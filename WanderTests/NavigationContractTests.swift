@@ -4,6 +4,33 @@ import MapKit
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
+    func testAppRootHardGatesSignedOutSessionsBehindNonDismissableAuth() throws {
+        let app = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderApp.swift")
+        )
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let authGate = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Auth/AuthGateSheet.swift")
+        )
+
+        XCTAssertTrue(app.contains("WanderAppEntryView(analytics: analytics, parser: discoverParser)"))
+        XCTAssertTrue(app.contains("ClerkNativeAuthView(isDismissable: false)"))
+        XCTAssertTrue(app.contains("if case .signedIn(let session) = auth.state"))
+        XCTAssertTrue(app.contains("initialSession: session"))
+        XCTAssertTrue(app.contains("isSessionValidated: destination == .authenticated"))
+        XCTAssertTrue(app.contains("isSessionValidated: auth.isSessionValidated"))
+        XCTAssertTrue(app.contains(".allowsHitTesting(destination == .authenticated)"))
+        XCTAssertTrue(app.contains(".task(id: sessionRefreshGeneration)"))
+        XCTAssertTrue(app.contains("guard phase == .active else { return }"))
+        XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
+        XCTAssertTrue(root.contains(".task(id: isSessionValidated)"))
+        XCTAssertTrue(root.contains("guard phase == .active, isSessionValidated else { return }"))
+        XCTAssertTrue(root.contains("guard isSessionValidated,"))
+        XCTAssertTrue(authGate.contains("AuthView(isDismissable: isDismissable)"))
+    }
+
     func testBottomNavigationUsesRequestedFiveItemOrder() {
         XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
     }
@@ -216,6 +243,52 @@ final class NavigationContractTests: XCTestCase {
                 handle: "you",
                 imageFileURL: pngFileURL
             )
+        )
+    }
+
+    @MainActor
+    func testFilteredProfileMapShareNamesTheSelectionAndKeepsLinkAndPNG() throws {
+        let imageFileURL = URL(fileURLWithPath: "/tmp/maya-santa-monica-map.png")
+        let content = try XCTUnwrap(
+            WanderShareContent.profileMap(
+                serverID: "user_maya",
+                displayName: "Maya Chen",
+                handle: "maya",
+                imageFileURL: imageFileURL,
+                filterTitle: "Santa Monica"
+            )
+        )
+
+        XCTAssertEqual(content.items, [
+            URL(string: "recme://profiles/user_maya")!,
+            imageFileURL
+        ])
+        XCTAssertEqual(content.subject, "Maya Chen's Santa Monica map")
+        XCTAssertEqual(content.message, "Explore Santa Monica on @maya's rec.me map")
+    }
+
+    @MainActor
+    func testFilteredProfileMapShareUsesSupportedActivitySubjectSource() {
+        let controller = UIActivityViewController(
+            activityItems: ["placeholder"],
+            applicationActivities: nil
+        )
+        let source = WanderShareActivityItemSource(
+            message: "Explore Santa Monica on @maya's rec.me map",
+            subject: "Maya Chen's Santa Monica map"
+        )
+
+        XCTAssertEqual(
+            source.activityViewControllerPlaceholderItem(controller) as? String,
+            "Explore Santa Monica on @maya's rec.me map"
+        )
+        XCTAssertEqual(
+            source.activityViewController(controller, itemForActivityType: nil) as? String,
+            "Explore Santa Monica on @maya's rec.me map"
+        )
+        XCTAssertEqual(
+            source.activityViewController(controller, subjectForActivityType: nil),
+            "Maya Chen's Santa Monica map"
         )
     }
 
@@ -505,6 +578,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(detailsContent.contains("saveAsSection"))
         XCTAssertTrue(detailsContent.contains("placeTypeSection"))
         XCTAssertTrue(detailsContent.contains("if selectedStatus == .been"))
+        XCTAssertTrue(detailsContent.contains("checkInDateSection"))
         XCTAssertTrue(detailsContent.contains("ratingSection"))
         XCTAssertTrue(detailsContent.contains("sharedVisitInviteSection"))
         XCTAssertTrue(detailsContent.contains("MapSaveVisitPhotoSection("))
@@ -519,7 +593,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("visibilitySection"))
         XCTAssertTrue(optionalDetails.contains("note, tags, labels & privacy"))
         XCTAssertEqual(
-            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"save as\")").count - 1,
+            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
         )
         XCTAssertTrue(mapScreen.contains("if step == .details && context.requiresStatusConfirmation"))
@@ -607,6 +681,25 @@ final class NavigationContractTests: XCTestCase {
         }
     }
 
+    func testCheckInPickerUsesDateOnlyWithoutInstructionalCopy() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let checkInDateSection = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private var checkInDateSection: some View")
+                .last?
+                .components(separatedBy: "private var canInviteFriends: Bool")
+                .first
+        )
+
+        XCTAssertTrue(checkInDateSection.contains("\"Check-in date\""))
+        XCTAssertTrue(checkInDateSection.contains("displayedComponents: [.date]"))
+        XCTAssertFalse(checkInDateSection.contains(".hourAndMinute"))
+        XCTAssertFalse(checkInDateSection.contains("Defaults to now."))
+        XCTAssertFalse(checkInDateSection.contains("Pick an earlier date for a past check-in."))
+    }
+
     func testMemberProfileBackAndActionPopoverStayAttachedToTheSharedHeader() throws {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
@@ -658,7 +751,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".scrollPosition(id: $profileScrollPosition, anchor: .top)"))
         XCTAssertFalse(source.contains("style: StrokeStyle("))
         XCTAssertFalse(source.contains("dash: [0.1, max(3, size * 0.14)]"))
-        XCTAssertTrue(source.contains("item(state: .visit, title: \"been\")"))
+        XCTAssertTrue(source.contains("item(state: .visit, title: CheckInCopy.pluralNoun)"))
         XCTAssertFalse(source.contains("item(state: .wanna, title: \"wanna\")"))
         XCTAssertTrue(source.contains(".offset(y: -6)"))
         XCTAssertFalse(source.contains("visitCount > 1"), "Calendar cells should keep state visuals stable and move counts into day detail")
@@ -672,7 +765,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("ProfileCalendarPlaceActivityLabel"))
         XCTAssertFalse(source.contains("visited this day"))
         XCTAssertFalse(source.contains("saved as wanna this day"))
-        XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: \"been\", plural: \"been\""))
+        XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun"))
         XCTAssertFalse(source.contains("metric(value: summary.wannaCount, singular: \"wanna\", plural: \"wanna\""))
         XCTAssertTrue(source.contains("var includesAllStatuses: Bool {\n        false\n    }"))
     }
@@ -721,6 +814,33 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapSection.contains("\n            Map("))
         XCTAssertFalse(source.contains("LazyVStack"))
         XCTAssertFalse(source.contains("LazyVGrid"))
+    }
+
+    func testProfileMapSummaryRowsExposeSeparateNavigationAndFilteredShareActions() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let mapSection = try XCTUnwrap(
+            source
+                .components(separatedBy: "private struct ProfileMapSection: View")
+                .last?
+                .components(separatedBy: "private struct ProfileMapSnapshotView: View")
+                .first
+        )
+        let shareButton = try XCTUnwrap(
+            source
+                .components(separatedBy: "private struct ProfileMapSummaryShareButton: View")
+                .last
+        )
+
+        XCTAssertTrue(mapSection.contains("\\(insights.mapPlaceCount) checked-in \\(placeLabel)"))
+        XCTAssertTrue(mapSection.contains("ProfileMapSummaryShareButton("))
+        XCTAssertTrue(mapSection.contains("points: insights.mapPoints(matching: item)"))
+        XCTAssertTrue(shareButton.contains(".accessibilityLabel(\"Share \\(item.title)\")"))
+        XCTAssertTrue(shareButton.contains("filterTitle: item.title"))
+        XCTAssertTrue(shareButton.contains("WanderShareSheet(content: shareContent)"))
+        XCTAssertTrue(shareButton.contains(".alert(\"Couldn't prepare this map\""))
+        XCTAssertTrue(shareButton.contains(".onDisappear(perform: cancelSharePreparation)"))
     }
 
     @MainActor

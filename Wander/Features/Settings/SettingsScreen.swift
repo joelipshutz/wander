@@ -409,7 +409,7 @@ struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.sharedListsEnabled) { NotificationPreferencesUpdate(sharedListsEnabled: $0) }
                         )
                         notificationToggle(
-                            title: "Shared visits",
+                            title: "Shared check-ins",
                             systemImage: "person.2.badge.plus",
                             binding: preferenceBinding(\.sharedVisitsEnabled) { NotificationPreferencesUpdate(sharedVisitsEnabled: $0) }
                         )
@@ -767,7 +767,7 @@ struct SettingsProfilePrivacySurface {
 
     static func warningBody(enabling: Bool) -> String {
         if enabling {
-            return "Places saved by you will switch to stealth mode, including your Been and Wanna Go places. Future saves stay stealth and your username will be hidden while Private Profile is on. Your followers and existing collaborative lists stay unchanged, but new collaborative lists are unavailable."
+            return "Places saved by you will switch to stealth mode, including your check-ins and Wanna Go places. Future saves stay stealth and your username will be hidden while Private Profile is on. Your followers and existing collaborative lists stay unchanged, but new collaborative lists are unavailable."
         }
 
         return "Your existing places will stay in stealth mode. Your username can appear in search again, and future saves will follow your stealth mode for new saves setting."

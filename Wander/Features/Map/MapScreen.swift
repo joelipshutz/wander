@@ -419,10 +419,10 @@ struct MapScreen: View {
             )
             guard case .resolved(let destination) = resolution else {
                 if resolution == .unavailable {
-                    mapSearchMessage = "That shared visit is no longer available."
+                    mapSearchMessage = "That shared check-in is no longer available."
                     pushNotifications.consumeNavigationRequest(id: request.id)
                 } else {
-                    mapSearchMessage = "Could not open that shared visit yet. It will retry when the app becomes active."
+                    mapSearchMessage = "Could not open that shared check-in yet. It will retry when the app becomes active."
                 }
                 return
             }
@@ -433,7 +433,7 @@ struct MapScreen: View {
                     generation: destination.currentGeneration
                 )
                 guard let invitation else {
-                    mapSearchMessage = "Could not open that shared visit yet. It will retry when the app becomes active."
+                    mapSearchMessage = "Could not open that shared check-in yet. It will retry when the app becomes active."
                     return
                 }
                 mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
@@ -441,7 +441,7 @@ struct MapScreen: View {
             } else if destination.status == SharedVisitParticipantStatus.accepted.rawValue {
                 await openNotificationPlace(destination.placeID, requestID: request.id)
             } else {
-                mapSearchMessage = "That shared visit is no longer available."
+                mapSearchMessage = "That shared check-in is no longer available."
                 pushNotifications.consumeNavigationRequest(id: request.id)
             }
         default:
@@ -1305,11 +1305,11 @@ struct MapScreen: View {
         case .add:
             "Added to your map."
         case .addVisit:
-            "Visit saved."
+            "Check-in saved."
         case .sharedVisit:
-            "Shared visit saved to your map."
+            "Shared check-in saved to your map."
         case .editVisit:
-            "Visit updated."
+            "Check-in updated."
         case .editWant:
             "Want updated."
         }
@@ -1326,7 +1326,7 @@ struct MapScreen: View {
         if store.pendingSharedVisitInvites.contains(where: {
             $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
         }) {
-            mapSearchMessage = "Visit saved. Friend invites are queued and will retry automatically."
+            mapSearchMessage = "Check-in saved. Friend invites are queued and will retry automatically."
         }
     }
 
@@ -1343,7 +1343,7 @@ struct MapScreen: View {
         if store.pendingSharedVisitInvites.contains(where: {
             $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
         }) {
-            mapSearchMessage = "Visit updated. Friend changes are queued and will retry automatically."
+            mapSearchMessage = "Check-in updated. Friend changes are queued and will retry automatically."
         }
     }
 
@@ -1449,13 +1449,13 @@ struct MapScreen: View {
                 }
             }
             if photoCopyFailed {
-                mapSearchMessage = "Visit saved. One shared photo will retry when you reopen rec.me."
+                mapSearchMessage = "Check-in saved. One shared photo will retry when you reopen rec.me."
             }
             await store.refreshSharedVisitInbox(backend: backend)
             await store.refreshRemoteVisiblePlaces(backend: backend)
             return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced)
         } catch {
-            mapSearchMessage = "That shared visit changed before it could be saved. Open the invitation again."
+            mapSearchMessage = "That shared check-in changed before it could be saved. Open the invitation again."
             return nil
         }
     }
@@ -1467,7 +1467,7 @@ struct MapScreen: View {
             guard await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil) else {
                 return false
             }
-            showTransientMapSearchMessage("Visit deleted.")
+            showTransientMapSearchMessage("Check-in deleted.")
             return true
         case .editWant(let visiblePlace):
             let removal = await store.removeSave(
@@ -2008,7 +2008,7 @@ enum MapFilter: String, CaseIterable, Identifiable {
         switch self {
         case .you: "you"
         case .social: "social"
-        case .been: "been"
+        case .been: CheckInCopy.pluralNoun
         case .wanna: "wanna"
         }
     }
@@ -2789,7 +2789,8 @@ enum PlaceSheetAction {
 
     var systemImage: String {
         switch self {
-        case .add, .addVisit: "plus"
+        case .add: "plus"
+        case .addVisit: "plus"
         case .choose: "checkmark"
         case .none: ""
         }
@@ -2798,10 +2799,14 @@ enum PlaceSheetAction {
     var accessibilityLabel: String {
         switch self {
         case .add: "Save to my map"
-        case .addVisit: "Add visit"
+        case .addVisit: CheckInCopy.againAction
         case .choose: "Choose this place"
         case .none: ""
         }
+    }
+
+    var displayTitle: String {
+        accessibilityLabel
     }
 
     var isPrimaryAction: Bool {
@@ -3021,11 +3026,11 @@ struct MapPlaceSaveContext: Identifiable {
         case .add:
             "save this place"
         case .addVisit:
-            "add visit"
+            "check in again"
         case .sharedVisit:
-            "save shared visit"
+            "save shared check-in"
         case .editVisit:
-            "edit visit"
+            "edit check-in"
         case .editWant:
             "edit want"
         }
@@ -3034,13 +3039,13 @@ struct MapPlaceSaveContext: Identifiable {
     var subtitle: String {
         switch mode {
         case .add:
-            "pick status and a few details."
+            "choose whether to check in or save it for later."
         case .addVisit:
-            "save what happened this time."
+            "capture what happened this time."
         case .sharedVisit(let invitation):
             "\(invitation.sourceOwnerDisplayName) shared their version. Make yours your own."
         case .editVisit:
-            "adjust this saved visit."
+            "adjust this check-in."
         case .editWant:
             "update why this is on your radar."
         }
@@ -3051,11 +3056,11 @@ struct MapPlaceSaveContext: Identifiable {
         case .add:
             "save to my map"
         case .addVisit:
-            "save visit"
+            "check in"
         case .sharedVisit:
-            "save my visit"
+            "save my check-in"
         case .editVisit:
-            "update visit"
+            "update check-in"
         case .editWant:
             "update want"
         }
@@ -3064,7 +3069,7 @@ struct MapPlaceSaveContext: Identifiable {
     var removeTitle: String {
         switch mode {
         case .editVisit:
-            "Delete visit"
+            CheckInCopy.deleteAction
         case .editWant:
             "Remove want"
         case .add, .addVisit, .sharedVisit:
@@ -3075,7 +3080,7 @@ struct MapPlaceSaveContext: Identifiable {
     var removeConfirmationTitle: String {
         switch mode {
         case .editVisit:
-            "Delete visit?"
+            "Delete check-in?"
         case .editWant:
             "Remove want?"
         case .add, .addVisit, .sharedVisit:
@@ -3086,7 +3091,7 @@ struct MapPlaceSaveContext: Identifiable {
     var removeConfirmationMessage: String {
         switch mode {
         case .editVisit:
-            "This removes this visit and its photos from your place history."
+            "This removes this check-in and its photos from your place history."
         case .editWant:
             "This removes your want from this place."
         case .add, .addVisit, .sharedVisit:
@@ -3404,6 +3409,7 @@ struct MapPlaceSaveSubmission {
     let photoAttachments: [MapPlaceSavePhotoAttachment]
     let inviteeUserIDs: [String]
     let reconcilesSharedVisitInvitees: Bool
+    var visitedAt: Date = .now
     var plannedDate: Date? = nil
 }
 
@@ -3481,6 +3487,7 @@ func createExplicitVisitIfNeeded(
 
     return store.createVisit(
         userPlaceID: visiblePlace.userPlace.id,
+        visitedAt: submission.visitedAt,
         note: submission.note,
         ratingScore: submission.ratingScore,
         attributes: submission.attributes,
@@ -3505,6 +3512,7 @@ func persistNewPlaceSaveSubmission(
         note: submission.note,
         sourceType: sourceType,
         ratingScore: submission.ratingScore,
+        visitedAt: submission.visitedAt,
         plannedDate: submission.plannedDate,
         attributes: submission.attributes,
         backend: backend
@@ -3541,6 +3549,7 @@ func persistScopedVisitOrWantSubmission(
     case .editVisit(_, let visit):
         guard let updatedVisit = store.updateVisit(
             visitID: visit.id,
+            visitedAt: submission.visitedAt,
             note: submission.note,
             ratingScore: submission.ratingScore,
             attributes: submission.attributes,
@@ -3668,6 +3677,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var isChoosingPlaceType = false
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
+    @State private var visitedAt: Date
     @State private var plannedDate: Date?
     @State private var isShowingPlannedDatePicker = false
     @State private var isSaving = false
@@ -3698,6 +3708,7 @@ struct MapPlaceSaveFlowSheet: View {
         _personalLabels = State(initialValue: context.initialPersonalLabels)
         _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
         _note = State(initialValue: context.initialNote)
+        _visitedAt = State(initialValue: context.editedVisit?.visitedAt ?? .now)
         let today = WannaGoDate.normalized(.now)
         let initialPlannedDate = context.initialPlannedDate
             .map { WannaGoDate.normalized($0) }
@@ -3875,7 +3886,7 @@ struct MapPlaceSaveFlowSheet: View {
                 .accessibilityLabel("Close")
             }
 
-            Text(context.title)
+            Text(flowTitle)
                 .font(.system(size: 28, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
             if step == .confirm {
@@ -3886,13 +3897,32 @@ struct MapPlaceSaveFlowSheet: View {
         }
     }
 
+    private var flowTitle: String {
+        guard step == .details, selectedStatus == .been else {
+            return context.title
+        }
+
+        switch context.mode {
+        case .add:
+            return "check in at \(context.candidate.name)"
+        case .addVisit:
+            return "check in again"
+        case .sharedVisit:
+            return "save shared check-in"
+        case .editVisit:
+            return "edit check-in"
+        case .editWant:
+            return context.title
+        }
+    }
+
     private var confirmContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             candidateCard
 
-            MapSavePickerBlock(title: "save as") {
+            MapSavePickerBlock(title: "what do you want to do?") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MapSaveChoicePill(title: "been", isSelected: selectedStatus == .been) {
+                    MapSaveChoicePill(title: CheckInCopy.verb, isSelected: selectedStatus == .been) {
                         selectedStatus = .been
                     }
                     MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
@@ -3910,6 +3940,11 @@ struct MapPlaceSaveFlowSheet: View {
     private var detailsContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             candidateCard
+
+            if selectedStatus == .been {
+                checkInDateSection
+            }
+
             placeTypeSection
 
             if selectedStatus == .been {
@@ -3948,7 +3983,7 @@ struct MapPlaceSaveFlowSheet: View {
     private var saveFooter: some View {
         WanderPrimaryButton(
             title: isSaving ? "saving..." : context.saveTitle,
-            systemImage: "checkmark",
+            systemImage: selectedStatus == .been ? "ticket.fill" : "checkmark",
             isDisabled: isSaving || isRemoving
         ) {
             save()
@@ -4203,6 +4238,31 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var ratingSection: some View {
         PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
+    }
+
+    private var checkInDateSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("when")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            DatePicker(
+                "Check-in date",
+                selection: $visitedAt,
+                in: ...Date.now,
+                displayedComponents: [.date]
+            )
+            .datePickerStyle(.compact)
+            .font(.system(size: 14, weight: .bold))
+            .tint(WanderTheme.terracotta.color)
+            .padding(WanderTheme.spacing3)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color)
+            )
+        }
     }
 
     private var canInviteFriends: Bool {
@@ -4580,6 +4640,10 @@ struct MapPlaceSaveFlowSheet: View {
 
     private func save() {
         guard !isSaving else { return }
+        guard selectedStatus != .been || visitedAt <= Date.now else {
+            errorMessage = "A check-in date can’t be in the future."
+            return
+        }
         isSaving = true
         errorMessage = nil
 
@@ -4596,6 +4660,7 @@ struct MapPlaceSaveFlowSheet: View {
             reconcilesSharedVisitInvitees: context.editedVisit != nil
                 && canInviteFriends
                 && didLoadSharedVisitInvitees,
+            visitedAt: visitedAt,
             plannedDate: selectedStatus == .wannaGo ? plannedDate : nil
         )
 
@@ -4608,7 +4673,7 @@ struct MapPlaceSaveFlowSheet: View {
                 } else if auth.isSignedIn {
                     errorMessage = context.sharedVisitInvitation == nil
                         ? "Could not save this place. Try again."
-                        : "Could not save this shared visit. Open the invitation and try again."
+                        : "Could not save this shared check-in. Open the invitation and try again."
                 } else {
                     errorMessage = "Sign in to finish this save."
                 }
@@ -4631,7 +4696,7 @@ struct MapPlaceSaveFlowSheet: View {
             )
             didLoadSharedVisitInvitees = true
         } catch {
-            sharedVisitInviteesError = "Could not load shared friends. Your visit can still be edited without changing them."
+            sharedVisitInviteesError = "Could not load shared friends. Your check-in can still be edited without changing them."
         }
         isLoadingSharedVisitInvitees = false
     }
@@ -4701,7 +4766,7 @@ private struct MapSaveVisitPhotoSection: View {
             }
             .buttonStyle(.plain)
             .disabled(!canAddPhotos || photos.count >= MapPlaceSavePhotoAttachment.maximumCount)
-            .confirmationDialog("Add photos to your visit", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
+            .confirmationDialog("Add photos to your check-in", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
                     Button("Take Photo") {
                         isShowingCamera = true
@@ -4748,7 +4813,7 @@ private struct MapSaveVisitPhotoSection: View {
             }
 
             if !canAddPhotos {
-                Text("Photos can be added after this is saved as been.")
+                Text("Photos can be added after you check in.")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -4835,11 +4900,11 @@ private struct MapSaveVisitPhotoSection: View {
 
     private func appendIfWithinLimits(_ attachment: MapPlaceSavePhotoAttachment) {
         guard photos.count < MapPlaceSavePhotoAttachment.maximumCount else {
-            photoError = "A visit can have up to 10 photos."
+            photoError = "A check-in can have up to 10 photos."
             return
         }
         guard photos.reduce(0, { $0 + $1.byteSize }) + attachment.byteSize <= MapPlaceSavePhotoAttachment.maximumTotalBytes else {
-            photoError = "Those photos are over the 75 MB visit limit."
+            photoError = "Those photos are over the 75 MB check-in limit."
             return
         }
         photoError = nil
@@ -6580,12 +6645,22 @@ struct PlaceSheet: View {
     private func actionButton(size: CGFloat, iconSize: CGFloat) -> some View {
         if action != .none {
             Button(action: onAction) {
-                Image(systemName: action.systemImage)
-                    .font(.system(size: iconSize, weight: .black))
-                    .frame(width: size, height: size)
-                    .background(action.isPrimaryAction ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
+                if action == .addVisit {
+                    Label(CheckInCopy.againAction, systemImage: action.systemImage)
+                        .font(.system(size: 14, weight: .black))
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(minHeight: max(size, WanderTheme.tapMinimum))
+                        .background(WanderTheme.terracotta.color)
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .clipShape(Capsule())
+                } else {
+                    Image(systemName: action.systemImage)
+                        .font(.system(size: iconSize, weight: .black))
+                        .frame(width: size, height: size)
+                        .background(action.isPrimaryAction ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .clipShape(Circle())
+                }
             }
             .accessibilityLabel(action.accessibilityLabel)
         }
@@ -6619,9 +6694,9 @@ private struct PlaceProfileRatingStrip: View {
         HStack(spacing: WanderTheme.spacing2) {
             PlaceProfileMetricCard(
                 title: "Your rating",
-                value: presentation.ownRating?.displayScore ?? "No visits yet",
+                value: presentation.ownRating?.displayScore ?? "No check-ins yet",
                 suffix: presentation.ownRating == nil ? nil : "/5",
-                subtitle: presentation.ownRating?.subtitle ?? "0 visits",
+                subtitle: presentation.ownRating?.subtitle ?? "0 check-ins",
                 systemImage: "star.fill",
                 tint: WanderTheme.stateWarning.color,
                 explanation: nil,
@@ -6749,7 +6824,7 @@ enum PlaceActivityFilter: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .all: "ALL"
-        case .myVisits: "MY SAVES"
+        case .myVisits: "MY CHECK-INS"
         }
     }
 }
@@ -6857,7 +6932,7 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var editAccessibilityLabel: String {
-        kind == .currentWant ? "Edit want" : "Edit visit"
+        kind == .currentWant ? "Edit want" : CheckInCopy.editAction
     }
 
     var status: PlaceStatus {
@@ -6945,7 +7020,7 @@ struct PlaceActivitySection: View {
             if filteredEntries.isEmpty {
                 PlaceActivityEmptyState(text: emptyStateText)
             } else {
-                VStack(spacing: WanderTheme.spacing2) {
+                LazyVStack(spacing: WanderTheme.spacing2) {
                     ForEach(filteredEntries) { entry in
                         PlaceActivityCard(
                             entry: entry,
@@ -7064,7 +7139,7 @@ struct PlaceActivitySection: View {
         case .all:
             "No activity yet."
         case .myVisits:
-            "No saves yet."
+            "No check-ins yet."
         }
     }
 
@@ -7239,6 +7314,14 @@ private struct PlaceActivityCard: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(entry.isCurrentUser ? WanderTheme.borderStrong.color.opacity(0.5) : WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .overlay(alignment: .leading) {
+            ticketNotch
+                .offset(x: -7)
+        }
+        .overlay(alignment: .trailing) {
+            ticketNotch
+                .offset(x: 7)
+        }
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
                 if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
@@ -7293,6 +7376,14 @@ private struct PlaceActivityCard: View {
         }
     }
 
+    private var ticketNotch: some View {
+        Circle()
+            .fill(WanderTheme.canvasWarm.color)
+            .frame(width: 14, height: 14)
+            .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+            .accessibilityHidden(true)
+    }
+
     @ViewBuilder
     private var activityIdentity: some View {
         if entry.isCurrentUser {
@@ -7322,7 +7413,7 @@ private struct PlaceActivityCard: View {
                 Text(entry.displayName)
                     .font(.system(size: 15, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text("@\(entry.owner.handle) · \(entry.timestampText)")
+                Text(entry.kind == .visit ? "CHECK-IN · \(entry.timestampText)" : "@\(entry.owner.handle) · \(entry.timestampText)")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(1)
@@ -7375,7 +7466,7 @@ private struct PlaceActivityCard: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .confirmationDialog("Add photos to your visit", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
+                .confirmationDialog("Add photos to your check-in", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
                     if UIImagePickerController.isSourceTypeAvailable(.camera) {
                         Button("Take Photo") {
                             isShowingCamera = true
@@ -7528,10 +7619,12 @@ private struct PlaceActivityPhotoViewer: View {
 
                 TabView(selection: $selectedPhotoID) {
                     ForEach(photos) { photo in
-                        VisitPhotoFullScreenImage(photo: photo)
-                            .tag(photo.id)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(.horizontal, WanderTheme.spacing2)
+                        ZoomablePhoto {
+                            VisitPhotoFullScreenImage(photo: photo)
+                        }
+                        .tag(photo.id)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, WanderTheme.spacing2)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
@@ -8032,7 +8125,7 @@ private struct StatusBadge: View {
     let status: PlaceStatus
 
     var body: some View {
-        Text(status == .been ? "been" : "wanna")
+        Text(status == .been ? CheckInCopy.noun : "wanna")
             .font(.system(size: 12, weight: .bold))
             .padding(.horizontal, WanderTheme.spacing2)
             .padding(.vertical, WanderTheme.spacing1)

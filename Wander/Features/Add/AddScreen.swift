@@ -130,6 +130,20 @@ struct AddScreen: View {
                 case .hereNow:
                     expandSheet()
                     await resolveCurrentLocationCandidates()
+                case .importInbox:
+                    expandSheet()
+                    showsImportInbox = true
+                case .nearbyPlace(let candidate):
+                    expandSheet()
+                    selectedSource = .currentLocation
+                    candidates = [candidate]
+                    selectedCandidateID = candidate.id
+                    pendingVisitPhotoAttachments = []
+                    addSaveFlow = MapPlaceSaveContext.addCandidate(
+                        candidate,
+                        sourceType: .currentLocation,
+                        defaultVisibility: store.effectiveDefaultVisibility
+                    )
                 }
                 guard !Task.isCancelled else { return }
                 onLaunchRequestHandled(launchRequest.id)

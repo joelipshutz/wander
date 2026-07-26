@@ -85,7 +85,7 @@ struct SaveStreakCelebrationView: View {
                     .offset(y: ticketLanded ? 0 : 10)
                     .animation(copyAnimation, value: ticketLanded)
 
-                    Text("One Been or Wanna keeps it going.")
+                    Text("One Check-in or Wanna keeps it going.")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
                         .multilineTextAlignment(.center)
@@ -386,7 +386,7 @@ private struct SaveStreakConfettiLayer: View {
 private extension PlaceStatus {
     var streakDisplayName: String {
         switch self {
-        case .been: "Been"
+        case .been: CheckInCopy.noun.capitalized
         case .wannaGo: "Wanna"
         }
     }

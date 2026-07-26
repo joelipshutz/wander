@@ -41,13 +41,19 @@ struct ProfileInsights: Equatable {
     let monthSpotCount: Int
     let monthCategoryCount: Int
     let monthCityCount: Int
+    let mapPlaceCount: Int
     let mapPoints: [ProfileMapPoint]
     let placeSummaries: [ProfileSummaryItem]
     let citySummaries: [ProfileSummaryItem]
     let countrySummaries: [ProfileSummaryItem]
 
     var mapCityCount: Int {
-        Set(mapPoints.compactMap { CityCanonicalizer.comparisonKey($0.city) }).count
+        citySummaries.count
+    }
+
+    func mapPoints(matching item: ProfileSummaryItem) -> [ProfileMapPoint] {
+        let acceptedPlaceIDs = Set(item.placeIDs)
+        return mapPoints.filter { acceptedPlaceIDs.contains($0.id) }
     }
 
     var monthVisitCounts: [Date: Int] {
@@ -380,10 +386,7 @@ enum ProfileInsightsPresenter {
         let distinctMonthCities = Set(monthPlaces.compactMap { CityCanonicalizer.comparisonKey($0.locality) })
 
         let uniqueBeen = uniqueUserPlaces(activeBeen)
-        let beenPlaces = uniqueBeen.compactMap { userPlace -> (LocalUserPlace, LocalPlace)? in
-            guard let place = placeByID[userPlace.placeID] else { return nil }
-            return (userPlace, place)
-        }
+        let beenPlaces = canonicalBeenPlaces(uniqueBeen, placeByID: placeByID)
         let mapPoints = beenPlaces.compactMap { _, place -> ProfileMapPoint? in
             guard validCoordinate(latitude: place.latitude, longitude: place.longitude) else { return nil }
             return ProfileMapPoint(
@@ -406,6 +409,7 @@ enum ProfileInsightsPresenter {
             monthSpotCount: monthUserPlaces.count,
             monthCategoryCount: distinctMonthCategories.count,
             monthCityCount: distinctMonthCities.count,
+            mapPlaceCount: beenPlaces.count,
             mapPoints: mapPoints,
             placeSummaries: summaries(
                 values: beenPlaces.map { (resolvedCategory(userPlace: $0.0, place: $0.1), $0.1.id) },
@@ -455,6 +459,29 @@ enum ProfileInsightsPresenter {
     private static func uniqueUserPlaces(_ values: [LocalUserPlace]) -> [LocalUserPlace] {
         var seen: Set<String> = []
         return values.filter { seen.insert($0.id).inserted }
+    }
+
+    private static func canonicalBeenPlaces(
+        _ userPlaces: [LocalUserPlace],
+        placeByID: [String: LocalPlace]
+    ) -> [(LocalUserPlace, LocalPlace)] {
+        let resolved = userPlaces.compactMap { userPlace -> (LocalUserPlace, LocalPlace)? in
+            guard let place = placeByID[userPlace.placeID] else { return nil }
+            return (userPlace, place)
+        }
+        let groups = Dictionary(grouping: resolved, by: { $0.1.id })
+
+        return groups.keys.sorted().compactMap { placeID in
+            groups[placeID]?.sorted { lhs, rhs in
+                if lhs.0.updatedAt != rhs.0.updatedAt {
+                    return lhs.0.updatedAt > rhs.0.updatedAt
+                }
+                if (lhs.0.serverID != nil) != (rhs.0.serverID != nil) {
+                    return lhs.0.serverID != nil
+                }
+                return lhs.0.id < rhs.0.id
+            }.first
+        }
     }
 
     private static func uniqueVisits(_ values: [LocalPlaceVisit]) -> [LocalPlaceVisit] {

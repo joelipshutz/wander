@@ -60,12 +60,14 @@ struct AuthGateSheet: View {
 }
 
 struct ClerkNativeAuthView: View {
+    var isDismissable = true
+
     var body: some View {
         #if canImport(ClerkKitUI) && canImport(ClerkKit)
-        AuthView()
+        AuthView(isDismissable: isDismissable)
             .environment(Clerk.shared)
         #elseif canImport(ClerkKitUI)
-        AuthView()
+        AuthView(isDismissable: isDismissable)
         #else
         VStack(spacing: WanderTheme.spacing3) {
             Text("Sign in is not linked in this build.")

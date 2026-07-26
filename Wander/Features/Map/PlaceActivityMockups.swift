@@ -40,18 +40,18 @@ struct PlaceActivityMockupRoot: View {
             case .latestActivity:
                 ClassicPlaceDetailMockup(selectedSegment: "ALL", entries: ClassicActivityData.all, mode: .owner)
             case .myVisits:
-                ClassicPlaceDetailMockup(selectedSegment: "MY VISITS", entries: ClassicActivityData.mine, mode: .owner)
+                ClassicPlaceDetailMockup(selectedSegment: "MY CHECK-INS", entries: ClassicActivityData.mine, mode: .owner)
             case .addVisit:
                 ClassicAddVisitMockup(
-                    title: "add a visit",
-                    placeSubtitle: "Existing save - new visit",
+                    title: "check in again",
+                    placeSubtitle: "Existing save - new check-in",
                     showsMenu: false,
                     showsInvitedFriend: false
                 )
             case .visitFriendsEditor:
                 ClassicAddVisitMockup(
                     title: "save this place",
-                    placeSubtitle: "New place - been",
+                    placeSubtitle: "New place - check-in",
                     showsMenu: false,
                     showsInvitedFriend: true
                 )
@@ -59,8 +59,8 @@ struct PlaceActivityMockupRoot: View {
                 ClassicPlaceDetailMockup(selectedSegment: "ALL", entries: [ClassicActivityData.withFriend], mode: .owner)
             case .photoMenu:
                 ClassicAddVisitMockup(
-                    title: "add a visit",
-                    placeSubtitle: "Existing save - new visit",
+                    title: "check in again",
+                    placeSubtitle: "Existing save - new check-in",
                     showsMenu: true,
                     showsInvitedFriend: false
                 )
@@ -125,7 +125,7 @@ private enum ClassicActivityData {
         initials: "RL",
         avatarColor: WanderTheme.terracotta.color,
         date: "Jun 30, 11:21 PM",
-        status: "been",
+        status: "check-in",
         visibility: "friends",
         rating: 5,
         tags: ["quick bite", "date night", "looks cozy"],
@@ -141,7 +141,7 @@ private enum ClassicActivityData {
         initials: "RL",
         avatarColor: WanderTheme.terracotta.color,
         date: "Jun 30, 11:21 PM",
-        status: "been",
+        status: "check-in",
         visibility: "friends",
         rating: 5,
         tags: ["quick bite", "date night", "looks cozy"],
@@ -157,7 +157,7 @@ private enum ClassicActivityData {
         initials: "RL",
         avatarColor: WanderTheme.terracotta.color,
         date: "May 18, 7:44 PM",
-        status: "been",
+        status: "check-in",
         visibility: "only me",
         rating: 4,
         tags: ["solo dinner", "bar seats"],
@@ -173,7 +173,7 @@ private enum ClassicActivityData {
         initials: "RL",
         avatarColor: WanderTheme.terracotta.color,
         date: "Apr 6, 9:36 PM",
-        status: "been",
+        status: "check-in",
         visibility: "friends",
         rating: 1.5,
         tags: ["late night", "crowded"],
@@ -205,7 +205,7 @@ private enum ClassicActivityData {
         initials: "MC",
         avatarColor: WanderTheme.avatarAndrew.color,
         date: "Jun 11, 9:02 PM",
-        status: "been",
+        status: "check-in",
         visibility: "friends",
         rating: 4.5,
         tags: ["walk-in", "good counter", "share plates"],
@@ -328,7 +328,7 @@ private struct ClassicPlaceDetailMockup: View {
                 ClassicMapHeader(badge: mode == .owner ? .been : .none)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    ClassicDashedPrompt(text: mode == .owner ? "Add a new visit when this place belongs on your map." : "Add your own visit to save this place to your map.")
+                    ClassicDashedPrompt(text: mode == .owner ? "Check in again when you return." : "Add your own check-in to save this place to your map.")
 
                     ClassicDirectionsButton()
 
@@ -359,8 +359,8 @@ private struct ClassicAddVisitMockup: View {
                 ClassicEditorNav(title: title)
                 ClassicEditorPlaceHeader(subtitle: placeSubtitle)
 
-                ClassicEditorSection(title: "VISIT") {
-                    ClassicSegmented(options: ["BEEN", "WANNA"], selected: "BEEN")
+                ClassicEditorSection(title: "SAVE AS") {
+                    ClassicSegmented(options: ["CHECK-IN", "WANNA GO"], selected: "CHECK-IN")
                     ClassicRatingPicker()
                 }
 
@@ -389,14 +389,14 @@ private struct ClassicAddVisitMockup: View {
                     ClassicSegmented(options: ["FRIENDS", "MUTUALS", "ONLY ME"], selected: "FRIENDS")
                 }
 
-                ClassicPrimaryButton(title: "save visit", systemImage: "checkmark")
+                ClassicPrimaryButton(title: "save check-in", systemImage: "checkmark")
             }
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, 14)
             .padding(.bottom, WanderTheme.spacing8)
         }
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
-        .confirmationDialog("Add photos to your visit", isPresented: $showsPhotoOptions, titleVisibility: .visible) {
+        .confirmationDialog("Add photos to your check-in", isPresented: $showsPhotoOptions, titleVisibility: .visible) {
             Button("Take Photo") {}
             Button("Choose from Library") {}
             Button("Cancel", role: .cancel) {}
@@ -447,7 +447,7 @@ private struct ClassicPhotoViewerMockup: View {
                                 VStack(spacing: WanderTheme.spacing2) {
                                     Image(systemName: photo.imageSystemName)
                                         .font(.system(size: 54, weight: .bold))
-                                    Text("visit photo")
+                                    Text("check-in photo")
                                         .font(.system(size: 20, weight: .black))
                                 }
                                 .foregroundStyle(WanderTheme.textMuted.color.opacity(0.75))
@@ -573,9 +573,9 @@ private struct ClassicRatingSummary: View {
         HStack(spacing: WanderTheme.spacing2) {
             ClassicMetricCard(
                 title: "Your rating",
-                value: mode == .owner ? "3.5" : "No visits yet",
+                value: mode == .owner ? "3.5" : "No check-ins yet",
                 suffix: mode == .owner ? "/5" : "",
-                subtitle: mode == .owner ? "3 visits" : "0 visits",
+                subtitle: mode == .owner ? "3 check-ins" : "0 check-ins",
                 systemImage: "star.fill",
                 tint: WanderTheme.stateWarning.color
             )
@@ -783,9 +783,9 @@ private struct ClassicCompactCard: View {
                         Text("RVR")
                             .font(.system(size: 22, weight: .black))
                             .foregroundStyle(WanderTheme.textInk.color)
-                        ClassicStatusPill(title: "been", selected: true)
+                        ClassicStatusPill(title: "check-in", selected: true)
                     }
-                    Text("Your rating 3.5/5 - 3 visits")
+                    Text("Your rating 3.5/5 - 3 check-ins")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(2)
@@ -920,7 +920,7 @@ private struct ClassicVisitFriendsSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .center, spacing: WanderTheme.spacing2) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("add friends to this visit")
+                    Text("add friends to this check-in")
                         .font(.system(size: 14, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
                     Text("Invite friends who were here with you.")
@@ -939,7 +939,7 @@ private struct ClassicVisitFriendsSection: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Add friends to this visit")
+                .accessibilityLabel("Add friends to this check-in")
             }
 
             if friends.isEmpty {

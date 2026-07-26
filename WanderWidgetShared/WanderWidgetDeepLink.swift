@@ -2,7 +2,9 @@ import Foundation
 
 enum WanderDeepLinkRoute: Equatable, Sendable {
     case quickCapture
+    case map
     case quickSearch(query: String?)
+    case nearbyPlace(candidateID: String)
     case profileCalendar
     case sharedProfile(profileID: String)
 
@@ -10,8 +12,12 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         switch self {
         case .quickCapture:
             WanderWidgetConstants.quickCaptureURL
+        case .map:
+            WanderWidgetConstants.mapURL
         case .quickSearch(let query):
             Self.quickSearchURL(query: query)
+        case .nearbyPlace(let candidateID):
+            Self.nearbyPlaceURL(candidateID: candidateID)
         case .profileCalendar:
             WanderWidgetConstants.profileCalendarURL
         case .sharedProfile(let profileID):
@@ -38,9 +44,23 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             guard hasNoQuery(in: components) else { return nil }
             return .quickCapture
 
+        case ("map", []):
+            guard hasNoQuery(in: components) else { return nil }
+            return .map
+
         case ("map", ["search"]):
             guard let query = searchQuery(in: components) else { return nil }
             return .quickSearch(query: query)
+
+        case ("add", let segments)
+            where segments.count == 2 && segments[0] == "nearby":
+            let candidateID = segments[1]
+            guard hasNoQuery(in: components),
+                  !candidateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                return nil
+            }
+            return .nearbyPlace(candidateID: candidateID)
 
         case ("profile", ["calendar"]):
             guard hasNoQuery(in: components) else { return nil }
@@ -75,6 +95,18 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         var components = baseComponents(host: "map", path: "/search")
         components.queryItems = [URLQueryItem(name: "q", value: query)]
         return components.url!
+    }
+
+    private static func nearbyPlaceURL(candidateID: String) -> URL? {
+        guard !candidateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let encodedID = candidateID.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed)
+        else {
+            return nil
+        }
+
+        var components = baseComponents(host: "add", path: "")
+        components.percentEncodedPath = "/nearby/\(encodedID)"
+        return components.url
     }
 
     private static func sharedProfileURL(profileID: String) -> URL? {

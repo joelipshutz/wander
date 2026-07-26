@@ -76,7 +76,7 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "joe")
         XCTAssertEqual(filters.area, "LA")
-        XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "been", "LA", "joe"])
+        XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "check-in", "LA", "joe"])
     }
 
     private func visiblePlace(id: String, savedAt: Date) -> VisiblePlace {
