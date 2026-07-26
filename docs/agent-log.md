@@ -25261,3 +25261,46 @@ Build 101 exact-main validation checkpoint — 2026-07-26 14:34 PDT:
   the complete suite from exact corrected `main` before archiving.
 - The corrected focused build-number contract passed 1/1 with exit 0 on the
   same iPhone 16 Plus / iOS 18.6 destination. `git diff --check` also passed.
+TestFlight build 100 release completion — 2026-07-26 14:26 PDT:
+
+- Squash-merged REC-122 PR #217 as
+  `0765ac64c740691a17a92f72bd5b141f22f1c0ad`, then squash-merged the build-100
+  metadata in PR #248 as exact archived `main`
+  `c98612e41e39e5d1c5f5b0e67e7cd424e4eb9e85`.
+- Exact build-100 validation passed 750/750 tests with zero failures plus the
+  generic arm64/x86_64 Simulator build. Result bundle:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Logs/Test/Test-Wander-2026.07.26_14-00-19--0700.xcresult`.
+- Reconfirmed the takeover on the current iPhone 16e simulator at the standard
+  Dynamic Type size after the release build. The reviewed REC-122 branch had
+  already passed dual-device visual QA; the current iPhone 16 Plus capture was
+  obscured by the simulator's location-permission alert, not an app layout
+  regression.
+- Archived `/private/tmp/Wander-0.1-build100.xcarchive`. Archive inspection
+  confirmed app `rec.me`, marketing version `0.1`, build `100`, bundle id
+  `com.grayline.wander`, and valid strict code signing. `WanderWidgets.appex`,
+  `WanderNearbyWidgets.appex`, and `WanderShareExtension.appex` are embedded
+  and each reports build 100.
+- Exported and uploaded the unchanged archive with automatic App Store
+  distribution signing and `manageAppVersionAndBuildNumber=false`. App Store
+  Connect reported `Upload succeeded`, `Uploaded Wander`, and
+  `EXPORT SUCCEEDED`; archive upload metadata independently confirmed build
+  100.
+- `scripts/testflight-release.mjs` resolved App Store Connect build id
+  `4e326016-b968-42d2-9f0a-220712cc792d`, confirmed processing state `VALID`,
+  set `usesNonExemptEncryption=false`, updated en-US What to Test copy, attached
+  the build to `rec.me Alpha`, submitted external beta review, and confirmed
+  review state `APPROVED`. Apple's What to Test validator rejected the fire
+  emoji, so only that App Store Connect note says `Keep it up`; the shipped
+  in-app copy remains exactly `Keep it up 🔥`.
+- Build 100 is live at `https://testflight.apple.com/join/knEhRa6t`. Posted the
+  required tester-facing note in `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785101024352409`.
+- Added complete release receipts to REC-122 and REC-159; both remain Done.
+  Known alpha issue remains unchanged: Clerk authentication may show `Wander`
+  branding and the development-mode banner.
+- REC-152 merged after the build-100 archive freeze and is intentionally not in
+  this binary. Its independently started build-101 release is recorded above;
+  no build-101 files, status, or external actions were modified here.
+
+Final outcome: rec.me 0.1 (100) is uploaded, externally approved, attached to
+the public TestFlight group, and available to testers with REC-122 and REC-159.
