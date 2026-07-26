@@ -24841,3 +24841,39 @@ Landing and validation:
 Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
+
+## 2026-07-26 13:59 PDT - Codex - REC-160 Final Validation
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Progress`)
+
+Validation and handoff checkpoint:
+
+- Reconciled the branch through current `origin/main` at `ff20d52e7`,
+  preserving both REC-159 implementation and landing receipts. No REC-160
+  implementation file conflicted.
+- Following Apple's system-control privacy guidance, the final intent uses
+  `.requiresAuthentication` before opening the personal nearby-location
+  surface from a locked system placement.
+- Final focused Action Button and existing widget regression suite passed
+  20/20 with zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-56-50--0700.xcresult`.
+- Final complete suite passed 748/748 with zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-57-43--0700.xcresult`.
+- Final generic iOS Simulator build passed for the app and all embedded
+  extensions. `WanderWidgets.appex` is a universal arm64/x86_64 Simulator
+  binary.
+- Inspected the built App Intents metadata directly in both `Wander.app` and
+  `WanderWidgets.appex`. Both advertise `WanderOpenCheckInControlIntent` with
+  title `Check-in here`, iOS 18 introduction, `openAppWhenRun: true`,
+  authenticated execution, and the `WanderControlDestination` target.
+- Existing non-blocking warnings remain for traditional headermaps and
+  `WanderSupabaseClient` formatter actor isolation. No new control, intent,
+  widget, packaging, or metadata warning was introduced.
+- `git diff --check` passes. No build number, TestFlight binary, backend,
+  Supabase, or Slack announcement changed.
+- Physical Action Button validation remains a hardware-only check after a
+  signed install: assign **Settings → Action Button → Controls → rec.me →
+  Check-in here**, then verify locked, unlocked, cold-launch, and signed-out
+  behavior. These instructions are durable in `docs/setup.md`.

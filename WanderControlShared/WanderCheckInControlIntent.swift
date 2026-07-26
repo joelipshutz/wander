@@ -61,7 +61,7 @@ struct WanderOpenCheckInControlIntent: OpenIntent {
     static let description = IntentDescription(
         "Opens rec.me to choose and save the place where you are."
     )
-    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Destination")
     var target: WanderControlDestination

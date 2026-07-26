@@ -54,7 +54,7 @@ final class WanderActionButtonControlTests: XCTestCase {
 
         XCTAssertTrue(sharedIntent.contains("struct WanderOpenCheckInControlIntent: OpenIntent"))
         XCTAssertTrue(sharedIntent.contains("WanderControlNavigationCenter.shared.request(target.route)"))
-        XCTAssertTrue(sharedIntent.contains("static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed"))
+        XCTAssertTrue(sharedIntent.contains("static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication"))
 
         XCTAssertEqual(
             project.components(separatedBy: "- WanderControlShared").count - 1,
