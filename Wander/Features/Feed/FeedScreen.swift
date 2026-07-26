@@ -5,7 +5,7 @@ struct FeedScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
-    @State private var isShowingSearch = false
+    @State private var isShowingSearch = ProcessInfo.processInfo.arguments.contains("-WanderOpenDiscoverSearch")
     @State private var selectedProfile: FeedProfileRoute?
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
@@ -41,7 +41,10 @@ struct FeedScreen: View {
                 await refresh()
             }
             .fullScreenCover(isPresented: $isShowingSearch) {
-                DiscoverScreen()
+                DiscoverScreen(
+                    startsInPlaceSearch: true,
+                    onClose: { isShowingSearch = false }
+                )
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)

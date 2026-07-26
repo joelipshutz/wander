@@ -4911,6 +4911,54 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.lastDiscoverFilters.statuses, [.been])
     }
 
+    func testDiscoverFavoriteUsesExactOwnersAndOwnerRowEvidence() async throws {
+        let store = makeStore()
+
+        let results = await store.discover(query: "Ryan's favorite coffee spots")
+
+        XCTAssertEqual(Set(results.places.map(\.owner.handle)), ["ryan"])
+        XCTAssertFalse(results.places.isEmpty)
+        XCTAssertTrue(results.places.allSatisfy { $0.userPlace.status == .been })
+        XCTAssertTrue(results.places.allSatisfy { ($0.userPlace.ratingScore ?? 0) >= 4 })
+
+        let circuit = try XCTUnwrap(results.places.first { $0.place.canonicalName == "Circuit Coffee" })
+        let evidence = try XCTUnwrap(results.evidenceByUserPlaceID[circuit.userPlace.id])
+        XCTAssertEqual(evidence.ownerID, "user_ryan")
+        XCTAssertEqual(evidence.ownerName, "Ryan")
+        XCTAssertEqual(evidence.ratingScore, 4)
+        XCTAssertEqual(evidence.items.map(\.kind), [.owner, .opinion, .rating, .category])
+        XCTAssertTrue(evidence.items.allSatisfy { $0.sourceOwnerID == "user_ryan" })
+        XCTAssertTrue(evidence.summary.contains("Ryan's save"))
+        XCTAssertTrue(evidence.summary.contains("favorite"))
+        XCTAssertTrue(evidence.summary.contains("4/5"))
+    }
+
+    func testDiscoverFavoriteNeverQualifiesWannaGoSaves() async {
+        let store = makeStore()
+
+        let results = await store.discover(query: "Ryan's favorite restaurants")
+
+        XCTAssertFalse(results.places.isEmpty)
+        XCTAssertTrue(results.places.allSatisfy { $0.owner.handle == "ryan" })
+        XCTAssertTrue(results.places.allSatisfy { $0.userPlace.status == .been })
+        XCTAssertFalse(results.places.contains { $0.place.canonicalName == "Larchmont Noodles" })
+    }
+
+    func testDiscoverOwnerResolutionDoesNotUseSubstrings() async {
+        let parser = FakeFilterParser(
+            result: DiscoverFilters(
+                query: "Ry coffee",
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                ownerQuery: "ry"
+            )
+        )
+        let store = WanderStore(fixtures: WanderFixtures.seed(), parser: parser)
+
+        let results = await store.discover(query: "Ry coffee")
+
+        XCTAssertTrue(results.places.isEmpty)
+    }
+
     func testDiscoverParserCachesAndTracksAnalytics() async {
         let analytics = RecordingAnalyticsClient()
         let parser = FakeFilterParser(
@@ -4930,7 +4978,21 @@ final class WanderStoreTests: XCTestCase {
             analytics.events.map(\.name),
             [WanderAnalyticsEvents.discoverQueryParsed, WanderAnalyticsEvents.discoverQueryParsed]
         )
-        XCTAssertEqual(analytics.events.map { $0.properties["source"] }, ["parser", "cache"])
+        XCTAssertEqual(analytics.events.map { $0.properties["source"] }, ["remote", "cache"])
+        XCTAssertEqual(store.lastDiscoverParseSource, .cache)
+    }
+
+    func testDiscoverParserCacheEvictsLeastRecentlyUsedEntryAtFiftyQueries() async {
+        let parser = FakeFilterParser()
+        let store = WanderStore(fixtures: WanderFixtures.seed(), parser: parser)
+
+        for index in 0..<51 {
+            _ = await store.parseDiscover(query: "coffee query \(index)")
+        }
+        _ = await store.parseDiscover(query: "coffee query 0")
+
+        XCTAssertEqual(parser.queries.count, 52)
+        XCTAssertEqual(parser.queries.last, "coffee query 0")
     }
 
     func testDiscoverParserFailureFallsBackAndTracksFailure() async {
@@ -4942,6 +5004,15 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(filters, DiscoverFilters(query: "anything"))
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
+    }
+
+    func testDiscoverUnknownNonemptyQueryDoesNotSilentlyReturnEveryPlace() async {
+        let store = makeStore()
+
+        let results = await store.discover(query: "teleport me somewhere surprising")
+
+        XCTAssertTrue(results.places.isEmpty)
+        XCTAssertFalse(results.filters.hasRecognizedFacet)
     }
 
     func testDiscoverCanScopeBetweenMyPlacesFriendsAndEveryone() async {

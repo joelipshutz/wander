@@ -1,5 +1,33 @@
 import Foundation
 
+enum DiscoverOpinion: String, Codable, Equatable {
+    case favorite
+}
+
+enum DiscoverSort: String, Codable, Equatable {
+    case ownerRatingDescending = "owner_rating_desc"
+}
+
+enum DiscoverUnsupportedConcept: String, Codable, CaseIterable, Equatable, Hashable {
+    case distance
+    case hours
+    case nearMe = "near_me"
+    case openNow = "open_now"
+    case price
+    case recency
+
+    var displayTitle: String {
+        switch self {
+        case .distance: "distance"
+        case .hours: "hours"
+        case .nearMe: "near me"
+        case .openNow: "open now"
+        case .price: "price"
+        case .recency: "recency"
+        }
+    }
+}
+
 struct DiscoverFilters: Codable, Equatable {
     var query: String
     var categories: Set<String> = []
@@ -8,6 +36,15 @@ struct DiscoverFilters: Codable, Equatable {
     var relationship: ViewerRelationship?
     var ownerQuery: String?
     var tags: Set<String> = []
+    // Optional so schema-v2 clients can decode the previous Edge response during rollout/rollback.
+    var schemaVersion: Int?
+    var opinion: DiscoverOpinion?
+    var sort: DiscoverSort?
+    var unsupportedConcepts: Set<DiscoverUnsupportedConcept>?
+
+    var resolvedUnsupportedConcepts: Set<DiscoverUnsupportedConcept> {
+        unsupportedConcepts ?? []
+    }
 }
 
 struct DiscoverFilterChip: Identifiable, Equatable {
@@ -16,6 +53,26 @@ struct DiscoverFilterChip: Identifiable, Equatable {
 }
 
 extension DiscoverFilters {
+    var hasRecognizedFacet: Bool {
+        !categories.isEmpty
+            || area?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || !statuses.isEmpty
+            || relationship != nil
+            || ownerQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || !tags.isEmpty
+            || opinion != nil
+    }
+
+    var recognizedFacetCount: Int {
+        categories.count
+            + (area?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? 1 : 0)
+            + statuses.count
+            + (relationship == nil ? 0 : 1)
+            + (ownerQuery?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? 1 : 0)
+            + tags.count
+            + (opinion == nil ? 0 : 1)
+    }
+
     var chips: [DiscoverFilterChip] {
         var chips: [DiscoverFilterChip] = []
 
@@ -43,6 +100,10 @@ extension DiscoverFilters {
             chips.append(DiscoverFilterChip(id: "owner_\(ownerQuery)", title: ownerQuery))
         }
 
+        if opinion == .favorite {
+            chips.append(DiscoverFilterChip(id: "opinion_favorite", title: "favorites"))
+        }
+
         chips.append(contentsOf: tags.sorted().map { tag in
             DiscoverFilterChip(id: "tag_\(tag)", title: tag)
         })
@@ -54,6 +115,76 @@ extension DiscoverFilters {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
     }
+}
+
+enum DiscoverSemanticNormalizer {
+    static func normalized(_ input: DiscoverFilters, query: String) -> DiscoverFilters {
+        var filters = input
+        filters.query = query
+        filters.schemaVersion = 2
+
+        let normalizedQuery = query
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+
+        let requestsFavorite = contains(
+            normalizedQuery,
+            pattern: #"\b(favou?rite|best|loved|highly\s+rated)\b"#
+        )
+        if requestsFavorite {
+            filters.opinion = .favorite
+        }
+
+        if filters.opinion == .favorite {
+            filters.statuses = [.been]
+            filters.sort = .ownerRatingDescending
+        } else {
+            filters.sort = nil
+            if contains(
+                normalizedQuery,
+                pattern: #"\b(wanna\s+go|want(?:\s+to)?\s+(?:go|try)|wishlist|saved\s+for\s+later)\b"#
+            ) {
+                filters.statuses = [.wannaGo]
+            } else if contains(
+                normalizedQuery,
+                pattern: #"\b(been|went|tried|visited|checked\s+in|check-?ins?)\b"#
+            ) {
+                filters.statuses = [.been]
+            }
+        }
+
+        if contains(normalizedQuery, pattern: #"\b(friend|friends|mutuals)\b"#) {
+            filters.relationship = .mutual
+        } else if contains(
+            normalizedQuery,
+            pattern: #"\b(people\s+i\s+follow|people\s+you\s+follow|following)\b"#
+        ) {
+            filters.relationship = .follower
+        }
+
+        let detectedUnsupported = Set(
+            DiscoverUnsupportedConcept.allCases.filter { concept in
+                unsupportedPatterns[concept, default: []].contains { phrase in
+                    normalizedQuery.contains(phrase)
+                }
+            }
+        )
+        filters.unsupportedConcepts = filters.resolvedUnsupportedConcepts.union(detectedUnsupported)
+        return filters
+    }
+
+    private static func contains(_ value: String, pattern: String) -> Bool {
+        value.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    private static let unsupportedPatterns: [DiscoverUnsupportedConcept: [String]] = [
+        .distance: ["within ", "miles away", "walking distance"],
+        .hours: ["hours", "closes", "closing"],
+        .nearMe: ["near me", "nearby"],
+        .openNow: ["open now", "open late"],
+        .price: ["cheap", "price", "$"],
+        .recency: ["recent", "lately", "this week", "last week"]
+    ]
 }
 
 struct DiscoverFilterSchema: Codable, Equatable {
@@ -331,9 +462,64 @@ extension LocalPlace {
     }
 }
 
+enum DiscoverParseSource: String, Equatable {
+    case remote
+    case cache
+    case deterministic
+    case deterministicFallback = "deterministic_fallback"
+}
+
+enum DiscoverEvidenceKind: String, Equatable {
+    case owner
+    case opinion
+    case rating
+    case personalLabel
+    case category
+    case status
+    case area
+    case tag
+    case relationship
+}
+
+struct DiscoverEvidenceItem: Equatable {
+    let kind: DiscoverEvidenceKind
+    let displayValue: String
+    let sourceOwnerID: String?
+}
+
+struct DiscoverMatchEvidence: Equatable {
+    let userPlaceID: String
+    let ownerID: String
+    let ownerName: String
+    let note: String?
+    let ratingScore: Double?
+    let items: [DiscoverEvidenceItem]
+
+    var summary: String {
+        "Matched: " + items.map(\.displayValue).joined(separator: " · ")
+    }
+}
+
 struct DiscoverResults {
     let places: [VisiblePlace]
     let profiles: [ProfileShell]
+    let filters: DiscoverFilters
+    let parseSource: DiscoverParseSource
+    let evidenceByUserPlaceID: [String: DiscoverMatchEvidence]
+
+    init(
+        places: [VisiblePlace],
+        profiles: [ProfileShell],
+        filters: DiscoverFilters = DiscoverFilters(query: ""),
+        parseSource: DiscoverParseSource = .deterministic,
+        evidenceByUserPlaceID: [String: DiscoverMatchEvidence] = [:]
+    ) {
+        self.places = places
+        self.profiles = profiles
+        self.filters = filters
+        self.parseSource = parseSource
+        self.evidenceByUserPlaceID = evidenceByUserPlaceID
+    }
 }
 
 enum DiscoverLatestActivityPresentation {
@@ -621,13 +807,20 @@ enum DiscoverPlaceScope: String, CaseIterable, Identifiable, Equatable {
 
 @MainActor
 protocol LLMFilterParser {
+    var parseSource: DiscoverParseSource { get }
     func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters
 }
 
+extension LLMFilterParser {
+    var parseSource: DiscoverParseSource { .remote }
+}
+
 struct DeterministicFilterParser: LLMFilterParser {
+    var parseSource: DiscoverParseSource { .deterministic }
+
     func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
         let normalized = query.lowercased()
-        var filters = DiscoverFilters(query: query)
+        var filters = DiscoverFilters(query: query, schemaVersion: 2)
 
         for category in schema.allowedCategories where normalized.contains(category.lowercased()) {
             filters.categories.insert(category)
@@ -639,7 +832,12 @@ struct DeterministicFilterParser: LLMFilterParser {
             }
         }
 
-        if normalized.contains("been") || normalized.contains("went") || normalized.contains("tried") || normalized.contains("liked") || normalized.contains("favorite") || normalized.contains("best") || normalized.contains("recommended") {
+        if normalized.contains("favorite") || normalized.contains("favourite") {
+            filters.opinion = .favorite
+            filters.sort = .ownerRatingDescending
+        }
+
+        if normalized.contains("been") || normalized.contains("went") || normalized.contains("tried") || normalized.contains("liked") || normalized.contains("favorite") || normalized.contains("favourite") || normalized.contains("best") || normalized.contains("recommended") {
             filters.statuses.insert(.been)
         }
 
@@ -669,8 +867,23 @@ struct DeterministicFilterParser: LLMFilterParser {
             filters.tags.insert(tag)
         }
 
-        return filters
+        filters.unsupportedConcepts = Set(
+            DiscoverUnsupportedConcept.allCases.filter { concept in
+                Self.unsupportedPhrases[concept, default: []].contains { normalized.contains($0) }
+            }
+        )
+
+        return DiscoverSemanticNormalizer.normalized(filters, query: query)
     }
+
+    private static let unsupportedPhrases: [DiscoverUnsupportedConcept: [String]] = [
+        .distance: ["within ", "miles away", "walking distance"],
+        .hours: ["hours", "closes", "closing"],
+        .nearMe: ["near me", "nearby"],
+        .openNow: ["open now", "open late"],
+        .price: ["cheap", "price", "$"],
+        .recency: ["recent", "lately", "this week", "last week"]
+    ]
 
     private static let categoryAliases: [String: [String]] = [
         "restaurants_food": ["restaurant", "restaurants", "food", "fast food", "noodle", "noodles", "dinner", "lunch", "brunch", "sushi", "thai", "taco", "pizza"],
@@ -702,6 +915,13 @@ struct DeterministicFilterParser: LLMFilterParser {
         if let possessive = firstCapture(in: normalized, pattern: #"\b([a-z][a-z0-9_.-]{1,30})['’]s\b"#),
            !ignoredOwnerWords.contains(possessive) {
             return possessive
+        }
+
+        if let possessiveWithoutApostrophe = firstCapture(
+            in: normalized,
+            pattern: #"\b([a-z][a-z0-9_.-]{1,29})s\s+(?:favou?rite|best|loved|highly\s+rated)\b"#
+        ), !ignoredOwnerWords.contains(possessiveWithoutApostrophe) {
+            return possessiveWithoutApostrophe
         }
 
         return nil

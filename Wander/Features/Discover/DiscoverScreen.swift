@@ -10,7 +10,13 @@ struct DiscoverScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @State private var selectedMode: DiscoverMode = .places
-    @State private var placesQuery = ""
+    @State private var placesQuery: String
+    @State private var submittedPlacesQuery: String?
+    @State private var isPlaceSearchPresented: Bool
+    @State private var isPlaceSearchLoading = false
+    @State private var placeSearchTask: Task<Void, Never>?
+    @State private var activePlaceSearchSubmissionID: UUID?
+    @State private var didTrackPlaceSearchOpen = false
     @State private var memberQuery = ""
     @State private var placeResults = DiscoverResults(places: [], profiles: [])
     @State private var memberResults: [ProfileShell] = []
@@ -26,17 +32,54 @@ struct DiscoverScreen: View {
     @State private var lastHandledVisiblePlaceSignature: [DiscoverVisiblePlaceSignature]?
     @FocusState private var searchFieldFocused: Bool
     @Binding private var requestedSection: DiscoverSection?
+    private let onClose: (() -> Void)?
 
-    init(requestedSection: Binding<DiscoverSection?> = .constant(nil)) {
+    init(
+        requestedSection: Binding<DiscoverSection?> = .constant(nil),
+        startsInPlaceSearch: Bool = false,
+        onClose: (() -> Void)? = nil
+    ) {
+        let initialQuery = Self.resolvedInitialPlaceSearchQuery()
         _requestedSection = requestedSection
+        _placesQuery = State(initialValue: initialQuery)
+        _isPlaceSearchPresented = State(initialValue: startsInPlaceSearch || !initialQuery.isEmpty)
+        self.onClose = onClose
     }
 
-    private let tickerSuggestions = [
-        "Joe's favorite coffee shops in LA",
-        "Maya's date night spots",
-        "quiet work cafes with wifi",
-        "friends' sunset hikes"
+    private let placeSearchExamples = [
+        DiscoverSearchExample(
+            analyticsID: "owner_favorite_coffee",
+            query: "Ryan's favorite coffee spots",
+            detail: "Ryan · favorites · coffee",
+            systemImage: "mug.fill",
+            tint: WanderTheme.categorySun.color
+        ),
+        DiscoverSearchExample(
+            analyticsID: "quiet_work_cafe",
+            query: "quiet cafes for getting work done",
+            detail: "coffee · quiet · work",
+            systemImage: "laptopcomputer",
+            tint: WanderTheme.pinSocial.color
+        ),
+        DiscoverSearchExample(
+            analyticsID: "friends_sunset_hikes",
+            query: "friends' sunset hikes",
+            detail: "friends · outdoors · sunset",
+            systemImage: "sun.max.fill",
+            tint: WanderTheme.pinSocial.color
+        ),
+        DiscoverSearchExample(
+            analyticsID: "date_night_neighborhood",
+            query: "date-night spots in Silver Lake",
+            detail: "date · Silver Lake",
+            systemImage: "heart.fill",
+            tint: WanderTheme.terracotta.color
+        )
     ]
+
+    private var tickerSuggestions: [String] {
+        placeSearchExamples.map(\.query)
+    }
 
     private var profileResults: [ProfileShell] {
         memberResults.map(latestProfileShell)
@@ -73,7 +116,7 @@ struct DiscoverScreen: View {
     }
 
     private var isPlacesSearchActive: Bool {
-        !placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        submittedPlacesQuery != nil
     }
 
     private var isMemberSearchActive: Bool {
@@ -101,8 +144,8 @@ struct DiscoverScreen: View {
         }
 
         let candidates = friendProfiles.filter { profile in
-            profile.handle.lowercased().contains(ownerQuery)
-                || profile.displayName.lowercased().contains(ownerQuery)
+            profile.handle.lowercased() == ownerQuery
+                || profile.displayName.lowercased() == ownerQuery
         }
         return candidates.count > 1 ? candidates : []
     }
@@ -113,6 +156,11 @@ struct DiscoverScreen: View {
     }
 
     private func resultExplanation(groupCount count: Int, selectedOwner: ProfileShell?) -> String {
+        if placeResults.filters.opinion == .favorite,
+           let owner = placeResults.filters.ownerQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !owner.isEmpty {
+            return "Places \(owner.capitalized) saved and rated highly"
+        }
         if let selectedOwner {
             return "\(count) \(count == 1 ? "place" : "places") filtered from \(selectedOwner.displayName)"
         }
@@ -123,7 +171,46 @@ struct DiscoverScreen: View {
         return "\(count) \(count == 1 ? "place" : "places") from people you follow"
     }
 
+    private func matchEvidence(for group: VisiblePlaceGroup) -> DiscoverMatchEvidence {
+        if let evidence = group.places
+            .compactMap({ placeResults.evidenceByUserPlaceID[$0.userPlace.id] })
+            .first {
+            return evidence
+        }
+
+        let primary = group.primary
+        return DiscoverMatchEvidence(
+            userPlaceID: primary.userPlace.id,
+            ownerID: primary.owner.id,
+            ownerName: primary.owner.displayName,
+            note: primary.userPlace.note,
+            ratingScore: primary.userPlace.ratingScore,
+            items: [
+                DiscoverEvidenceItem(
+                    kind: .owner,
+                    displayValue: primary.owner.displayName,
+                    sourceOwnerID: primary.owner.id
+                ),
+                DiscoverEvidenceItem(
+                    kind: .category,
+                    displayValue: primary.effectiveCategoryDisplay.compactTitle,
+                    sourceOwnerID: primary.owner.id
+                )
+            ]
+        )
+    }
+
     private var placeResultTitle: String {
+        if placeResults.filters.opinion == .favorite,
+           let owner = placeResults.filters.ownerQuery?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !owner.isEmpty {
+            let category = placeResults.filters.categories
+                .map(WanderPlaceCategory.broadCategory)
+                .sorted()
+                .first?
+                .lowercased() ?? "place"
+            return "\(owner.capitalized)'s \(category) favorites"
+        }
         let trimmed = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "places" : trimmed
     }
@@ -132,15 +219,21 @@ struct DiscoverScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    modeTabs
+                    if selectedMode == .places, isPlaceSearchPresented {
+                        activePlaceSearchHeader
+                            .id("discover-place-search-top")
+                        activePlaceSearchContent
+                    } else {
+                        modeTabs
 
-                    switch selectedMode {
-                    case .places:
-                        placesSearchField
-                        placesContent
-                    case .members:
-                        membersSearchField
-                        membersContent
+                        switch selectedMode {
+                        case .places:
+                            placesSearchField
+                            placesContent
+                        case .members:
+                            membersSearchField
+                            membersContent
+                        }
                     }
                 }
                 .padding(WanderTheme.spacing4)
@@ -148,8 +241,29 @@ struct DiscoverScreen: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .wanderScreen()
+            .modifier(
+                DiscoverScrollToTopModifier(
+                    isActive: isPlaceSearchPresented,
+                    trigger: "\(submittedPlacesQuery ?? "draft")|\(isPlaceSearchLoading)"
+                )
+            )
             .task {
                 applyRequestedSection()
+                if isPlaceSearchPresented, !didTrackPlaceSearchOpen {
+                    didTrackPlaceSearchOpen = true
+                    store.trackDiscoverSearchEvent(
+                        WanderAnalyticsEvents.discoverSearchOpened,
+                        properties: ["entry_surface": onClose == nil ? "discover" : "feed"]
+                    )
+                }
+                if isPlaceSearchPresented,
+                   !ProcessInfo.processInfo.arguments.contains("-WanderDisableSearchAutofocus") {
+                    await Task.yield()
+                    searchFieldFocused = true
+                }
+                if !placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    submitPlaceSearch()
+                }
                 activityLoadState = .loading
                 await refreshDiscoverDefaultContent()
                 lastHandledAuthState = auth.isSignedIn
@@ -176,19 +290,31 @@ struct DiscoverScreen: View {
                 else {
                     return
                 }
-                await refreshPlaces(query: placesQuery)
+                if submittedPlacesQuery != nil {
+                    await refreshPlaces(query: placesQuery)
+                }
                 guard !Task.isCancelled else { return }
                 await refreshMembers(query: memberQuery)
-            }
-            .task(id: placesQuery) {
-                selectedOwnerCandidateID = nil
-                await refreshPlaces(query: placesQuery, debounce: true)
             }
             .task(id: memberQuery) {
                 await refreshMembers(query: memberQuery, debounce: true)
             }
+            .onChange(of: placesQuery) { _, newValue in
+                guard let submittedPlacesQuery,
+                      normalizedSearchQuery(newValue) != normalizedSearchQuery(submittedPlacesQuery)
+                else { return }
+                cancelPlaceSearchWork()
+                self.submittedPlacesQuery = nil
+                selectedOwnerCandidateID = nil
+                placeResults = DiscoverResults(places: [], profiles: [])
+            }
             .onChange(of: requestedSection) { _, _ in
                 applyRequestedSection()
+            }
+            .onChange(of: searchFieldFocused) { _, isFocused in
+                if isFocused, selectedMode == .places, !isPlaceSearchPresented {
+                    activatePlaceSearch()
+                }
             }
             .task(id: visiblePlaceSignature) {
                 let signature = visiblePlaceSignature
@@ -198,7 +324,9 @@ struct DiscoverScreen: View {
                 }
                 guard previousSignature != signature else { return }
                 lastHandledVisiblePlaceSignature = signature
-                await refreshPlaces(query: placesQuery)
+                if submittedPlacesQuery != nil {
+                    await refreshPlaces(query: placesQuery)
+                }
                 guard !Task.isCancelled else { return }
                 await refreshMembers(query: memberQuery)
             }
@@ -227,6 +355,7 @@ struct DiscoverScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
+            .onDisappear(perform: cancelPlaceSearchWork)
         }
     }
 
@@ -234,7 +363,160 @@ struct DiscoverScreen: View {
         guard let requestedSection else { return }
         selectedMode = requestedSection == .members ? .members : .places
         self.requestedSection = nil
+        if requestedSection == .members {
+            exitPlaceSearch()
+        }
         searchFieldFocused = false
+    }
+
+    private func activatePlaceSearch() {
+        guard !isPlaceSearchPresented else { return }
+        isPlaceSearchPresented = true
+        if !didTrackPlaceSearchOpen {
+            didTrackPlaceSearchOpen = true
+            store.trackDiscoverSearchEvent(
+                WanderAnalyticsEvents.discoverSearchOpened,
+                properties: ["entry_surface": "discover"]
+            )
+        }
+        Task { @MainActor in
+            await Task.yield()
+            searchFieldFocused = true
+        }
+    }
+
+    private func exitPlaceSearch() {
+        let exitState: String
+        if isPlaceSearchLoading {
+            exitState = "loading"
+        } else if submittedPlacesQuery != nil {
+            exitState = "results"
+        } else if placesQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            exitState = "empty"
+        } else {
+            exitState = "draft"
+        }
+        if isPlaceSearchPresented {
+            store.trackDiscoverSearchEvent(
+                WanderAnalyticsEvents.discoverSearchExited,
+                properties: ["state": exitState, "cancelled": isPlaceSearchLoading ? "true" : "false"]
+            )
+        }
+        didTrackPlaceSearchOpen = false
+        cancelPlaceSearchWork()
+        if let onClose {
+            searchFieldFocused = false
+            onClose()
+            return
+        }
+        isPlaceSearchPresented = false
+        isPlaceSearchLoading = false
+        submittedPlacesQuery = nil
+        selectedOwnerCandidateID = nil
+        placesQuery = ""
+        placeResults = DiscoverResults(places: [], profiles: [])
+        searchFieldFocused = false
+    }
+
+    private func clearPlaceSearch() {
+        cancelPlaceSearchWork()
+        placesQuery = ""
+        submittedPlacesQuery = nil
+        selectedOwnerCandidateID = nil
+        placeResults = DiscoverResults(places: [], profiles: [])
+        isPlaceSearchLoading = false
+        searchFieldFocused = true
+    }
+
+    private func submitPlaceSearch() {
+        submitPlaceSearch(source: "typed")
+    }
+
+    private func submitPlaceSearch(source: String) {
+        let query = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+
+        cancelPlaceSearchWork()
+        let submissionID = UUID()
+        activePlaceSearchSubmissionID = submissionID
+        placesQuery = query
+        submittedPlacesQuery = query
+        selectedOwnerCandidateID = nil
+        isPlaceSearchLoading = true
+        searchFieldFocused = false
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.discoverSearchSubmitted,
+            properties: [
+                "query_length": discoverQueryLengthBucket(query.count),
+                "source": source,
+                "schema_version": "2"
+            ]
+        )
+
+        placeSearchTask = Task { @MainActor in
+            let results = await store.discover(query: query, scope: .everyone, backend: backend)
+            guard !Task.isCancelled,
+                  isPlaceSearchPresented,
+                  activePlaceSearchSubmissionID == submissionID,
+                  submittedPlacesQuery == query,
+                  normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
+            else { return }
+            placeResults = results
+            isPlaceSearchLoading = false
+            placeSearchTask = nil
+            store.trackDiscoverSearchEvent(
+                WanderAnalyticsEvents.discoverSearchResults,
+                properties: [
+                    "result_count": discoverResultCountBucket(results.places.count),
+                    "exact_zero": results.places.isEmpty ? "true" : "false",
+                    "parse_source": results.parseSource.rawValue
+                ]
+            )
+        }
+    }
+
+    private func discoverQueryLengthBucket(_ count: Int) -> String {
+        switch count {
+        case 0...20: "0_20"
+        case 21...60: "21_60"
+        case 61...120: "61_120"
+        default: "121_160"
+        }
+    }
+
+    private func discoverResultCountBucket(_ count: Int) -> String {
+        switch count {
+        case 0: "0"
+        case 1: "1"
+        case 2...5: "2_5"
+        case 6...10: "6_10"
+        default: "11_plus"
+        }
+    }
+
+    private func cancelPlaceSearchWork() {
+        placeSearchTask?.cancel()
+        placeSearchTask = nil
+        activePlaceSearchSubmissionID = nil
+        isPlaceSearchLoading = false
+    }
+
+    private func normalizedSearchQuery(_ query: String) -> String {
+        query
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func resolvedInitialPlaceSearchQuery(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderDiscoverSearchQuery") else {
+            return ""
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return "" }
+        return arguments[valueIndex]
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -308,7 +590,10 @@ struct DiscoverScreen: View {
             text: $placesQuery,
             placeholders: tickerSuggestions,
             isTicker: true,
-            accessibilityLabel: "Search places"
+            accessibilityLabel: "Search places",
+            onFocus: activatePlaceSearch,
+            onSubmit: submitPlaceSearch,
+            onClear: clearPlaceSearch
         )
         .focused($searchFieldFocused)
     }
@@ -318,9 +603,176 @@ struct DiscoverScreen: View {
             text: $memberQuery,
             placeholders: ["Search name or @handle"],
             isTicker: false,
-            accessibilityLabel: "Search people"
+            accessibilityLabel: "Search people",
+            onFocus: {},
+            onSubmit: {},
+            onClear: {}
         )
         .focused($searchFieldFocused)
+    }
+
+    private var activePlaceSearchHeader: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Button(action: exitPlaceSearch) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 22, weight: .black))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            }
+            .accessibilityLabel("Back to Discover")
+
+            DiscoverSearchField(
+                text: $placesQuery,
+                placeholders: ["Ask about a place…"],
+                isTicker: false,
+                accessibilityLabel: "Ask about a place",
+                onFocus: {},
+                onSubmit: submitPlaceSearch,
+                onClear: clearPlaceSearch
+            )
+            .focused($searchFieldFocused)
+        }
+    }
+
+    @ViewBuilder
+    private var activePlaceSearchContent: some View {
+        if isPlaceSearchLoading {
+            DiscoverLoadingPanel(label: "Understanding your search")
+        } else if submittedPlacesQuery != nil {
+            placeSearchInterpretation
+            placeResultsSection
+        } else {
+            placeSearchTeachingState
+        }
+    }
+
+    private var placeSearchTeachingState: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            VStack(spacing: WanderTheme.spacing2) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .fill(WanderTheme.surfaceBone.color)
+                        .frame(width: 92, height: 78)
+                        .rotationEffect(.degrees(-4))
+                    Image(systemName: "mappin.circle")
+                        .font(.system(size: 38, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                }
+                .accessibilityHidden(true)
+
+                Text("Ask for a place the way you'd ask a friend")
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("People, neighborhoods, moods, and moments can all go in one sentence.")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, WanderTheme.spacing2)
+
+            Text("TRY ONE")
+                .font(.system(size: 12, weight: .black))
+                .tracking(2)
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            ForEach(placeSearchExamples) { example in
+                Button {
+                    placesQuery = example.query
+                    store.trackDiscoverSearchEvent(
+                        WanderAnalyticsEvents.discoverSearchExampleSelected,
+                        properties: ["example_id": example.analyticsID]
+                    )
+                    submitPlaceSearch(source: "example")
+                } label: {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Image(systemName: example.systemImage)
+                            .font(.system(size: 20, weight: .black))
+                            .foregroundStyle(example.tint)
+                            .frame(width: 48, height: 48)
+                            .background(example.tint.opacity(0.14))
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(example.query)
+                                .font(.system(size: 16, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .multilineTextAlignment(.leading)
+                            Text(example.detail)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .multilineTextAlignment(.leading)
+                        }
+
+                        Spacer(minLength: WanderTheme.spacing2)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                    .padding(WanderTheme.spacing3)
+                    .frame(maxWidth: .infinity, minHeight: 76)
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(example.query)
+                .accessibilityHint("Example search: \(example.detail)")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var placeSearchInterpretation: some View {
+        let filters = placeResults.filters
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("Understood as")
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            if filters.chips.isEmpty {
+                Text("places matching your words")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(filters.chips) { chip in
+                            Text(chip.title)
+                                .font(.system(size: 12, weight: .black))
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .frame(minHeight: 32)
+                                .background(WanderTheme.terracottaTint.color)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+
+            if !filters.resolvedUnsupportedConcepts.isEmpty {
+                let concepts = filters.resolvedUnsupportedConcepts
+                    .map(\.displayTitle)
+                    .sorted()
+                    .joined(separator: ", ")
+                Text("We can't reliably filter by \(concepts) yet, so those words weren't applied.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.stateWarning.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if placeResults.parseSource == .deterministicFallback {
+                Text("Using basic matching because smart search is temporarily unavailable.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     @ViewBuilder
@@ -357,7 +809,23 @@ struct DiscoverScreen: View {
             }
 
             if groups.isEmpty {
-                EmptyPanel(title: "No matching places yet", action: "try another person, place type, or area")
+                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    EmptyPanel(
+                        title: "No exact matches yet",
+                        action: "Nothing was broadened automatically. Remove one detail or try the explicit option below."
+                    )
+
+                    if let relaxedQuery = favoriteRelaxationQuery {
+                        WanderPrimaryButton(
+                            title: "Search visited instead",
+                            systemImage: "arrow.right"
+                        ) {
+                            placesQuery = relaxedQuery
+                            submitPlaceSearch(source: "relaxation")
+                        }
+                        .accessibilityHint("Submits \(relaxedQuery)")
+                    }
+                }
             } else {
                 ForEach(groups) { group in
                     let primary = group.primary
@@ -365,7 +833,7 @@ struct DiscoverScreen: View {
                         group: group,
                         isSavedByCurrentUser: primary.owner.id == store.currentUser.id
                             || !group.aliases.isDisjoint(with: savedAliases),
-                        matchedOwnerName: selectedOwner?.displayName ?? primary.owner.displayName,
+                        evidence: matchEvidence(for: group),
                         currentUserID: store.currentUser.id
                     ) {
                         selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
@@ -377,6 +845,23 @@ struct DiscoverScreen: View {
                 }
             }
         }
+    }
+
+    private var favoriteRelaxationQuery: String? {
+        guard placeResults.filters.opinion == .favorite,
+              let submittedPlacesQuery
+        else { return nil }
+        let relaxed = submittedPlacesQuery
+            .replacingOccurrences(
+                of: #"\b(favou?rite|best|loved|highly\s+rated)\b"#,
+                with: "visited",
+                options: [.regularExpression, .caseInsensitive]
+            )
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizedSearchQuery(relaxed) == normalizedSearchQuery(submittedPlacesQuery)
+            ? nil
+            : relaxed
     }
 
     private var latestActivitySection: some View {
@@ -744,17 +1229,18 @@ struct DiscoverScreen: View {
         }
     }
 
-    private func refreshPlaces(query: String, debounce: Bool = false) async {
+    private func refreshPlaces(query: String) async {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else {
-            placeResults = DiscoverResults(places: [], profiles: [])
-            selectedOwnerCandidateID = nil
-            return
-        }
+        guard !trimmedQuery.isEmpty,
+              let submittedPlacesQuery,
+              normalizedSearchQuery(submittedPlacesQuery) == normalizedSearchQuery(trimmedQuery)
+        else { return }
 
-        guard await waitForSearchDebounceIfNeeded(debounce) else { return }
         let results = await store.discover(query: query, scope: .everyone, backend: backend)
-        guard !Task.isCancelled, query == placesQuery else { return }
+        guard !Task.isCancelled,
+              submittedPlacesQuery == self.submittedPlacesQuery,
+              normalizedSearchQuery(query) == normalizedSearchQuery(placesQuery)
+        else { return }
         placeResults = results
     }
 
@@ -857,6 +1343,16 @@ private struct DiscoverVisiblePlaceSignature: Equatable {
         status = visiblePlace.userPlace.status
         visibility = visiblePlace.userPlace.visibility
     }
+}
+
+private struct DiscoverSearchExample: Identifiable {
+    let analyticsID: String
+    let query: String
+    let detail: String
+    let systemImage: String
+    let tint: Color
+
+    var id: String { query }
 }
 
 private enum DiscoverMode: String, CaseIterable, Identifiable {
@@ -1134,11 +1630,32 @@ private struct PeopleRecommendationCard: View {
     }
 }
 
+private struct DiscoverScrollToTopModifier: ViewModifier {
+    let isActive: Bool
+    let trigger: String
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content
+                .onChange(of: trigger) { _, _ in
+                    guard isActive else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        proxy.scrollTo("discover-place-search-top", anchor: .top)
+                    }
+                }
+        }
+    }
+}
+
 private struct DiscoverSearchField: View {
     @Binding var text: String
     let placeholders: [String]
     let isTicker: Bool
     let accessibilityLabel: String
+    let onFocus: () -> Void
+    let onSubmit: () -> Void
+    let onClear: () -> Void
     @State private var placeholderIndex = 0
 
     private var placeholder: String {
@@ -1169,11 +1686,14 @@ private struct DiscoverSearchField: View {
                     .autocorrectionDisabled()
                     .submitLabel(.search)
                     .foregroundStyle(WanderTheme.textInk.color)
+                    .onTapGesture(perform: onFocus)
+                    .onSubmit(onSubmit)
             }
 
             if !text.isEmpty {
                 Button {
                     text = ""
+                    onClear()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20, weight: .bold))
@@ -1218,7 +1738,7 @@ private struct DiscoverSearchField: View {
 private struct DiscoverPlaceResultCard: View {
     let group: VisiblePlaceGroup
     let isSavedByCurrentUser: Bool
-    let matchedOwnerName: String
+    let evidence: DiscoverMatchEvidence
     let currentUserID: String
     let openPlace: () -> Void
     let save: () -> Void
@@ -1239,7 +1759,7 @@ private struct DiscoverPlaceResultCard: View {
                                 .foregroundStyle(WanderTheme.textInk.color)
                                 .lineLimit(1)
 
-                            if let score = group.recommendedScore {
+                            if let score = evidence.ratingScore {
                                 Text(PlaceRating.averageDisplay(score))
                                     .font(.system(size: 12, weight: .black))
                                     .foregroundStyle(WanderTheme.textOnAction.color)
@@ -1273,7 +1793,7 @@ private struct DiscoverPlaceResultCard: View {
                             Text(matchLine)
                                 .font(.system(size: 12, weight: .black))
                                 .foregroundStyle(WanderTheme.terracotta.color)
-                                .lineLimit(1)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -1315,33 +1835,20 @@ private struct DiscoverPlaceResultCard: View {
     }
 
     private var noteLine: String? {
-        guard let note = visiblePlace.userPlace.note?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let note = evidence.note?.trimmingCharacters(in: .whitespacesAndNewlines),
               !note.isEmpty
         else {
             return nil
         }
-        return "\(matchedOwnerName): \(note)"
+        return "\(evidence.ownerName): \(note)"
     }
 
     private var matchLine: String {
-        [
-            matchedOwnerName,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
-            visiblePlace.userPlace.status.displayTitle,
-            visiblePlace.place.locality
-        ]
-            .compactMap { value in
-                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed?.isEmpty == false ? trimmed : nil
-            }
-            .joined(separator: " · ")
+        evidence.summary
     }
 
     private var displayOwner: LocalProfile {
-        group.places.first { visiblePlace in
-            visiblePlace.owner.displayName == matchedOwnerName
-                || visiblePlace.owner.handle == matchedOwnerName
-        }?.owner ?? visiblePlace.owner
+        group.places.first { $0.owner.id == evidence.ownerID }?.owner ?? visiblePlace.owner
     }
 
     private var displayOwnerColor: Color {
