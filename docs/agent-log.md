@@ -24778,3 +24778,34 @@ PR handoff (11:32 PDT):
   the 747/747 result and two-size visual review, and calls out the remaining
   dense same-coordinate MapKit collision follow-up. REC-147 should remain In
   Review until the PR lands; no TestFlight release was requested.
+
+## 2026-07-26 14:06 PDT — Codex — REC-147 latest-main stack refresh
+
+Agent: Codex using the repo's native implementation and Linear workflow
+Branch target: `codex/rec-147-direction-a-map` (PR #241), followed by stacked
+`codex/rec-147-feed-profile-tickets` (PR #242)
+Worktrees: `/private/tmp/rec147-map-latest` and
+`/private/tmp/rec147-stack-latest`
+Linear: `REC-147` (`In Progress`)
+
+Goal: update the complete Direction A ticket stack from former base `b4d7c98`
+onto current `origin/main` `c98612e` before Joe tests on a connected phone.
+
+Starting status and coordination:
+
+- Refreshed origin and confirmed current main adds REC-159, the newer streak
+  celebration hierarchy from PR #217, its landing record, and build-100 prep.
+- Both existing REC-147 worktrees are clean. The root phone-build checkout is
+  still 54 commits behind with unrelated untracked `tmp/` data and remains
+  untouched.
+- Created clean detached temporary worktrees for conflict resolution because
+  the named PR branches remain open in Xcode and the root checkout is not safe
+  to reuse.
+- Expected overlap: append-only `docs/agent-log.md`, plus the stacked PR's
+  `SaveStreakCelebrationView.swift` terminology changes against PR #217's newer
+  visual hierarchy. Preserve both the newer hierarchy and REC-147's current
+  Check in/Wanna vocabulary.
+- Validation target: focused ticket/copy/streak contracts, full iOS suite,
+  generic simulator build, and refreshed iPhone 16 Plus/iPhone 16e visuals.
+  No backend/schema, build-number, archive, upload, TestFlight, or Slack action
+  is authorized.
