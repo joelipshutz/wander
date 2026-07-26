@@ -22646,6 +22646,132 @@ Handoff completion — 2026-07-25 23:34 PDT:
   both REC-97 and REC-150 records were preserved. Upstream changes were
   documentation-only, so the already-green 8/8 focused and 696/696 full test
   results still cover the unchanged REC-97 application source.
+## 2026-07-25 21:50 PDT - Codex - REC-146 Profile map filter sharing
+
+Agent: Codex
+Branch: `codex/rec-146-profile-filter-sharing`
+Worktree: `/private/tmp/recme-rec146-profile-filter-sharing`
+Linear: `REC-146` (`In Progress`)
+
+Goal: update Profile > your map so its subtitle reports the accurate Been-only
+city and place totals as `{x} cities • Been to {x} places`, and add an
+accessible share option to every Places, Cities, and Countries summary row.
+Each row share should reuse the existing stable profile-link plus PNG workflow
+while rendering only the row's matching Been places.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from `origin/main` at
+  `d8ef2e74d`.
+- The primary checkout is mid-conflict on `codex/rec-142-widgets`, including
+  `project.yml`, the generated Xcode project, and this log. It remains
+  untouched; this branch is isolated specifically to avoid that overlap.
+- REC-146 already covered individual map-item sharing. Expanded its title,
+  description, and acceptance criteria for the requested summary copy/counts
+  and row-level accessible sharing, then moved it from Backlog to In Progress.
+- Expected files are
+  `Wander/Features/Profile/ProfileOwnerHome.swift`, focused Profile presenter or
+  navigation/share tests under `WanderTests/`, and this append-only log.
+  `project.yml`, backend contracts, build number, TestFlight, and Slack are out
+  of scope.
+
+Implementation and validation — 2026-07-25 22:35 PDT:
+
+- Profile map totals now derive from the resolved Been-place collection rather
+  than only from mappable coordinates. The subtitle uses correct singular and
+  plural forms in the requested `{x} cities • Been to {x} places` format.
+- Every Places, Cities, and Countries summary row now keeps its existing
+  navigation action and adds a separate 44-point share action. Sharing renders
+  an on-demand PNG containing only that row's mappable Been places and sends it
+  through the existing stable profile-link workflow with filter-specific copy.
+- Added regression coverage for accurate totals when a resolved place has no
+  valid map coordinate, summary-to-pin filtering, filter-specific share
+  content, and the separate navigation/share interaction contract.
+- Updated the worktree onto `origin/main` at `e7b12a97f`. The overlapping
+  Profile test and append-only log conflicts preserved both upstream REC-142
+  work and this REC-146 work.
+- Focused validation passed 22/22 after adapting the share task syntax to the
+  existing Profile source contract. Final full suite passed 692/692 on iPhone
+  17 Pro, iOS 26.5:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_22-34-39--0700.xcresult`.
+- Visual QA passed on iPhone 17e and iPhone 17 Pro. The title, requested count
+  copy, map, segmented control, percentages, chevrons, and circular share
+  actions remain legible without clipping or overlap. Screenshots:
+  `/private/tmp/rec146-profile-map-17e.png` and
+  `/private/tmp/rec146-profile-map-17pro.png`.
+- `xcodegen generate` completed with no generated-project diff, and
+  `git diff --check` passed. Existing Swift isolation, App Intents, and
+  traditional headermap warnings remain unchanged.
+- Next: commit and push the feature branch, open a ready PR linked to REC-146,
+  move the issue to In Review, and leave TestFlight/build 98 untouched because
+  no release was requested.
+
+Handoff — 2026-07-25 22:38 PDT:
+
+- Committed the implementation as `070e8b636` and pushed
+  `codex/rec-146-profile-filter-sharing`.
+- Opened ready PR #221 against `main`:
+  `https://github.com/joelipshutz/wander/pull/221`.
+- Linked the PR to REC-146, posted the validation summary, and moved the Linear
+  issue to `In Review`.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser reports `Wander, codex/rec-146-profile-filter-sharing`.
+- Known issues: none specific to REC-146. Existing build warnings remain
+  unchanged. TestFlight/build 98, beta-group changes, and tester Slack notes
+  were intentionally not performed because no release was requested.
+
+Final outcome: accurate Profile map totals and per-filter share actions are
+implemented, fully tested, visually validated, and ready for review in PR #221.
+
+Pre-landing review and hardening — 2026-07-25 23:31 PDT:
+
+- Ryan requested that PR #221 land on `main`. This remains a merge-only request:
+  build 97 is the latest completed TestFlight release, and no build-number bump,
+  archive, upload, beta-group change, or tester Slack note is authorized.
+- Fetched current `origin/main` and confirmed the ready PR was exactly current
+  with `main`, mergeable, and limited to the Profile map/share implementation,
+  focused tests, and coordination log. No backend, auth, database, project, or
+  release metadata is in scope.
+- The gstack pre-landing review plus independent design, test, and
+  security/performance passes found one correctness blocker: two local
+  user-place aliases can resolve to the same canonical place, causing the new
+  Been-place total and map pins to double count it. The presenter now
+  canonicalizes resolved Been places by place ID with a deterministic preferred
+  user-place row, and the existing alias fixture now asserts one place and one
+  map point.
+- Hardened the row share flow discovered during review: only one row can prepare
+  at a time; preparation cancels when the row disappears; unavailable unsynced
+  rows are visibly disabled; failures show an alert and VoiceOver announcement;
+  filter PNGs are deleted after the activity sheet closes; and cancellation
+  cleans up a just-created attachment.
+- Replaced undocumented activity-controller subject KVC with a supported
+  `UIActivityItemSource` that supplies the message and subject. Added regression
+  coverage for the supported activity source and the new failure/cancellation
+  source contracts.
+- Focused post-fix validation passed 19/19 presenter tests, including the
+  canonical-alias regression. The share/navigation selectors compiled cleanly;
+  their exact contract tests will be included in the final complete-suite run.
+  Focused result:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-30-21--0700.xcresult`.
+- Greptile had no line-level or top-level review comments. The core scope review
+  found no additional blocker. Prior iPhone 17e and iPhone 17 Pro visual QA
+  remains applicable because the happy-path layout did not change; review
+  hardening affects disabled, failure, cancellation, and cleanup states.
+- Next: run the complete iPhone 17 Pro suite on the hardened head, record the
+  final review, commit and push the fixes, recheck mergeability against current
+  `main`, post validation to PR #221, and squash-merge it.
+
+Final pre-push validation — 2026-07-25 23:32 PDT:
+
+- The two exact share/navigation contracts passed 2/2:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-31-33--0700.xcresult`.
+- The complete iPhone 17 Pro, iOS 26.5 suite passed 693/693 on the hardened
+  branch:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-31-47--0700.xcresult`.
+- Existing Swift isolation, simulator entitlement/resource, App Intents, and
+  traditional headermap warnings remain unchanged. No REC-146 regression or
+  unresolved pre-landing review finding remains.
+
 ## 2026-07-25 22:29 PDT - Codex - REC-150 Discover Search Engineering Plan
 
 Agent: Codex
