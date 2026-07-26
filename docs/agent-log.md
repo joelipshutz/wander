@@ -22786,3 +22786,25 @@ Final implementation validation checkpoint:
 Next: complete the merge commit, publish the implementation PR, move REC-143
 to `In Review`, and open this isolated project in Xcode with
 `codex/rec-143-checkins-implementation` visible in Branch Chooser.
+
+Publication and Xcode handoff — 2026-07-25 22:49 PDT:
+
+- Completed the latest-main merge as `94ecc9732` and pushed
+  `codex/rec-143-checkins-implementation` to origin.
+- Opened ready implementation PR #224:
+  `https://github.com/joelipshutz/wander/pull/224`.
+- Confirmed Linear REC-143 has the PR/branch attachments and moved it from
+  `In Progress` to `In Review`; the final validation and handoff record will
+  be posted there after this log commit is pushed.
+- Used Xcode's native Open panel to open the isolated project at
+  `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins/Wander.xcodeproj`.
+  Visually verified the project URL is that worktree and Xcode's Branch
+  Chooser shows `codex/rec-143-checkins-implementation`.
+- The branch is ready for Ryan to choose a simulator or connected iPhone and
+  press Run. No uncommitted source or project changes remain from opening
+  Xcode, and no known implementation blocker remains.
+
+Final outcome: repeatable Check-ins and ticket presentation are implemented,
+the hosted schema is current, the merged app/widget project is fully tested,
+PR #224 is ready for review, REC-143 is `In Review`, and Xcode is on the exact
+implementation branch requested for local testing.
