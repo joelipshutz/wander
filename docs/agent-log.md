@@ -24803,3 +24803,18 @@ REC-152 implementation validation — 2026-07-26 13:35 PDT:
 - `git diff --check` passed. No TestFlight build was requested, so build 99
   remains unchanged. Next: publish a ready PR for REC-152 and attach the PR and
   validation receipts to Linear and Mission Control.
+
+REC-152 review handoff — 2026-07-26 13:40 PDT:
+
+- Committed the implementation as `9d6a64f` (`feat: add recent activity to
+  profile`), pushed `codex/rec-152-profile-activity`, and opened ready PR #245:
+  `https://github.com/joelipshutz/wander/pull/245`.
+- Linked PR #245 to Linear REC-152, added the validation receipt, and moved the
+  issue from In Progress to In Review.
+- Opened the isolated worktree's `Wander.xcodeproj` in Xcode for local testing;
+  the worktree remains on `codex/rec-152-profile-activity`.
+- Mission Control at `http://localhost:4000` was unavailable (`curl` exit 7),
+  and the documented `com.grayline.mission-control` LaunchAgent was not loaded
+  or present in `~/Library/LaunchAgents`. Its existing task
+  `67856d32-86fa-4faa-8121-a5fdac4af423` therefore could not be advanced to
+  review in this session; Linear and the PR contain the complete live status.
