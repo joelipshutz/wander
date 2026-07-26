@@ -22609,3 +22609,15 @@ Implementation and validation — 2026-07-25 22:46 PDT:
 - No App Store build number, archive, TestFlight state, or Slack announcement
   was changed. Next: publish a ready PR for REC-153 and keep the voice/nearby
   widgets as separately scoped follow-up implementation.
+
+Handoff — 2026-07-25 22:49 PDT:
+
+- Committed the implementation as `81d9d5938`, pushed
+  `codex/rec-153-widget-links`, and opened ready PR #225:
+  `https://github.com/joelipshutz/wander/pull/225`.
+- REC-153 is ready for review with no known implementation or validation
+  blocker. The worktree-only `DerivedData-rec153/` build output remains
+  untracked and is not part of the branch.
+- Next: review/merge PR #225. Treat voice capture and nearby-place widgets as
+  new feature work with their own product/security/permission acceptance
+  criteria before implementation.
