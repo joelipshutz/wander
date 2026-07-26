@@ -141,6 +141,6 @@ select throws_ok(
   'final identity save remains authoritative against a claimed handle'
 );
 
-select * from finish(true);
+select * from finish();
 
 rollback;

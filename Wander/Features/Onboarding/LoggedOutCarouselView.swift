@@ -4,6 +4,10 @@ enum OnboardingCarouselTiming {
     static let defaultAutoAdvanceSeconds = 7.0
 }
 
+enum OnboardingCarouselLayout {
+    static let heroAspectRatio = 1.07
+}
+
 struct OnboardingCarouselSlide: Identifiable, Equatable {
     let id: Int
     let imageName: String
@@ -67,10 +71,6 @@ struct LoggedOutCarouselView: View {
                     Text(AppBrand.displayName)
                         .font(WanderTheme.editorialDisplay(size: 28, weight: .black))
                     Spacer()
-                    Text("a map made personal")
-                        .font(.system(size: 11, weight: .black))
-                        .tracking(1.1)
-                        .foregroundStyle(WanderTheme.textMuted.color)
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, WanderTheme.spacing2)
@@ -167,22 +167,15 @@ private struct OnboardingCarouselSlideView: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let heroWidth = proxy.size.width - 32
+            let heroHeight = max(280, heroWidth / OnboardingCarouselLayout.heroAspectRatio)
+
             VStack(spacing: WanderTheme.spacing4) {
                 Image(slide.imageName)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: proxy.size.width - 32, height: max(280, proxy.size.height * 0.56))
+                    .frame(width: heroWidth, height: heroHeight)
                     .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                    .overlay(alignment: .bottomLeading) {
-                        Text("REAL APP VIEW · MAP DATA © APPLE")
-                            .font(.system(size: 10, weight: .black))
-                            .tracking(1)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Capsule())
-                            .padding(12)
-                    }
                     .overlay(
                         RoundedRectangle(cornerRadius: 30, style: .continuous)
                             .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
