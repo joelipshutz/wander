@@ -22644,3 +22644,21 @@ Landing completion — 2026-07-25 22:03 PDT:
 
 Final outcome: the requested Been-only calendar behavior and completed REC-142
 widget work are on `main`; no known landing blocker remains.
+
+REC-122 current-main sync validation — 2026-07-26 00:21 PDT:
+
+- Synced PR #217 through current `origin/main` at `e7b12a9`; the widget landing
+  had no conflict with `SaveStreak.swift`, `SaveStreakCelebrationView.swift`,
+  or `SaveStreakTests.swift`. Xcode is open on the isolated REC-122 worktree.
+- A post-sync focused retry was attempted after the independently green
+  REC-122 full suite (640/640) and widget-main suite (689/689). The first clean
+  retry exhausted the Mac's remaining disk while compiling package
+  dependencies. Removed only this run's failed 832 MB temporary DerivedData.
+- Cached retries compiled the streak files but did not reach test execution:
+  one hit Swift's type-check timeout in the newly landed
+  `WanderRootView.swift`, one found a transient locked build database, and the
+  last ended when the Xcode build service crashed. These are post-sync tooling
+  blockers outside the REC-122 diff; no new test failure was observed.
+- The handoff therefore remains the earlier exact-branch 640/640 suite plus
+  7/7 focused tests, exact-binary dual-device visual QA, and current-main diff
+  review. The PR is ready for review; no TestFlight release was requested.
