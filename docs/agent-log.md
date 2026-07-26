@@ -23485,3 +23485,26 @@ Landing completion:
 
 Final outcome: repeatable Check-ins and their ticketing backend are on `main`;
 no known REC-143 merge blocker remains.
+
+REC-132 latest-main release validation — 2026-07-26 00:53 PDT:
+
+- Merged exact `origin/main` at `af8f800`, including the complete REC-143
+  repeatable Check-ins implementation and landing record. All overlapping app,
+  store, and test sources auto-merged cleanly; the only conflict was this
+  append-only log, resolved by preserving both histories.
+- The combined focused auth, notification, navigation, persistence, and five
+  full-suite follow-up regressions ran 92 tests: 90 passed and two tests still
+  used the local profile-details path, which intentionally ignores privacy
+  fields without a backend. Updated those fixtures to explicitly unlock the
+  authenticated profile and set mutual visibility through the store's privacy
+  API; both corrected tests then passed 2/2.
+- The complete combined latest-main suite passed 714/714 with zero failures or
+  skips on iPhone 17 Pro Max / iOS 26.2:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.26_00-50-38--0700.xcresult`.
+- The generic iOS Simulator build then passed for the app and widget extension
+  with `CODE_SIGNING_ALLOWED=NO`. Only the existing Supabase formatter actor-
+  isolation and traditional-headermap warnings remain.
+- Next: commit the final test/log correction, push the branch, verify PR #223
+  against current main, post the review/validation summary, and squash-merge.
+  Build 97 remains unchanged until the separate exact-main build-98 release
+  commit is created after that merge.

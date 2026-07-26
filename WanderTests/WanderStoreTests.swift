@@ -2429,16 +2429,14 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(visiblePlace?.userPlace.ratingSignal)
     }
 
-    func testFilePersistenceRestoresSavedPlaceAfterRelaunch() async throws {
+    func testFilePersistenceRestoresSavedPlaceAfterRelaunch() {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
 
         let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
         firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
-        try await firstStore.updateCurrentUserDetails(
-            ProfileDetailsUpdate(defaultVisibility: .mutuals, isPrivateProfile: false),
-            backend: nil
-        )
+        firstStore.setPrivateProfile(false)
+        firstStore.defaultVisibility = .mutuals
 
         let result = firstStore.saveCandidate(
             PlaceCandidate(
@@ -6222,10 +6220,8 @@ final class WanderStoreTests: XCTestCase {
         let analytics = RecordingAnalyticsClient()
         let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
-        try await store.updateCurrentUserDetails(
-            ProfileDetailsUpdate(defaultVisibility: .mutuals, isPrivateProfile: false),
-            backend: nil
-        )
+        store.setPrivateProfile(false)
+        store.defaultVisibility = .mutuals
         let userPlaceRepository = FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
         let backend = WanderBackend(userPlaceRepository: userPlaceRepository)
 
