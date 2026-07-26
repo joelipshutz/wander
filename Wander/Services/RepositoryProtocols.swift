@@ -730,6 +730,36 @@ struct PlaceVisitResult: Equatable {
     let backfilledFromUserPlace: Bool
 }
 
+struct HistoricalWantSnapshotDraft: Equatable {
+    let note: String?
+    let attributeAnswersJSON: String
+    let tags: [String]
+    let wantedAt: Date
+}
+
+struct CheckInSaveDraft: Equatable {
+    let userPlace: UserPlaceDraft
+    let visit: PlaceVisitDraft
+    let historicalWant: HistoricalWantSnapshotDraft?
+}
+
+struct CheckInSaveResult: Equatable {
+    let saveResult: SaveResult
+    let visitResult: PlaceVisitResult
+}
+
+enum CheckInDeleteTransition: String, Equatable {
+    case checkedIn = "been"
+    case wannaGo = "wanna_go"
+    case removed
+}
+
+struct CheckInDeleteResult: Equatable {
+    let visitID: String
+    let userPlaceID: String?
+    let transition: CheckInDeleteTransition
+}
+
 struct VisitPhotoDraft: Equatable {
     let id: String?
     let visitID: String
@@ -1492,6 +1522,12 @@ protocol UserPlaceRepository {
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws
     func delete(userPlaceID: String) async throws
+}
+
+@MainActor
+protocol CheckInRepository {
+    func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult
+    func deleteCheckIn(visitID: String) async throws -> CheckInDeleteResult
 }
 
 extension UserPlaceRepository {

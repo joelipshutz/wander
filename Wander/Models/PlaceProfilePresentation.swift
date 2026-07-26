@@ -33,7 +33,7 @@ struct PlaceActualRating: Equatable {
     var subtitle: String {
         switch source {
         case .own:
-            count == 1 ? "1 visit" : "\(count) visits"
+            CheckInCopy.count(count)
         case .trusted:
             count == 1 ? "1 rating" : "\(count) ratings"
         }

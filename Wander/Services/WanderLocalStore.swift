@@ -54,8 +54,16 @@ private struct LocalRemoveSaveChange {
 
 struct ProfileStats: Equatable {
     let been: Int
+    let checkIns: Int
     let wanna: Int
     let friends: Int
+
+    init(been: Int, checkIns: Int? = nil, wanna: Int, friends: Int) {
+        self.been = been
+        self.checkIns = checkIns ?? been
+        self.wanna = wanna
+        self.friends = friends
+    }
 }
 
 struct CurrentUserCalendarProjection {
@@ -833,6 +841,7 @@ final class WanderStore: ObservableObject {
         case .signedIn(let session):
             let previousUserID = currentUser.id
             if previousUserID != session.userID {
+                analytics.resetIdentity()
                 clearSessionScopedRemoteState()
             }
             apply(session: session)
@@ -872,6 +881,10 @@ final class WanderStore: ObservableObject {
             || feedLoadState != .idle
             || lastFeedRefreshAt != nil
             || lastRemoteError != nil
+            || profiles.contains { $0.id != currentUser.id }
+            || !follows.isEmpty
+            || !blocks.isEmpty
+            || !mutes.isEmpty
         guard hadRemoteState else { return }
 
         withDeferredPersistence {
@@ -886,6 +899,10 @@ final class WanderStore: ObservableObject {
             feedLoadState = .idle
             lastFeedRefreshAt = nil
             lastRemoteError = nil
+            profiles = []
+            follows = []
+            blocks = []
+            mutes = []
             objectWillChange.send()
             persist()
         }
@@ -893,8 +910,18 @@ final class WanderStore: ObservableObject {
 
     var stats: ProfileStats {
         let mine = userPlaces.filter { $0.userID == currentUser.id && $0.deletedAt == nil }
+        let uniqueCheckedInPlaces = mine.filter { $0.status == .been }.count
+        let checkedInPlaceIDs = Set(
+            mine
+                .filter { $0.status == .been }
+                .flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0 } }
+        )
+        let checkInCount = placeVisits.filter {
+            $0.deletedAt == nil && checkedInPlaceIDs.contains($0.userPlaceID)
+        }.count
         return ProfileStats(
-            been: mine.filter { $0.status == .been }.count,
+            been: uniqueCheckedInPlaces,
+            checkIns: max(checkInCount, uniqueCheckedInPlaces),
             wanna: mine.filter { $0.status == .wannaGo }.count,
             friends: profiles.filter { relationship(to: $0.id) == .mutual }.count
         )
@@ -3259,9 +3286,11 @@ final class WanderStore: ObservableObject {
         guard let userPlace = currentUserPlace(matching: userPlaceID) else { return nil }
 
         let now = Date.now
+        let isRepeatCheckIn = !visits(for: userPlace.id).isEmpty
         let attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
         let visit = LocalPlaceVisit(
             localID: "local_visit_\(UUID().uuidString.lowercased())",
+            serverID: UUID().uuidString.lowercased(),
             userPlaceID: userPlace.id,
             visitedAt: visitedAt,
             note: note,
@@ -3290,6 +3319,16 @@ final class WanderStore: ObservableObject {
         userPlace.syncStateRaw = userPlace.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
         placeVisits.append(visit)
         refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.checkInCreated,
+                properties: [
+                    "is_repeat": isRepeatCheckIn ? "true" : "false",
+                    "visibility": userPlace.visibility.rawValue,
+                    "date_bucket": checkInDateBucket(visitedAt, now: now)
+                ]
+            )
+        )
 
         objectWillChange.send()
         persist()
@@ -3366,6 +3405,12 @@ final class WanderStore: ObservableObject {
         }
 
         refreshUserPlaceVisitSummary(userPlaceID: visit.userPlaceID)
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.checkInEdited,
+                properties: ["date_changed": visitedAt == nil ? "false" : "true"]
+            )
+        )
 
         objectWillChange.send()
         persist()
@@ -3393,6 +3438,12 @@ final class WanderStore: ObservableObject {
                 refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
             }
         }
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.checkInDeleted,
+                properties: ["was_backfill": visit.backfilledFromUserPlace ? "true" : "false"]
+            )
+        )
 
         objectWillChange.send()
         persist()
@@ -3799,6 +3850,7 @@ final class WanderStore: ObservableObject {
         note: String?,
         sourceType: AddSourceType,
         ratingScore: Double? = nil,
+        visitedAt: Date = .now,
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
@@ -3849,6 +3901,7 @@ final class WanderStore: ObservableObject {
                 if previousStatus == .been || previousStatus == .wannaGo {
                     _ = createVisit(
                         userPlaceID: existing.id,
+                        visitedAt: visitedAt,
                         note: note,
                         ratingScore: savedRatingScore,
                         attributes: attributeDrafts,
@@ -3856,7 +3909,14 @@ final class WanderStore: ObservableObject {
                     )
                     return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
                 }
-                syncBackfilledVisit(for: existing, attributes: attributeDrafts)
+                _ = createVisit(
+                    userPlaceID: existing.id,
+                    visitedAt: visitedAt,
+                    note: note,
+                    ratingScore: savedRatingScore,
+                    attributes: attributeDrafts,
+                    visibility: resolvedVisibility
+                )
                 refreshUserPlaceVisitSummary(userPlaceID: existing.id)
             } else {
                 softDeleteVisits(for: existing.id, at: .now)
@@ -3900,7 +3960,16 @@ final class WanderStore: ObservableObject {
         if let attributes {
             replaceAttributes(for: userPlace.id, with: attributes, syncState: .pendingCreate)
         }
-        syncBackfilledVisit(for: userPlace, attributes: attributeDrafts)
+        if status == .been {
+            _ = createVisit(
+                userPlaceID: userPlace.id,
+                visitedAt: visitedAt,
+                note: note,
+                ratingScore: savedRatingScore,
+                attributes: attributeDrafts,
+                visibility: resolvedVisibility
+            )
+        }
         refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
         analytics.track(
             AnalyticsEvent(
@@ -3926,6 +3995,7 @@ final class WanderStore: ObservableObject {
         note: String?,
         sourceType: AddSourceType,
         ratingScore: Double? = nil,
+        visitedAt: Date = .now,
         plannedDate: Date? = nil,
         attributes: [PlaceAttributeDraft]? = nil,
         backend: WanderBackend?
@@ -3940,6 +4010,7 @@ final class WanderStore: ObservableObject {
             note: note,
             sourceType: sourceType,
             ratingScore: ratingScore,
+            visitedAt: visitedAt,
             plannedDate: plannedDate,
             attributes: attributes
         )
@@ -3952,6 +4023,28 @@ final class WanderStore: ObservableObject {
             WanderDebugLog.sync.debug("direct save skipped remote reason=missing_backend user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
             #endif
             return localResult
+        }
+
+        if status == .been,
+           let explicitVisit = visits(for: localResult.userPlaceID)
+            .first(where: { !$0.backfilledFromUserPlace && $0.syncState != .synced }) {
+            let didSync = await syncVisit(visitID: explicitVisit.id, backend: backend)
+            if didSync {
+                await refreshRemoteVisiblePlaces(backend: backend)
+            }
+            let syncedUserPlace = currentUserPlace(matching: localResult.userPlaceID)
+            let syncedPlace = syncedUserPlace.flatMap { userPlace in
+                places.first {
+                    $0.id == userPlace.placeID
+                        || $0.localID == userPlace.placeID
+                        || $0.serverID == userPlace.placeID
+                }
+            }
+            return SaveResult(
+                userPlaceID: syncedUserPlace?.id ?? localResult.userPlaceID,
+                syncState: didSync ? .synced : .failed,
+                placeID: syncedPlace?.serverID
+            )
         }
 
         guard let draft = userPlaceDraft(for: localResult.userPlaceID) else {
@@ -4187,6 +4280,7 @@ final class WanderStore: ObservableObject {
     func syncPendingVisits(backend: WanderBackend?) async -> Int {
         guard let backend else { return 0 }
 
+        var syncedCount = await retryPendingVisitDeletes(backend: backend)
         let visitIDs = placeVisits
             .filter { visit in
                 guard let userPlace = userPlaces.first(where: { userPlace in
@@ -4208,7 +4302,6 @@ final class WanderStore: ObservableObject {
             }
             .map(\.id)
 
-        var syncedCount = 0
         for visitID in visitIDs {
             if await syncVisit(visitID: visitID, backend: backend) {
                 syncedCount += 1
@@ -4237,53 +4330,101 @@ final class WanderStore: ObservableObject {
             return false
         }
 
-        if userPlace.serverID == nil || userPlace.syncState != .synced {
-            let parentOutcome = await retryOwnPlaceSync(
-                userPlaceID: userPlace.id,
-                backend: backend,
-                trigger: .signedInBackfill
-            )
-            guard case .succeeded = parentOutcome else {
+        if visit.backfilledFromUserPlace {
+            if userPlace.serverID == nil || userPlace.syncState != .synced {
+                let parentOutcome = await retryOwnPlaceSync(
+                    userPlaceID: userPlace.id,
+                    backend: backend,
+                    trigger: .signedInBackfill
+                )
+                guard case .succeeded = parentOutcome else {
+                    return false
+                }
+            }
+
+            guard let remoteUserPlaceID = userPlace.serverID else {
+                markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing remote user place id")
                 return false
             }
-        }
-
-        guard let remoteUserPlaceID = userPlace.serverID else {
-            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing remote user place id")
-            return false
-        }
-
-        if visit.backfilledFromUserPlace {
             return await hydrateBackfilledVisit(visit, remoteUserPlaceID: remoteUserPlaceID, backend: backend)
         }
 
         if visit.serverID == nil {
             markPlaceVisit(localOrServerID: visit.id, serverID: UUID().uuidString.lowercased(), syncState: .pendingCreate)
         } else {
-            markPlaceVisit(localOrServerID: visit.id, syncState: .pendingUpdate)
+            markPlaceVisit(localOrServerID: visit.id, syncState: visit.serverUpdatedAt == nil ? .pendingCreate : .pendingUpdate)
         }
 
-        guard let draft = visitDraft(for: visit.id, remoteUserPlaceID: remoteUserPlaceID) else {
-            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing visit draft")
+        guard let checkInDraft = checkInDraft(for: visit.id, userPlace: userPlace) else {
+            markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing check-in draft")
             return false
         }
 
         do {
-            let result = try await backend.upsertVisit(draft)
+            let result = try await backend.saveCheckIn(checkInDraft)
+            if let placeID = result.saveResult.placeID {
+                markPlace(
+                    localOrServerID: checkInDraft.userPlace.place.localID,
+                    serverID: placeID,
+                    syncState: .synced
+                )
+            }
+            markUserPlace(
+                localOrServerID: userPlace.id,
+                serverID: result.saveResult.userPlaceID,
+                syncState: .synced
+            )
             markPlaceVisit(
                 localOrServerID: visit.id,
-                serverID: result.visitID,
+                serverID: result.visitResult.visitID,
                 syncState: .synced,
-                result: result
+                result: result.visitResult
             )
             lastRemoteError = nil
             return true
         } catch {
             let message = remoteErrorMessage(error)
             markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
+            markUserPlace(localOrServerID: userPlace.id, syncState: .failed, error: message)
             lastRemoteError = message
             return false
         }
+    }
+
+    @discardableResult
+    func retryPendingVisitDeletes(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+        let pendingIDs = placeVisits
+            .filter {
+                $0.deletedAt != nil
+                    && $0.serverID != nil
+                    && ($0.syncState == .pendingDelete || $0.syncState == .failed)
+            }
+            .map(\.id)
+
+        var syncedCount = 0
+        for visitID in pendingIDs {
+            guard let visit = placeVisits.first(where: { $0.id == visitID || $0.localID == visitID || $0.serverID == visitID }),
+                  let remoteVisitID = visit.serverID
+            else { continue }
+
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.checkInSyncRetried,
+                    properties: ["operation": "delete"]
+                )
+            )
+            do {
+                _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
+                markPlaceVisit(localOrServerID: visit.id, syncState: .tombstoned)
+                syncedCount += 1
+            } catch {
+                let message = remoteErrorMessage(error)
+                markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
+                lastRemoteError = message
+            }
+        }
+        return syncedCount
     }
 
     @discardableResult
@@ -4352,13 +4493,18 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func deleteVisit(visitID: String, backend: WanderBackend?) async -> Bool {
-        let remoteVisitID = placeVisits.first { $0.id == visitID || $0.localID == visitID || $0.serverID == visitID }?.serverID
+        let existingVisit = placeVisits.first { $0.id == visitID || $0.localID == visitID || $0.serverID == visitID }
+        let remoteVisitID = existingVisit?.serverID
+        let requiresRemoteDelete = existingVisit?.serverUpdatedAt != nil || existingVisit?.syncState != .pendingCreate
         let didDeleteLocally = deleteVisit(visitID: visitID)
         guard didDeleteLocally else { return false }
-        guard let backend, let remoteVisitID else { return true }
+        guard requiresRemoteDelete, let backend, let remoteVisitID else {
+            markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
+            return true
+        }
 
         do {
-            try await backend.deleteVisit(visitID: remoteVisitID)
+            _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
             markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
             lastRemoteError = nil
             return true
@@ -4775,18 +4921,26 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    func refreshRemoteCurrentProfile(backend: WanderBackend?) async {
+    @discardableResult
+    func refreshRemoteCurrentProfile(backend: WanderBackend?) async -> Bool {
         guard let backend else {
-            return
+            return false
         }
+        let requestUserID = currentUser.id
 
         do {
-            if let profile = try await backend.currentProfile() {
-                applyRemoteCurrentProfile(profile)
-            }
+            guard let profile = try await backend.currentProfile(),
+                  !Task.isCancelled,
+                  currentUser.id == requestUserID,
+                  profile.id == requestUserID
+            else { return false }
+            applyRemoteCurrentProfile(profile)
             lastRemoteError = nil
+            return true
         } catch {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
             lastRemoteError = remoteErrorMessage(error)
+            return false
         }
     }
 
@@ -5659,19 +5813,19 @@ final class WanderStore: ObservableObject {
         let handle = sessionHandle
         let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
         let localID = "local_profile_current"
-        let preferredVisibility = defaultVisibility
-        let preferredPrivateProfile = isPrivateProfile
+        let preferredVisibility = PlaceVisibility.selfOnly
+        let preferredPrivateProfile = true
         let profile = LocalProfile(
             localID: localID,
             serverID: session.userID,
             handle: handle,
             displayName: displayName,
-            avatarURL: previousCurrentUser.avatarURL,
-            bio: previousCurrentUser.bio,
-            homeArea: previousCurrentUser.homeArea,
+            avatarURL: nil,
+            bio: nil,
+            homeArea: nil,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .synced,
-            createdAt: previousCurrentUser.createdAt
+            createdAt: .now
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
@@ -5679,6 +5833,8 @@ final class WanderStore: ObservableObject {
             currentUser = profile
             profiles.removeAll { $0.localID == localID || $0.serverID == session.userID }
             profiles.insert(profile, at: 0)
+            defaultVisibility = preferredVisibility
+            isPrivateProfile = preferredPrivateProfile
             claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
             persist()
         }
@@ -5732,10 +5888,9 @@ final class WanderStore: ObservableObject {
     }
 
     private func applySignedOutProfile() {
-        let previousCurrentUser = currentUser
         let localID = "local_profile_current"
-        let preferredVisibility = defaultVisibility
-        let preferredPrivateProfile = isPrivateProfile
+        let preferredVisibility = PlaceVisibility.followers
+        let preferredPrivateProfile = false
         cancelSharedVisitInboxTask()
         sharedVisitInvitations = []
         sharedVisitInboxUserID = nil
@@ -5744,12 +5899,12 @@ final class WanderStore: ObservableObject {
             localID: localID,
             handle: "you",
             displayName: "You",
-            avatarURL: previousCurrentUser.avatarURL,
-            bio: previousCurrentUser.bio,
-            homeArea: previousCurrentUser.homeArea,
+            avatarURL: nil,
+            bio: nil,
+            homeArea: nil,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .localOnly,
-            createdAt: previousCurrentUser.createdAt
+            createdAt: .now
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
@@ -5893,6 +6048,48 @@ final class WanderStore: ObservableObject {
             sourceType: userPlace.sourceType,
             attributes: attributeDrafts
         )
+    }
+
+    private func checkInDraft(
+        for visitID: String,
+        userPlace: LocalUserPlace
+    ) -> CheckInSaveDraft? {
+        guard let parentDraft = userPlaceDraft(for: userPlace.id),
+              let visitDraft = visitDraft(
+                  for: visitID,
+                  remoteUserPlaceID: userPlace.serverID ?? userPlace.id
+              )
+        else {
+            return nil
+        }
+
+        let historicalWant = userPlace.historicalWantedAt.map { wantedAt in
+            HistoricalWantSnapshotDraft(
+                note: userPlace.historicalWantNote,
+                attributeAnswersJSON: userPlace.historicalWantAttributeAnswersJSON ?? "[]",
+                tags: userPlace.historicalWantTags,
+                wantedAt: wantedAt
+            )
+        }
+        return CheckInSaveDraft(
+            userPlace: parentDraft,
+            visit: visitDraft,
+            historicalWant: historicalWant
+        )
+    }
+
+    private func checkInDateBucket(_ date: Date, now: Date) -> String {
+        let days = max(0, Calendar.current.dateComponents([.day], from: date, to: now).day ?? 0)
+        switch days {
+        case 0:
+            return "today"
+        case 1...7:
+            return "last_7_days"
+        case 8...30:
+            return "last_30_days"
+        default:
+            return "older"
+        }
     }
 
     private func matchingUserPlaceIDs(_ userPlaceID: String) -> Set<String> {
@@ -7135,9 +7332,38 @@ final class WanderStore: ObservableObject {
         WanderDebugLog.sync.debug("own-place sync attempt trigger=\(trigger.rawValue, privacy: .public) user_place=\(WanderDebugLog.shortID(userPlaceID), privacy: .public) place_has_server_id=\((draft.place.serverID != nil), privacy: .public) attribute_count=\(draft.attributes.count, privacy: .public)")
         #endif
 
+        let syncingUserPlace = userPlaces.first {
+            $0.id == userPlaceID || $0.localID == userPlaceID || $0.serverID == userPlaceID
+        }
+        let explicitVisit = draft.status == .been
+            ? visits(for: userPlaceID)
+                .filter { !$0.backfilledFromUserPlace && $0.syncState != .synced }
+                .sorted {
+                    if $0.createdAt != $1.createdAt {
+                        return $0.createdAt < $1.createdAt
+                    }
+                    return $0.id < $1.id
+                }
+                .first
+            : nil
+
         markUserPlace(localOrServerID: userPlaceID, syncState: .pendingUpdate, error: nil)
         do {
-            let remoteResult = try await backend.saveUserPlace(draft)
+            let remoteResult: SaveResult
+            if let explicitVisit,
+               let syncingUserPlace,
+               let atomicDraft = checkInDraft(for: explicitVisit.id, userPlace: syncingUserPlace) {
+                let checkInResult = try await backend.saveCheckIn(atomicDraft)
+                remoteResult = checkInResult.saveResult
+                markPlaceVisit(
+                    localOrServerID: explicitVisit.id,
+                    serverID: checkInResult.visitResult.visitID,
+                    syncState: .synced,
+                    result: checkInResult.visitResult
+                )
+            } else {
+                remoteResult = try await backend.saveUserPlace(draft)
+            }
             if let placeID = remoteResult.placeID {
                 markPlace(localOrServerID: draft.place.localID, serverID: placeID, syncState: .synced)
             }
@@ -7156,6 +7382,9 @@ final class WanderStore: ObservableObject {
             return .succeeded
         } catch {
             let message = remoteErrorMessage(error)
+            if let explicitVisit {
+                markPlaceVisit(localOrServerID: explicitVisit.id, syncState: .failed, error: message)
+            }
             markUserPlace(localOrServerID: userPlaceID, syncState: .failed, error: message)
             lastRemoteError = message
             trackOwnPlaceSyncEvent(

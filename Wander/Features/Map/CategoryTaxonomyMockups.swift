@@ -70,7 +70,7 @@ private struct RemoveSaveEditMockup: View {
     }
 
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "edit visit", subtitle: "Jitlada - saved by you") {
+        CategoryTaxonomyMockupScreen(title: "edit check-in", subtitle: "Jitlada - saved by you") {
             placeHeader
 
             MockupSection(title: "place type") {
@@ -81,7 +81,7 @@ private struct RemoveSaveEditMockup: View {
 
             MockupSection(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MockupChoicePill(title: "been", isSelected: true)
+                    MockupChoicePill(title: "check-in", isSelected: true)
                     MockupChoicePill(title: "wanna go", isSelected: false)
                     Spacer(minLength: 0)
                 }
@@ -237,7 +237,7 @@ private enum CategoryTaxonomyMockData {
 
 private struct CategoryTaxonomyEditMockup: View {
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "edit visit", subtitle: "Jitlada - Los Angeles") {
+        CategoryTaxonomyMockupScreen(title: "edit check-in", subtitle: "Jitlada - Los Angeles") {
             placeHeader
 
             MockupSection(title: "place type") {
@@ -248,7 +248,7 @@ private struct CategoryTaxonomyEditMockup: View {
 
             MockupSection(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MockupChoicePill(title: "been", isSelected: true)
+                    MockupChoicePill(title: "check-in", isSelected: true)
                     MockupChoicePill(title: "wanna go", isSelected: false)
                     Spacer(minLength: 0)
                 }
@@ -318,23 +318,26 @@ private struct CategoryTaxonomyPrimaryPickerMockup: View {
 }
 
 private struct CategoryTaxonomySubcategoryPickerMockup: View {
+    @State private var selectedAssignment = WanderPlaceCategory.assignment(
+        primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+        subcategory: "Coffee shop",
+        source: PlaceCategorySource.provider.rawValue,
+        confidence: 0.98,
+        rawProviderType: "coffee_shop"
+    )
+    @State private var selectedCuisine: String?
+
     var body: some View {
-        CategoryTaxonomyMockupScreen(
-            title: "choose subcategory",
-            subtitle: "Coffee, Tea, & Sweets - \(WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets).count) types"
-        ) {
-            MockupSearchField(text: "Search coffee, tea, & sweets types")
-
-            HStack(spacing: WanderTheme.spacing2) {
-                CategoryPickerModePill(title: "Coffee, Tea, & Sweets", category: WanderPlaceCategory.coffeeTeaSweets, isSelected: true)
-                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
-                Spacer(minLength: 0)
-            }
-
-            ForEach(WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.coffeeTeaSweets), id: \.title) { group in
-                SubcategoryGroupSection(group: group, selectedSubcategory: "Coffee shop") { _ in }
-            }
-        }
+        PlaceTypePickerSheet(
+            selectedAssignment: $selectedAssignment,
+            selectedCuisine: $selectedCuisine,
+            placeName: "Dayglow",
+            suggestedCuisine: nil,
+            suggestionReason: nil,
+            recentCuisines: [],
+            initialMode: .subcategory,
+            onSelect: {}
+        )
     }
 }
 
@@ -773,7 +776,7 @@ private struct CategoryTaxonomyLabelsMockup: View {
                 Text("Jitlada")
                     .font(.system(size: 24, weight: .black))
                 Spacer()
-                Text("been")
+                Text("check-in")
                     .font(.system(size: 12, weight: .black))
                     .padding(.horizontal, WanderTheme.spacing2)
                     .frame(minHeight: 28)

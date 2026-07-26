@@ -1,19 +1,93 @@
 import Foundation
 
+struct WanderCalendarDate: Equatable, Hashable, Sendable {
+    let year: Int
+    let month: Int
+    let day: Int
+
+    init?(year: Int, month: Int, day: Int) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = DateComponents(
+            calendar: calendar,
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: day,
+            hour: 12
+        )
+        guard let date = calendar.date(from: components) else { return nil }
+        let validated = calendar.dateComponents([.year, .month, .day], from: date)
+        guard validated.year == year,
+              validated.month == month,
+              validated.day == day
+        else {
+            return nil
+        }
+
+        self.year = year
+        self.month = month
+        self.day = day
+    }
+
+    init?(urlValue: String) {
+        let parts = urlValue.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0].count == 4,
+              parts[1].count == 2,
+              parts[2].count == 2,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2])
+        else {
+            return nil
+        }
+        self.init(year: year, month: month, day: day)
+    }
+
+    var urlValue: String {
+        String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    func date(timeZone: TimeZone = .autoupdatingCurrent) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(
+            from: DateComponents(
+                calendar: calendar,
+                timeZone: timeZone,
+                year: year,
+                month: month,
+                day: day,
+                hour: 12
+            )
+        )
+    }
+}
+
 enum WanderDeepLinkRoute: Equatable, Sendable {
     case quickCapture
+    case map
     case quickSearch(query: String?)
+    case nearbyPlace(candidateID: String)
     case profileCalendar
+    case profileCalendarDate(WanderCalendarDate)
     case sharedProfile(profileID: String)
 
     var url: URL? {
         switch self {
         case .quickCapture:
             WanderWidgetConstants.quickCaptureURL
+        case .map:
+            WanderWidgetConstants.mapURL
         case .quickSearch(let query):
             Self.quickSearchURL(query: query)
+        case .nearbyPlace(let candidateID):
+            Self.nearbyPlaceURL(candidateID: candidateID)
         case .profileCalendar:
             WanderWidgetConstants.profileCalendarURL
+        case .profileCalendarDate(let date):
+            Self.profileCalendarDateURL(date)
         case .sharedProfile(let profileID):
             Self.sharedProfileURL(profileID: profileID)
         }
@@ -38,13 +112,37 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             guard hasNoQuery(in: components) else { return nil }
             return .quickCapture
 
+        case ("map", []):
+            guard hasNoQuery(in: components) else { return nil }
+            return .map
+
         case ("map", ["search"]):
             guard let query = searchQuery(in: components) else { return nil }
             return .quickSearch(query: query)
 
+        case ("add", let segments)
+            where segments.count == 2 && segments[0] == "nearby":
+            let candidateID = segments[1]
+            guard hasNoQuery(in: components),
+                  !candidateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else {
+                return nil
+            }
+            return .nearbyPlace(candidateID: candidateID)
+
         case ("profile", ["calendar"]):
             guard hasNoQuery(in: components) else { return nil }
             return .profileCalendar
+
+        case ("profile", let segments)
+            where segments.count == 2 && segments[0] == "calendar":
+            let value = segments[1]
+            guard hasNoQuery(in: components),
+                  let date = WanderCalendarDate(urlValue: value)
+            else {
+                return nil
+            }
+            return .profileCalendarDate(date)
 
         case ("profiles", let segments):
             guard segments.count == 1,
@@ -75,6 +173,22 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         var components = baseComponents(host: "map", path: "/search")
         components.queryItems = [URLQueryItem(name: "q", value: query)]
         return components.url!
+    }
+
+    private static func profileCalendarDateURL(_ date: WanderCalendarDate) -> URL {
+        baseComponents(host: "profile", path: "/calendar/\(date.urlValue)").url!
+    }
+
+    private static func nearbyPlaceURL(candidateID: String) -> URL? {
+        guard !candidateID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let encodedID = candidateID.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed)
+        else {
+            return nil
+        }
+
+        var components = baseComponents(host: "add", path: "")
+        components.percentEncodedPath = "/nearby/\(encodedID)"
+        return components.url
     }
 
     private static func sharedProfileURL(profileID: String) -> URL? {

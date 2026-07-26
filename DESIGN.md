@@ -565,34 +565,35 @@ Access changed:
 - If unfollow or block revokes access while a detail is open, do not leave private place details visible.
 - Show "This place isn't available anymore" and return to Map/Profile.
 
-### Auth Gates
+### Authentication Boundary
 
-Shown only at save/sync/follow/social-save moments.
+The main app is available only after Clerk confirms an active signed-in session.
 
 Rules:
 
-- Guest first save can remain local.
-- Sync, follow, social save, and cross-device access require sign-in.
-- The sheet must name the user's current action, for example "Sign in to follow Ryan" or "Sign in to sync this place."
-- For local save flows, include a secondary "Keep it on this phone" path when technically valid.
-- Do not force account creation during first-run browsing or before save intent.
+- Launch and foreground activation show a blocking session-check state until the current Clerk client is authoritatively refreshed.
+- Signed-out sessions show the native Clerk sign-in/sign-up surface without a dismiss path; authenticated tabs and cached profile metadata must not remain visible underneath it.
+- Session revocation, account deletion, logout, or an account switch removes the authenticated surface immediately and clears account-scoped presentation, widget, analytics, and person metadata.
+- A cached device profile is never proof of authentication and must not be inherited by a different account.
+- If session verification fails, show a retryable unavailable state instead of entering the app with cached identity state.
+- Contextual auth-gate copy may remain for transitions already in flight, but it cannot provide a path around the root authentication boundary.
 
 ## Onboarding Rules
 
 Flow:
 
-1. Welcome / map promise.
-2. Location pre-prompt.
-3. Category preferences.
-4. Add first place education.
-5. Auth gate only at save/share/follow/sync intent.
+1. Clerk sign-in or sign-up.
+2. Welcome / map promise.
+3. Location pre-prompt.
+4. Category preferences.
+5. Add first place education.
 6. Notifications after first save or wanna-go save.
 7. Paywall later, not during first-run onboarding.
 
 Rules:
 
-- Guest-first.
-- No forced login before first save intent.
+- Authentication is required before entering the main app.
+- Returning users go directly from session verification to their prior app state.
 - No paywall during first-run onboarding.
 - Native permission prompts only after explicit CTA.
 - Every permission screen has a skip path.
@@ -644,7 +645,6 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 - No public global feed in v0.1.
 - No live-location affordances.
 - No badges, streaks, mayorships, or ranking people.
-- No account wall before save intent.
 - No early paywall.
 - No generic card-grid marketplace feel.
 
@@ -666,3 +666,4 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 | 2026-06-01 | Use simple v0.1 sync conflict handling | Local retry queue plus `updated_at`/server-wins behavior is enough for v0.1; no field-level multi-device merge. |
 | 2026-06-01 | Keep analytics vendor-neutral | Define event names now behind an interface, choose provider later. |
 | 2026-06-01 | Complete refreshed design review gate for M2 | Missing Discover, other-user profile, followers/following, Settings, auth gate, block, and access-changed states are now specified in the handoff style. |
+| 2026-07-25 | Require authentication at the app boundary | Logged-out or unverifiable sessions must never render the authenticated app or cached person metadata; Clerk sign-in is the non-dismissable root until a session is confirmed. This supersedes the earlier guest-first/no-account-wall rules. |

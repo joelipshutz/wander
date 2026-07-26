@@ -192,7 +192,15 @@ struct ProfileScreen: View {
 
             await Task.yield()
             guard !Task.isCancelled, calendarLaunchRequest?.id == request.id else { return }
-            activeCalendarLaunchRequest = request
+            switch request.destination {
+            case .calendar:
+                activeCalendarLaunchRequest = request
+            case .day:
+                placeCollectionRoute = .calendar(
+                    calendarDaySummary(on: request.targetDate)
+                )
+                onCalendarLaunchRequestHandled(request.id)
+            }
         }
     }
 
@@ -227,6 +235,23 @@ struct ProfileScreen: View {
         onCalendarLaunchRequestHandled(id)
     }
 
+    private func calendarDaySummary(on date: Date) -> ProfileCalendarDaySummary {
+        let projection = store.currentUserCalendarProjection
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: date)
+        let insights = profileInsightsCache.present(
+            ownerID: store.currentUser.id,
+            userPlaces: projection.userPlaces,
+            visits: projection.visits,
+            places: projection.places,
+            month: date,
+            calendar: calendar,
+            dataRevision: store.presentationRevision
+        )
+        return insights.monthDaySummaries[day]
+            ?? ProfileCalendarDaySummary.empty(on: day)
+    }
+
     private func openRequestedVisitInvitationInbox() {
         guard visitInvitationInboxRequestID != nil else { return }
         showsVisitInvitations = true
@@ -250,8 +275,14 @@ struct ProfileScreen: View {
         let active = store.currentUserCalendarProjection.userPlaces.filter {
             $0.userID == store.currentUser.id && $0.deletedAt == nil && seen.insert($0.id).inserted
         }
+        let uniqueCheckedInPlaces = active.filter { $0.status == .been }.count
+        let activeIDs = Set(active.flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0 } })
+        let checkInCount = store.placeVisits.filter {
+            $0.deletedAt == nil && activeIDs.contains($0.userPlaceID)
+        }.count
         return ProfileStats(
-            been: active.filter { $0.status == .been }.count,
+            been: uniqueCheckedInPlaces,
+            checkIns: max(checkInCount, uniqueCheckedInPlaces),
             wanna: active.filter { $0.status == .wannaGo }.count,
             friends: store.friends(of: store.currentUser.id).count
         )
@@ -376,14 +407,14 @@ struct ProfileScreen: View {
                 savedListMode = .been
             } label: {
                 StatTile(
-                    value: "\(store.stats.been)",
-                    label: "BEEN",
+                    value: "\(store.stats.checkIns)",
+                    label: CheckInCopy.pluralNoun.uppercased(),
                     color: WanderTheme.stateSuccess.color,
                     fill: WanderTheme.categorySage.color.opacity(0.22)
                 )
             }
             .buttonStyle(ProfileStatButtonStyle())
-            .accessibilityLabel("Open been places")
+            .accessibilityLabel("Open checked-in places")
 
             Button {
                 savedListMode = .wanna
@@ -1012,8 +1043,16 @@ struct ProfileDetailView: View {
             from: profileVisiblePlaces,
             currentUserID: store.currentUser.id
         )
+        let uniqueCheckedInPlaces = places.filter { $0.userPlace.status == .been }.count
+        let activeIDs = Set(places.flatMap {
+            [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].compactMap { $0 }
+        })
+        let checkInCount = store.placeVisits.filter {
+            $0.deletedAt == nil && activeIDs.contains($0.userPlaceID)
+        }.count
         return ProfileStats(
-            been: places.filter { $0.userPlace.status == .been }.count,
+            been: uniqueCheckedInPlaces,
+            checkIns: max(checkInCount, uniqueCheckedInPlaces),
             wanna: places.filter { $0.userPlace.status == .wannaGo }.count,
             friends: store.friends(of: profileID).count
         )
@@ -1129,7 +1168,7 @@ private enum SavedPlacesListMode: String, Identifiable {
 
     var title: String {
         switch self {
-        case .been: "Been"
+        case .been: "Check-ins"
         case .wanna: "Wanna"
         case .inCommon: "In Common"
         }
@@ -2129,7 +2168,7 @@ private struct SavedPlacesListScreen: View {
                         if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
                                 title: "No activity this day",
-                                subtitle: "been places will show up here"
+                                subtitle: "check-ins will show up here"
                             )
                         } else if collection?.calendarDay != nil {
                             SmallEmptyRow(title: "No matching places", subtitle: "try another type or tag")
@@ -2962,7 +3001,7 @@ private struct ProfileCalendarDayDetailHeader: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
-            metric(value: summary.visitCount, singular: "been", plural: "been", color: WanderTheme.terracotta.color)
+            metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun, color: WanderTheme.terracotta.color)
             Divider()
                 .overlay(WanderTheme.borderHairline.color)
             metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: WanderTheme.textInk.color)

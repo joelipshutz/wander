@@ -301,7 +301,7 @@ struct SupabaseFeedRepository: FeedRepository {
     }
 }
 
-struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository {
+struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository {
     private let rpc: RemoteProcedureCalling
     private let userPlaceDeleter: RemoteUserPlaceDeleting?
 
@@ -345,6 +345,44 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
             params: SaveOwnPlaceParams(draft: draft)
         )
         return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced, placeID: result.placeID)
+    }
+
+    func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
+        let result: SaveOwnCheckInResponse = try await rpc.call(
+            "save_own_check_in",
+            params: SaveOwnCheckInParams(draft: draft)
+        )
+        return CheckInSaveResult(
+            saveResult: SaveResult(
+                userPlaceID: result.userPlaceID,
+                syncState: .synced,
+                placeID: result.placeID
+            ),
+            visitResult: PlaceVisitResult(
+                visitID: result.visitID,
+                userPlaceID: result.userPlaceID,
+                visitedAt: result.visitedAt,
+                note: result.note,
+                ratingScore: result.ratingScore,
+                tags: result.tags,
+                backfilledFromUserPlace: result.backfilledFromUserPlace
+            )
+        )
+    }
+
+    func deleteCheckIn(visitID: String) async throws -> CheckInDeleteResult {
+        let result: DeleteOwnCheckInResponse = try await rpc.call(
+            "delete_own_check_in",
+            params: DeleteOwnCheckInParams(inputVisitID: visitID)
+        )
+        guard let transition = CheckInDeleteTransition(rawValue: result.transition) else {
+            throw WanderRemoteError.invalidResponse("Unknown check-in delete transition: \(result.transition)")
+        }
+        return CheckInDeleteResult(
+            visitID: result.visitID,
+            userPlaceID: result.userPlaceID,
+            transition: transition
+        )
     }
 
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {
@@ -2220,6 +2258,127 @@ private struct SaveOwnPlaceParams: Encodable {
         case inputPlace = "input_place"
         case inputUserPlace = "input_user_place"
         case inputAttributes = "input_attributes"
+    }
+}
+
+private struct SaveOwnCheckInParams: Encodable {
+    let inputPlace: SaveOwnPlacePlaceParams
+    let inputUserPlace: SaveOwnPlaceUserPlaceParams
+    let inputAttributes: [SaveOwnPlaceAttributeParams]
+    let inputVisit: SaveOwnCheckInVisitParams
+    let inputHistoricalWant: SaveOwnCheckInHistoricalWantParams?
+
+    init(draft: CheckInSaveDraft) throws {
+        inputPlace = SaveOwnPlacePlaceParams(place: draft.userPlace.place)
+        inputUserPlace = SaveOwnPlaceUserPlaceParams(draft: draft.userPlace)
+        inputAttributes = try draft.userPlace.attributes.map(SaveOwnPlaceAttributeParams.init)
+        inputVisit = try SaveOwnCheckInVisitParams(draft: draft.visit)
+        inputHistoricalWant = try draft.historicalWant.map(SaveOwnCheckInHistoricalWantParams.init)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputPlace = "input_place"
+        case inputUserPlace = "input_user_place"
+        case inputAttributes = "input_attributes"
+        case inputVisit = "input_visit"
+        case inputHistoricalWant = "input_historical_want"
+    }
+}
+
+private struct SaveOwnCheckInVisitParams: Encodable {
+    let id: String
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let attributeAnswers: JSONValue
+
+    init(draft: PlaceVisitDraft) throws {
+        guard let id = draft.id, UUID(uuidString: id) != nil else {
+            throw WanderRemoteError.invalidResponse("Explicit check-ins require a stable UUID")
+        }
+        self.id = id
+        visitedAt = draft.visitedAt
+        note = draft.note
+        ratingScore = PlaceRating.normalized(draft.ratingScore)
+        attributeAnswers = try Self.decodeJSON(draft.attributeAnswersJSON)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case visitedAt = "visited_at"
+        case note
+        case ratingScore = "rating_score"
+        case attributeAnswers = "attribute_answers"
+    }
+
+    private static func decodeJSON(_ value: String) throws -> JSONValue {
+        try JSONDecoder().decode(JSONValue.self, from: Data(value.utf8))
+    }
+}
+
+private struct SaveOwnCheckInHistoricalWantParams: Encodable {
+    let note: String?
+    let attributeAnswers: JSONValue
+    let tags: [String]
+    let wantedAt: Date
+
+    init(draft: HistoricalWantSnapshotDraft) throws {
+        note = draft.note
+        attributeAnswers = try JSONDecoder().decode(
+            JSONValue.self,
+            from: Data(draft.attributeAnswersJSON.utf8)
+        )
+        tags = draft.tags
+        wantedAt = draft.wantedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case note
+        case attributeAnswers = "attribute_answers"
+        case tags
+        case wantedAt = "wanted_at"
+    }
+}
+
+private struct SaveOwnCheckInResponse: Decodable {
+    let userPlaceID: String
+    let placeID: String
+    let visitID: String
+    let visitedAt: Date
+    let note: String?
+    let ratingScore: Double?
+    let tags: [String]
+    let backfilledFromUserPlace: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case userPlaceID = "user_place_id"
+        case placeID = "place_id"
+        case visitID = "visit_id"
+        case visitedAt = "visited_at"
+        case note
+        case ratingScore = "rating_score"
+        case tags
+        case backfilledFromUserPlace = "backfilled_from_user_place"
+    }
+}
+
+private struct DeleteOwnCheckInParams: Encodable {
+    let inputVisitID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputVisitID = "input_visit_id"
+    }
+}
+
+private struct DeleteOwnCheckInResponse: Decodable {
+    let visitID: String
+    let userPlaceID: String?
+    let transition: String
+
+    enum CodingKeys: String, CodingKey {
+        case visitID = "visit_id"
+        case userPlaceID = "user_place_id"
+        case transition
     }
 }
 
