@@ -24750,3 +24750,56 @@ TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
 Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
+
+REC-152 implementation approval checkpoint — 2026-07-26 11:10 PDT:
+
+- Joe selected the middle mock's information pattern but rejected the wide,
+  desktop-like mock presentation. Implementation must preserve the existing
+  iPhone Profile layout and data outside the explicitly requested area.
+- Locked scope: remove only the small `profile` eyebrow, move the existing
+  streak immediately below the Followers/Following/Friends counts, move the
+  existing check-in invitations row below the streak, and replace only the
+  Check-ins/Wanna tiles with one mobile-width Recent activity module.
+- The new module will use compact All/Been/Wanna count filters, show the six
+  latest events in reverse chronological order with explicit date and time,
+  offer See all activity, and open the tapped place directly at its activity
+  / check-in section. Calendar, map, identity data, social graph controls, and
+  all downstream save data remain unchanged.
+- Merged current `origin/main` (`b4d7c98`) into the worktree before editing.
+  The only conflict was append-only `docs/agent-log.md`; both histories were
+  preserved. Current branch head after the merge is `ae5d2c5`.
+- The session sandbox could not write the original external worktree and the
+  disk had only 116 MB free. Removed only the fully regenerable 1.1 GB
+  `/private/tmp/DerivedData-rec152-profile` cache created during exploration,
+  then moved the same worktree/branch to
+  `/private/tmp/rec-152-profile-activity` without changing history.
+
+REC-152 implementation validation — 2026-07-26 13:35 PDT:
+
+- Implemented the approved mobile-first Profile adjustment without changing
+  identity, social counts, calendar, map, or underlying save data. The owner
+  profile now orders streak, check-in invitations, and Recent activity below
+  the existing social counts; the small `profile` eyebrow is removed.
+- Replaced only the old Check-ins/Wanna tiles with a Recent activity module.
+  It provides All/Been/Wanna count filters, shows the six newest events in
+  reverse chronological order with explicit date and time, and opens a full
+  filtered history through `See more`.
+- Activity rows deep-link to the existing place card and scroll directly to
+  its activity/check-in section. Existing place-card callers retain their
+  original top-of-card behavior through the default route.
+- Added presenter coverage for visit-level chronology, historical Wanna
+  events, legacy Been fallback, and timestamp formatting. Added navigation
+  contracts for strict module order, the six-row preview, filters, full
+  history, and the place-card activity destination.
+- Focused validation passed 20/20 tests; an exact new-test rerun passed 3/3.
+  The clean full suite passed 747/747 tests with zero failures on iPhone 16
+  Plus / iOS 18.6. Result bundle:
+  `/tmp/DerivedData-rec152-final/Logs/Test/Test-Wander-2026.07.26_13-26-30--0700.xcresult`.
+- Visual QA passed on the compact iPhone 16e and large iPhone 17 Pro Max.
+  Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9cdd-5254-7830-a5ef-206f6e8bf7af/profile-activity-iphone-16e.png`
+  and
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9cdd-5254-7830-a5ef-206f6e8bf7af/profile-activity-iphone-17-pro-max.png`.
+- `git diff --check` passed. No TestFlight build was requested, so build 99
+  remains unchanged. Next: publish a ready PR for REC-152 and attach the PR and
+  validation receipts to Linear and Mission Control.
