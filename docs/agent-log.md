@@ -24101,3 +24101,13 @@ Follow-up validation — 2026-07-26 01:39 PDT:
 
 Next: commit and force-with-lease push the rebased branch to update PR #229,
 return Linear REC-154 to `In Review`, and leave Xcode focused on this branch.
+
+Final sync — 2026-07-26 01:42 PDT:
+
+- After validation, `origin/main` advanced only with the completed TestFlight
+  build-98 release record (`061edc336`). Rebased the four REC-154 commits onto
+  that exact head and preserved both append-only log histories.
+- No app, widget, project, test, or dependency source changed in this final
+  sync, so the 30/30 focused suite, 723/723 complete suite, two-device preview,
+  and clean universal Simulator build remain applicable. Post-rebase
+  `git diff --check` and conflict-marker sweeps passed.
