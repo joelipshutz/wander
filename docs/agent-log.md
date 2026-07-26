@@ -22092,8 +22092,10 @@ Completion checkpoint — 2026-07-25 21:29 PDT:
 
 - The temporary implementation worktree was reaped during the long validation
   run; recreated it at `/private/tmp/recme-rec122-streak-hierarchy-resume` from
-  the intact branch and commits without losing work. The branch remains based
-  on current `origin/main` (`74ab31b`) with no missing upstream commits.
+  the intact branch and commits without losing work. After validation,
+  `origin/main` advanced to `ba172e3` with build-97 metadata and its agent-log
+  entry only; merged it and retained both append-only records. No app source or
+  streak behavior intersected this sync.
 - Full-suite validation passed 640/640 with zero failures using iPhone 16 Plus,
   iOS 18.6:
   `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Logs/Test/Test-Wander-2026.07.25_21-12-46--0700.xcresult`.
@@ -22111,3 +22113,62 @@ Completion checkpoint — 2026-07-25 21:29 PDT:
 - Pushed the branch and opened ready PR #217:
   `https://github.com/joelipshutz/wander/pull/217`. REC-122 is moving to
   `In Review` with the test and visual-validation record attached.
+
+## 2026-07-25 21:21 PDT - Codex - REC-149 TestFlight Build 97
+
+Agent: Codex
+Branch: `codex/rec-149-testflight-build-97`
+Worktree: `/private/tmp/recme-testflight-build-97`
+Linear: `REC-149` (`In Progress`)
+
+Goal: package the exact latest `main` as rec.me TestFlight build 97 after
+Ryan's explicit release request, make it available to the public
+`rec.me Alpha` group, and announce the tester-facing scope in
+`#testflight-feedback`.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated release worktree from
+  `origin/main` at `74ab31bb0`.
+- The primary checkout remains untouched on `codex/rec-142-widgets`; its
+  untracked `.pnpm-store/` and all unrelated worktrees belong to other work.
+- TestFlight build 96 is the last completed release. Its upload, compliance,
+  public-group attachment, beta review approval, and Slack announcement are
+  all recorded as complete.
+- The only app behavior merged after build 96 is REC-140: the owner Profile
+  calendar now shows Been and Wanna activity together. REC-142 / PR #215 is
+  unmerged and therefore intentionally excluded from build 97.
+- Expected release-branch files are `project.yml`,
+  `Wander.xcodeproj/project.pbxproj`, and this append-only agent log.
+- The marketing version remains 0.1. This pass increments only
+  `CURRENT_PROJECT_VERSION` from 96 to 97 and does not submit an App Store
+  production release.
+
+Release gates:
+
+- Regenerate the Xcode project, inspect the diff for scope/signing churn, and
+  run the full simulator test suite plus a clean generic simulator build.
+- Land the release metadata through a reviewed PR, then archive and upload the
+  exact merged `main`.
+- Process build 97 through the repository TestFlight helper, verify the
+  uploaded build number and public-group status, update REC-149 and this log,
+  and post tester-facing release notes in `#testflight-feedback`.
+
+Pre-landing validation — 2026-07-25 21:28 PDT:
+
+- Changed `CURRENT_PROJECT_VERSION` from 96 to 97 in `project.yml`, then ran
+  `xcodegen generate`. The generated project changed only the matching Debug
+  and Release build-number settings; marketing version 0.1 and signing
+  configuration are unchanged.
+- `git diff --check` passed. The complete release-branch diff contains only
+  the intended build metadata and this coordination record.
+- Full iPhone 17 Pro Max / iOS 26.5 simulator suite passed 637/637 tests:
+  `/private/tmp/DerivedData-build97/Logs/Test/Test-Wander-2026.07.25_21-22-13--0700.xcresult`.
+- A clean universal simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination
+  'generic/platform=iOS Simulator' -derivedDataPath
+  /private/tmp/DerivedData-build97-generic CODE_SIGNING_ALLOWED=NO`.
+- Only the existing Swift isolation, App Intents metadata, and traditional
+  headermap warnings remain. No new release-blocking issue was found.
+- Next: commit and push the release branch, open and squash-merge a ready PR,
+  then archive/export/upload the exact merged `main`.
