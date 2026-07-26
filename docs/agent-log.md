@@ -22984,3 +22984,60 @@ Landing completion:
 
 Final outcome: the requested Profile map totals and per-filter sharing are on
 `main`; no known REC-146 landing blocker remains.
+
+REC-132 final release-hardening checkpoint — 2026-07-26 00:38 PDT:
+
+- Completed the adversarial security, maintainability, and test review of the
+  latest-main branch. The review expanded the session boundary so a cached
+  signed-in identity is untrusted until authoritative Clerk validation, and
+  both ordinary and forced Supabase token calls reject while validation is
+  pending. Clerk tokens also require an active session, with stale/cancelled
+  refresh generations unable to overwrite a newer result.
+- Clerk auth events now carry the resolved state directly instead of causing a
+  second refresh loop. Foreground validation keeps the prior root mounted only
+  as opaque, non-interactive continuity while root-owned work is cancelled and
+  descendant backend requests are denied centrally.
+- Account transitions now clear profile, follow, block, mute, feed, widget,
+  notification-routing, and analytics identity state. A newly authenticated
+  account starts private/self-only until its matching remote profile hydrates;
+  a late Account A profile response cannot overwrite Account B or unlock
+  pending sync.
+- Notification delivery now uses a process-local unknown/authenticated/signed-
+  out gate. Cold-launch taps buffer while auth is unknown, drain only after a
+  validated sign-in, and are discarded on logout; logout also clears delivered
+  notifications and pending account-specific local reminders.
+- The iPhone 16 Plus / iOS 18.6 XCTest worker twice stalled in Xcode's
+  `waiting for workers to materialize` state, including after a clean simulator
+  restart. This was recorded as infrastructure, not a test failure. The same
+  expanded focused suite passed 85/85 on the known-good iPhone 17 Pro Max /
+  iOS 26.2 runner, and the final auth-only rerun passed 18/18. Existing
+  repository headermap and Supabase formatter isolation warnings remain
+  unchanged.
+- Final specialist re-review is in progress. Next: resolve any last blocking
+  finding, run the required full suite and generic simulator build, push PR
+  #223, verify latest `origin/main`, then squash-merge and create TestFlight
+  build 98 from the exact merged main head.
+
+REC-132 final-review follow-up — 2026-07-26 00:46 PDT:
+
+- Security and maintainability re-review both returned `MERGE`; the test
+  specialist found no remaining auth-scope release blocker. The last security
+  follow-up replaced separate notification state/buffer locks with one atomic
+  account- and validation-generation-bound gate, and the final focused suite
+  passed 86/86.
+- The first full suite completed 703/708. All five failures were deterministic
+  expectations exposed by the new privacy-preserving provisional profile, not
+  crashes or unrelated feature failures: two persistence-count expectations
+  revealed that the remote-state scrub treated the current profile itself as
+  remote state, and three tests still assumed guest avatar/default-visibility
+  metadata should flow into an authenticated account. Tightened the scrub
+  predicate and updated those tests to hydrate or explicitly configure the
+  authenticated profile before asserting non-private visibility.
+- A prior focused link attempt failed with `errno=28` because the machine had
+  only 126 MiB free. Removed only four disposable REC-132 DerivedData caches
+  created by this work, recovering about 5.2 GiB; no source, user data, other
+  agent worktree, simulator content, or archive was removed.
+- A fetch then found `origin/main` had advanced to `af8f800` with the large
+  REC-143 Check-ins landing. It overlaps store and test files, so the current
+  reviewed auth hardening will be checkpointed before merging that latest main
+  and rerunning the full release validation on the combined source.

@@ -19,10 +19,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(app.contains("ClerkNativeAuthView(isDismissable: false)"))
         XCTAssertTrue(app.contains("if case .signedIn(let session) = auth.state"))
         XCTAssertTrue(app.contains("initialSession: session"))
+        XCTAssertTrue(app.contains("isSessionValidated: destination == .authenticated"))
+        XCTAssertTrue(app.contains("isSessionValidated: auth.isSessionValidated"))
         XCTAssertTrue(app.contains(".allowsHitTesting(destination == .authenticated)"))
         XCTAssertTrue(app.contains(".task(id: sessionRefreshGeneration)"))
         XCTAssertTrue(app.contains("guard phase == .active else { return }"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
+        XCTAssertTrue(root.contains(".task(id: isSessionValidated)"))
+        XCTAssertTrue(root.contains("guard phase == .active, isSessionValidated else { return }"))
+        XCTAssertTrue(root.contains("guard isSessionValidated,"))
         XCTAssertTrue(authGate.contains("AuthView(isDismissable: isDismissable)"))
     }
 

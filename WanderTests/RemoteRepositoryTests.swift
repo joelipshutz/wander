@@ -2126,6 +2126,42 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(PushNotificationManager.hexString(from: Data([0x00, 0x0A, 0xFF])), "000aff")
     }
 
+    func testPushNotificationDeliveryRequiresValidatedAuthenticatedSession() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertFalse(WanderAppDelegate.shouldAcceptAuthenticatedNotification())
+        XCTAssertTrue(WanderAppDelegate.shouldBufferAuthenticatedNotification())
+
+        WanderAppDelegate.setAuthenticatedSessionSignedOut()
+        XCTAssertFalse(WanderAppDelegate.shouldAcceptAuthenticatedNotification())
+        XCTAssertFalse(WanderAppDelegate.shouldBufferAuthenticatedNotification())
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertTrue(WanderAppDelegate.shouldAcceptAuthenticatedNotification())
+        XCTAssertFalse(WanderAppDelegate.shouldBufferAuthenticatedNotification())
+    }
+
+    func testUnknownNotificationResponseOnlyReleasesToExpectedAccount() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let accountAUserInfo: [AnyHashable: Any] = ["recme": ["event_id": "event_a"]]
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(accountAUserInfo))
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_b")
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_b"))
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(accountAUserInfo))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"] as? [String: String],
+            ["event_id": "event_a"]
+        )
+    }
+
     func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
         let manager = PushNotificationManager()
         let userInfo: [AnyHashable: Any] = [
@@ -2318,7 +2354,7 @@ private final class FeedTokenAuthSession: AuthSessionProviding {
         self.switchesUserDuringForcedRefresh = switchesUserDuringForcedRefresh
     }
 
-    func sessionChanges() -> AsyncStream<Void> {
+    func sessionChanges() -> AsyncStream<AuthState> {
         AsyncStream { continuation in
             continuation.finish()
         }

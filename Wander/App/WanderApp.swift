@@ -81,10 +81,12 @@ enum WanderAppSessionDestination: Equatable {
 struct WanderAppEntryView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var pushNotifications: PushNotificationManager
     private let analytics: AnalyticsClient
     private let parser: any LLMFilterParser
     @State private var hasResolvedSession = false
     @State private var sessionRefreshGeneration = 0
+    @State private var authenticatedUserID: String?
 
     init(analytics: AnalyticsClient, parser: any LLMFilterParser) {
         self.analytics = analytics
@@ -94,13 +96,15 @@ struct WanderAppEntryView: View {
     var body: some View {
         let destination = Self.destination(
             for: auth.state,
-            hasResolvedSession: hasResolvedSession
+            hasResolvedSession: hasResolvedSession,
+            isSessionValidated: auth.isSessionValidated
         )
 
         ZStack {
             if case .signedIn(let session) = auth.state {
                 WanderRootView(
                     initialSession: session,
+                    isSessionValidated: destination == .authenticated,
                     analytics: analytics,
                     parser: parser
                 )
@@ -116,13 +120,42 @@ struct WanderAppEntryView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            auth.beginSessionValidation()
             hasResolvedSession = false
             sessionRefreshGeneration &+= 1
         }
-        .onChange(of: auth.state) { _, state in
-            guard !state.isSignedIn else { return }
+        .onChange(of: auth.state, initial: true) { _, state in
+            let newUserID: String?
+            if case .signedIn(let session) = state {
+                newUserID = session.userID
+            } else {
+                newUserID = nil
+            }
+            if authenticatedUserID != newUserID {
+                if authenticatedUserID != nil {
+                    WanderWidgetSnapshotPublisher.clear()
+                    pushNotifications.clearAuthenticatedSessionState()
+                }
+                authenticatedUserID = newUserID
+                if let newUserID, auth.isSessionValidated {
+                    WanderAppDelegate.setAuthenticatedSessionActive(userID: newUserID)
+                }
+            }
+            guard newUserID == nil else { return }
             analytics.resetIdentity()
             WanderWidgetSnapshotPublisher.clear()
+        }
+        .onChange(of: destination, initial: true) { _, destination in
+            switch destination {
+            case .authenticated:
+                if case .signedIn(let session) = auth.state {
+                    WanderAppDelegate.setAuthenticatedSessionActive(userID: session.userID)
+                }
+            case .signIn, .unavailable:
+                pushNotifications.clearAuthenticatedSessionState()
+            case .loading:
+                WanderAppDelegate.beginAuthenticatedSessionValidation()
+            }
         }
     }
 
@@ -169,6 +202,7 @@ struct WanderAppEntryView: View {
                             .multilineTextAlignment(.center)
                     }
                     WanderPrimaryButton(title: "Try again", systemImage: "arrow.clockwise") {
+                        auth.beginSessionValidation()
                         hasResolvedSession = false
                         sessionRefreshGeneration &+= 1
                     }
@@ -182,7 +216,8 @@ struct WanderAppEntryView: View {
 
     static func destination(
         for state: AuthState,
-        hasResolvedSession: Bool
+        hasResolvedSession: Bool,
+        isSessionValidated: Bool = true
     ) -> WanderAppSessionDestination {
         guard hasResolvedSession else { return .loading }
         switch state {
@@ -191,7 +226,7 @@ struct WanderAppEntryView: View {
         case .signedOut:
             return .signIn
         case .signedIn:
-            return .authenticated
+            return isSessionValidated ? .authenticated : .loading
         case .unavailable(let message):
             return .unavailable(message)
         }

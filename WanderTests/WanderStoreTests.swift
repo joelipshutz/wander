@@ -1673,8 +1673,94 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(store.currentUser.avatarURL)
         XCTAssertNil(store.currentUser.bio)
         XCTAssertNil(store.currentUser.homeArea)
-        XCTAssertFalse(store.currentUser.isPrivateProfile)
-        XCTAssertEqual(store.defaultVisibility, .followers)
+        XCTAssertTrue(store.currentUser.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .selfOnly)
+    }
+
+    func testPersistedAccountMetadataAndSocialGraphDoNotCrossAccounts() {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+
+        let firstStore = WanderStore(fixtures: WanderFixtures.seed(), persistence: fixture.persistence)
+        firstStore.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Account A", handle: "account_a")
+            )
+        )
+        firstStore.updateCurrentUserAvatarURL("https://example.com/account-a.jpg")
+        firstStore.updateCurrentUserProfile(
+            displayName: "Account A",
+            handle: "account_a",
+            bio: "Account A bio",
+            homeArea: "Los Angeles"
+        )
+        firstStore.follow(userID: "user_maya")
+        firstStore.block(userID: "user_ryan")
+
+        let relaunchedStore = WanderStore(
+            fixtures: WanderFixtures.empty(),
+            persistence: fixture.persistence
+        )
+        relaunchedStore.apply(authState: .signedOut)
+        relaunchedStore.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_b", displayName: "Account B", handle: "account_b")
+            )
+        )
+
+        XCTAssertEqual(relaunchedStore.currentUser.id, "user_b")
+        XCTAssertNil(relaunchedStore.currentUser.avatarURL)
+        XCTAssertNil(relaunchedStore.currentUser.bio)
+        XCTAssertNil(relaunchedStore.currentUser.homeArea)
+        XCTAssertTrue(relaunchedStore.following(of: "user_b").isEmpty)
+        XCTAssertTrue(relaunchedStore.blockedProfiles().isEmpty)
+        XCTAssertTrue(relaunchedStore.searchProfiles(handleQuery: "account_a").isEmpty)
+    }
+
+    func testLateProfileResponseCannotOverwriteNewAccount() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Account A", handle: "account_a")
+            )
+        )
+        let repository = FakeProfileRepository(
+            currentProfile: LocalProfile(
+                localID: "profile_a",
+                serverID: "user_a",
+                handle: "account_a",
+                displayName: "Account A",
+                avatarURL: "https://example.com/account-a.jpg",
+                bio: "Account A bio",
+                homeArea: "Los Angeles",
+                syncState: .synced
+            ),
+            suspendCurrentProfile: true
+        )
+        let refresh = Task { @MainActor in
+            await store.refreshRemoteCurrentProfile(
+                backend: WanderBackend(profileRepository: repository)
+            )
+        }
+        while repository.currentProfileRequestCount == 0 {
+            await Task.yield()
+        }
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_b", displayName: "Account B", handle: "account_b")
+            )
+        )
+        refresh.cancel()
+        repository.resumeCurrentProfile()
+
+        let didApplyProfile = await refresh.value
+        XCTAssertFalse(didApplyProfile)
+        XCTAssertEqual(store.currentUser.id, "user_b")
+        XCTAssertEqual(store.currentUser.displayName, "Account B")
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.currentUser.bio)
+        XCTAssertNil(store.currentUser.homeArea)
     }
 
     func testSignedInSessionRefreshPreservesPersistedAppOwnedIdentityForSameUser() {
@@ -1734,7 +1820,7 @@ final class WanderStoreTests: XCTestCase {
         )
         let backend = WanderBackend(profileRepository: profileRepository)
 
-        await store.refreshRemoteCurrentProfile(backend: backend)
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
 
         XCTAssertEqual(store.currentUser.id, "user_live")
         XCTAssertEqual(store.currentUser.handle, "joe")
@@ -1744,7 +1830,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.pendingSyncCount, initialPendingCount)
     }
 
-    func testRemoteCurrentProfileKeepsLocalOnlyAvatarWhenRemoteOmitsAvatar() async {
+    func testSignInDoesNotCarryGuestAvatarWhenRemoteOmitsAvatar() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let localAvatarURL = "file:///tmp/wander-avatar.jpg"
         store.updateCurrentUserAvatarURL(localAvatarURL)
@@ -1773,10 +1859,10 @@ final class WanderStoreTests: XCTestCase {
         )
         let backend = WanderBackend(profileRepository: profileRepository)
 
-        await store.refreshRemoteCurrentProfile(backend: backend)
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
 
-        XCTAssertEqual(store.currentUser.avatarURL, localAvatarURL)
-        XCTAssertEqual(store.profileState(for: "user_live")?.shell.avatarURL, localAvatarURL)
+        XCTAssertNil(store.currentUser.avatarURL)
+        XCTAssertNil(store.profileState(for: "user_live")?.shell.avatarURL)
         XCTAssertEqual(store.currentUser.defaultVisibility, .mutuals)
     }
 
@@ -1808,7 +1894,7 @@ final class WanderStoreTests: XCTestCase {
         )
         let backend = WanderBackend(profileRepository: profileRepository)
 
-        await store.refreshRemoteCurrentProfile(backend: backend)
+        _ = await store.refreshRemoteCurrentProfile(backend: backend)
 
         XCTAssertNil(store.currentUser.avatarURL)
         XCTAssertNil(store.profileState(for: "user_live")?.shell.avatarURL)
@@ -2343,13 +2429,16 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(visiblePlace?.userPlace.ratingSignal)
     }
 
-    func testFilePersistenceRestoresSavedPlaceAfterRelaunch() {
+    func testFilePersistenceRestoresSavedPlaceAfterRelaunch() async throws {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
 
         let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
         firstStore.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
-        firstStore.defaultVisibility = .mutuals
+        try await firstStore.updateCurrentUserDetails(
+            ProfileDetailsUpdate(defaultVisibility: .mutuals, isPrivateProfile: false),
+            backend: nil
+        )
 
         let result = firstStore.saveCandidate(
             PlaceCandidate(
@@ -3710,7 +3799,7 @@ final class WanderStoreTests: XCTestCase {
                 syncState: .synced
             )
         )
-        await store.refreshRemoteCurrentProfile(
+        _ = await store.refreshRemoteCurrentProfile(
             backend: WanderBackend(profileRepository: profileRepository)
         )
 
@@ -5322,7 +5411,7 @@ final class WanderStoreTests: XCTestCase {
 
         refreshTask.cancel()
         followRepository.resumeFollowing()
-        await refreshTask.value
+        _ = await refreshTask.value
 
         XCTAssertFalse(store.profiles.contains { $0.id == "user_maya" })
         XCTAssertFalse(store.follows.contains {
@@ -6035,13 +6124,36 @@ final class WanderStoreTests: XCTestCase {
         store.apply(authState: .signedOut)
 
         XCTAssertEqual(analytics.identifiedUserIDs, ["user_live"])
-        XCTAssertEqual(analytics.resetCount, 1)
+        XCTAssertEqual(analytics.resetCount, 2)
+    }
+
+    func testDirectAccountSwitchResetsAnalyticsBeforeIdentifyingNewUser() {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Account A", handle: "account_a")
+            )
+        )
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_b", displayName: "Account B", handle: "account_b")
+            )
+        )
+
+        XCTAssertEqual(analytics.identifiedUserIDs, ["user_a", "user_b"])
+        XCTAssertEqual(analytics.resetCount, 2)
     }
 
     func testRemoteOwnPlaceSaveFailureTracksNonPIISyncDiagnostics() async throws {
         let analytics = RecordingAnalyticsClient()
         let store = WanderStore(fixtures: WanderFixtures.empty(), analytics: analytics)
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        try await store.updateCurrentUserDetails(
+            ProfileDetailsUpdate(defaultVisibility: .mutuals, isPrivateProfile: false),
+            backend: nil
+        )
         let userPlaceRepository = FakeUserPlaceRepository(error: WanderRemoteError.invalidResponse("network down"))
         let backend = WanderBackend(userPlaceRepository: userPlaceRepository)
 
@@ -7378,9 +7490,11 @@ private final class FakeProfileRepository: ProfileRepository {
     private let updatedProfileResult: LocalProfile?
     private var recommendationResponses: [[DiscoverPeopleRecommendation]]
     private let recommendationError: Error?
+    private var currentProfileIsSuspended: Bool
     private(set) var queries: [String] = []
     private(set) var profileIDs: [String] = []
     private(set) var recommendationLimits: [Int] = []
+    private(set) var currentProfileRequestCount = 0
 
     init(
         shells: [ProfileShell] = [],
@@ -7390,7 +7504,8 @@ private final class FakeProfileRepository: ProfileRepository {
         updatedProfile: LocalProfile? = nil,
         recommendations: [DiscoverPeopleRecommendation] = [],
         recommendationResponses: [[DiscoverPeopleRecommendation]]? = nil,
-        recommendationError: Error? = nil
+        recommendationError: Error? = nil,
+        suspendCurrentProfile: Bool = false
     ) {
         self.shells = shells
         self.profileStates = profileStates
@@ -7399,10 +7514,19 @@ private final class FakeProfileRepository: ProfileRepository {
         self.updatedProfileResult = updatedProfile
         self.recommendationResponses = recommendationResponses ?? [recommendations]
         self.recommendationError = recommendationError
+        self.currentProfileIsSuspended = suspendCurrentProfile
     }
 
     func currentProfile() async throws -> LocalProfile? {
-        currentProfileResult
+        currentProfileRequestCount += 1
+        while currentProfileIsSuspended {
+            await Task.yield()
+        }
+        return currentProfileResult
+    }
+
+    func resumeCurrentProfile() {
+        currentProfileIsSuspended = false
     }
 
     func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {

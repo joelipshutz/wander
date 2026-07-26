@@ -11,6 +11,7 @@ final class ClerkAuthService: AuthSessionProviding {
     #if canImport(ClerkKit)
     typealias SessionResolver = @MainActor () async throws -> AuthSession?
     private let resolveAuthoritativeSession: SessionResolver
+    private var refreshGeneration = 0
 
     init(
         configuration: WanderBackendConfiguration,
@@ -47,7 +48,7 @@ final class ClerkAuthService: AuthSessionProviding {
         return true
     }
 
-    func sessionChanges() -> AsyncStream<Void> {
+    func sessionChanges() -> AsyncStream<AuthState> {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
             return AsyncStream { continuation in
@@ -57,12 +58,16 @@ final class ClerkAuthService: AuthSessionProviding {
 
         let events = Clerk.shared.auth.events
         return AsyncStream { continuation in
-            let task = Task { @MainActor in
+            let task = Task { @MainActor [weak self] in
                 for await event in events {
                     guard !Task.isCancelled else { break }
                     switch event {
                     case .signInCompleted, .signUpCompleted, .signedOut, .accountDeleted, .sessionChanged:
-                        continuation.yield()
+                        guard let self else { return }
+                        self.refreshGeneration &+= 1
+                        let state = Self.currentClientState()
+                        self.state = state
+                        continuation.yield(state)
                     case .tokenRefreshed:
                         break
                     }
@@ -82,6 +87,8 @@ final class ClerkAuthService: AuthSessionProviding {
 
     func refreshSession() async {
         #if canImport(ClerkKit)
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
         guard configuration.isClerkConfigured else {
             state = .unavailable("Missing Clerk publishable key.")
             #if DEBUG
@@ -91,7 +98,9 @@ final class ClerkAuthService: AuthSessionProviding {
         }
 
         do {
-            guard let session = try await resolveAuthoritativeSession() else {
+            let resolvedSession = try await resolveAuthoritativeSession()
+            guard !Task.isCancelled, generation == refreshGeneration else { return }
+            guard let session = resolvedSession else {
                 state = .signedOut
                 #if DEBUG
                 WanderDebugLog.remote.debug("clerk refresh signed_out")
@@ -102,7 +111,10 @@ final class ClerkAuthService: AuthSessionProviding {
             #if DEBUG
             WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public)")
             #endif
+        } catch is CancellationError {
+            return
         } catch {
+            guard generation == refreshGeneration else { return }
             state = .unavailable("Could not verify your session. Check your connection and try again.")
             #if DEBUG
             WanderDebugLog.remote.error("clerk refresh failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
@@ -158,7 +170,10 @@ final class ClerkAuthService: AuthSessionProviding {
             #endif
             throw AuthSessionError.notConfigured
         }
-        guard Clerk.shared.user != nil else {
+        guard let session = Clerk.shared.session,
+              Self.isActiveSessionStatus(session.status),
+              session.user != nil
+        else {
             #if DEBUG
             WanderDebugLog.remote.error("clerk supabase token skipped reason=no_current_user")
             #endif
@@ -192,8 +207,26 @@ final class ClerkAuthService: AuthSessionProviding {
     #if canImport(ClerkKit)
     private static func resolveCurrentSession() async throws -> AuthSession? {
         _ = try await Clerk.shared.refreshClient()
-        guard let user = Clerk.shared.user else { return nil }
+        guard let session = Clerk.shared.session,
+              isActiveSessionStatus(session.status),
+              let user = session.user
+        else { return nil }
+        return authSession(from: user)
+    }
 
+    private static func currentClientState() -> AuthState {
+        guard let session = Clerk.shared.session,
+              isActiveSessionStatus(session.status),
+              let user = session.user
+        else { return .signedOut }
+        return .signedIn(authSession(from: user))
+    }
+
+    static func isActiveSessionStatus(_ status: ClerkKit.Session.SessionStatus) -> Bool {
+        status == .active
+    }
+
+    private static func authSession(from user: User) -> AuthSession {
         let name = [user.firstName, user.lastName]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
