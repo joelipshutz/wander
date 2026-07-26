@@ -24767,3 +24767,14 @@ Final validation checkpoint (11:30 PDT):
   captures. The clean rebuild and final full suite then passed.
 - No schema, backend data, build-number, archive, upload, TestFlight, App Store
   Connect, or Slack release action was performed. PR handoff is next.
+
+PR handoff (11:32 PDT):
+
+- Final implementation commit: `d31003b` (`feat: implement REC-147 Direction A
+  map tickets`).
+- Pushed `codex/rec-147-direction-a-map` and opened ready PR #241:
+  `https://github.com/joelipshutz/wander/pull/241`.
+- PR #241 links REC-147 and the related REC-148 typography exploration, records
+  the 747/747 result and two-size visual review, and calls out the remaining
+  dense same-coordinate MapKit collision follow-up. REC-147 should remain In
+  Review until the PR lands; no TestFlight release was requested.
