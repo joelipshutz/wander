@@ -25090,3 +25090,42 @@ Release start:
 - Next: regenerate the project, review and land the release metadata, validate
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
+
+## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Review` at handoff)
+
+Final handoff:
+
+- Pushed the implementation branch and opened ready PR #249:
+  `https://github.com/joelipshutz/wander/pull/249`.
+- `origin/main` advanced again during publication with the REC-122 streak
+  hierarchy and build-100 release metadata. Merged exact current main
+  `c98612e41`, preserving its product, test, version, generated-project, and
+  append-only log changes. Only `docs/agent-log.md` required manual conflict
+  resolution.
+- Regenerated `Wander.xcodeproj` from the merged `project.yml`. The final
+  project retains build 100 and the REC-160 source membership in both the app
+  and primary widget extension.
+- The exact reconciled PR branch passed the complete 754/754 XCTest suite with
+  zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_14-01-46--0700.xcresult`.
+- The exact reconciled branch passed the generic iOS Simulator build. Both the
+  app and `WanderWidgets.appex` report build 100; the extension remains a
+  universal arm64/x86_64 binary.
+- Reinspected final built metadata in both app and widget extension: exact
+  title `Check-in here`, iOS 18 introduction, `openAppWhenRun: true`, and
+  authenticated execution remain present.
+- Implementation commits are `d63a4e6b0` and `f4b3f64b2`; current-main
+  reconciliation is `834efdfc4`.
+- No TestFlight release action for REC-160 was requested or performed. The
+  independently running build-100 release started from `main` before REC-160
+  and therefore does not contain this feature.
+
+Final outcome: the new authenticated **Check-in here** system control is
+implemented, tested, documented, and ready for review in PR #249. The existing
+bottom Lock Screen accessory widget remains unchanged. Physical Action Button
+validation after a signed install is the only remaining hardware-specific
+check.
