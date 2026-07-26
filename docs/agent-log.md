@@ -22542,3 +22542,34 @@ Landing completion — 2026-07-25 22:03 PDT:
 
 Final outcome: the requested Been-only calendar behavior and completed REC-142
 widget work are on `main`; no known landing blocker remains.
+
+## 2026-07-25 22:22 PDT - Codex - REC-152 Profile Recent Activity Exploration
+
+Agent: Codex using `design-shotgun`
+Branch: `codex/rec-152-profile-activity`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-152-profile-activity`
+Linear: `REC-152` (`In Progress`)
+Mission Control: `67856d32-86fa-4faa-8121-a5fdac4af423` (`in_progress`)
+
+Goal: redesign the owner Profile around one reverse-chronological recent
+activity timeline, remove the current identity header, move the day streak
+directly below the social graph entry points, move Visit invitations below the
+streak, and preserve Been/check-in and Wanna access through timeline filters
+and a full See more screen.
+
+Starting status and coordination:
+
+- Created this isolated worktree from clean `origin/main` commit `e7b12a9`;
+  Joe's `joe/phone-build-latest` checkout and all existing agent worktrees
+  remain untouched.
+- No prior GBrain result was found for this exact Profile activity redesign.
+  Linear search surfaced adjacent REC-147 check-in-card work and REC-145
+  long-history paging work; REC-152 is intentionally scoped to Profile
+  information architecture, ordering, timestamps, and navigation.
+- The current stage is visual/IA exploration before production implementation.
+  Compare multiple single-timeline layouts; do not use two stacked five-item
+  Been/Wanna lists.
+- Expected initial files: `Wander/Features/Profile/ProfileOwnerHome.swift`,
+  `Wander/Features/Profile/ProfileRedesignMockups.swift`, focused Profile
+  presentation/navigation tests, and this log. Additional files will be logged
+  if the approved direction needs a dedicated activity screen or presenter.
