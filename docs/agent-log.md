@@ -24683,3 +24683,61 @@ TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
 Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
+
+## 2026-07-26 13:40 PDT - Codex - REC-160 Check-in here Action Button control
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Worktree: `/private/tmp/recme-rec160-action-control`
+Linear: `REC-160` (`In Progress`)
+
+Goal: add one iOS 18+ WidgetKit Control named `Check-in here` so rec.me can be
+assigned to the iPhone Action Button and open the existing nearby check-in
+flow. The shipped bottom Lock Screen accessory widget is explicitly out of
+scope and will not be rebuilt or changed.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact current
+  `origin/main` at `b4d7c98ce`.
+- The primary checkout remains untouched on the stale REC-142 branch with its
+  unrelated untracked `.pnpm-store/`.
+- Created REC-160 in the `recme` team / `mvp` project, assigned it to Ryan,
+  related it to REC-142 and REC-157, and moved it to `In Progress`.
+- Active REC-157 and REC-158 branches overlap widget-bundle registration and
+  app deep-link routing. REC-160 will place the control in a separate source
+  file, leave REC-157's accessory widget presentation untouched, and keep its
+  navigation changes additive. The branch will be reconciled with latest
+  `origin/main` before publication.
+- Expected files:
+  `project.yml`, regenerated project state, a small app/widget shared App
+  Intent and navigation handoff, one new control source file, the existing
+  widget bundle registration, focused widget/navigation tests, setup docs,
+  and this log.
+- No backend, schema, Supabase, notification, build-number, TestFlight, or
+  Slack release change is in scope.
+
+Implementation checkpoint — 2026-07-26 13:47 PDT:
+
+- Added an iOS 18 `ControlWidget` with exact display name and label
+  `Check-in here`, terracotta tint, `location.fill` symbol, and a dedicated
+  `OpenIntent`. The new source is registered only with the host app and the
+  existing primary widget extension.
+- The intent hands off to the existing `.quickCapture` / I'm Here Now route.
+  A main-actor navigation center retains the request until authenticated
+  session validation completes, then reuses the existing deep-link handoff.
+- Registered the control in the existing widget bundle behind an iOS 18
+  availability guard. The accessory-circular Lock Screen widget implementation
+  remains unchanged.
+- Added focused contract and behavior coverage plus physical-device Action
+  Button setup instructions in `docs/setup.md`.
+- `xcodegen generate` and `git diff --check` passed.
+- Focused `WanderActionButtonControlTests` passed 4/4 with zero failures on
+  iPhone 17 Pro / iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-42-07--0700.xcresult`.
+- The sandboxed first attempt could not access CoreSimulator or fetch Swift
+  packages; rerunning the same command with the repository-prescribed
+  escalation succeeded.
+- `origin/main` advanced by REC-159 while this work was in progress. Its
+  Nearby-widget icon change does not overlap implementation files, but its
+  append-only agent-log entry will be preserved during reconciliation.

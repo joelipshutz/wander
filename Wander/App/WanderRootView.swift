@@ -318,6 +318,7 @@ struct WanderRootView: View {
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
+    @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
 
@@ -655,6 +656,12 @@ struct WanderRootView: View {
             guard isSessionValidated else { return }
             handleDeepLink(url)
         }
+        .onChange(
+            of: controlNavigationCenter.pendingRequest,
+            initial: true
+        ) { _, request in
+            handleControlNavigationRequestIfReady(request)
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, isSessionValidated else { return }
             drainSharedPlaceImports()
@@ -671,9 +678,14 @@ struct WanderRootView: View {
                 onReview: presentSharedPlaceImportReview
             )
         )
-        .onChange(of: isSessionValidated) { _, isValidated in
-            guard !isValidated else { return }
-            cancelSignedInMaintenance()
+        .onChange(of: isSessionValidated, initial: true) { _, isValidated in
+            if isValidated {
+                handleControlNavigationRequestIfReady(
+                    controlNavigationCenter.pendingRequest
+                )
+            } else {
+                cancelSignedInMaintenance()
+            }
         }
         .onDisappear(perform: handleRootDisappear)
     }
@@ -856,6 +868,15 @@ struct WanderRootView: View {
         guard let route = WanderDeepLinkRoute.parse(url) else { return }
 
         beginDeepLinkHandoff(to: route)
+    }
+
+    private func handleControlNavigationRequestIfReady(
+        _ request: WanderControlNavigationRequest?
+    ) {
+        guard isSessionValidated, let request else { return }
+
+        beginDeepLinkHandoff(to: request.route)
+        controlNavigationCenter.consume(request.id)
     }
 
     private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute) {

@@ -126,6 +126,26 @@ WidgetKit does not offer an inline keyboard. Tapping the Search widget opens Map
 with the in-app search focused; text entry and result population happen in the
 app.
 
+On iOS 18 or later, the primary widget extension also contributes one system
+control named **Check-in here**. It opens rec.me's existing I'm Here Now nearby
+place picker; it does not duplicate or replace the accessory-circular control
+already available for the bottom Lock Screen slots. To assign the new control
+to a supported iPhone's Action Button:
+
+1. Build and run the **Wander** scheme once so iOS discovers the embedded widget
+   extension and its controls.
+2. Open **Settings → Action Button**, swipe to **Controls**, and choose
+   **Choose a Control**.
+3. Find rec.me and select **Check-in here**.
+4. Hold the Action Button. Verify rec.me opens the nearby check-in flow. If the
+   app requires sign-in or is still restoring the session, finish that step and
+   verify the check-in flow opens afterward.
+
+The same control can also appear in Control Center and in a configurable bottom
+Lock Screen control slot. Those are alternative placements for the same iOS 18
+control; the existing rec.me bottom Lock Screen widget remains a separate
+WidgetKit configuration.
+
 The Nearby Rich Visit extension uses When In Use location only. The host app
 must receive that permission before the widget can request location, and iOS may
 show a separate prompt asking whether the widget may use location. Its bounded
