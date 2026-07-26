@@ -22351,3 +22351,138 @@ REC-142 tester-feedback revision handoff — 2026-07-25 21:47 PDT:
   immediately. Physical-iPhone testing requires the Apple Developer portal and
   Xcode account/profile steps in `docs/setup.md`; no source signing changes are
   pending.
+## 2026-07-25 21:21 PDT - Codex - REC-149 TestFlight Build 97
+
+Agent: Codex
+Branch: `codex/rec-149-testflight-build-97`
+Worktree: `/private/tmp/recme-testflight-build-97`
+Linear: `REC-149` (`In Progress`)
+
+Goal: package the exact latest `main` as rec.me TestFlight build 97 after
+Ryan's explicit release request, make it available to the public
+`rec.me Alpha` group, and announce the tester-facing scope in
+`#testflight-feedback`.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated release worktree from
+  `origin/main` at `74ab31bb0`.
+- The primary checkout remains untouched on `codex/rec-142-widgets`; its
+  untracked `.pnpm-store/` and all unrelated worktrees belong to other work.
+- TestFlight build 96 is the last completed release. Its upload, compliance,
+  public-group attachment, beta review approval, and Slack announcement are
+  all recorded as complete.
+- The only app behavior merged after build 96 is REC-140: the owner Profile
+  calendar now shows Been and Wanna activity together. REC-142 / PR #215 is
+  unmerged and therefore intentionally excluded from build 97.
+- Expected release-branch files are `project.yml`,
+  `Wander.xcodeproj/project.pbxproj`, and this append-only agent log.
+- The marketing version remains 0.1. This pass increments only
+  `CURRENT_PROJECT_VERSION` from 96 to 97 and does not submit an App Store
+  production release.
+
+Release gates:
+
+- Regenerate the Xcode project, inspect the diff for scope/signing churn, and
+  run the full simulator test suite plus a clean generic simulator build.
+- Land the release metadata through a reviewed PR, then archive and upload the
+  exact merged `main`.
+- Process build 97 through the repository TestFlight helper, verify the
+  uploaded build number and public-group status, update REC-149 and this log,
+  and post tester-facing release notes in `#testflight-feedback`.
+
+Pre-landing validation — 2026-07-25 21:28 PDT:
+
+- Changed `CURRENT_PROJECT_VERSION` from 96 to 97 in `project.yml`, then ran
+  `xcodegen generate`. The generated project changed only the matching Debug
+  and Release build-number settings; marketing version 0.1 and signing
+  configuration are unchanged.
+- `git diff --check` passed. The complete release-branch diff contains only
+  the intended build metadata and this coordination record.
+- Full iPhone 17 Pro Max / iOS 26.5 simulator suite passed 637/637 tests:
+  `/private/tmp/DerivedData-build97/Logs/Test/Test-Wander-2026.07.25_21-22-13--0700.xcresult`.
+- A clean universal simulator build passed:
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination
+  'generic/platform=iOS Simulator' -derivedDataPath
+  /private/tmp/DerivedData-build97-generic CODE_SIGNING_ALLOWED=NO`.
+- Only the existing Swift isolation, App Intents metadata, and traditional
+  headermap warnings remain. No new release-blocking issue was found.
+- Next: commit and push the release branch, open and squash-merge a ready PR,
+  then archive/export/upload the exact merged `main`.
+
+Release completion — 2026-07-25 21:40 PDT:
+
+- Opened ready PR #216, confirmed it was clean and mergeable against exact
+  latest `origin/main`, posted the validation summary, and squash-merged it as
+  `ba172e380f1bb5eacc70fefc119f0ee70a1f6745`:
+  `https://github.com/joelipshutz/wander/pull/216`. The merged remote release
+  branch was deleted.
+- Created a clean detached worktree at that exact released `main` SHA and
+  archived `/private/tmp/Wander-0.1-build97.xcarchive`. Archive and embedded
+  app metadata verify display name `rec.me`, marketing version `0.1`, build
+  `97`, and bundle `com.grayline.wander`; strict code-signature verification
+  passed.
+- Export options `/private/tmp/recme-build97-export-options.plist` used
+  `destination=upload`, `method=app-store-connect`, automatic distribution
+  signing, and `manageAppVersionAndBuildNumber=false`. Xcode reported
+  `Uploaded Wander`, `Upload succeeded`, and `EXPORT SUCCEEDED`; archive
+  upload metadata independently confirmed build 97.
+- `scripts/testflight-release.mjs` confirmed App Store Connect build
+  `f25cba53-4060-4549-8a70-155b50e80e4b` is `VALID`, set
+  `usesNonExemptEncryption=false`, updated the en-US What to Test copy,
+  attached public group `rec.me Alpha`, submitted external beta review, and
+  returned review state `APPROVED`.
+- Posted the required live tester note in `#testflight-feedback` with the
+  change summary, concrete Profile calendar checks, deferred WidgetKit scope,
+  and requested repro details:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785040819977229`.
+- Updated REC-149 with PR, exact main SHA, archive, validation, App Store
+  Connect build id, public link, and Slack record, then moved the issue to
+  `Done`.
+- Public TestFlight:
+  `https://testflight.apple.com/join/knEhRa6t`. Build 97 is live and approved
+  for external testing.
+- Included release behavior is REC-140's combined Been/Wanna Profile
+  calendar. REC-142 / PR #215 widgets remain unmerged and were not included.
+  No App Store production submission was made.
+
+Final outcome: rec.me 0.1 (97) is validated, uploaded, approved, attached to
+the public TestFlight group, announced to testers, and durably tracked. No
+known build-97 blocker remains.
+
+## 2026-07-25 21:47 PDT - Codex - REC-142 Been-only Calendar Landing
+
+Agent: Codex
+Branch: `codex/rec-142-widgets`
+Worktree: `/Users/ryanlieblein/Developer/wander`
+Linear: `REC-142` (`In Review`)
+PR: `#215`
+
+Goal: land Ryan's tested Been-only Profile/widget calendar revision and the
+completed WidgetKit feature into `main`, then stop before any new TestFlight
+release.
+
+Starting status and coordination:
+
+- Fetched `origin`. The active checkout is the existing dedicated REC-142
+  branch, clean except for an unrelated untracked `.pnpm-store/`, which remains
+  untouched.
+- A new follow-up issue, REC-151, was initially created from the chat request.
+  Coordination review found the exact requested change already implemented,
+  tested, pushed, and attached to REC-142 / PR #215, so REC-151 was marked
+  Duplicate of REC-142 before any overlapping source edit.
+- The latest REC-142 head is `2cb87493a`. Its revision removes Wanna dates,
+  counts, rings, legends, and day-detail membership from both calendars while
+  preserving Wanna tiles/save behavior and backward-compatible zero-valued
+  widget JSON fields.
+- Build 97 is the latest completed TestFlight release. Its release workflow is
+  fully recorded and no pending explicit release remains. This merge request
+  does not authorize build 98, archive/upload, beta-group changes, or Slack
+  release notes.
+- Merging latest `origin/main` produced conflicts only in build/project
+  metadata and the append-only work log. Resolution keeps the complete widget
+  target/configuration, advances the shared app/extension build value to 97,
+  and preserves both REC-142 and REC-149 histories.
+- Expected landing changes are the existing REC-142 app/widget implementation,
+  tests, setup/decision docs, the generated project after conflict resolution,
+  and this append-only log. The untracked package store is excluded.
