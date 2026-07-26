@@ -8,6 +8,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: Y7TVK75RZ8
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "97"
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
 packages:
@@ -25,6 +27,7 @@ schemes:
     build:
       targets:
         Wander: all
+        WanderWidgets: all
         WanderTests: [test]
     run:
       config: Debug
@@ -44,6 +47,7 @@ targets:
     platform: iOS
     sources:
       - Wander
+      - WanderWidgetShared
     configFiles:
       Debug: Wander/Config/Auth.xcconfig
       Release: Wander/Config/Auth.xcconfig
@@ -74,8 +78,6 @@ targets:
       base:
         PRODUCT_NAME: Wander
         PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander
-        MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "96"
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Wander/Resources/Wander.entitlements
         LD_RUNPATH_SEARCH_PATHS:
@@ -103,6 +105,44 @@ targets:
         product: ClerkKitUI
       - package: supabase-swift
         product: Supabase
+      - target: WanderWidgets
+        embed: true
+        link: false
+  WanderWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - WanderWidgets
+      - WanderWidgetShared
+    info:
+      path: WanderWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: rec.me
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_NAME: WanderWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.widgets
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: WanderWidgets/WanderWidgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+          - "@executable_path/../../Frameworks"
+      configs:
+        Debug:
+          ONLY_ACTIVE_ARCH: YES
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        Release:
+          SWIFT_COMPILATION_MODE: wholemodule
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
   WanderTests:
     type: bundle.unit-test
     platform: iOS

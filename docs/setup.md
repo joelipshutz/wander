@@ -1,6 +1,6 @@
 # Setup
 
-Last updated: 2026-06-15
+Last updated: 2026-07-24
 
 ## Requirements
 
@@ -81,6 +81,74 @@ checked in as non-secret project defaults for the Wander alpha project.
 
 Do not commit `Wander/Config/LocalAuth.xcconfig`; it is intentionally ignored and
 only for local overrides.
+
+## Widget Extension And Signing
+
+`WanderWidgets` is one WidgetKit extension with bundle id
+`com.grayline.wander.widgets`. It hosts all three widget configurations: Quick
+Capture, Search, and Activity Calendar. The app and extension share App Group
+`group.com.grayline.wander.shared`.
+
+Only the calendar crosses the App Group boundary. The host app writes a redacted,
+aggregate-only JSON snapshot containing calendar layout and daily Been counts.
+The backward-compatible schema currently retains zero-valued Wanna fields; do
+not repopulate them. Do not add place names, notes, precise locations, user
+identities, or raw place records to that payload. The file lives under the App Group's
+`Library/Caches` directory, is excluded from backup after every atomic write,
+and is cleared immediately when the authenticated identity becomes unavailable
+or changes.
+
+WidgetKit does not offer an inline keyboard. Tapping the Search widget opens Map
+with the in-app search focused; text entry and result population happen in the
+app.
+
+### First-time physical-device setup
+
+The checked-in entitlements are intentional. Errors such as `No Accounts`,
+`Unknown Name (Y7TVK75RZ8)`, `profile doesn't include the App Groups
+capability`, or `No profiles for com.grayline.wander.widgets` mean the Mac or
+Apple Developer account is not provisioned yet; removing the entitlements only
+hides the problem and breaks live calendar updates.
+
+1. In Xcode, open **Xcode → Settings → Accounts**, add the Apple Account that is
+   a member of team `Y7TVK75RZ8`, and complete any authentication prompts.
+   A Personal Team is not a substitute for access to the existing rec.me bundle
+   identifiers. If the team still does not appear, an Account Holder or Admin
+   must add the developer to the organization and grant Certificates,
+   Identifiers & Profiles access. In **Manage Certificates**, create an Apple
+   Development certificate if the account does not already have one available
+   on this Mac.
+2. In [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/identifiers/list),
+   register App Group `group.com.grayline.wander.shared` if it does not already
+   exist.
+3. Open the explicit App ID `com.grayline.wander`, enable **App Groups**,
+   configure it, and assign `group.com.grayline.wander.shared`.
+4. Register the explicit iOS App ID `com.grayline.wander.widgets` if it does not
+   exist. Enable **App Groups** on it and assign the same group.
+5. Changing either App ID invalidates older provisioning profiles. With
+   automatic signing, return to Xcode and let it request replacements. With
+   manual signing, regenerate and download an iOS App Development profile for
+   each App ID, including the connected device and the developer's Apple
+   Development certificate.
+6. In the **Wander** target's **Signing & Capabilities** pane, select team
+   `Y7TVK75RZ8`, keep **Automatically manage signing** enabled, and verify that
+   `group.com.grayline.wander.shared` is checked under App Groups.
+7. Repeat the same team, automatic-signing, and App Group checks for the
+   **WanderWidgets** target. Its bundle identifier must remain
+   `com.grayline.wander.widgets`.
+8. Re-select the connected iPhone and build. Automatic signing should register
+   the device and create/download both development profiles. If Xcode continues
+   to reuse the old host profile, use the Accounts pane to download profiles or
+   quit Xcode and move only the stale host/widget profile to a backup folder
+   from `~/Library/Developer/Xcode/UserData/Provisioning Profiles/` (current
+   Xcode) or `~/Library/MobileDevice/Provisioning Profiles/` (older Xcode),
+   then reopen Xcode and build again.
+9. On the iPhone, trust the Mac when prompted and enable **Settings → Privacy &
+   Security → Developer Mode** if Xcode requests it.
+
+For a code-only test while portal access is being fixed, select an iPhone
+Simulator instead of a physical iPhone. The app and all three widgets can be
+built and exercised in Simulator without creating device provisioning profiles.
 
 ## Test
 

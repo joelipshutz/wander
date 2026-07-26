@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-07-18
+Last updated: 2026-07-24
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -48,6 +48,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | M2 extraction shells | Locked | Link/photo create unresolved drafts until backend jobs exist. |
 | Discover parser interface early | Locked | Deterministic local parser now; cheap swappable LLM parser in M5. |
 | LLM data minimization | Locked | Send raw query phrase + schema only, not graph/place/contact/user data. |
+| Home screen widgets | Locked for REC-142, revised 2026-07-25 | One WidgetKit extension hosts Quick Capture, Search, and Activity Calendar widgets. Quick Capture deep-links to the in-app I'm Here Now flow. WidgetKit does not provide an inline keyboard, so Search deep-links to Map with its in-app search focused instead of accepting text on the Home Screen. The Activity Calendar and the in-app Profile calendar are Been-only; Wanna remains elsewhere in the product but does not contribute calendar markers, counts, legends, day details, or widget data. Tapping the calendar widget persistently targets the Profile calendar's top anchor so the whole section snaps into view even during a cold TabView launch. The calendar reads a redacted, aggregate-only JSON snapshot from App Group `group.com.grayline.wander.shared`; its backward-compatible schema still carries zero-valued Wanna fields, but the publisher emits only daily Been counts and the widget ignores any historical cached Wanna state. The snapshot never contains place names, notes, precise locations, or user identities. It is an identity-scoped cache in practice: clear it on sign-out/account change, keep it out of backups, and treat it as unusable when the current time zone or first-weekday setting differs from the stored calendar context. |
 | Share extension | Locked for REC-97, revised 2026-07-15 | The prior deferral is superseded for place imports. REC-97 includes a URL/text/file Share Extension behind `import_places_v1`; it writes bounded idempotent envelopes to an App Group and leaves authenticated upload, parsing, and network work to the host app. |
 | Multi-source place imports | Locked for REC-97 | Google Maps, Instagram, TikTok, and Text/Notes all feed one owner-private durable Import Inbox. Raw artifacts live in private storage and delete after seven days; scheduled workers use modular provider adapters, constrained evidence-grounded AI hints, and Apple Maps Server API resolution. Profile shows import progress and then Review Import. Each item remains private until the user chooses Been/Wanna and completes the regular shared save flow. Import commits are item-level, idempotent, and must return Already Saved without overwriting an existing save. |
 | Native Contacts | Planned later | Use `FakeContactProvider` in M2/v0.1 baseline. |
