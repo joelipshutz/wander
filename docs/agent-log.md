@@ -23986,3 +23986,43 @@ Checkpoint — 2026-07-26 00:18 PDT:
   and build, inspect the final diff, then push/open the REC-154 PR and leave
   Xcode focused on this branch. No TestFlight build-number or release action is
   authorized.
+
+## 2026-07-26 00:42 PDT — Codex — REC-154 implementation completion
+
+Agent: Codex
+Branch: `codex/rec-154-nearby-widget`
+Worktree: `/private/tmp/recme-rec154-nearby-widget`
+Linear: `REC-154` (`In Progress` pending publication)
+
+Final implementation and validation:
+
+- Rebased the implementation onto current `origin/main`
+  `af8f8000b` and regenerated `Wander.xcodeproj`; the implementation commit
+  before this completion record is `44e984f15`.
+- The complete iPhone 17 Pro / iOS 26.5 suite passed 707/707 with zero
+  failures. The focused nearby-widget/deep-link/snapshot suite passed 29/29.
+- A clean unsigned generic iOS Simulator build passed for arm64 and x86_64.
+  A signed Simulator build that included both App Group-enabled app extensions
+  also passed. Existing unrelated Swift 6 formatter-isolation, traditional
+  headermap, and unused-expression warnings remain unchanged.
+- Live Simulator smoke validation seeded one bounded App Group candidate, opened
+  `recme://add/nearby/ggiata-smoke`, and confirmed the widget route presents the
+  existing `save this place` choice with Ggiata Delicatessen prefilled. Choosing
+  Check-in reached the full manual Rich Visit details form with category,
+  cuisine, rating, photos, and more-options controls. No place was saved.
+  Captures: `/private/tmp/rec154-rich-visit-open.png` and
+  `/private/tmp/rec154-rich-visit-details.png`.
+- Xcode's system-large preview on iPhone 17 Pro rendered all five nearby rows
+  without clipping and exposed each row as one labeled accessibility action.
+  The secondary iPhone 17e preview attempt was interrupted by Xcode switching
+  to another existing worktree; it is a remaining visual-validation gap, not an
+  observed functional failure.
+- `git diff --check` passed. Derived-data directories remain local and
+  untracked. Voice capture remains intentionally deferred. No build-number,
+  archive, TestFlight, tester-group, or Slack release action was requested or
+  performed.
+
+Next: push the branch, open the ready REC-154 PR, move Linear to `In Review`,
+and complete physical-device signing by registering
+`com.grayline.wander.nearbywidgets` with the shared App Group before device
+testing.
