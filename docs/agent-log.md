@@ -23508,3 +23508,53 @@ REC-132 latest-main release validation — 2026-07-26 00:53 PDT:
   against current main, post the review/validation summary, and squash-merge.
   Build 97 remains unchanged until the separate exact-main build-98 release
   commit is created after that merge.
+
+## 2026-07-26 00:56 PDT - Codex - REC-132 TestFlight Build 98
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-98`
+Worktree: `/private/tmp/recme-testflight-build-98`
+Linear: `REC-132` (`In Review` until build 98 is live)
+
+Goal: package exact merged `main` as rec.me TestFlight build 98 after Joe's
+explicit `push to tf` request, attach it to `rec.me Alpha`, submit external beta
+review, and announce the tester-facing scope in `#testflight-feedback`.
+
+Starting status and release scope:
+
+- PR #223 was specialist-reviewed, validated on latest main, and squash-merged
+  as `245a54c8a20bb1750a0d034a3962db36b19aca0b`.
+- Created this clean isolated release worktree from that exact `origin/main`.
+  Build 97 is the last completed release; there is no partial build-98 bump or
+  upload to resume.
+- This release includes all app behavior merged since build 97: REC-142's
+  Been-only Profile/widget calendars, REC-146 Profile map totals and filtered
+  sharing, REC-143 repeatable Check-ins/ticketing, and REC-132's hard logged-
+  out/authenticated-session boundary.
+- Incrementing only `CURRENT_PROJECT_VERSION` from 97 to 98. Marketing version
+  remains 0.1. App Store production submission is out of scope.
+- Pre-release feature validation is already green on exact merged source:
+  714/714 tests and a universal simulator build. This release worktree will
+  regenerate the project, validate build metadata, archive, upload, process
+  through the TestFlight helper, and record the live state.
+- Known alpha issue: the repository still uses a Clerk development instance,
+  so native auth says `Wander` and displays Clerk's development-mode banner.
+  No auth credentials or hosted Clerk configuration will be changed here.
+
+Pre-landing build-98 validation — 2026-07-26 01:02 PDT:
+
+- Updated `CURRENT_PROJECT_VERSION` from 97 to 98 in `project.yml`, regenerated
+  with XcodeGen, and confirmed the generated project changed only the matching
+  Debug and Release build settings. Updated the build-number contract test;
+  marketing version, signing team, capabilities, and bundle identifiers are
+  unchanged.
+- The complete post-bump suite passed 714/714 with zero failures or skips on
+  iPhone 17 Pro Max / iOS 26.2:
+  `/private/tmp/DerivedData-build98/Logs/Test/Test-Wander-2026.07.26_00-56-13--0700.xcresult`.
+- A post-bump generic iOS Simulator build passed for the app and widget
+  extension. Existing Supabase formatter isolation, XCTest stripping, and
+  traditional-headermap warnings remain unchanged.
+- `git diff --check` passed. The release branch contains only build metadata,
+  the matching test contract, and this release record. Next: land the metadata
+  through a ready PR, archive exact resulting main with distribution signing,
+  and upload with Xcode build-number management disabled.
