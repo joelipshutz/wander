@@ -25348,3 +25348,28 @@ Validation:
 No build-number bump, TestFlight upload, merge, backend/schema change, or
 typography migration was performed. Outcome is ready for review on PR #242;
 Joe's connected-phone validation is the next gate.
+
+## 2026-07-26 16:26 PDT — Codex — REC-148 typography and brand exploration
+
+Agent: Codex
+Branch: `codex/rec-148-typography-exploration`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-148-typography-exploration`
+Linear: `REC-148` (`In Progress`)
+
+Joe approved the REC-147 simulator screenshots and asked to begin typography
+and branding. This is an exploration gate, not a global font migration. The
+branch starts from PR #242 commit `1eee30d` so all variants use the approved
+Direction A ticket, Feed, map, and place-profile state as their common base.
+
+The `design-shotgun` workflow is active. Prior design memory confirms that Joe
+selected `Streak Ticket Exact` for the ticket family. The next artifact will
+compare three deliberately distinct typography/brand systems across the Feed,
+place profile, streak bridge, and a utility-heavy search/filter surface. The
+comparison must preserve the existing ownership colors, dotted/solid status
+grammar, data density, 44-point controls, compact widths, and Dynamic Type
+intent. No app code, typography tokens, build number, TestFlight release, or
+merge will change until Joe approves a direction.
+
+Expected tracked file for this exploration phase: `docs/agent-log.md`. Visual
+variants and comparison boards must remain under the gstack design artifact
+directory, outside the repository, per the selected workflow.
