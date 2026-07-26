@@ -25245,3 +25245,19 @@ Release correction and start:
   archive/upload with build-number management disabled, attach to `rec.me
   Alpha`, post the tester-facing Slack note, and close REC-152 only when the
   build is available.
+
+Build 101 exact-main validation checkpoint — 2026-07-26 14:34 PDT:
+
+- Merged release-metadata PR #250 into `main` as
+  `cf31f6f54497161d1ae9fdac3d20c296475302e1`, then ran the complete suite from
+  that exact commit on iPhone 16 Plus / iOS 18.6.
+- The run executed 753 tests: 752 passed and one release-contract assertion
+  failed. `WanderWidgetIntegrationTests/testAppAndExtensionShareOneBuildNumberSource`
+  still expected the just-replaced literal build number `100` in `project.yml`.
+  This is a test metadata miss, not an app or Profile behavior failure.
+- Updated the contract's expected literal to `101` while preserving its checks
+  that `CURRENT_PROJECT_VERSION` has one source and all four bundles inherit it.
+  Next: land this two-file correction, rerun the focused contract, then rerun
+  the complete suite from exact corrected `main` before archiving.
+- The corrected focused build-number contract passed 1/1 with exit 0 on the
+  same iPhone 16 Plus / iOS 18.6 destination. `git diff --check` also passed.
