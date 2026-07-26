@@ -22646,6 +22646,11 @@ Handoff completion — 2026-07-25 23:34 PDT:
   both REC-97 and REC-150 records were preserved. Upstream changes were
   documentation-only, so the already-green 8/8 focused and 696/696 full test
   results still cover the unchanged REC-97 application source.
+- `main` advanced again when PR #221 landed as `9feb4c795`; merged it as
+  `43901a698` and preserved the REC-97/REC-146/REC-150 log entries. Because that
+  upstream merge included Profile source changes, reran the complete iPhone 17
+  Pro Max, iOS 26.5 suite: 700/700 passed. Result bundle:
+  `/private/tmp/DerivedData-rec97-share-focused/Logs/Test/Test-Wander-2026.07.25_23-37-03--0700.xcresult`.
 ## 2026-07-25 21:50 PDT - Codex - REC-146 Profile map filter sharing
 
 Agent: Codex
