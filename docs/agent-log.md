@@ -22611,6 +22611,8 @@ Handoff — 2026-07-25 22:38 PDT:
   `https://github.com/joelipshutz/wander/pull/221`.
 - Linked the PR to REC-146, posted the validation summary, and moved the Linear
   issue to `In Review`.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser reports `Wander, codex/rec-146-profile-filter-sharing`.
 - Known issues: none specific to REC-146. Existing build warnings remain
   unchanged. TestFlight/build 98, beta-group changes, and tester Slack notes
   were intentionally not performed because no release was requested.
