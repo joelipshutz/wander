@@ -24732,3 +24732,19 @@ Implementation and validation — 2026-07-26 13:33 PDT:
   warnings remain unchanged.
 - `git diff --check` passed. Final source scope is the Nearby widget, its
   integration contract, and this log.
+
+Handoff — 2026-07-26 13:35 PDT:
+
+- Committed the scoped implementation as `60bd8f80c` (`Use plus icons in
+  nearby widget`) and pushed `codex/rec-159-nearby-plus-icons`.
+- Opened ready PR #246 to current `main`:
+  `https://github.com/joelipshutz/wander/pull/246`.
+- Linked PR #246 to REC-159, posted the implementation and validation receipt,
+  and moved the issue to `In Review`.
+- Final validation remains 744/744 complete-suite tests and the focused 1/1
+  Nearby widget contract, both with zero failures.
+- No TestFlight build number was changed and no build was uploaded or released.
+
+Final outcome: every visible Nearby widget place row now uses a plus icon while
+retaining the same selected-place check-in destination. PR #246 is ready for
+review.
