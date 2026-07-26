@@ -1486,6 +1486,33 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testSubcategoryPickerUsesAtlasLayoutAcrossNonRestaurantCategories() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let picker = try sourceSection(
+            mapScreen,
+            after: "private var subcategoryPickerContent: some View {",
+            before: "private var cuisinePickerContent: some View {"
+        )
+
+        XCTAssertTrue(picker.contains("title: \"explore types\""))
+        XCTAssertTrue(picker.contains("selectedCategoryPills"))
+        XCTAssertTrue(picker.contains("CategoryPickerSearchField"))
+        XCTAssertTrue(picker.contains("SubcategoryAtlasFilters"))
+        XCTAssertTrue(picker.contains("LazyVGrid"))
+        XCTAssertTrue(picker.contains("PlaceTypeAtlasTile"))
+        XCTAssertFalse(picker.contains("SubcategoryGroupSection"))
+
+        XCTAssertTrue(mapScreen.contains("PlaceTypeSelectionFooter"))
+        XCTAssertTrue(mapScreen.contains("selectedSubcategoryGroup = \"All\""))
+        XCTAssertTrue(
+            mapScreen.contains(
+                "WanderCategoryEmoji(\n                            category: category,\n                            subcategory: subcategory"
+            )
+        )
+    }
+
     private var projectRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
