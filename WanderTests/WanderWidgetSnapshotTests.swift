@@ -6,9 +6,11 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
     func testWidgetConstantsMatchRegisteredContracts() {
         XCTAssertEqual(WanderWidgetConstants.appGroupIdentifier, "group.com.grayline.wander.shared")
         XCTAssertEqual(WanderWidgetConstants.calendarSnapshotFilename, "activity-calendar-snapshot.json")
+        XCTAssertEqual(WanderWidgetConstants.nearbySnapshotFilename, "nearby-place-snapshot.json")
         XCTAssertEqual(WanderWidgetConstants.quickCaptureKind, "QuickCaptureWidget")
         XCTAssertEqual(WanderWidgetConstants.quickSearchKind, "QuickSearchWidget")
         XCTAssertEqual(WanderWidgetConstants.activityCalendarKind, "ActivityCalendarWidget")
+        XCTAssertEqual(WanderWidgetConstants.nearbyPlacesKind, "NearbyPlacesWidget")
         XCTAssertEqual(WanderWidgetConstants.quickCaptureURL.absoluteString, "recme://add/here-now")
         XCTAssertEqual(WanderWidgetConstants.quickSearchURL.absoluteString, "recme://map/search")
         XCTAssertEqual(WanderWidgetConstants.profileCalendarURL.absoluteString, "recme://profile/calendar")
@@ -42,6 +44,18 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
         )
     }
 
+    func testNearbyPlaceEncodesOneOpaquePathSegmentAndRoundTripsUnicode() throws {
+        let route = WanderDeepLinkRoute.nearbyPlace(candidateID: "mapkit/Ggiata 東京")
+        let url = try XCTUnwrap(route.url)
+
+        XCTAssertEqual(
+            url.absoluteString,
+            "recme://add/nearby/mapkit%2FGgiata%20%E6%9D%B1%E4%BA%AC"
+        )
+        XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
+        XCTAssertNil(WanderDeepLinkRoute.nearbyPlace(candidateID: " \n ").url)
+    }
+
     func testQuickSearchOmitsBlankQueryAndParserNormalizesBlankQuery() throws {
         XCTAssertEqual(
             try XCTUnwrap(WanderDeepLinkRoute.quickSearch(query: " \n\t ").url),
@@ -73,6 +87,10 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             "recme://add",
             "recme://add/here-now/extra",
             "recme://add/here-now?q=cafe",
+            "recme://add/nearby",
+            "recme://add/nearby/%20%0A",
+            "recme://add/nearby/place/extra",
+            "recme://add/nearby/place?q=coffee",
             "recme://map/search/extra",
             "recme://map/search?query=cafe",
             "recme://map/search?q=one&q=two",
@@ -99,6 +117,218 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
         )
         XCTAssertNil(
             WanderDeepLinkRoute.parse(try XCTUnwrap(URL(string: "recme://add/HERE-NOW")))
+        )
+    }
+}
+
+final class WanderNearbyWidgetSnapshotTests: XCTestCase {
+    private var temporaryDirectory: URL!
+    private var snapshotFileURL: URL!
+
+    override func setUpWithError() throws {
+        temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wander-nearby-widget-tests-\(UUID().uuidString)", isDirectory: true)
+        snapshotFileURL = temporaryDirectory
+            .appendingPathComponent(WanderWidgetConstants.nearbySnapshotFilename, isDirectory: false)
+    }
+
+    override func tearDownWithError() throws {
+        if FileManager.default.fileExists(atPath: temporaryDirectory.path) {
+            try FileManager.default.removeItem(at: temporaryDirectory)
+        }
+        temporaryDirectory = nil
+        snapshotFileURL = nil
+    }
+
+    func testSnapshotLimitsVisiblePlacesAndRetainsRecentRoutes() throws {
+        let places = try (0..<7).map { try makePlace($0) }
+        let snapshot = WanderNearbyWidgetSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_000),
+            places: places
+        )
+
+        XCTAssertEqual(snapshot.places.count, 5)
+        XCTAssertEqual(snapshot.places.map(\.id), ["place-0", "place-1", "place-2", "place-3", "place-4"])
+        XCTAssertEqual(snapshot.recentPlaces.count, 5)
+
+        let nextPlaces = try (7..<12).map { try makePlace($0) }
+        let merged = WanderNearbyWidgetSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000),
+            places: nextPlaces
+        ).mergingRouteHistory(from: snapshot)
+
+        XCTAssertEqual(merged.places.map(\.id), ["place-7", "place-8", "place-9", "place-10", "place-11"])
+        XCTAssertEqual(merged.recentPlaces.count, 10)
+        XCTAssertEqual(merged.place(id: "place-0"), places[0])
+        XCTAssertEqual(merged.place(id: "place-11"), nextPlaces[4])
+    }
+
+    func testStoreRoundTripsAndPreservesRoutesAcrossRefreshes() throws {
+        let store = WanderNearbyWidgetSnapshotStore(fileURL: snapshotFileURL)
+        let first = WanderNearbyWidgetSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_000),
+            places: [try makePlace(0)]
+        )
+        let second = WanderNearbyWidgetSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 2_000),
+            places: [try makePlace(1)]
+        )
+
+        XCTAssertTrue(try store.save(first))
+        XCTAssertTrue(try store.save(second))
+
+        let loaded = try XCTUnwrap(store.load())
+        XCTAssertEqual(loaded.places, second.places)
+        XCTAssertEqual(loaded.place(id: "place-0"), first.places[0])
+        XCTAssertEqual(loaded.place(id: "place-1"), second.places[0])
+    }
+
+    func testStoreSkipsEquivalentFreshnessWriteInsideFiveMinutes() throws {
+        let store = WanderNearbyWidgetSnapshotStore(fileURL: snapshotFileURL)
+        let place = try makePlace(0)
+
+        XCTAssertTrue(
+            try store.save(
+                WanderNearbyWidgetSnapshot(
+                    generatedAt: Date(timeIntervalSince1970: 1_000),
+                    places: [place]
+                )
+            )
+        )
+        XCTAssertFalse(
+            try store.save(
+                WanderNearbyWidgetSnapshot(
+                    generatedAt: Date(timeIntervalSince1970: 1_299),
+                    places: [place]
+                )
+            )
+        )
+        XCTAssertTrue(
+            try store.save(
+                WanderNearbyWidgetSnapshot(
+                    generatedAt: Date(timeIntervalSince1970: 1_300),
+                    places: [place]
+                )
+            )
+        )
+    }
+
+    func testFreshnessHidesExactDistanceAfterThirtyMinutesAndExpiresAfterOneDay() throws {
+        let generatedAt = Date(timeIntervalSince1970: 10_000)
+        let place = try makePlace(0, distanceMeters: 10.7)
+        let snapshot = WanderNearbyWidgetSnapshot(
+            generatedAt: generatedAt,
+            places: [place]
+        )
+
+        XCTAssertEqual(
+            place.distanceLabel(
+                generatedAt: generatedAt,
+                now: generatedAt.addingTimeInterval(30 * 60)
+            ),
+            "35 ft away"
+        )
+        XCTAssertEqual(
+            place.distanceLabel(
+                generatedAt: generatedAt,
+                now: generatedAt.addingTimeInterval(30 * 60 + 1)
+            ),
+            "near you"
+        )
+        XCTAssertTrue(
+            WanderNearbyWidgetFreshness(
+                generatedAt: generatedAt,
+                now: generatedAt.addingTimeInterval(24 * 60 * 60)
+            ).isUsable
+        )
+        XCTAssertFalse(
+            WanderNearbyWidgetFreshness(
+                generatedAt: generatedAt,
+                now: generatedAt.addingTimeInterval(24 * 60 * 60 + 1)
+            ).isUsable
+        )
+        XCTAssertTrue(snapshot.isUsable(at: generatedAt.addingTimeInterval(24 * 60 * 60)))
+        XCTAssertFalse(
+            snapshot.isUsable(at: generatedAt.addingTimeInterval(24 * 60 * 60 + 1))
+        )
+    }
+
+    func testDistanceFormatterUsesReadableFeetAndMiles() {
+        XCTAssertEqual(WanderNearbyWidgetDistanceFormatter.string(meters: 10.7), "35 ft")
+        XCTAssertEqual(WanderNearbyWidgetDistanceFormatter.string(meters: 152.4), "500 ft")
+        XCTAssertEqual(WanderNearbyWidgetDistanceFormatter.string(meters: 804.672), "0.5 mi")
+        XCTAssertEqual(WanderNearbyWidgetDistanceFormatter.string(meters: 16_093.44), "10 mi")
+        XCTAssertNil(WanderNearbyWidgetDistanceFormatter.string(meters: -Double.infinity))
+        XCTAssertNil(WanderNearbyWidgetDistanceFormatter.string(meters: -1))
+    }
+
+    func testAppCandidateRoundTripPreservesRichVisitPlaceMetadata() throws {
+        let candidate = PlaceCandidate(
+            id: "mapkit_ggiata_3408000_-11826000",
+            name: "Ggiata Delicatessen",
+            category: "restaurants_food",
+            primaryCategory: "restaurants_food",
+            subcategory: "Sandwich",
+            categorySource: PlaceCategorySource.provider.rawValue,
+            categoryConfidence: 0.92,
+            rawProviderType: "MKPOICategoryRestaurant",
+            address: "5009 Melrose Avenue",
+            locality: "Los Angeles",
+            region: "CA",
+            country: "US",
+            latitude: 34.083,
+            longitude: -118.312,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit_ggiata_3408000_-11826000",
+            distanceMeters: 10.7,
+            websiteURLString: "https://example.com/ggiata",
+            phoneNumber: "+1-323-555-0100",
+            timeZoneIdentifier: "America/Los_Angeles",
+            confidence: 0.92
+        )
+
+        let snapshot = try XCTUnwrap(WanderNearbyPlaceSnapshot(candidate: candidate))
+        let restored = snapshot.placeCandidate
+
+        XCTAssertEqual(restored.id, candidate.id)
+        XCTAssertEqual(restored.name, candidate.name)
+        XCTAssertEqual(restored.primaryCategory, candidate.primaryCategory)
+        XCTAssertEqual(restored.rawProviderType, candidate.rawProviderType)
+        XCTAssertEqual(restored.address, candidate.address)
+        XCTAssertEqual(restored.locality, candidate.locality)
+        XCTAssertEqual(restored.region, candidate.region)
+        XCTAssertEqual(restored.country, candidate.country)
+        XCTAssertEqual(restored.latitude, candidate.latitude)
+        XCTAssertEqual(restored.longitude, candidate.longitude)
+        XCTAssertEqual(restored.sourceProviderPlaceID, candidate.sourceProviderPlaceID)
+        XCTAssertEqual(restored.distanceMeters, candidate.distanceMeters)
+        XCTAssertEqual(restored.websiteURLString, candidate.websiteURLString)
+        XCTAssertEqual(restored.phoneNumber, candidate.phoneNumber)
+        XCTAssertEqual(restored.timeZoneIdentifier, candidate.timeZoneIdentifier)
+    }
+
+    private func makePlace(
+        _ index: Int,
+        distanceMeters: Double? = nil
+    ) throws -> WanderNearbyPlaceSnapshot {
+        try XCTUnwrap(
+            WanderNearbyPlaceSnapshot(
+                id: "place-\(index)",
+                name: index == 0 ? "Ggiata" : "Place \(index)",
+                category: "restaurant",
+                categoryLabel: "Restaurant",
+                categoryEmoji: "🍝",
+                rawProviderType: "MKPOICategoryRestaurant",
+                address: "\(index) Sunset Boulevard",
+                locality: "Los Angeles",
+                region: "CA",
+                country: "US",
+                latitude: 34.0 + Double(index) / 1_000,
+                longitude: -118.0 - Double(index) / 1_000,
+                sourceProviderPlaceID: "place-\(index)",
+                distanceMeters: distanceMeters ?? Double(index + 1) * 25,
+                confidence: 0.9
+            )
         )
     }
 }

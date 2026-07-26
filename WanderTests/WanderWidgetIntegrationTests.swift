@@ -8,6 +8,16 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let searchID = UUID()
         let profileCalendarID = UUID()
         let profileCalendarTargetDate = Date(timeIntervalSince1970: 1_725_916_800)
+        let nearbyCandidate = PlaceCandidate(
+            id: "mapkit_ggiata",
+            name: "Ggiata",
+            category: "restaurants_food",
+            latitude: 34.08,
+            longitude: -118.26,
+            sourceProviderPlaceID: "mapkit_ggiata",
+            distanceMeters: 10.7,
+            confidence: 0.9
+        )
 
         XCTAssertEqual(
             WanderPresentationResetRequest(id: resetID),
@@ -20,6 +30,16 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertEqual(
             WanderAddLaunchRequest(id: addID, destination: .hereNow),
             WanderAddLaunchRequest(id: addID, destination: .hereNow)
+        )
+        XCTAssertEqual(
+            WanderAddLaunchRequest(
+                id: addID,
+                destination: .nearbyPlace(nearbyCandidate)
+            ),
+            WanderAddLaunchRequest(
+                id: addID,
+                destination: .nearbyPlace(nearbyCandidate)
+            )
         )
         XCTAssertEqual(WanderMapSearchLaunchRequest(id: searchID, query: "  Bar Nido  ").query, "Bar Nido")
         XCTAssertNil(WanderMapSearchLaunchRequest(id: searchID, query: " \n ").query)
@@ -293,6 +313,9 @@ final class WanderWidgetIntegrationTests: XCTestCase {
 
         XCTAssertTrue(root.contains("WanderDeepLinkRoute.parse(url)"))
         XCTAssertTrue(root.contains("WanderAddLaunchRequest(destination: .hereNow)"))
+        XCTAssertTrue(root.contains("case .nearbyPlace(let candidateID):"))
+        XCTAssertTrue(root.contains("WanderNearbyWidgetSnapshotStore()"))
+        XCTAssertTrue(root.contains("WanderAddLaunchRequest.Destination.nearbyPlace"))
         XCTAssertTrue(root.contains("WanderMapSearchLaunchRequest(query: query)"))
         XCTAssertTrue(root.contains("selectedTab = .profile"))
         XCTAssertTrue(root.contains("WanderProfileCalendarLaunchRequest(targetDate: .now)"))
@@ -419,12 +442,16 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertFalse(profileHome.contains("Task { @MainActor"))
     }
 
-    func testProjectEmbedsOneWidgetExtensionWithSharedAppGroup() throws {
+    func testProjectEmbedsSeparateLocationWidgetExtensionWithSharedAppGroup() throws {
         let project = try source("project.yml")
         let generatedProject = try source("Wander.xcodeproj/project.pbxproj")
         let appEntitlements = try propertyList("Wander/Resources/Wander.entitlements")
         let widgetEntitlements = try propertyList("WanderWidgets/WanderWidgets.entitlements")
+        let nearbyWidgetEntitlements = try propertyList(
+            "WanderNearbyWidgets/WanderNearbyWidgets.entitlements"
+        )
         let widgetInfo = try propertyList("WanderWidgets/Info.plist")
+        let nearbyWidgetInfo = try propertyList("WanderNearbyWidgets/Info.plist")
 
         XCTAssertTrue(project.contains("WanderWidgets:"))
         XCTAssertTrue(project.contains("type: app-extension"))
@@ -433,15 +460,28 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(project.contains("SKIP_INSTALL: YES"))
         XCTAssertTrue(project.contains("embed: true"))
         XCTAssertTrue(project.contains("link: false"))
+        XCTAssertTrue(project.contains("WanderNearbyWidgets:"))
+        XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.nearbywidgets"))
+        XCTAssertTrue(project.contains("NSWidgetWantsLocation: true"))
 
         XCTAssertTrue(generatedProject.contains("WanderWidgets.appex"))
+        XCTAssertTrue(generatedProject.contains("WanderNearbyWidgets.appex"))
         XCTAssertTrue(generatedProject.contains("Embed Foundation Extensions"))
         XCTAssertTrue(generatedProject.contains("PRODUCT_BUNDLE_IDENTIFIER = com.grayline.wander.widgets;"))
+        XCTAssertTrue(
+            generatedProject.contains(
+                "PRODUCT_BUNDLE_IDENTIFIER = com.grayline.wander.nearbywidgets;"
+            )
+        )
 
         let appGroups = try XCTUnwrap(appEntitlements["com.apple.security.application-groups"] as? [String])
         let widgetGroups = try XCTUnwrap(widgetEntitlements["com.apple.security.application-groups"] as? [String])
+        let nearbyWidgetGroups = try XCTUnwrap(
+            nearbyWidgetEntitlements["com.apple.security.application-groups"] as? [String]
+        )
         XCTAssertEqual(appGroups, [WanderWidgetConstants.appGroupIdentifier])
         XCTAssertEqual(widgetGroups, [WanderWidgetConstants.appGroupIdentifier])
+        XCTAssertEqual(nearbyWidgetGroups, [WanderWidgetConstants.appGroupIdentifier])
 
         let extensionDictionary = try XCTUnwrap(widgetInfo["NSExtension"] as? [String: Any])
         XCTAssertEqual(
@@ -449,6 +489,16 @@ final class WanderWidgetIntegrationTests: XCTestCase {
             "com.apple.widgetkit-extension"
         )
         XCTAssertNil(extensionDictionary["NSExtensionPrincipalClass"])
+
+        let nearbyExtensionDictionary = try XCTUnwrap(
+            nearbyWidgetInfo["NSExtension"] as? [String: Any]
+        )
+        XCTAssertEqual(
+            nearbyExtensionDictionary["NSExtensionPointIdentifier"] as? String,
+            "com.apple.widgetkit-extension"
+        )
+        XCTAssertEqual(nearbyWidgetInfo["NSWidgetWantsLocation"] as? Bool, true)
+        XCTAssertNil(nearbyExtensionDictionary["NSExtensionPrincipalClass"])
     }
 
     func testWidgetBundleContainsThreeNativeWidgetConfigurationsWithoutTextInput() throws {
@@ -471,6 +521,38 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("See your been activity for the current month."))
         XCTAssertFalse(widgetSource.contains("model.wannaCount"))
         XCTAssertFalse(widgetSource.contains("Wanna:"))
+    }
+
+    func testNearbyWidgetIsLargeLocationAwareAndRoutesFiveRowsIntoRichVisit() throws {
+        let widgetSource = try source("WanderNearbyWidgets/WanderNearbyWidget.swift")
+        let sharedSnapshot = try source(
+            "WanderWidgetShared/WanderNearbyWidgetSnapshot.swift"
+        )
+        let publisher = try source(
+            "Wander/Widgets/WanderNearbyWidgetSnapshotPublisher.swift"
+        )
+        let root = try source("Wander/App/WanderRootView.swift")
+        let add = try source("Wander/Features/Add/AddScreen.swift")
+
+        XCTAssertTrue(widgetSource.contains(".supportedFamilies([.systemLarge])"))
+        XCTAssertTrue(widgetSource.contains("WanderNearbyWidgetLocationProvider"))
+        XCTAssertTrue(widgetSource.contains("isAuthorizedForWidgetUpdates"))
+        XCTAssertTrue(widgetSource.contains("CLLocationDistance(200)"))
+        XCTAssertTrue(widgetSource.contains("CLLocationDistance(400)"))
+        XCTAssertTrue(widgetSource.contains("CLLocationDistance(800)"))
+        XCTAssertTrue(widgetSource.contains("retryAfter: 5 * 60"))
+        XCTAssertTrue(widgetSource.contains("reloadAfter: now.addingTimeInterval(15 * 60)"))
+        XCTAssertTrue(widgetSource.contains("Link(destination: destination)"))
+        XCTAssertTrue(widgetSource.contains(".nearbyPlace(candidateID: place.id)"))
+        XCTAssertTrue(sharedSnapshot.contains("static let maximumVisiblePlaces = 5"))
+        XCTAssertTrue(sharedSnapshot.contains("static let exactDistanceLifetime"))
+        XCTAssertTrue(publisher.contains("WidgetCenter.shared.currentConfigurations()"))
+        XCTAssertTrue(publisher.contains("store.currentLocationCandidates()"))
+        XCTAssertTrue(publisher.contains("reloadTimelines("))
+        XCTAssertTrue(root.contains("refreshNearbyWidgetSnapshot()"))
+        XCTAssertTrue(root.contains("case .nearbyPlace(let candidateID):"))
+        XCTAssertTrue(add.contains("case .nearbyPlace(let candidate):"))
+        XCTAssertTrue(add.contains("MapPlaceSaveContext.addCandidate("))
     }
 
     @MainActor

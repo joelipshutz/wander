@@ -84,9 +84,12 @@ only for local overrides.
 
 ## Widget And Share Extensions
 
-`WanderWidgets` is one WidgetKit extension with bundle id
-`com.grayline.wander.widgets`. It hosts all three widget configurations: Quick
-Capture, Search, and Activity Calendar. The app and extension share App Group
+The app ships four Home Screen widget configurations across two extensions.
+`WanderWidgets` (`com.grayline.wander.widgets`) hosts Quick Capture, Search, and
+Activity Calendar. `WanderNearbyWidgets`
+(`com.grayline.wander.nearbywidgets`) separately hosts the system-large Nearby
+Rich Visit widget because only that extension declares `NSWidgetWantsLocation`.
+The app and both extensions share App Group
 `group.com.grayline.wander.shared`.
 
 `WanderShareExtension` is one app-independent Share Extension with bundle id
@@ -105,14 +108,16 @@ to 20 attachments. Supported files are CSV, JSON, TXT, Markdown, and RTF.
 Pending envelopes expire after seven days and App Group import files are excluded
 from device backup.
 
-The App Group contains two intentionally narrow payloads. For widgets, the host
-app writes a redacted, aggregate-only JSON snapshot containing calendar layout
+The App Group contains three intentionally narrow payloads. The host app writes
+a redacted, aggregate-only calendar JSON snapshot containing calendar layout
 and daily Been counts. The backward-compatible schema currently retains
 zero-valued Wanna fields; do not repopulate them. Do not add place names, notes,
-precise locations, user identities, or raw place records to that widget
-payload. For sharing, the extension writes only the user-selected link, text,
-or supported file into its bounded import inbox. Keep both privacy boundaries
-intact when changing either payload. The widget file lives under the App Group's
+precise locations, user identities, or raw place records to that calendar
+payload. The location-enabled widget uses a separate bounded nearby-place cache
+described below. For sharing, the extension writes only the user-selected link,
+text, or supported file into its bounded import inbox. Keep all three privacy
+boundaries intact when changing any payload. The calendar widget file lives
+under the App Group's
 `Library/Caches` directory, is excluded from backup after every atomic write,
 and is cleared immediately when the authenticated identity becomes unavailable
 or changes.
@@ -121,13 +126,24 @@ WidgetKit does not offer an inline keyboard. Tapping the Search widget opens Map
 with the in-app search focused; text entry and result population happen in the
 app.
 
+The Nearby Rich Visit extension uses When In Use location only. The host app
+must receive that permission before the widget can request location, and iOS may
+show a separate prompt asking whether the widget may use location. Its bounded
+App Group cache contains the five visible MapKit candidates plus recent routing
+fallbacks, including place names and coordinates needed to prefill the Rich
+Visit form. The file is excluded from backup, exact distances stop rendering
+after 30 minutes, and the whole result set stops rendering after 24 hours. The
+widget asks WidgetKit for a 15-minute refresh and a five-minute retry after a
+transient failure, but iOS ultimately schedules and budgets those reloads.
+
 ### First-time physical-device setup
 
 The checked-in entitlements are intentional. Errors such as `No Accounts`,
 `Unknown Name (Y7TVK75RZ8)`, `profile doesn't include the App Groups
-capability`, or `No profiles for com.grayline.wander.widgets` mean the Mac or
-Apple Developer account is not provisioned yet; removing the entitlements only
-hides the problem and breaks live calendar updates.
+capability`, or `No profiles for com.grayline.wander.widgets` /
+`com.grayline.wander.nearbywidgets` / `com.grayline.wander.share` mean the Mac
+or Apple Developer account is not provisioned yet; removing the entitlements
+only hides the problem and breaks widget or share-extension updates.
 
 1. In Xcode, open **Xcode → Settings → Accounts**, add the Apple Account that is
    a member of team `Y7TVK75RZ8`, and complete any authentication prompts.
@@ -144,33 +160,36 @@ hides the problem and breaks live calendar updates.
    configure it, and assign `group.com.grayline.wander.shared`.
 4. Register the explicit iOS App ID `com.grayline.wander.widgets` if it does not
    exist. Enable **App Groups** on it and assign the same group.
-5. Register the explicit iOS App ID `com.grayline.wander.share` if it does not
+5. Register the explicit iOS App ID `com.grayline.wander.nearbywidgets` if it
+   does not exist. Enable **App Groups** on it and assign the same group.
+6. Register the explicit iOS App ID `com.grayline.wander.share` if it does not
    exist. Enable **App Groups** on it and assign the same group.
-6. Changing any of these App IDs invalidates older provisioning profiles. With
+7. Changing any of these App IDs invalidates older provisioning profiles. With
    automatic signing, return to Xcode and let it request replacements. With
    manual signing, regenerate and download an iOS App Development profile for
    each App ID, including the connected device and the developer's Apple
    Development certificate.
-7. In the **Wander** target's **Signing & Capabilities** pane, select team
+8. In the **Wander** target's **Signing & Capabilities** pane, select team
    `Y7TVK75RZ8`, keep **Automatically manage signing** enabled, and verify that
    `group.com.grayline.wander.shared` is checked under App Groups.
-8. Repeat the same team, automatic-signing, and App Group checks for the
-   **WanderWidgets** target. Its bundle identifier must remain
-   `com.grayline.wander.widgets`.
-9. Repeat those checks for **WanderShareExtension**. Its bundle identifier must
+9. Repeat the same team, automatic-signing, and App Group checks for both
+   **WanderWidgets** and **WanderNearbyWidgets**. Their bundle identifiers must
+   remain `com.grayline.wander.widgets` and
+   `com.grayline.wander.nearbywidgets`.
+10. Repeat those checks for **WanderShareExtension**. Its bundle identifier must
    remain `com.grayline.wander.share`.
-10. Re-select the connected iPhone and build. Automatic signing should register
-   the device and create/download all three development profiles. If Xcode continues
+11. Re-select the connected iPhone and build. Automatic signing should register
+   the device and create/download all four development profiles. If Xcode continues
    to reuse the old host profile, use the Accounts pane to download profiles or
    quit Xcode and move only the stale host/widget/share profile to a backup folder
    from `~/Library/Developer/Xcode/UserData/Provisioning Profiles/` (current
    Xcode) or `~/Library/MobileDevice/Provisioning Profiles/` (older Xcode),
    then reopen Xcode and build again.
-11. On the iPhone, trust the Mac when prompted and enable **Settings → Privacy &
+12. On the iPhone, trust the Mac when prompted and enable **Settings → Privacy &
    Security → Developer Mode** if Xcode requests it.
 
 For a code-only test while portal access is being fixed, select an iPhone
-Simulator instead of a physical iPhone. The app, all three widgets, and the
+Simulator instead of a physical iPhone. The app, all four widgets, and the
 Share Extension can be built and exercised in Simulator without creating device
 provisioning profiles.
 

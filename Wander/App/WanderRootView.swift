@@ -308,6 +308,7 @@ struct WanderRootView: View {
     @State private var widgetCalendarIdentityUserID: String?
     @State private var widgetCalendarHydratedUserID: String?
     @State private var widgetCalendarLastHydratedAt: Date?
+    @State private var nearbyWidgetRefreshTask: Task<Void, Never>?
     @State private var sharedVisitBannerInvitation: SharedVisitInvitation?
     @State private var sharedVisitBannerTracker = SharedVisitBannerTracker()
     @State private var sharedVisitBannerTask: Task<Void, Never>?
@@ -542,6 +543,7 @@ struct WanderRootView: View {
             importStore.resumePendingImports()
             reconcilePlaceImports()
             publishWidgetSnapshot()
+            refreshNearbyWidgetSnapshot()
             await pushNotifications.refreshAuthorizationStatus()
             guard !Task.isCancelled, isSessionValidated else { return }
             applyAuthStateIfNeeded(auth.state)
@@ -658,6 +660,7 @@ struct WanderRootView: View {
             drainSharedPlaceImports()
             scheduleSignedInMaintenance(for: auth.state)
             publishWidgetSnapshot()
+            refreshNearbyWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: auth.state)
             }
@@ -766,6 +769,15 @@ struct WanderRootView: View {
         )
     }
 
+    private func refreshNearbyWidgetSnapshot() {
+        nearbyWidgetRefreshTask?.cancel()
+        nearbyWidgetRefreshTask = Task { @MainActor in
+            await WanderNearbyWidgetSnapshotPublisher.refreshIfConfigured(
+                store: store
+            )
+        }
+    }
+
     private func handleCurrentUserCalendarHydration(revision: UInt64) {
         guard revision > 0,
               case .signedIn(let session) = auth.state,
@@ -800,6 +812,8 @@ struct WanderRootView: View {
 
     private func handleRootDisappear() {
         cancelSignedInMaintenance()
+        nearbyWidgetRefreshTask?.cancel()
+        nearbyWidgetRefreshTask = nil
         deepLinkHandoffTask?.cancel()
         deepLinkHandoff.cancel()
         deepLinkPresentations.removeAll()
@@ -985,6 +999,23 @@ struct WanderRootView: View {
             store.saveFlowDidPresent(.addSheet)
             addTabResetToken = UUID()
             addLaunchRequest = WanderAddLaunchRequest(destination: .hereNow)
+            addSheetDetent = .large
+            isPresentingAdd = true
+        case .nearbyPlace(let candidateID):
+            let snapshot = WanderNearbyWidgetSnapshotStore().load()
+            let candidate = snapshot.flatMap {
+                $0.isUsable(at: .now)
+                    ? $0.place(id: candidateID)?.placeCandidate
+                    : nil
+            }
+            selectedTab = .map
+            store.saveFlowDidPresent(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = WanderAddLaunchRequest(
+                destination: candidate.map(
+                    WanderAddLaunchRequest.Destination.nearbyPlace
+                ) ?? .hereNow
+            )
             addSheetDetent = .large
             isPresentingAdd = true
         case .quickSearch(let query):

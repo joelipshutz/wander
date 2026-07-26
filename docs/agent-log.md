@@ -22743,6 +22743,32 @@ Final outcome: rec.me 0.1 (97) is validated, uploaded, approved, attached to
 the public TestFlight group, announced to testers, and durably tracked. No
 known build-97 blocker remains.
 
+## 2026-07-25 — Codex — REC-154 nearby-place Rich Visit widget
+
+Start — 2026-07-25 23:34 PDT:
+
+- Goal: add a large Home Screen widget showing up to five useful nearby places,
+  refresh its snapshot as aggressively and honestly as WidgetKit permits, and
+  open a selected result directly in the manual Rich Visit/save flow.
+- Linear: created REC-154, assigned it to Ryan in the `mvp` project, related it
+  to REC-142 and REC-153, and moved it to `In Progress`. Voice capture is
+  explicitly deferred.
+- Branch/worktree: `codex/rec-154-nearby-widget` in
+  `/private/tmp/recme-rec154-nearby-widget`, based on current `origin/main`
+  (`e7b7122a5`).
+- Coordination: the primary checkout has an unrelated untracked
+  `.pnpm-store/` and remains untouched. REC-153 has a separate open worktree
+  and PR for calendar/search deep-link polish. No existing nearby-widget
+  implementation or overlapping agent-log entry was found.
+- Expected files: `project.yml` and generated project configuration; the
+  widget bundle/view/provider; shared widget snapshot/deep-link contracts;
+  app launch routing; location/place discovery and shared-store integration;
+  focused tests; setup/decision documentation if capabilities change; and
+  this append-only work log.
+- Initial assumptions to verify before editing: use only When In Use location,
+  avoid implying live distance when WidgetKit serves stale timelines, cap the
+  display at five results, and preserve the existing three widgets unchanged.
+
 ## 2026-07-25 21:47 PDT - Codex - REC-142 Been-only Calendar Landing
 
 Agent: Codex
@@ -23922,3 +23948,41 @@ Landing completion:
 
 Final outcome: full-screen photo zoom is on `main`, validated, and ready for
 local Xcode testing or inclusion in the next explicit TestFlight release.
+
+## 2026-07-26 — Codex — REC-154 implementation checkpoint
+
+Checkpoint — 2026-07-26 00:18 PDT:
+
+- Implemented a separate `WanderNearbyWidgets` location-enabled extension with
+  one system-large configuration and five independently tappable MapKit POI
+  rows. A selected place resolves through a strict opaque deep link and opens
+  the existing manual Rich Visit form with the candidate prefilled; missing or
+  expired candidate metadata falls back safely to I'm Here Now.
+- Refresh policy follows Apple's WidgetKit constraints: request a 15-minute
+  timeline, retry transient failures after five minutes, accept significant
+  location-change reloads, and refresh/reload from the active host app only
+  when the widget is installed. WidgetKit remains authoritative and no cadence
+  is promised as live.
+- Privacy and freshness: When In Use only, separate widget location approval,
+  App Group cache excluded from backup, bounded candidate/history counts,
+  privacy-sensitive rendered rows, exact distance hidden after 30 minutes, and
+  all results hidden/rejected after 24 hours. Future timeline entries enforce
+  both expiry boundaries even if a network reload is deferred.
+- Updated `project.yml`, generated the Xcode project/plists, added the new
+  bundle id `com.grayline.wander.nearbywidgets`, and documented its additional
+  App ID/App Group provisioning requirement and the revised location usage
+  copy. Durable architecture/refresh/privacy decisions are in
+  `docs/decisions.md`.
+- Validation so far: `xcodegen generate` passed; unsigned generic iOS Simulator
+  build passed; focused deep-link/snapshot/integration suite passed 29/29 on
+  iPhone 17 Pro, iOS 26.5. Xcode's system-large preview rendered all five rows
+  without clipping on iPhone 17 Pro and exposed each row as one labeled
+  accessibility action. The attempted iPhone 17e preview was interrupted when
+  Xcode focused another already-open worktree; no product failure was observed.
+- Existing warnings remain outside this change: Swift 6 formatter isolation in
+  `WanderSupabaseClient`, traditional headermap warnings, and one unrelated
+  unused Boolean expression in `WanderStoreTests`.
+- Next: integrate the two newer `origin/main` commits, rerun focused/full tests
+  and build, inspect the final diff, then push/open the REC-154 PR and leave
+  Xcode focused on this branch. No TestFlight build-number or release action is
+  authorized.

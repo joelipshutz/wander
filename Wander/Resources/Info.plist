@@ -4,12 +4,12 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>rec.me</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleDisplayName</key>
-	<string>rec.me</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -36,7 +36,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>rec.me uses the camera only when you choose to take a photo in the app.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>rec.me uses your location once to suggest nearby places. It never broadcasts live location.</string>
+	<string>rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>
