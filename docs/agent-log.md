@@ -24026,3 +24026,14 @@ Next: push the branch, open the ready REC-154 PR, move Linear to `In Review`,
 and complete physical-device signing by registering
 `com.grayline.wander.nearbywidgets` with the shared App Group before device
 testing.
+
+Publication — 2026-07-26 00:44 PDT:
+
+- Pushed `codex/rec-154-nearby-widget` and opened ready PR #229:
+  `https://github.com/joelipshutz/wander/pull/229`.
+- Moved Linear REC-154 to `In Review`, attached the PR, and added the validation,
+  device-provisioning, refresh-cadence, visual-gap, voice-deferral, and
+  no-TestFlight handoff.
+- Remaining reviewer/device step: register the new nearby-widget App ID and
+  enable `group.com.grayline.wander.shared` for all three relevant targets
+  before installing on a physical iPhone.
