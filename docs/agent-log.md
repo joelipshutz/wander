@@ -24459,3 +24459,29 @@ Pre-landing review (10:02 PDT):
   completed TestFlight release record; this request is merge-only, so no build
   bump, archive, upload, tester-group change, or Slack release note is
   authorized.
+
+Landing outcome (09:57 PDT):
+
+- Squash-merged ready PR #235 into `main`:
+  `https://github.com/joelipshutz/wander/pull/235`.
+  GitHub reports the merged commit as
+  `efeb07ef0a3da9d20b42932ea7869df32002c982`
+  (`Redesign subcategory pickers with Atlas layout (#235)`), and a fresh
+  `git fetch origin` confirmed that exact commit at `origin/main`.
+- Shipped the Atlas-style choose-subcategory redesign for every
+  non-restaurant category, its production-backed debug mock, and focused
+  navigation-contract coverage. The existing Explore Cuisines flow remains
+  the restaurant-specific picker.
+- Final validation remains the exact pre-landing result: clean XcodeGen and
+  whitespace checks, 742/742 tests on iPhone 17 Pro / iOS 26.5, and visual QA
+  on iPhone 17 Pro plus iPhone 17e. The requested iPhone 16 Plus / iOS 18.6
+  runtime was unavailable locally.
+- Review found no blocker. Coordinated Dynamic Type improvements across both
+  Atlas pickers and a more directly extracted interaction-state unit test
+  remain optional follow-ups; neither indicates a known shipped defect.
+  The gstack review history helper could not persist its local JSON record
+  because its `bun` runtime is absent, but the complete review and specialist
+  findings are recorded above and on the PR.
+- Per Ryan's explicit direction, no new Linear issue was created. This was a
+  merge-only request: build 98 is unchanged, and no TestFlight build, archive,
+  App Store Connect action, or Slack release note was performed.
