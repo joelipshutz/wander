@@ -38,6 +38,7 @@ struct MapScreen: View {
     @State private var didResolveInitialCamera = false
     @State private var handlingNotificationRequestID: UUID?
     @State private var handledPresentationResetRequestID: UUID?
+    @State private var mapSearchFocusRequestID: UUID?
     @FocusState private var isMapSearchFocused: Bool
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -250,6 +251,11 @@ struct MapScreen: View {
                         SearchBar(
                             query: $mapQuery,
                             isFocused: $isMapSearchFocused,
+                            focusRequestID: mapSearchFocusRequestID,
+                            onFocusRequestHandled: { requestID in
+                                guard mapSearchFocusRequestID == requestID else { return }
+                                mapSearchFocusRequestID = nil
+                            },
                             onSubmit: submitMapSearch
                         )
                         if shouldShowTypeahead {
@@ -908,6 +914,8 @@ struct MapScreen: View {
     @MainActor
     private func resetMapPresentations() {
         invalidateMapSearchRequest()
+        mapSearchFocusRequestID = nil
+        isMapSearchFocused = false
         mapSelectionRevision += 1
         mapSaveFlow = nil
         isPlaceProfilePresented = false
@@ -939,10 +947,7 @@ struct MapScreen: View {
                 suppressNextQueryAutoSelection = true
                 mapQuery = ""
             }
-            await Task.yield()
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else { return }
-            isMapSearchFocused = true
+            mapSearchFocusRequestID = request.id
             return
         }
 
@@ -2169,8 +2174,11 @@ private struct MapSocialOwnerOption: Identifiable, Equatable {
 }
 
 private struct SearchBar: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Binding var query: String
     let isFocused: FocusState<Bool>.Binding
+    let focusRequestID: UUID?
+    let onFocusRequestHandled: (UUID) -> Void
     let onSubmit: () -> Void
 
     var body: some View {
@@ -2186,6 +2194,15 @@ private struct SearchBar: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .onSubmit(onSubmit)
+                .task(id: focusRequestID) {
+                    await focusIfRequested()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active, focusRequestID != nil else { return }
+                    Task {
+                        await focusIfRequested()
+                    }
+                }
             Spacer()
             if !query.isEmpty {
                 Button {
@@ -2205,6 +2222,23 @@ private struct SearchBar: View {
         .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
         .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 10, x: 0, y: 5)
         .padding(.horizontal, WanderTheme.spacing3)
+    }
+
+    @MainActor
+    private func focusIfRequested() async {
+        guard let focusRequestID, scenePhase == .active else { return }
+
+        // Run from the TextField's own lifecycle so the selected Map tab and
+        // its navigation hierarchy are attached before becoming first
+        // responder. A second yield makes cold widget launches deterministic
+        // without relying on a device-speed-specific delay.
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        isFocused.wrappedValue = false
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        isFocused.wrappedValue = true
+        onFocusRequestHandled(focusRequestID)
     }
 }
 

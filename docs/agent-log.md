@@ -22542,3 +22542,70 @@ Landing completion — 2026-07-25 22:03 PDT:
 
 Final outcome: the requested Been-only calendar behavior and completed REC-142
 widget work are on `main`; no known landing blocker remains.
+
+## 2026-07-25 — Codex — REC-153 widget deep-link polish
+
+Start — 2026-07-25 22:24 PDT:
+
+- Goal: make individual Activity Calendar widget dates open that exact date,
+  keep all other calendar-widget taps routed to the full Profile calendar, and
+  make the Quick Search widget reliably show the Map search keyboard on warm
+  and cold launches.
+- Linear: created REC-153, assigned to Ryan, related it to REC-142 and REC-70,
+  and moved it to `In Progress`.
+- Branch/worktree: `codex/rec-153-widget-links` in
+  `/private/tmp/recme-rec153-widget-links`, based on current `origin/main`
+  (`e7b12a97f`).
+- Coordination: the primary checkout remains on the deleted remote
+  `codex/rec-142-widgets` branch with an unrelated untracked `.pnpm-store/`;
+  it will remain untouched. Existing active worktrees were inspected. This
+  task may touch high-conflict Map/Profile navigation files, so it is isolated.
+- Expected files: widget deep-link/shared models, widget view, app launch-route
+  handling, Map/Profile navigation, focused tests, and this append-only log.
+- The proposed voice and nearby-place widgets are research/design follow-ups in
+  this pass, not implementation scope. Current Apple platform constraints will
+  be verified from primary documentation before the recommendation is handed
+  off.
+
+Implementation and validation — 2026-07-25 22:46 PDT:
+
+- Added a strict `recme://profile/calendar/YYYY-MM-DD` contract shared by the
+  app and widget. Every valid date cell in the calendar widget is now its own
+  link, while the widget-level fallback remains
+  `recme://profile/calendar` for taps outside a date.
+- Profile routing now distinguishes the calendar section from an exact day.
+  The section route scrolls the calendar fully into view; an exact-day route
+  opens that day's detail directly.
+- Quick Search routing now asks the Map search field to focus through an
+  explicit request identifier handled by the text field's own lifecycle. This
+  replaces the fixed 140 ms delay and retries when the app becomes active, so
+  cold and warm widget launches both arrive ready for keyboard input.
+- Added deep-link parsing/round-trip and malformed-date coverage plus source
+  integration contracts for date-cell links, exact-day routing, and the
+  lifecycle-based search focus behavior.
+- `xcodegen generate` completed and produced no project-file diff.
+- Focused widget/deep-link tests passed 23/23. The full iOS Simulator suite
+  passed 691/691 with zero failures. A generic iOS Simulator build passed for
+  arm64 and x86_64 after rerunning outside the filesystem sandbox; the initial
+  failure was limited to sandboxed CoreSimulator/SwiftPM cache access.
+- Live visual routing passed on iPhone 17 Pro Max and iPhone 17e. Search opens
+  with a visible insertion caret on both sizes; the simulator's connected
+  hardware keyboard suppresses the software keyboard. Exact-date links opened
+  the July 25, 2026 day detail, and the generic calendar link showed the full
+  Profile calendar.
+- Existing unrelated warnings remain: two Swift actor-isolation warnings in
+  `WanderSupabaseClient`, the traditional headermap warning, and unsigned-test
+  app-group entitlement messages.
+- Apple platform research confirms five configurations can live in a widget
+  bundle. A voice check-in is feasible, but direct widget recording requires
+  an `AudioRecordingIntent`, microphone/speech permissions, and a Live Activity
+  while recording on iOS. Recommended first version: deep-link to an in-app
+  voice capture that transcribes into a reviewable check-in draft before save.
+- A five-place nearby widget is feasible in `systemMedium` or `systemLarge`;
+  iPhone has no medium-large family. Because widgets do not receive continuous
+  location and have limited refresh opportunities, distances need a freshness
+  label and a fallback such as “near you.” Only the location widgets should be
+  placed in a separate location-authorized extension.
+- No App Store build number, archive, TestFlight state, or Slack announcement
+  was changed. Next: publish a ready PR for REC-153 and keep the voice/nearby
+  widgets as separately scoped follow-up implementation.

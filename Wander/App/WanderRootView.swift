@@ -840,7 +840,17 @@ struct WanderRootView: View {
             mapSearchLaunchRequest = WanderMapSearchLaunchRequest(query: query)
         case .profileCalendar:
             selectedTab = .profile
-            profileCalendarLaunchRequest = WanderProfileCalendarLaunchRequest(targetDate: .now)
+            profileCalendarLaunchRequest = WanderProfileCalendarLaunchRequest(
+                targetDate: .now,
+                destination: .calendar
+            )
+        case .profileCalendarDate(let calendarDate):
+            guard let targetDate = calendarDate.date() else { return }
+            selectedTab = .profile
+            profileCalendarLaunchRequest = WanderProfileCalendarLaunchRequest(
+                targetDate: targetDate,
+                destination: .day
+            )
         case .sharedProfile(let profileID):
             sharedProfile = SharedProfileRoute(profileID: profileID)
         }

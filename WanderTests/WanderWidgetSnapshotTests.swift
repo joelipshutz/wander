@@ -28,6 +28,43 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
         }
     }
 
+    func testCalendarDateRouteBuildsExactURLAndRoundTrips() throws {
+        let date = try XCTUnwrap(WanderCalendarDate(year: 2026, month: 7, day: 25))
+        let route = WanderDeepLinkRoute.profileCalendarDate(date)
+        let url = try XCTUnwrap(route.url)
+
+        XCTAssertEqual(url.absoluteString, "recme://profile/calendar/2026-07-25")
+        XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let resolved = try XCTUnwrap(date.date(timeZone: calendar.timeZone))
+        XCTAssertEqual(
+            calendar.dateComponents([.year, .month, .day], from: resolved),
+            DateComponents(year: 2026, month: 7, day: 25)
+        )
+    }
+
+    func testCalendarDateRejectsMalformedAndImpossibleValues() throws {
+        XCTAssertNil(WanderCalendarDate(urlValue: "2026-7-25"))
+        XCTAssertNil(WanderCalendarDate(urlValue: "2026-07-25-extra"))
+        XCTAssertNil(WanderCalendarDate(urlValue: "2026-02-29"))
+        XCTAssertNil(WanderCalendarDate(year: 2026, month: 13, day: 1))
+        XCTAssertNotNil(WanderCalendarDate(urlValue: "2028-02-29"))
+
+        for rawURL in [
+            "recme://profile/calendar/2026-7-25",
+            "recme://profile/calendar/2026-02-29",
+            "recme://profile/calendar/2026-07-25?source=widget",
+            "recme://profile/calendar/2026-07-25/extra"
+        ] {
+            XCTAssertNil(
+                WanderDeepLinkRoute.parse(try XCTUnwrap(URL(string: rawURL))),
+                "Unexpectedly accepted \(rawURL)"
+            )
+        }
+    }
+
     func testQuickSearchTrimsAndPercentEncodesUnicodeQuery() throws {
         let route = WanderDeepLinkRoute.quickSearch(query: " \n Best Café & 東京 \t")
         let url = try XCTUnwrap(route.url)
@@ -79,6 +116,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             "recme://map/search?",
             "recme://map:8080/search",
             "recme://profile/calendar#today",
+            "recme://profile/calendar/2026-07-25#today",
             "recme://profiles",
             "recme://profiles/%20%0A",
             "recme://profiles/user/extra"
