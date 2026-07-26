@@ -22641,6 +22641,11 @@ Handoff completion — 2026-07-25 23:34 PDT:
 - No known code or test blocker remains. The only outstanding external
   prerequisite is provisioned App Group signing for live cross-process
   delivery on a physical iPhone.
+- After PR creation, fetched newer `origin/main` at `e7b7122a5` and merged it
+  into the branch as `b1b98a65f`. The only overlap was this append-only log;
+  both REC-97 and REC-150 records were preserved. Upstream changes were
+  documentation-only, so the already-green 8/8 focused and 696/696 full test
+  results still cover the unchanged REC-97 application source.
 ## 2026-07-25 22:29 PDT - Codex - REC-150 Discover Search Engineering Plan
 
 Agent: Codex
