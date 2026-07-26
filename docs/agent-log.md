@@ -22486,3 +22486,34 @@ Starting status and coordination:
 - Expected landing changes are the existing REC-142 app/widget implementation,
   tests, setup/decision docs, the generated project after conflict resolution,
   and this append-only log. The untracked package store is excluded.
+
+Pre-landing validation — 2026-07-25 22:01 PDT:
+
+- Manual diff review confirmed the Profile and widget calendars now derive
+  activity only from Been visits. Wanna remains available in the Profile tile,
+  saved-place list, and save flows; it no longer contributes dates, counts,
+  rings, legends, summaries, or day-detail membership to either calendar.
+- The first focused run executed 91 calendar, widget, and navigation tests.
+  Ninety passed; the only failure was a hard-coded build-96 assertion after
+  merging released build 97 from `main`. Updated that contract to expect the
+  single shared build-97 declaration, then reran the failed test successfully
+  (1/1). The implementation tests themselves were green, including the
+  explicit Wanna-exclusion cases.
+- A clean generic iOS Simulator build succeeded with the widget extension
+  embedded and validated. Existing Swift concurrency and headermap warnings
+  remain unchanged.
+- The complete widget integration class then passed 14/14 together after the
+  build-number contract update.
+- Prior validation on the exact REC-142 source revision remains applicable:
+  full suite 689/689, focused widget/profile suite 43/43, corrected contracts
+  2/2, visual review on iPhone 17 Pro Max and iPhone 17e, live widget routes,
+  and an independent P1/P2 review. The merge from current `main` changed only
+  generated/project build metadata, the build-number contract assertion, and
+  append-only coordination history.
+- `git diff --check` passed. Manual landing review found no release blocker.
+  The installed gstack review package could not run because its required
+  `review/checklist.md` and `greptile-triage.md` resources are absent; no
+  substitute output was claimed.
+- Next: commit the build-97 contract/log update, push PR #215, confirm its
+  mergeability against current `main`, post validation, and squash-merge.
+  This remains a merge-only request; no TestFlight action is authorized.
