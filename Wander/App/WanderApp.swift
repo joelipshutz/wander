@@ -87,6 +87,7 @@ struct WanderAppEntryView: View {
     @State private var hasResolvedSession = false
     @State private var sessionRefreshGeneration = 0
     @State private var authenticatedUserID: String?
+    @State private var deepLinkLaunchQueue = WanderDeepLinkLaunchQueue()
 
     init(analytics: AnalyticsClient, parser: any LLMFilterParser) {
         self.analytics = analytics
@@ -105,6 +106,10 @@ struct WanderAppEntryView: View {
                 WanderRootView(
                     initialSession: session,
                     isSessionValidated: destination == .authenticated,
+                    deepLinkLaunchRequest: deepLinkLaunchQueue.requestForDelivery(
+                        isReady: destination == .authenticated
+                    ),
+                    onDeepLinkLaunchRequestHandled: consumeDeepLinkLaunchRequest,
                     analytics: analytics,
                     parser: parser
                 )
@@ -115,6 +120,7 @@ struct WanderAppEntryView: View {
 
             sessionOverlay(for: destination)
         }
+        .onOpenURL(perform: queueDeepLink)
         .task(id: sessionRefreshGeneration) {
             await resolveSession()
         }
@@ -236,5 +242,13 @@ struct WanderAppEntryView: View {
         await auth.refreshSession()
         guard !Task.isCancelled else { return }
         hasResolvedSession = true
+    }
+
+    private func queueDeepLink(_ url: URL) {
+        deepLinkLaunchQueue.enqueue(url)
+    }
+
+    private func consumeDeepLinkLaunchRequest(_ id: UUID) {
+        deepLinkLaunchQueue.consume(id: id)
     }
 }
