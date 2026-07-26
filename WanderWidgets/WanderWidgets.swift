@@ -273,8 +273,8 @@ private struct WanderCircularWidgetArcText: View {
 
         var radius: CGFloat {
             switch self {
-            case .top: -20
-            case .bottom: 20
+            case .top: -18
+            case .bottom: 18
             }
         }
 
@@ -287,8 +287,8 @@ private struct WanderCircularWidgetArcText: View {
 
         var fontSize: CGFloat {
             switch self {
-            case .top: 5.5
-            case .bottom: 4.5
+            case .top: 6.5
+            case .bottom: 5.5
             }
         }
     }

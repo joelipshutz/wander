@@ -24785,3 +24785,37 @@ REC-157 handoff — 2026-07-26 13:20 PDT:
   `codex/rec-157-lock-widget-mockups`.
 - No TestFlight build number was changed and no release was attempted because
   the request did not include a TestFlight release.
+
+REC-157 typography revision start — 2026-07-26 13:38 PDT:
+
+- Ryan requested a tighter ring-band treatment: move curved `rec.me` down into
+  the band between the inner rings and enlarge both `rec.me` and `CHECK-IN` so
+  the letterforms better fill that space.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; PR #243 remains open.
+- Current checkout was clean. `git fetch origin` completed after rerunning with
+  the required worktree metadata permission.
+- No overlapping uncommitted work was found. Expected files:
+  `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 typography revision completion — 2026-07-26 13:43 PDT:
+
+- Moved both arc baselines from a 20-point radius to an 18-point radius so
+  `rec.me` sits lower and both labels are centered in the same inner ring band.
+- Increased `rec.me` from 5.5pt to 6.5pt and `CHECK-IN` from 4.5pt to 5.5pt.
+  Added source-contract assertions for the approved metrics.
+- Generated, XML-validated, and visually inspected the matching C3 mockup at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/variant-C3.png`
+  with editable SVG and updated the adjacent `approved.json`.
+- Ran `xcodegen generate`; no project file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing `WanderSupabaseClient.swift` actor-isolation warnings and Xcode's
+  traditional headermap warnings are unchanged and outside this visual tweak.
+- Next: commit and push the revision to PR #243, return REC-157 to `In Review`,
+  and leave Xcode on the existing REC-157 worktree for device testing.
