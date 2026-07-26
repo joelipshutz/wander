@@ -1339,7 +1339,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(recommendationCard.contains(".frame(minHeight: 264)"))
     }
 
-    func testDiscoverUnboundedRowsAreLazyAndSearchWorkIsCancellable() throws {
+    func testDiscoverUnboundedRowsAreLazyAndPlaceSearchIsSubmitDriven() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
         )
@@ -1363,10 +1363,37 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(friends.contains("LazyVStack"))
         XCTAssertTrue(memberResults.contains("LazyHStack"))
         XCTAssertFalse(source.contains("store.visiblePlaces(for: profile.id).count"))
-        XCTAssertTrue(source.contains(".task(id: placesQuery)"))
+        XCTAssertFalse(source.contains(".task(id: placesQuery)"))
         XCTAssertTrue(source.contains(".task(id: memberQuery)"))
-        XCTAssertFalse(source.contains(".onChange(of: placesQuery)"))
+        XCTAssertTrue(source.contains(".onChange(of: placesQuery)"))
+        XCTAssertTrue(source.contains(".onSubmit(onSubmit)"))
+        XCTAssertTrue(source.contains("private func submitPlaceSearch()"))
         XCTAssertFalse(source.contains(".onChange(of: memberQuery)"))
+    }
+
+    func testDiscoverPlaceSearchIsReversibleAndTeachesNaturalLanguageQueries() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let feedSource = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(source.contains("activePlaceSearchHeader"))
+        XCTAssertTrue(source.contains("Back to Discover"))
+        XCTAssertTrue(source.contains("private func exitPlaceSearch()"))
+        XCTAssertTrue(source.contains("private func clearPlaceSearch()"))
+        XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
+        XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
+        XCTAssertTrue(source.contains("Ask for a place the way you'd ask a friend"))
+        XCTAssertTrue(source.contains("Ryan's favorite coffee spots"))
+        XCTAssertTrue(source.contains("quiet cafes for getting work done"))
+        XCTAssertTrue(source.contains("Understood as"))
+        XCTAssertTrue(source.contains("evidence.summary"))
+        XCTAssertTrue(source.contains("Search visited instead"))
+        XCTAssertTrue(source.contains("Nothing was broadened automatically"))
+        XCTAssertTrue(feedSource.contains("startsInPlaceSearch: true"))
+        XCTAssertTrue(feedSource.contains("onClose: { isShowingSearch = false }"))
     }
 
     func testDiscoverAuthAndVisibleDataRefreshesRerunActiveSearchesCancellably() throws {
@@ -1376,7 +1403,7 @@ final class NavigationContractTests: XCTestCase {
         let authRefresh = try sourceSection(
             source,
             after: ".task(id: auth.isSignedIn)",
-            before: ".task(id: placesQuery)"
+            before: ".task(id: memberQuery)"
         )
         let visibleDataRefresh = try sourceSection(
             source,

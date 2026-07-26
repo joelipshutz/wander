@@ -24683,3 +24683,196 @@ TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
 Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
+## 2026-07-25 23:32 PDT - Codex - REC-150 Discover Search Implementation
+
+Agent: Codex using the repo ship workflow and `ios-fix`
+Branch: `codex/rec-150-discover-search`
+Worktree: `/private/tmp/recme-rec150-implementation`
+Linear: `REC-150` (`In Progress`)
+
+Goal: ship the approved Discover place-search behavior from REC-150: a
+reversible top-pinned search mode with Back/Clear, a rich natural-language
+teaching state, submit-only cheap structured parsing, exact favorite/owner
+semantics, and truthful per-result match metadata.
+
+Starting status and coordination:
+
+- Reviewed and squash-merged plan PR #222 to `main` as `e7b7122`, then created
+  this clean isolated implementation worktree from that exact commit. The
+  original checkout is 31 commits behind with an unrelated `tmp/`, and the
+  other active worktrees do not advertise edits to the REC-150 parser/store/UI
+  files; all remain untouched.
+- Latest completed TestFlight is build 97, `VALID`, public-group attached,
+  externally approved, and announced. No explicit TestFlight request or pending
+  release exists, so this task does not bump build 98, archive/upload, or post a
+  tester Slack note.
+- REC-150 already exists and is correctly `In Progress`. Mission Control remains
+  unavailable at `localhost:4000`, and the bundled Linear app is not available
+  in this session; branch/PR/log references will remain the durable tracking
+  fallback without claiming an external status/comment update.
+- The `ios-fix` workflow normally requires a debug `StateServer` snapshot before
+  Swift edits. This repo intentionally has no `StateServer`, `DebugBridge`, or
+  restore API, confirmed by source search and prior project records. The
+  approved REC-150 pre-change mock/screenshots plus a fresh simulator capture of
+  the current production Discover state will serve as the visual reproduction;
+  deterministic Swift navigation/parser/store tests will be the durable
+  regression guard. No unowned debug-server infrastructure will be added.
+- The workflow's optional artifact sync was skipped because it could publish
+  unrelated queued private gstack artifacts to a remote repository; that is
+  outside this app-shipping authorization.
+- Expected files: the existing Discover models/store/repository/screen and
+  analytics events, the `parse-discover-query` Edge Function plus focused Deno
+  tests, Discover/repository/store/navigation XCTest coverage, and this
+  append-only log. No database/RLS/RPC migration is planned.
+
+Checkpoint — 2026-07-26 00:32 PDT:
+
+- Implemented schema-v2 structured parsing with optional old-response decoding,
+  favorite/sort/unsupported concepts, the existing one-call token/timeout
+  envelope, and pure Edge validation tests. `deno` is not installed on this
+  machine, so the Deno tests are authored but remain to be run in CI or a Deno
+  environment; no dependency was installed ad hoc.
+- Implemented a schema-fingerprinted 50-entry LRU, exact owner resolution,
+  Been-only favorite qualification from the exact owner row (rating >= 4 or a
+  standalone `favorite` personal label), truthful deterministic evidence, and
+  owner-rating sorting. Unsupported concepts surface rather than silently
+  pretending to filter.
+- Reworked Discover > Places into a submit-driven, reversible search mode with
+  Back/Clear, rich natural-language examples, loading/interpretation/limitation
+  states, exact-zero guidance, and evidence metadata. People search remains on
+  its existing independent debounce path.
+- The feature initially pushed the already-large `WanderRootView.body` past
+  Swift's expression type-check threshold. A behavior-neutral local binding
+  split (`rootTabs` / presentation / lifecycle / observation stages) restores
+  compiler tractability; a clean pre-change worktree build confirmed the
+  timeout was introduced rather than a baseline/environment failure.
+- Validation: incremental simulator build passed on iPhone 17 Pro Max / iOS
+  26.2. Focused parser, store, cache, owner/favorite/evidence, and navigation
+  contract tests passed. Existing unrelated actor-isolation/headermap/test
+  binary warnings remain unchanged.
+
+Checkpoint — 2026-07-26 10:07 PDT:
+
+- Wired the Feed/Discover compact launcher directly into active place-search
+  mode. Its Back action now dismisses the full-screen cover, closing the exact
+  trap reported in REC-150; the regular Discover-tab Back action restores the
+  default Discover surface. Static navigation contracts cover both paths.
+- Added deterministic simulator launch arguments for the teaching and result
+  states. These are QA-only state selectors; normal launches still autofocus
+  the search field and do not inject a query. Direct computer-use tapping was
+  unavailable because the host Mac was locked, so Back/Clear behavior was
+  validated through focused XCTest/source contracts and the live launch states.
+- Visual QA passed for the rich teaching state and Ryan favorite-coffee result
+  state on iPhone 17 Pro Max / iOS 26.2 and iPhone 16e / iOS 18.6. A first-frame
+  result capture exposed ScrollView position retention; the search transition
+  now resets to the top after submission/loading changes, and stable recaptures
+  keep the Back button and search field fully visible on both sizes.
+- The focused final suite passed on iPhone 17 Pro Max / iOS 26.2, covering the
+  parser, exact owner/favorite/evidence behavior, LRU eviction, submit-only and
+  reversible navigation, and the Feed launcher. An earlier full iPhone 16 Plus
+  / iOS 18.6 suite exited 0 after clearing only the installed simulator app;
+  Xcode could not write the result summary because the data volume was full, so
+  no test count was reported. Existing unrelated warnings remain unchanged.
+- The Edge Function's Deno tests remain authored but unexecuted because Deno is
+  not installed. The hosted function has not been deployed from this feature
+  branch; deploy the additive schema-v2 function before any native release.
+  Build 97 remains unchanged, with no archive, upload, TestFlight mutation, or
+  Slack announcement.
+
+Final validation and hosted rollout — 2026-07-26 11:09 PDT:
+
+- Rebased the implementation onto current `origin/main` `b4d7c98` and preserved
+  the concurrent build-99 auth/check-in/share/widget/photo/picker work. This
+  feature does not change `CURRENT_PROJECT_VERSION`; no TestFlight release was
+  requested or performed.
+- Hardened the final query contract after implementation review: cache hits now
+  identify their source, requests cancel cleanly on edit/Clear/Back, analytics
+  contain only buckets/enums/static IDs, owner and tag matching are exact to the
+  qualifying user-place row, evidence is typed, and unknown or unsupported-only
+  queries cannot silently return the whole visible feed. Favorite and
+  relationship phrases are repaired deterministically after the model call.
+- Native validation: the generic iOS Simulator build passed. The rebased full
+  suite passed 749/749 before the final semantic-hardening patch; the focused
+  parser/store/repository/navigation suite then passed after that hardening.
+  A requested final full-suite rerun was attempted twice but Xcode cancelled
+  during dependency/module compilation because the host data volume reached
+  `ENOSPC`; no XCTest failure occurred. Only this task's exact regenerable
+  DerivedData caches were removed between attempts, and other worktrees/caches
+  were left untouched.
+- Deno was run through the temporary npm package runner after all final Edge
+  changes: 15/15 parser/provider/auth tests passed. The generated untracked
+  `deno.lock` was removed because no other function in this repo tracks one.
+- Deployed the backward-compatible `parse-discover-query` schema-v2 Edge
+  Function to Supabase project `rugmtlgufrhlxwfkumhw`. Hosted version 8 is
+  `ACTIVE`; `verify_jwt=false` remains intentional for Clerk third-party JWTs,
+  while the function validates users through the existing `current_profile`
+  contract and independently verifies service-role operational calls through
+  PostgREST.
+- Hosted acceptance passed 5/5 synthetic queries: owner favorite coffee, quiet
+  work cafe, friends' sunset hikes, Silver Lake date-night, and Wanna Go coffee.
+  All returned HTTP 200/schema v2 with correct invariant filters; observed
+  latency was approximately 1.0–1.6 seconds per warm request. No place, graph,
+  contact, profile, or private user data was sent to the model.
+- Visual QA remains passed on iPhone 17 Pro Max / iOS 26.2 and iPhone 16e /
+  iOS 18.6 for the teaching and result states. After rebasing, the new Clerk
+  sign-in gate prevented another unauthenticated simulator recapture; auth was
+  not changed because it is outside REC-150.
+
+PR handoff — 2026-07-26 11:13 PDT:
+
+- Pushed `codex/rec-150-discover-search` and opened ready PR #240:
+  `https://github.com/joelipshutz/wander/pull/240`.
+- GitHub reports the PR `MERGEABLE` and `CLEAN` against current `main`, with no
+  checks configured for the branch.
+- Linked PR #240 to REC-150, moved the issue to `In Review`, and added the
+  implementation, hosted-rollout, validation, ENOSPC, and no-TestFlight receipt.
+- Mission Control remains unavailable at `localhost:4000`; no tracker state was
+  fabricated. Build 99 remains unchanged, and no archive, upload, App Store
+  Connect, TestFlight-group, or Slack action was performed by REC-150.
+
+Device handoff follow-up — 2026-07-26 12:47 PDT:
+
+- Agent: Codex using `ios-qa` for standard signed-device deployment only.
+  Branch/worktree: `codex/rec-150-discover-search` at
+  `/private/tmp/recme-rec150-implementation`.
+- Goal: incorporate current `origin/main`, prove PR #240 has no conflicts, then
+  build, install, and launch that exact feature branch on Joe's paired iPhone.
+- Starting state was clean. Fresh fetch confirmed current `origin/main`
+  `b4d7c98` is already an ancestor of the feature branch (branch divergence
+  versus main: one ahead, zero behind); GitHub reports PR #240 `MERGEABLE` and
+  `CLEAN`. No merge/rebase commit is needed.
+- Connected-device discovery found paired iPhone 16 Pro
+  `00008140-0018152C08A2201C`, iOS 26.5, with Developer Mode enabled. CoreDevice
+  currently reports it unavailable (`tunnelState: unavailable`, last connection
+  July 24), so the signed build will be prepared while waiting for the phone to
+  be plugged in and unlocked.
+- Expected tracked file is this append-only log only. No product, auth, signing,
+  schema, build-number, TestFlight, or release mutation is planned.
+
+Device handoff checkpoint — 2026-07-26 12:53 PDT:
+
+- Source integration is complete with no merge/rebase required: current
+  `origin/main` remains an ancestor of branch commit `e4e6d9c`, the worktree
+  source diff passes `git diff --check`, and PR #240 remains conflict-free.
+- The first generic iPhone build failed before compilation because this Mac has
+  no active Xcode account session and the wildcard profile cannot carry the
+  shared App Group used by the share/widget extensions. Retried without project
+  changes using the configured App Store Connect API key for automatic
+  provisioning; the signed Debug arm64 build then completed successfully,
+  including `WanderShareExtension`, `WanderWidgets`, and
+  `WanderNearbyWidgets`.
+- Signed app waiting for installation:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Build/Products/Debug-iphoneos/Wander.app`.
+- Installation/launch is blocked only by external device state. Three
+  CoreDevice checks, `xcdevice`, and a USB hardware check all report iPhone 16
+  Pro `00008140-0018152C08A2201C` unavailable; no USB tunnel is active and the
+  Mac cannot currently see a connected/unlocked phone. No install or launch was
+  falsely claimed.
+- Exact restart: plug in and unlock the iPhone, accept any Trust prompt, confirm
+  `xcrun devicectl list devices` reports `available`, then install the signed
+  app with `xcrun devicectl device install app` and launch bundle
+  `com.grayline.wander` with `xcrun devicectl device process launch`.
+- No product source, auth, entitlement, project signing, build number,
+  TestFlight, App Store Connect release, or Slack state changed. Existing
+  formatter actor-isolation and traditional-headermap warnings remain
+  non-blocking.
