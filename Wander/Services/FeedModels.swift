@@ -11,15 +11,6 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
     case listCreated = "list_created"
     case listItemAdded = "list_item_added"
 
-    var isPlaceActivity: Bool {
-        switch self {
-        case .placeSaved, .placeBeen, .placeWannaGo, .listItemAdded:
-            true
-        case .listCreated:
-            false
-        }
-    }
-
     var supportsRating: Bool {
         switch self {
         case .placeBeen, .listItemAdded:
@@ -29,9 +20,25 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
         }
     }
 
-    var usesCheckInTicket: Bool {
-        self == .placeBeen
+    var ticketKind: FeedTicketKind {
+        switch self {
+        case .placeBeen:
+            .checkIn
+        case .placeWannaGo:
+            .wanna
+        case .listCreated, .listItemAdded:
+            .list
+        case .placeSaved:
+            .droppedPin
+        }
     }
+}
+
+enum FeedTicketKind: Equatable {
+    case checkIn
+    case wanna
+    case list
+    case droppedPin
 }
 
 struct FeedMediaPreview: Identifiable, Equatable {

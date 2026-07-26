@@ -25185,6 +25185,23 @@ Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
 
+## 2026-07-26 14:24 PDT — Codex — REC-147 phone feedback follow-up
+
+Joe's connected-phone review approved the Check-in direction but identified a
+follow-up before the stack is ready to merge: the ticket edge reads as a loose
+circle instead of a punch-out; the celebration feels slow; Feed tickets are too
+wide/tall; notes need quotation marks; and Wanna, list, and dropped-pin events
+need the same ticket family. Feed cards also need a small photo treatment and
+should not spend a full row on `View place`.
+
+Implementation stays on `codex/rec-147-feed-profile-tickets` / REC-147. The
+follow-up will convert the shared edge to a real clipped notch, speed up the
+celebration reveal, make every Feed event a compact semantic ticket, preserve
+all event data and destinations, lazy-render the Feed, and use event/provider
+photo imagery with an immediate category fallback. No typography migration,
+backend/schema change, build-number bump, TestFlight release, or merge is part
+of this pass.
+
 ## 2026-07-26 13:58 PDT - Codex - TestFlight Build 100
 
 Agent: Codex
@@ -25211,3 +25228,45 @@ Release start:
 - Next: regenerate the project, review and land the release metadata, validate
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
+
+## 2026-07-26 14:59 PDT — Codex — REC-147 phone feedback implemented
+
+Completed the connected-phone refinement on
+`codex/rec-147-feed-profile-tickets`, stacked on the latest refreshed Direction
+A map branch and current `main` build 100.
+
+Outcome:
+
+- Replaced the loose circular overlay with one clipped, stroked ticket shape;
+  the right edge is now a true concave punch-out on both the streak celebration
+  and every shared ticket surface.
+- Shortened the streak ticket, count, and copy reveal timings while preserving
+  Reduce Motion behavior and the existing four-day celebration hierarchy.
+- Converted all five Feed event kinds into compact semantic tickets: Check-in,
+  Wanna, list created, added to list, and dropped pin. The cards retain actor,
+  timestamp, place/list title, category/location, destination list, rating,
+  note, and media data.
+- Reduced card width, padding, artwork size, and vertical density; quoted and
+  italicized notes; removed the redundant full-width `View place` / list CTA;
+  and kept the place/list destination on the card content itself.
+- Added a 72-point photo slot that prioritizes event media, then asynchronously
+  resolves the place provider photo, with an immediate category artwork
+  fallback. Feed rows now use `LazyVStack` so image work stays limited to
+  visible tickets.
+- Temporary visual-QA launch helpers were removed before the final test run.
+
+Validation:
+
+- `xcodegen generate`: passed with no generated project diff.
+- Focused XCTest: 91/91 passed (Feed models, navigation contracts, place
+  profile presentation, check-in copy, and save streak).
+- Full XCTest: 755/755 passed on iPhone 16 Plus, iOS 18.6.
+- `git diff --check`: passed.
+- Visual QA reviewed the streak punch-out plus the top and lower Feed states:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec147-feedback-qa/streak-cutout.png`,
+  `feed-top-reboot.png`, and `feed-bottom-states.png`.
+
+No build-number bump, TestFlight upload, merge, backend/schema change, or
+typography migration was performed. Next is Joe's connected-phone sign-off,
+then the remaining list/profile ticket expansion and the separate magazine
+typography exploration.

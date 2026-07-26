@@ -936,20 +936,26 @@ private struct FeedFeaturedCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(alignment: .top) {
-                FeedPlaceArtwork(place: featured.visiblePlace, height: 92)
-                Spacer(minLength: 0)
+            Button {
+                openPlace(featured.visiblePlace)
+            } label: {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    FeedPlaceArtwork(place: featured.visiblePlace, height: 88)
+
+                    Text(featured.visiblePlace.place.canonicalName)
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(2)
+
+                    Text(placeDetail(for: featured.visiblePlace))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
             }
-
-            Text(featured.visiblePlace.place.canonicalName)
-                .font(.system(size: 15, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .lineLimit(2)
-
-            Text(placeDetail(for: featured.visiblePlace))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(1)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(featured.visiblePlace.place.canonicalName)")
 
             Button {
                 openProfile(ProfileShell(
@@ -969,19 +975,6 @@ private struct FeedFeaturedCard: View {
             .buttonStyle(.plain)
 
             Spacer(minLength: 0)
-
-            Button {
-                openPlace(featured.visiblePlace)
-            } label: {
-                Label("View place", systemImage: "mappin.and.ellipse")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(featured.visiblePlace.place.canonicalName)")
         }
         .padding(WanderTheme.spacing3)
         .frame(
@@ -1010,7 +1003,7 @@ private struct FeedActivityList: View {
     let openList: (LocalPlaceList) -> Void
 
     var body: some View {
-        VStack(spacing: WanderTheme.spacing3) {
+        LazyVStack(spacing: WanderTheme.spacing3) {
             ForEach(activity) { event in
                 FeedActivityModule(
                     activity: event,
@@ -1025,12 +1018,11 @@ private struct FeedActivityList: View {
 
 private enum FeedFeaturedLayout {
     static let cardWidth: CGFloat = 184
-    static let cardHeight: CGFloat = 252
+    static let cardHeight: CGFloat = 220
 }
 
 private enum FeedActivityLayout {
-    static let photoWidth: CGFloat = 88
-    static let photoHeight: CGFloat = 56
+    static let photoSize: CGFloat = 72
 }
 
 private struct FeedActivityModule: View {
@@ -1039,317 +1031,301 @@ private struct FeedActivityModule: View {
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
 
-    @ViewBuilder
     var body: some View {
-        if activity.kind.usesCheckInTicket, let place = activity.place {
-            checkInTicket(place)
-        } else {
-            lightweightActivityRow
+        activityTicket
+            .padding(.horizontal, WanderTheme.spacing2)
+    }
+
+    private var activityTicket: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            ticketHeader
+
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    primaryDestinationTitle
+                    compactMetadata
+
+                    if let note = normalizedNote {
+                        Text("“\(note)”")
+                            .font(.system(size: 13, weight: .medium))
+                            .italic()
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                FeedActivityThumbnail(activity: activity)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .checkInTicketSurface(
+            accent: ticketAccent,
+            surface: WanderTheme.surfaceBone.color,
+            surroundingSurface: WanderTheme.canvasWarm.color,
+            notchEdges: .trailing,
+            castsShadow: false
+        )
+    }
+
+    private var ticketHeader: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Button {
+                openProfile(activity.actor)
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    WanderAvatar(
+                        initials: initials(for: activity.actor.displayName),
+                        avatarURL: activity.actor.avatarURL,
+                        size: 32,
+                        color: WanderTheme.skyTint.color
+                    )
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(activity.actor.displayName)
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(1)
+
+                        Text("\(ticketEyebrow) · \(FeedPresentation.timestampText(for: activity.occurredAt).uppercased())")
+                            .font(.system(size: 9, weight: .black, design: .rounded))
+                            .tracking(0.9)
+                            .foregroundStyle(ticketAccent)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                }
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
+
+            Spacer(minLength: WanderTheme.spacing1)
+
+            Image(systemName: ticketIcon)
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(ticketAccent)
+                .frame(width: 30, height: 30)
+                .background(ticketAccent.opacity(0.13))
+                .clipShape(Circle())
         }
     }
 
-    private func checkInTicket(_ place: VisiblePlace) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                Button {
-                    openProfile(activity.actor)
-                } label: {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        WanderAvatar(
-                            initials: initials(for: activity.actor.displayName),
-                            avatarURL: activity.actor.avatarURL,
-                            size: 40,
-                            color: WanderTheme.skyTint.color
-                        )
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(activity.actor.displayName)
-                                .font(.system(size: 15, weight: .black))
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .lineLimit(1)
-
-                            Text("CHECKED IN · \(FeedPresentation.timestampText(for: activity.occurredAt).uppercased())")
-                                .font(.system(size: 10, weight: .black, design: .rounded))
-                                .tracking(1.05)
-                                .foregroundStyle(WanderTheme.pinSocial.color)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.78)
-                        }
-                    }
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
-
-                Spacer(minLength: WanderTheme.spacing1)
-
-                if let rating = activity.rating {
-                    Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .frame(minHeight: 32)
-                        .overlay {
-                            Capsule().stroke(WanderTheme.terracotta.color.opacity(0.55), lineWidth: 1)
-                        }
-                        .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating))")
-                }
-            }
-
+    @ViewBuilder
+    private var primaryDestinationTitle: some View {
+        if let place = activity.place {
             Button {
                 openPlace(place)
             } label: {
                 Text(place.place.canonicalName)
-                    .font(.system(size: 25, weight: .black, design: .serif))
+                    .font(.system(size: 20, weight: .black, design: .serif))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
-                    .minimumScaleFactor(0.78)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .minimumScaleFactor(0.82)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open \(place.place.canonicalName)")
-
-            Label(metadata, systemImage: "fork.knife")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(2)
-
-            if let note = activity.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
-                Text(note)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !activity.media.isEmpty {
-                FeedMediaRail(media: activity.media)
-            }
-
-            HStack {
-                Spacer(minLength: 0)
-                Button {
-                    openPlace(place)
-                } label: {
-                    Label("View place", systemImage: "mappin.and.ellipse")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .frame(minHeight: 44)
-                        .background(WanderTheme.skyTint.color)
-                        .clipShape(Capsule())
-                        .overlay {
-                            Capsule()
-                                .stroke(WanderTheme.pinSocial.color.opacity(0.72), lineWidth: 1)
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(place.place.canonicalName)")
-            }
-        }
-        .padding(WanderTheme.spacing4)
-        .checkInTicketSurface(
-            accent: WanderTheme.pinSocial.color,
-            surface: WanderTheme.surfaceBone.color,
-            surroundingSurface: WanderTheme.canvasWarm.color,
-            notchEdges: .trailing
-        )
-    }
-
-    private var lightweightActivityRow: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                Button {
-                    openProfile(activity.actor)
-                } label: {
-                    WanderAvatar(
-                        initials: initials(for: activity.actor.displayName),
-                        avatarURL: activity.actor.avatarURL,
-                        size: 44,
-                        color: WanderTheme.skyTint.color
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    lightweightActivityTitle
-
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Image(systemName: activity.list == nil ? "fork.knife" : "list.bullet")
-                        Text(metadata)
-                            .lineLimit(1)
-                        Text("·")
-                            .accessibilityHidden(true)
-                        Text(FeedPresentation.timestampText(for: activity.occurredAt))
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                }
-
-                Spacer(minLength: WanderTheme.spacing1)
-            }
-
-            if let note = activity.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
-                Text(note)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 56)
-            }
-
-            if !activity.media.isEmpty {
-                FeedMediaRail(media: activity.media)
-                    .padding(.leading, 56)
-            }
-
-            HStack {
-                Spacer(minLength: 0)
-                actionButton
-            }
-        }
-        .padding(.vertical, WanderTheme.spacing2)
-        .padding(.horizontal, WanderTheme.spacing3)
-    }
-
-    private var lightweightActivityTitle: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: WanderTheme.spacing1) {
-                Button {
-                    openProfile(activity.actor)
-                } label: {
-                    Text(activity.actor.displayName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
-
-                Text(activityVerb)
-                    .font(.system(size: 16, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(1)
-            }
-
-            if let place = activity.place {
-                Button {
-                    openPlace(place)
-                } label: {
-                    Text(place.place.canonicalName)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open \(place.place.canonicalName)")
-            } else if let list = activity.list {
-                Button {
-                    openList(list)
-                } label: {
-                    Text(list.name)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("View list \(list.name)")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var actionButton: some View {
-        if let list = activity.list, !activity.kind.isPlaceActivity || activity.kind == .listItemAdded {
+        } else if let list = activity.list {
             Button {
                 openList(list)
             } label: {
-                Label("View list", systemImage: "list.bullet")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(minHeight: 44)
+                Text(list.name)
+                    .font(.system(size: 20, weight: .black, design: .serif))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("View list \(list.name)")
-        } else if let place = activity.place {
-            Button {
-                openPlace(place)
-            } label: {
-                Label("View place", systemImage: "mappin.and.ellipse")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .frame(minHeight: 44)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open \(place.place.canonicalName)")
+        } else {
+            Text("Map activity")
+                .font(.system(size: 20, weight: .black, design: .serif))
+                .foregroundStyle(WanderTheme.textInk.color)
         }
     }
 
-    private var activityVerb: String {
-        switch activity.kind {
-        case .placeSaved:
-            "added to their map"
-        case .placeBeen:
-            "checked in at"
-        case .placeWannaGo:
-            "marked Wanna"
-        case .listCreated:
-            "created"
-        case .listItemAdded:
-            "added"
+    private var compactMetadata: some View {
+        ViewThatFits(in: .horizontal) {
+            inlineMetadata
+            stackedMetadata
         }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(WanderTheme.textMuted.color)
+    }
+
+    private var inlineMetadata: some View {
+        HStack(spacing: WanderTheme.spacing1) {
+            Label(metadata, systemImage: metadataIcon)
+                .lineLimit(1)
+
+            if let list = activity.list, activity.place != nil {
+                Text("·")
+                    .accessibilityHidden(true)
+                listDestination(list)
+            }
+
+            ratingLabel
+        }
+    }
+
+    private var stackedMetadata: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing1) {
+                Label(metadata, systemImage: metadataIcon)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ratingLabel
+            }
+
+            if let list = activity.list, activity.place != nil {
+                listDestination(list)
+            }
+        }
+    }
+
+    private func listDestination(_ list: LocalPlaceList) -> some View {
+        Button {
+            openList(list)
+        } label: {
+            Label(list.name, systemImage: "list.bullet")
+                .fontWeight(.bold)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("View list \(list.name)")
+    }
+
+    @ViewBuilder
+    private var ratingLabel: some View {
+        if let rating = activity.rating {
+            Spacer(minLength: 0)
+            Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
+                .fontWeight(.black)
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating))")
+        }
+    }
+
+    private var normalizedNote: String? {
+        guard let note = activity.note?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !note.isEmpty
+        else { return nil }
+        return note
     }
 
     private var metadata: String {
-        if let place = activity.place {
-            return placeDetail(for: place)
-        }
+        if let place = activity.place { return placeDetail(for: place) }
         if let list = activity.list {
             let count = list.cachedItemCount ?? 0
             return count == 1 ? "1 place" : "\(count) places"
         }
         return "From someone you follow"
     }
-}
 
-private struct FeedMediaRail: View {
-    let media: [FeedMediaPreview]
+    private var metadataIcon: String {
+        if let place = activity.place { return categorySymbol(for: place.effectiveCategory) }
+        return "list.bullet"
+    }
 
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: WanderTheme.spacing2) {
-                ForEach(media) { preview in
-                    Group {
-                        if let url = preview.urlString.flatMap(URL.init(string:)) {
-                            AsyncImage(url: url) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                FeedMediaPlaceholder()
-                            }
-                        } else {
-                            FeedMediaPlaceholder()
-                        }
-                    }
-                    .frame(
-                        width: FeedActivityLayout.photoWidth,
-                        height: FeedActivityLayout.photoHeight
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                    .accessibilityLabel(preview.accessibilityLabel)
-                }
-            }
+    private var ticketEyebrow: String {
+        switch activity.kind {
+        case .placeBeen: "CHECKED IN"
+        case .placeWannaGo: "ADDED TO WANNA"
+        case .listCreated: "CREATED A LIST"
+        case .listItemAdded: "ADDED TO LIST"
+        case .placeSaved: "DROPPED A PIN"
+        }
+    }
+
+    private var ticketIcon: String {
+        switch activity.kind.ticketKind {
+        case .checkIn: "checkmark"
+        case .wanna: "plus"
+        case .list: "list.bullet"
+        case .droppedPin: "mappin"
+        }
+    }
+
+    private var ticketAccent: Color {
+        switch activity.kind.ticketKind {
+        case .checkIn: WanderTheme.pinSocial.color
+        case .wanna: WanderTheme.stateWarning.color
+        case .list: WanderTheme.terracotta.color
+        case .droppedPin: WanderTheme.categorySage.color
         }
     }
 }
 
-private struct FeedMediaPlaceholder: View {
+private struct FeedActivityThumbnail: View {
+    let activity: FeedActivity
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var providerPhoto: PlacePhoto?
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            FeedActivityArtworkFallback(activity: activity)
+
+            if let preview = activity.media.first,
+               let url = preview.urlString.flatMap(URL.init(string:)) {
+                AsyncImage(url: url) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Color.clear
+                }
+                .accessibilityLabel(preview.accessibilityLabel)
+            } else if let providerPhoto, let place = activity.place {
+                PlaceProfilePhotoImage(
+                    photo: providerPhoto,
+                    placeName: place.place.canonicalName
+                )
+            }
+
+            if activity.media.count > 1 {
+                Text("+\(activity.media.count - 1)")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .frame(minHeight: 20)
+                    .background(Color.black.opacity(0.68))
+                    .clipShape(Capsule())
+                    .padding(4)
+            }
+        }
+        .frame(width: FeedActivityLayout.photoSize, height: FeedActivityLayout.photoSize)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+        .task(id: photoResolutionKey) {
+            await resolveProviderPhoto()
+        }
+    }
+
+    private var photoResolutionKey: String {
+        guard activity.media.isEmpty, let place = activity.place else {
+            return "media-\(activity.media.first?.id ?? "none")"
+        }
+        return PlaceSheetPlace(visiblePlace: place).photoLookupKey
+    }
+
+    private func resolveProviderPhoto() async {
+        providerPhoto = nil
+        guard activity.media.isEmpty, let place = activity.place else { return }
+        providerPhoto = try? await backend.placePhoto(
+            for: PlaceSheetPlace(visiblePlace: place).photoRequest
+        )
+    }
+}
+
+private struct FeedActivityArtworkFallback: View {
+    let activity: FeedActivity
+
     var body: some View {
         LinearGradient(
             colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
@@ -1357,10 +1333,16 @@ private struct FeedMediaPlaceholder: View {
             endPoint: .bottomTrailing
         )
         .overlay {
-            Image(systemName: "photo")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.82))
+            Image(systemName: fallbackIcon)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color.opacity(0.62))
         }
+        .accessibilityHidden(true)
+    }
+
+    private var fallbackIcon: String {
+        if let place = activity.place { return categorySymbol(for: place.effectiveCategory) }
+        return "list.bullet"
     }
 }
 
