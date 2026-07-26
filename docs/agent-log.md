@@ -24111,3 +24111,13 @@ Final sync — 2026-07-26 01:42 PDT:
   sync, so the 30/30 focused suite, 723/723 complete suite, two-device preview,
   and clean universal Simulator build remain applicable. Post-rebase
   `git diff --check` and conflict-marker sweeps passed.
+
+Publication — 2026-07-26 01:44 PDT:
+
+- Force-with-lease pushed validated head `402c91aa2` and confirmed PR #229 is
+  open, ready, `MERGEABLE`, and based on exact `origin/main` `061edc336`.
+- Posted the copy, layout, See all/map-route, full-width, minute-footer, test,
+  build, and two-device preview summary to PR #229:
+  `https://github.com/joelipshutz/wander/pull/229#issuecomment-5082764418`.
+- Returned Linear REC-154 to `In Review` and added the matching validation and
+  no-TestFlight handoff. No known follow-up blocker remains.
