@@ -24780,5 +24780,8 @@ REC-157 handoff — 2026-07-26 13:20 PDT:
   validation summary and simulator-runtime caveat.
 - No known REC-157 implementation blockers. Remaining work is PR review/merge
   and optional hands-on Lock Screen visual confirmation on a signed device.
+- Opened `/private/tmp/recme-rec157-lock-widget-mockups/Wander.xcodeproj` as its
+  own Xcode project and verified Xcode's Branch Chooser displays
+  `codex/rec-157-lock-widget-mockups`.
 - No TestFlight build number was changed and no release was attempted because
   the request did not include a TestFlight release.
