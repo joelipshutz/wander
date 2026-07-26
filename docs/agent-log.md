@@ -23199,3 +23199,40 @@ Pre-merge validation — 2026-07-26 00:12 PDT:
   RLS, security, performance, or regression blocker. No TestFlight release was
   requested: build 97, archive/upload state, tester groups, and Slack release
   notes remain unchanged.
+
+## 2026-07-26 00:14 PDT - Codex - REC-143 landing completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-143-merge-record`
+Worktree: `/private/tmp/recme-rec143-merge-record`
+Linear: `REC-143` (`Done`)
+
+Landing completion:
+
+- Pushed reviewed feature head `69b6ba66a`, confirmed PR #224 was `CLEAN` and
+  `MERGEABLE` against current `main`, and posted the final review and validation
+  record:
+  `https://github.com/joelipshutz/wander/pull/224#issuecomment-5082493900`.
+- Squash-merged PR #224 to `main` as
+  `82fcf0ab864d7c6570826e317815798936477afc`:
+  `https://github.com/joelipshutz/wander/pull/224`. The remote
+  `codex/rec-143-checkins-implementation` branch was deleted after the CLI's
+  local cleanup collided harmlessly with a stale worktree reservation for
+  `main`.
+- Final behavior: user-facing Been terminology is rebranded as Check-in;
+  repeat visits create distinct tickets; check-in date is date-only; the place
+  action uses the requested plus icon; existing internal compatibility values
+  remain stable; and local/remote deletion, feed projection, and notification
+  behavior follow the approved contract.
+- Validation: complete iPhone 17 / iOS 26.5 suite 699/699; clean generic
+  Simulator build for arm64 and x86_64; hosted check-in pgTAP 21/21; exact
+  hosted check-in smoke block; two-size visual review; and clean final
+  diff/copy sweeps. The broad smoke run's existing unrelated profile-geography
+  assertion and the pre-ship physical accessibility checks remain documented.
+- Linear REC-143 was moved to `Done` with the PR, merge commit, validation, and
+  pre-ship accessibility note.
+- Build 97 remains unchanged. This landing did not increment the build, archive,
+  upload, change TestFlight groups, or post tester Slack notes.
+
+Final outcome: repeatable Check-ins and their ticketing backend are on `main`;
+no known REC-143 merge blocker remains.
