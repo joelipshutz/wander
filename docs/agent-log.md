@@ -24151,3 +24151,14 @@ Latest-main reconciliation — 2026-07-26 02:08 PDT:
 Next: commit this combined-target contract/log update, force-with-lease push
 PR #229 again, verify it is mergeable on exact current main, update Linear with
 the superseding 730/730 result, and leave Xcode on REC-154.
+
+Final publication — 2026-07-26 02:10 PDT:
+
+- Force-with-lease pushed combined validated head `5cfddb80a` and confirmed
+  ready PR #229 is `MERGEABLE` against exact `origin/main` `9d51b0ec3`.
+- Posted the superseding 730/730 full-suite, 30/30 focused-suite, universal
+  build, three-extension reconciliation, and no-TestFlight record:
+  `https://github.com/joelipshutz/wander/pull/229#issuecomment-5082846548`.
+- Added the same superseding handoff to Linear REC-154, which remains
+  `In Review`. No known code, integration, visual, build, or tracking blocker
+  remains.
