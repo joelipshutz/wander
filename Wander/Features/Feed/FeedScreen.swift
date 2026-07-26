@@ -1056,7 +1056,7 @@ private struct FeedActivityModule: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                FeedActivityThumbnail(activity: activity)
+                activityThumbnailDestination
             }
         }
         .padding(WanderTheme.spacing3)
@@ -1068,6 +1068,37 @@ private struct FeedActivityModule: View {
             notchEdges: .trailing,
             castsShadow: false
         )
+    }
+
+    @ViewBuilder
+    private var activityThumbnailDestination: some View {
+        if activity.place != nil || activity.list != nil {
+            Button(action: openActivityDestination) {
+                FeedActivityThumbnail(activity: activity)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(activityDestinationAccessibilityLabel)
+        } else {
+            FeedActivityThumbnail(activity: activity)
+        }
+    }
+
+    private func openActivityDestination() {
+        if let place = activity.place {
+            openPlace(place)
+        } else if let list = activity.list {
+            openList(list)
+        }
+    }
+
+    private var activityDestinationAccessibilityLabel: String {
+        if let place = activity.place {
+            return "Open activity at \(place.place.canonicalName)"
+        }
+        if let list = activity.list {
+            return "Open list \(list.name)"
+        }
+        return "Activity preview"
     }
 
     private var ticketHeader: some View {

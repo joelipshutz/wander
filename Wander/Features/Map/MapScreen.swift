@@ -165,16 +165,10 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        let annotationGroups = visiblePlaceGroups.enumerated()
-            .sorted { lhs, rhs in
-                let lhsIsSelected = isSelectedMapRepresentative(lhs.element.primary)
-                let rhsIsSelected = isSelectedMapRepresentative(rhs.element.primary)
-                if lhsIsSelected != rhsIsSelected {
-                    return !lhsIsSelected && rhsIsSelected
-                }
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
+        let annotationGroups = Self.orderedAnnotationGroups(
+            visiblePlaceGroups,
+            selectedGroupKey: selectedPlaceGroupKey
+        )
         NavigationStack {
             ZStack(alignment: .bottom) {
                 MapReader { proxy in
@@ -196,12 +190,12 @@ struct MapScreen: View {
                                         visiblePlace: group.primary,
                                         saves: saveSummaries(for: group),
                                         currentUserID: store.currentUser.id,
-                                        isSelected: isSelectedMapRepresentative(group.primary)
+                                        isSelected: group.key == selectedPlaceGroupKey
                                     )
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
-                                .zIndex(isSelectedMapRepresentative(group.primary) ? 1 : 0)
+                                .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
                             }
                         }
 
@@ -737,13 +731,21 @@ struct MapScreen: View {
         saveSummaries(for: selectedPlace).map(\.visiblePlace.owner)
     }
 
-    private func isSelectedMapRepresentative(_ visiblePlace: VisiblePlace) -> Bool {
-        guard let selectedPlaceGroupKey else { return false }
-        return VisiblePlaceGrouping.matchingGroup(
-            for: visiblePlace,
-            in: visiblePlaces,
-            currentUserID: store.currentUser.id
-        )?.key == selectedPlaceGroupKey
+    static func orderedAnnotationGroups(
+        _ groups: [VisiblePlaceGroup],
+        selectedGroupKey: String?
+    ) -> [VisiblePlaceGroup] {
+        guard let selectedGroupKey,
+              let selectedIndex = groups.firstIndex(where: { $0.key == selectedGroupKey }),
+              selectedIndex != groups.index(before: groups.endIndex)
+        else {
+            return groups
+        }
+
+        var orderedGroups = groups
+        let selectedGroup = orderedGroups.remove(at: selectedIndex)
+        orderedGroups.append(selectedGroup)
+        return orderedGroups
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {

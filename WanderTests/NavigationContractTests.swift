@@ -1,6 +1,7 @@
 import XCTest
 import UIKit
 import MapKit
+import SwiftUI
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
@@ -92,6 +93,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityModule.contains("activity.rating"))
         XCTAssertTrue(activityModule.contains("Text(\"“\\(note)”\")"))
         XCTAssertTrue(activityModule.contains("FeedActivityThumbnail(activity: activity)"))
+        XCTAssertTrue(activityModule.contains("Button(action: openActivityDestination)"))
+        XCTAssertTrue(activityModule.contains("if let place = activity.place"))
+        XCTAssertTrue(activityModule.contains("openPlace(place)"))
+        XCTAssertTrue(activityModule.contains("openList(list)"))
         XCTAssertTrue(activityModule.contains("castsShadow: false"))
         XCTAssertFalse(activityModule.contains("lightweightActivityRow"))
         XCTAssertFalse(activityModule.contains("Label(\"View place\""))
@@ -436,13 +441,24 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(ticketSurface.contains("func checkInTicketSurface("))
-        XCTAssertTrue(ticketSurface.contains("private struct CheckInTicketShape: InsettableShape"))
+        XCTAssertTrue(ticketSurface.contains("struct CheckInTicketShape: InsettableShape"))
         XCTAssertTrue(ticketSurface.contains(".clipShape(ticketShape)"))
         XCTAssertTrue(ticketSurface.contains("addTrailingNotch("))
         XCTAssertFalse(ticketSurface.contains("Circle()\n            .fill(surroundingSurface)"))
+        XCTAssertFalse(ticketSurface.contains(".compositingGroup()"))
         XCTAssertTrue(ticketSurface.contains("case trailing"))
         XCTAssertTrue(ticketSurface.contains("case both"))
         XCTAssertTrue(placeProfile.contains(".checkInTicketSurface("))
+        let previewCard = try XCTUnwrap(
+            placeProfile
+                .components(separatedBy: "private struct PlaceProfilePreviewCard: View")
+                .last?
+                .components(separatedBy: "private struct PlaceProfileFullView: View")
+                .first
+        )
+        XCTAssertFalse(previewCard.contains("ticketEyebrow"))
+        XCTAssertFalse(previewCard.contains("YOUR CHECK-IN"))
+        XCTAssertFalse(previewCard.contains("YOUR WANNA"))
         XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
         XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityCard.contains("ticketAccentColor"))
@@ -452,6 +468,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityCard.contains("ForEach(entry.tags.prefix(6)"))
         XCTAssertTrue(activityCard.contains("photoThumbnails"))
         XCTAssertTrue(activityCard.contains("addPhotoControl"))
+    }
+
+    func testTicketShapeUsesAConcaveCutoutInsteadOfAnAddedCircle() {
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let trailingPath = CheckInTicketShape(notchEdges: .trailing).path(in: rect)
+
+        XCTAssertFalse(trailingPath.contains(CGPoint(x: 199, y: 50)))
+        XCTAssertFalse(trailingPath.contains(CGPoint(x: 195, y: 50)))
+        XCTAssertTrue(trailingPath.contains(CGPoint(x: 180, y: 50)))
+        XCTAssertTrue(trailingPath.contains(CGPoint(x: 199, y: 30)))
+        XCTAssertTrue(trailingPath.contains(CGPoint(x: 199, y: 70)))
+
+        let bothEdgesPath = CheckInTicketShape(notchEdges: .both).path(in: rect)
+        XCTAssertFalse(bothEdgesPath.contains(CGPoint(x: 1, y: 50)))
+        XCTAssertTrue(bothEdgesPath.contains(CGPoint(x: 20, y: 50)))
     }
 
     func testUnavailableContentAvoidsStackedOpacityTreatments() throws {

@@ -132,12 +132,6 @@ private struct PlaceProfilePreviewCard: View {
                 )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text(ticketEyebrow)
-                        .font(.system(size: 10, weight: .black, design: .rounded))
-                        .tracking(1.1)
-                        .foregroundStyle(ticketAccentColor)
-                        .lineLimit(1)
-
                     Text(place.name)
                         .font(.system(size: 25, weight: .black, design: .serif))
                         .foregroundStyle(WanderTheme.textInk.color)
@@ -308,22 +302,6 @@ private struct PlaceProfilePreviewCard: View {
 
     private var socialSaves: [PlaceSaveSummary] {
         saves.filter { $0.visiblePlace.owner.id != currentUserID }
-    }
-
-    private var ticketEyebrow: String {
-        switch ownStatus {
-        case .been:
-            return "YOUR CHECK-IN"
-        case .wannaGo:
-            return "YOUR WANNA"
-        case nil:
-            let hasCheckIn = socialSaves.contains { $0.visiblePlace.userPlace.status == .been }
-            let hasWanna = socialSaves.contains { $0.visiblePlace.userPlace.status == .wannaGo }
-            if hasCheckIn && hasWanna { return "SOCIAL · CHECK-IN + WANNA" }
-            if hasCheckIn { return "SOCIAL · CHECKED IN" }
-            if hasWanna { return "SOCIAL · WANNA" }
-            return "PLACE"
-        }
     }
 
     private var ticketAccentColor: Color {

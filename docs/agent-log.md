@@ -25270,3 +25270,81 @@ No build-number bump, TestFlight upload, merge, backend/schema change, or
 typography migration was performed. Next is Joe's connected-phone sign-off,
 then the remaining list/profile ticket expansion and the separate magazine
 typography exploration.
+
+## 2026-07-26 15:48 PDT — Codex — REC-147 second phone-feedback pass
+
+Agent: Codex
+Branch: `codex/rec-147-feed-profile-tickets`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-147-feed-profile-tickets`
+Linear: `REC-147` (`In Progress`)
+
+Joe's phone screenshots show mixed first-pass coverage: two Check-in events
+use the ticket while Wanna and later events remain legacy rows with visible
+`View place` / `View list` actions. Joe confirmed this was not simply an old
+build. Current PR #242 head `93a8dd5` already routes Check in, Wanna,
+list-created, list-item, and dropped-pin events through the same compact ticket
+renderer; this pass treats the screenshots as evidence of the earlier partial
+implementation and explicitly regression-tests the unified current branch.
+
+This follow-up will remove the colored map-preview `YOUR CHECK-IN / YOUR WANNA`
+eyebrow, make the Feed thumbnail route through the existing place/list
+destination, and harden the shared ticket surface with a directly tested
+concave punch-out while removing unnecessary offscreen compositing. The
+reported place-profile hang is a P2 regression candidate: current evidence does
+not tie it to REC-147 because this branch only changed place-profile ticket
+styling, but the shared compositing cost will be removed and the focused/full
+test suites plus exact-branch visual QA will be rerun.
+
+Engineering review gate: not needed for this pass. The thumbnail reuses the
+existing tested Feed destination and introduces no new route, persisted state,
+backend/schema contract, or cross-screen semantics. An exact deep link to one
+historical visit would require a separate `visit_id` Feed contract and is not
+being approximated here. Expected files: shared ticket surface, Feed, map place
+preview, navigation/design tests, and this log. No TestFlight release or merge
+is authorized.
+
+Checkpoint / correction:
+
+- Joe's second 15:51 screenshot established that the phone build was mixed,
+  not wholly old: two Check-in events used the first ticket pass while Wanna
+  and later events still used legacy rows. Current branch head already routes
+  all five event kinds through one `FeedActivityModule`; this pass retained and
+  regression-tested that single-renderer coverage.
+- The shared ticket is now one concave `InsettableShape`; there is no circle
+  overlay. A geometry test asserts that points inside the trailing and leading
+  center notches are outside the shape while adjacent ticket body points remain
+  inside.
+- Removed the map preview's colored `YOUR CHECK-IN / YOUR WANNA` eyebrow.
+- Feed photos/thumbnails now open the existing place destination, or the list
+  destination for list-only events. Notes stay quoted; there is no visible
+  `View place` CTA.
+- Removed the ticket surface's forced `.compositingGroup()` and kept its shadow
+  on the shape background, reducing per-row offscreen rendering work.
+- Reproduced a genuine selected-place hang under the deterministic 1,620-save /
+  900-place stress fixture. A process sample showed `MapScreen.body` repeatedly
+  rebuilding all `VisiblePlaceGrouping` groups from inside the annotation sort
+  and selected-marker checks, reaching 100% CPU and a 4.9 GB footprint. The map
+  now moves the already-grouped selected annotation to the end with one linear
+  pass and compares stable group keys inside marker rendering. A focused
+  regression test preserves ordering and group membership.
+- After that fix, the app-owned regrouping loop disappeared from the process
+  sample and memory dropped to about 439 MB. The 900-custom-annotation fixture
+  can still saturate MapKit itself; this is a separate extreme-scale map
+  rendering limit. Normal demo-data place profile presentation rendered fully
+  in under one second.
+
+Validation:
+
+- Focused XCTest: 98/98 passed, including ticket geometry, every Feed event
+  contract, thumbnail routing, place-profile presentation, map hit testing, and
+  selected annotation ordering.
+- Full XCTest: 757/757 passed on iPhone 16 Plus, iOS 18.6.
+- `xcodegen generate` and `git diff --check`: passed; no generated project diff.
+- Visual QA reviewed exact-branch Feed, Map ticket, and full place profile at:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec147-feedback-2/`.
+- Temporary fixture-auth bypass used only for simulator screenshots was removed
+  before the final focused and full suites.
+
+No build-number bump, TestFlight upload, merge, backend/schema change, or
+typography migration was performed. Outcome is ready for review on PR #242;
+Joe's connected-phone validation is the next gate.

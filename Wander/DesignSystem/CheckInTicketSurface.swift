@@ -15,25 +15,25 @@ private struct CheckInTicketSurfaceModifier: ViewModifier {
         let ticketShape = CheckInTicketShape(notchEdges: notchEdges)
 
         content
-            .background {
-                ticketShape.fill(surface)
-            }
             .clipShape(ticketShape)
+            .background {
+                ticketShape
+                    .fill(surface)
+                    .shadow(
+                        color: castsShadow ? WanderTheme.textInk.color.opacity(0.14) : .clear,
+                        radius: castsShadow ? 14 : 0,
+                        x: 0,
+                        y: castsShadow ? 7 : 0
+                    )
+            }
             .overlay {
                 ticketShape
                     .strokeBorder(accent.opacity(0.72), lineWidth: 1)
             }
-            .compositingGroup()
-            .shadow(
-                color: castsShadow ? WanderTheme.textInk.color.opacity(0.14) : .clear,
-                radius: castsShadow ? 14 : 0,
-                x: 0,
-                y: castsShadow ? 7 : 0
-            )
     }
 }
 
-private struct CheckInTicketShape: InsettableShape {
+struct CheckInTicketShape: InsettableShape {
     let notchEdges: CheckInTicketNotchEdges
     var insetAmount: CGFloat = 0
 
