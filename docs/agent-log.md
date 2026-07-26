@@ -24683,3 +24683,87 @@ TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
 Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
+
+## 2026-07-26 10:27 PDT — Codex — REC-147 Direction A Map vertical slice
+
+Agent: Codex using the repo's native feature implementation workflow after
+rejecting `ios-fix` as bug-specific
+Branch: `codex/rec-147-direction-a-map`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-147-direction-a`
+Linear: `REC-147` (`In Progress`); typography follow-up `REC-148` remains in
+Backlog and is related to REC-147
+
+Goal: implement the locked Direction A Map vertical slice from the approved
+Refined Rings mock: circular category pins, ownership color, Checked in/Wanna
+line patterns, mixed/concentric states, selected halo, matching filter pills,
+current Check in terminology, and plus controls.
+
+Starting status and coordination:
+
+- Started clean from exact `origin/main` commit `db3397a` after fetching.
+- The root phone-build checkout is 47 commits behind with unrelated untracked
+  `tmp/` content and remains untouched.
+- Existing worktrees were inspected. None has uncommitted work in the intended
+  pin/filter renderer. `MapScreen.swift` is still a documented high-conflict
+  file, so edits remain narrow and isolated.
+- PR #224 is merged, so current Check in terminology and repeatable check-in
+  behavior are the implementation foundation.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused map/filter
+  tests in `WanderTests/`, and this coordination log. No schema, backend,
+  build-number, TestFlight, or typography migration is in scope.
+
+Implementation and visual checkpoint (11:12 PDT):
+
+- Implemented Direction A in the production Map renderer: 38 pt category
+  discs, 3 pt semantic rings, true dotted Wanna strokes, concentric You/Social
+  states, split mixed-social states, selected halo, and selected-last annotation
+  ordering.
+- Mirrored the exact ownership/status grammar in the You, Social, Check-ins,
+  and Wanna filter pills. The pills, map annotations, typeahead plus, and ticket
+  actions now expose at least 44 pt hit areas.
+- Reworked the selected-place preview into a restrained ticket card with one
+  notch, a semantic border, serif place title, current place metadata, rating,
+  social check-in signal, fit sentence, tags, and a plus action. No paperclip or
+  field-notes treatment was introduced.
+- Updated the touched Map and place-profile copy to Check in/Check-ins or
+  neutral “on your map” language. Persistence values and internal `.been` / save
+  contracts remain unchanged.
+- Focused `MapHitTestingTests`, `MapCoordinateCandidateTests`,
+  `MapFilterSelectionTests`, `MapPinOutlineBuilderTests`,
+  `PlaceProfilePresentationTests`, and `CheckInCopyTests` passed on iPhone 16
+  Plus, iOS 18.6. Existing unrelated Swift concurrency and headermap warnings
+  remain.
+- Visually inspected the deterministic seeded Map and Bar Nido ticket on iPhone
+  16 Plus and iPhone 16e. The final 16 Plus capture is
+  `/private/tmp/rec147-visuals/final-touch-map-iphone16plus.png`; the 16e capture
+  is `/private/tmp/rec147-visuals/final-map-iphone16e.png`. The review artifact
+  is `~/.gstack/projects/joelipshutz-wander/ios-design-review-2026-07-26.md`.
+- The visual review caught sub-44 pt controls and they were corrected. Remaining
+  non-blocking concern: dense same-coordinate MapKit annotations can still
+  overlap the selected pin center even though its halo and ticket remain clear.
+- A debug-only authentication bypass was used temporarily to render production
+  Map code with demo fixtures; it was removed after capture and is not part of
+  the branch diff.
+
+Final validation checkpoint (11:30 PDT):
+
+- Fetched and rebased onto exact current `origin/main` `b4d7c98`, preserving
+  the REC-153/build-99 release records and resolving the append-only log
+  conflict without dropping either side. Production source merged cleanly.
+- Completed the Map-surface terminology sweep after rebase: every touched
+  user-facing action, progress state, result, error, hint, accessibility label,
+  and social-proof line now uses Check in/Check-ins/Wanna or neutral “on your
+  map” copy. Internal `saved_` IDs, `.been`, and save repository contracts stay
+  stable.
+- The exact rebased branch passed 747/747 tests with zero failures on iPhone 16
+  Plus / iOS 18.6. Final result bundle:
+  `/private/tmp/DerivedData-rec147-direction-a/Logs/Test/Test-Wander-2026.07.26_11-28-26--0700.xcresult`.
+- `git diff --check` passes. The only build output is the repository's existing
+  traditional-headermap warning; the cold focused rebuild also repeated the
+  existing `WanderSupabaseClient` formatter actor-isolation warning.
+- A first post-clean test attempt was cancelled at link time by disk-full
+  `errno=28`. Cleaned only this branch's disposable DerivedData and removed the
+  recoverable debug app from the dedicated `rec.me Streak QA` simulator after
+  captures. The clean rebuild and final full suite then passed.
+- No schema, backend data, build-number, archive, upload, TestFlight, App Store
+  Connect, or Slack release action was performed. PR handoff is next.

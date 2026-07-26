@@ -17,6 +17,8 @@ enum PlaceStatus: String, Codable, CaseIterable, Equatable {
 /// value `"been"` remain stable compatibility contracts.
 enum CheckInCopy {
     static let verb = "check in"
+    static let action = "Check in"
+    static let pluralTitle = "Check-ins"
     static let noun = "check-in"
     static let pluralNoun = "check-ins"
     static let pastTense = "checked in"
