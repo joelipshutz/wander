@@ -22517,3 +22517,28 @@ Pre-landing validation — 2026-07-25 22:01 PDT:
 - Next: commit the build-97 contract/log update, push PR #215, confirm its
   mergeability against current `main`, post validation, and squash-merge.
   This remains a merge-only request; no TestFlight action is authorized.
+
+Landing completion — 2026-07-25 22:03 PDT:
+
+- Pushed refreshed head `085b6c08b`, confirmed ready PR #215 was `CLEAN` and
+  `MERGEABLE` against current `main`, and posted the final validation record:
+  `https://github.com/joelipshutz/wander/pull/215#issuecomment-5082124723`.
+- Squash-merged PR #215 to `main` as
+  `3d14569bf0e4378448392a3b04cdb80be8b7c125`:
+  `https://github.com/joelipshutz/wander/pull/215`.
+- Final behavior: Profile and widget calendar dates, counts, visual markers,
+  month summaries, and day details are Been-only. Wanna remains available in
+  the Profile tile/list and place-save workflows.
+- Validation: widget integration 14/14; the other 77 tests from the refreshed
+  91-test calendar/widget/navigation run passed before the stale build-number
+  assertion was corrected and rerun; prior exact-source full suite 689/689,
+  focused suite 43/43, corrected contracts 2/2, dual-device visual QA, and
+  independent P1/P2 review; clean generic iOS Simulator build succeeded.
+- Build 97 remains unchanged. This merge did not increment the build, archive,
+  upload, change TestFlight groups, or post tester Slack notes. The change is
+  eligible for the next explicitly requested TestFlight release batch.
+- REC-151 remains closed as a duplicate of REC-142. REC-142 can move from
+  `In Review` to `Done` after this completion record lands.
+
+Final outcome: the requested Been-only calendar behavior and completed REC-142
+widget work are on `main`; no known landing blocker remains.
