@@ -318,23 +318,26 @@ private struct CategoryTaxonomyPrimaryPickerMockup: View {
 }
 
 private struct CategoryTaxonomySubcategoryPickerMockup: View {
+    @State private var selectedAssignment = WanderPlaceCategory.assignment(
+        primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+        subcategory: "Coffee shop",
+        source: PlaceCategorySource.provider.rawValue,
+        confidence: 0.98,
+        rawProviderType: "coffee_shop"
+    )
+    @State private var selectedCuisine: String?
+
     var body: some View {
-        CategoryTaxonomyMockupScreen(
-            title: "choose subcategory",
-            subtitle: "Coffee, Tea, & Sweets - \(WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets).count) types"
-        ) {
-            MockupSearchField(text: "Search coffee, tea, & sweets types")
-
-            HStack(spacing: WanderTheme.spacing2) {
-                CategoryPickerModePill(title: "Coffee, Tea, & Sweets", category: WanderPlaceCategory.coffeeTeaSweets, isSelected: true)
-                CategoryPickerModePill(title: "change", systemImage: "square.grid.2x2", isSelected: false)
-                Spacer(minLength: 0)
-            }
-
-            ForEach(WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.coffeeTeaSweets), id: \.title) { group in
-                SubcategoryGroupSection(group: group, selectedSubcategory: "Coffee shop") { _ in }
-            }
-        }
+        PlaceTypePickerSheet(
+            selectedAssignment: $selectedAssignment,
+            selectedCuisine: $selectedCuisine,
+            placeName: "Dayglow",
+            suggestedCuisine: nil,
+            suggestionReason: nil,
+            recentCuisines: [],
+            initialMode: .subcategory,
+            onSelect: {}
+        )
     }
 }
 

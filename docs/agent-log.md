@@ -24336,3 +24336,65 @@ Landing completion:
 
 Final outcome: the requested nearby-widget refresh, routing, and width changes
 are on `main`, validated, documented, and ready for Xcode/device testing.
+
+## 2026-07-26 02:08 PDT - Codex - Atlas-Style Subcategory Picker Follow-up
+
+Agent: Codex using the `design-review` workflow for final visual QA
+Branch: `codex/subcategory-atlas-picker`
+Worktree: `/private/tmp/recme-subcategory-atlas-picker`
+Linear: no new issue by Ryan's explicit request; this is a direct follow-up to
+the completed REC-126 Cuisine Atlas work.
+
+Goal: redesign every non-restaurant choose-subcategory surface to use the same
+clear search, grouped browsing, two-column tile, selected-state, and explicit
+Done interaction language as Explore Cuisines, while preserving the existing
+taxonomy and save behavior.
+
+Starting status and coordination:
+
+- Fetched current `origin/main` at `9d51b0ec3` and created this clean isolated
+  branch because the root checkout has unrelated REC-142 state and an untracked
+  package store.
+- No active worktree identified as editing the intended picker files. This
+  task touches high-conflict `Wander/Features/Map/MapScreen.swift`, so all work
+  remains isolated and the diff will be checked against latest main before
+  handoff.
+- Read `DESIGN.md`, the complete design-review workflow, current picker source
+  locations, recent coordination history, and existing taxonomy/navigation
+  tests.
+- Expected files:
+  `Wander/Features/Map/MapScreen.swift`,
+  `Wander/Features/Map/CategoryTaxonomyMockups.swift`, focused tests, and this
+  log. No schema, Supabase data, build-number, or TestFlight change is expected.
+
+Implementation and validation checkpoint:
+
+- Reworked the production non-restaurant `PlaceTypePickerSheet` into the same
+  Atlas interaction model as Explore Cuisines: editorial header/subheader,
+  current-category pill plus Change action, search, explicit `filter`
+  subheader, horizontally scrolling taxonomy-group filters, two-column type
+  tiles, persistent selected state, and a sticky TYPE/Done footer.
+- Preserved the existing category/subcategory taxonomy, custom-type entry, and
+  save bindings. Restaurant selection continues to use the dedicated Cuisine
+  Atlas path.
+- Updated the debug taxonomy mock to render the production picker and added a
+  navigation contract regression covering the shared Atlas layout across
+  non-restaurant categories.
+- Ran `xcodegen generate`; it produced no project-file diff.
+- The repository-prescribed iPhone 16 Plus / iOS 18.6 destination is not
+  installed on this machine. Ran the full suite twice on the available current
+  runtime instead:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination
+  'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath
+  DerivedData CODE_SIGNING_ALLOWED=NO`.
+  Both runs passed 722 tests with 0 failures. The last pre-sync result bundle
+  was `DerivedData/Logs/Test/Test-Wander-2026.07.26_09-31-42--0700.xcresult`.
+- Completed the `design-review` visual QA on iPhone 17 Pro and iPhone 17e.
+  The smaller phone exposed one clipped contextual search placeholder; changed
+  it to `Search types`, rebuilt, and verified the final production debug mock on
+  both sizes. Final screenshots and an A-rated audit are stored outside the
+  repository at
+  `~/.gstack/projects/joelipshutz-wander/designs/design-audit-20260726/`.
+- `origin/main` advanced by two commits during implementation, including a
+  photo-zoom change in `MapScreen.swift`. The branch will be rebased and the
+  full validation repeated before handoff.
