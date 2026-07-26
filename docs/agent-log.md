@@ -22070,3 +22070,77 @@ Pre-landing validation — 2026-07-25 21:28 PDT:
   headermap warnings remain. No new release-blocking issue was found.
 - Next: commit and push the release branch, open and squash-merge a ready PR,
   then archive/export/upload the exact merged `main`.
+
+## 2026-07-25 21:33 PDT - Codex - REC-150 Discover Search Interaction Mock
+
+Agent: Codex using `design-html`
+Branch: `codex/rec-150-discover-search-mock`
+Worktree: `/private/tmp/recme-rec150-discover-search-mock`
+Linear: `REC-150` (`In Progress`)
+
+Goal: mock Joe's requested Discover place-search interaction before changing
+production code. Tapping search should move it into a top search row with an
+always-available back control, teach plain-language queries through a polished
+empty state, and show a representative results state without assuming the
+current result cards need to be redesigned.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from exact current
+  `origin/main` commit `ba172e380`.
+- Joe's primary phone-build checkout is 27 commits behind the fetched main and
+  has an untracked `tmp/` directory. It remains untouched.
+- Other active worktrees are REC-122 streak hierarchy, REC-132 onboarding/auth,
+  and none advertise edits to Discover search. The only repository file expected
+  to change in this design-only pass is this append-only log.
+- Visual artifacts will live outside the repository under the gstack design
+  workspace. No Swift, project, backend, build-number, or TestFlight change is
+  authorized until Joe approves the mock.
+- Existing constraints reviewed: `DESIGN.md`, the approved
+  `preview/follow-profile-settings-mocks/` tokens, the current
+  `DiscoverScreen.swift` search/results structure, and the locked Discover
+  hierarchy in `docs/decisions.md`.
+- Mission Control task creation was attempted, but `localhost:4000` is not
+  running. Linear REC-150 is the active tracker and is related to REC-39.
+
+Expected output: an interactive iPhone preview plus focused-empty and populated
+results screenshots covering search entry, example-query selection, clear, and
+back-to-Discover behavior.
+
+Design handoff checkpoint, 2026-07-25 21:54 PDT:
+
+- Produced a design-only interactive prototype at
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/discover-search-20260725/finalized.html`
+  plus matching focused-empty and results PNG/SVG previews in the same folder.
+- Proposed interaction: tapping the existing field enters a temporary search
+  mode; the field becomes the top row beside a persistent 44pt back control;
+  Back exits to the unfiltered Discover context; Clear stays in search and
+  restores the example-query state; Return or a tapped example shows results.
+- The empty state teaches plain-language search through four tappable examples
+  spanning a person, vibe/occasion, neighborhood, and social graph. The primary
+  example is `Ryan's favorite coffee spots`.
+- The results mock intentionally preserves today's Discover card anatomy:
+  category thumb, place/location, note, trusted-person attribution, score, and
+  save action. It changes hierarchy and query framing without presupposing a
+  result-card redesign.
+- Visual inspection passed for both 393x852 phone-state previews: the top row
+  respects the status safe area, Back/Clear and all example/save controls meet
+  the 44pt minimum, copy is readable, no content overlaps, the bottom tab bar
+  remains clear, and the palette matches the canonical warm rec.me tokens.
+- Validation passed: the finalized ES module passes `node --check`; the bundled
+  Pretext source is present; banned placeholder/slop strings are absent; both
+  raster previews are valid 1048x2272 PNGs.
+- The gstack headless preview tool could not run because its installed
+  Playwright version lacks the matching Chromium runtime. The in-app browser
+  correctly refused a direct local-file URL, so no browser safety boundary was
+  bypassed. Static SVG/PNG previews were rasterized and inspected locally;
+  interaction code was syntax-checked but not browser-executed in this agent
+  environment.
+- No production Swift, tests, project files, backend state, build number,
+  TestFlight release, or Slack message changed. These interaction choices stay
+  provisional until Joe approves or revises the mock.
+
+Next step: Joe reviews the focused-empty and results states. On approval, restart
+from this worktree, implement REC-150 in `DiscoverScreen.swift` with focus/back/
+clear state tests, run the full simulator suite, and capture large + small iPhone
+screenshots before opening the implementation PR.
