@@ -24836,3 +24836,37 @@ REC-122 copy follow-up — 2026-07-26:
   `One Check-in or Wanna keeps it going.` to `Keep it up 🔥`. The counter,
   seven-day card, ticket animation, confetti, and dismissal behavior are
   unchanged.
+
+REC-122 explicit TestFlight release review — 2026-07-26:
+
+- Joe explicitly requested a TestFlight push. The latest completed release is
+  rec.me 0.1 (99), live and approved, with no unfinished archive/upload/helper
+  work. This release will land PR #217, include the independently merged
+  REC-159 Nearby-widget plus-icon polish since build 99, and cut build 100 from
+  exact latest `main`.
+- The required gstack review covered the complete product diff, DESIGN.md,
+  focused tests, prior review history, and Greptile (zero current comments).
+  Testing, maintainability, performance, design, red-team, and independent
+  adversarial passes were dispatched. The local Codex CLI probe reported ready
+  but its vendored executable is missing, so its redundant CLI pass could not
+  run; the primary Codex review and independent specialist passes remain the
+  review gate.
+- Fixed the actionable findings before landing: stale takeovers are discarded
+  if the local calendar day rolls over while the save sheet remains open;
+  Reduce Motion no longer applies scale/translation effects; primary new type
+  scales relative to Dynamic Type; the weekday caption uses the 12pt semantic
+  token; the seven-day window is one shared contract; the week model computes
+  once per render and uses its date for stable identity; weekday symbols are
+  loaded once; and focused tests now cover exact helper copy, stale-day expiry,
+  non-positive defensive clamps, and a localized DST boundary.
+- Joe's explicit `Keep it up 🔥` direction supersedes the older blanket
+  anti-streak wording. DESIGN.md now records the narrow exception: one private
+  daily takeover plus a compact Profile row, never a public rank or persistent
+  app-shell fixture.
+- The post-review streak regression gate passed 14/14 focused tests with zero
+  failures, including the newly added calendar-day expiry, Dynamic Type-facing
+  presentation model, DST, and defensive-count coverage. Result bundle:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Logs/Test/Test-Wander-2026.07.26_13-50-58--0700.xcresult`.
+- Next: run focused and complete validation on the reviewed head, sync current
+  `origin/main`, publish the clean PR, squash-merge it, then execute the build
+  100 release workflow. REC-122 stays In Review until build 100 is available.

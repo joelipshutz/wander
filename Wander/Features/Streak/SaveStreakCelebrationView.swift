@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SaveStreakCelebrationView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var streakCountFontSize: CGFloat = 82
+    @ScaledMetric(relativeTo: .title) private var streakLabelFontSize: CGFloat = 28
     let celebration: SaveStreakCelebration
     let onDismiss: () -> Void
 
@@ -58,20 +60,22 @@ struct SaveStreakCelebrationView: View {
 
                     VStack(spacing: WanderTheme.spacing1) {
                         Text(SaveStreakCelebrationPresentation.visualCount(for: celebration.streakCount))
-                            .font(.system(size: 82, weight: .black, design: .rounded))
+                            .font(.system(size: streakCountFontSize, weight: .black, design: .rounded))
                             .monospacedDigit()
                             .minimumScaleFactor(0.72)
                             .lineLimit(1)
 
                         Text("day streak!")
-                            .font(.system(size: 28, weight: .black, design: .rounded))
+                            .font(.system(size: streakLabelFontSize, weight: .black, design: .rounded))
+                            .minimumScaleFactor(0.72)
+                            .lineLimit(1)
                     }
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
                     .padding(.top, WanderTheme.spacing6)
                     .opacity(ticketLanded ? 1 : 0)
-                    .scaleEffect(ticketLanded ? 1 : 0.82)
+                    .scaleEffect(accessibilityReduceMotion || ticketLanded ? 1 : 0.82)
                     .animation(countAnimation, value: ticketLanded)
 
                     SaveStreakWeekCard(
@@ -82,25 +86,25 @@ struct SaveStreakCelebrationView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, WanderTheme.spacing4)
                     .opacity(ticketLanded ? 1 : 0)
-                    .offset(y: ticketLanded ? 0 : 10)
+                    .offset(y: accessibilityReduceMotion || ticketLanded ? 0 : 10)
                     .animation(copyAnimation, value: ticketLanded)
 
-                    Text("Keep it up 🔥")
-                        .font(.system(size: 16, weight: .medium))
+                    Text(SaveStreakCelebrationPresentation.helperText)
+                        .font(.body.weight(.medium))
                         .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, WanderTheme.spacing4)
                         .opacity(ticketLanded ? 1 : 0)
-                        .offset(y: ticketLanded ? 0 : 12)
+                        .offset(y: accessibilityReduceMotion || ticketLanded ? 0 : 12)
                         .animation(copyAnimation, value: ticketLanded)
 
                     Spacer(minLength: WanderTheme.spacing6)
 
                     Button(action: onDismiss) {
                         Text("got it")
-                            .font(.system(size: 16, weight: .black, design: .rounded))
+                            .font(.system(.body, design: .rounded, weight: .black))
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 54)
                             .foregroundStyle(WanderTheme.textInk.color)
@@ -250,11 +254,13 @@ private struct SaveStreakWeekCard: View {
     let saveDate: Date
 
     var body: some View {
+        let days = weekdays
+
         HStack(spacing: WanderTheme.spacing2) {
-            ForEach(Array(weekdays.enumerated()), id: \.offset) { _, day in
+            ForEach(days, id: \.date) { day in
                 VStack(spacing: WanderTheme.spacing2) {
                     Text(day.symbol)
-                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .font(.system(.caption, design: .rounded, weight: .black))
                         .foregroundStyle(
                             day.isToday
                                 ? WanderTheme.terracottaDark.color
@@ -295,7 +301,7 @@ private struct SaveStreakWeekCard: View {
                 .stroke(WanderTheme.borderHairline.color.opacity(0.78), lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(weekAccessibilityLabel)
+        .accessibilityLabel(weekAccessibilityLabel(for: days))
     }
 
     private var weekdays: [SaveStreakWeekday] {
@@ -305,9 +311,9 @@ private struct SaveStreakWeekCard: View {
         )
     }
 
-    private var weekAccessibilityLabel: String {
-        let coveredCount = weekdays.filter(\.isCovered).count
-        return "Last seven days. \(coveredCount) days complete. Today complete."
+    private func weekAccessibilityLabel(for days: [SaveStreakWeekday]) -> String {
+        let coveredCount = days.filter(\.isCovered).count
+        return "Last \(SaveStreakWindow.dayCount) days. \(coveredCount) days complete. Today complete."
     }
 }
 
