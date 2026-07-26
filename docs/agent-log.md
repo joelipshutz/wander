@@ -25176,3 +25176,43 @@ Release start:
 - Next: regenerate the project, review and land the release metadata, validate
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
+
+REC-152 build-100-main reconciliation and release review — 2026-07-26 14:07 PDT:
+
+- Joe explicitly requested a TestFlight push after approving the Profile
+  activity implementation. Build 100 had already been incremented and merged
+  to `main` but had not been archived or uploaded, so REC-152 will join that
+  same release batch without a second build-number increment.
+- Merged current `origin/main` at `c98612e` into PR #245. The sole conflict was
+  the append-only agent log; all REC-152, REC-122, REC-159, and build-100
+  histories were preserved. No product source required conflict resolution.
+- Pre-landing review covered the complete current diff, `DESIGN.md`, mobile
+  hierarchy, reverse chronology, legacy Check-ins compatibility, timestamp
+  formatting, filtered history, and the place-card activity deep link. No
+  critical or informational findings remain. GitHub has no hosted checks or
+  unresolved human/Greptile comments on PR #245.
+- The gstack update helper could not persist its optional timestamp outside
+  the workspace, and its redundant local Codex CLI probe produced no review
+  output. The primary full-diff and independent adversarial review are the
+  landing gate; orchestration policy prohibited spawning review subagents.
+- Next: rerun the focused REC-152 regression tests on the reconciled head,
+  publish and squash-merge PR #245, then validate/archive/upload exact latest
+  build-100 `main` and complete the TestFlight/Slack/Linear receipts.
+
+REC-152 reconciled-head validation — 2026-07-26 14:17 PDT:
+
+- `xcodegen generate` completed on the reconciled branch and produced no
+  project-file diff. `git diff --check` also passed.
+- The first clean-cache focused run stopped during dependency compilation
+  because the host volume ran out of space; no app code or test executed.
+  Removed only the newly created REC-152 review cache and the regenerable,
+  already-shipped build-98 archive DerivedData cache, then reused the existing
+  project DerivedData cache.
+- The sandboxed retry hit the documented CoreSimulator/cache restriction. The
+  required elevated rerun passed all three selected REC-152 regressions with
+  exit 0: reverse-chronological Check-in/Wanna events, legacy Check-ins plus
+  explicit date/time formatting, and the mobile Profile module/navigation
+  contract. Only existing actor-isolation, signed-simulator-library, and
+  traditional-headermap warnings were emitted.
+- Review gate is complete with no remaining findings. PR #245 is ready to push
+  and squash-merge before exact-main build-100 release validation.
