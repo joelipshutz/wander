@@ -22333,3 +22333,21 @@ REC-142 tester-feedback revision validation — 2026-07-25 21:43 PDT:
   no-entitlement App Group messages in `CODE_SIGNING_ALLOWED=NO` unit-test
   launches. No TestFlight build, archive, upload, build-number increment, or
   Slack release note was requested or performed; build remains 96.
+
+REC-142 tester-feedback revision handoff — 2026-07-25 21:47 PDT:
+
+- Implementation commit `7c3e362e2` (`fix: snap calendar widget to been-only
+  calendar`) was pushed to `origin/codex/rec-142-widgets`.
+- Updated ready PR #215 at
+  `https://github.com/joelipshutz/wander/pull/215` so its summary, privacy
+  contract, validation, and follow-up status describe the Been-only calendar
+  and direct Profile snap accurately.
+- Rewrote Linear REC-142's stale combined-calendar acceptance criteria, linked
+  PR #215, posted the validation results, and returned the issue to
+  `In Review`. REC-144 is `Canceled` with the superseding product-decision
+  comment.
+- The unrelated untracked `.pnpm-store/` remains untouched and uncommitted.
+- Next step: Ryan can fetch/open `codex/rec-142-widgets` and test in Simulator
+  immediately. Physical-iPhone testing requires the Apple Developer portal and
+  Xcode account/profile steps in `docs/setup.md`; no source signing changes are
+  pending.
