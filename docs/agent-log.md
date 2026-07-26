@@ -23820,3 +23820,46 @@ Landing completion:
 Final outcome: the universal rec.me Share Extension is on `main`, fully
 validated in Simulator, and ready for physical-device testing once the
 documented Apple Developer provisioning is complete.
+
+## 2026-07-26 09:05 PDT - Codex - Full-Screen Photo Zoom
+
+Agent: Codex
+Branch: `codex/photo-viewer-zoom`
+Worktree: `/private/tmp/recme-photo-viewer-zoom`
+Linear: intentionally skipped at Ryan's request
+
+Goal: make production full-screen photo viewers support pinch-to-zoom while
+preserving horizontal paging at the resting scale, then push the branch and
+open this isolated worktree in Xcode for local testing.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this branch from clean `origin/main` at
+  `9d51b0ec3`.
+- The primary checkout has an unrelated untracked `.pnpm-store/`; it remains
+  untouched. This isolated worktree is clean.
+- Reviewed the latest coordination log and worktree list. No active entry
+  reports overlapping edits to the production photo viewer files.
+- Expected files: a reusable DesignSystem zoom surface, the place-gallery and
+  activity full-screen photo viewers, focused tests, generated project output
+  only if XcodeGen requires it, and this log.
+
+Completion checkpoint (09:18 PDT):
+
+- Added a reusable `ZoomablePhoto` surface with 1x-4x pinch zoom, bounded
+  panning while zoomed, double-tap zoom/reset, and accessibility zoom actions.
+  Horizontal gallery paging remains available at the resting scale.
+- Integrated it into both production full-screen viewers:
+  `PlacePhotoGalleryViewer` and `PlaceActivityPhotoViewer`.
+- Added `PhotoZoomStateTests` covering scale limits, resting-scale drag
+  behavior, pan bounds, double-tap reset, accessibility actions, and
+  source-level integration for both viewer paths.
+- Regenerated `Wander.xcodeproj` with XcodeGen.
+- Validation: `git diff --check` passed. The complete suite passed 727/727 with
+  zero failures on iPhone 17 Pro Max / iOS 26.5. The prescribed iPhone 16 Plus
+  / iOS 18.6 runtime is not installed on this machine. Result bundle:
+  `/tmp/DerivedData-photo-viewer-zoom-focused/Logs/Test/Test-Wander-2026.07.26_09-16-30--0700.xcresult`.
+- Opened `/private/tmp/recme-photo-viewer-zoom/Wander.xcodeproj` in Xcode and
+  verified the Branch Chooser shows `codex/photo-viewer-zoom`.
+- Linear tracking and notification were intentionally skipped at Ryan's
+  request. No TestFlight build or release action was requested or performed.

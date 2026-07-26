@@ -986,12 +986,14 @@ private struct PlacePhotoGalleryViewer: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 0) {
                     ForEach(photos) { item in
-                        PlaceProfilePhotoImage(
-                            photo: item.photo,
-                            placeName: placeName,
-                            contentMode: .fit,
-                            onLoadFailure: onPhotoLoadFailure
-                        )
+                        ZoomablePhoto {
+                            PlaceProfilePhotoImage(
+                                photo: item.photo,
+                                placeName: placeName,
+                                contentMode: .fit,
+                                onLoadFailure: onPhotoLoadFailure
+                            )
+                        }
                         .padding(.horizontal, WanderTheme.spacing2)
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .id(item.id)

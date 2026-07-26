@@ -7619,10 +7619,12 @@ private struct PlaceActivityPhotoViewer: View {
 
                 TabView(selection: $selectedPhotoID) {
                     ForEach(photos) { photo in
-                        VisitPhotoFullScreenImage(photo: photo)
-                            .tag(photo.id)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(.horizontal, WanderTheme.spacing2)
+                        ZoomablePhoto {
+                            VisitPhotoFullScreenImage(photo: photo)
+                        }
+                        .tag(photo.id)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, WanderTheme.spacing2)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
