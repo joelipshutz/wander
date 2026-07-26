@@ -22012,6 +22012,299 @@ Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
 No known functional issue remains; existing compiler/headermap warnings are
 unchanged.
 
+## 2026-07-25 12:41 PDT - Codex - REC-132 Logged-Out Session Gate
+
+Agent: Codex using `ios-fix` and Linear workflows
+Branch: `codex/rec-132-auth-session-gate`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-132-auth-session`
+Linear: `REC-132` (`In Progress`)
+
+Goal: fix the production auth-state bug where Clerk can log the user out while
+rec.me continues rendering the authenticated app and stale device/profile
+metadata. A missing or invalid session must immediately remove the app shell and
+show non-dismissable sign-in.
+
+Starting status and diagnosis:
+
+- Fetched latest `origin/main` and created this clean isolated worktree at
+  `74ab31b`. Re-fetched on Joe's request and confirmed worktree `HEAD` exactly
+  matches `origin/main`. The root checkout is 27 commits behind with unrelated
+  `tmp/` content and remains untouched.
+- The initial `/private/tmp` worktree disappeared during a tool interruption, so
+  recreated the same branch at the persistent repo-standard sibling worktree
+  path above before making source changes.
+- REC-132 already owns the logged-out/onboarding state, is assigned to Joe, and
+  remains In Progress. Added this follow-up and branch to the issue. Mission
+  Control is unavailable because `localhost:4000` is not running.
+- Current production always mounts `WanderRootView`, regardless of
+  `AuthSessionStore.state`. Clerk is sampled at launch and after the modal auth
+  sheet closes, but the store does not subscribe to Clerk auth/session events.
+  A server-side or cross-device logout can therefore leave the store signed in
+  and expose the authenticated tabs plus the cached current-person profile.
+- Existing PR #182 contains a stale, conflicting full Phase A onboarding branch
+  with 2,900+ lines across schema, UI, and onboarding scope. This fix stays on
+  current main and targets the auth boundary only; it will not rebase or silently
+  ship that larger unfinished scope.
+- The `ios-fix` StateServer snapshot fixture is unavailable by prior repo
+  decision because this app has no DebugBridge/restore API. Use a deterministic
+  pre-fix auth-session regression test as the reproducing fixture, then simulator
+  build/test evidence. No QA instrumentation will be added.
+
+Expected files:
+
+- `Wander/App/WanderApp.swift`
+- `Wander/Features/Auth/AuthGateSheet.swift`
+- `Wander/Services/Auth/AuthSessionProviding.swift`
+- `Wander/Services/Auth/ClerkAuthService.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Validation plan:
+
+- Prove the stale-provider transition fails before the fix, then add focused
+  session-observation and app-entry routing tests.
+- Run focused auth/navigation tests, the full iOS test suite, a generic simulator
+  build, and inspect the exact diff for auth, metadata, and unrelated churn.
+- Push and open a ready PR back to `main`; no build-number bump, TestFlight
+  upload, hosted migration, or Slack announcement is part of this request.
+
+Checkpoint — 2026-07-25 21:27 PDT:
+
+- Reproduced the stale-session bug with
+  `AuthSessionTests.testStoreTracksProviderLogoutWithoutManualRefresh` on
+  iPhone 17 Pro Max (iOS 26.2). Before the fix, all three assertions failed:
+  the auth store remained signed in, retained its pending auth gate, and
+  retained the native-auth presentation flag after its provider moved to
+  signed out. Result bundle:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_21-19-16--0700.xcresult`.
+- Implemented a hard app-entry auth boundary: unresolved/loading sessions show
+  a neutral loading state, signed-out sessions show non-dismissable Clerk
+  authentication, only signed-in sessions mount `WanderRootView`, and
+  unavailable auth shows a retry surface.
+- Added continuous Clerk auth-event observation plus foreground session
+  resolution. Provider state changes now clear stale auth gates/presentation
+  state whenever the session is no longer signed in.
+- Focused post-fix validation passed 13/13 tests: all 12
+  `AuthSessionTests` plus
+  `NavigationContractTests.testAppRootHardGatesSignedOutSessionsBehindNonDismissableAuth`.
+  Result bundle:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_21-33-23--0700.xcresult`.
+- Compiler output contains only the repository's existing Swift isolation,
+  App Intents metadata, headermap, and test-expression warnings; the changed
+  auth files introduced no new warning.
+- Full iPhone 17 Pro Max (iOS 26.2) simulator suite passed 640/640 tests:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_21-38-22--0700.xcresult`.
+- Launched the built app signed out on the same simulator and visually verified
+  that it opens directly to the Clerk sign-in form with no dismiss control and
+  no tabs, profile metadata, or other authenticated app content. Screenshot:
+  `/private/tmp/rec132-auth-gate.png`.
+- Fresh universal simulator build passed for arm64 and x86_64 with
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination
+  'generic/platform=iOS Simulator' -derivedDataPath
+  /private/tmp/DerivedData-rec132-auth-session-build CODE_SIGNING_ALLOWED=NO`.
+## 2026-07-24 16:25 PDT - Codex - REC-143 Check-in Ticketing Specification
+
+Agent: Codex
+Branch: `codex/rec-143-checkin-ticketing-spec`
+Worktree: `/private/tmp/recme-rec143-checkin-spec`
+Linear: `REC-143` (`In Progress`)
+
+Goal: audit every user-facing and persisted use of “Been,” define the
+repeatable Check-in/ticket product contract, run the requested engineering plan
+review, and publish an implementation-ready specification without changing app
+behavior.
+
+Starting status and coordination:
+
+- Fetched `origin`; this clean isolated worktree starts at `origin/main`
+  (`74ab31bb0`).
+- The primary checkout contains unrelated `.gitignore` and `.pnpm-store/`
+  changes and remains untouched.
+- A separate isolated branch,
+  `codex/rec-143-ios-design-instrumentation`, contains debug-only live-device
+  review wiring. It does not overlap this specification branch and must not be
+  merged into a production release.
+- The connected iPhone design review is in progress; the first signed Debug
+  device build passed, and screenshot capture is temporarily waiting for the
+  device to be unlocked.
+
+Expected files:
+
+- `docs/plans/2026-07-24-rec-143-check-in-ticketing-spec.md`
+- `docs/agent-log.md`
+- gstack-local design-review, engineering-review, QA-plan, and task artifacts
+  under `~/.gstack/projects/joelipshutz-wander/`
+
+Validation plan:
+
+- exhaustive case-insensitive terminology and data-contract audit;
+- architecture, data-flow, failure-mode, rollout, and test-plan review;
+- `git diff --check` and documentation link/path verification;
+- requested gstack engineering and iOS design review completion.
+
+Engineering review checkpoint — 2026-07-24 16:49 PDT:
+
+- `/plan-eng-review` completed in `FULL_REVIEW` mode with 9 architecture
+  findings, 2 code-quality findings, 8 grouped test gaps, and 3 performance
+  findings. All 18 recommended decisions were selected as requested; no
+  unresolved decision or uncovered critical failure remains in the plan.
+- The independent outside-voice fallback found 9 concerns. The load-bearing
+  changes are: newly created first check-ins are explicit visits (legacy
+  backfill only), create/delete-last writes are atomic, visit deletion has a
+  durable relaunch-safe outbox, historical Wanna restoration is remote and
+  cross-device, and Feed/push semantics distinguish current activity from
+  historical/import/backfill memories.
+- Per-check-in sharing and Feed photo projection were cut from v1. Existing
+  place sharing remains. Private visit media stays out of the SQL Feed
+  projection.
+- Batch Profile hydration and server paging were split to Linear `REC-145`;
+  REC-143 keeps only a grouped projection and lazy card rendering.
+- The required gstack review log, decision record, two project learnings, QA
+  plan, and eight-task JSONL artifact were written and validated. The terminal
+  `GSTACK REVIEW REPORT` is clean, and `git diff --check` passes.
+- Local completion telemetry was recorded. The optional remote telemetry call
+  was blocked by the environment's egress policy and was not retried.
+- The real-device design review remains blocked at this checkpoint: the
+  previously connected iPhone 15 Pro changed from locked to `unavailable`.
+  Instrumentation is built and installed on its isolated draft branch, ready
+  to resume when the phone is connected and unlocked.
+
+Specification and review completion — 2026-07-24 17:24 PDT:
+
+- Finalized `docs/plans/2026-07-24-rec-143-check-in-ticketing-spec.md` with
+  the complete compatibility boundary, atomic data flow, retry/delete
+  semantics, Feed publication matrix, failure table, test topology, rollout,
+  eight-task implementation graph, and terminal clean gstack report.
+- The iOS design review completed through the documented simulator/source
+  fallback. Five relevant surfaces were captured on iPhone 17 Pro Max and
+  compact iPhone 17e. All eight recommended design choices were selected and
+  folded into the spec.
+- The primary visual/product corrections are: count active check-in rows in
+  Profile’s primary statistic, make labeled “Check in again” outrank
+  Directions, give the form an early “When?” and labeled submit, put the newest
+  ticket in the compact first viewport, and route imports through date
+  confirmation.
+- The local design report is
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/ios-design-review-2026-07-24.md`;
+  its ten screenshots are in the adjacent
+  `ios-design-review-2026-07-24-screenshots/` directory.
+- Design status is `DONE_WITH_CONCERNS`: the source/two-size review is
+  complete, while physical-device screenshot/AX, VoiceOver, XXL Dynamic Type,
+  Reduce Motion, and color-filter validation remain explicit pre-ship checks.
+- The plan’s local design, QA, review-log, decision, learning, task-graph,
+  timeline, and analytics artifacts were refreshed. Optional remote telemetry
+  remained blocked by the environment egress policy and was not retried.
+- Validation: `git diff --check`; terminal `GSTACK REVIEW REPORT` sentinel;
+  eight valid T1-T8 JSONL tasks; referenced iOS report and ten PNG captures
+  present. This docs-only branch does not require an app build or TestFlight
+  release.
+
+Final outcome: REC-143 now has an implementation-ready, engineering-cleared
+spec and completed simulator/source iOS design review. App behavior was not
+changed. Publication details will be appended after the ready PR is created.
+
+Publication — 2026-07-24 17:31 PDT:
+
+- Committed the completed spec and review record at `ce9490e35`, pushed
+  `codex/rec-143-checkin-ticketing-spec`, and opened ready PR
+  [#213](https://github.com/joelipshutz/wander/pull/213) against `main`.
+- The GitHub app returned `403 Resource not accessible by integration`; the
+  authenticated `gh` fallback opened the PR successfully.
+- Moved Linear `REC-143` to `In Review`, attached ready PR #213 and draft
+  instrumentation PR #214, and posted the selected decisions, validation,
+  REC-145 follow-up, remaining real-device checks, and release boundary.
+- No TestFlight release, build-number change, archive, upload, or Slack
+  announcement was requested or performed.
+
+## 2026-07-25 21:17 PDT - Codex - REC-143 Check-in Implementation
+
+Agent: Codex
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Progress`)
+
+Goal: implement the approved repeatable Check-in/ticketing specification,
+validate the complete local/remote contract, publish a ready PR, and open this
+isolated worktree in Xcode with its branch visible in Branch Chooser.
+
+Starting status and coordination:
+
+- Fetched `origin`. This clean persistent worktree starts from
+  `origin/codex/rec-143-checkin-ticketing-spec` at `ca16341b4`, which itself is
+  based on current `origin/main` (`74ab31bb0`).
+- The primary checkout is active on `codex/rec-142-widgets` and contains
+  user-owned `.pnpm-store/`; it remains untouched.
+- PR #213 remains the docs-only REC-143 specification review. Draft PR #214 is
+  temporary design instrumentation and will not be merged into this branch.
+- Linear REC-143 moved back to `In Progress` and now links this implementation
+  branch.
+- No other live worktree reports REC-143 implementation edits. High-conflict
+  Map, local-store, project, agent-log, and Supabase files will be changed only
+  in this isolated worktree.
+
+Expected implementation areas:
+
+- Check-in terminology and formatting across Map, Add, Discover, Profile,
+  calendar, Feed, imports, Settings, supported mockups, accessibility, and
+  tests.
+- Explicit first/repeat visit persistence, historical Wanna restoration,
+  durable visit-delete retry, repository DTO/protocol changes, and one reviewed
+  Supabase migration plus smoke coverage.
+- Ticket-style place activity, form/action hierarchy, Profile counts,
+  calendar/import behavior, and performance-safe grouped/lazy rendering.
+- `project.yml` and generated `Wander.xcodeproj/project.pbxproj` only if source
+  membership requires regeneration.
+- `docs/agent-log.md`; durable contract clarifications in the existing REC-143
+  spec if implementation evidence requires them.
+
+Validation plan:
+
+- focused grammar, compatibility, store, repository, navigation, Feed,
+  calendar/import, retry, and security tests;
+- hosted Supabase smoke and function metadata checks for any iOS-called RPC;
+- full documented simulator suite and generic build;
+- screenshots on current and compact iPhones plus accessibility/state review;
+- clean diff/review, ready PR, Linear `In Review`, then open this worktree’s
+  `Wander.xcodeproj` and verify Xcode Branch Chooser shows
+  `codex/rec-143-checkins-implementation`.
+
+Implementation checkpoint — 2026-07-25 22:05 PDT:
+
+- Completed the app-wide Check-in vocabulary conversion while retaining
+  compatibility identifiers (`PlaceStatus.been`, SQL `status = 'been'`, and
+  legacy analytics/feed discriminators). Added centralized grammar for
+  Check in, Check-in, Check-ins, and Checked in.
+- Implemented explicit first and repeat check-ins with stable visit UUIDs,
+  selectable non-future dates, atomic remote save, durable visit-delete retry,
+  historical Wanna restoration, per-visit Feed publication, and active-ticket
+  Profile counts.
+- Updated Map actions, the add/edit form, place activity, Feed, Discover,
+  Profile/import, shared visits, Settings, lists, streak copy, accessibility
+  labels, and contract tests. Ticket rows use compact notched presentation and
+  lazy rendering with newest check-ins first.
+- Generated the Xcode project and completed a successful generic simulator
+  build. The repo-documented iPhone 16 Plus / iOS 18.6 destination is not
+  installed on this machine; validation therefore uses installed iPhone 17
+  and iPhone 17e simulators on iOS 26.5.
+- Added migrations `20260725214500_check_in_ticketing.sql` and
+  `20260725214600_check_in_feed_projection.sql`, plus strict pgTAP and
+  production-shaped hosted smoke coverage. Local Supabase validation was
+  unavailable because Docker is not running.
+- Confirmed the linked target is the `wander` Supabase project
+  (`rugmtlgufrhlxwfkumhw`), reviewed both migrations in a rollback preview,
+  fixed an authenticated wrapper-to-`app` execute-grant defect found by the
+  smoke path, then applied both migrations to the linked project.
+- Hosted metadata/security regression coverage is green: 21/21 assertions
+  cover columns, RPC definitions, `security definer`/invoker posture,
+  `search_path`, grants, the Feed trigger, cascade behavior, and the ticket
+  index. The production-shaped check-in save/repeat/delete/Wanna-restore/future
+  rejection smoke block also passed before the broader pre-existing smoke
+  suite stopped later at its unrelated profile-geography assertion.
+- The first full iPhone 17 run exposed expected copy-contract updates and one
+  fake-repository atomicity mismatch. After correcting those, the focused
+  271-test regression run had one cache-refresh failure; that path is fixed
+  and awaits the final full-suite rerun.
 ## 2026-07-24 14:52 PDT - Codex - REC-142 Home Screen Widgets
 
 Agent: Codex
@@ -22651,6 +22944,257 @@ Handoff completion — 2026-07-25 23:34 PDT:
   upstream merge included Profile source changes, reran the complete iPhone 17
   Pro Max, iOS 26.5 suite: 700/700 passed. Result bundle:
   `/private/tmp/DerivedData-rec97-share-focused/Logs/Test/Test-Wander-2026.07.25_23-37-03--0700.xcresult`.
+REC-132 latest-main checkpoint — 2026-07-25 22:09 PDT:
+
+- Re-fetched after validation and found `origin/main` had advanced four commits
+  to `e7b12a9`, including released build 97 and the REC-142 widget landing.
+- Merged current `origin/main` into `codex/rec-132-auth-session-gate`. All auth
+  implementation and test files merged cleanly; the only conflict was this
+  append-only coordination log, resolved by preserving both complete histories.
+- Next: rerun focused auth/navigation validation and the full suite/build against
+  the merged widget head, then finalize the conventional commit and ready PR.
+
+REC-132 post-merge validation — 2026-07-25 22:42 PDT:
+
+- Confirmed the final branch is based on current `origin/main` at `e7b12a9`,
+  including released build 97 and the complete REC-142 widget landing.
+- The first two standard focused-test attempts after that merge exposed a
+  deterministic Swift compiler type-check timeout in the newly enlarged
+  `WanderRootView.body`. Extracted the existing modifier chain into four small
+  private view-building properties without changing navigation, presentation,
+  lifecycle, or state-observation behavior. The same standard command then
+  compiled normally.
+- Focused auth/navigation validation passed 13/13 on iPhone 17 Pro Max
+  (iOS 26.2):
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_22-29-49--0700.xcresult`.
+- The complete current-main suite passed 692/692 on the same simulator:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_22-32-42--0700.xcresult`.
+- The first generic-simulator build attempt was blocked before compilation by
+  Codex sandbox access to CoreSimulator and SwiftPM caches. Re-running the exact
+  required command with normal Xcode filesystem access succeeded for arm64 and
+  x86_64. Existing Swift isolation and headermap warnings remain unchanged.
+- `git fetch origin` after validation confirmed `origin/main` had not advanced.
+  Next: inspect the final diff, commit the compile-stability extraction and this
+  record, push the branch, open a ready PR, and move REC-132 to `In Review`.
+- No build number was changed and no TestFlight archive, upload, beta-group
+  action, or tester Slack announcement was requested or performed.
+
+REC-132 handoff — 2026-07-25 22:45 PDT:
+
+- Committed the post-merge compile-stability extraction and validation record,
+  pushed `codex/rec-132-auth-session-gate`, and opened ready PR #223:
+  `https://github.com/joelipshutz/wander/pull/223`.
+- GitHub reports the PR `CLEAN` and `MERGEABLE` against `main`; no required
+  hosted status checks are configured. The exact validated source is on the
+  pushed branch, with only this final append-only handoff record following it.
+- Final behavior: an unresolved session shows loading; a signed-out session
+  shows non-dismissable Clerk sign-in; only a signed-in session can mount the
+  app shell. Clerk logout/account/session events and foreground activation both
+  re-resolve auth, clear stale gate state, and remove cached person metadata
+  from view immediately.
+- Validation remains: focused 13/13, full suite 692/692, generic simulator
+  build passed for arm64/x86_64, signed-out simulator visual passed, and
+  `git diff --check` passed. Known repository warnings are unchanged.
+- REC-132 should remain `In Review` until PR #223 lands. No TestFlight release
+  was requested; build 97 remains unchanged.
+
+REC-132 explicit TestFlight release review — 2026-07-25 23:47 PDT:
+
+- Joe explicitly requested "push to tf", authorizing review/merge of PR #223,
+  one build-number increment on latest `main`, archive/upload, public beta-group
+  attachment, external beta review, and the required tester Slack note.
+- Release sweep confirmed build 97 is fully completed and `origin/main` still
+  declares build 97; there is no abandoned build bump or upload to resume.
+- The pre-landing specialist gate found three real release blockers in the first
+  PR head: foreground validation unmounted/recreated the entire app shell;
+  cached Clerk user data was accepted before an authoritative client refresh;
+  and persisted person metadata could cross from account A to account B before
+  remote hydration. The source-of-truth design doc also still instructed future
+  agents to preserve the superseded guest-first behavior.
+- Fixing the gate before merge by keeping a validated authenticated subtree
+  mounted behind an opaque/non-interactive foreground-check overlay, deduping
+  refresh work through `.task(id:)`, awaiting Clerk `refreshClient()`, failing
+  closed when verification errors, applying the validated session before the
+  root store's first render, scrubbing avatar/bio/home/privacy metadata on
+  logout/account change, and canceling root-owned maintenance on disappearance.
+- Adding deterministic event/foreground/auth-failure/person-isolation tests and
+  aligning `DESIGN.md` with Joe's signed-in-only decision. The review-expanded
+  file set includes `WanderLocalStore.swift`, `WanderStoreTests.swift`,
+  `RemoteRepositoryTests.swift`, and `DESIGN.md` in addition to the existing
+  REC-132 files.
+- The repository still intentionally uses a Clerk development instance whose
+  hosted native UI says `Wander` and shows Clerk's development-mode banner.
+  That is existing TestFlight environment state, not a regression in this PR;
+  record it as a known alpha branding issue rather than silently changing auth
+  credentials or Clerk dashboard configuration during this release.
+- The gstack-requested external Codex CLI review was rejected because it would
+  export private repo code to another model service without separate approval.
+  It was not retried or circumvented; local structured review and isolated
+  in-workspace specialist reviews remain the merge evidence.
+
+Release-review validation checkpoint — 2026-07-25 23:53 PDT:
+
+- The expanded focused auth/session/person suite passed 17/17 on iPhone 17 Pro
+  Max, iOS 26.2 after one test-only constructor-label compile correction:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_23-51-03--0700.xcresult`.
+- A final event-path audit found that a Clerk logout/session-change event could
+  leave the prior signed-in state visible while its authoritative refresh was
+  in flight. Session-change observation now moves the store to `.loading`
+  before awaiting that refresh, so the authenticated root is removed at the
+  event boundary instead of after the network round trip.
+- `origin/main` advanced during review from `e7b12a9` to `f4242bc` with the
+  REC-146 Profile-map share landing and coordination docs. The hardened auth
+  changes will be checkpointed, merged with that latest main, conflict-resolved
+  without dropping either feature, and fully revalidated before PR #223 lands.
+## 2026-07-25 22:45 PDT - Codex - REC-143 Merged-Main Validation
+
+Agent: Codex
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Progress`)
+
+Final implementation validation checkpoint:
+
+- Committed the complete repeatable Check-in/ticketing implementation as
+  `0f7b0abe3`, then merged latest `origin/main` at `e7b12a97f` so the branch
+  includes the landed REC-142 widget work and build-97 project state.
+- Resolved the generated project, Profile calendar/copy, navigation-contract,
+  and append-only log conflicts by preserving both the check-in terminology
+  and main's Been-only calendar/widget behavior. Regenerated
+  `Wander.xcodeproj` from `project.yml`; the project includes both the widget
+  target/tests and `CheckInCopyTests`.
+- The final merged full suite passed 694/694 with 0 failures and 0 skips on
+  iPhone 17 / iOS 26.5. Result bundle:
+  `/private/tmp/rec143-merged-tests.xcresult`.
+- A separate clean generic iOS Simulator build passed for the app and widget
+  extension. Generated DerivedData directories were removed after validation.
+- Visual QA remains green on iPhone 17 Pro Max and compact iPhone 17e. The
+  final place-profile captures show the full-width terracotta
+  `Check in again` action above secondary Directions/Website/Call actions:
+  `/private/tmp/rec143-visual-qa/place-profile-final-iphone-17-pro-max.png`
+  and
+  `/private/tmp/rec143-visual-qa/place-profile-final-iphone-17e.png`.
+- Hosted Supabase regression coverage remains green at 21/21, and the
+  production-shaped check-in save/repeat/delete/Wanna-restore/future-date
+  smoke block passed. The broader existing smoke suite still stops later at
+  its unrelated profile-geography assertion; local pgTAP remains unavailable
+  because Docker is not running.
+- Existing warnings remain limited to the known Supabase formatter
+  actor-isolation and traditional-headermap warnings. No TestFlight release,
+  build-number increment, archive/upload, beta-group change, or Slack
+  announcement was requested or performed.
+
+Next: complete the merge commit, publish the implementation PR, move REC-143
+to `In Review`, and open this isolated project in Xcode with
+`codex/rec-143-checkins-implementation` visible in Branch Chooser.
+
+Publication and Xcode handoff — 2026-07-25 22:49 PDT:
+
+- Completed the latest-main merge as `94ecc9732` and pushed
+  `codex/rec-143-checkins-implementation` to origin.
+- Opened ready implementation PR #224:
+  `https://github.com/joelipshutz/wander/pull/224`.
+- Confirmed Linear REC-143 has the PR/branch attachments and moved it from
+  `In Progress` to `In Review`; the final validation and handoff record will
+  be posted there after this log commit is pushed.
+- Used Xcode's native Open panel to open the isolated project at
+  `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins/Wander.xcodeproj`.
+  Visually verified the project URL is that worktree and Xcode's Branch
+  Chooser shows `codex/rec-143-checkins-implementation`.
+- The branch is ready for Ryan to choose a simulator or connected iPhone and
+  press Run. No uncommitted source or project changes remain from opening
+  Xcode, and no known implementation blocker remains.
+
+Final outcome: repeatable Check-ins and ticket presentation are implemented,
+the hosted schema is current, the merged app/widget project is fully tested,
+PR #224 is ready for review, REC-143 is `In Review`, and Xcode is on the exact
+implementation branch requested for local testing.
+
+## 2026-07-25 23:08 PDT - Codex - REC-143 Xcode Feedback Polish
+
+Agent: Codex
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Review`)
+PR: `#224`
+
+Goal: apply Ryan's first Xcode feedback without changing persistence or remote
+contracts: make the check-in picker date-only, remove its instructional helper
+copy, and restore the repeat-check-in place action from a ticket icon to `+`.
+
+Starting status and coordination:
+
+- Fetched origin; the dedicated REC-143 worktree and branch were clean and
+  synchronized with the published PR head at `4556b6c9a`.
+- Xcode remains open on this isolated worktree. The primary checkout and all
+  unrelated worktrees remain untouched.
+- Expected files are `Wander/Features/Map/MapScreen.swift`, focused UI-contract
+  tests, and this append-only log. No schema, migration, build-number,
+  TestFlight, or release action is in scope.
+
+Completion — 2026-07-25 23:27 PDT:
+
+- Changed the check-in picker label to `Check-in date`, restricted the native
+  picker to `.date`, and removed the `Defaults to now...` helper sentence.
+  The existing non-future date bound and visit timestamp persistence remain
+  unchanged.
+- Restored `PlaceSheetAction.addVisit.systemImage` from `ticket.fill` to
+  `plus`. Both the compact/header repeat action and labeled
+  `Check in again` action now use `+`; ticket-card presentation and Profile
+  ticket/count semantics are unchanged.
+- Added focused regression contracts for the exact picker copy/components,
+  absent helper text, and both add/repeat `+` icons. The focused pair passed
+  2/2 on iPhone 17 / iOS 26.5:
+  `/private/tmp/rec143-polish-tests.xcresult`.
+- The required complete simulator suite passed 695/695 with 0 failures and
+  0 skips:
+  `/private/tmp/rec143-polish-full.xcresult`.
+- Installed the exact validated app on iPhone 17 Pro Max and compact iPhone
+  17e. Visual inspection confirms the top action and full-width
+  `Check in again` action use `+` without clipping:
+  `/private/tmp/rec143-polish-place-profile-17-pro-max.png` and
+  `/private/tmp/rec143-polish-place-profile-17e.png`.
+- Only the existing formatter actor-isolation and traditional-headermap
+  warnings remain. No backend, migration, build-number, TestFlight, or Slack
+  release action was performed.
+
+Next: commit and push this feedback revision to ready PR #224, update REC-143's
+validation comment, and keep Xcode on the implementation worktree.
+
+## 2026-07-25 23:52 PDT - Codex - REC-143 Landing Review
+
+Agent: Codex
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Review`)
+PR: `#224`
+
+Goal: review and squash-merge the completed Check-in/ticketing implementation
+to `main`, update durable status, and stop before any TestFlight release.
+
+Starting status and coordination:
+
+- Ryan explicitly requested a main landing. The dedicated worktree was clean
+  at pushed PR head `9218a15e7`; the primary checkout and unrelated worktrees
+  remain untouched.
+- TestFlight build 97 is fully completed, uploaded, attached, and approved.
+  There is no unfinished explicit release to resume. This merge request does
+  not authorize build 98, an archive/upload, beta-group changes, or Slack
+  release notes.
+- Latest `origin/main` is `f4242bceb` after REC-146 / PR #221 and its landing
+  record. It is not yet an ancestor of PR #224, so the feature branch must be
+  updated and revalidated before merge.
+- The rec.me landing skill is active. Its preferred gstack review workflow
+  could not start because the required
+  `.agents/skills/gstack/review/checklist.md` and `greptile-triage.md` resources
+  are absent from this repo/install; the review skill explicitly stops in
+  that state. The landing will use an equivalent manual review and will not
+  claim a gstack pass.
+- Review scope includes the full diff against latest main, REC-143's completed
+  plan/engineering/iOS design reviews, `DESIGN.md`, migration/RPC security,
+  delete/retry/data-flow behavior, final copy/action hierarchy, tests, hosted
+  verification evidence, PR comments/checks, and mergeability.
+
 ## 2026-07-25 21:50 PDT - Codex - REC-146 Profile map filter sharing
 
 Agent: Codex
@@ -22934,3 +23478,304 @@ Starting status and coordination:
   Xcode project, review the full resulting diff and Greptile state, rerun the
   focused and complete simulator validation required by the changed base, then
   push and recheck GitHub mergeability before the squash merge.
+
+Latest-main review and validation — 2026-07-26 01:43 PDT:
+
+- Merged exact `origin/main` at `061edc336`, preserving REC-143 check-ins, the
+  logged-out session-boundary fix, released build 98, and all append-only work
+  records. The only manual source conflict was `WanderRootView.swift`; the
+  resolution keeps Share Extension inbox draining and its Review alert while
+  requiring the newly landed validated-session gate before any drain or
+  signed-in maintenance.
+- Regenerated the Xcode project. `CURRENT_PROJECT_VERSION` remains 98 for the
+  host, widget, and share targets; there is no build-99 or signing churn.
+- Completed the full gstack checklist and complete diff review. Scope is clean:
+  one universal Share Extension, shared bounded inbox/drainer, import-flow
+  wiring, project membership, tests, and setup docs. No SQL/backend migration,
+  LLM trust boundary, shell, enum, auth, concurrency, unsafe path, persistence,
+  extension-embedding, accessibility, performance, or documentation blocker
+  remains. No auto-fix or human decision was required.
+- GitHub has zero line-level and zero top-level PR comments, so there are no
+  Greptile or human review findings to resolve. PR #226 has no draft, hold, or
+  do-not-merge signal and no failing required check.
+- Focused Share Extension/source/inbox/drainer validation passed 7/7. The
+  complete iPhone 17 Pro Max / iOS 26.5 suite then passed 721/721, including
+  all 14 widget/project integration tests and embedded-binary validation for
+  both extensions:
+  `/private/tmp/DerivedData-rec97-landing/Logs/Test/Test-Wander-2026.07.26_01-41-58--0700.xcresult`.
+- Existing Swift isolation, simulator App Group/keychain, App Intents, and
+  traditional headermap warnings remain unchanged. The physical-device setup
+  prerequisite is still explicit App ID/App Group provisioning for
+  `com.grayline.wander.share`; it is documented and does not block merging the
+  tested implementation.
+- Next: commit and push this exact latest-main merge candidate, re-fetch and
+  confirm PR #226 is clean and mergeable at its new head, post the validation
+  record, squash-merge to `main`, and mark REC-97 Done. No TestFlight action is
+  authorized or planned.
+REC-132 final release-hardening checkpoint — 2026-07-26 00:38 PDT:
+
+- Completed the adversarial security, maintainability, and test review of the
+  latest-main branch. The review expanded the session boundary so a cached
+  signed-in identity is untrusted until authoritative Clerk validation, and
+  both ordinary and forced Supabase token calls reject while validation is
+  pending. Clerk tokens also require an active session, with stale/cancelled
+  refresh generations unable to overwrite a newer result.
+- Clerk auth events now carry the resolved state directly instead of causing a
+  second refresh loop. Foreground validation keeps the prior root mounted only
+  as opaque, non-interactive continuity while root-owned work is cancelled and
+  descendant backend requests are denied centrally.
+- Account transitions now clear profile, follow, block, mute, feed, widget,
+  notification-routing, and analytics identity state. A newly authenticated
+  account starts private/self-only until its matching remote profile hydrates;
+  a late Account A profile response cannot overwrite Account B or unlock
+  pending sync.
+- Notification delivery now uses a process-local unknown/authenticated/signed-
+  out gate. Cold-launch taps buffer while auth is unknown, drain only after a
+  validated sign-in, and are discarded on logout; logout also clears delivered
+  notifications and pending account-specific local reminders.
+- The iPhone 16 Plus / iOS 18.6 XCTest worker twice stalled in Xcode's
+  `waiting for workers to materialize` state, including after a clean simulator
+  restart. This was recorded as infrastructure, not a test failure. The same
+  expanded focused suite passed 85/85 on the known-good iPhone 17 Pro Max /
+  iOS 26.2 runner, and the final auth-only rerun passed 18/18. Existing
+  repository headermap and Supabase formatter isolation warnings remain
+  unchanged.
+- Final specialist re-review is in progress. Next: resolve any last blocking
+  finding, run the required full suite and generic simulator build, push PR
+  #223, verify latest `origin/main`, then squash-merge and create TestFlight
+  build 98 from the exact merged main head.
+
+REC-132 final-review follow-up — 2026-07-26 00:46 PDT:
+
+- Security and maintainability re-review both returned `MERGE`; the test
+  specialist found no remaining auth-scope release blocker. The last security
+  follow-up replaced separate notification state/buffer locks with one atomic
+  account- and validation-generation-bound gate, and the final focused suite
+  passed 86/86.
+- The first full suite completed 703/708. All five failures were deterministic
+  expectations exposed by the new privacy-preserving provisional profile, not
+  crashes or unrelated feature failures: two persistence-count expectations
+  revealed that the remote-state scrub treated the current profile itself as
+  remote state, and three tests still assumed guest avatar/default-visibility
+  metadata should flow into an authenticated account. Tightened the scrub
+  predicate and updated those tests to hydrate or explicitly configure the
+  authenticated profile before asserting non-private visibility.
+- A prior focused link attempt failed with `errno=28` because the machine had
+  only 126 MiB free. Removed only four disposable REC-132 DerivedData caches
+  created by this work, recovering about 5.2 GiB; no source, user data, other
+  agent worktree, simulator content, or archive was removed.
+- A fetch then found `origin/main` had advanced to `af8f800` with the large
+  REC-143 Check-ins landing. It overlaps store and test files, so the current
+  reviewed auth hardening will be checkpointed before merging that latest main
+  and rerunning the full release validation on the combined source.
+## 2026-07-25 23:56 PDT - Codex - REC-143 landing review checkpoint
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Review`)
+
+Review checkpoint:
+
+- Merged current `origin/main` into the feature branch. The only conflicts were
+  Profile summary copy and this append-only coordination log; the resolution
+  keeps REC-146's canonical map totals while expressing the result as checked-in
+  places, and preserves both branches' log histories.
+- Reviewed production repository wiring, the atomic save/delete RPCs, their
+  authenticated-user ownership checks, pinned `search_path`, feed projection,
+  per-ticket feed lifecycle, current-day-only notification gate, hosted pgTAP
+  metadata assertions, durable local delete retry, and stable client UUID
+  idempotency. No blocking data, RLS, auth, or migration issue was found.
+- GitHub reports no reviews, comments, or checks on PR #224. Its temporary
+  `CONFLICTING` state reflects the resolved latest-main merge not yet being
+  pushed; the merge commit and final feature adjustments remain under local
+  validation.
+- A literal-copy sweep found four remaining visible `BEEN` labels in older
+  SwiftUI/mockup-backed surfaces. They now use centralized `CheckInCopy` values.
+  Internal `PlaceStatus.been`, serialized `"been"`, event names, fixture ids,
+  and deterministic query synonyms remain stable compatibility contracts.
+- The installed gstack review skill cannot run its canonical pipeline because
+  the required `.agents/skills/gstack/review/checklist.md` is absent from both
+  the repo and installed gstack package. This checkpoint records the equivalent
+  manual review; it does not claim a gstack pass.
+- Next gate: run the complete merged iOS suite and generic simulator build,
+  recheck the final PR diff, push the reviewed head, and land only if GitHub
+  reports it clean and mergeable.
+
+Pre-merge validation — 2026-07-26 00:12 PDT:
+
+- The complete merged iPhone 17 / iOS 26.5 suite passed 699/699 with zero
+  failures. Result bundle:
+  `/private/tmp/rec143-landing-tests.xcresult`.
+- A clean generic iOS Simulator build passed for both arm64 and x86_64 with
+  code signing disabled. Only the existing unrelated formatter warnings remain.
+- `git diff --check` passed, and a final SwiftUI literal-copy sweep found no
+  remaining visible `Been` or `BEEN` labels. Stable internal enum, wire, fixture,
+  analytics, and search-synonym compatibility names intentionally remain.
+- Earlier branch validation remains applicable: hosted check-in pgTAP passed
+  21/21; the exact hosted check-in smoke block passed; the later broad smoke run
+  stopped on the already-existing unrelated profile-geography assertion; and
+  iPhone 17 Pro Max plus iPhone 17e visual captures were reviewed.
+- The approved plan's implementation tasks T1 through T7 are complete. T8's
+  automated, hosted, and two-size visual gates are complete; physical-device
+  VoiceOver, accessibility XXL, Reduce Motion, and color-filter checks remain
+  explicit pre-ship validation rather than a merge blocker.
+- Final manual engineering review found no unresolved functional, migration,
+  RLS, security, performance, or regression blocker. No TestFlight release was
+  requested: build 97, archive/upload state, tester groups, and Slack release
+  notes remain unchanged.
+
+## 2026-07-26 00:14 PDT - Codex - REC-143 landing completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-143-merge-record`
+Worktree: `/private/tmp/recme-rec143-merge-record`
+Linear: `REC-143` (`Done`)
+
+Landing completion:
+
+- Pushed reviewed feature head `69b6ba66a`, confirmed PR #224 was `CLEAN` and
+  `MERGEABLE` against current `main`, and posted the final review and validation
+  record:
+  `https://github.com/joelipshutz/wander/pull/224#issuecomment-5082493900`.
+- Squash-merged PR #224 to `main` as
+  `82fcf0ab864d7c6570826e317815798936477afc`:
+  `https://github.com/joelipshutz/wander/pull/224`. The remote
+  `codex/rec-143-checkins-implementation` branch was deleted after the CLI's
+  local cleanup collided harmlessly with a stale worktree reservation for
+  `main`.
+- Final behavior: user-facing Been terminology is rebranded as Check-in;
+  repeat visits create distinct tickets; check-in date is date-only; the place
+  action uses the requested plus icon; existing internal compatibility values
+  remain stable; and local/remote deletion, feed projection, and notification
+  behavior follow the approved contract.
+- Validation: complete iPhone 17 / iOS 26.5 suite 699/699; clean generic
+  Simulator build for arm64 and x86_64; hosted check-in pgTAP 21/21; exact
+  hosted check-in smoke block; two-size visual review; and clean final
+  diff/copy sweeps. The broad smoke run's existing unrelated profile-geography
+  assertion and the pre-ship physical accessibility checks remain documented.
+- Linear REC-143 was moved to `Done` with the PR, merge commit, validation, and
+  pre-ship accessibility note.
+- Build 97 remains unchanged. This landing did not increment the build, archive,
+  upload, change TestFlight groups, or post tester Slack notes.
+
+Final outcome: repeatable Check-ins and their ticketing backend are on `main`;
+no known REC-143 merge blocker remains.
+
+REC-132 latest-main release validation — 2026-07-26 00:53 PDT:
+
+- Merged exact `origin/main` at `af8f800`, including the complete REC-143
+  repeatable Check-ins implementation and landing record. All overlapping app,
+  store, and test sources auto-merged cleanly; the only conflict was this
+  append-only log, resolved by preserving both histories.
+- The combined focused auth, notification, navigation, persistence, and five
+  full-suite follow-up regressions ran 92 tests: 90 passed and two tests still
+  used the local profile-details path, which intentionally ignores privacy
+  fields without a backend. Updated those fixtures to explicitly unlock the
+  authenticated profile and set mutual visibility through the store's privacy
+  API; both corrected tests then passed 2/2.
+- The complete combined latest-main suite passed 714/714 with zero failures or
+  skips on iPhone 17 Pro Max / iOS 26.2:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.26_00-50-38--0700.xcresult`.
+- The generic iOS Simulator build then passed for the app and widget extension
+  with `CODE_SIGNING_ALLOWED=NO`. Only the existing Supabase formatter actor-
+  isolation and traditional-headermap warnings remain.
+- Next: commit the final test/log correction, push the branch, verify PR #223
+  against current main, post the review/validation summary, and squash-merge.
+  Build 97 remains unchanged until the separate exact-main build-98 release
+  commit is created after that merge.
+
+## 2026-07-26 00:56 PDT - Codex - REC-132 TestFlight Build 98
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-98`
+Worktree: `/private/tmp/recme-testflight-build-98`
+Linear: `REC-132` (`In Review` until build 98 is live)
+
+Goal: package exact merged `main` as rec.me TestFlight build 98 after Joe's
+explicit `push to tf` request, attach it to `rec.me Alpha`, submit external beta
+review, and announce the tester-facing scope in `#testflight-feedback`.
+
+Starting status and release scope:
+
+- PR #223 was specialist-reviewed, validated on latest main, and squash-merged
+  as `245a54c8a20bb1750a0d034a3962db36b19aca0b`.
+- Created this clean isolated release worktree from that exact `origin/main`.
+  Build 97 is the last completed release; there is no partial build-98 bump or
+  upload to resume.
+- This release includes all app behavior merged since build 97: REC-142's
+  Been-only Profile/widget calendars, REC-146 Profile map totals and filtered
+  sharing, REC-143 repeatable Check-ins/ticketing, and REC-132's hard logged-
+  out/authenticated-session boundary.
+- Incrementing only `CURRENT_PROJECT_VERSION` from 97 to 98. Marketing version
+  remains 0.1. App Store production submission is out of scope.
+- Pre-release feature validation is already green on exact merged source:
+  714/714 tests and a universal simulator build. This release worktree will
+  regenerate the project, validate build metadata, archive, upload, process
+  through the TestFlight helper, and record the live state.
+- Known alpha issue: the repository still uses a Clerk development instance,
+  so native auth says `Wander` and displays Clerk's development-mode banner.
+  No auth credentials or hosted Clerk configuration will be changed here.
+
+Pre-landing build-98 validation — 2026-07-26 01:02 PDT:
+
+- Updated `CURRENT_PROJECT_VERSION` from 97 to 98 in `project.yml`, regenerated
+  with XcodeGen, and confirmed the generated project changed only the matching
+  Debug and Release build settings. Updated the build-number contract test;
+  marketing version, signing team, capabilities, and bundle identifiers are
+  unchanged.
+- The complete post-bump suite passed 714/714 with zero failures or skips on
+  iPhone 17 Pro Max / iOS 26.2:
+  `/private/tmp/DerivedData-build98/Logs/Test/Test-Wander-2026.07.26_00-56-13--0700.xcresult`.
+- A post-bump generic iOS Simulator build passed for the app and widget
+  extension. Existing Supabase formatter isolation, XCTest stripping, and
+  traditional-headermap warnings remain unchanged.
+- `git diff --check` passed. The release branch contains only build metadata,
+  the matching test contract, and this release record. Next: land the metadata
+  through a ready PR, archive exact resulting main with distribution signing,
+  and upload with Xcode build-number management disabled.
+
+Build 98 release completion — 2026-07-26 01:16 PDT:
+
+- Squash-merged the authenticated-session boundary in PR #223 as
+  `245a54c8a20bb1750a0d034a3962db36b19aca0b`, then squash-merged the build-98
+  metadata in PR #230 as exact release commit
+  `dace9c1a5a63fa2d971965acbc90f866fc984d2e`.
+- Final exact-main validation remained green: 714/714 tests with zero failures
+  or skips on iPhone 17 Pro Max / iOS 26.2, plus the generic iOS Simulator
+  build for the app and widget extension. The prescribed iPhone 16 Plus /
+  iOS 18.6 runner stalled twice while Xcode waited for workers to materialize;
+  this was recorded as simulator infrastructure rather than an app failure.
+- Archived exact release commit `dace9c1` to
+  `/private/tmp/Wander-0.1-build98.xcarchive`. Archive metadata is app `rec.me`,
+  marketing version `0.1`, build `98`, bundle id `com.grayline.wander`.
+- The first archive attempt could not locate the local Xcode Account/App Group
+  profiles. Retried with the configured App Store Connect API-key
+  authentication; archive succeeded. The development-signed archive's local
+  deep verification reported `CSSMERR_TP_NOT_TRUSTED`, after which the App
+  Store Connect export re-signed the payload and the official upload completed
+  successfully with build-number management disabled.
+- `scripts/testflight-release.mjs` resolved App Store Connect build id
+  `354c1b9c-d5fa-4e6b-b338-ad5278238848`, confirmed processing state `VALID`,
+  set `usesNonExemptEncryption=false`, updated the en-US What to Test copy,
+  attached build 98 to `rec.me Alpha`, submitted external beta review, and
+  confirmed review state `APPROVED`. The build is live at
+  `https://testflight.apple.com/join/knEhRa6t`.
+- The required tester-facing Slack note could not be delivered: the configured
+  OpenClaw runtime returned `Channel is unavailable: slack`, and no Slack tool
+  is connected in this session. No message was claimed as posted. The tester
+  checklist is live in App Store Connect's What to Test copy; post the matching
+  build-live announcement to `#testflight-feedback` (`C0BAA7DG2AC`) when Slack
+  is available.
+- Linear tooling is also not connected in this Codex session, so REC-132 could
+  not be moved from `In Review` to `Done` or receive its completion comment.
+  Required follow-up: mark REC-132 Done and attach PR #223, release PR #230,
+  exact release commit `dace9c1`, the 714/714 validation result, build id above,
+  and the public TestFlight link.
+- Known alpha issue remains unchanged: Clerk's development sign-in says
+  `Wander` and displays its development-mode banner. No hosted Clerk settings
+  or credentials were changed.
+
+Final outcome: rec.me 0.1 (98) is uploaded, externally approved, attached to
+the public TestFlight group, and available to testers. Only the Slack and
+Linear release records remain blocked by unavailable integrations.

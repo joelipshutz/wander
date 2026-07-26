@@ -651,11 +651,11 @@ struct DiscoverScreen: View {
         case .add:
             return syncState == .synced ? "Saved." : "Queued locally. We'll retry sync."
         case .addVisit:
-            return "Visit saved." + suffix
+            return "Check-in saved." + suffix
         case .sharedVisit:
-            return "Shared visit saved." + suffix
+            return "Shared check-in saved." + suffix
         case .editVisit:
-            return "Visit updated." + suffix
+            return "Check-in updated." + suffix
         case .editWant:
             return "Want updated." + suffix
         }
@@ -670,7 +670,7 @@ struct DiscoverScreen: View {
             }
             await refreshPlaces(query: placesQuery)
             await refreshMembers(query: memberQuery)
-            savedMessage = "Visit deleted."
+            savedMessage = "Check-in deleted."
             return true
         case .editWant(let visiblePlace):
             guard await store.removeSave(userPlaceID: visiblePlace.userPlace.id, backend: auth.isSignedIn ? backend : nil) != nil else {
@@ -1290,7 +1290,7 @@ private struct DiscoverPlaceResultCard: View {
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .clipShape(Circle())
             }
-            .accessibilityLabel(isSavedByCurrentUser ? "Add visit" : "Save place")
+            .accessibilityLabel(isSavedByCurrentUser ? CheckInCopy.againAction : "Save place")
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)

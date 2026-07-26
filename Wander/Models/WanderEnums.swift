@@ -11,6 +11,24 @@ enum PlaceStatus: String, Codable, CaseIterable, Equatable {
     case wannaGo = "wanna_go"
 }
 
+/// Product vocabulary for the repeatable place check-in system.
+///
+/// Keep this separate from persistence: `PlaceStatus.been` and the backend
+/// value `"been"` remain stable compatibility contracts.
+enum CheckInCopy {
+    static let verb = "check in"
+    static let noun = "check-in"
+    static let pluralNoun = "check-ins"
+    static let pastTense = "checked in"
+    static let againAction = "Check in again"
+    static let editAction = "Edit check-in"
+    static let deleteAction = "Delete check-in"
+
+    static func count(_ count: Int) -> String {
+        "\(count) \(count == 1 ? noun : pluralNoun)"
+    }
+}
+
 enum SyncState: String, Codable, CaseIterable, Equatable {
     case localOnly = "local_only"
     case pendingCreate = "pending_create"
@@ -209,7 +227,7 @@ extension PlaceVisibility {
 extension PlaceStatus {
     var displayTitle: String {
         switch self {
-        case .been: "been"
+        case .been: CheckInCopy.noun
         case .wannaGo: "wanna go"
         }
     }
