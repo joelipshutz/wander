@@ -268,9 +268,9 @@ struct ProfileOwnerHome: View {
     private var savedPlacesSection: some View {
         HStack(spacing: mode.isOwner ? WanderTheme.spacing3 : WanderTheme.spacing2) {
             OwnerProfileSaveTile(
-                value: stats.been,
-                label: "BEEN",
-                symbol: "checkmark.circle.fill",
+                value: stats.checkIns,
+                label: "\(CheckInCopy.pluralNoun.uppercased()) · \(stats.been) \(stats.been == 1 ? "PLACE" : "PLACES")",
+                symbol: "ticket.fill",
                 color: WanderTheme.stateSuccess.color,
                 fill: WanderTheme.categorySage.color.opacity(0.22),
                 isCompact: !mode.isOwner
@@ -545,7 +545,7 @@ private struct ProfileSaveStreakRow: View {
 
     private var accessibilityLabel: String {
         guard summary.currentCount > 0 else {
-            return "No active save streak. Save a Been or Wanna place to start one."
+            return "No active save streak. Check in or save a Wanna place to start one."
         }
         let todayStatus = summary.isTodayCovered ? "Today is covered." : "Save today to keep it going."
         return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus)"
@@ -574,7 +574,7 @@ struct SaveStreakProfileRowMockup: View {
             HStack(spacing: WanderTheme.spacing3) {
                 OwnerProfileSaveTile(
                     value: 87,
-                    label: "BEEN",
+                    label: CheckInCopy.pluralNoun.uppercased(),
                     symbol: "checkmark.circle.fill",
                     color: WanderTheme.stateSuccess.color,
                     fill: WanderTheme.categorySage.color.opacity(0.22),
@@ -714,7 +714,7 @@ private struct ProfileCalendarSection: View {
     }
 
     private var monthActivitySummary: String {
-        "\(insights.monthVisitCount) been"
+        CheckInCopy.count(insights.monthVisitCount)
     }
 
     private var monthDays: [Date?] {
@@ -825,7 +825,7 @@ private struct ProfileCalendarDayCell: View {
         guard let summary, summary.visitCount > 0 else {
             return "\(base)\(today), no activity"
         }
-        return "\(base)\(today), \(summary.visitCount) been"
+        return "\(base)\(today), \(CheckInCopy.count(summary.visitCount))"
     }
 }
 
@@ -859,12 +859,12 @@ private struct ProfileCalendarActivityMarker: View {
 private struct ProfileCalendarLegend: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
-            item(state: .visit, title: "been")
+            item(state: .visit, title: CheckInCopy.pluralNoun)
         }
         .font(.system(size: 11, weight: .bold))
         .foregroundStyle(WanderTheme.textMuted.color)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Calendar legend: filled is been")
+        .accessibilityLabel("Calendar legend: filled is check-ins")
     }
 
     private func item(state: ProfileCalendarActivityState, title: String) -> some View {
@@ -931,7 +931,7 @@ private struct ProfileMapSection: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Map of \(ownerLabel) Been places")
+                .accessibilityLabel("Map of \(ownerLabel) checked-in places")
 
             Picker("Map summary", selection: $selectedSummary) {
                 ForEach(ProfileMapSummaryKind.allCases) { kind in
@@ -958,7 +958,7 @@ private struct ProfileMapSection: View {
                                 ProfileMapSummaryRow(item: item)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityHint("Shows matching Been places")
+                            .accessibilityHint("Shows matching checked-in places")
 
                             ProfileMapSummaryShareButton(
                                 profile: profile,
@@ -996,7 +996,7 @@ private struct ProfileMapSection: View {
     private var mapCountSummary: String {
         let cityLabel = insights.mapCityCount == 1 ? "city" : "cities"
         let placeLabel = insights.mapPlaceCount == 1 ? "place" : "places"
-        return "\(insights.mapCityCount) \(cityLabel)  •  Been to \(insights.mapPlaceCount) \(placeLabel)"
+        return "\(insights.mapCityCount) \(cityLabel)  •  \(insights.mapPlaceCount) checked-in \(placeLabel)"
     }
 
     private var summaryItems: [ProfileSummaryItem] {
@@ -1009,9 +1009,9 @@ private struct ProfileMapSection: View {
 
     private var emptyCopy: String {
         switch selectedSummary {
-        case .places: "\(ownerLabel.capitalized) Been places will appear here."
-        case .cities: "Cities appear after \(ownerLabel) Been places have location details."
-        case .countries: "Countries appear after \(ownerLabel) Been places have location details."
+        case .places: "\(ownerLabel.capitalized) checked-in places will appear here."
+        case .cities: "Cities appear after \(ownerLabel) checked-in places have location details."
+        case .countries: "Countries appear after \(ownerLabel) checked-in places have location details."
         }
     }
 }
@@ -1330,7 +1330,7 @@ private struct ProfileMapSummaryShareButton: View {
         guard profile.serverID != nil else {
             return "Available after this profile finishes syncing"
         }
-        return "Shares the profile link and a map of these \(item.count) Been \(item.count == 1 ? "place" : "places")"
+        return "Shares the profile link and a map of these \(item.count) checked-in \(item.count == 1 ? "place" : "places")"
     }
 
     private func cancelSharePreparation() {

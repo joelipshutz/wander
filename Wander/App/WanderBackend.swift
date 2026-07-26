@@ -394,6 +394,34 @@ final class WanderBackend: ObservableObject {
         return try await userPlaceRepository.save(draft)
     }
 
+    func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
+        guard let userPlaceRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        if let checkInRepository = userPlaceRepository as? any CheckInRepository {
+            return try await checkInRepository.saveCheckIn(draft)
+        }
+
+        // Test and local repository fallback. Production Supabase repositories
+        // implement CheckInRepository so the parent and visit write atomically.
+        let saveResult = try await userPlaceRepository.save(draft.userPlace)
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        let visitDraft = PlaceVisitDraft(
+            id: draft.visit.id,
+            userPlaceID: saveResult.userPlaceID,
+            visitedAt: draft.visit.visitedAt,
+            note: draft.visit.note,
+            ratingScore: draft.visit.ratingScore,
+            attributeAnswersJSON: draft.visit.attributeAnswersJSON,
+            backfilledFromUserPlace: false
+        )
+        let visitResult = try await visitRepository.upsertVisit(visitDraft)
+        return CheckInSaveResult(saveResult: saveResult, visitResult: visitResult)
+    }
+
     func ownWannaGoPlans() async throws -> [OwnWannaGoPlan] {
         guard let userPlaceRepository else {
             throw WanderRemoteError.notConfigured
@@ -432,6 +460,22 @@ final class WanderBackend: ObservableObject {
         }
 
         try await visitRepository.deleteVisit(visitID: visitID)
+    }
+
+    func deleteCheckIn(visitID: String) async throws -> CheckInDeleteResult {
+        if let checkInRepository = userPlaceRepository as? any CheckInRepository {
+            return try await checkInRepository.deleteCheckIn(visitID: visitID)
+        }
+
+        guard let visitRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        try await visitRepository.deleteVisit(visitID: visitID)
+        return CheckInDeleteResult(
+            visitID: visitID,
+            userPlaceID: nil,
+            transition: .checkedIn
+        )
     }
 
     func photos(for visitID: String) async throws -> [VisitPhotoResult] {

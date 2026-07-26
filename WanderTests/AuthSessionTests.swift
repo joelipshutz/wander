@@ -420,7 +420,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(SettingsProfilePrivacySurface.body(isEnabled: false).contains("username can appear in search"))
         XCTAssertFalse(SettingsProfilePrivacySurface.body(isEnabled: false).contains("Stealth mode below"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Places saved by you will switch to stealth mode"))
-        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("Been and Wanna Go"))
+        XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("check-ins and Wanna Go"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("username will be hidden"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("existing collaborative lists stay unchanged"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: true).contains("new collaborative lists are unavailable"))

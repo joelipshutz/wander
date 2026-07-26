@@ -3930,7 +3930,7 @@ private struct ListPlaceMock: Identifiable {
         let hasBeen = statuses.contains(.been)
         let hasWanna = statuses.contains(.wannaGo)
         let statusSummary = hasBeen && hasWanna
-            ? "Been + Wanna go"
+            ? "Checked in + Wanna go"
             : (hasBeen ? PlaceStatus.been.displayTitle : PlaceStatus.wannaGo.displayTitle)
 
         return "\(ownershipSummary) · \(statusSummary)"

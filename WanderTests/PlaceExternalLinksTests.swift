@@ -48,7 +48,7 @@ final class PlaceExternalLinksTests: XCTestCase {
     func testShareSummaryOmitsMissingMetadata() {
         XCTAssertEqual(
             PlaceExternalLinks.shareSummary(placeName: "Griffith Observatory Trail", locality: nil, status: .been),
-            "Griffith Observatory Trail · been"
+            "Griffith Observatory Trail · check-in"
         )
     }
 

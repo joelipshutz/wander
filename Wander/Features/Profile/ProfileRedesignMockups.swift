@@ -149,7 +149,7 @@ private struct OwnerProfileRedesignMockup: View {
         HStack(spacing: WanderTheme.spacing3) {
             ProfileSaveTile(
                 value: "87",
-                label: "BEEN",
+                label: CheckInCopy.pluralNoun.uppercased(),
                 symbol: "checkmark.circle.fill",
                 color: WanderTheme.stateSuccess.color,
                 fill: WanderTheme.categorySage.color.opacity(0.22)
@@ -302,7 +302,7 @@ private struct ProfileCalendarMockup: View {
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .background(WanderTheme.terracotta.color)
                     .clipShape(Circle())
-                Text("Dining days show where your Been visits happened.")
+                Text("Dining days show where your check-ins happened.")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -404,7 +404,7 @@ private struct ProfileDiningMapMockup: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("your map")
                     .font(.system(size: 23, weight: .black))
-                Text("5 cities  •  87 Been places")
+                Text("5 cities  •  87 check-in places")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -434,7 +434,7 @@ private struct ProfileDiningMapMockup: View {
             .frame(height: 205)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
             .allowsHitTesting(false)
-            .accessibilityLabel("Map of Been places in five cities")
+            .accessibilityLabel("Map of check-in places in five cities")
 
             WanderSegmentedSwitch(
                 options: [

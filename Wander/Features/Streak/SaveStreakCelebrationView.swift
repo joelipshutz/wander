@@ -70,7 +70,7 @@ struct SaveStreakCelebrationView: View {
                                 .foregroundStyle(WanderTheme.textOnAction.color)
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            Text("One Been or Wanna keeps your streak alive for the day.")
+                            Text("One check-in or Wanna keeps your streak alive for the day.")
                                 .font(.system(size: 17, weight: .medium))
                                 .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -359,7 +359,7 @@ private struct SaveStreakConfettiLayer: View {
 private extension PlaceStatus {
     var streakDisplayName: String {
         switch self {
-        case .been: "Been"
+        case .been: CheckInCopy.noun.capitalized
         case .wannaGo: "Wanna"
         }
     }

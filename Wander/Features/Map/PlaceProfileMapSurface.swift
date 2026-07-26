@@ -377,6 +377,10 @@ private struct PlaceProfileFullView: View {
 
                         ratingSection
 
+                        if action != .none {
+                            primaryPlaceAction
+                        }
+
                         if !actionItems.isEmpty {
                             actionRow
                         }
@@ -600,10 +604,10 @@ private struct PlaceProfileFullView: View {
         if hasRatingSection {
             HStack(spacing: WanderTheme.spacing2) {
                 PlaceProfileRatingTile(
-                    value: presentation.ownRating?.displayScore ?? "No visits yet",
+                    value: presentation.ownRating?.displayScore ?? "No check-ins yet",
                     suffix: presentation.ownRating == nil ? nil : "/5",
                     title: "Your rating",
-                    subtitle: presentation.ownRating?.subtitle ?? "0 visits",
+                    subtitle: presentation.ownRating?.subtitle ?? "0 check-ins",
                     systemImage: "star.fill",
                     tint: WanderTheme.stateWarning.color,
                     explanation: nil
@@ -652,18 +656,32 @@ private struct PlaceProfileFullView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .padding(.horizontal, WanderTheme.spacing2)
-                    .background(item.kind == .directions ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color)
-                    .foregroundStyle(item.kind == .directions ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .foregroundStyle(WanderTheme.textInk.color)
                     .clipShape(Capsule())
                     .overlay(
                         Capsule()
-                            .stroke(item.kind == .directions ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color, lineWidth: 1)
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(item.title)
             }
         }
+    }
+
+    private var primaryPlaceAction: some View {
+        Button(action: onAction) {
+            Label(action.displayTitle, systemImage: action.systemImage)
+                .font(.system(size: 15, weight: .black))
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.terracotta.color)
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.accessibilityLabel)
     }
 
     @ViewBuilder
@@ -1150,7 +1168,7 @@ private struct PlacePhotoGalleryViewer: View {
     }
 
     private func statusPill(_ status: PlaceStatus) -> some View {
-        Text(status == .been ? "been" : "wanna go")
+        Text(status == .been ? CheckInCopy.noun : "wanna go")
             .font(.system(size: 13, weight: .black))
             .foregroundStyle(WanderTheme.stateSuccess.color)
             .padding(.horizontal, 12)
@@ -1979,7 +1997,7 @@ private struct PlaceProfileStatusPill: View {
     let status: PlaceStatus
 
     var body: some View {
-        Text(status == .been ? "been" : "wanna")
+        Text(status == .been ? CheckInCopy.noun : "wanna")
             .font(.system(size: 12, weight: .black))
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(height: 30)

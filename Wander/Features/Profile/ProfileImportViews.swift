@@ -718,7 +718,7 @@ struct PlaceImportInboxScreen: View {
             }
 
             VStack(spacing: 2) {
-                Text("Been")
+                Text("Check in")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                 importSelectionButton(
@@ -775,7 +775,7 @@ struct PlaceImportInboxScreen: View {
                 .overlay(Circle().stroke(status.importColor.opacity(0.28), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(status == .been ? "Mark all Been" : "Mark all Wanna")
+        .accessibilityLabel(status == .been ? "Mark all as check-ins" : "Mark all Wanna")
     }
 
     private func importMetric(_ value: Int, _ label: String, _ color: Color) -> some View {
@@ -1215,7 +1215,7 @@ private struct PlaceImportStatusSelector: View {
                 .shadow(color: status.importColor.opacity(0.14), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(status == .been ? "Been" : "Wanna")
+        .accessibilityLabel(status == .been ? CheckInCopy.noun : "Wanna")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -1713,7 +1713,7 @@ private struct PlaceImportCandidateCard: View {
 
     private var beenButton: some View {
         quickSaveButton(
-            "Been",
+            "Check in",
             systemImage: "checkmark.circle.fill",
             color: WanderTheme.stateSuccess.color
         ) {

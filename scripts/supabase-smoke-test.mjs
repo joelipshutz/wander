@@ -32,7 +32,8 @@ async function main() {
   const smokeUserID = DEFAULT_SMOKE_USER_ID;
   const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
   const strangerUserID = DEFAULT_SMOKE_STRANGER_ID;
-  if (options.migrationTest && (!options.linked || !options.migrationPreview)) {
+  const migrationPreviews = options.migrationPreviews ?? [];
+  if (options.migrationTest && (!options.linked || migrationPreviews.length === 0)) {
     throw new Error("--migration-test requires --linked and --migration-preview.");
   }
   if (options.linked) {
@@ -40,7 +41,7 @@ async function main() {
       smokeUserID,
       collaboratorUserID,
       strangerUserID,
-      options.migrationPreview,
+      migrationPreviews,
       options.migrationTest,
     );
     return;
@@ -62,12 +63,13 @@ async function main() {
     await client.connect();
     await client.query("begin");
     try {
-      if (options.migrationPreview) {
-        await client.query(loadMigrationPreview(options.migrationPreview));
-        console.log(`ok - migration preview loaded from ${options.migrationPreview}`);
+      for (const migrationPreview of migrationPreviews) {
+        await client.query(loadMigrationPreview(migrationPreview));
+        console.log(`ok - migration preview loaded from ${migrationPreview}`);
       }
       await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
       await runOwnPlaceSmokeChecks(client, smokeUserID);
+      await runCheckInSmokeChecks(client, smokeUserID);
       await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
       await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
       await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
@@ -104,7 +106,8 @@ function parseArgs(args) {
         parsed.linked = true;
         break;
       case "--migration-preview":
-        parsed.migrationPreview = requiredValue(args, index, arg);
+        parsed.migrationPreviews ??= [];
+        parsed.migrationPreviews.push(requiredValue(args, index, arg));
         index += 1;
         break;
       case "--migration-test":
@@ -134,13 +137,13 @@ Usage:
   node scripts/supabase-smoke-test.mjs
   node scripts/supabase-smoke-test.mjs --linked
   node scripts/supabase-smoke-test.mjs --migration-preview <migration.sql>
-  node scripts/supabase-smoke-test.mjs --linked --migration-preview <migration.sql> --migration-test <test.sql>
+  node scripts/supabase-smoke-test.mjs --linked --migration-preview <migration.sql> [--migration-preview <migration.sql> ...] --migration-test <test.sql>
 
 Options:
   --env-file <path>               Env file to load. Defaults to ~/.openclaw/workspace/.env.keys.
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
-  --migration-preview <path>       Apply one transaction-wrapped migration only inside the rolled-back smoke transaction.
+  --migration-preview <path>       Apply a transaction-wrapped migration inside the rollback-only smoke transaction. Repeatable.
   --migration-test <path>          With --linked and --migration-preview, run one strict pgTAP file in the same rollback-only transaction.
 
 Required env when --db-url is omitted:
@@ -179,15 +182,15 @@ function runLinkedSmokeChecks(
   smokeUserID,
   collaboratorUserID,
   strangerUserID,
-  migrationPreviewPath,
+  migrationPreviewPaths,
   migrationTestPath,
 ) {
   const directory = mkdtempSync(join(tmpdir(), "recme-supabase-smoke-"));
   const filePath = join(directory, "linked-smoke.sql");
-  const migrationPreviewSQL = migrationPreviewPath
-    ? loadMigrationPreview(migrationPreviewPath)
-    : "";
-  const migrationPreviewTestSQL = migrationPreviewPath
+  const migrationPreviewSQL = migrationPreviewPaths
+    .map(loadMigrationPreview)
+    .join("\n\n");
+  const migrationPreviewTestSQL = migrationPreviewPaths.length > 0
     ? transactionBody(
       loadStrictPgTapSQL(
         migrationTestPath
@@ -228,6 +231,9 @@ function runLinkedSmokeChecks(
         .filter(Boolean)
         .join("\n");
       throw new Error(details || "linked Supabase query failed");
+    }
+    if (migrationTestPath && result.stdout?.trim()) {
+      console.log(result.stdout.trim());
     }
     if (migrationTestPath) {
       console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${migrationTestPath}`);
@@ -503,6 +509,214 @@ $member_profile_metadata$;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
+
+do $check_in_behavior$
+declare
+  first_result jsonb;
+  second_result jsonb;
+  delete_result jsonb;
+  check_in_user_place_id uuid;
+  active_ticket_count integer;
+  restored_status text;
+  restored_note text;
+  restored_labels jsonb;
+begin
+  first_result := public.save_own_check_in(
+    '{
+      "canonical_name":"Codex Smoke Check-In",
+      "category":"restaurants_food",
+      "primary_category":"restaurants_food",
+      "subcategory":"Restaurant",
+      "category_source":"deterministic",
+      "category_confidence":1,
+      "raw_provider_type":"restaurant",
+      "latitude":34.05235,
+      "longitude":-118.24375,
+      "source_provider":"codex_smoke",
+      "source_provider_place_id":"atomic-check-in-ticket",
+      "confidence":1
+    }'::jsonb,
+    '{
+      "status":"been",
+      "visibility":"followers",
+      "note":"first check-in",
+      "rating_score":4,
+      "nearby_confirmed":false,
+      "source_type":"manual"
+    }'::jsonb,
+    '[
+      {"question_key":"personal_labels","value_type":"personal_label","value":["date night"]},
+      {"question_key":"restaurant_cuisine","value_type":"restaurant_cuisine","value":"Thai"}
+    ]'::jsonb,
+    jsonb_build_object(
+      'id', '59000000-0000-0000-0000-000000000001',
+      'visited_at', now() - interval '1 day',
+      'note', 'first check-in',
+      'rating_score', 4,
+      'attribute_answers', '[
+        {"question_key":"personal_labels","value_type":"personal_label","value":["date night"]},
+        {"question_key":"restaurant_cuisine","value_type":"restaurant_cuisine","value":"Thai"}
+      ]'::jsonb
+    ),
+    jsonb_build_object(
+      'note', 'want snapshot',
+      'attribute_answers', '[
+        {"question_key":"personal_labels","value_type":"personal_label","value":["try soon"]}
+      ]'::jsonb,
+      'tags', '["try soon"]'::jsonb,
+      'wanted_at', now() - interval '10 days'
+    )
+  );
+  check_in_user_place_id := (first_result->>'user_place_id')::uuid;
+  if first_result->>'visit_id' is distinct from '59000000-0000-0000-0000-000000000001'
+    or (first_result->>'backfilled_from_user_place')::boolean then
+    raise exception 'production-shaped check-in payload failed';
+  end if;
+
+  perform public.save_own_check_in(
+    '{
+      "canonical_name":"Codex Smoke Check-In",
+      "category":"restaurants_food",
+      "primary_category":"restaurants_food",
+      "subcategory":"Restaurant",
+      "category_source":"deterministic",
+      "category_confidence":1,
+      "raw_provider_type":"restaurant",
+      "latitude":34.05235,
+      "longitude":-118.24375,
+      "source_provider":"codex_smoke",
+      "source_provider_place_id":"atomic-check-in-ticket",
+      "confidence":1
+    }'::jsonb,
+    '{"status":"been","visibility":"followers","note":"first check-in","rating_score":4,"nearby_confirmed":false,"source_type":"manual"}'::jsonb,
+    '[
+      {"question_key":"personal_labels","value_type":"personal_label","value":["date night"]},
+      {"question_key":"restaurant_cuisine","value_type":"restaurant_cuisine","value":"Thai"}
+    ]'::jsonb,
+    jsonb_build_object(
+      'id', '59000000-0000-0000-0000-000000000001',
+      'visited_at', now() - interval '1 day',
+      'note', 'first check-in',
+      'rating_score', 4,
+      'attribute_answers', '[
+        {"question_key":"personal_labels","value_type":"personal_label","value":["date night"]},
+        {"question_key":"restaurant_cuisine","value_type":"restaurant_cuisine","value":"Thai"}
+      ]'::jsonb
+    ),
+    null
+  );
+
+  select count(*)::integer
+  into active_ticket_count
+  from public.place_visits
+  where user_place_id = check_in_user_place_id
+    and id = '59000000-0000-0000-0000-000000000001'::uuid
+    and deleted_at is null;
+  if active_ticket_count <> 1 then
+    raise exception 'stable check-in UUID was not idempotent';
+  end if;
+
+  second_result := public.save_own_check_in(
+    '{
+      "canonical_name":"Codex Smoke Check-In",
+      "category":"restaurants_food",
+      "primary_category":"restaurants_food",
+      "subcategory":"Restaurant",
+      "category_source":"deterministic",
+      "category_confidence":1,
+      "raw_provider_type":"restaurant",
+      "latitude":34.05235,
+      "longitude":-118.24375,
+      "source_provider":"codex_smoke",
+      "source_provider_place_id":"atomic-check-in-ticket",
+      "confidence":1
+    }'::jsonb,
+    '{"status":"been","visibility":"followers","note":"latest check-in","rating_score":5,"nearby_confirmed":false,"source_type":"manual"}'::jsonb,
+    '[
+      {"question_key":"personal_labels","value_type":"personal_label","value":["date night"]},
+      {"question_key":"restaurant_cuisine","value_type":"restaurant_cuisine","value":"Thai"}
+    ]'::jsonb,
+    jsonb_build_object(
+      'id', '59000000-0000-0000-0000-000000000002',
+      'visited_at', now() - interval '1 hour',
+      'note', 'latest check-in',
+      'rating_score', 5,
+      'attribute_answers', '[
+        {"question_key":"personal_labels","value_type":"personal_label","value":["date night"]},
+        {"question_key":"restaurant_cuisine","value_type":"restaurant_cuisine","value":"Thai"}
+      ]'::jsonb
+    ),
+    null
+  );
+  if second_result->>'visit_id' is distinct from '59000000-0000-0000-0000-000000000002' then
+    raise exception 'repeat check-in did not create its ticket';
+  end if;
+
+  select count(*)::integer
+  into active_ticket_count
+  from public.place_visits
+  where user_place_id = check_in_user_place_id
+    and deleted_at is null;
+  if active_ticket_count <> 2 then
+    raise exception 'repeat check-in did not create two tickets';
+  end if;
+
+  delete_result := public.delete_own_check_in(
+    '59000000-0000-0000-0000-000000000002'::uuid
+  );
+  if delete_result->>'transition' is distinct from 'been' then
+    raise exception 'deleting one of two check-ins did not retain checked-in state';
+  end if;
+  if not exists (
+    select 1
+    from public.user_places
+    where id = check_in_user_place_id
+      and status = 'been'
+      and note = 'first check-in'
+      and rating_score = 4
+      and deleted_at is null
+  ) then
+    raise exception 'deleting the latest check-in did not restore the remaining summary';
+  end if;
+
+  delete_result := public.delete_own_check_in(
+    '59000000-0000-0000-0000-000000000001'::uuid
+  );
+  select up.status, up.note, attr.value
+  into restored_status, restored_note, restored_labels
+  from public.user_places up
+  left join public.place_attributes attr
+    on attr.user_place_id = up.id
+    and attr.question_key = 'personal_labels'
+  where up.id = check_in_user_place_id;
+  if delete_result->>'transition' is distinct from 'wanna_go'
+    or restored_status is distinct from 'wanna_go'
+    or restored_note is distinct from 'want snapshot'
+    or restored_labels is distinct from '["try soon"]'::jsonb then
+    raise exception 'final check-in deletion did not restore historical Wanna state';
+  end if;
+
+  begin
+    perform public.save_own_check_in(
+      '{"canonical_name":"Codex Future Check-In","category":"other","latitude":34.05235,"longitude":-118.24375,"source_provider":"codex_smoke","source_provider_place_id":"future-check-in"}'::jsonb,
+      '{"status":"been","visibility":"self","nearby_confirmed":false,"source_type":"manual"}'::jsonb,
+      '[]'::jsonb,
+      jsonb_build_object(
+        'id', '59000000-0000-0000-0000-000000000003',
+        'visited_at', now() + interval '1 day',
+        'attribute_answers', '[]'::jsonb
+      ),
+      null
+    );
+    raise exception 'future check-in unexpectedly succeeded';
+  exception when others then
+    if sqlerrm not like '%future_check_in_not_allowed%' then
+      raise;
+    end if;
+  end;
+end;
+$check_in_behavior$;
+
 do $profile_behavior$
 declare updated jsonb; muted_id text; visible_city text; member_home text; member_relationship text;
 begin
@@ -1295,6 +1509,249 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID) {
     `,
     [],
     (result) => result.rows[0]?.enabled === true,
+  );
+
+  await client.query("reset role");
+}
+
+async function runCheckInSmokeChecks(client, smokeUserID) {
+  await expectQuery(
+    client,
+    "check-in RPC grants and security metadata match the iOS boundary",
+    `
+      select
+        app_save.prosecdef as app_save_definer,
+        'search_path=public, app' = any(coalesce(app_save.proconfig, array[]::text[])) as app_save_path,
+        not public_save.prosecdef as public_save_invoker,
+        'search_path=app, public' = any(coalesce(public_save.proconfig, array[]::text[])) as public_save_path,
+        app_delete.prosecdef as app_delete_definer,
+        'search_path=public, app' = any(coalesce(app_delete.proconfig, array[]::text[])) as app_delete_path,
+        not public_delete.prosecdef as public_delete_invoker,
+        has_function_privilege('authenticated', public_save.oid, 'execute') as save_authenticated,
+        not has_function_privilege('anon', public_save.oid, 'execute') as save_anon_denied,
+        has_function_privilege('authenticated', public_delete.oid, 'execute') as delete_authenticated,
+        not has_function_privilege('anon', public_delete.oid, 'execute') as delete_anon_denied
+      from pg_proc app_save
+      cross join pg_proc public_save
+      cross join pg_proc app_delete
+      cross join pg_proc public_delete
+      where app_save.oid = 'app.save_own_check_in(jsonb,jsonb,jsonb,jsonb,jsonb)'::regprocedure
+        and public_save.oid = 'public.save_own_check_in(jsonb,jsonb,jsonb,jsonb,jsonb)'::regprocedure
+        and app_delete.oid = 'app.delete_own_check_in(uuid)'::regprocedure
+        and public_delete.oid = 'public.delete_own_check_in(uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  const place = {
+    canonical_name: "Codex Smoke Check-In",
+    category: "restaurants_food",
+    primary_category: "restaurants_food",
+    subcategory: "Restaurant",
+    category_source: "deterministic",
+    category_confidence: 1,
+    raw_provider_type: "restaurant",
+    latitude: 34.05235,
+    longitude: -118.24375,
+    source_provider: "codex_smoke",
+    source_provider_place_id: "atomic-check-in-ticket",
+    confidence: 1,
+  };
+  const userPlace = {
+    status: "been",
+    visibility: "followers",
+    note: "repeat check-in",
+    rating_score: 4.5,
+    nearby_confirmed: false,
+    source_type: "manual",
+  };
+  const attributes = [
+    {
+      question_key: "personal_labels",
+      value_type: "personal_label",
+      value: ["date night"],
+    },
+    {
+      question_key: "restaurant_cuisine",
+      value_type: "restaurant_cuisine",
+      value: "Thai",
+    },
+  ];
+  const historicalWant = {
+    note: "want snapshot",
+    attribute_answers: [
+      {
+        question_key: "personal_labels",
+        value_type: "personal_label",
+        value: ["try soon"],
+      },
+    ],
+    tags: ["try soon"],
+    wanted_at: "2026-07-01T12:00:00Z",
+  };
+  const firstVisitID = "59000000-0000-0000-0000-000000000001";
+  const secondVisitID = "59000000-0000-0000-0000-000000000002";
+  const firstVisit = {
+    id: firstVisitID,
+    visited_at: "2026-07-20T18:00:00Z",
+    note: "first check-in",
+    rating_score: 4,
+    attribute_answers: attributes,
+  };
+
+  const saved = await expectQuery(
+    client,
+    "production-shaped check-in payload saves a parent and explicit ticket atomically",
+    "select public.save_own_check_in($1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb) as saved",
+    [
+      JSON.stringify(place),
+      JSON.stringify(userPlace),
+      JSON.stringify(attributes),
+      JSON.stringify(firstVisit),
+      JSON.stringify(historicalWant),
+    ],
+    (result) => result.rows[0]?.saved?.visit_id === firstVisitID
+      && result.rows[0]?.saved?.backfilled_from_user_place === false,
+  );
+  const userPlaceID = saved.rows[0].saved.user_place_id;
+
+  await expectQuery(
+    client,
+    "retrying the same stable ticket UUID is idempotent",
+    `
+      with retried as (
+        select public.save_own_check_in($1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb)
+      )
+      select count(*)::integer as ticket_count
+      from public.place_visits, retried
+      where user_place_id = $6::uuid
+        and id = $7::uuid
+        and deleted_at is null
+    `,
+    [
+      JSON.stringify(place),
+      JSON.stringify(userPlace),
+      JSON.stringify(attributes),
+      JSON.stringify(firstVisit),
+      JSON.stringify(historicalWant),
+      userPlaceID,
+      firstVisitID,
+    ],
+    (result) => result.rows[0]?.ticket_count === 1,
+  );
+
+  await expectQuery(
+    client,
+    "a second stable UUID creates a second active ticket",
+    `
+      with saved as (
+        select public.save_own_check_in(
+          $1::jsonb,
+          $2::jsonb,
+          $3::jsonb,
+          $4::jsonb,
+          null
+        )
+      )
+      select
+        count(*)::integer as ticket_count,
+        count(distinct feed.visit_id)::integer as feed_count
+      from public.place_visits visit
+      left join public.feed_events feed
+        on feed.visit_id = visit.id
+        and feed.event_type = 'place_been'
+      cross join saved
+      where visit.user_place_id = $5::uuid
+        and visit.deleted_at is null
+    `,
+    [
+      JSON.stringify(place),
+      JSON.stringify({ ...userPlace, note: "latest check-in", rating_score: 5 }),
+      JSON.stringify(attributes),
+      JSON.stringify({
+        id: secondVisitID,
+        visited_at: "2026-07-21T18:00:00Z",
+        note: "latest check-in",
+        rating_score: 5,
+        attribute_answers: attributes,
+      }),
+      userPlaceID,
+    ],
+    (result) => result.rows[0]?.ticket_count === 2 && result.rows[0]?.feed_count === 2,
+  );
+
+  await expectQuery(
+    client,
+    "deleting one of two tickets retains checked-in state and restores the remaining summary",
+    `
+      with deleted as (
+        select public.delete_own_check_in($1::uuid) as result
+      )
+      select
+        deleted.result->>'transition' as transition,
+        up.status,
+        up.note,
+        up.rating_score::double precision as rating_score,
+        count(visit.id)::integer as ticket_count
+      from deleted
+      join public.user_places up on up.id = $2::uuid
+      left join public.place_visits visit
+        on visit.user_place_id = up.id
+        and visit.deleted_at is null
+      group by deleted.result, up.status, up.note, up.rating_score
+    `,
+    [secondVisitID, userPlaceID],
+    (result) => result.rows[0]?.transition === "been"
+      && result.rows[0]?.status === "been"
+      && result.rows[0]?.note === "first check-in"
+      && result.rows[0]?.rating_score === 4
+      && result.rows[0]?.ticket_count === 1,
+  );
+
+  await expectQuery(
+    client,
+    "deleting the final ticket restores the historical Wanna snapshot atomically",
+    `
+      with deleted as (
+        select public.delete_own_check_in($1::uuid) as result
+      )
+      select
+        deleted.result->>'transition' as transition,
+        up.status,
+        up.note,
+        up.deleted_at,
+        attr.value
+      from deleted
+      join public.user_places up on up.id = $2::uuid
+      left join public.place_attributes attr
+        on attr.user_place_id = up.id
+        and attr.question_key = 'personal_labels'
+    `,
+    [firstVisitID, userPlaceID],
+    (result) => result.rows[0]?.transition === "wanna_go"
+      && result.rows[0]?.status === "wanna_go"
+      && result.rows[0]?.note === "want snapshot"
+      && result.rows[0]?.deleted_at === null
+      && JSON.stringify(result.rows[0]?.value) === JSON.stringify(["try soon"]),
+  );
+
+  await expectQueryFailure(
+    client,
+    "future check-ins are rejected",
+    "select public.save_own_check_in($1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, null)",
+    [
+      JSON.stringify(place),
+      JSON.stringify(userPlace),
+      JSON.stringify(attributes),
+      JSON.stringify({
+        ...firstVisit,
+        id: "59000000-0000-0000-0000-000000000003",
+        visited_at: new Date(Date.now() + 86_400_000).toISOString(),
+      }),
+    ],
+    /future_check_in_not_allowed/,
   );
 
   await client.query("reset role");

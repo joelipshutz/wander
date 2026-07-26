@@ -18,7 +18,7 @@ enum PlaceRatingExplanation: String, CaseIterable, Identifiable {
     var message: String {
         switch self {
         case .recMe:
-            "The average rating from people you follow who have been here. Your own rating is shown separately."
+            "The average rating from people you follow who checked in here. Your own rating is shown separately."
         case .fit:
             "A personalized match score based on places you’ve rated, the categories and tags you like, and saves from people you follow."
         }
