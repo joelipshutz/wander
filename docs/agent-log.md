@@ -24751,3 +24751,25 @@ Checkpoint — 2026-07-26 13:21 PDT:
   `Wander/App/WanderRootView.swift`,
   `Wander/App/WanderWidgetLaunchRequest.swift`,
   `WanderTests/WanderWidgetIntegrationTests.swift`, and this log.
+
+Completion — 2026-07-26 13:24 PDT:
+
+- Committed the scoped fix as `e97dcb6e1` (`Fix widget cold-start routing`)
+  and pushed `codex/rec-158-widget-cold-start`.
+- Opened ready PR #244 to current `main`:
+  `https://github.com/joelipshutz/wander/pull/244`.
+- Linked the PR to REC-158, added the root-cause and validation receipt, and
+  moved the issue to `In Review`.
+- Final validation remains 746/746 full-suite tests, 101/101 combined
+  widget/navigation/auth tests, 18/18 widget integration tests, and a clean
+  arm64/x86_64 generic Simulator build.
+- Known validation gap: available Simulators were signed out, so the
+  authenticated final destination could not be captured during a manual
+  terminated-process launch. Automated regression coverage exercises every
+  shipped widget route across the same not-ready → authenticated-ready
+  transition.
+- No TestFlight build number was changed and no build was uploaded or released.
+
+Final outcome: all shipped widget URL requests are retained across cold-start
+session restoration and delivered once the authenticated app shell can route
+them. PR #244 is ready for review.
