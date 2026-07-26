@@ -24634,3 +24634,52 @@ TestFlight build 99 pre-landing validation — 2026-07-26 10:37 PDT:
   introduced.
 - Next: publish a ready REC-156 release PR, squash-merge it into current
   `main`, then archive only after fresh ancestry and version proofs pass.
+
+TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
+
+- Upgraded the global vendored gstack install from 1.57.7.0 to 1.60.1.0, then
+  completed clean gstack pre-landing reviews for REC-153 and the release bump.
+- Squash-merged REC-153 PR #225 as
+  `46810555c92511e4dabc2b8be937387a133b65d2`. Squash-merged the build-99
+  metadata in release PR #238 as exact archived `main`
+  `239ac671a9ffb423335a05411b587a843146b244`.
+- Before archiving, fetched `origin/main`, proved the detached archive
+  worktree exactly equaled that SHA, and independently verified every requested
+  merge as an ancestor:
+  - REC-142: `3d14569bf0e4378448392a3b04cdb80be8b7c125`
+  - REC-146: `9feb4c79513fc195e8d2b2bff71468f56734dfae`
+  - REC-153: `46810555c92511e4dabc2b8be937387a133b65d2`
+  - REC-154: `d3f70c03c7cc7bd194e7a5bf16cc3f25904d1c6b`
+  - REC-97: `fb37c744bfc406fb518f72811986f4486c6293e0`
+  - PR #233: `3fcca8378ed24c43c418092627d64ff8128718ec`
+  - PR #235: `efeb07ef0a3da9d20b42932ea7869df32002c982`
+- Exact release validation passed 744/744 tests with zero failures plus the
+  generic arm64/x86_64 Simulator build. Result bundle:
+  `/tmp/DerivedData-build99/Logs/Test/Test-Wander-2026.07.26_10-28-47--0700.xcresult`.
+- Archived the proven SHA to
+  `/private/tmp/Wander-0.1-build99.xcarchive`. Archive inspection confirmed
+  app `rec.me`, marketing version `0.1`, build `99`, arm64, and bundle id
+  `com.grayline.wander`. `WanderWidgets.appex`,
+  `WanderNearbyWidgets.appex`, and the REC-97
+  `WanderShareExtension.appex` are all embedded and report build 99.
+- Exported and uploaded with automatic App Store distribution signing and
+  `manageAppVersionAndBuildNumber=false`. App Store Connect accepted the IPA
+  and Xcode reported `Uploaded Wander` / `EXPORT SUCCEEDED`.
+- `scripts/testflight-release.mjs` verified archive build 99, resolved App
+  Store Connect build id `abe189b4-959d-4dc8-8c52-1bac7b883238`, confirmed
+  processing state `VALID`, set `usesNonExemptEncryption=false`, updated en-US
+  What to Test copy, attached the build to `rec.me Alpha`, submitted external
+  beta review, and confirmed review state `APPROVED`.
+- Build 99 is live at `https://testflight.apple.com/join/knEhRa6t`. Posted the
+  required tester-facing note in `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785087978146699`.
+- Added release receipts to PRs #225, #233, and #235. Added per-issue receipts
+  to REC-142, REC-146, REC-153, REC-154, and REC-97, and marked all five Done.
+  REC-156 contains the complete proof record and is Done.
+- Known alpha issue remains unchanged: Clerk authentication uses its
+  development instance, so native auth may say `Wander` and show the
+  development-mode banner. No App Store production submission was performed.
+
+Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
+the public TestFlight group, and available to testers with every item in
+Ryan's requested list proven present in the archived binary source.
