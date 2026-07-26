@@ -25,8 +25,13 @@ struct ProfileScreen: View {
     @State private var showsEditProfile = false
     @State private var selectedMonth = Date.now
     @State private var profileInsightsCache = ProfileInsightsCache()
+    @State private var activeCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
+    @State private var handledPresentationResetRequestID: UUID?
 
     @Binding private var visitInvitationInboxRequestID: UUID?
+    private let presentationResetRequest: WanderPresentationResetRequest?
+    private let calendarLaunchRequest: WanderProfileCalendarLaunchRequest?
+    private let onCalendarLaunchRequestHandled: (UUID) -> Void
     let onFindFriends: () -> Void
 
     private let profilePhotoMenuWidth: CGFloat = 232
@@ -35,9 +40,15 @@ struct ProfileScreen: View {
 
     init(
         visitInvitationInboxRequestID: Binding<UUID?> = .constant(nil),
+        presentationResetRequest: WanderPresentationResetRequest? = nil,
+        calendarLaunchRequest: WanderProfileCalendarLaunchRequest? = nil,
+        onCalendarLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         onFindFriends: @escaping () -> Void = {}
     ) {
         _visitInvitationInboxRequestID = visitInvitationInboxRequestID
+        self.presentationResetRequest = presentationResetRequest
+        self.calendarLaunchRequest = calendarLaunchRequest
+        self.onCalendarLaunchRequestHandled = onCalendarLaunchRequestHandled
         self.onFindFriends = onFindFriends
     }
 
@@ -71,7 +82,9 @@ struct ProfileScreen: View {
                 },
                 mapSummaryAction: { kind, item in
                     placeCollectionRoute = .mapSummary(kind: kind, item: item)
-                }
+                },
+                calendarScrollRequestID: activeCalendarLaunchRequest?.id,
+                onCalendarScrollRequestHandled: completeCalendarLaunchRequest
             )
                 .sheet(isPresented: $showsSettings) {
                     SettingsScreen()
@@ -164,6 +177,54 @@ struct ProfileScreen: View {
                     Button("Cancel", role: .cancel) {}
                 }
         }
+        .task(id: presentationResetRequest?.id) {
+            handlePresentationResetRequest(presentationResetRequest)
+        }
+        .task(id: calendarLaunchRequest?.id) {
+            guard let request = calendarLaunchRequest else {
+                activeCalendarLaunchRequest = nil
+                return
+            }
+
+            handlePresentationResetRequest(presentationResetRequest)
+            resetProfilePresentations()
+            selectedMonth = request.targetDate
+
+            await Task.yield()
+            guard !Task.isCancelled, calendarLaunchRequest?.id == request.id else { return }
+            activeCalendarLaunchRequest = request
+        }
+    }
+
+    private func handlePresentationResetRequest(_ request: WanderPresentationResetRequest?) {
+        guard let request,
+              handledPresentationResetRequestID != request.id
+        else { return }
+
+        handledPresentationResetRequestID = request.id
+        resetProfilePresentations()
+    }
+
+    private func resetProfilePresentations() {
+        activeCalendarLaunchRequest = nil
+        visitInvitationInboxRequestID = nil
+        showsSettings = false
+        showsProfilePhotoMenu = false
+        showsProfilePhotoLibrary = false
+        showsProfileCamera = false
+        selectedProfilePhotoItem = nil
+        socialGraphTab = nil
+        listMode = nil
+        savedListMode = nil
+        placeCollectionRoute = nil
+        showsVisitInvitations = false
+        showsEditProfile = false
+    }
+
+    private func completeCalendarLaunchRequest(_ id: UUID) {
+        guard activeCalendarLaunchRequest?.id == id else { return }
+        activeCalendarLaunchRequest = nil
+        onCalendarLaunchRequestHandled(id)
     }
 
     private func openRequestedVisitInvitationInbox() {
@@ -173,11 +234,12 @@ struct ProfileScreen: View {
     }
 
     private var profileInsights: ProfileInsights {
-        profileInsightsCache.present(
+        let projection = store.currentUserCalendarProjection
+        return profileInsightsCache.present(
             ownerID: store.currentUser.id,
-            userPlaces: profileUserPlaces,
-            visits: store.placeVisits,
-            places: profilePlaces,
+            userPlaces: projection.userPlaces,
+            visits: projection.visits,
+            places: projection.places,
             month: selectedMonth,
             dataRevision: store.presentationRevision
         )
@@ -185,7 +247,7 @@ struct ProfileScreen: View {
 
     private var profileStats: ProfileStats {
         var seen: Set<String> = []
-        let active = profileUserPlaces.filter {
+        let active = store.currentUserCalendarProjection.userPlaces.filter {
             $0.userID == store.currentUser.id && $0.deletedAt == nil && seen.insert($0.id).inserted
         }
         let uniqueCheckedInPlaces = active.filter { $0.status == .been }.count
@@ -199,18 +261,6 @@ struct ProfileScreen: View {
             wanna: active.filter { $0.status == .wannaGo }.count,
             friends: store.friends(of: store.currentUser.id).count
         )
-    }
-
-    private var profileUserPlaces: [LocalUserPlace] {
-        store.userPlaces + store.remoteVisiblePlaceCache
-            .filter { $0.owner.id == store.currentUser.id }
-            .map(\.userPlace)
-    }
-
-    private var profilePlaces: [LocalPlace] {
-        store.places + store.remoteVisiblePlaceCache
-            .filter { $0.owner.id == store.currentUser.id }
-            .map(\.place)
     }
 
     private var pageTitle: some View {
@@ -888,7 +938,9 @@ struct ProfileDetailView: View {
                             },
                             mapSummaryAction: { kind, item in
                                 placeCollectionRoute = .mapSummary(kind: kind, item: item)
-                            }
+                            },
+                            calendarScrollRequestID: nil,
+                            onCalendarScrollRequestHandled: { _ in }
                         )
                     } else if isLoading {
                         ProgressView("Loading profile")
@@ -1126,7 +1178,7 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
     let calendarDay: ProfileCalendarDaySummary?
 
     var includesAllStatuses: Bool {
-        calendarDay != nil
+        false
     }
 
     static func calendar(_ summary: ProfileCalendarDaySummary, calendar: Calendar = .current) -> Self {
@@ -2091,7 +2143,7 @@ private struct SavedPlacesListScreen: View {
                         if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
                                 title: "No activity this day",
-                                subtitle: "check-ins and wanna places will show up here"
+                                subtitle: "check-ins will show up here"
                             )
                         } else if collection?.calendarDay != nil {
                             SmallEmptyRow(title: "No matching places", subtitle: "try another type or tag")
@@ -2925,9 +2977,6 @@ private struct ProfileCalendarDayDetailHeader: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun, color: WanderTheme.terracotta.color)
-            Divider()
-                .overlay(WanderTheme.borderHairline.color)
-            metric(value: summary.wannaCount, singular: "wanna", plural: "wanna", color: WanderTheme.categorySage.color)
             Divider()
                 .overlay(WanderTheme.borderHairline.color)
             metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: WanderTheme.textInk.color)

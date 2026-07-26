@@ -24,6 +24,8 @@ struct AddScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let resetToken: UUID
     @Binding private var selectedDetent: PresentationDetent
+    let launchRequest: WanderAddLaunchRequest?
+    let onLaunchRequestHandled: (UUID) -> Void
     let onClose: () -> Void
     @State private var step: AddStep = .source
     @State private var candidates: [PlaceCandidate] = []
@@ -49,11 +51,15 @@ struct AddScreen: View {
         importStore: PlaceImportStore,
         resetToken: UUID = UUID(),
         selectedDetent: Binding<PresentationDetent>,
+        launchRequest: WanderAddLaunchRequest? = nil,
+        onLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         onClose: @escaping () -> Void
     ) {
         self.importStore = importStore
         self.resetToken = resetToken
         _selectedDetent = selectedDetent
+        self.launchRequest = launchRequest
+        self.onLaunchRequestHandled = onLaunchRequestHandled
         self.onClose = onClose
     }
 
@@ -117,6 +123,16 @@ struct AddScreen: View {
             .onChange(of: selectedDetent) { _, detent in
                 guard detent == restingDetent, isQuickAddFocused else { return }
                 isQuickAddFocused = false
+            }
+            .task(id: launchRequest?.id) {
+                guard let launchRequest else { return }
+                switch launchRequest.destination {
+                case .hereNow:
+                    expandSheet()
+                    await resolveCurrentLocationCandidates()
+                }
+                guard !Task.isCancelled else { return }
+                onLaunchRequestHandled(launchRequest.id)
             }
             .sheet(item: $addSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)

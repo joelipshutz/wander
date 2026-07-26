@@ -27,6 +27,8 @@ struct MapScreen: View {
     @State private var typeaheadTask: Task<Void, Never>?
     @State private var suppressedTypeaheadQuery: String?
     @State private var isSearchingMapKit = false
+    @State private var mapSearchRevision: UInt64 = 0
+    @State private var mapSearchTask: Task<Void, Never>?
     @State private var selectedFilters: Set<MapFilter> = [.you, .social, .been, .wanna]
     @State private var selectedSocialOwnerID: String?
     @State private var currentSearchRegion = Self.defaultRegion
@@ -35,6 +37,8 @@ struct MapScreen: View {
     @State private var suppressNextQueryAutoSelection = false
     @State private var didResolveInitialCamera = false
     @State private var handlingNotificationRequestID: UUID?
+    @State private var handledPresentationResetRequestID: UUID?
+    @FocusState private var isMapSearchFocused: Bool
 
     private static let defaultRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
@@ -44,6 +48,9 @@ struct MapScreen: View {
     private static let currentLocationTint = Color(uiColor: .systemBlue)
 
     private let initialPlaceQuery: String?
+    private let presentationResetRequest: WanderPresentationResetRequest?
+    private let searchLaunchRequest: WanderMapSearchLaunchRequest?
+    private let onSearchLaunchRequestHandled: (UUID) -> Void
 
     private var baseVisiblePlaces: [VisiblePlace] {
         guard let mapPlaceFilters else { return [] }
@@ -52,9 +59,15 @@ struct MapScreen: View {
 
     init(
         initialPlaceQuery: String? = Self.resolvedInitialMapPlaceQuery(),
-        startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation()
+        startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation(),
+        presentationResetRequest: WanderPresentationResetRequest? = nil,
+        searchLaunchRequest: WanderMapSearchLaunchRequest? = nil,
+        onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in }
     ) {
         self.initialPlaceQuery = initialPlaceQuery
+        self.presentationResetRequest = presentationResetRequest
+        self.searchLaunchRequest = searchLaunchRequest
+        self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
     }
 
@@ -236,6 +249,7 @@ struct MapScreen: View {
                     VStack(spacing: WanderTheme.spacing2) {
                         SearchBar(
                             query: $mapQuery,
+                            isFocused: $isMapSearchFocused,
                             onSubmit: submitMapSearch
                         )
                         if shouldShowTypeahead {
@@ -304,6 +318,12 @@ struct MapScreen: View {
             .task {
                 await centerMapOnCurrentCityIfNeeded()
             }
+            .task(id: presentationResetRequest?.id) {
+                handlePresentationResetRequest(presentationResetRequest)
+            }
+            .task(id: searchLaunchRequest?.id) {
+                await handleMapSearchLaunchRequest(searchLaunchRequest)
+            }
             .task {
                 await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
                 if auth.isSignedIn {
@@ -343,6 +363,7 @@ struct MapScreen: View {
             .onDisappear {
                 typeaheadTask?.cancel()
                 mapFeatureResolutionTask?.cancel()
+                mapSearchTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -859,26 +880,134 @@ struct MapScreen: View {
         typeaheadTask?.cancel()
         typeaheadSuggestions = []
         isLoadingTypeahead = false
-        Task {
-            await runMapSearch()
+        mapSearchTask?.cancel()
+
+        let requestedQuery = mapQuery
+        let requestRevision = beginMapSearchRequest()
+        mapSearchTask = Task { @MainActor in
+            await runMapSearch(
+                requestedQuery: requestedQuery,
+                requestRevision: requestRevision
+            )
+            if requestRevision == mapSearchRevision {
+                mapSearchTask = nil
+            }
         }
     }
 
     @MainActor
-    private func runMapSearch() async {
-        let query = mapQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func handlePresentationResetRequest(_ request: WanderPresentationResetRequest?) {
+        guard let request,
+              handledPresentationResetRequestID != request.id
+        else { return }
+
+        handledPresentationResetRequestID = request.id
+        resetMapPresentations()
+    }
+
+    @MainActor
+    private func resetMapPresentations() {
+        invalidateMapSearchRequest()
+        mapSelectionRevision += 1
+        mapSaveFlow = nil
+        isPlaceProfilePresented = false
+        selectedPlaceGroupKey = nil
+        selectedSearchCandidateID = nil
+        clearNativeMapFeatureSelection()
+    }
+
+    @MainActor
+    private func handleMapSearchLaunchRequest(_ request: WanderMapSearchLaunchRequest?) async {
+        guard let request else { return }
+        defer {
+            if !Task.isCancelled {
+                onSearchLaunchRequestHandled(request.id)
+            }
+        }
+
+        handlePresentationResetRequest(presentationResetRequest)
+        resetMapPresentations()
+        mapSearchCandidates = []
+        mapSearchMessage = nil
+        typeaheadTask?.cancel()
+        typeaheadSuggestions = []
+        isLoadingTypeahead = false
+
+        guard let query = request.query else {
+            suppressedTypeaheadQuery = nil
+            if !mapQuery.isEmpty {
+                suppressNextQueryAutoSelection = true
+                mapQuery = ""
+            }
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(140))
+            guard !Task.isCancelled else { return }
+            isMapSearchFocused = true
+            return
+        }
+
+        await centerMapOnCurrentCityIfNeeded()
+        guard !Task.isCancelled else { return }
+        isMapSearchFocused = false
+        suppressedTypeaheadQuery = Self.normalized(query)
+        suppressNextQueryAutoSelection = true
+        mapQuery = query
+        let requestRevision = beginMapSearchRequest()
+        await runMapSearch(
+            requestedQuery: query,
+            requestRevision: requestRevision
+        )
+    }
+
+    @MainActor
+    private func runMapSearch(
+        requestedQuery: String,
+        requestRevision: UInt64
+    ) async {
+        let query = requestedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
+            guard Self.shouldApplyMapSearchCompletion(
+                requestRevision: requestRevision,
+                currentRevision: mapSearchRevision,
+                requestedQuery: requestedQuery,
+                currentQuery: mapQuery,
+                isCancelled: Task.isCancelled
+            ) else {
+                return
+            }
             mapSearchMessage = nil
             mapSearchCandidates = []
             selectedSearchCandidateID = nil
             return
         }
 
+        guard Self.shouldApplyMapSearchCompletion(
+            requestRevision: requestRevision,
+            currentRevision: mapSearchRevision,
+            requestedQuery: requestedQuery,
+            currentQuery: mapQuery,
+            isCancelled: Task.isCancelled
+        ) else {
+            return
+        }
         isSearchingMapKit = true
-        defer { isSearchingMapKit = false }
+        defer {
+            if requestRevision == mapSearchRevision {
+                isSearchingMapKit = false
+            }
+        }
 
         do {
             let candidates = try await mapKitCandidates(for: query)
+            guard Self.shouldApplyMapSearchCompletion(
+                requestRevision: requestRevision,
+                currentRevision: mapSearchRevision,
+                requestedQuery: requestedQuery,
+                currentQuery: mapQuery,
+                isCancelled: Task.isCancelled
+            ) else {
+                return
+            }
             mapSearchCandidates = candidates.filter { !isAlreadyVisible(candidate: $0) }
 
             if let firstVisiblePlace = visiblePlaces.first {
@@ -896,11 +1025,44 @@ struct MapScreen: View {
                 mapSearchMessage = "No saved places or map results found."
             }
         } catch {
+            guard Self.shouldApplyMapSearchCompletion(
+                requestRevision: requestRevision,
+                currentRevision: mapSearchRevision,
+                requestedQuery: requestedQuery,
+                currentQuery: mapQuery,
+                isCancelled: Task.isCancelled
+            ) else {
+                return
+            }
             mapSearchCandidates = []
             mapSearchMessage = visiblePlaces.isEmpty
                 ? "No saved places match yet. Try a more specific search."
                 : nil
         }
+    }
+
+    private func beginMapSearchRequest() -> UInt64 {
+        mapSearchRevision &+= 1
+        return mapSearchRevision
+    }
+
+    private func invalidateMapSearchRequest() {
+        mapSearchTask?.cancel()
+        mapSearchTask = nil
+        mapSearchRevision &+= 1
+        isSearchingMapKit = false
+    }
+
+    static func shouldApplyMapSearchCompletion(
+        requestRevision: UInt64,
+        currentRevision: UInt64,
+        requestedQuery: String,
+        currentQuery: String,
+        isCancelled: Bool
+    ) -> Bool {
+        !isCancelled
+            && requestRevision == currentRevision
+            && normalized(requestedQuery) == normalized(currentQuery)
     }
 
     private func handleMapFeatureSelection(_ feature: MapFeature?) {
@@ -1388,10 +1550,14 @@ struct MapScreen: View {
 
     private func handleMapQueryChange() {
         let normalized = Self.normalized(mapQuery)
+        let isSuppressedProgrammaticQuery = normalized == suppressedTypeaheadQuery
+        if !isSuppressedProgrammaticQuery {
+            invalidateMapSearchRequest()
+        }
         mapSearchMessage = nil
         clearNativeMapFeatureSelection()
 
-        if normalized == suppressedTypeaheadQuery {
+        if isSuppressedProgrammaticQuery {
             typeaheadTask?.cancel()
             typeaheadSuggestions = []
             isLoadingTypeahead = false
@@ -2004,6 +2170,7 @@ private struct MapSocialOwnerOption: Identifiable, Equatable {
 
 private struct SearchBar: View {
     @Binding var query: String
+    let isFocused: FocusState<Bool>.Binding
     let onSubmit: () -> Void
 
     var body: some View {
@@ -2011,6 +2178,7 @@ private struct SearchBar: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(WanderTheme.textMuted.color)
             TextField("search your map or people...", text: $query)
+                .focused(isFocused)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)

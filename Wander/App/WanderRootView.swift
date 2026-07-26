@@ -1,5 +1,221 @@
 import SwiftUI
 
+enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
+    case add
+    case authGate
+    case nativeAuth
+    case initialPresentation
+    case sharedProfile
+}
+
+struct WanderDeepLinkPresentationToken: Hashable, Sendable {
+    let surface: WanderDeepLinkPresentationSurface
+    let generation: UUID
+
+    init(
+        surface: WanderDeepLinkPresentationSurface,
+        generation: UUID = UUID()
+    ) {
+        self.surface = surface
+        self.generation = generation
+    }
+}
+
+struct WanderDeepLinkHandoffCoordinator {
+    private struct PendingHandoff {
+        let requestID: UUID
+        let route: WanderDeepLinkRoute
+        var awaitingDismissals: Set<WanderDeepLinkPresentationToken>
+    }
+
+    private var pendingHandoff: PendingHandoff?
+
+    var pendingRequestID: UUID? {
+        pendingHandoff?.requestID
+    }
+
+    var awaitingDismissals: Set<WanderDeepLinkPresentationToken> {
+        pendingHandoff?.awaitingDismissals ?? []
+    }
+
+    mutating func begin(
+        requestID: UUID,
+        route: WanderDeepLinkRoute,
+        awaitingDismissals: Set<WanderDeepLinkPresentationToken>
+    ) {
+        let inheritedDismissals = pendingHandoff?.awaitingDismissals ?? []
+        pendingHandoff = PendingHandoff(
+            requestID: requestID,
+            route: route,
+            awaitingDismissals: inheritedDismissals.union(awaitingDismissals)
+        )
+    }
+
+    mutating func addDismissalBlocker(_ token: WanderDeepLinkPresentationToken) {
+        guard var handoff = pendingHandoff else { return }
+
+        handoff.awaitingDismissals.insert(token)
+        pendingHandoff = handoff
+    }
+
+    mutating func acknowledgeDismissal(
+        _ token: WanderDeepLinkPresentationToken
+    ) -> WanderDeepLinkRoute? {
+        guard var handoff = pendingHandoff,
+              handoff.awaitingDismissals.remove(token) != nil
+        else {
+            return nil
+        }
+
+        let requestID = handoff.requestID
+        pendingHandoff = handoff
+        return takeReadyRoute(requestID: requestID)
+    }
+
+    mutating func takeReadyRoute(requestID: UUID) -> WanderDeepLinkRoute? {
+        guard let handoff = pendingHandoff,
+              handoff.requestID == requestID,
+              handoff.awaitingDismissals.isEmpty
+        else {
+            return nil
+        }
+
+        pendingHandoff = nil
+        return handoff.route
+    }
+
+    mutating func cancel() {
+        pendingHandoff = nil
+    }
+}
+
+struct WanderDeepLinkPresentationRegistry {
+    private(set) var presentedTokens: Set<WanderDeepLinkPresentationToken> = []
+    private var presentedTokenOrder:
+        [WanderDeepLinkPresentationSurface: [WanderDeepLinkPresentationToken]] = [:]
+    private var dismissingTokenOrder:
+        [WanderDeepLinkPresentationSurface: [WanderDeepLinkPresentationToken]] = [:]
+
+    var tokensAwaitingDismissal: Set<WanderDeepLinkPresentationToken> {
+        let dismissingTokens = dismissingTokenOrder.values.flatMap { $0 }
+        return presentedTokens.union(dismissingTokens)
+    }
+
+    @discardableResult
+    mutating func presentationDidAppear(
+        _ token: WanderDeepLinkPresentationToken
+    ) -> Bool {
+        guard presentedTokens.insert(token).inserted else { return false }
+
+        presentedTokenOrder[token.surface, default: []].append(token)
+        return true
+    }
+
+    @discardableResult
+    mutating func presentationWillDisappear(
+        _ token: WanderDeepLinkPresentationToken
+    ) -> Bool {
+        guard presentedTokens.remove(token) != nil else { return false }
+
+        removePresentedTokenFromOrder(token)
+        dismissingTokenOrder[token.surface, default: []].append(token)
+        return true
+    }
+
+    mutating func sheetDidDismiss(
+        surface: WanderDeepLinkPresentationSurface
+    ) -> WanderDeepLinkPresentationToken? {
+        if let token = Self.popFirstToken(
+            for: surface,
+            from: &dismissingTokenOrder
+        ) {
+            return token
+        }
+
+        // SwiftUI can call a sheet's onDismiss before the presented content's
+        // onDisappear. Fall back to the oldest still-presented generation so
+        // either callback order acknowledges the same physical sheet.
+        guard let token = Self.popFirstToken(
+            for: surface,
+            from: &presentedTokenOrder
+        ) else {
+            return nil
+        }
+        presentedTokens.remove(token)
+        return token
+    }
+
+    @discardableResult
+    mutating func presentationDidDismissImmediately(
+        _ token: WanderDeepLinkPresentationToken
+    ) -> Bool {
+        guard presentedTokens.remove(token) != nil else { return false }
+
+        removePresentedTokenFromOrder(token)
+        return true
+    }
+
+    mutating func removeAll() {
+        presentedTokens.removeAll()
+        presentedTokenOrder.removeAll()
+        dismissingTokenOrder.removeAll()
+    }
+
+    private mutating func removePresentedTokenFromOrder(
+        _ token: WanderDeepLinkPresentationToken
+    ) {
+        guard var tokens = presentedTokenOrder[token.surface] else { return }
+
+        tokens.removeAll { $0 == token }
+        presentedTokenOrder[token.surface] = tokens.isEmpty ? nil : tokens
+    }
+
+    private static func popFirstToken(
+        for surface: WanderDeepLinkPresentationSurface,
+        from tokenOrder: inout [
+            WanderDeepLinkPresentationSurface: [WanderDeepLinkPresentationToken]
+        ]
+    ) -> WanderDeepLinkPresentationToken? {
+        guard var tokens = tokenOrder[surface], !tokens.isEmpty else {
+            return nil
+        }
+
+        let token = tokens.removeFirst()
+        tokenOrder[surface] = tokens.isEmpty ? nil : tokens
+        return token
+    }
+}
+
+private struct WanderRootPresentationLifecycle<Content: View>: View {
+    let surface: WanderDeepLinkPresentationSurface
+    let onPresent: (WanderDeepLinkPresentationToken) -> Void
+    let onDismiss: (WanderDeepLinkPresentationToken) -> Void
+    @ViewBuilder let content: () -> Content
+
+    @State private var presentedToken: WanderDeepLinkPresentationToken?
+
+    var body: some View {
+        content()
+            .onAppear(perform: presentationDidAppear)
+            .onDisappear(perform: presentationDidDisappear)
+    }
+
+    private func presentationDidAppear() {
+        guard presentedToken == nil else { return }
+
+        let token = WanderDeepLinkPresentationToken(surface: surface)
+        presentedToken = token
+        onPresent(token)
+    }
+
+    private func presentationDidDisappear() {
+        guard let token = presentedToken else { return }
+
+        presentedToken = nil
+        onDismiss(token)
+    }
+}
+
 @MainActor
 struct WanderRootView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -11,11 +227,21 @@ struct WanderRootView: View {
     @State private var addTabResetToken = UUID()
     @State private var isPresentingAdd = false
     @State private var addSheetDetent: PresentationDetent
+    @State private var addLaunchRequest: WanderAddLaunchRequest?
+    @State private var mapSearchLaunchRequest: WanderMapSearchLaunchRequest?
+    @State private var profileCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
+    @State private var presentationResetRequest: WanderPresentationResetRequest?
+    @State private var deepLinkHandoffTask: Task<Void, Never>?
+    @State private var deepLinkHandoff = WanderDeepLinkHandoffCoordinator()
+    @State private var deepLinkPresentations = WanderDeepLinkPresentationRegistry()
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var sharedProfile: SharedProfileRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
     @State private var signedInMaintenanceRunID: UUID?
     @State private var signedInMaintenanceUserID: String?
+    @State private var widgetCalendarIdentityUserID: String?
+    @State private var widgetCalendarHydratedUserID: String?
+    @State private var widgetCalendarLastHydratedAt: Date?
     @State private var sharedVisitBannerInvitation: SharedVisitInvitation?
     @State private var sharedVisitBannerTracker = SharedVisitBannerTracker()
     @State private var sharedVisitBannerTask: Task<Void, Never>?
@@ -59,7 +285,11 @@ struct WanderRootView: View {
 
     var body: some View {
         TabView(selection: tabSelection) {
-            MapScreen()
+            MapScreen(
+                presentationResetRequest: presentationResetRequest,
+                searchLaunchRequest: mapSearchLaunchRequest,
+                onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest
+            )
                 .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
                 .tag(WanderTab.map)
 
@@ -75,7 +305,12 @@ struct WanderRootView: View {
                 .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
                 .tag(WanderTab.lists)
 
-            ProfileScreen(visitInvitationInboxRequestID: $visitInvitationInboxRequestID) {
+            ProfileScreen(
+                visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
+                presentationResetRequest: presentationResetRequest,
+                calendarLaunchRequest: profileCalendarLaunchRequest,
+                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest
+            ) {
                 selectedTab = .discover
             }
                 .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
@@ -117,63 +352,107 @@ struct WanderRootView: View {
                 .zIndex(100)
             }
         }
-        .sheet(isPresented: $isPresentingAdd, onDismiss: {
-            store.saveFlowDidDismiss(.addSheet)
-            addTabResetToken = UUID()
-            addSheetDetent = addSheetRestingDetent
-        }) {
-            AddScreen(
-                importStore: importStore,
-                resetToken: addTabResetToken,
-                selectedDetent: $addSheetDetent
+        .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
+            WanderRootPresentationLifecycle(
+                surface: .add,
+                onPresent: handleDeepLinkPresentation,
+                onDismiss: handleDeepLinkPresentationWillDismiss
             ) {
-                isPresentingAdd = false
-            }
-                .environmentObject(store)
-                .environmentObject(auth)
-                .environmentObject(backend)
-                .presentationDetents(
-                    AddSheetLayout.detents(
-                        hasPendingImports: importStore.summary.hasPendingImports
-                    ),
-                    selection: $addSheetDetent
-                )
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(28)
-                .presentationBackground(WanderTheme.surfaceBone.color)
-                .presentationContentInteraction(.resizes)
-        }
-        .sheet(item: $auth.activeGate) { request in
-            AuthGateSheet(request: request)
-                .environmentObject(auth)
-                .presentationDetents([.medium])
-                .presentationBackground(WanderTheme.canvasWarm.color)
-        }
-        .sheet(isPresented: $auth.isPresentingNativeAuth) {
-            ClerkNativeAuthView()
-                .environmentObject(auth)
-        }
-        .sheet(item: $initialPresentation) { presentation in
-            switch presentation {
-            case .settings:
-                SettingsScreen()
+                AddScreen(
+                    importStore: importStore,
+                    resetToken: addTabResetToken,
+                    selectedDetent: $addSheetDetent,
+                    launchRequest: addLaunchRequest,
+                    onLaunchRequestHandled: consumeAddLaunchRequest
+                ) {
+                    isPresentingAdd = false
+                }
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
-                    .environmentObject(pushNotifications)
+                    .presentationDetents(
+                        AddSheetLayout.detents(
+                        hasPendingImports: importStore.summary.hasPendingImports
+                        ),
+                        selection: $addSheetDetent
+                    )
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(28)
+                    .presentationBackground(WanderTheme.surfaceBone.color)
+                    .presentationContentInteraction(.resizes)
+            }
+        }
+        .sheet(
+            item: $auth.activeGate,
+            onDismiss: {
+                handleDeepLinkPresentationDismissal(of: .authGate)
+            }
+        ) { request in
+            WanderRootPresentationLifecycle(
+                surface: .authGate,
+                onPresent: handleDeepLinkPresentation,
+                onDismiss: handleDeepLinkPresentationWillDismiss
+            ) {
+                AuthGateSheet(request: request)
+                    .environmentObject(auth)
+                    .presentationDetents([.medium])
+                    .presentationBackground(WanderTheme.canvasWarm.color)
+            }
+        }
+        .sheet(
+            isPresented: $auth.isPresentingNativeAuth,
+            onDismiss: {
+                handleDeepLinkPresentationDismissal(of: .nativeAuth)
+            }
+        ) {
+            WanderRootPresentationLifecycle(
+                surface: .nativeAuth,
+                onPresent: handleDeepLinkPresentation,
+                onDismiss: handleDeepLinkPresentationWillDismiss
+            ) {
+                ClerkNativeAuthView()
+                    .environmentObject(auth)
+            }
+        }
+        .sheet(
+            item: $initialPresentation,
+            onDismiss: {
+                handleDeepLinkPresentationDismissal(of: .initialPresentation)
+            }
+        ) { presentation in
+            WanderRootPresentationLifecycle(
+                surface: .initialPresentation,
+                onPresent: handleDeepLinkPresentation,
+                onDismiss: handleDeepLinkPresentationWillDismiss
+            ) {
+                switch presentation {
+                case .settings:
+                    SettingsScreen()
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                        .environmentObject(pushNotifications)
+                }
             }
         }
         .fullScreenCover(item: $sharedProfile) { route in
-            ProfileDetailView(profileID: route.profileID)
-                .environmentObject(store)
-                .environmentObject(auth)
-                .environmentObject(backend)
+            WanderRootPresentationLifecycle(
+                surface: .sharedProfile,
+                onPresent: handleDeepLinkPresentation,
+                onDismiss: handleDeepLinkPresentationDismissalImmediately
+            ) {
+                ProfileDetailView(profileID: route.profileID)
+                    .environmentObject(store)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+            }
         }
         .onAppear {
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
             importStore.resumePendingImports()
             reconcilePlaceImports()
+            publishWidgetSnapshot()
         }
         .task {
             await pushNotifications.refreshAuthorizationStatus()
@@ -217,6 +496,7 @@ struct WanderRootView: View {
         }
         .onChange(of: auth.state) { _, state in
             applyAuthStateIfNeeded(state)
+            publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: state)
             }
@@ -234,6 +514,13 @@ struct WanderRootView: View {
         }
         .onChange(of: store.presentationRevision) { _, _ in
             reconcilePlaceImports()
+            publishWidgetSnapshot()
+        }
+        .onChange(of: store.currentUserCalendarHydrationRevision) { _, revision in
+            handleCurrentUserCalendarHydration(revision: revision)
+        }
+        .onChange(of: store.isRefreshingCurrentUserCalendarData) {
+            handleCalendarRefreshStateChange($0, $1)
         }
         .onChange(of: importStore.items) { _, _ in
             reconcilePlaceImports()
@@ -250,21 +537,17 @@ struct WanderRootView: View {
             }
         }
         .onOpenURL { url in
-            if let route = Self.sharedProfileRoute(for: url) {
-                sharedProfile = route
-            }
+            handleDeepLink(url)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             scheduleSignedInMaintenance(for: auth.state)
+            publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: auth.state)
             }
         }
-        .onDisappear {
-            sharedVisitBannerTask?.cancel()
-            saveStreakCelebrationTask?.cancel()
-        }
+        .onDisappear(perform: handleRootDisappear)
     }
 
     private var tabSelection: Binding<WanderTab> {
@@ -274,6 +557,7 @@ struct WanderRootView: View {
             if newTab == .add {
                 store.saveFlowDidPresent(.addSheet)
                 addTabResetToken = UUID()
+                addLaunchRequest = nil
                 addSheetDetent = addSheetRestingDetent
                 isPresentingAdd = true
             } else {
@@ -286,6 +570,21 @@ struct WanderRootView: View {
         AddSheetLayout.restingDetent(
             hasPendingImports: importStore.summary.hasPendingImports
         )
+    }
+
+    private func consumeAddLaunchRequest(_ id: UUID) {
+        guard addLaunchRequest?.id == id else { return }
+        addLaunchRequest = nil
+    }
+
+    private func consumeMapSearchLaunchRequest(_ id: UUID) {
+        guard mapSearchLaunchRequest?.id == id else { return }
+        mapSearchLaunchRequest = nil
+    }
+
+    private func consumeProfileCalendarLaunchRequest(_ id: UUID) {
+        guard profileCalendarLaunchRequest?.id == id else { return }
+        profileCalendarLaunchRequest = nil
     }
 
     private func reconcilePlaceImports() {
@@ -301,6 +600,66 @@ struct WanderRootView: View {
                 )
             }
         )
+    }
+
+    private func publishWidgetSnapshot(allowFreshnessAdvance: Bool = false) {
+        guard !store.isRefreshingCurrentUserCalendarData else { return }
+
+        if fixtureMode == .empty, auth.isSignedIn {
+            let hasLocalCalendarData = store.userPlaces.contains {
+                $0.userID == store.currentUser.id && $0.deletedAt == nil
+            }
+            guard widgetCalendarHydratedUserID == store.currentUser.id
+                    || hasLocalCalendarData
+            else {
+                return
+            }
+        }
+        WanderWidgetSnapshotPublisher.publish(
+            store: store,
+            isAvailable: auth.isSignedIn || fixtureMode != .empty,
+            allowFreshnessAdvance: allowFreshnessAdvance || fixtureMode != .empty
+        )
+    }
+
+    private func handleCurrentUserCalendarHydration(revision: UInt64) {
+        guard revision > 0,
+              case .signedIn(let session) = auth.state,
+              session.userID == store.currentUser.id,
+              store.currentUserCalendarProjection.isAuthoritative
+        else { return }
+
+        widgetCalendarHydratedUserID = session.userID
+        widgetCalendarLastHydratedAt = .now
+        publishWidgetSnapshot(allowFreshnessAdvance: true)
+    }
+
+    static func calendarRefreshDidFinish(
+        wasRefreshing: Bool,
+        isRefreshing: Bool
+    ) -> Bool {
+        wasRefreshing && !isRefreshing
+    }
+
+    private func handleCalendarRefreshStateChange(
+        _ wasRefreshing: Bool,
+        _ isRefreshing: Bool
+    ) {
+        guard Self.calendarRefreshDidFinish(
+            wasRefreshing: wasRefreshing,
+            isRefreshing: isRefreshing
+        ) else {
+            return
+        }
+        publishWidgetSnapshot()
+    }
+
+    private func handleRootDisappear() {
+        deepLinkHandoffTask?.cancel()
+        deepLinkHandoff.cancel()
+        deepLinkPresentations.removeAll()
+        sharedVisitBannerTask?.cancel()
+        saveStreakCelebrationTask?.cancel()
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
@@ -325,15 +684,166 @@ struct WanderRootView: View {
     static let sharedVisitBannerDestinationTab: WanderTab = .profile
 
     static func sharedProfileRoute(for url: URL) -> SharedProfileRoute? {
-        guard url.scheme?.lowercased() == "recme", url.host?.lowercased() == "profiles" else {
-            return nil
-        }
-        guard let profileID = url.pathComponents.dropFirst().first?.removingPercentEncoding,
-              !profileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            return nil
-        }
+        guard case .sharedProfile(let profileID) = WanderDeepLinkRoute.parse(url) else { return nil }
         return SharedProfileRoute(profileID: profileID)
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard let route = WanderDeepLinkRoute.parse(url) else { return }
+
+        beginDeepLinkHandoff(to: route)
+    }
+
+    private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute) {
+        deepLinkHandoffTask?.cancel()
+
+        let resetRequest = WanderPresentationResetRequest()
+        deepLinkHandoff.begin(
+            requestID: resetRequest.id,
+            route: route,
+            awaitingDismissals: deepLinkPresentationTokensAwaitingDismissal()
+        )
+        presentationResetRequest = resetRequest
+        resetRootPresentationsForDeepLink()
+
+        guard deepLinkHandoff.awaitingDismissals.isEmpty else {
+            deepLinkHandoffTask = nil
+            return
+        }
+
+        deepLinkHandoffTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled,
+                  presentationResetRequest?.id == resetRequest.id
+            else { return }
+
+            activateReadyDeepLink(requestID: resetRequest.id)
+        }
+    }
+
+    private func handleDeepLinkPresentation(
+        _ token: WanderDeepLinkPresentationToken
+    ) {
+        guard deepLinkPresentations.presentationDidAppear(token) else {
+            return
+        }
+
+        // A presentation can finish appearing after a handoff has started.
+        // Its physical generation must still block that pending route.
+        deepLinkHandoff.addDismissalBlocker(token)
+    }
+
+    private func handleDeepLinkPresentationWillDismiss(
+        _ token: WanderDeepLinkPresentationToken
+    ) {
+        _ = deepLinkPresentations.presentationWillDisappear(token)
+    }
+
+    private func handleAddSheetDismissal() {
+        handleDeepLinkPresentationDismissal(of: .add)
+    }
+
+    private func handleDeepLinkPresentationDismissal(
+        of surface: WanderDeepLinkPresentationSurface
+    ) {
+        guard let token = deepLinkPresentations.sheetDidDismiss(
+            surface: surface
+        ) else { return }
+        completeDeepLinkPresentationDismissal(token)
+    }
+
+    private func handleDeepLinkPresentationDismissalImmediately(
+        _ token: WanderDeepLinkPresentationToken
+    ) {
+        guard deepLinkPresentations.presentationDidDismissImmediately(token) else {
+            return
+        }
+
+        completeDeepLinkPresentationDismissal(token)
+    }
+
+    private func completeDeepLinkPresentationDismissal(
+        _ token: WanderDeepLinkPresentationToken
+    ) {
+        if Self.shouldResetAddFlowAfterDismissal(
+            token,
+            remainingPresentedTokens: deepLinkPresentationTokensAwaitingDismissal(),
+            isPresentingAdd: isPresentingAdd
+        ) {
+            store.saveFlowDidDismiss(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = nil
+            addSheetDetent = addSheetRestingDetent
+        }
+
+        guard let route = deepLinkHandoff.acknowledgeDismissal(token) else {
+            return
+        }
+
+        deepLinkHandoffTask?.cancel()
+        deepLinkHandoffTask = nil
+        activateDeepLink(route)
+    }
+
+    private func deepLinkPresentationTokensAwaitingDismissal()
+        -> Set<WanderDeepLinkPresentationToken>
+    {
+        deepLinkPresentations.tokensAwaitingDismissal
+    }
+
+    static func shouldResetAddFlowAfterDismissal(
+        _ token: WanderDeepLinkPresentationToken,
+        remainingPresentedTokens: Set<WanderDeepLinkPresentationToken>,
+        isPresentingAdd: Bool
+    ) -> Bool {
+        token.surface == .add
+            && !isPresentingAdd
+            && !remainingPresentedTokens.contains(where: { $0.surface == .add })
+    }
+
+    private func activateReadyDeepLink(requestID: UUID) {
+        guard presentationResetRequest?.id == requestID,
+              let route = deepLinkHandoff.takeReadyRoute(requestID: requestID)
+        else {
+            return
+        }
+
+        deepLinkHandoffTask = nil
+        activateDeepLink(route)
+    }
+
+    private func resetRootPresentationsForDeepLink() {
+        addLaunchRequest = nil
+        mapSearchLaunchRequest = nil
+        profileCalendarLaunchRequest = nil
+        visitInvitationInboxRequestID = nil
+        addTabResetToken = UUID()
+        addSheetDetent = addSheetRestingDetent
+        isPresentingAdd = false
+        initialPresentation = nil
+        sharedProfile = nil
+        auth.activeGate = nil
+        auth.isPresentingNativeAuth = false
+    }
+
+    private func activateDeepLink(_ route: WanderDeepLinkRoute) {
+        switch route {
+        case .quickCapture:
+            selectedTab = .map
+            store.saveFlowDidPresent(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = WanderAddLaunchRequest(destination: .hereNow)
+            addSheetDetent = .large
+            isPresentingAdd = true
+        case .quickSearch(let query):
+            selectedTab = .map
+            mapSearchLaunchRequest = WanderMapSearchLaunchRequest(query: query)
+        case .profileCalendar:
+            selectedTab = .profile
+            profileCalendarLaunchRequest = WanderProfileCalendarLaunchRequest(targetDate: .now)
+        case .sharedProfile(let profileID):
+            sharedProfile = SharedProfileRoute(profileID: profileID)
+        }
     }
 
     private func applyAuthStateIfNeeded(_ state: AuthState) {
@@ -343,6 +853,24 @@ struct WanderRootView: View {
             #endif
             return
         }
+
+        switch state {
+        case .signedIn(let session):
+            if widgetCalendarIdentityUserID != session.userID {
+                WanderWidgetSnapshotPublisher.clear()
+                widgetCalendarIdentityUserID = session.userID
+                widgetCalendarHydratedUserID = nil
+                widgetCalendarLastHydratedAt = nil
+            }
+        case .signedOut, .unavailable:
+            WanderWidgetSnapshotPublisher.clear()
+            widgetCalendarIdentityUserID = nil
+            widgetCalendarHydratedUserID = nil
+            widgetCalendarLastHydratedAt = nil
+        case .loading:
+            break
+        }
+
         store.apply(authState: state)
         resetSharedVisitBannerTracking()
 
@@ -493,6 +1021,19 @@ struct WanderRootView: View {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
+            let calendarRefreshDue = widgetCalendarHydratedUserID != session.userID
+                || widgetCalendarLastHydratedAt.map {
+                    Date.now.timeIntervalSince($0) >= Self.widgetCalendarRefreshInterval
+                } ?? true
+            if calendarRefreshDue {
+                _ = await store.refreshRemoteCurrentUserCalendarData(
+                    backend: backend
+                )
+                guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                    finishSignedInMaintenance(runID: runID)
+                    return
+                }
+            }
             await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: state)
             guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
                 finishSignedInMaintenance(runID: runID)
@@ -558,6 +1099,8 @@ struct WanderRootView: View {
         signedInMaintenanceUserID = nil
         signedInMaintenanceTask = nil
     }
+
+    private static let widgetCalendarRefreshInterval: TimeInterval = 15 * 60
 
     private func refreshWannaGoReminders(for state: AuthState) async {
         guard case .signedIn = state else {
