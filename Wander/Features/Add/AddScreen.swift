@@ -130,6 +130,9 @@ struct AddScreen: View {
                 case .hereNow:
                     expandSheet()
                     await resolveCurrentLocationCandidates()
+                case .importInbox:
+                    expandSheet()
+                    showsImportInbox = true
                 }
                 guard !Task.isCancelled else { return }
                 onLaunchRequestHandled(launchRequest.id)

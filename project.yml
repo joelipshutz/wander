@@ -27,6 +27,7 @@ schemes:
     build:
       targets:
         Wander: all
+        WanderShareExtension: all
         WanderWidgets: all
         WanderTests: [test]
     run:
@@ -47,6 +48,7 @@ targets:
     platform: iOS
     sources:
       - Wander
+      - WanderImportShared
       - WanderWidgetShared
     configFiles:
       Debug: Wander/Config/Auth.xcconfig
@@ -108,6 +110,50 @@ targets:
       - target: WanderWidgets
         embed: true
         link: false
+      - target: WanderShareExtension
+        embed: true
+        link: false
+  WanderShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - WanderShareExtension
+      - WanderImportShared
+    info:
+      path: WanderShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Save to rec.me
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsFileWithMaxCount: 20
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 20
+    settings:
+      base:
+        PRODUCT_NAME: WanderShareExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.share
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: WanderShareExtension/WanderShareExtension.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+          - "@executable_path/../../Frameworks"
+      configs:
+        Debug:
+          ONLY_ACTIVE_ARCH: YES
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        Release:
+          SWIFT_COMPILATION_MODE: wholemodule
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
   WanderWidgets:
     type: app-extension
     platform: iOS

@@ -22542,3 +22542,84 @@ Landing completion — 2026-07-25 22:03 PDT:
 
 Final outcome: the requested Been-only calendar behavior and completed REC-142
 widget work are on `main`; no known landing blocker remains.
+
+## 2026-07-25 23:00 PDT - Codex - REC-97 Universal Share Extension
+
+Agent: Codex
+Branch: `codex/rec-97-share-extension`
+Worktree: `/private/tmp/recme-rec97-share-extension`
+Linear: `REC-97` (`In Progress`, connector read retry pending)
+
+Goal: implement the first testable universal iOS Share Extension for rec.me so
+Google Maps, Apple Maps, Instagram, TikTok, and other apps can send supported
+URLs, text, and files into the existing place-import inbox through one
+app-independent capture surface.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `e7b12a97f`.
+- The primary checkout remains untouched on `codex/rec-142-widgets` with an
+  unrelated untracked `.pnpm-store/`; all other listed worktrees are unrelated.
+- REC-142 has landed, so its prior `project.yml`, generated project, entitlement,
+  and `docs/agent-log.md` work is now part of this branch's base rather than an
+  overlapping active edit.
+- Existing REC-97 code already provides the device-local import parser, store,
+  Profile source UI, Google Maps shared-list importer, social metadata helpers,
+  and review flow. This slice will add one Share Extension target, a bounded
+  App Group envelope/inbox contract shared with the app, host-app draining into
+  the existing import store, source routing, focused tests, signing/setup docs,
+  and generated project changes.
+- Expected high-conflict files are `project.yml`,
+  `Wander.xcodeproj/project.pbxproj`, `Wander/Resources/Wander.entitlements`,
+  and this append-only log. New sources are expected under a shared import
+  module and a dedicated extension directory. No Supabase migration, hosted
+  mutation, build-number bump, TestFlight release, or Slack announcement is
+  authorized by this implementation request.
+
+Implementation and validation checkpoint — 2026-07-25 23:31 PDT:
+
+- Reopened existing Linear issue REC-97 from Done to In Progress and added the
+  implementation-scope comment; no duplicate issue was created.
+- Added one app-independent `WanderShareExtension` target
+  (`com.grayline.wander.share`) that accepts up to 20 URLs, text items, or
+  supported files from any iOS host share sheet. Provider detection recognizes
+  Google Maps, Instagram, TikTok, and Google Maps Takeout-style filenames;
+  Apple Maps, Yelp, Resy, OpenTable, Safari, Notes, Messages, and other sources
+  intentionally use the generic link/text path rather than separate targets.
+- Added the versioned App Group inbox contract under
+  `WanderImportShared/`. Capture is bounded to 256 KB text, 10 MB per file,
+  25 MB total, and CSV/JSON/TXT/Markdown/RTF; it uses protected atomic writes,
+  SHA-256 deduplication, backup exclusion, seven-day expiry, corrupt-envelope
+  quarantine, safe attachment resolution, and delivery-ID traversal
+  protection.
+- The containing app drains the inbox on launch/foreground, persists a
+  delivery ID per import batch for idempotency, routes generic URLs through the
+  existing link resolver, and offers a Review action that opens the existing
+  Import Review surface. The extension never authenticates, calls social APIs,
+  resolves places, or uploads data.
+- Regenerated `Wander.xcodeproj` from `project.yml`. The first simulator install
+  correctly caught missing generated `NSExtension` metadata; moved the complete
+  activation dictionary into the XcodeGen source of truth, regenerated, and
+  confirmed the app installs.
+- Validation:
+  - Generic iOS Simulator build succeeded and Apple embedded-binary validation
+    passed for both `WanderWidgets.appex` and `WanderShareExtension.appex`.
+  - Focused share/import/embedding suite passed 8/8 after correcting one
+    attachment base-path defect found by the test.
+  - Final full simulator suite passed 696/696 on iPhone 17 Pro Max, iOS 26.5.
+  - An ad-hoc signed simulator build installed and launched; `pluginkit`
+    registered `com.grayline.wander.share (0.1)`.
+  - `xcodegen generate`, plist parsing, and `git diff --check` passed.
+- Environment gap: this Mac's simulator signing strips restricted App Group
+  entitlements from its ad-hoc signature, so automated validation covered the
+  shared-container behavior through an injected filesystem root rather than a
+  live simulator App Group. Physical-device acceptance requires registering
+  `com.grayline.wander.share`, enabling
+  `group.com.grayline.wander.shared`, and refreshing the host/widget/share
+  development profiles as documented in `docs/setup.md`.
+- No Supabase changes were made. Build 97 remains unchanged; no archive,
+  TestFlight upload, group attachment, or Slack announcement was performed.
+- Next: commit and push the implementation, open a ready PR to `main`, update
+  REC-97 to In Review with validation and the physical-device setup gap, then
+  open this worktree's project in Xcode for branch handoff.

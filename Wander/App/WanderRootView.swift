@@ -21,6 +21,72 @@ struct WanderDeepLinkPresentationToken: Hashable, Sendable {
     }
 }
 
+private struct SharedPlaceImportDrainNotice: Identifiable {
+    let id = UUID()
+    let report: SharedPlaceImportDrainReport
+
+    var title: String {
+        if report.importedOrDuplicateBatchCount > 0,
+           report.failedEnvelopeCount + report.quarantinedEnvelopeCount + report.expiredEnvelopeCount > 0 {
+            return "Some shared places were added"
+        }
+        if report.importedOrDuplicateBatchCount > 0 {
+            return "Shared places added"
+        }
+        return "Shared import needs attention"
+    }
+
+    var message: String {
+        var parts: [String] = []
+        if report.importedBatchCount > 0 {
+            parts.append(
+                "\(report.importedBatchCount) import\(report.importedBatchCount == 1 ? "" : "s") added to your inbox."
+            )
+        }
+        if report.duplicateBatchCount > 0 {
+            parts.append(
+                "\(report.duplicateBatchCount) import\(report.duplicateBatchCount == 1 ? " was" : "s were") already in your inbox."
+            )
+        }
+        let unavailableCount = report.failedEnvelopeCount
+            + report.quarantinedEnvelopeCount
+            + report.expiredEnvelopeCount
+        if unavailableCount > 0 {
+            parts.append(
+                "\(unavailableCount) shared item\(unavailableCount == 1 ? "" : "s") could not be recovered. Share \(unavailableCount == 1 ? "it" : "them") again."
+            )
+        }
+        return parts.joined(separator: " ")
+    }
+
+    var canReview: Bool {
+        report.importedOrDuplicateBatchCount > 0
+    }
+}
+
+private struct SharedPlaceImportAlertModifier: ViewModifier {
+    @Binding var notice: SharedPlaceImportDrainNotice?
+    let onReview: () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(item: $notice) { notice in
+            if notice.canReview {
+                return Alert(
+                    title: Text(notice.title),
+                    message: Text(notice.message),
+                    primaryButton: .default(Text("Review"), action: onReview),
+                    secondaryButton: .cancel(Text("Later"))
+                )
+            }
+            return Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+}
+
 struct WanderDeepLinkHandoffCoordinator {
     private struct PendingHandoff {
         let requestID: UUID
@@ -248,6 +314,7 @@ struct WanderRootView: View {
     @State private var visitInvitationInboxRequestID: UUID?
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
+    @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     private let fixtureMode: WanderFixtureMode
@@ -450,6 +517,7 @@ struct WanderRootView: View {
         .onAppear {
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
+            drainSharedPlaceImports()
             importStore.resumePendingImports()
             reconcilePlaceImports()
             publishWidgetSnapshot()
@@ -541,12 +609,19 @@ struct WanderRootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            drainSharedPlaceImports()
             scheduleSignedInMaintenance(for: auth.state)
             publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: auth.state)
             }
         }
+        .modifier(
+            SharedPlaceImportAlertModifier(
+                notice: $sharedPlaceImportNotice,
+                onReview: presentSharedPlaceImportReview
+            )
+        )
         .onDisappear(perform: handleRootDisappear)
     }
 
@@ -600,6 +675,24 @@ struct WanderRootView: View {
                 )
             }
         )
+    }
+
+    private func drainSharedPlaceImports() {
+        guard let inbox = try? SharedPlaceImportInbox.live() else { return }
+        let report = SharedPlaceImportInboxDrainer.drain(
+            inbox: inbox,
+            into: importStore
+        )
+        guard report.hasUserVisibleResult else { return }
+        reconcilePlaceImports()
+        sharedPlaceImportNotice = SharedPlaceImportDrainNotice(report: report)
+    }
+
+    private func presentSharedPlaceImportReview() {
+        addTabResetToken = UUID()
+        addSheetDetent = .large
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importInbox)
+        isPresentingAdd = true
     }
 
     private func publishWidgetSnapshot(allowFreshnessAdvance: Bool = false) {
