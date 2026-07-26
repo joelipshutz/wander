@@ -23558,3 +23558,48 @@ Pre-landing build-98 validation — 2026-07-26 01:02 PDT:
   the matching test contract, and this release record. Next: land the metadata
   through a ready PR, archive exact resulting main with distribution signing,
   and upload with Xcode build-number management disabled.
+
+Build 98 release completion — 2026-07-26 01:16 PDT:
+
+- Squash-merged the authenticated-session boundary in PR #223 as
+  `245a54c8a20bb1750a0d034a3962db36b19aca0b`, then squash-merged the build-98
+  metadata in PR #230 as exact release commit
+  `dace9c1a5a63fa2d971965acbc90f866fc984d2e`.
+- Final exact-main validation remained green: 714/714 tests with zero failures
+  or skips on iPhone 17 Pro Max / iOS 26.2, plus the generic iOS Simulator
+  build for the app and widget extension. The prescribed iPhone 16 Plus /
+  iOS 18.6 runner stalled twice while Xcode waited for workers to materialize;
+  this was recorded as simulator infrastructure rather than an app failure.
+- Archived exact release commit `dace9c1` to
+  `/private/tmp/Wander-0.1-build98.xcarchive`. Archive metadata is app `rec.me`,
+  marketing version `0.1`, build `98`, bundle id `com.grayline.wander`.
+- The first archive attempt could not locate the local Xcode Account/App Group
+  profiles. Retried with the configured App Store Connect API-key
+  authentication; archive succeeded. The development-signed archive's local
+  deep verification reported `CSSMERR_TP_NOT_TRUSTED`, after which the App
+  Store Connect export re-signed the payload and the official upload completed
+  successfully with build-number management disabled.
+- `scripts/testflight-release.mjs` resolved App Store Connect build id
+  `354c1b9c-d5fa-4e6b-b338-ad5278238848`, confirmed processing state `VALID`,
+  set `usesNonExemptEncryption=false`, updated the en-US What to Test copy,
+  attached build 98 to `rec.me Alpha`, submitted external beta review, and
+  confirmed review state `APPROVED`. The build is live at
+  `https://testflight.apple.com/join/knEhRa6t`.
+- The required tester-facing Slack note could not be delivered: the configured
+  OpenClaw runtime returned `Channel is unavailable: slack`, and no Slack tool
+  is connected in this session. No message was claimed as posted. The tester
+  checklist is live in App Store Connect's What to Test copy; post the matching
+  build-live announcement to `#testflight-feedback` (`C0BAA7DG2AC`) when Slack
+  is available.
+- Linear tooling is also not connected in this Codex session, so REC-132 could
+  not be moved from `In Review` to `Done` or receive its completion comment.
+  Required follow-up: mark REC-132 Done and attach PR #223, release PR #230,
+  exact release commit `dace9c1`, the 714/714 validation result, build id above,
+  and the public TestFlight link.
+- Known alpha issue remains unchanged: Clerk's development sign-in says
+  `Wander` and displays its development-mode banner. No hosted Clerk settings
+  or credentials were changed.
+
+Final outcome: rec.me 0.1 (98) is uploaded, externally approved, attached to
+the public TestFlight group, and available to testers. Only the Slack and
+Linear release records remain blocked by unavailable integrations.
