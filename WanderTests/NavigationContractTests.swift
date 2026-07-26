@@ -4,6 +4,20 @@ import MapKit
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
+    func testAppRootHardGatesSignedOutSessionsBehindNonDismissableAuth() throws {
+        let app = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderApp.swift")
+        )
+        let authGate = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Auth/AuthGateSheet.swift")
+        )
+
+        XCTAssertTrue(app.contains("WanderAppEntryView(analytics: analytics, parser: discoverParser)"))
+        XCTAssertTrue(app.contains("case .signIn:\n                ClerkNativeAuthView(isDismissable: false)"))
+        XCTAssertTrue(app.contains("case .authenticated:\n                WanderRootView(analytics: analytics, parser: parser)"))
+        XCTAssertTrue(authGate.contains("AuthView(isDismissable: isDismissable)"))
+    }
+
     func testBottomNavigationUsesRequestedFiveItemOrder() {
         XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
     }

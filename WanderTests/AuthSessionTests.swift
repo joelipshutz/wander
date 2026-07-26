@@ -123,6 +123,59 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.signOutError, "Could not sign out. Try again.")
     }
 
+    func testStoreTracksProviderLogoutWithoutManualRefresh() async {
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let provider = PreviewAuthSessionProvider(
+            state: .signedIn(session),
+            canPresentNativeAuth: true,
+            token: "token"
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.presentGate(for: .syncPlace)
+        store.isPresentingNativeAuth = true
+
+        provider.setState(.signedOut)
+        for _ in 0..<20 where store.state != .signedOut {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(store.state, .signedOut)
+        XCTAssertNil(store.activeGate)
+        XCTAssertFalse(store.isPresentingNativeAuth)
+    }
+
+    func testAppSessionDestinationNeverShowsAppWithoutSignedInSession() {
+        XCTAssertEqual(
+            WanderAppEntryView.destination(for: .signedOut, hasResolvedSession: true),
+            .signIn
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(for: .loading, hasResolvedSession: true),
+            .loading
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(
+                for: .unavailable("No auth"),
+                hasResolvedSession: true
+            ),
+            .unavailable("No auth")
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(
+                for: .signedIn(AuthSession(userID: "user_123", displayName: nil, handle: nil)),
+                hasResolvedSession: true
+            ),
+            .authenticated
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(
+                for: .signedIn(AuthSession(userID: "user_123", displayName: nil, handle: nil)),
+                hasResolvedSession: false
+            ),
+            .loading
+        )
+    }
+
     func testAuthGateCopyKeepsTrustPromisesClear() {
         let syncCopy = AuthGateIntent.syncPlace.copy
         XCTAssertTrue(syncCopy.message.contains("this phone"))

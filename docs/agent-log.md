@@ -22011,3 +22011,95 @@ Landing completion — 2026-07-24 14:31 PDT:
 Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
 No known functional issue remains; existing compiler/headermap warnings are
 unchanged.
+
+## 2026-07-25 12:41 PDT - Codex - REC-132 Logged-Out Session Gate
+
+Agent: Codex using `ios-fix` and Linear workflows
+Branch: `codex/rec-132-auth-session-gate`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-132-auth-session`
+Linear: `REC-132` (`In Progress`)
+
+Goal: fix the production auth-state bug where Clerk can log the user out while
+rec.me continues rendering the authenticated app and stale device/profile
+metadata. A missing or invalid session must immediately remove the app shell and
+show non-dismissable sign-in.
+
+Starting status and diagnosis:
+
+- Fetched latest `origin/main` and created this clean isolated worktree at
+  `74ab31b`. Re-fetched on Joe's request and confirmed worktree `HEAD` exactly
+  matches `origin/main`. The root checkout is 27 commits behind with unrelated
+  `tmp/` content and remains untouched.
+- The initial `/private/tmp` worktree disappeared during a tool interruption, so
+  recreated the same branch at the persistent repo-standard sibling worktree
+  path above before making source changes.
+- REC-132 already owns the logged-out/onboarding state, is assigned to Joe, and
+  remains In Progress. Added this follow-up and branch to the issue. Mission
+  Control is unavailable because `localhost:4000` is not running.
+- Current production always mounts `WanderRootView`, regardless of
+  `AuthSessionStore.state`. Clerk is sampled at launch and after the modal auth
+  sheet closes, but the store does not subscribe to Clerk auth/session events.
+  A server-side or cross-device logout can therefore leave the store signed in
+  and expose the authenticated tabs plus the cached current-person profile.
+- Existing PR #182 contains a stale, conflicting full Phase A onboarding branch
+  with 2,900+ lines across schema, UI, and onboarding scope. This fix stays on
+  current main and targets the auth boundary only; it will not rebase or silently
+  ship that larger unfinished scope.
+- The `ios-fix` StateServer snapshot fixture is unavailable by prior repo
+  decision because this app has no DebugBridge/restore API. Use a deterministic
+  pre-fix auth-session regression test as the reproducing fixture, then simulator
+  build/test evidence. No QA instrumentation will be added.
+
+Expected files:
+
+- `Wander/App/WanderApp.swift`
+- `Wander/Features/Auth/AuthGateSheet.swift`
+- `Wander/Services/Auth/AuthSessionProviding.swift`
+- `Wander/Services/Auth/ClerkAuthService.swift`
+- `WanderTests/AuthSessionTests.swift`
+- `WanderTests/NavigationContractTests.swift`
+- `docs/agent-log.md`
+
+Validation plan:
+
+- Prove the stale-provider transition fails before the fix, then add focused
+  session-observation and app-entry routing tests.
+- Run focused auth/navigation tests, the full iOS test suite, a generic simulator
+  build, and inspect the exact diff for auth, metadata, and unrelated churn.
+- Push and open a ready PR back to `main`; no build-number bump, TestFlight
+  upload, hosted migration, or Slack announcement is part of this request.
+
+Checkpoint — 2026-07-25 21:27 PDT:
+
+- Reproduced the stale-session bug with
+  `AuthSessionTests.testStoreTracksProviderLogoutWithoutManualRefresh` on
+  iPhone 17 Pro Max (iOS 26.2). Before the fix, all three assertions failed:
+  the auth store remained signed in, retained its pending auth gate, and
+  retained the native-auth presentation flag after its provider moved to
+  signed out. Result bundle:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_21-19-16--0700.xcresult`.
+- Implemented a hard app-entry auth boundary: unresolved/loading sessions show
+  a neutral loading state, signed-out sessions show non-dismissable Clerk
+  authentication, only signed-in sessions mount `WanderRootView`, and
+  unavailable auth shows a retry surface.
+- Added continuous Clerk auth-event observation plus foreground session
+  resolution. Provider state changes now clear stale auth gates/presentation
+  state whenever the session is no longer signed in.
+- Focused post-fix validation passed 13/13 tests: all 12
+  `AuthSessionTests` plus
+  `NavigationContractTests.testAppRootHardGatesSignedOutSessionsBehindNonDismissableAuth`.
+  Result bundle:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_21-33-23--0700.xcresult`.
+- Compiler output contains only the repository's existing Swift isolation,
+  App Intents metadata, headermap, and test-expression warnings; the changed
+  auth files introduced no new warning.
+- Full iPhone 17 Pro Max (iOS 26.2) simulator suite passed 640/640 tests:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_21-38-22--0700.xcresult`.
+- Launched the built app signed out on the same simulator and visually verified
+  that it opens directly to the Clerk sign-in form with no dismiss control and
+  no tabs, profile metadata, or other authenticated app content. Screenshot:
+  `/private/tmp/rec132-auth-gate.png`.
+- Fresh universal simulator build passed for arm64 and x86_64 with
+  `xcodebuild build -project Wander.xcodeproj -scheme Wander -destination
+  'generic/platform=iOS Simulator' -derivedDataPath
+  /private/tmp/DerivedData-rec132-auth-session-build CODE_SIGNING_ALLOWED=NO`.

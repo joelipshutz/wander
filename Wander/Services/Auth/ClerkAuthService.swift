@@ -42,6 +42,39 @@ final class ClerkAuthService: AuthSessionProviding {
         return true
     }
 
+    func sessionChanges() -> AsyncStream<Void> {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else {
+            return AsyncStream { continuation in
+                continuation.finish()
+            }
+        }
+
+        let events = Clerk.shared.auth.events
+        return AsyncStream { continuation in
+            let task = Task { @MainActor in
+                for await event in events {
+                    guard !Task.isCancelled else { break }
+                    switch event {
+                    case .signInCompleted, .signUpCompleted, .signedOut, .accountDeleted, .sessionChanged:
+                        continuation.yield()
+                    case .tokenRefreshed:
+                        break
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+        #else
+        return AsyncStream { continuation in
+            continuation.finish()
+        }
+        #endif
+    }
+
     func refreshSession() async {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {

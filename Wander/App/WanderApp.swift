@@ -48,7 +48,7 @@ struct WanderApp: App {
     }
 
     private var appRoot: some View {
-        WanderRootView(analytics: analytics, parser: discoverParser)
+        WanderAppEntryView(analytics: analytics, parser: discoverParser)
             .environmentObject(auth)
             .environmentObject(backend)
             .environmentObject(pushNotifications)
@@ -67,5 +67,110 @@ struct WanderApp: App {
         return RemoteDiscoverFilterParser(
             repository: SupabaseDiscoverFilterRepository(functions: client)
         )
+    }
+}
+
+enum WanderAppSessionDestination: Equatable {
+    case loading
+    case signIn
+    case authenticated
+    case unavailable(String)
+}
+
+@MainActor
+struct WanderAppEntryView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var auth: AuthSessionStore
+    private let analytics: AnalyticsClient
+    private let parser: any LLMFilterParser
+    @State private var hasResolvedSession = false
+
+    init(analytics: AnalyticsClient, parser: any LLMFilterParser) {
+        self.analytics = analytics
+        self.parser = parser
+    }
+
+    var body: some View {
+        Group {
+            switch Self.destination(for: auth.state, hasResolvedSession: hasResolvedSession) {
+            case .loading:
+                sessionLoadingView
+            case .signIn:
+                ClerkNativeAuthView(isDismissable: false)
+            case .authenticated:
+                WanderRootView(analytics: analytics, parser: parser)
+            case .unavailable(let message):
+                authUnavailableView(message: message)
+            }
+        }
+        .task {
+            await resolveSession()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            hasResolvedSession = false
+            Task {
+                await resolveSession()
+            }
+        }
+    }
+
+    static func destination(
+        for state: AuthState,
+        hasResolvedSession: Bool
+    ) -> WanderAppSessionDestination {
+        guard hasResolvedSession else { return .loading }
+        switch state {
+        case .loading:
+            return .loading
+        case .signedOut:
+            return .signIn
+        case .signedIn:
+            return .authenticated
+        case .unavailable(let message):
+            return .unavailable(message)
+        }
+    }
+
+    private var sessionLoadingView: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            ProgressView()
+                .tint(WanderTheme.terracotta.color)
+            Text("Checking your session…")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+    }
+
+    private func authUnavailableView(message: String) -> some View {
+        VStack(spacing: WanderTheme.spacing4) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                .font(.system(size: 38, weight: .bold))
+                .foregroundStyle(WanderTheme.terracotta.color)
+            VStack(spacing: WanderTheme.spacing2) {
+                Text("Sign in is unavailable")
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                Text(message)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .multilineTextAlignment(.center)
+            }
+            WanderPrimaryButton(title: "Try again", systemImage: "arrow.clockwise") {
+                hasResolvedSession = false
+                Task {
+                    await resolveSession()
+                }
+            }
+        }
+        .padding(WanderTheme.spacing4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+    }
+
+    private func resolveSession() async {
+        await auth.refreshSession()
+        hasResolvedSession = true
     }
 }

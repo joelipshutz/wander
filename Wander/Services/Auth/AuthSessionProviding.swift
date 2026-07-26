@@ -129,6 +129,7 @@ enum AuthSessionError: Error, Equatable {
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
     var canPresentNativeAuth: Bool { get }
+    func sessionChanges() -> AsyncStream<Void>
     func refreshSession() async
     func signOut() async throws
     func deleteAccount() async throws
@@ -137,6 +138,12 @@ protocol AuthSessionProviding: AnyObject {
 }
 
 extension AuthSessionProviding {
+    func sessionChanges() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
     }
@@ -158,10 +165,22 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published private(set) var signOutError: String?
 
     private let provider: AuthSessionProviding
+    private var sessionObservationTask: Task<Void, Never>?
 
     init(provider: AuthSessionProviding) {
         self.provider = provider
         self.state = provider.state
+        sessionObservationTask = Task { @MainActor [weak self] in
+            for await _ in provider.sessionChanges() {
+                guard !Task.isCancelled else { return }
+                await provider.refreshSession()
+                self?.synchronizeStateFromProvider()
+            }
+        }
+    }
+
+    deinit {
+        sessionObservationTask?.cancel()
     }
 
     var isSignedIn: Bool {
@@ -177,7 +196,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         WanderDebugLog.remote.debug("auth store refresh start current_state=\(self.state.debugSummary, privacy: .public)")
         #endif
         await provider.refreshSession()
-        state = provider.state
+        synchronizeStateFromProvider()
         #if DEBUG
         WanderDebugLog.remote.debug("auth store refresh finished new_state=\(self.state.debugSummary, privacy: .public)")
         #endif
@@ -251,12 +270,10 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
         do {
             try await provider.signOut()
-            state = provider.state
-            activeGate = nil
-            isPresentingNativeAuth = false
+            synchronizeStateFromProvider()
         } catch {
             await provider.refreshSession()
-            state = provider.state
+            synchronizeStateFromProvider()
             signOutError = "Could not sign out. Try again."
             throw error
         }
@@ -265,7 +282,12 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     func deleteAccount() async throws {
         try await provider.deleteAccount()
         await provider.refreshSession()
+        synchronizeStateFromProvider()
+    }
+
+    private func synchronizeStateFromProvider() {
         state = provider.state
+        guard !state.isSignedIn else { return }
         activeGate = nil
         isPresentingNativeAuth = false
     }
@@ -277,17 +299,25 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     let canPresentNativeAuth: Bool
     private let token: String?
     private let signOutError: Error?
+    private let sessionChangeStream: AsyncStream<Void>
+    private let sessionChangeContinuation: AsyncStream<Void>.Continuation
 
     init(state: AuthState = .signedOut, canPresentNativeAuth: Bool = false, token: String? = nil, signOutError: Error? = nil) {
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
         self.state = state
         self.canPresentNativeAuth = canPresentNativeAuth
         self.token = token
         self.signOutError = signOutError
+        self.sessionChangeStream = stream
+        self.sessionChangeContinuation = continuation
     }
 
     func setState(_ state: AuthState) {
         self.state = state
+        sessionChangeContinuation.yield()
     }
+
+    func sessionChanges() -> AsyncStream<Void> { sessionChangeStream }
 
     func refreshSession() async {}
 
