@@ -41,13 +41,19 @@ struct ProfileInsights: Equatable {
     let monthSpotCount: Int
     let monthCategoryCount: Int
     let monthCityCount: Int
+    let mapPlaceCount: Int
     let mapPoints: [ProfileMapPoint]
     let placeSummaries: [ProfileSummaryItem]
     let citySummaries: [ProfileSummaryItem]
     let countrySummaries: [ProfileSummaryItem]
 
     var mapCityCount: Int {
-        Set(mapPoints.compactMap { CityCanonicalizer.comparisonKey($0.city) }).count
+        citySummaries.count
+    }
+
+    func mapPoints(matching item: ProfileSummaryItem) -> [ProfileMapPoint] {
+        let acceptedPlaceIDs = Set(item.placeIDs)
+        return mapPoints.filter { acceptedPlaceIDs.contains($0.id) }
     }
 
     var monthVisitCounts: [Date: Int] {
@@ -406,6 +412,7 @@ enum ProfileInsightsPresenter {
             monthSpotCount: monthUserPlaces.count,
             monthCategoryCount: distinctMonthCategories.count,
             monthCityCount: distinctMonthCities.count,
+            mapPlaceCount: beenPlaces.count,
             mapPoints: mapPoints,
             placeSummaries: summaries(
                 values: beenPlaces.map { (resolvedCategory(userPlace: $0.0, place: $0.1), $0.1.id) },

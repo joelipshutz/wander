@@ -220,6 +220,27 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testFilteredProfileMapShareNamesTheSelectionAndKeepsLinkAndPNG() throws {
+        let imageFileURL = URL(fileURLWithPath: "/tmp/maya-santa-monica-map.png")
+        let content = try XCTUnwrap(
+            WanderShareContent.profileMap(
+                serverID: "user_maya",
+                displayName: "Maya Chen",
+                handle: "maya",
+                imageFileURL: imageFileURL,
+                filterTitle: "Santa Monica"
+            )
+        )
+
+        XCTAssertEqual(content.items, [
+            URL(string: "recme://profiles/user_maya")!,
+            imageFileURL
+        ])
+        XCTAssertEqual(content.subject, "Maya Chen's Santa Monica map")
+        XCTAssertEqual(content.message, "Explore Santa Monica on @maya's rec.me map")
+    }
+
+    @MainActor
     func testProfileMapPNGAttachmentsAreLosslessUniqueAndPruneOnlyExpiredFiles() throws {
         let fileManager = FileManager.default
         let baseDirectory = fileManager.temporaryDirectory
@@ -721,6 +742,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapSection.contains("\n            Map("))
         XCTAssertFalse(source.contains("LazyVStack"))
         XCTAssertFalse(source.contains("LazyVGrid"))
+    }
+
+    func testProfileMapSummaryRowsExposeSeparateNavigationAndFilteredShareActions() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let mapSection = try XCTUnwrap(
+            source
+                .components(separatedBy: "private struct ProfileMapSection: View")
+                .last?
+                .components(separatedBy: "private struct ProfileMapSnapshotView: View")
+                .first
+        )
+        let shareButton = try XCTUnwrap(
+            source
+                .components(separatedBy: "private struct ProfileMapSummaryShareButton: View")
+                .last
+        )
+
+        XCTAssertTrue(mapSection.contains("Been to \\(insights.mapPlaceCount) \\(placeLabel)"))
+        XCTAssertTrue(mapSection.contains("ProfileMapSummaryShareButton("))
+        XCTAssertTrue(mapSection.contains("points: insights.mapPoints(matching: item)"))
+        XCTAssertTrue(shareButton.contains(".accessibilityLabel(\"Share \\(item.title)\")"))
+        XCTAssertTrue(shareButton.contains("filterTitle: item.title"))
+        XCTAssertTrue(shareButton.contains("WanderShareSheet(content: shareContent)"))
     }
 
     @MainActor

@@ -17,6 +17,8 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(insights.monthSpotCount, 2)
         XCTAssertEqual(insights.monthCategoryCount, 2)
         XCTAssertEqual(insights.monthCityCount, 2)
+        XCTAssertEqual(insights.mapPlaceCount, 2)
+        XCTAssertEqual(insights.mapCityCount, 2)
         XCTAssertEqual(insights.mapPoints.map(\.name), ["Bar Nido", "Woodcat Coffee"])
         XCTAssertEqual(insights.placeSummaries.map(\.title), ["Coffee, Tea, & Sweets", "Restaurants & Food"])
         XCTAssertEqual(insights.countrySummaries.map(\.title), ["United States"])
@@ -25,6 +27,10 @@ final class ProfileInsightsPresenterTests: XCTestCase {
             insights.placeSummaries.first { $0.id == WanderPlaceCategory.coffeeTeaSweets }?.placeIDs,
             ["coffee"]
         )
+        let coffeeSummary = try XCTUnwrap(
+            insights.placeSummaries.first { $0.id == WanderPlaceCategory.coffeeTeaSweets }
+        )
+        XCTAssertEqual(insights.mapPoints(matching: coffeeSummary).map(\.name), ["Woodcat Coffee"])
         XCTAssertFalse(insights.mapPoints.contains { $0.name == "Wanna Noodles" })
         XCTAssertEqual(insights.monthVisitCount, 3)
         XCTAssertEqual(insights.monthWannaCount, 0)
@@ -39,6 +45,26 @@ final class ProfileInsightsPresenterTests: XCTestCase {
         XCTAssertEqual(daySummary.visitPlaceIDs, ["dinner"])
         XCTAssertTrue(daySummary.wannaPlaceIDs.isEmpty)
         XCTAssertEqual(daySummary.placeIDs, ["dinner"])
+    }
+
+    func testMapTotalsIncludeResolvedBeenPlacesAndCitiesWithoutMappableCoordinates() {
+        let fixture = makeFixture()
+        fixture.places[0].latitude = 0
+        fixture.places[0].longitude = 0
+
+        let insights = ProfileInsightsPresenter.present(
+            ownerID: fixture.ownerID,
+            userPlaces: fixture.userPlaces,
+            visits: fixture.visits,
+            places: fixture.places,
+            month: fixture.month,
+            calendar: fixture.calendar
+        )
+
+        XCTAssertEqual(insights.mapPlaceCount, 2)
+        XCTAssertEqual(insights.mapCityCount, 2)
+        XCTAssertEqual(insights.citySummaries.map(\.title).sorted(), ["Los Angeles", "New York"])
+        XCTAssertEqual(insights.mapPoints.map(\.name), ["Bar Nido"])
     }
 
     func testCalendarDaySummariesCountRepeatedOwnerVisitsAndExcludeWanna() throws {

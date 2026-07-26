@@ -83,7 +83,6 @@ struct ProfileOwnerHome: View {
                 ProfileMapSection(
                     profile: profile,
                     insights: insights,
-                    beenCount: stats.been,
                     ownerLabel: ownerLabel,
                     summaryAction: mapSummaryAction
                 )
@@ -889,7 +888,6 @@ enum ProfileMapSummaryKind: String, CaseIterable, Identifiable {
 private struct ProfileMapSection: View {
     let profile: LocalProfile
     let insights: ProfileInsights
-    let beenCount: Int
     let ownerLabel: String
     let summaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
     @State private var selectedSummary: ProfileMapSummaryKind = .places
@@ -901,7 +899,7 @@ private struct ProfileMapSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) map")
                         .font(.system(size: 23, weight: .black))
-                    Text("\(insights.mapCityCount) \(insights.mapCityCount == 1 ? "city" : "cities")  •  \(beenCount) Been places")
+                    Text(mapCountSummary)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
@@ -952,13 +950,22 @@ private struct ProfileMapSection: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(Array(summaryItems.enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            summaryAction(selectedSummary, item)
-                        } label: {
-                            ProfileMapSummaryRow(item: item)
+                        HStack(spacing: 0) {
+                            Button {
+                                summaryAction(selectedSummary, item)
+                            } label: {
+                                ProfileMapSummaryRow(item: item)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows matching Been places")
+
+                            ProfileMapSummaryShareButton(
+                                profile: profile,
+                                item: item,
+                                points: insights.mapPoints(matching: item)
+                            )
+                            .padding(.trailing, WanderTheme.spacing2)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Shows matching Been places")
                         if index < summaryItems.count - 1 {
                             Divider().overlay(WanderTheme.borderHairline.color)
                         }
@@ -982,6 +989,12 @@ private struct ProfileMapSection: View {
             handle: profile.handle,
             imageFileURL: shareImageFileURL
         )
+    }
+
+    private var mapCountSummary: String {
+        let cityLabel = insights.mapCityCount == 1 ? "city" : "cities"
+        let placeLabel = insights.mapPlaceCount == 1 ? "place" : "places"
+        return "\(insights.mapCityCount) \(cityLabel)  •  Been to \(insights.mapPlaceCount) \(placeLabel)"
     }
 
     private var summaryItems: [ProfileSummaryItem] {
@@ -1206,6 +1219,80 @@ private struct ProfileMapSummaryRow: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
         }
         .padding(.horizontal, WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(minHeight: 58)
+    }
+}
+
+private struct ProfileMapSummaryShareButton: View {
+    let profile: LocalProfile
+    let item: ProfileSummaryItem
+    let points: [ProfileMapPoint]
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+    @State private var isPreparing = false
+    @State private var shareContent: WanderShareContent?
+    @State private var showsShareSheet = false
+
+    var body: some View {
+        Button {
+            prepareAndShare()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(WanderTheme.surfaceSand.color)
+                Circle()
+                    .stroke(WanderTheme.borderHairline.color)
+                if isPreparing {
+                    ProgressView()
+                        .tint(WanderTheme.terracotta.color)
+                } else {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                }
+            }
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+        }
+        .buttonStyle(.plain)
+        .disabled(isPreparing || profile.serverID == nil)
+        .accessibilityLabel("Share \(item.title)")
+        .accessibilityHint("Shares the profile link and a map of these \(item.count) Been \(item.count == 1 ? "place" : "places")")
+        .sheet(isPresented: $showsShareSheet) {
+            if let shareContent {
+                WanderShareSheet(content: shareContent)
+            }
+        }
+    }
+
+    private func prepareAndShare() {
+        Task {
+            isPreparing = true
+            defer { isPreparing = false }
+
+            let request = ProfileMapSnapshotRequest(
+                points: points,
+                size: CGSize(width: 334, height: 205),
+                displayScale: displayScale,
+                colorScheme: colorScheme
+            )
+            guard let image = await ProfileMapSnapshotCache.shared.image(for: request),
+                  !Task.isCancelled,
+                  let pngData = image.pngData(),
+                  let imageFileURL = await WanderShareAttachmentStore.preparePNG(pngData),
+                  !Task.isCancelled,
+                  let content = WanderShareContent.profileMap(
+                    serverID: profile.serverID,
+                    displayName: profile.displayName,
+                    handle: profile.handle,
+                    imageFileURL: imageFileURL,
+                    filterTitle: item.title
+                  )
+            else { return }
+
+            shareContent = content
+            showsShareSheet = true
+        }
     }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct WanderShareContent: Equatable {
     let item: URL
@@ -22,15 +23,20 @@ struct WanderShareContent: Equatable {
         serverID: String?,
         displayName: String,
         handle: String,
-        imageFileURL: URL
+        imageFileURL: URL,
+        filterTitle: String? = nil
     ) -> WanderShareContent? {
         guard imageFileURL.isFileURL, imageFileURL.pathExtension.lowercased() == "png" else { return nil }
         guard let item = appURL(host: "profiles", pathComponent: serverID) else { return nil }
+        let trimmedFilterTitle = filterTitle?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedFilterTitle = trimmedFilterTitle?.isEmpty == false ? trimmedFilterTitle : nil
         return WanderShareContent(
             item: item,
             additionalItems: [imageFileURL],
-            subject: "\(displayName)'s map",
-            message: "Explore @\(handle)'s saved places on rec.me"
+            subject: normalizedFilterTitle.map { "\(displayName)'s \($0) map" } ?? "\(displayName)'s map",
+            message: normalizedFilterTitle.map { "Explore \($0) on @\(handle)'s rec.me map" }
+                ?? "Explore @\(handle)'s saved places on rec.me"
         )
     }
 
@@ -56,6 +62,23 @@ struct WanderShareContent: Equatable {
         components.path = "/\(pathComponent)"
         return components.url
     }
+}
+
+struct WanderShareSheet: UIViewControllerRepresentable {
+    let content: WanderShareContent
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        var activityItems: [Any] = [content.message]
+        activityItems.append(contentsOf: content.items)
+        let controller = UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
+        controller.setValue(content.subject, forKey: "subject")
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 enum WanderShareAttachmentStore {
