@@ -203,11 +203,35 @@ private struct WanderQuickCaptureWidgetView: View {
     private var circularView: some View {
         ZStack {
             AccessoryWidgetBackground()
-            VStack(spacing: 1) {
-                Image(systemName: "location.fill")
-                    .font(.system(size: 19, weight: .bold))
-                Text("HERE")
-                    .font(.system(size: 8, weight: .black, design: .rounded))
+
+            ZStack {
+                Circle()
+                    .stroke(lineWidth: 1)
+                    .opacity(0.44)
+                    .padding(4)
+
+                Circle()
+                    .stroke(lineWidth: 1)
+                    .opacity(0.4)
+                    .padding(10)
+
+                Circle()
+                    .stroke(lineWidth: 1)
+                    .opacity(0.36)
+                    .padding(16)
+
+                WanderCircularWidgetArcText(
+                    text: "rec.me",
+                    placement: .top
+                )
+
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .black))
+
+                WanderCircularWidgetArcText(
+                    text: "CHECK-IN",
+                    placement: .bottom
+                )
             }
             .widgetAccentable()
         }
@@ -239,6 +263,64 @@ private struct WanderQuickCaptureWidgetView: View {
     private var inlineView: some View {
         Label("I'm here now", systemImage: "location.fill")
             .accessibilityLabel("I'm here now. Opens rec.me.")
+    }
+}
+
+private struct WanderCircularWidgetArcText: View {
+    enum Placement {
+        case top
+        case bottom
+
+        var radius: CGFloat {
+            switch self {
+            case .top: -20
+            case .bottom: 20
+            }
+        }
+
+        var angularStep: Double {
+            switch self {
+            case .top: 9.5
+            case .bottom: -8
+            }
+        }
+
+        var fontSize: CGFloat {
+            switch self {
+            case .top: 5.5
+            case .bottom: 4.5
+            }
+        }
+    }
+
+    let text: String
+    let placement: Placement
+
+    private var characters: [Character] {
+        Array(text)
+    }
+
+    var body: some View {
+        ZStack {
+            ForEach(characters.indices, id: \.self) { index in
+                Text(String(characters[index]))
+                    .font(
+                        .system(
+                            size: placement.fontSize,
+                            weight: .black,
+                            design: .rounded
+                        )
+                    )
+                    .offset(y: placement.radius)
+                    .rotationEffect(.degrees(angle(for: index)))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func angle(for index: Int) -> Double {
+        let centeredIndex = Double(index) - Double(characters.count - 1) / 2
+        return centeredIndex * placement.angularStep
     }
 }
 
@@ -818,6 +900,12 @@ private enum WanderWidgetPreviewData {
 }
 
 #Preview("Quick capture", as: .systemSmall) {
+    WanderQuickCaptureWidget()
+} timeline: {
+    WanderShortcutEntry(date: WanderWidgetPreviewData.date)
+}
+
+#Preview("Quick capture — Lock Screen", as: .accessoryCircular) {
     WanderQuickCaptureWidget()
 } timeline: {
     WanderShortcutEntry(date: WanderWidgetPreviewData.date)

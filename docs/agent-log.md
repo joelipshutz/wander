@@ -24683,3 +24683,90 @@ TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
 Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
+
+## 2026-07-26 12:53 PDT — Codex — REC-157 Lock Screen widget design exploration
+
+- Goal: create several visually distinct mockups for the small Lock Screen
+  quick-capture widget so both the `rec.me` brand and the “I’m here now” /
+  check-in action are recognizable at a glance.
+- Linear: REC-157 (`In Progress`), related to REC-142 and assigned to Ryan.
+- Branch: `codex/rec-157-lock-widget-mockups`. Clean isolated worktree:
+  `/private/tmp/recme-rec157-lock-widget-mockups`, based on current
+  `origin/main` `b4d7c98ce`.
+- The primary checkout was intentionally left untouched because it is on the
+  now-merged `codex/rec-142-widgets` branch and contains an unrelated untracked
+  `.pnpm-store/`.
+- Design-shotgun artifacts will be saved outside the repository under
+  `~/.gstack/projects/joelipshutz-wander/designs/`, per that workflow.
+- Expected repository files: this append-only coordination log only. Source
+  files under `WanderWidgets/`, widget deep-link contracts, and `DESIGN.md`
+  will be inspected but not changed until Ryan approves a mockup direction.
+- Next: audit the accessory widget implementation and Lock Screen constraints,
+  inspect prior design memory, propose distinct concepts, generate the approved
+  comparison set, and record the design feedback.
+
+REC-157 design-shotgun checkpoint — 2026-07-26 13:02 PDT:
+
+- Audited `WanderWidgets/WanderWidgets.swift`: the current
+  `.accessoryCircular` treatment is a generic `location.fill` plus `HERE`;
+  the deep link and accessibility label already route to the intended
+  “I’m here now” flow.
+- Reviewed `DESIGN.md` and the canonical rec.me app-icon contract/master. The
+  relevant recognizable grammar is the location pin, bookmark cutout, orbit,
+  and monochrome-safe silhouette.
+- The local gstack design binary and browser helper were unavailable, so
+  design-shotgun used its HTML/SVG fallback. Optional cross-machine artifact
+  sync was privacy-blocked and deliberately skipped; all artifacts remain
+  local.
+- Generated and XML-validated four 1200×900 SVG directions, each shown at
+  realistic accessory-circular scale plus magnified detail:
+  A App Badge, B rec·HERE, C Check-in Pulse, and D Radial Label.
+- Saved the local comparison board and PNG/SVG artifacts at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`
+  and opened `design-board.html` in the default browser.
+- No product source, project configuration, or tests changed. Awaiting Ryan’s
+  comparison-board feedback before locking a direction or implementing it.
+
+REC-157 implementation and validation — 2026-07-26 13:18 PDT:
+
+- Ryan selected the Check-in Pulse direction with a revised composition:
+  curved `rec.me` at the top, a centered plus sign, matching curved `CHECK-IN`
+  at the bottom, and the concentric pulse rings retained.
+- Created and visually inspected the revised C2 mockup at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/variant-C2.png`
+  (with an editable SVG beside it). The design artifacts remain local because
+  optional cross-machine artifact sync was privacy-blocked. Saved the confirmed
+  choice and Ryan's feedback in the adjacent `approved.json`; the optional
+  taste-profile updater could not run because its required `bun` runtime is not
+  installed on this machine.
+- Implemented the design in the `.accessoryCircular` quick-capture widget using
+  monochrome-safe SwiftUI shapes, SF Symbols, and per-character arc layout.
+  Added a dedicated accessory-circular Xcode preview.
+- Moved URL intake to `WanderAppEntryView` and added a one-shot deep-link inbox.
+  Widget URLs received while authentication/session restoration is unresolved
+  are retained, then handed to `WanderRootView` after validation. This makes the
+  quick-capture link reliably open the existing “I’m here now” flow after a
+  terminated/crashed-app launch as well as during warm launches.
+- Added regression coverage for deferred cold-start routing, invalid URL
+  rejection, latest-valid-request behavior, one-shot consumption, and the
+  revised widget source contract.
+- Regenerated the Xcode project with `xcodegen generate`; it produced no
+  `project.pbxproj` diff.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on the available iPhone 17 Pro /
+    iOS 26.5 simulator. The documented iPhone 16 Plus / iOS 18.6 runtime is not
+    installed on this machine.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - `git diff --check`: passed.
+- Existing warnings in `WanderSupabaseClient.swift` about actor-isolated date
+  formatters and Xcode's traditional headermap warning remain unchanged and are
+  outside REC-157.
+- Files changed: `Wander/App/WanderApp.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/App/WanderWidgetLaunchRequest.swift`,
+  `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this log.
+- Next: commit and push `codex/rec-157-lock-widget-mockups`, open a ready PR,
+  link it to REC-157, and move the issue to `In Review`. No TestFlight build
+  number change or release was requested.
