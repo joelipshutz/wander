@@ -24870,3 +24870,102 @@ REC-122 explicit TestFlight release review — 2026-07-26:
 - Next: run focused and complete validation on the reviewed head, sync current
   `origin/main`, publish the clean PR, squash-merge it, then execute the build
   100 release workflow. REC-122 stays In Review until build 100 is available.
+## 2026-07-26 13:28 PDT - Codex - REC-159 Nearby Widget Plus Icons
+
+Agent: Codex
+Branch: `codex/rec-159-nearby-plus-icons`
+Worktree: `/private/tmp/recme-rec159-nearby-plus-icons`
+Linear: `REC-159` (`In Progress`)
+
+Goal: replace the trailing diagonal arrow on every place row in the large
+Nearby spots widget with a plus icon while preserving the existing selected
+place deep link and all other widget controls.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact current
+  `origin/main` at `b4d7c98ce`.
+- The primary checkout remains untouched with its unrelated untracked
+  `.pnpm-store/`.
+- PR #243 / REC-157 is active on the Lock Screen quick-capture widget, while
+  PR #244 / REC-158 is active on cold-start routing. Neither branch owns the
+  Nearby place-row presentation changed here.
+- Created medium-priority REC-159, assigned it to Ryan, related it to the
+  shipped Nearby widget issue REC-154, and moved it to `In Progress`.
+- Expected files: `WanderNearbyWidgets/WanderNearbyWidget.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this append-only log.
+- No TestFlight build, build-number change, merge, or release was requested.
+
+Implementation and validation — 2026-07-26 13:33 PDT:
+
+- Replaced the shared Nearby place-row trailing SF Symbol from
+  `arrow.up.right` to `plus`. Because all five visible rows use the same
+  `placeRow` view, the requested affordance changes consistently without
+  altering any row's existing `.nearbyPlace(candidateID:)` destination.
+- Added source-contract assertions requiring the plus symbol and forbidding
+  the prior diagonal arrow in the Nearby widget implementation. The See all
+  chevron, Refresh control, row layout, colors, and accessibility copy remain
+  unchanged.
+- `xcodegen generate` completed and produced no project-file diff.
+- Focused Nearby widget integration test passed 1/1:
+  `/tmp/DerivedData-rec159-focused/Logs/Test/Test-Wander-2026.07.26_13-29-04--0700.xcresult`.
+- The complete iPhone 17 Pro / iOS 26.5 suite passed 744/744 with zero
+  failures:
+  `/tmp/DerivedData-rec159-focused/Logs/Test/Test-Wander-2026.07.26_13-32-49--0700.xcresult`.
+- The initial sandboxed focused run could not access CoreSimulator or fetch
+  pinned packages; the required elevated rerun passed. Existing non-blocking
+  simulator entitlement, keychain, actor-isolation, and traditional headermap
+  warnings remain unchanged.
+- `git diff --check` passed. Final source scope is the Nearby widget, its
+  integration contract, and this log.
+
+Handoff — 2026-07-26 13:35 PDT:
+
+- Committed the scoped implementation as `60bd8f80c` (`Use plus icons in
+  nearby widget`) and pushed `codex/rec-159-nearby-plus-icons`.
+- Opened ready PR #246 to current `main`:
+  `https://github.com/joelipshutz/wander/pull/246`.
+- Linked PR #246 to REC-159, posted the implementation and validation receipt,
+  and moved the issue to `In Review`.
+- Final validation remains 744/744 complete-suite tests and the focused 1/1
+  Nearby widget contract, both with zero failures.
+- No TestFlight build number was changed and no build was uploaded or released.
+
+Final outcome: every visible Nearby widget place row now uses a plus icon while
+retaining the same selected-place check-in destination. PR #246 is ready for
+review.
+
+## 2026-07-26 13:42 PDT - Codex - REC-159 Landing
+
+Agent: Codex
+Branch: `codex/rec-159-merge-record`
+Worktree: `/private/tmp/recme-rec159-merge-record`
+Linear: `REC-159`
+
+Goal: review and land the completed Nearby widget plus-icon change on `main`,
+then record the durable completion receipt.
+
+Landing and validation:
+
+- Fetched current `origin/main`, inspected the full PR diff, read `DESIGN.md`
+  and the pre-landing review checklist, and confirmed the change remained
+  scoped to the Nearby widget row glyph, its source-contract assertions, and
+  the required agent log.
+- PR #246 was ready, mergeable, and free of unresolved human or Greptile review
+  comments. No GitHub-hosted checks were configured for this branch.
+- Pre-landing review found no critical or informational issues. The row retains
+  its existing `.nearbyPlace(candidateID:)` destination and only changes the
+  shared trailing SF Symbol from `arrow.up.right` to `plus`.
+- Reconfirmed `git diff --check`, the focused 1/1 widget integration result,
+  and the complete 744/744 XCTest result recorded above.
+- Squash-merged ready PR #246 into `main` as `977f7c654264fd21532fe1b4694ef10fc1192753`.
+- Fetched the merged branch and directly verified that
+  `origin/main:WanderNearbyWidgets/WanderNearbyWidget.swift` contains
+  `Image(systemName: "plus")`.
+- This merge did not increment the build number or create, upload, attach, or
+  announce a TestFlight build. The fix will ride the next explicitly requested
+  TestFlight release batch.
+
+Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
+place row now shows the requested plus icon while preserving its check-in deep
+link.
