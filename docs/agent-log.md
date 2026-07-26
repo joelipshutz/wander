@@ -22863,3 +22863,39 @@ Completion — 2026-07-25 22:43 PDT:
 Final outcome: the approved Discover search direction now has an
 implementation-ready, costed, privacy-bounded engineering plan and a clean
 ready PR. The feature itself is not yet implemented.
+
+## 2026-07-25 23:36 PDT - Codex - REC-146 landing completion
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-146-merge-record`
+Worktree: `/private/tmp/recme-rec146-merge-record`
+Linear: `REC-146` (`Done` after this completion record lands)
+
+Landing completion:
+
+- Pushed hardened feature head `b122c7c93`, confirmed ready PR #221 was
+  `CLEAN` and `MERGEABLE` against current `main`, and posted the final review
+  and validation record:
+  `https://github.com/joelipshutz/wander/pull/221#issuecomment-5082383767`.
+- Squash-merged PR #221 to `main` as
+  `9feb4c79513fc195e8d2b2bff71468f56734dfae`:
+  `https://github.com/joelipshutz/wander/pull/221`. GitHub deleted the remote
+  `codex/rec-146-profile-filter-sharing` branch.
+- Final behavior: Profile > your map reports accurate canonical Been-only city
+  and place totals in the requested copy, and every Places, Cities, and
+  Countries summary row has a separate accessible share action for its
+  matching map and stable profile link.
+- Pre-landing review fixed canonical-place alias double counting, concurrent or
+  abandoned share preparation, silent share failures, unsynced affordance
+  ambiguity, unsupported activity-subject KVC, and generated PNG cleanup. No
+  unresolved gstack, design, test, security/performance, or Greptile finding
+  remained at merge.
+- Validation: complete iPhone 17 Pro / iOS 26.5 suite 693/693; exact share
+  contracts 2/2; prior iPhone 17e and iPhone 17 Pro visual QA; clean diff and
+  latest-main merge. Existing unrelated build warnings remain unchanged.
+- Build 97 remains unchanged. This merge did not increment the build, archive,
+  upload, change TestFlight groups, or post tester Slack notes. REC-146 is
+  eligible for the next explicitly requested TestFlight release batch.
+
+Final outcome: the requested Profile map totals and per-filter sharing are on
+`main`; no known REC-146 landing blocker remains.
