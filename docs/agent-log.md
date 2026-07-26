@@ -24852,3 +24852,17 @@ Implementation and validation checkpoint (12:31 PDT):
   approves the Map, Feed, and history ticket layouts. No backend/schema,
   build-number, archive, TestFlight, App Store Connect, or Slack release action
   was performed. Stacked PR handoff is next.
+
+PR handoff (12:35 PDT):
+
+- Implementation commit: `963cfd3` (`feat: add REC-147 feed and profile
+  tickets`). Pushed `codex/rec-147-feed-profile-tickets` and opened ready
+  stacked PR #242 against `codex/rec-147-direction-a-map`:
+  `https://github.com/joelipshutz/wander/pull/242`.
+- PR #242 links REC-147 and records the 749/749 result, generic build, two-size
+  visual QA, preserved data contract, stack base #241, and explicit typography
+  exclusion. REC-147 is back in In Review with the PR attachment and validation
+  comment.
+- Mission Control task `fc5cf02a-cb70-457d-9f9c-08d07f5898a8` is in Review
+  with the same proof. No TestFlight release was requested; build 99 remains the
+  latest shipped tester build.
