@@ -505,6 +505,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(detailsContent.contains("saveAsSection"))
         XCTAssertTrue(detailsContent.contains("placeTypeSection"))
         XCTAssertTrue(detailsContent.contains("if selectedStatus == .been"))
+        XCTAssertTrue(detailsContent.contains("checkInDateSection"))
         XCTAssertTrue(detailsContent.contains("ratingSection"))
         XCTAssertTrue(detailsContent.contains("sharedVisitInviteSection"))
         XCTAssertTrue(detailsContent.contains("MapSaveVisitPhotoSection("))
@@ -519,7 +520,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("visibilitySection"))
         XCTAssertTrue(optionalDetails.contains("note, tags, labels & privacy"))
         XCTAssertEqual(
-            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"save as\")").count - 1,
+            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
         )
         XCTAssertTrue(mapScreen.contains("if step == .details && context.requiresStatusConfirmation"))
@@ -657,7 +658,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("style: StrokeStyle("))
         XCTAssertTrue(source.contains("lineCap: .round"))
         XCTAssertTrue(source.contains("dash: [0.1, max(3, size * 0.14)]"))
-        XCTAssertTrue(source.contains("item(state: .visit, title: \"been\")"))
+        XCTAssertTrue(source.contains("item(state: .visit, title: CheckInCopy.pluralNoun)"))
         XCTAssertTrue(source.contains(".offset(y: -6)"))
         XCTAssertFalse(source.contains("visitCount > 1"), "Calendar cells should keep state visuals stable and move counts into day detail")
     }
@@ -670,7 +671,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("ProfileCalendarPlaceActivityLabel"))
         XCTAssertFalse(source.contains("visited this day"))
         XCTAssertFalse(source.contains("saved as wanna this day"))
-        XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: \"been\", plural: \"been\""))
+        XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun"))
         XCTAssertTrue(source.contains("metric(value: summary.wannaCount, singular: \"wanna\", plural: \"wanna\""))
     }
 

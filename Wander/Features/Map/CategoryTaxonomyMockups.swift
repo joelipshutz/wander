@@ -70,7 +70,7 @@ private struct RemoveSaveEditMockup: View {
     }
 
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "edit visit", subtitle: "Jitlada - saved by you") {
+        CategoryTaxonomyMockupScreen(title: "edit check-in", subtitle: "Jitlada - saved by you") {
             placeHeader
 
             MockupSection(title: "place type") {
@@ -81,7 +81,7 @@ private struct RemoveSaveEditMockup: View {
 
             MockupSection(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MockupChoicePill(title: "been", isSelected: true)
+                    MockupChoicePill(title: "check-in", isSelected: true)
                     MockupChoicePill(title: "wanna go", isSelected: false)
                     Spacer(minLength: 0)
                 }
@@ -237,7 +237,7 @@ private enum CategoryTaxonomyMockData {
 
 private struct CategoryTaxonomyEditMockup: View {
     var body: some View {
-        CategoryTaxonomyMockupScreen(title: "edit visit", subtitle: "Jitlada - Los Angeles") {
+        CategoryTaxonomyMockupScreen(title: "edit check-in", subtitle: "Jitlada - Los Angeles") {
             placeHeader
 
             MockupSection(title: "place type") {
@@ -248,7 +248,7 @@ private struct CategoryTaxonomyEditMockup: View {
 
             MockupSection(title: "save as") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MockupChoicePill(title: "been", isSelected: true)
+                    MockupChoicePill(title: "check-in", isSelected: true)
                     MockupChoicePill(title: "wanna go", isSelected: false)
                     Spacer(minLength: 0)
                 }
@@ -773,7 +773,7 @@ private struct CategoryTaxonomyLabelsMockup: View {
                 Text("Jitlada")
                     .font(.system(size: 24, weight: .black))
                 Spacer()
-                Text("been")
+                Text("check-in")
                     .font(.system(size: 12, weight: .black))
                     .padding(.horizontal, WanderTheme.spacing2)
                     .frame(minHeight: 28)

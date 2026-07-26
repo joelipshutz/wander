@@ -22125,3 +22125,92 @@ Publication — 2026-07-24 17:31 PDT:
   REC-145 follow-up, remaining real-device checks, and release boundary.
 - No TestFlight release, build-number change, archive, upload, or Slack
   announcement was requested or performed.
+
+## 2026-07-25 21:17 PDT - Codex - REC-143 Check-in Implementation
+
+Agent: Codex
+Branch: `codex/rec-143-checkins-implementation`
+Worktree: `/Users/ryanlieblein/Developer/Wander-worktrees/rec-143-checkins`
+Linear: `REC-143` (`In Progress`)
+
+Goal: implement the approved repeatable Check-in/ticketing specification,
+validate the complete local/remote contract, publish a ready PR, and open this
+isolated worktree in Xcode with its branch visible in Branch Chooser.
+
+Starting status and coordination:
+
+- Fetched `origin`. This clean persistent worktree starts from
+  `origin/codex/rec-143-checkin-ticketing-spec` at `ca16341b4`, which itself is
+  based on current `origin/main` (`74ab31bb0`).
+- The primary checkout is active on `codex/rec-142-widgets` and contains
+  user-owned `.pnpm-store/`; it remains untouched.
+- PR #213 remains the docs-only REC-143 specification review. Draft PR #214 is
+  temporary design instrumentation and will not be merged into this branch.
+- Linear REC-143 moved back to `In Progress` and now links this implementation
+  branch.
+- No other live worktree reports REC-143 implementation edits. High-conflict
+  Map, local-store, project, agent-log, and Supabase files will be changed only
+  in this isolated worktree.
+
+Expected implementation areas:
+
+- Check-in terminology and formatting across Map, Add, Discover, Profile,
+  calendar, Feed, imports, Settings, supported mockups, accessibility, and
+  tests.
+- Explicit first/repeat visit persistence, historical Wanna restoration,
+  durable visit-delete retry, repository DTO/protocol changes, and one reviewed
+  Supabase migration plus smoke coverage.
+- Ticket-style place activity, form/action hierarchy, Profile counts,
+  calendar/import behavior, and performance-safe grouped/lazy rendering.
+- `project.yml` and generated `Wander.xcodeproj/project.pbxproj` only if source
+  membership requires regeneration.
+- `docs/agent-log.md`; durable contract clarifications in the existing REC-143
+  spec if implementation evidence requires them.
+
+Validation plan:
+
+- focused grammar, compatibility, store, repository, navigation, Feed,
+  calendar/import, retry, and security tests;
+- hosted Supabase smoke and function metadata checks for any iOS-called RPC;
+- full documented simulator suite and generic build;
+- screenshots on current and compact iPhones plus accessibility/state review;
+- clean diff/review, ready PR, Linear `In Review`, then open this worktree’s
+  `Wander.xcodeproj` and verify Xcode Branch Chooser shows
+  `codex/rec-143-checkins-implementation`.
+
+Implementation checkpoint — 2026-07-25 22:05 PDT:
+
+- Completed the app-wide Check-in vocabulary conversion while retaining
+  compatibility identifiers (`PlaceStatus.been`, SQL `status = 'been'`, and
+  legacy analytics/feed discriminators). Added centralized grammar for
+  Check in, Check-in, Check-ins, and Checked in.
+- Implemented explicit first and repeat check-ins with stable visit UUIDs,
+  selectable non-future dates, atomic remote save, durable visit-delete retry,
+  historical Wanna restoration, per-visit Feed publication, and active-ticket
+  Profile counts.
+- Updated Map actions, the add/edit form, place activity, Feed, Discover,
+  Profile/import, shared visits, Settings, lists, streak copy, accessibility
+  labels, and contract tests. Ticket rows use compact notched presentation and
+  lazy rendering with newest check-ins first.
+- Generated the Xcode project and completed a successful generic simulator
+  build. The repo-documented iPhone 16 Plus / iOS 18.6 destination is not
+  installed on this machine; validation therefore uses installed iPhone 17
+  and iPhone 17e simulators on iOS 26.5.
+- Added migrations `20260725214500_check_in_ticketing.sql` and
+  `20260725214600_check_in_feed_projection.sql`, plus strict pgTAP and
+  production-shaped hosted smoke coverage. Local Supabase validation was
+  unavailable because Docker is not running.
+- Confirmed the linked target is the `wander` Supabase project
+  (`rugmtlgufrhlxwfkumhw`), reviewed both migrations in a rollback preview,
+  fixed an authenticated wrapper-to-`app` execute-grant defect found by the
+  smoke path, then applied both migrations to the linked project.
+- Hosted metadata/security regression coverage is green: 21/21 assertions
+  cover columns, RPC definitions, `security definer`/invoker posture,
+  `search_path`, grants, the Feed trigger, cascade behavior, and the ticket
+  index. The production-shaped check-in save/repeat/delete/Wanna-restore/future
+  rejection smoke block also passed before the broader pre-existing smoke
+  suite stopped later at its unrelated profile-geography assertion.
+- The first full iPhone 17 run exposed expected copy-contract updates and one
+  fake-repository atomicity mismatch. After correcting those, the focused
+  271-test regression run had one cache-refresh failure; that path is fixed
+  and awaits the final full-suite rerun.

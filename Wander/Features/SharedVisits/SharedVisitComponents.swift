@@ -47,7 +47,7 @@ struct SharedVisitInviteSection: View {
             .buttonStyle(.plain)
             .disabled(isLoading || errorMessage != nil)
             .opacity(isLoading || errorMessage != nil ? 0.5 : 1)
-            .accessibilityLabel("Add friends to this visit")
+            .accessibilityLabel("Add friends to this check-in")
             .accessibilityValue(selectedFriends.isEmpty ? "None added" : "\(selectedFriends.count) added")
 
             if isLoading {
@@ -336,7 +336,7 @@ struct SharedVisitNotificationBanner: View {
                         .font(.system(size: 14, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
-                    Text("Shared visit · \(relativeInvitationTime)")
+                    Text("Shared check-in · \(relativeInvitationTime)")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
@@ -363,7 +363,7 @@ struct SharedVisitNotificationBanner: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
-            "Open visit invitations. \(SharedVisitBannerCopy.title(inviterName: invitation.sourceOwnerDisplayName, placeName: invitation.placeName))"
+            "Open check-in invitations. \(SharedVisitBannerCopy.title(inviterName: invitation.sourceOwnerDisplayName, placeName: invitation.placeName))"
         )
     }
 
@@ -387,7 +387,7 @@ struct ProfileSharedVisitInboxRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("visit invitations")
+                    Text("check-in invitations")
                         .font(.system(size: 16, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
                     Text(subtitle)
@@ -430,8 +430,8 @@ struct ProfileSharedVisitInboxRow: View {
 
     private var accessibilityText: String {
         invitationCount == 0
-            ? "Visit invitations, none pending"
-            : "Visit invitations, \(invitationCount) pending"
+            ? "Check-in invitations, none pending"
+            : "Check-in invitations, \(invitationCount) pending"
     }
 }
 
@@ -481,7 +481,7 @@ struct SharedVisitInvitationInboxScreen: View {
         }
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .foregroundStyle(WanderTheme.textInk.color)
-        .navigationTitle("visit invitations")
+        .navigationTitle("check-in invitations")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refresh() }
     }
@@ -495,7 +495,7 @@ struct SharedVisitInvitationInboxScreen: View {
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
             Text("no invitations waiting")
                 .font(.system(size: 21, weight: .black, design: .rounded))
-            Text("New shared visits will show up here.")
+            Text("New shared check-ins will show up here.")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -598,7 +598,7 @@ private struct SharedVisitInboxInvitationCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(invitation.sourceOwnerDisplayName)
                     .font(.system(size: 14, weight: .black))
-                Text("invited you to a visit")
+                Text("invited you to a check-in")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }

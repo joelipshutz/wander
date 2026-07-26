@@ -243,7 +243,7 @@ struct FeedScreen: View {
             )
             await refresh()
             savedMessage = result.syncState == .synced
-                ? "Visit saved."
+                ? "Check-in saved."
                 : "Saved locally. We'll retry sync."
             return result
 
