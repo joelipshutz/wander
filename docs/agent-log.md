@@ -24866,3 +24866,6 @@ PR handoff (12:35 PDT):
 - Mission Control task `fc5cf02a-cb70-457d-9f9c-08d07f5898a8` is in Review
   with the same proof. No TestFlight release was requested; build 99 remains the
   latest shipped tester build.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode for Joe's local
+  testing. Xcode's Branch Chooser explicitly reports
+  `codex/rec-147-feed-profile-tickets`.
