@@ -22983,6 +22983,84 @@ REC-122 current-main sync validation — 2026-07-26 00:21 PDT:
   7/7 focused tests, exact-binary dual-device visual QA, and current-main diff
   review. The PR is ready for review; no TestFlight release was requested.
 
+## 2026-07-25 — Codex — REC-153 widget deep-link polish
+
+Start — 2026-07-25 22:24 PDT:
+
+- Goal: make individual Activity Calendar widget dates open that exact date,
+  keep all other calendar-widget taps routed to the full Profile calendar, and
+  make the Quick Search widget reliably show the Map search keyboard on warm
+  and cold launches.
+- Linear: created REC-153, assigned to Ryan, related it to REC-142 and REC-70,
+  and moved it to `In Progress`.
+- Branch/worktree: `codex/rec-153-widget-links` in
+  `/private/tmp/recme-rec153-widget-links`, based on current `origin/main`
+  (`e7b12a97f`).
+- Coordination: the primary checkout remains on the deleted remote
+  `codex/rec-142-widgets` branch with an unrelated untracked `.pnpm-store/`;
+  it will remain untouched. Existing active worktrees were inspected. This
+  task may touch high-conflict Map/Profile navigation files, so it is isolated.
+- Expected files: widget deep-link/shared models, widget view, app launch-route
+  handling, Map/Profile navigation, focused tests, and this append-only log.
+- The proposed voice and nearby-place widgets are research/design follow-ups in
+  this pass, not implementation scope. Current Apple platform constraints will
+  be verified from primary documentation before the recommendation is handed
+  off.
+
+Implementation and validation — 2026-07-25 22:46 PDT:
+
+- Added a strict `recme://profile/calendar/YYYY-MM-DD` contract shared by the
+  app and widget. Every valid date cell in the calendar widget is now its own
+  link, while the widget-level fallback remains
+  `recme://profile/calendar` for taps outside a date.
+- Profile routing now distinguishes the calendar section from an exact day.
+  The section route scrolls the calendar fully into view; an exact-day route
+  opens that day's detail directly.
+- Quick Search routing now asks the Map search field to focus through an
+  explicit request identifier handled by the text field's own lifecycle. This
+  replaces the fixed 140 ms delay and retries when the app becomes active, so
+  cold and warm widget launches both arrive ready for keyboard input.
+- Added deep-link parsing/round-trip and malformed-date coverage plus source
+  integration contracts for date-cell links, exact-day routing, and the
+  lifecycle-based search focus behavior.
+- `xcodegen generate` completed and produced no project-file diff.
+- Focused widget/deep-link tests passed 23/23. The full iOS Simulator suite
+  passed 691/691 with zero failures. A generic iOS Simulator build passed for
+  arm64 and x86_64 after rerunning outside the filesystem sandbox; the initial
+  failure was limited to sandboxed CoreSimulator/SwiftPM cache access.
+- Live visual routing passed on iPhone 17 Pro Max and iPhone 17e. Search opens
+  with a visible insertion caret on both sizes; the simulator's connected
+  hardware keyboard suppresses the software keyboard. Exact-date links opened
+  the July 25, 2026 day detail, and the generic calendar link showed the full
+  Profile calendar.
+- Existing unrelated warnings remain: two Swift actor-isolation warnings in
+  `WanderSupabaseClient`, the traditional headermap warning, and unsigned-test
+  app-group entitlement messages.
+- Apple platform research confirms five configurations can live in a widget
+  bundle. A voice check-in is feasible, but direct widget recording requires
+  an `AudioRecordingIntent`, microphone/speech permissions, and a Live Activity
+  while recording on iOS. Recommended first version: deep-link to an in-app
+  voice capture that transcribes into a reviewable check-in draft before save.
+- A five-place nearby widget is feasible in `systemMedium` or `systemLarge`;
+  iPhone has no medium-large family. Because widgets do not receive continuous
+  location and have limited refresh opportunities, distances need a freshness
+  label and a fallback such as “near you.” Only the location widgets should be
+  placed in a separate location-authorized extension.
+- No App Store build number, archive, TestFlight state, or Slack announcement
+  was changed. Next: publish a ready PR for REC-153 and keep the voice/nearby
+  widgets as separately scoped follow-up implementation.
+
+Handoff — 2026-07-25 22:49 PDT:
+
+- Committed the implementation as `81d9d5938`, pushed
+  `codex/rec-153-widget-links`, and opened ready PR #225:
+  `https://github.com/joelipshutz/wander/pull/225`.
+- REC-153 is ready for review with no known implementation or validation
+  blocker. The worktree-only `DerivedData-rec153/` build output remains
+  untracked and is not part of the branch.
+- Next: review/merge PR #225. Treat voice capture and nearby-place widgets as
+  new feature work with their own product/security/permission acceptance
+  criteria before implementation.
 ## 2026-07-25 23:00 PDT - Codex - REC-97 Universal Share Extension
 
 Agent: Codex
@@ -24473,3 +24551,281 @@ REC-122 latest-main reconciliation — 2026-07-26:
   retries ended in Xcode build-service instability; the exact streak branch
   remains validated by its earlier 7/7 focused tests, 640/640 full suite, and
   dual-device visual QA. No TestFlight action was requested for REC-122.
+## 2026-07-26 02:08 PDT - Codex - Atlas-Style Subcategory Picker Follow-up
+
+Agent: Codex using the `design-review` workflow for final visual QA
+Branch: `codex/subcategory-atlas-picker`
+Worktree: `/private/tmp/recme-subcategory-atlas-picker`
+Linear: no new issue by Ryan's explicit request; this is a direct follow-up to
+the completed REC-126 Cuisine Atlas work.
+
+Goal: redesign every non-restaurant choose-subcategory surface to use the same
+clear search, grouped browsing, two-column tile, selected-state, and explicit
+Done interaction language as Explore Cuisines, while preserving the existing
+taxonomy and save behavior.
+
+Starting status and coordination:
+
+- Fetched current `origin/main` at `9d51b0ec3` and created this clean isolated
+  branch because the root checkout has unrelated REC-142 state and an untracked
+  package store.
+- No active worktree identified as editing the intended picker files. This
+  task touches high-conflict `Wander/Features/Map/MapScreen.swift`, so all work
+  remains isolated and the diff will be checked against latest main before
+  handoff.
+- Read `DESIGN.md`, the complete design-review workflow, current picker source
+  locations, recent coordination history, and existing taxonomy/navigation
+  tests.
+- Expected files:
+  `Wander/Features/Map/MapScreen.swift`,
+  `Wander/Features/Map/CategoryTaxonomyMockups.swift`, focused tests, and this
+  log. No schema, Supabase data, build-number, or TestFlight change is expected.
+
+Implementation and validation checkpoint:
+
+- Reworked the production non-restaurant `PlaceTypePickerSheet` into the same
+  Atlas interaction model as Explore Cuisines: editorial header/subheader,
+  current-category pill plus Change action, search, explicit `filter`
+  subheader, horizontally scrolling taxonomy-group filters, two-column type
+  tiles, persistent selected state, and a sticky TYPE/Done footer.
+- Preserved the existing category/subcategory taxonomy, custom-type entry, and
+  save bindings. Restaurant selection continues to use the dedicated Cuisine
+  Atlas path.
+- Updated the debug taxonomy mock to render the production picker and added a
+  navigation contract regression covering the shared Atlas layout across
+  non-restaurant categories.
+- Ran `xcodegen generate`; it produced no project-file diff.
+- The repository-prescribed iPhone 16 Plus / iOS 18.6 destination is not
+  installed on this machine. Ran the full suite twice on the available current
+  runtime instead:
+  `xcodebuild test -project Wander.xcodeproj -scheme Wander -destination
+  'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' -derivedDataPath
+  DerivedData CODE_SIGNING_ALLOWED=NO`.
+  Both runs passed 722 tests with 0 failures. The last pre-sync result bundle
+  was `DerivedData/Logs/Test/Test-Wander-2026.07.26_09-31-42--0700.xcresult`.
+- Completed the `design-review` visual QA on iPhone 17 Pro and iPhone 17e.
+  The smaller phone exposed one clipped contextual search placeholder; changed
+  it to `Search types`, rebuilt, and verified the final production debug mock on
+  both sizes. Final screenshots and an A-rated audit are stored outside the
+  repository at
+  `~/.gstack/projects/joelipshutz-wander/designs/design-audit-20260726/`.
+- `origin/main` advanced by two commits during implementation, including a
+  photo-zoom change in `MapScreen.swift`. The branch will be rebased and the
+  full validation repeated before handoff.
+
+Final handoff (09:44 PDT):
+
+- Rebased through both concurrent `main` landing batches, preserving the
+  full-screen photo zoom and nearby-widget work plus all append-only agent-log
+  entries. The exact implementation commit before this handoff record is
+  `fb805ddd29b4772fa2abca1277df2932297389b7`.
+- Regenerated the project after the final rebase; XcodeGen remained clean and
+  `git diff --check` passed.
+- The complete final-main suite passed 742/742 with zero failures on iPhone 17
+  Pro / iOS 26.5. Result bundle:
+  `DerivedData/Logs/Test/Test-Wander-2026.07.26_09-42-49--0700.xcresult`.
+  The prescribed iPhone 16 Plus / iOS 18.6 runtime remains unavailable.
+- Pushed `codex/subcategory-atlas-picker` and opened ready PR #235:
+  `https://github.com/joelipshutz/wander/pull/235`. After the final force-with-
+  lease update, GitHub reports the PR `MERGEABLE` and `CLEAN` against current
+  `main`.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and visually
+  verified the Branch Chooser reads
+  `Wander, codex/subcategory-atlas-picker`.
+- No new Linear issue was created, as explicitly requested. No schema,
+  Supabase-data, build-number, archive, TestFlight, App Store Connect, or Slack
+  release action was performed.
+
+Final outcome: every non-restaurant choose-subcategory page now uses the
+Explore Cuisines Atlas interaction language, is validated on current `main`,
+and is ready for Ryan's local Xcode testing and PR review.
+
+Pre-landing review (10:02 PDT):
+
+- Ryan explicitly requested that ready PR #235 be pushed to `main`. Applied the
+  repo-owned `recme-pr-review-merge-release` workflow and the gstack pre-landing
+  review against exact current `origin/main` `76872a65b`.
+- Scope is clean: production picker UI, the production-backed debug mock, one
+  focused navigation contract test, and this coordination log. No schema,
+  persistence, auth, sync, provider, signing, generated-project, or unrelated
+  code is present.
+- Core review plus testing, maintainability/performance, and
+  design/accessibility specialist passes found no merge-blocking issue.
+  A duplicate-SwiftUI-ID concern was disproved by
+  `WanderPlaceCategory.subcategoryGroups`, which de-duplicates normalized values
+  across groups, and
+  `testSubcategoryGroupsAreExhaustiveForEveryEditableCategory`, which asserts
+  every editable category's grouped values are globally unique.
+- Non-blocking accessibility note: the new type filters/tiles intentionally
+  match the existing Explore Cuisines Atlas controls, including its fixed-size
+  typography. A correct Dynamic Type improvement should update both Atlas
+  pickers and their grid/footer reflow together; a type-only styling divergence
+  is outside this visual-consistency merge. Existing VoiceOver labels/values,
+  non-color selected checkmarks, 44-point targets, safe-area footer behavior,
+  and two-device visual QA are intact.
+- Test specialist noted that the new regression is source-contract coverage,
+  not an extracted unit test of private filter/view state. Existing exhaustive
+  taxonomy uniqueness tests, the complete 742/742 suite, and live iPhone 17 Pro
+  plus iPhone 17e visual verification make this a non-blocking follow-up rather
+  than evidence of a current behavior defect.
+- PR #235 is ready, unlabeled, `MERGEABLE`, and `CLEAN`, with no required
+  checks, human review blocker, hold signal, or Greptile comment. Build 98 has a
+  completed TestFlight release record; this request is merge-only, so no build
+  bump, archive, upload, tester-group change, or Slack release note is
+  authorized.
+
+Landing outcome (09:57 PDT):
+
+- Squash-merged ready PR #235 into `main`:
+  `https://github.com/joelipshutz/wander/pull/235`.
+  GitHub reports the merged commit as
+  `efeb07ef0a3da9d20b42932ea7869df32002c982`
+  (`Redesign subcategory pickers with Atlas layout (#235)`), and a fresh
+  `git fetch origin` confirmed that exact commit at `origin/main`.
+- Shipped the Atlas-style choose-subcategory redesign for every
+  non-restaurant category, its production-backed debug mock, and focused
+  navigation-contract coverage. The existing Explore Cuisines flow remains
+  the restaurant-specific picker.
+- Final validation remains the exact pre-landing result: clean XcodeGen and
+  whitespace checks, 742/742 tests on iPhone 17 Pro / iOS 26.5, and visual QA
+  on iPhone 17 Pro plus iPhone 17e. The requested iPhone 16 Plus / iOS 18.6
+  runtime was unavailable locally.
+- Review found no blocker. Coordinated Dynamic Type improvements across both
+  Atlas pickers and a more directly extracted interaction-state unit test
+  remain optional follow-ups; neither indicates a known shipped defect.
+  The gstack review history helper could not persist its local JSON record
+  because its `bun` runtime is absent, but the complete review and specialist
+  findings are recorded above and on the PR.
+- Per Ryan's explicit direction, no new Linear issue was created. This was a
+  merge-only request: build 98 is unchanged, and no TestFlight build, archive,
+  App Store Connect action, or Slack release note was performed.
+
+REC-153 latest-main release reconciliation — 2026-07-26 10:13 PDT:
+
+- Ryan explicitly requested REC-153 in the next TestFlight batch. Applied the
+  repo-owned landing workflow and upgraded gstack from 1.57.7.0 to 1.60.1.0
+  before running its pre-landing review.
+- Review scope was clean: exact-date calendar-widget links, calendar/day route
+  handling, Quick Search focus lifecycle, focused tests, and coordination log.
+  No Greptile comments, scope drift, missing enum consumers, security issue, or
+  unresolved review finding was found.
+- Merged current `origin/main` at `db3397a9c`, which already contains REC-97,
+  REC-154, PR #233 (`3fcca8378`), and PR #235 (`efeb07ef0`). Resolved three
+  additive conflicts by preserving both the REC-153 calendar-date coverage and
+  main's nearby-widget routes/tests, plus every append-only agent-log entry.
+- Next: regenerate the project, run focused and complete tests plus a generic
+  Simulator build on this combined source, publish the refreshed PR #225 head,
+  and squash-merge REC-153 to `main` before cutting TestFlight build 99.
+
+REC-153 validation on latest main — 2026-07-26 10:25 PDT:
+
+- `xcodegen generate` completed successfully and `git diff --check` is clean.
+- Focused widget/deep-link validation passed 27/27 tests on iPhone 17 Pro /
+  iOS 26.5:
+  `/tmp/DerivedData-rec153-current-main/Logs/Test/Test-Wander-2026.07.26_10-14-41--0700.xcresult`.
+- The complete suite passed 744/744 tests with zero failures on the same
+  simulator:
+  `/tmp/DerivedData-rec153-current-main/Logs/Test/Test-Wander-2026.07.26_10-18-38--0700.xcresult`.
+- The generic iOS Simulator build passed for both arm64 and x86_64 using
+  `/tmp/DerivedData-rec153-current-main-generic`. Existing non-blocking
+  warnings remain for `WanderSupabaseClient` formatter actor isolation,
+  traditional headermaps, and unsigned Simulator app-group/keychain
+  entitlements; no new build warning or error was introduced by REC-153.
+- REC-153 is ready to publish and squash-merge as PR #225. After the merge,
+  build 99 will be cut from the exact resulting `main`.
+
+TestFlight build 99 release start — 2026-07-26 10:28 PDT:
+
+- Agent/tool: Codex. Goal: release Ryan's explicit batch of REC-142, REC-146,
+  REC-153, REC-154, REC-97, PR #233 commit `3fcca8378`, and PR #235 to
+  TestFlight, with per-item inclusion proof and live-group confirmation.
+- Linear: REC-156 (`In Progress`), related to all requested Linear issues.
+  Branch: `codex/rec-156-testflight-build-99`. Clean isolated worktree:
+  `/private/tmp/recme-testflight-build-99`.
+- Exact base: current `origin/main`
+  `46810555c92511e4dabc2b8be937387a133b65d2`, the REC-153 PR #225 squash
+  merge. The prior completed release is build 98, so this release will
+  increment `CURRENT_PROJECT_VERSION` exactly once to 99.
+- Expected files: `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, the build-number contract in
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this append-only log.
+- Next: bump/regenerate, run the full suite and generic Simulator build,
+  review/publish the release PR, squash-merge it, verify requested commit
+  ancestry on exact `main`, then archive/upload/process build 99.
+
+TestFlight build 99 pre-landing validation — 2026-07-26 10:37 PDT:
+
+- Bumped the single source of truth in `project.yml` from build 98 to 99,
+  regenerated the Xcode project, and updated the build-number integration
+  contract. The diff is limited to those version artifacts and this log.
+- `xcodegen generate` and `git diff --check` passed.
+- The exact release branch passed 744/744 tests with zero failures on iPhone
+  17 Pro / iOS 26.5:
+  `/tmp/DerivedData-build99/Logs/Test/Test-Wander-2026.07.26_10-28-47--0700.xcresult`.
+- The exact release branch also passed the generic iOS Simulator build for
+  arm64 and x86_64 using `/tmp/DerivedData-build99`.
+- Existing non-blocking warnings remain for `WanderSupabaseClient` formatter
+  actor isolation, traditional headermaps, and unsigned Simulator
+  app-group/keychain entitlements. No new error or release-bump warning was
+  introduced.
+- Next: publish a ready REC-156 release PR, squash-merge it into current
+  `main`, then archive only after fresh ancestry and version proofs pass.
+
+TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
+
+- Upgraded the global vendored gstack install from 1.57.7.0 to 1.60.1.0, then
+  completed clean gstack pre-landing reviews for REC-153 and the release bump.
+- Squash-merged REC-153 PR #225 as
+  `46810555c92511e4dabc2b8be937387a133b65d2`. Squash-merged the build-99
+  metadata in release PR #238 as exact archived `main`
+  `239ac671a9ffb423335a05411b587a843146b244`.
+- Before archiving, fetched `origin/main`, proved the detached archive
+  worktree exactly equaled that SHA, and independently verified every requested
+  merge as an ancestor:
+  - REC-142: `3d14569bf0e4378448392a3b04cdb80be8b7c125`
+  - REC-146: `9feb4c79513fc195e8d2b2bff71468f56734dfae`
+  - REC-153: `46810555c92511e4dabc2b8be937387a133b65d2`
+  - REC-154: `d3f70c03c7cc7bd194e7a5bf16cc3f25904d1c6b`
+  - REC-97: `fb37c744bfc406fb518f72811986f4486c6293e0`
+  - PR #233: `3fcca8378ed24c43c418092627d64ff8128718ec`
+  - PR #235: `efeb07ef0a3da9d20b42932ea7869df32002c982`
+- Exact release validation passed 744/744 tests with zero failures plus the
+  generic arm64/x86_64 Simulator build. Result bundle:
+  `/tmp/DerivedData-build99/Logs/Test/Test-Wander-2026.07.26_10-28-47--0700.xcresult`.
+- Archived the proven SHA to
+  `/private/tmp/Wander-0.1-build99.xcarchive`. Archive inspection confirmed
+  app `rec.me`, marketing version `0.1`, build `99`, arm64, and bundle id
+  `com.grayline.wander`. `WanderWidgets.appex`,
+  `WanderNearbyWidgets.appex`, and the REC-97
+  `WanderShareExtension.appex` are all embedded and report build 99.
+- Exported and uploaded with automatic App Store distribution signing and
+  `manageAppVersionAndBuildNumber=false`. App Store Connect accepted the IPA
+  and Xcode reported `Uploaded Wander` / `EXPORT SUCCEEDED`.
+- `scripts/testflight-release.mjs` verified archive build 99, resolved App
+  Store Connect build id `abe189b4-959d-4dc8-8c52-1bac7b883238`, confirmed
+  processing state `VALID`, set `usesNonExemptEncryption=false`, updated en-US
+  What to Test copy, attached the build to `rec.me Alpha`, submitted external
+  beta review, and confirmed review state `APPROVED`.
+- Build 99 is live at `https://testflight.apple.com/join/knEhRa6t`. Posted the
+  required tester-facing note in `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785087978146699`.
+- Added release receipts to PRs #225, #233, and #235. Added per-issue receipts
+  to REC-142, REC-146, REC-153, REC-154, and REC-97, and marked all five Done.
+  REC-156 contains the complete proof record and is Done.
+- Known alpha issue remains unchanged: Clerk authentication uses its
+  development instance, so native auth may say `Wander` and show the
+  development-mode banner. No App Store production submission was performed.
+
+Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
+the public TestFlight group, and available to testers with every item in
+Ryan's requested list proven present in the archived binary source.
+
+REC-122 build-99-main reconciliation — 2026-07-26:
+
+- Merged current `origin/main` at `b4d7c98` into PR #217. The only conflict
+  was the append-only agent log; all REC-122 and upstream release records were
+  preserved. No product source required another resolution.
+- `git diff --check` and conflict-marker checks pass. REC-122 remains a ready
+  review PR with the previously recorded focused, full-suite, and dual-device
+  visual validation. Build 99 was released independently from `main`; this
+  branch did not trigger or modify that TestFlight release.

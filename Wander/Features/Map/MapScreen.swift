@@ -38,6 +38,7 @@ struct MapScreen: View {
     @State private var didResolveInitialCamera = false
     @State private var handlingNotificationRequestID: UUID?
     @State private var handledPresentationResetRequestID: UUID?
+    @State private var mapSearchFocusRequestID: UUID?
     @FocusState private var isMapSearchFocused: Bool
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -250,6 +251,11 @@ struct MapScreen: View {
                         SearchBar(
                             query: $mapQuery,
                             isFocused: $isMapSearchFocused,
+                            focusRequestID: mapSearchFocusRequestID,
+                            onFocusRequestHandled: { requestID in
+                                guard mapSearchFocusRequestID == requestID else { return }
+                                mapSearchFocusRequestID = nil
+                            },
                             onSubmit: submitMapSearch
                         )
                         if shouldShowTypeahead {
@@ -908,6 +914,8 @@ struct MapScreen: View {
     @MainActor
     private func resetMapPresentations() {
         invalidateMapSearchRequest()
+        mapSearchFocusRequestID = nil
+        isMapSearchFocused = false
         mapSelectionRevision += 1
         mapSaveFlow = nil
         isPlaceProfilePresented = false
@@ -939,10 +947,7 @@ struct MapScreen: View {
                 suppressNextQueryAutoSelection = true
                 mapQuery = ""
             }
-            await Task.yield()
-            try? await Task.sleep(for: .milliseconds(140))
-            guard !Task.isCancelled else { return }
-            isMapSearchFocused = true
+            mapSearchFocusRequestID = request.id
             return
         }
 
@@ -2169,8 +2174,11 @@ private struct MapSocialOwnerOption: Identifiable, Equatable {
 }
 
 private struct SearchBar: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Binding var query: String
     let isFocused: FocusState<Bool>.Binding
+    let focusRequestID: UUID?
+    let onFocusRequestHandled: (UUID) -> Void
     let onSubmit: () -> Void
 
     var body: some View {
@@ -2186,6 +2194,15 @@ private struct SearchBar: View {
                 .autocorrectionDisabled()
                 .submitLabel(.search)
                 .onSubmit(onSubmit)
+                .task(id: focusRequestID) {
+                    await focusIfRequested()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active, focusRequestID != nil else { return }
+                    Task {
+                        await focusIfRequested()
+                    }
+                }
             Spacer()
             if !query.isEmpty {
                 Button {
@@ -2205,6 +2222,23 @@ private struct SearchBar: View {
         .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
         .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 10, x: 0, y: 5)
         .padding(.horizontal, WanderTheme.spacing3)
+    }
+
+    @MainActor
+    private func focusIfRequested() async {
+        guard let focusRequestID, scenePhase == .active else { return }
+
+        // Run from the TextField's own lifecycle so the selected Map tab and
+        // its navigation hierarchy are attached before becoming first
+        // responder. A second yield makes cold widget launches deterministic
+        // without relying on a device-speed-specific delay.
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        isFocused.wrappedValue = false
+        await Task.yield()
+        guard !Task.isCancelled else { return }
+        isFocused.wrappedValue = true
+        onFocusRequestHandled(focusRequestID)
     }
 }
 
@@ -5008,6 +5042,7 @@ struct PlaceTypePickerSheet: View {
     @State private var query = ""
     @State private var recentCuisines: [String]
     @State private var selectedCuisineRegion = "Popular"
+    @State private var selectedSubcategoryGroup = "All"
 
     init(
         selectedAssignment: Binding<PlaceCategoryAssignment>,
@@ -5072,16 +5107,6 @@ struct PlaceTypePickerSheet: View {
         WanderPlaceCategory.editableCategories.contains(selectedPrimaryCategory)
     }
 
-    private var selectedSubcategories: [String] {
-        WanderPlaceCategory.subcategorySuggestions(for: selectedPrimaryCategory)
-    }
-
-    private var selectedSubcategoryGroups: [PlaceCategorySubcategoryGroup] {
-        filteredGroupsForCurrentSelection(
-            role: selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood ? .type : nil
-        )
-    }
-
     private var subcategoryGroupsForCurrentSelection: [PlaceCategorySubcategoryGroup] {
         WanderPlaceCategory.subcategoryGroups(for: selectedPrimaryCategory)
     }
@@ -5090,16 +5115,32 @@ struct PlaceTypePickerSheet: View {
         WanderPlaceCategory.broadCategory(for: selectedPrimaryCategory)
     }
 
-    private var selectedCategoryCount: Int {
-        return selectedSubcategories.count
+    private var subcategoryFilterTitles: [String] {
+        ["All"] + groupsForCurrentSelection(role: .type).map(\.title)
     }
 
-    private var selectedSubcategorySubtitle: String {
-        return "\(selectedCategoryTitle) - \(selectedCategoryCount) types"
-    }
+    private var filteredSubcategoryOptions: [String] {
+        let groups = groupsForCurrentSelection(role: .type)
+        let queryText = normalizedQuery
 
-    private var selectedCategorySearchName: String {
-        selectedCategoryTitle.lowercased()
+        if !queryText.isEmpty {
+            return groups.flatMap { group in
+                if group.title.localizedCaseInsensitiveContains(queryText) {
+                    return group.subcategories
+                }
+                return group.subcategories.filter {
+                    $0.localizedCaseInsensitiveContains(queryText)
+                }
+            }
+        }
+
+        guard selectedSubcategoryGroup != "All" else {
+            return groups.flatMap(\.subcategories)
+        }
+
+        return groups
+            .first(where: { $0.title == selectedSubcategoryGroup })?
+            .subcategories ?? groups.flatMap(\.subcategories)
     }
 
     private var filteredCuisineOptions: [String] {
@@ -5166,8 +5207,17 @@ struct PlaceTypePickerSheet: View {
         .scrollDismissesKeyboard(.interactively)
         .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if mode == .cuisine,
-               selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
+            if mode == .subcategory,
+               hasEditableSelection,
+               selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
+                PlaceTypeSelectionFooter(
+                    label: "TYPE",
+                    value: selectedAssignment.subcategory ?? "Choose a type"
+                ) {
+                    dismiss()
+                }
+            } else if mode == .cuisine,
+                      selectedPrimaryCategory == WanderPlaceCategory.restaurantsFood {
                 RestaurantCuisineSelectionFooter(cuisine: selectedCuisine) {
                     dismiss()
                 }
@@ -5208,27 +5258,47 @@ struct PlaceTypePickerSheet: View {
 
     private var subcategoryPickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            CategoryPickerHeader(title: "choose subcategory", subtitle: selectedSubcategorySubtitle)
-
-            CategoryPickerSearchField(placeholder: "Search \(selectedCategorySearchName) types", text: $query)
+            CategoryPickerHeader(
+                title: "explore types",
+                subtitle: "Pick the closest match. You can change it anytime."
+            )
 
             selectedCategoryPills
 
+            CategoryPickerSearchField(placeholder: "Search types", text: $query)
+
             if !hasEditableSelection {
                 CategoryPickerEmptyState(title: "Choose a category first", message: "Pick one of the 14 primary categories, then choose its type.")
-            } else if selectedSubcategoryGroups.isEmpty {
+            } else {
+                SubcategoryAtlasFilters(
+                    titles: subcategoryFilterTitles,
+                    selectedTitle: $selectedSubcategoryGroup
+                ) {
+                    query = ""
+                }
+            }
+
+            if hasEditableSelection, filteredSubcategoryOptions.isEmpty {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     CategoryPickerEmptyState(title: "No matching type", message: "Try a broader search, or add your custom type below.")
                     customSubcategoryControl
                 }
-            } else {
-                ForEach(selectedSubcategoryGroups, id: \.title) { group in
-                    SubcategoryGroupSection(
-                        group: group,
-                        selectedSubcategory: selectedAssignment.subcategory
-                    ) { subcategory in
-                        selectSubcategory(subcategory)
-                        dismiss()
+            } else if hasEditableSelection {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: WanderTheme.spacing2),
+                        GridItem(.flexible(), spacing: WanderTheme.spacing2)
+                    ],
+                    spacing: WanderTheme.spacing2
+                ) {
+                    ForEach(filteredSubcategoryOptions, id: \.self) { subcategory in
+                        PlaceTypeAtlasTile(
+                            category: selectedPrimaryCategory,
+                            subcategory: subcategory,
+                            isSelected: selectedAssignment.subcategory?.caseInsensitiveCompare(subcategory) == .orderedSame
+                        ) {
+                            selectSubcategory(subcategory)
+                        }
                     }
                 }
 
@@ -5355,7 +5425,6 @@ struct PlaceTypePickerSheet: View {
         if let customSearchSubcategory {
             Button {
                 selectSubcategory(customSearchSubcategory)
-                dismiss()
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "plus")
@@ -5395,6 +5464,7 @@ struct PlaceTypePickerSheet: View {
         }
 
         query = ""
+        selectedSubcategoryGroup = "All"
         mode = category == WanderPlaceCategory.restaurantsFood ? .cuisine : .subcategory
         onSelect()
     }
@@ -5421,24 +5491,6 @@ struct PlaceTypePickerSheet: View {
 
     private func optionsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [String] {
         groupsForCurrentSelection(role: role).flatMap(\.subcategories)
-    }
-
-    private func filteredGroupsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [PlaceCategorySubcategoryGroup] {
-        let groups = groupsForCurrentSelection(role: role)
-        let queryText = normalizedQuery
-        guard !queryText.isEmpty else {
-            return groups
-        }
-
-        return groups.compactMap { group in
-            let groupMatches = group.title.localizedCaseInsensitiveContains(queryText)
-            let subcategories = groupMatches
-                ? group.subcategories
-                : group.subcategories.filter { $0.localizedCaseInsensitiveContains(queryText) }
-
-            guard !subcategories.isEmpty else { return nil }
-            return PlaceCategorySubcategoryGroup(title: group.title, subcategories: subcategories, role: group.role)
-        }
     }
 
     private func groupsForCurrentSelection(role: PlaceCategorySubcategoryRole?) -> [PlaceCategorySubcategoryGroup] {
@@ -5701,12 +5753,26 @@ private struct RestaurantCuisineSelectionFooter: View {
     let onDone: () -> Void
 
     var body: some View {
+        PlaceTypeSelectionFooter(
+            label: "CUISINE",
+            value: cuisine ?? "No cuisine",
+            onDone: onDone
+        )
+    }
+}
+
+private struct PlaceTypeSelectionFooter: View {
+    let label: String
+    let value: String
+    let onDone: () -> Void
+
+    var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("CUISINE")
+                Text(label)
                     .font(.system(size: 10, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                Text(cuisine ?? "No cuisine")
+                Text(value)
                     .font(.system(size: 18, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(1)
@@ -5733,6 +5799,106 @@ private struct RestaurantCuisineSelectionFooter: View {
                     WanderTheme.borderHairline.color.frame(height: 1)
                 }
         }
+    }
+}
+
+private struct SubcategoryAtlasFilters: View {
+    let titles: [String]
+    @Binding var selectedTitle: String
+    let onSelect: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("filter")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(titles, id: \.self) { title in
+                        Button {
+                            selectedTitle = title
+                            onSelect()
+                        } label: {
+                            Text(title)
+                                .font(.system(size: 13, weight: .black))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .frame(minHeight: WanderTheme.tapMinimum)
+                                .background(
+                                    selectedTitle == title
+                                        ? WanderTheme.textInk.color
+                                        : WanderTheme.surfaceBone.color
+                                )
+                                .foregroundStyle(
+                                    selectedTitle == title
+                                        ? WanderTheme.textOnAction.color
+                                        : WanderTheme.textInk.color
+                                )
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(title) types")
+                        .accessibilityValue(selectedTitle == title ? "Selected" : "Not selected")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PlaceTypeAtlasTile: View {
+    let category: String
+    let subcategory: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                HStack {
+                    ZStack {
+                        Circle().fill(WanderTheme.terracottaTint.color)
+                        WanderCategoryEmoji(
+                            category: category,
+                            subcategory: subcategory,
+                            size: 21
+                        )
+                    }
+                    .frame(width: 44, height: 44)
+
+                    Spacer(minLength: 0)
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 19, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+
+                Text(subcategory)
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+            .background(isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(
+                        isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(subcategory)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 }
 
