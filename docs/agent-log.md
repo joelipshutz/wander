@@ -22965,6 +22965,73 @@ Landing completion — 2026-07-25 22:03 PDT:
 Final outcome: the requested Been-only calendar behavior and completed REC-142
 widget work are on `main`; no known landing blocker remains.
 
+## 2026-07-25 22:22 PDT - Codex - REC-152 Profile Recent Activity Exploration
+
+Agent: Codex using `design-shotgun`
+Branch: `codex/rec-152-profile-activity`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-152-profile-activity`
+Linear: `REC-152` (`In Progress`)
+Mission Control: `67856d32-86fa-4faa-8121-a5fdac4af423` (`in_progress`)
+
+Goal: redesign the owner Profile around one reverse-chronological recent
+activity timeline, remove the current identity header, move the day streak
+directly below the social graph entry points, move Visit invitations below the
+streak, and preserve Been/check-in and Wanna access through timeline filters
+and a full See more screen.
+
+Starting status and coordination:
+
+- Created this isolated worktree from clean `origin/main` commit `e7b12a9`;
+  Joe's `joe/phone-build-latest` checkout and all existing agent worktrees
+  remain untouched.
+- No prior GBrain result was found for this exact Profile activity redesign.
+  Linear search surfaced adjacent REC-147 check-in-card work and REC-145
+  long-history paging work; REC-152 is intentionally scoped to Profile
+  information architecture, ordering, timestamps, and navigation.
+- The current stage is visual/IA exploration before production implementation.
+  Compare multiple single-timeline layouts; do not use two stacked five-item
+  Been/Wanna lists.
+- Expected initial files: `Wander/Features/Profile/ProfileOwnerHome.swift`,
+  `Wander/Features/Profile/ProfileRedesignMockups.swift`, focused Profile
+  presentation/navigation tests, and this log. Additional files will be logged
+  if the approved direction needs a dedicated activity screen or presenter.
+
+Exploration checkpoint, 2026-07-25 22:28 PDT:
+
+- Pulled the current owner Profile mockup up on the booted iPhone 17 Pro Max
+  simulator and captured the baseline at
+  `~/.gstack/projects/joelipshutz-wander/designs/profile-recent-activity-20260725/current-profile.png`.
+  The live fixture route reaches the Clerk development sign-in gate in this
+  installed build, so the dedicated native Profile mockup is the clean visual
+  baseline for this stage.
+- Confirmed the current implementation order is identity, Visit invitations,
+  Been/Wanna tiles, streak, calendar, and map. REC-152 will preserve the
+  identity information while removing the small `profile` eyebrow unless an
+  approved mock intentionally compacts the whole identity block.
+- The first source build from exact `origin/main` hit the Swift compiler
+  type-check timeout in `WanderRootView.body` with `-jobs 4`. A second
+  single-job retry hit the same compiler timeout. No source edit caused this
+  baseline failure; the already-installed debug build remains usable for
+  visual exploration. Reassess after the mock direction is chosen and source
+  changes split the affected view graph.
+- Next design concepts will compare: a simple segmented timeline, compact
+  Been/Wanna count filters above one timeline, and a date-grouped activity
+  ledger. All keep five or six full-width rows, explicit timestamps, a See more
+  route, and no double-stacked status lists.
+
+Mock comparison checkpoint, 2026-07-25 22:37 PDT:
+
+- Generated three artifact-only profile directions with `design-shotgun`:
+  A) a segmented All/Been/Wanna timeline, B) count-bearing Been/Wanna filters
+  above a mixed timeline, and C) a date-grouped activity ledger.
+- Published the interactive comparison board at
+  `http://127.0.0.1:54636/boards/b-20260726-053711-o9ocwg/`. Each direction keeps
+  one full-width activity list with timestamps and a See all entry point;
+  production Profile code remains unchanged pending Joe's selection.
+- Artifacts live outside the repo at
+  `~/.gstack/projects/joelipshutz-wander/designs/profile-recent-activity-20260725/`.
+  The next step is to capture an approved direction and only then implement it
+  in the isolated worktree.
 REC-122 current-main sync validation — 2026-07-26 00:21 PDT:
 
 - Synced PR #217 through current `origin/main` at `e7b12a9`; the widget landing
@@ -24820,6 +24887,109 @@ Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
 
+REC-152 implementation approval checkpoint — 2026-07-26 11:10 PDT:
+
+- Joe selected the middle mock's information pattern but rejected the wide,
+  desktop-like mock presentation. Implementation must preserve the existing
+  iPhone Profile layout and data outside the explicitly requested area.
+- Locked scope: remove only the small `profile` eyebrow, move the existing
+  streak immediately below the Followers/Following/Friends counts, move the
+  existing check-in invitations row below the streak, and replace only the
+  Check-ins/Wanna tiles with one mobile-width Recent activity module.
+- The new module will use compact All/Been/Wanna count filters, show the six
+  latest events in reverse chronological order with explicit date and time,
+  offer See all activity, and open the tapped place directly at its activity
+  / check-in section. Calendar, map, identity data, social graph controls, and
+  all downstream save data remain unchanged.
+- Merged current `origin/main` (`b4d7c98`) into the worktree before editing.
+  The only conflict was append-only `docs/agent-log.md`; both histories were
+  preserved. Current branch head after the merge is `ae5d2c5`.
+- The session sandbox could not write the original external worktree and the
+  disk had only 116 MB free. Removed only the fully regenerable 1.1 GB
+  `/private/tmp/DerivedData-rec152-profile` cache created during exploration,
+  then moved the same worktree/branch to
+  `/private/tmp/rec-152-profile-activity` without changing history.
+
+REC-152 implementation validation — 2026-07-26 13:35 PDT:
+
+- Implemented the approved mobile-first Profile adjustment without changing
+  identity, social counts, calendar, map, or underlying save data. The owner
+  profile now orders streak, check-in invitations, and Recent activity below
+  the existing social counts; the small `profile` eyebrow is removed.
+- Replaced only the old Check-ins/Wanna tiles with a Recent activity module.
+  It provides All/Been/Wanna count filters, shows the six newest events in
+  reverse chronological order with explicit date and time, and opens a full
+  filtered history through `See more`.
+- Activity rows deep-link to the existing place card and scroll directly to
+  its activity/check-in section. Existing place-card callers retain their
+  original top-of-card behavior through the default route.
+- Added presenter coverage for visit-level chronology, historical Wanna
+  events, legacy Been fallback, and timestamp formatting. Added navigation
+  contracts for strict module order, the six-row preview, filters, full
+  history, and the place-card activity destination.
+- Focused validation passed 20/20 tests; an exact new-test rerun passed 3/3.
+  The clean full suite passed 747/747 tests with zero failures on iPhone 16
+  Plus / iOS 18.6. Result bundle:
+  `/tmp/DerivedData-rec152-final/Logs/Test/Test-Wander-2026.07.26_13-26-30--0700.xcresult`.
+- Visual QA passed on the compact iPhone 16e and large iPhone 17 Pro Max.
+  Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9cdd-5254-7830-a5ef-206f6e8bf7af/profile-activity-iphone-16e.png`
+  and
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9cdd-5254-7830-a5ef-206f6e8bf7af/profile-activity-iphone-17-pro-max.png`.
+- `git diff --check` passed. No TestFlight build was requested, so build 99
+  remains unchanged. Next: publish a ready PR for REC-152 and attach the PR and
+  validation receipts to Linear and Mission Control.
+
+REC-152 review handoff — 2026-07-26 13:40 PDT:
+
+- Committed the implementation as `9d6a64f` (`feat: add recent activity to
+  profile`), pushed `codex/rec-152-profile-activity`, and opened ready PR #245:
+  `https://github.com/joelipshutz/wander/pull/245`.
+- Linked PR #245 to Linear REC-152, added the validation receipt, and moved the
+  issue from In Progress to In Review.
+- Opened the isolated worktree's `Wander.xcodeproj` in Xcode for local testing;
+  the worktree remains on `codex/rec-152-profile-activity`.
+- Mission Control at `http://localhost:4000` was unavailable (`curl` exit 7),
+  and the documented `com.grayline.mission-control` LaunchAgent was not loaded
+  or present in `~/Library/LaunchAgents`. Its existing task
+  `67856d32-86fa-4faa-8121-a5fdac4af423` therefore could not be advanced to
+  review in this session; Linear and the PR contain the complete live status.
+
+REC-152 Check-ins terminology follow-up — 2026-07-26 13:50 PDT:
+
+- Joe clarified that the former user-facing `Been` term is now `Check-ins`.
+  Scope is limited to correcting PR #245's new activity module, full-history
+  screen, tests, and REC-152 copy; layout, behavior, and persistence remain
+  unchanged.
+- Confirmed `PlaceStatus.been` and backend `"been"` are explicitly stable
+  compatibility contracts in `WanderEnums.swift`. The UI filter will use a
+  `checkIns` case and centralized `CheckInCopy`; stored status values will not
+  be renamed or migrated.
+- Fetched `origin`, confirmed the isolated worktree is clean with no overlap,
+  updated REC-152's description to Check-ins terminology, and moved it back to
+  In Progress while the correction is active.
+
+REC-152 Check-ins terminology validation — 2026-07-26 14:00 PDT:
+
+- Updated the new activity filter's UI state from `been` to `checkIns` and all
+  visible labels, empty states, and accessibility copy from Been to Check-ins.
+  Added title-case values to centralized `CheckInCopy`; the row label now uses
+  `Check-in` without Foundation's incorrect `Check-In` capitalization.
+- Kept `PlaceStatus.been`, backend `"been"`, and existing persistence/data
+  contracts unchanged. This is strictly a product-terminology correction.
+- The focused clean simulator run passed 3/3 tests on iPhone 16 Plus / iOS
+  18.6, covering chronology/filtering, legacy status compatibility, explicit
+  timestamps, mobile module order, navigation, and the no-stale-Been contract.
+  Result bundle:
+  `/tmp/DerivedData-rec152-copy/Logs/Test/Test-Wander-2026.07.26_13-39-14--0700.xcresult`.
+- An incremental iPhone 16e build passed after the expected sandbox-only
+  CoreSimulator/cache failure was rerun outside the sandbox. Compact-phone
+  visual QA confirmed `315 Check-ins` fits the equal-width filter without
+  truncation or layout changes. Screenshot:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9cdd-5254-7830-a5ef-206f6e8bf7af/profile-activity-check-ins-iphone-16e.png`.
+- Removed the temporary QA-only launch route and confirmed `WanderApp.swift`
+  has no diff. `git diff --check` passed and no stale user-facing Been copy
+  remains in the new activity module or history screen.
 REC-122 build-99-main reconciliation — 2026-07-26:
 
 - Merged current `origin/main` at `b4d7c98` into PR #217. The only conflict
@@ -24970,6 +25140,16 @@ Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
 
+REC-152 latest-main conflict resolution — 2026-07-26 14:05 PDT:
+
+- GitHub reported PR #245 conflicting after REC-159 landed while the Check-ins
+  follow-up was being validated. Merged latest `origin/main` at `ff20d52` into
+  `codex/rec-152-profile-activity`.
+- The incoming change touches only the Nearby widget, its integration test,
+  and its append-only log. The sole conflict was `docs/agent-log.md`; preserved
+  both complete REC-152 and REC-159 histories without source overlap.
+- Profile validation remains the clean 3/3 focused run, prior 747/747 full
+  suite, passing iPhone 16e build, and compact screenshot recorded above.
 ## 2026-07-26 13:58 PDT - Codex - TestFlight Build 100
 
 Agent: Codex
@@ -24996,3 +25176,43 @@ Release start:
 - Next: regenerate the project, review and land the release metadata, validate
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
+
+REC-152 build-100-main reconciliation and release review — 2026-07-26 14:07 PDT:
+
+- Joe explicitly requested a TestFlight push after approving the Profile
+  activity implementation. Build 100 had already been incremented and merged
+  to `main` but had not been archived or uploaded, so REC-152 will join that
+  same release batch without a second build-number increment.
+- Merged current `origin/main` at `c98612e` into PR #245. The sole conflict was
+  the append-only agent log; all REC-152, REC-122, REC-159, and build-100
+  histories were preserved. No product source required conflict resolution.
+- Pre-landing review covered the complete current diff, `DESIGN.md`, mobile
+  hierarchy, reverse chronology, legacy Check-ins compatibility, timestamp
+  formatting, filtered history, and the place-card activity deep link. No
+  critical or informational findings remain. GitHub has no hosted checks or
+  unresolved human/Greptile comments on PR #245.
+- The gstack update helper could not persist its optional timestamp outside
+  the workspace, and its redundant local Codex CLI probe produced no review
+  output. The primary full-diff and independent adversarial review are the
+  landing gate; orchestration policy prohibited spawning review subagents.
+- Next: rerun the focused REC-152 regression tests on the reconciled head,
+  publish and squash-merge PR #245, then validate/archive/upload exact latest
+  build-100 `main` and complete the TestFlight/Slack/Linear receipts.
+
+REC-152 reconciled-head validation — 2026-07-26 14:17 PDT:
+
+- `xcodegen generate` completed on the reconciled branch and produced no
+  project-file diff. `git diff --check` also passed.
+- The first clean-cache focused run stopped during dependency compilation
+  because the host volume ran out of space; no app code or test executed.
+  Removed only the newly created REC-152 review cache and the regenerable,
+  already-shipped build-98 archive DerivedData cache, then reused the existing
+  project DerivedData cache.
+- The sandboxed retry hit the documented CoreSimulator/cache restriction. The
+  required elevated rerun passed all three selected REC-152 regressions with
+  exit 0: reverse-chronological Check-in/Wanna events, legacy Check-ins plus
+  explicit date/time formatting, and the mobile Profile module/navigation
+  contract. Only existing actor-isolation, signed-simulator-library, and
+  traditional-headermap warnings were emitted.
+- Review gate is complete with no remaining findings. PR #245 is ready to push
+  and squash-merge before exact-main build-100 release validation.

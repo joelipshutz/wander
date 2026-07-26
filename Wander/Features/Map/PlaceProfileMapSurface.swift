@@ -2,6 +2,15 @@
 import SwiftUI
 import UIKit
 
+enum PlaceProfileInitialSection: Hashable {
+    case top
+    case activity
+}
+
+private enum PlaceProfileScrollAnchor {
+    static let activity = "place-profile.activity"
+}
+
 struct PlaceProfileMapSurface: View {
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
@@ -51,8 +60,29 @@ struct PlaceProfileFullScreen: View {
     let tasteSaves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
+    let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
+
+    init(
+        place: PlaceSheetPlace,
+        saves: [PlaceSaveSummary],
+        tasteSaves: [PlaceSaveSummary],
+        currentUserID: String,
+        action: PlaceSheetAction,
+        initialSection: PlaceProfileInitialSection = .top,
+        onBack: @escaping () -> Void,
+        onAction: @escaping () -> Void
+    ) {
+        self.place = place
+        self.saves = saves
+        self.tasteSaves = tasteSaves
+        self.currentUserID = currentUserID
+        self.action = action
+        self.initialSection = initialSection
+        self.onBack = onBack
+        self.onAction = onAction
+    }
 
     private var presentation: PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
@@ -71,6 +101,7 @@ struct PlaceProfileFullScreen: View {
             saves: saves,
             currentUserID: currentUserID,
             action: action,
+            initialSection: initialSection,
             onBack: onBack,
             onAction: onAction
         )
@@ -325,6 +356,7 @@ private struct PlaceProfileFullView: View {
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
+    let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
     @Environment(\.openURL) private var openURL
@@ -362,37 +394,46 @@ private struct PlaceProfileFullView: View {
                     onPhotoLoadFailure: handlePhotoLoadFailure
                 )
 
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                        heading
+                ScrollViewReader { scrollProxy in
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                            heading
 
-                        if let fitSentence {
-                            Text(fitSentence)
-                                .font(.system(size: 19, weight: .black))
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .fixedSize(horizontal: false, vertical: true)
+                            if let fitSentence {
+                                Text(fitSentence)
+                                    .font(.system(size: 19, weight: .black))
+                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            PlaceProfileTagRail(tags: displayTags, compact: false)
+
+                            ratingSection
+
+                            if action != .none {
+                                primaryPlaceAction
+                            }
+
+                            if !actionItems.isEmpty {
+                                actionRow
+                            }
+
+                            whyItFitsSection
+                            bestForSection
+                            PlaceActivitySection(saves: saves, currentUserID: currentUserID)
+                                .id(PlaceProfileScrollAnchor.activity)
+                            detailsSection
                         }
-
-                        PlaceProfileTagRail(tags: displayTags, compact: false)
-
-                        ratingSection
-
-                        if action != .none {
-                            primaryPlaceAction
-                        }
-
-                        if !actionItems.isEmpty {
-                            actionRow
-                        }
-
-                        whyItFitsSection
-                        bestForSection
-                        PlaceActivitySection(saves: saves, currentUserID: currentUserID)
-                        detailsSection
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .padding(.top, WanderTheme.spacing4)
+                        .padding(.bottom, bottomContentInset)
                     }
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing4)
-                    .padding(.bottom, bottomContentInset)
+                    .task(id: place.id) {
+                        guard initialSection == .activity else { return }
+                        await Task.yield()
+                        guard !Task.isCancelled else { return }
+                        scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
+                    }
                 }
                 .background(WanderTheme.surfaceBone.color)
             }
