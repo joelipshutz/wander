@@ -58,7 +58,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
     }
 
-    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndKeepsOnlyFeaturedCardsUniform() throws {
+    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndMakesOnlyCheckInsFullTickets() throws {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
@@ -74,8 +74,8 @@ final class NavigationContractTests: XCTestCase {
         let activityList = try XCTUnwrap(
             feedAfterActivityList.components(separatedBy: "private struct FeedActivityModule: View").first
         )
-        XCTAssertTrue(activityList.contains("Divider()"))
-        XCTAssertTrue(activityList.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
+        XCTAssertTrue(activityList.contains("VStack(spacing: WanderTheme.spacing3)"))
+        XCTAssertFalse(activityList.contains("Divider()"))
         XCTAssertFalse(activityList.contains(".background(WanderTheme.surfaceBone.color)"))
         XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
 
@@ -84,6 +84,19 @@ final class NavigationContractTests: XCTestCase {
         let activityModule = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
+        let lightweightRow = try XCTUnwrap(
+            activityModule.components(separatedBy: "private var lightweightActivityRow: some View").last?
+                .components(separatedBy: "private var lightweightActivityTitle: some View").first
+        )
+        XCTAssertTrue(activityModule.contains("activity.kind.usesCheckInTicket"))
+        XCTAssertTrue(activityModule.contains("checkInTicket(place)"))
+        XCTAssertTrue(activityModule.contains(".checkInTicketSurface("))
+        XCTAssertTrue(activityModule.contains("design: .serif"))
+        XCTAssertTrue(activityModule.contains("activity.note"))
+        XCTAssertTrue(activityModule.contains("activity.rating"))
+        XCTAssertTrue(activityModule.contains("FeedMediaRail(media: activity.media)"))
+        XCTAssertFalse(lightweightRow.contains(".checkInTicketSurface("))
+        XCTAssertFalse(lightweightRow.contains(".background(WanderTheme.surfaceBone.color"))
         XCTAssertFalse(activityModule.contains("FeedActivityLayout.rowHeight"))
         XCTAssertFalse(activityModule.contains("maxHeight:"))
 
@@ -93,6 +106,8 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(featuredCard.contains("height: FeedFeaturedLayout.cardHeight"))
         XCTAssertTrue(featuredCard.contains("width: FeedFeaturedLayout.cardWidth"))
+        XCTAssertTrue(featuredCard.contains("private var featuredReason: String"))
+        XCTAssertFalse(feed.contains("Label(featured.reason"))
     }
 
     func testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile() throws {
@@ -404,6 +419,39 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityCard.contains("if entry.isCurrentUser"))
         XCTAssertTrue(activityCard.contains("activityIdentityLabel"))
         XCTAssertFalse(activityCard.contains(".disabled(entry.isCurrentUser)"))
+    }
+
+    func testMapFeedAndPlaceHistoryShareTheDirectionATicketSurface() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let ticketSurface = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/CheckInTicketSurface.swift")
+        )
+        let activityCard = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private struct PlaceActivityCard: View")
+                .last?
+                .components(separatedBy: "private struct VisitPhotoThumbnail: View")
+                .first
+        )
+
+        XCTAssertTrue(ticketSurface.contains("func checkInTicketSurface("))
+        XCTAssertTrue(ticketSurface.contains("case trailing"))
+        XCTAssertTrue(ticketSurface.contains("case both"))
+        XCTAssertTrue(placeProfile.contains(".checkInTicketSurface("))
+        XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
+        XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
+        XCTAssertTrue(activityCard.contains("ticketAccentColor"))
+        XCTAssertTrue(activityCard.contains("design: .serif"))
+        XCTAssertTrue(activityCard.contains("StatusBadge(status: entry.status)"))
+        XCTAssertTrue(activityCard.contains("if let note = entry.note"))
+        XCTAssertTrue(activityCard.contains("ForEach(entry.tags.prefix(6)"))
+        XCTAssertTrue(activityCard.contains("photoThumbnails"))
+        XCTAssertTrue(activityCard.contains("addPhotoControl"))
     }
 
     func testUnavailableContentAvoidsStackedOpacityTreatments() throws {

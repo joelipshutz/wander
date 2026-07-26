@@ -28,6 +28,10 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
             false
         }
     }
+
+    var usesCheckInTicket: Bool {
+        self == .placeBeen
+    }
 }
 
 struct FeedMediaPreview: Identifiable, Equatable {
@@ -136,7 +140,9 @@ enum FeedPresentation {
             results.append(
                 FeedFeaturedPlace(
                     visiblePlace: place,
-                    reason: "Saved by \(event.actor.displayName)"
+                    reason: place.userPlace.status == .been
+                        ? "Checked in by \(event.actor.displayName)"
+                        : "Wanna by \(event.actor.displayName)"
                 )
             )
             if results.count == max(0, limit) { break }

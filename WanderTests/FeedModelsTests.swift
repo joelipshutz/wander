@@ -40,6 +40,14 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(activity.rating, 4.5)
     }
 
+    func testOnlyExplicitCheckInActivityUsesTheFullTicketPresentation() {
+        XCTAssertTrue(FeedActivityKind.placeBeen.usesCheckInTicket)
+        XCTAssertFalse(FeedActivityKind.placeSaved.usesCheckInTicket)
+        XCTAssertFalse(FeedActivityKind.placeWannaGo.usesCheckInTicket)
+        XCTAssertFalse(FeedActivityKind.listCreated.usesCheckInTicket)
+        XCTAssertFalse(FeedActivityKind.listItemAdded.usesCheckInTicket)
+    }
+
     private var actor: ProfileShell {
         ProfileShell(
             id: "user_maya",

@@ -7242,7 +7242,7 @@ struct PlaceActivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("latest activity")
+            Text("check-in history")
                 .font(.system(size: 12, weight: .black))
                 .textCase(.uppercase)
                 .foregroundStyle(WanderTheme.textMuted.color)
@@ -7443,7 +7443,7 @@ private struct PlaceActivityFilterControl: View {
                         .font(.system(size: 12, weight: .black))
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
-                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .foregroundStyle(selection == filter ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
                         .background(selection == filter ? WanderTheme.surfaceRaised.color : WanderTheme.surfaceSand.color)
                         .clipShape(Capsule())
@@ -7541,20 +7541,12 @@ private struct PlaceActivityCard: View {
         }
         .padding(WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(entry.isCurrentUser ? WanderTheme.surfaceSand.color : WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(entry.isCurrentUser ? WanderTheme.borderStrong.color.opacity(0.5) : WanderTheme.borderHairline.color, lineWidth: 1)
+        .checkInTicketSurface(
+            accent: ticketAccentColor,
+            surface: WanderTheme.surfaceRaised.color,
+            surroundingSurface: WanderTheme.surfaceBone.color,
+            notchEdges: .trailing
         )
-        .overlay(alignment: .leading) {
-            ticketNotch
-                .offset(x: -7)
-        }
-        .overlay(alignment: .trailing) {
-            ticketNotch
-                .offset(x: 7)
-        }
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
                 if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
@@ -7595,9 +7587,9 @@ private struct PlaceActivityCard: View {
             if entry.canEdit {
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
-                        .font(.system(size: 12, weight: .black))
-                        .frame(width: 32, height: 32)
-                        .background(WanderTheme.surfaceRaised.color)
+                        .font(.system(size: 14, weight: .black))
+                        .frame(width: 44, height: 44)
+                        .background(WanderTheme.surfaceSand.color)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
@@ -7609,12 +7601,8 @@ private struct PlaceActivityCard: View {
         }
     }
 
-    private var ticketNotch: some View {
-        Circle()
-            .fill(WanderTheme.canvasWarm.color)
-            .frame(width: 14, height: 14)
-            .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
-            .accessibilityHidden(true)
+    private var ticketAccentColor: Color {
+        entry.isCurrentUser ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color
     }
 
     @ViewBuilder
@@ -7639,20 +7627,28 @@ private struct PlaceActivityCard: View {
             WanderAvatar(
                 initials: entry.owner.initials,
                 avatarURL: entry.owner.avatarURL,
-                size: 34,
+                size: 40,
                 color: entry.avatarColor
             )
             VStack(alignment: .leading, spacing: 2) {
+                Text(entry.status == .been ? "CHECKED IN" : "WANNA")
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .tracking(1.05)
+                    .foregroundStyle(ticketAccentColor)
+                    .lineLimit(1)
                 Text(entry.displayName)
-                    .font(.system(size: 15, weight: .black))
+                    .font(.system(size: 20, weight: .black, design: .serif))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text(entry.kind == .visit ? "CHECK-IN · \(entry.timestampText)" : "@\(entry.owner.handle) · \(entry.timestampText)")
+                    .lineLimit(1)
+                Text(entry.isCurrentUser ? entry.timestampText : "@\(entry.owner.handle) · \(entry.timestampText)")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
         }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
     }
 
     private var profileDestinationBinding: Binding<Bool> {
@@ -7690,7 +7686,7 @@ private struct PlaceActivityCard: View {
                     Label("Add photo", systemImage: "photo.badge.plus")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(WanderTheme.pinSocial.color)
-                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .background(WanderTheme.skyTint.color)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                         .overlay(

@@ -134,7 +134,8 @@ struct SaveStreakCelebrationView: View {
 
     private var accessibilityLabel: String {
         let dayLabel = celebration.streakCount == 1 ? "day" : "days"
-        return "\(celebration.streakCount) \(dayLabel) streak. \(celebration.placeName) saved as \(celebration.status.streakDisplayName)."
+        let activity = celebration.status == .been ? CheckInCopy.pastTense : "added to Wanna"
+        return "\(celebration.streakCount) \(dayLabel) streak. \(activity) at \(celebration.placeName)."
     }
 }
 
@@ -175,7 +176,7 @@ private struct SaveStreakTicketCard: View {
 
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("SAVED TODAY  ·  \(celebration.status.streakDisplayName.uppercased())")
+                    Text(ticketEyebrow)
                         .font(.system(size: 11, weight: .black, design: .rounded))
                         .tracking(1.3)
                         .foregroundStyle(WanderTheme.terracottaDark.color)
@@ -198,7 +199,7 @@ private struct SaveStreakTicketCard: View {
 
                 Spacer(minLength: WanderTheme.spacing2)
 
-                Image(systemName: celebration.status == .been ? "checkmark" : "bookmark.fill")
+                Image(systemName: celebration.status == .been ? "checkmark" : "plus")
                     .font(.system(size: 18, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .frame(width: 40, height: 40)
@@ -229,6 +230,10 @@ private struct SaveStreakTicketCard: View {
         celebration.status == .been
             ? WanderTheme.stateSuccess.color
             : WanderTheme.stateWarning.color
+    }
+
+    private var ticketEyebrow: String {
+        celebration.status == .been ? "CHECKED IN TODAY" : "ADDED TO WANNA TODAY"
     }
 }
 
@@ -353,15 +358,6 @@ private struct SaveStreakConfettiLayer: View {
     private func animation(_ index: Int) -> Animation {
         .easeIn(duration: 1.15 + Double(index % 5) * 0.12)
             .delay(Double(index % 9) * 0.035)
-    }
-}
-
-private extension PlaceStatus {
-    var streakDisplayName: String {
-        switch self {
-        case .been: CheckInCopy.noun.capitalized
-        case .wannaGo: "Wanna"
-        }
     }
 }
 

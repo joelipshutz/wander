@@ -66,7 +66,7 @@ struct FeedScreen: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .alert("Saved to your map", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
+            .alert("Map updated", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
                 Button("OK", role: .cancel) { savedMessage = nil }
             } message: {
                 Text(savedMessage ?? "")
@@ -222,9 +222,7 @@ struct FeedScreen: View {
             ) else { return nil }
 
             await refresh()
-            savedMessage = result.syncState == .synced
-                ? "Saved."
-                : "Saved locally. We'll retry sync."
+            savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
             return result
 
         case .addVisit, .editVisit, .editWant:
@@ -242,14 +240,21 @@ struct FeedScreen: View {
                 backend: visitBackend
             )
             await refresh()
-            savedMessage = result.syncState == .synced
-                ? "Check-in saved."
-                : "Saved locally. We'll retry sync."
+            savedMessage = confirmationMessage(for: submission.status, syncState: result.syncState)
             return result
 
         case .sharedVisit:
             return nil
         }
+    }
+
+    private func confirmationMessage(for status: PlaceStatus, syncState: SyncState) -> String {
+        if syncState == .synced {
+            return status == .been ? "Check-in complete." : "Added to Wanna."
+        }
+        return status == .been
+            ? "Check-in is on this phone. We'll retry sync."
+            : "Wanna is on this phone. We'll retry sync."
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -956,7 +961,7 @@ private struct FeedFeaturedCard: View {
                     relationship: .follower
                 ))
             } label: {
-                Label(featured.reason, systemImage: "person.2.fill")
+                Label(featuredReason, systemImage: "person.2.fill")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WanderTheme.skyTint.color)
                     .lineLimit(1)
@@ -971,7 +976,7 @@ private struct FeedFeaturedCard: View {
                 Label("View place", systemImage: "mappin.and.ellipse")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(maxWidth: .infinity, minHeight: 38)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(WanderTheme.terracotta.color)
                     .clipShape(Capsule())
             }
@@ -991,6 +996,11 @@ private struct FeedFeaturedCard: View {
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         }
     }
+
+    private var featuredReason: String {
+        let statusVerb = featured.visiblePlace.userPlace.status == .been ? "Checked in by" : "Wanna by"
+        return featured.reason.replacingOccurrences(of: "Saved by", with: statusVerb)
+    }
 }
 
 private struct FeedActivityList: View {
@@ -1000,20 +1010,14 @@ private struct FeedActivityList: View {
     let openList: (LocalPlaceList) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(activity.enumerated()), id: \.element.id) { index, event in
+        VStack(spacing: WanderTheme.spacing3) {
+            ForEach(activity) { event in
                 FeedActivityModule(
                     activity: event,
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList
                 )
-
-                if index < activity.count - 1 {
-                    Divider()
-                        .overlay(WanderTheme.borderHairline.color)
-                        .padding(.horizontal, -WanderTheme.spacing4)
-                }
             }
         }
     }
@@ -1035,7 +1039,126 @@ private struct FeedActivityModule: View {
     let openPlace: (VisiblePlace) -> Void
     let openList: (LocalPlaceList) -> Void
 
+    @ViewBuilder
     var body: some View {
+        if activity.kind.usesCheckInTicket, let place = activity.place {
+            checkInTicket(place)
+        } else {
+            lightweightActivityRow
+        }
+    }
+
+    private func checkInTicket(_ place: VisiblePlace) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                Button {
+                    openProfile(activity.actor)
+                } label: {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        WanderAvatar(
+                            initials: initials(for: activity.actor.displayName),
+                            avatarURL: activity.actor.avatarURL,
+                            size: 40,
+                            color: WanderTheme.skyTint.color
+                        )
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(activity.actor.displayName)
+                                .font(.system(size: 15, weight: .black))
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .lineLimit(1)
+
+                            Text("CHECKED IN · \(FeedPresentation.timestampText(for: activity.occurredAt).uppercased())")
+                                .font(.system(size: 10, weight: .black, design: .rounded))
+                                .tracking(1.05)
+                                .foregroundStyle(WanderTheme.pinSocial.color)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                        }
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
+
+                Spacer(minLength: WanderTheme.spacing1)
+
+                if let rating = activity.rating {
+                    Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .frame(minHeight: 32)
+                        .overlay {
+                            Capsule().stroke(WanderTheme.terracotta.color.opacity(0.55), lineWidth: 1)
+                        }
+                        .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating))")
+                }
+            }
+
+            Button {
+                openPlace(place)
+            } label: {
+                Text(place.place.canonicalName)
+                    .font(.system(size: 25, weight: .black, design: .serif))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open \(place.place.canonicalName)")
+
+            Label(metadata, systemImage: "fork.knife")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(2)
+
+            if let note = activity.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+                Text(note)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !activity.media.isEmpty {
+                FeedMediaRail(media: activity.media)
+            }
+
+            HStack {
+                Spacer(minLength: 0)
+                Button {
+                    openPlace(place)
+                } label: {
+                    Label("View place", systemImage: "mappin.and.ellipse")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(minHeight: 44)
+                        .background(WanderTheme.skyTint.color)
+                        .clipShape(Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(WanderTheme.pinSocial.color.opacity(0.72), lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(place.place.canonicalName)")
+            }
+        }
+        .padding(WanderTheme.spacing4)
+        .checkInTicketSurface(
+            accent: WanderTheme.pinSocial.color,
+            surface: WanderTheme.surfaceBone.color,
+            surroundingSurface: WanderTheme.canvasWarm.color,
+            notchEdges: .trailing
+        )
+    }
+
+    private var lightweightActivityRow: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 Button {
@@ -1044,7 +1167,7 @@ private struct FeedActivityModule: View {
                     WanderAvatar(
                         initials: initials(for: activity.actor.displayName),
                         avatarURL: activity.actor.avatarURL,
-                        size: 48,
+                        size: 44,
                         color: WanderTheme.skyTint.color
                     )
                 }
@@ -1052,7 +1175,7 @@ private struct FeedActivityModule: View {
                 .accessibilityLabel("Open \(activity.actor.displayName)'s profile")
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    activityTitle
+                    lightweightActivityTitle
 
                     HStack(spacing: WanderTheme.spacing1) {
                         Image(systemName: activity.list == nil ? "fork.knife" : "list.bullet")
@@ -1068,43 +1191,32 @@ private struct FeedActivityModule: View {
                 }
 
                 Spacer(minLength: WanderTheme.spacing1)
-
-                if let rating = activity.rating {
-                    Text(PlaceRating.averageDisplay(rating))
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .frame(minHeight: 32)
-                        .overlay {
-                            Capsule().stroke(WanderTheme.terracotta.color.opacity(0.45), lineWidth: 1)
-                        }
-                        .accessibilityLabel("Rating \(PlaceRating.averageDisplay(rating))")
-                }
             }
 
             if let note = activity.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
                 Text(note)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                    .lineLimit(1)
-                    .padding(.leading, 60)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 56)
             }
 
             if !activity.media.isEmpty {
                 FeedMediaRail(media: activity.media)
-                    .padding(.leading, 60)
+                    .padding(.leading, 56)
             }
 
             HStack {
                 Spacer(minLength: 0)
                 actionButton
             }
-            .padding(.top, WanderTheme.spacing1)
         }
-        .padding(WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+        .padding(.horizontal, WanderTheme.spacing3)
     }
 
-    private var activityTitle: some View {
+    private var lightweightActivityTitle: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: WanderTheme.spacing1) {
                 Button {
@@ -1131,7 +1243,7 @@ private struct FeedActivityModule: View {
                     Text(place.place.canonicalName)
                         .font(.system(size: 16, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open \(place.place.canonicalName)")
@@ -1142,7 +1254,7 @@ private struct FeedActivityModule: View {
                     Text(list.name)
                         .font(.system(size: 16, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("View list \(list.name)")
@@ -1170,10 +1282,10 @@ private struct FeedActivityModule: View {
                 Label("View place", systemImage: "mappin.and.ellipse")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .frame(minHeight: 38)
-                .background(WanderTheme.terracotta.color)
-                .clipShape(Capsule())
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 44)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open \(place.place.canonicalName)")
@@ -1183,11 +1295,11 @@ private struct FeedActivityModule: View {
     private var activityVerb: String {
         switch activity.kind {
         case .placeSaved:
-            "saved"
+            "added to their map"
         case .placeBeen:
             "checked in at"
         case .placeWannaGo:
-            "added to Want to go"
+            "marked Wanna"
         case .listCreated:
             "created"
         case .listItemAdded:

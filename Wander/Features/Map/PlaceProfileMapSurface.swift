@@ -206,24 +206,12 @@ private struct PlaceProfilePreviewCard: View {
                 }
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color.opacity(0.98))
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(ticketAccentColor.opacity(0.72), lineWidth: 1)
+            .checkInTicketSurface(
+                accent: ticketAccentColor,
+                surface: WanderTheme.surfaceBone.color.opacity(0.98),
+                surroundingSurface: WanderTheme.canvasWarm.color,
+                notchEdges: .trailing
             )
-            .overlay(alignment: .trailing) {
-                Circle()
-                    .fill(WanderTheme.canvasWarm.color)
-                    .frame(width: 16, height: 16)
-                    .overlay(
-                        Circle()
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
-                    .offset(x: 8)
-                    .accessibilityHidden(true)
-            }
-            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 20, x: 0, y: 10)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open \(place.name)")

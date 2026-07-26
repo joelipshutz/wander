@@ -26,6 +26,7 @@
 		13E38F0F2359AD89CE1F8C7D /* VisibilityPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1AFBD6D06D23BC0C007F77C /* VisibilityPolicyTests.swift */; };
 		13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A090198414BF253FB326D960 /* SettingsScreen.swift */; };
 		16C50D466E2E66EA03E038C4 /* ProfileInsightsPresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8BAADA0C34354EB278F466 /* ProfileInsightsPresenterTests.swift */; };
+		1777381F242E1547FB1F5E0B /* CheckInTicketSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81299C03F3D6832DB9240061 /* CheckInTicketSurface.swift */; };
 		18622774B25BD7DAE231ADE4 /* SharedPlaceImportInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A294B4D596A37D263243FAF /* SharedPlaceImportInbox.swift */; };
 		1892B85AE93D8064CAA26A43 /* WanderRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12893CD9516BC58FD7D3BE43 /* WanderRootView.swift */; };
 		1B5F7AE1882A1C2C51D99E92 /* WanderBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = E850341A28B18117631F62F5 /* WanderBackend.swift */; };
@@ -267,6 +268,7 @@
 		7B8BAADA0C34354EB278F466 /* ProfileInsightsPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileInsightsPresenterTests.swift; sourceTree = "<group>"; };
 		7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapHitTestingTests.swift; sourceTree = "<group>"; };
 		7D348E71875A1E8A32FD57BE /* CheckInCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInCopyTests.swift; sourceTree = "<group>"; };
+		81299C03F3D6832DB9240061 /* CheckInTicketSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CheckInTicketSurface.swift; sourceTree = "<group>"; };
 		82E12138B68E0CBFA73B271D /* WanderSupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderSupabaseClient.swift; sourceTree = "<group>"; };
 		840B49067A7E0AB076EEBB23 /* FeedModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedModelsTests.swift; sourceTree = "<group>"; };
 		86041408E563554B57347025 /* LinkPlaceParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParser.swift; sourceTree = "<group>"; };
@@ -554,6 +556,7 @@
 		74079079D5E95AD2E796B1E8 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
+				81299C03F3D6832DB9240061 /* CheckInTicketSurface.swift */,
 				239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */,
 				E04C498EA555370C671CD904 /* PlaceRatingSlider.swift */,
 				77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */,
@@ -918,6 +921,7 @@
 				9B51E6EC8F138E5DA3ACC16C /* AuthGateSheet.swift in Sources */,
 				A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */,
 				D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */,
+				1777381F242E1547FB1F5E0B /* CheckInTicketSurface.swift in Sources */,
 				1C59AF053BAE53C75405C6A7 /* ClerkAuthService.swift in Sources */,
 				A8710E56BE6DB7AA89C9AD66 /* ContactProvider.swift in Sources */,
 				00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */,
