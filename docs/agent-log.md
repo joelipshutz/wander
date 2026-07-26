@@ -25373,3 +25373,28 @@ merge will change until Joe approves a direction.
 Expected tracked file for this exploration phase: `docs/agent-log.md`. Visual
 variants and comparison boards must remain under the gstack design artifact
 directory, outside the repository, per the selected workflow.
+
+Checkpoint:
+
+- Generated and manually inspected three four-surface comparison boards:
+  `A · New York Newsstand`, `B · Sunroom Journal`, and
+  `C · Pocket Gazette`.
+- A uses an Apple-native serif/sans boundary and is the lowest-risk migration.
+  Its corrected board preserves the current five-tab shell and exact
+  Feed/Woodcat/check-in #4/map semantics.
+- B is the warmest and most ownable brand expression, extending the semantic
+  palette with moss and sun. Its board is directionally useful but retains
+  small image-model drift in some shell/data details, so it must not be treated
+  as an implementation spec.
+- C is the strongest structured magazine system and uses serif most broadly.
+  Its corrected board preserves the exact Feed tickets, Woodcat profile,
+  check-in #4, and ownership/status filter grammar, though its navigation shell
+  follows the older four-tab contract and is not a nav proposal.
+- All variants passed the prompt-aware visual quality check. Artifacts, role
+  definitions, licensing notes, and migration map live at:
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/rec148-typography-branding-20260726/`.
+- Comparison board:
+  `http://127.0.0.1:56158/boards/b-20260726-234451-e9fy4d/`.
+
+The workflow is paused for Joe to select or remix a direction. No font files,
+SwiftUI typography tokens, or app screens have been changed.
