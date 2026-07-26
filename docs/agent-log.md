@@ -24121,3 +24121,33 @@ Publication — 2026-07-26 01:44 PDT:
   `https://github.com/joelipshutz/wander/pull/229#issuecomment-5082764418`.
 - Returned Linear REC-154 to `In Review` and added the matching validation and
   no-TestFlight handoff. No known follow-up blocker remains.
+
+Latest-main reconciliation — 2026-07-26 02:08 PDT:
+
+- While publishing, REC-97's universal Share Extension and its landing record
+  merged to `main` (`fb37c744b`, then `9d51b0ec3`). Rebased REC-154 onto that
+  exact head and resolved the shared extension surfaces by preserving all three
+  targets: `WanderWidgets`, `WanderNearbyWidgets`, and
+  `WanderShareExtension`.
+- Preserved both Add launch destinations (`importInbox` and the selected nearby
+  place), main's share-inbox drain, the authenticated-session gate, both widget
+  refresh paths, all generated scheme entries, both App IDs, all App Group
+  entitlements, and the combined setup/privacy documentation. Regenerated the
+  Xcode project from the merged `project.yml`.
+- The combined project has four build-number consumers: the app and three
+  extensions. Updated the integration contract from three to four after the
+  first combined full run correctly exposed that stale expectation. A
+  fresh-DerivedData rerun then passed 730/730 with zero failures or skips:
+  `/private/tmp/DerivedData-rec154-combined-final/Logs/Test/Test-Wander-2026.07.26_01-55-10--0700.xcresult`.
+- The final combined focused widget/deep-link/snapshot suite passed 30/30:
+  `/private/tmp/DerivedData-rec154-combined-final/Logs/Test/Test-Wander-2026.07.26_02-05-44--0700.xcresult`.
+  The generic iOS Simulator build also passed for arm64 and x86_64 with the app,
+  both widget extensions, and the Share Extension.
+- The previously reviewed iPhone 17 Pro and iPhone 17e widget previews remain
+  applicable because the final reconciliation did not alter the nearby-widget
+  SwiftUI source. Existing formatter actor-isolation, signed-XCTest stripping,
+  and headermap warnings remain unchanged. No TestFlight action was performed.
+
+Next: commit this combined-target contract/log update, force-with-lease push
+PR #229 again, verify it is mergeable on exact current main, update Linear with
+the superseding 730/730 result, and leave Xcode on REC-154.
