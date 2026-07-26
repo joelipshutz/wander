@@ -24597,3 +24597,40 @@ REC-153 validation on latest main — 2026-07-26 10:25 PDT:
   entitlements; no new build warning or error was introduced by REC-153.
 - REC-153 is ready to publish and squash-merge as PR #225. After the merge,
   build 99 will be cut from the exact resulting `main`.
+
+TestFlight build 99 release start — 2026-07-26 10:28 PDT:
+
+- Agent/tool: Codex. Goal: release Ryan's explicit batch of REC-142, REC-146,
+  REC-153, REC-154, REC-97, PR #233 commit `3fcca8378`, and PR #235 to
+  TestFlight, with per-item inclusion proof and live-group confirmation.
+- Linear: REC-156 (`In Progress`), related to all requested Linear issues.
+  Branch: `codex/rec-156-testflight-build-99`. Clean isolated worktree:
+  `/private/tmp/recme-testflight-build-99`.
+- Exact base: current `origin/main`
+  `46810555c92511e4dabc2b8be937387a133b65d2`, the REC-153 PR #225 squash
+  merge. The prior completed release is build 98, so this release will
+  increment `CURRENT_PROJECT_VERSION` exactly once to 99.
+- Expected files: `project.yml`, regenerated
+  `Wander.xcodeproj/project.pbxproj`, the build-number contract in
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this append-only log.
+- Next: bump/regenerate, run the full suite and generic Simulator build,
+  review/publish the release PR, squash-merge it, verify requested commit
+  ancestry on exact `main`, then archive/upload/process build 99.
+
+TestFlight build 99 pre-landing validation — 2026-07-26 10:37 PDT:
+
+- Bumped the single source of truth in `project.yml` from build 98 to 99,
+  regenerated the Xcode project, and updated the build-number integration
+  contract. The diff is limited to those version artifacts and this log.
+- `xcodegen generate` and `git diff --check` passed.
+- The exact release branch passed 744/744 tests with zero failures on iPhone
+  17 Pro / iOS 26.5:
+  `/tmp/DerivedData-build99/Logs/Test/Test-Wander-2026.07.26_10-28-47--0700.xcresult`.
+- The exact release branch also passed the generic iOS Simulator build for
+  arm64 and x86_64 using `/tmp/DerivedData-build99`.
+- Existing non-blocking warnings remain for `WanderSupabaseClient` formatter
+  actor isolation, traditional headermaps, and unsigned Simulator
+  app-group/keychain entitlements. No new error or release-bump warning was
+  introduced.
+- Next: publish a ready REC-156 release PR, squash-merge it into current
+  `main`, then archive only after fresh ancestry and version proofs pass.
