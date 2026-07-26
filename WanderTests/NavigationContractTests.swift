@@ -241,6 +241,31 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testFilteredProfileMapShareUsesSupportedActivitySubjectSource() {
+        let controller = UIActivityViewController(
+            activityItems: ["placeholder"],
+            applicationActivities: nil
+        )
+        let source = WanderShareActivityItemSource(
+            message: "Explore Santa Monica on @maya's rec.me map",
+            subject: "Maya Chen's Santa Monica map"
+        )
+
+        XCTAssertEqual(
+            source.activityViewControllerPlaceholderItem(controller) as? String,
+            "Explore Santa Monica on @maya's rec.me map"
+        )
+        XCTAssertEqual(
+            source.activityViewController(controller, itemForActivityType: nil) as? String,
+            "Explore Santa Monica on @maya's rec.me map"
+        )
+        XCTAssertEqual(
+            source.activityViewController(controller, subjectForActivityType: nil),
+            "Maya Chen's Santa Monica map"
+        )
+    }
+
+    @MainActor
     func testProfileMapPNGAttachmentsAreLosslessUniqueAndPruneOnlyExpiredFiles() throws {
         let fileManager = FileManager.default
         let baseDirectory = fileManager.temporaryDirectory
@@ -767,6 +792,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(shareButton.contains(".accessibilityLabel(\"Share \\(item.title)\")"))
         XCTAssertTrue(shareButton.contains("filterTitle: item.title"))
         XCTAssertTrue(shareButton.contains("WanderShareSheet(content: shareContent)"))
+        XCTAssertTrue(shareButton.contains(".alert(\"Couldn't prepare this map\""))
+        XCTAssertTrue(shareButton.contains(".onDisappear(perform: cancelSharePreparation)"))
     }
 
     @MainActor

@@ -892,6 +892,7 @@ private struct ProfileMapSection: View {
     let summaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
     @State private var selectedSummary: ProfileMapSummaryKind = .places
     @State private var shareImageFileURL: URL?
+    @State private var activeShareItemID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -962,7 +963,8 @@ private struct ProfileMapSection: View {
                             ProfileMapSummaryShareButton(
                                 profile: profile,
                                 item: item,
-                                points: insights.mapPoints(matching: item)
+                                points: insights.mapPoints(matching: item),
+                                activeShareItemID: $activeShareItemID
                             )
                             .padding(.trailing, WanderTheme.spacing2)
                         }
@@ -1228,12 +1230,14 @@ private struct ProfileMapSummaryShareButton: View {
     let profile: LocalProfile
     let item: ProfileSummaryItem
     let points: [ProfileMapPoint]
+    @Binding var activeShareItemID: String?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
-    @State private var isPreparing = false
+    @State private var shareTask: Task<Void, Never>?
     @State private var shareContent: WanderShareContent?
     @State private var showsShareSheet = false
+    @State private var showsShareError = false
 
     var body: some View {
         Button {
@@ -1256,20 +1260,34 @@ private struct ProfileMapSummaryShareButton: View {
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
         }
         .buttonStyle(.plain)
-        .disabled(isPreparing || profile.serverID == nil)
+        .disabled(activeShareItemID != nil || profile.serverID == nil)
+        .opacity(profile.serverID == nil ? 0.45 : 1)
         .accessibilityLabel("Share \(item.title)")
-        .accessibilityHint("Shares the profile link and a map of these \(item.count) Been \(item.count == 1 ? "place" : "places")")
-        .sheet(isPresented: $showsShareSheet) {
+        .accessibilityHint(shareAccessibilityHint)
+        .sheet(isPresented: $showsShareSheet, onDismiss: cleanupShareAttachment) {
             if let shareContent {
                 WanderShareSheet(content: shareContent)
             }
         }
+        .alert("Couldn't prepare this map", isPresented: $showsShareError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Check your connection and try sharing again.")
+        }
+        .onDisappear(perform: cancelSharePreparation)
     }
 
     private func prepareAndShare() {
-        Task {
-            isPreparing = true
-            defer { isPreparing = false }
+        shareTask?.cancel()
+        showsShareError = false
+        activeShareItemID = item.id
+        shareTask = Task {
+            defer {
+                if activeShareItemID == item.id {
+                    activeShareItemID = nil
+                }
+                shareTask = nil
+            }
 
             let request = ProfileMapSnapshotRequest(
                 points: points,
@@ -1289,10 +1307,48 @@ private struct ProfileMapSummaryShareButton: View {
                     imageFileURL: imageFileURL,
                     filterTitle: item.title
                   )
-            else { return }
+            else {
+                guard !Task.isCancelled else { return }
+                showsShareError = true
+                UIAccessibility.post(
+                    notification: .announcement,
+                    argument: "Couldn't prepare this map. Check your connection and try sharing again."
+                )
+                return
+            }
 
             shareContent = content
             showsShareSheet = true
+        }
+    }
+
+    private var isPreparing: Bool {
+        activeShareItemID == item.id
+    }
+
+    private var shareAccessibilityHint: String {
+        guard profile.serverID != nil else {
+            return "Available after this profile finishes syncing"
+        }
+        return "Shares the profile link and a map of these \(item.count) Been \(item.count == 1 ? "place" : "places")"
+    }
+
+    private func cancelSharePreparation() {
+        shareTask?.cancel()
+        shareTask = nil
+        if activeShareItemID == item.id {
+            activeShareItemID = nil
+        }
+    }
+
+    private func cleanupShareAttachment() {
+        guard let fileURL = shareContent?.additionalItems.first else {
+            shareContent = nil
+            return
+        }
+        shareContent = nil
+        Task {
+            await WanderShareAttachmentStore.removePreparedPNG(at: fileURL)
         }
     }
 }

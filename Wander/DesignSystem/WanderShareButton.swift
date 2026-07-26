@@ -68,17 +68,48 @@ struct WanderShareSheet: UIViewControllerRepresentable {
     let content: WanderShareContent
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        var activityItems: [Any] = [content.message]
+        var activityItems: [Any] = [
+            WanderShareActivityItemSource(
+                message: content.message,
+                subject: content.subject
+            )
+        ]
         activityItems.append(contentsOf: content.items)
-        let controller = UIActivityViewController(
+        return UIActivityViewController(
             activityItems: activityItems,
             applicationActivities: nil
         )
-        controller.setValue(content.subject, forKey: "subject")
-        return controller
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+final class WanderShareActivityItemSource: NSObject, UIActivityItemSource {
+    let message: String
+    let subject: String
+
+    init(message: String, subject: String) {
+        self.message = message
+        self.subject = subject
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        message
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        itemForActivityType activityType: UIActivity.ActivityType?
+    ) -> Any? {
+        message
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        subjectForActivityType activityType: UIActivity.ActivityType?
+    ) -> String {
+        subject
+    }
 }
 
 enum WanderShareAttachmentStore {
@@ -91,8 +122,28 @@ enum WanderShareAttachmentStore {
     private static let pngSignature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
 
     static func preparePNG(_ data: Data) async -> URL? {
-        await Task.detached(priority: .utility) {
+        guard !Task.isCancelled else { return nil }
+        let fileURL = await Task.detached(priority: .utility) {
             try? persistPNG(data)
+        }.value
+        guard !Task.isCancelled else {
+            if let fileURL {
+                await removePreparedPNG(at: fileURL)
+            }
+            return nil
+        }
+        return fileURL
+    }
+
+    static func removePreparedPNG(at fileURL: URL) async {
+        await Task.detached(priority: .utility) {
+            let fileManager = FileManager.default
+            let attachmentDirectory = fileManager.temporaryDirectory
+                .appendingPathComponent(directoryName, isDirectory: true)
+                .standardizedFileURL
+            let standardizedFileURL = fileURL.standardizedFileURL
+            guard standardizedFileURL.deletingLastPathComponent() == attachmentDirectory else { return }
+            try? fileManager.removeItem(at: standardizedFileURL)
         }.value
     }
 

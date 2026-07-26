@@ -386,10 +386,7 @@ enum ProfileInsightsPresenter {
         let distinctMonthCities = Set(monthPlaces.compactMap { CityCanonicalizer.comparisonKey($0.locality) })
 
         let uniqueBeen = uniqueUserPlaces(activeBeen)
-        let beenPlaces = uniqueBeen.compactMap { userPlace -> (LocalUserPlace, LocalPlace)? in
-            guard let place = placeByID[userPlace.placeID] else { return nil }
-            return (userPlace, place)
-        }
+        let beenPlaces = canonicalBeenPlaces(uniqueBeen, placeByID: placeByID)
         let mapPoints = beenPlaces.compactMap { _, place -> ProfileMapPoint? in
             guard validCoordinate(latitude: place.latitude, longitude: place.longitude) else { return nil }
             return ProfileMapPoint(
@@ -462,6 +459,29 @@ enum ProfileInsightsPresenter {
     private static func uniqueUserPlaces(_ values: [LocalUserPlace]) -> [LocalUserPlace] {
         var seen: Set<String> = []
         return values.filter { seen.insert($0.id).inserted }
+    }
+
+    private static func canonicalBeenPlaces(
+        _ userPlaces: [LocalUserPlace],
+        placeByID: [String: LocalPlace]
+    ) -> [(LocalUserPlace, LocalPlace)] {
+        let resolved = userPlaces.compactMap { userPlace -> (LocalUserPlace, LocalPlace)? in
+            guard let place = placeByID[userPlace.placeID] else { return nil }
+            return (userPlace, place)
+        }
+        let groups = Dictionary(grouping: resolved, by: { $0.1.id })
+
+        return groups.keys.sorted().compactMap { placeID in
+            groups[placeID]?.sorted { lhs, rhs in
+                if lhs.0.updatedAt != rhs.0.updatedAt {
+                    return lhs.0.updatedAt > rhs.0.updatedAt
+                }
+                if (lhs.0.serverID != nil) != (rhs.0.serverID != nil) {
+                    return lhs.0.serverID != nil
+                }
+                return lhs.0.id < rhs.0.id
+            }.first
+        }
     }
 
     private static func uniqueVisits(_ values: [LocalPlaceVisit]) -> [LocalPlaceVisit] {

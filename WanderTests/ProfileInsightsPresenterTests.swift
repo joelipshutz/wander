@@ -247,6 +247,10 @@ final class ProfileInsightsPresenterTests: XCTestCase {
 
         XCTAssertEqual(insights.monthVisitCounts[day], 3)
         XCTAssertEqual(insights.monthPlaceIDs[day], ["missing-place", "server-place"])
+        XCTAssertEqual(insights.mapPlaceCount, 1)
+        XCTAssertEqual(insights.mapPoints.map(\.id), ["server-place"])
+        XCTAssertEqual(insights.placeSummaries.map(\.count), [1])
+        XCTAssertEqual(insights.placeSummaries.flatMap(\.placeIDs), ["server-place"])
     }
 
     func testCountryCanonicalizerDeduplicatesCodesAndNames() {

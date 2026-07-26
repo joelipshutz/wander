@@ -22619,3 +22619,52 @@ Handoff — 2026-07-25 22:38 PDT:
 
 Final outcome: accurate Profile map totals and per-filter share actions are
 implemented, fully tested, visually validated, and ready for review in PR #221.
+
+Pre-landing review and hardening — 2026-07-25 23:31 PDT:
+
+- Ryan requested that PR #221 land on `main`. This remains a merge-only request:
+  build 97 is the latest completed TestFlight release, and no build-number bump,
+  archive, upload, beta-group change, or tester Slack note is authorized.
+- Fetched current `origin/main` and confirmed the ready PR was exactly current
+  with `main`, mergeable, and limited to the Profile map/share implementation,
+  focused tests, and coordination log. No backend, auth, database, project, or
+  release metadata is in scope.
+- The gstack pre-landing review plus independent design, test, and
+  security/performance passes found one correctness blocker: two local
+  user-place aliases can resolve to the same canonical place, causing the new
+  Been-place total and map pins to double count it. The presenter now
+  canonicalizes resolved Been places by place ID with a deterministic preferred
+  user-place row, and the existing alias fixture now asserts one place and one
+  map point.
+- Hardened the row share flow discovered during review: only one row can prepare
+  at a time; preparation cancels when the row disappears; unavailable unsynced
+  rows are visibly disabled; failures show an alert and VoiceOver announcement;
+  filter PNGs are deleted after the activity sheet closes; and cancellation
+  cleans up a just-created attachment.
+- Replaced undocumented activity-controller subject KVC with a supported
+  `UIActivityItemSource` that supplies the message and subject. Added regression
+  coverage for the supported activity source and the new failure/cancellation
+  source contracts.
+- Focused post-fix validation passed 19/19 presenter tests, including the
+  canonical-alias regression. The share/navigation selectors compiled cleanly;
+  their exact contract tests will be included in the final complete-suite run.
+  Focused result:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-30-21--0700.xcresult`.
+- Greptile had no line-level or top-level review comments. The core scope review
+  found no additional blocker. Prior iPhone 17e and iPhone 17 Pro visual QA
+  remains applicable because the happy-path layout did not change; review
+  hardening affects disabled, failure, cancellation, and cleanup states.
+- Next: run the complete iPhone 17 Pro suite on the hardened head, record the
+  final review, commit and push the fixes, recheck mergeability against current
+  `main`, post validation to PR #221, and squash-merge it.
+
+Final pre-push validation — 2026-07-25 23:32 PDT:
+
+- The two exact share/navigation contracts passed 2/2:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-31-33--0700.xcresult`.
+- The complete iPhone 17 Pro, iOS 26.5 suite passed 693/693 on the hardened
+  branch:
+  `/private/tmp/DerivedData-rec146-focused/Logs/Test/Test-Wander-2026.07.25_23-31-47--0700.xcresult`.
+- Existing Swift isolation, simulator entitlement/resource, App Intents, and
+  traditional headermap warnings remain unchanged. No REC-146 regression or
+  unresolved pre-landing review finding remains.
