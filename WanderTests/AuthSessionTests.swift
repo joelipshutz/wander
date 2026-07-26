@@ -1,5 +1,8 @@
 import XCTest
 @testable import Wander
+#if canImport(ClerkKit)
+import ClerkKit
+#endif
 
 @MainActor
 final class AuthSessionTests: XCTestCase {
@@ -35,9 +38,10 @@ final class AuthSessionTests: XCTestCase {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
         }
-        let service = ClerkAuthService(configuration: configuration) { publishableKey in
-            publishableKey
-        }
+        let service = ClerkAuthService(
+            configuration: configuration,
+            configureClerk: { publishableKey in publishableKey }
+        )
         let store = AuthSessionStore(provider: service)
 
         store.presentGate(for: .syncPlace)
@@ -52,12 +56,129 @@ final class AuthSessionTests: XCTestCase {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
         }
-        let service = ClerkAuthService(configuration: configuration) { _ in
-            ""
-        }
+        let service = ClerkAuthService(
+            configuration: configuration,
+            configureClerk: { _ in "" }
+        )
 
         XCTAssertEqual(service.state, .unavailable("Missing Clerk publishable key."))
         XCTAssertFalse(service.canPresentNativeAuth)
+    }
+
+    func testClerkSessionRefreshFailsClosedWhenAuthoritativeResolutionFails() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let resolution = AuthSessionResolutionHolder(.success(session))
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { try resolution.value.get() },
+            configureClerk: { $0 }
+        )
+
+        await service.refreshSession()
+        XCTAssertEqual(service.state, .signedIn(session))
+
+        resolution.value = .failure(.tokenUnavailable)
+        await service.refreshSession()
+
+        XCTAssertEqual(
+            service.state,
+            .unavailable("Could not verify your session. Check your connection and try again.")
+        )
+    }
+
+    #if canImport(ClerkKit)
+    func testOnlyActiveClerkSessionStatusCanAuthenticate() {
+        XCTAssertTrue(ClerkAuthService.isActiveSessionStatus(.active))
+
+        let inactiveStatuses: [ClerkKit.Session.SessionStatus] = [
+            .abandoned,
+            .pending,
+            .ended,
+            .expired,
+            .removed,
+            .replaced,
+            .revoked,
+            .unknown("future")
+        ]
+        for status in inactiveStatuses {
+            XCTAssertFalse(ClerkAuthService.isActiveSessionStatus(status))
+        }
+    }
+    #endif
+
+    func testOlderSessionRefreshCannotOverwriteNewerResult() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let firstStarted = expectation(description: "first refresh started")
+        let secondStarted = expectation(description: "second refresh started")
+        var requestCount = 0
+        var firstContinuation: CheckedContinuation<AuthSession?, Never>?
+        var secondContinuation: CheckedContinuation<AuthSession?, Never>?
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                requestCount += 1
+                let requestNumber = requestCount
+                return await withCheckedContinuation { continuation in
+                    if requestNumber == 1 {
+                        firstContinuation = continuation
+                        firstStarted.fulfill()
+                    } else {
+                        secondContinuation = continuation
+                        secondStarted.fulfill()
+                    }
+                }
+            },
+            configureClerk: { $0 }
+        )
+
+        let firstRefresh = Task { await service.refreshSession() }
+        await fulfillment(of: [firstStarted], timeout: 1)
+        let secondRefresh = Task { await service.refreshSession() }
+        await fulfillment(of: [secondStarted], timeout: 1)
+
+        let newerSession = AuthSession(userID: "user_b", displayName: "B", handle: "b")
+        secondContinuation?.resume(returning: newerSession)
+        await secondRefresh.value
+        XCTAssertEqual(service.state, .signedIn(newerSession))
+
+        firstContinuation?.resume(
+            returning: AuthSession(userID: "user_a", displayName: "A", handle: "a")
+        )
+        await firstRefresh.value
+        XCTAssertEqual(service.state, .signedIn(newerSession))
+    }
+
+    func testCancelledSessionRefreshDoesNotReplaceValidatedState() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let validatedSession = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let cancellationStarted = expectation(description: "cancelled refresh started")
+        var requestCount = 0
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                requestCount += 1
+                if requestCount == 1 { return validatedSession }
+                cancellationStarted.fulfill()
+                try await Task.sleep(nanoseconds: 30_000_000_000)
+                return AuthSession(userID: "stale", displayName: "Stale", handle: "stale")
+            },
+            configureClerk: { $0 }
+        )
+
+        await service.refreshSession()
+        let cancelledRefresh = Task { await service.refreshSession() }
+        await fulfillment(of: [cancellationStarted], timeout: 1)
+        cancelledRefresh.cancel()
+        await cancelledRefresh.value
+
+        XCTAssertEqual(service.state, .signedIn(validatedSession))
     }
 
     func testSupabaseTokenRequiresSignedInSession() async {
@@ -79,9 +200,46 @@ final class AuthSessionTests: XCTestCase {
         )
         let signedInStore = AuthSessionStore(provider: signedInProvider)
 
+        do {
+            _ = try await signedInStore.supabaseAccessToken()
+            XCTFail("Expected unvalidated token lookup to throw")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .notSignedIn)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        await signedInStore.refreshSession()
         let token = try? await signedInStore.supabaseAccessToken()
 
         XCTAssertEqual(token, "token")
+    }
+
+    func testSessionValidationBlocksTokensUntilRefreshCompletes() async throws {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedIn(AuthSession(userID: "user_123", displayName: nil, handle: nil)),
+            token: "token"
+        )
+        let store = AuthSessionStore(provider: provider)
+        await store.refreshSession()
+        let validatedToken = try await store.supabaseAccessToken()
+        XCTAssertEqual(validatedToken, "token")
+
+        store.beginSessionValidation()
+
+        do {
+            _ = try await store.supabaseAccessToken()
+            XCTFail("Expected access token lookup to be blocked during validation")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .notSignedIn)
+        }
+
+        do {
+            _ = try await store.refreshSupabaseAccessToken()
+            XCTFail("Expected forced token refresh to be blocked during validation")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .notSignedIn)
+        }
     }
 
     func testSignOutClearsSession() async throws {
@@ -121,6 +279,93 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.state, .signedIn(session))
         XCTAssertFalse(store.isSigningOut)
         XCTAssertEqual(store.signOutError, "Could not sign out. Try again.")
+    }
+
+    func testStoreTracksProviderLogoutWithoutManualRefresh() async {
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let provider = PreviewAuthSessionProvider(
+            state: .signedIn(session),
+            canPresentNativeAuth: true,
+            token: "token"
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.presentGate(for: .syncPlace)
+        store.isPresentingNativeAuth = true
+
+        let signedOut = expectation(description: "provider logout reaches auth store")
+        let observation = Task { @MainActor in
+            while store.state != .signedOut {
+                guard !Task.isCancelled else { return }
+                await Task.yield()
+            }
+            signedOut.fulfill()
+        }
+        defer { observation.cancel() }
+
+        provider.setState(.signedOut)
+        await fulfillment(of: [signedOut], timeout: 1)
+
+        XCTAssertEqual(store.state, .signedOut)
+        XCTAssertNil(store.activeGate)
+        XCTAssertFalse(store.isPresentingNativeAuth)
+    }
+
+    func testForegroundStyleRefreshRejectsSilentProviderLogout() async {
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let provider = PreviewAuthSessionProvider(state: .signedIn(session), token: "token")
+        let store = AuthSessionStore(provider: provider)
+
+        provider.setStateSilently(.signedOut)
+        XCTAssertEqual(store.state, .signedIn(session))
+
+        await store.refreshSession()
+
+        XCTAssertEqual(store.state, .signedOut)
+        XCTAssertEqual(
+            WanderAppEntryView.destination(for: store.state, hasResolvedSession: true),
+            .signIn
+        )
+    }
+
+    func testAppSessionDestinationNeverShowsAppWithoutSignedInSession() {
+        XCTAssertEqual(
+            WanderAppEntryView.destination(for: .signedOut, hasResolvedSession: true),
+            .signIn
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(for: .loading, hasResolvedSession: true),
+            .loading
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(
+                for: .unavailable("No auth"),
+                hasResolvedSession: true
+            ),
+            .unavailable("No auth")
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(
+                for: .signedIn(AuthSession(userID: "user_123", displayName: nil, handle: nil)),
+                hasResolvedSession: true
+            ),
+            .authenticated
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(
+                for: .signedIn(AuthSession(userID: "user_123", displayName: nil, handle: nil)),
+                hasResolvedSession: false,
+                isSessionValidated: true
+            ),
+            .loading
+        )
+        XCTAssertEqual(
+            WanderAppEntryView.destination(
+                for: .signedIn(AuthSession(userID: "user_123", displayName: nil, handle: nil)),
+                hasResolvedSession: true,
+                isSessionValidated: false
+            ),
+            .loading
+        )
     }
 
     func testAuthGateCopyKeepsTrustPromisesClear() {
@@ -183,5 +428,14 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("username can appear in search again"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("existing places will stay in stealth mode"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("future saves will follow"))
+    }
+}
+
+@MainActor
+private final class AuthSessionResolutionHolder {
+    var value: Result<AuthSession?, AuthSessionError>
+
+    init(_ value: Result<AuthSession?, AuthSessionError>) {
+        self.value = value
     }
 }

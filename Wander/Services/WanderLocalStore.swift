@@ -841,6 +841,7 @@ final class WanderStore: ObservableObject {
         case .signedIn(let session):
             let previousUserID = currentUser.id
             if previousUserID != session.userID {
+                analytics.resetIdentity()
                 clearSessionScopedRemoteState()
             }
             apply(session: session)
@@ -880,6 +881,10 @@ final class WanderStore: ObservableObject {
             || feedLoadState != .idle
             || lastFeedRefreshAt != nil
             || lastRemoteError != nil
+            || profiles.contains { $0.id != currentUser.id }
+            || !follows.isEmpty
+            || !blocks.isEmpty
+            || !mutes.isEmpty
         guard hadRemoteState else { return }
 
         withDeferredPersistence {
@@ -894,6 +899,10 @@ final class WanderStore: ObservableObject {
             feedLoadState = .idle
             lastFeedRefreshAt = nil
             lastRemoteError = nil
+            profiles = []
+            follows = []
+            blocks = []
+            mutes = []
             objectWillChange.send()
             persist()
         }
@@ -4912,18 +4921,26 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    func refreshRemoteCurrentProfile(backend: WanderBackend?) async {
+    @discardableResult
+    func refreshRemoteCurrentProfile(backend: WanderBackend?) async -> Bool {
         guard let backend else {
-            return
+            return false
         }
+        let requestUserID = currentUser.id
 
         do {
-            if let profile = try await backend.currentProfile() {
-                applyRemoteCurrentProfile(profile)
-            }
+            guard let profile = try await backend.currentProfile(),
+                  !Task.isCancelled,
+                  currentUser.id == requestUserID,
+                  profile.id == requestUserID
+            else { return false }
+            applyRemoteCurrentProfile(profile)
             lastRemoteError = nil
+            return true
         } catch {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
             lastRemoteError = remoteErrorMessage(error)
+            return false
         }
     }
 
@@ -5796,19 +5813,19 @@ final class WanderStore: ObservableObject {
         let handle = sessionHandle
         let displayName = normalizedSessionDisplayName(from: session, fallbackHandle: sessionHandle)
         let localID = "local_profile_current"
-        let preferredVisibility = defaultVisibility
-        let preferredPrivateProfile = isPrivateProfile
+        let preferredVisibility = PlaceVisibility.selfOnly
+        let preferredPrivateProfile = true
         let profile = LocalProfile(
             localID: localID,
             serverID: session.userID,
             handle: handle,
             displayName: displayName,
-            avatarURL: previousCurrentUser.avatarURL,
-            bio: previousCurrentUser.bio,
-            homeArea: previousCurrentUser.homeArea,
+            avatarURL: nil,
+            bio: nil,
+            homeArea: nil,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .synced,
-            createdAt: previousCurrentUser.createdAt
+            createdAt: .now
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
@@ -5816,6 +5833,8 @@ final class WanderStore: ObservableObject {
             currentUser = profile
             profiles.removeAll { $0.localID == localID || $0.serverID == session.userID }
             profiles.insert(profile, at: 0)
+            defaultVisibility = preferredVisibility
+            isPrivateProfile = preferredPrivateProfile
             claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
             persist()
         }
@@ -5869,10 +5888,9 @@ final class WanderStore: ObservableObject {
     }
 
     private func applySignedOutProfile() {
-        let previousCurrentUser = currentUser
         let localID = "local_profile_current"
-        let preferredVisibility = defaultVisibility
-        let preferredPrivateProfile = isPrivateProfile
+        let preferredVisibility = PlaceVisibility.followers
+        let preferredPrivateProfile = false
         cancelSharedVisitInboxTask()
         sharedVisitInvitations = []
         sharedVisitInboxUserID = nil
@@ -5881,12 +5899,12 @@ final class WanderStore: ObservableObject {
             localID: localID,
             handle: "you",
             displayName: "You",
-            avatarURL: previousCurrentUser.avatarURL,
-            bio: previousCurrentUser.bio,
-            homeArea: previousCurrentUser.homeArea,
+            avatarURL: nil,
+            bio: nil,
+            homeArea: nil,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .localOnly,
-            createdAt: previousCurrentUser.createdAt
+            createdAt: .now
         )
         profile.defaultVisibilityRaw = preferredVisibility.rawValue
 
