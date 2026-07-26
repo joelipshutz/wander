@@ -24425,3 +24425,37 @@ Final handoff (09:44 PDT):
 Final outcome: every non-restaurant choose-subcategory page now uses the
 Explore Cuisines Atlas interaction language, is validated on current `main`,
 and is ready for Ryan's local Xcode testing and PR review.
+
+Pre-landing review (10:02 PDT):
+
+- Ryan explicitly requested that ready PR #235 be pushed to `main`. Applied the
+  repo-owned `recme-pr-review-merge-release` workflow and the gstack pre-landing
+  review against exact current `origin/main` `76872a65b`.
+- Scope is clean: production picker UI, the production-backed debug mock, one
+  focused navigation contract test, and this coordination log. No schema,
+  persistence, auth, sync, provider, signing, generated-project, or unrelated
+  code is present.
+- Core review plus testing, maintainability/performance, and
+  design/accessibility specialist passes found no merge-blocking issue.
+  A duplicate-SwiftUI-ID concern was disproved by
+  `WanderPlaceCategory.subcategoryGroups`, which de-duplicates normalized values
+  across groups, and
+  `testSubcategoryGroupsAreExhaustiveForEveryEditableCategory`, which asserts
+  every editable category's grouped values are globally unique.
+- Non-blocking accessibility note: the new type filters/tiles intentionally
+  match the existing Explore Cuisines Atlas controls, including its fixed-size
+  typography. A correct Dynamic Type improvement should update both Atlas
+  pickers and their grid/footer reflow together; a type-only styling divergence
+  is outside this visual-consistency merge. Existing VoiceOver labels/values,
+  non-color selected checkmarks, 44-point targets, safe-area footer behavior,
+  and two-device visual QA are intact.
+- Test specialist noted that the new regression is source-contract coverage,
+  not an extracted unit test of private filter/view state. Existing exhaustive
+  taxonomy uniqueness tests, the complete 742/742 suite, and live iPhone 17 Pro
+  plus iPhone 17e visual verification make this a non-blocking follow-up rather
+  than evidence of a current behavior defect.
+- PR #235 is ready, unlabeled, `MERGEABLE`, and `CLEAN`, with no required
+  checks, human review blocker, hold signal, or Greptile comment. Build 98 has a
+  completed TestFlight release record; this request is merge-only, so no build
+  bump, archive, upload, tester-group change, or Slack release note is
+  authorized.
