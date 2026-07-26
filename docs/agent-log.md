@@ -24292,3 +24292,47 @@ Latest-main reconciliation — 2026-07-26 09:38 PDT:
 Next: commit this reconciliation record, force-with-lease push the rebased
 branch, update ready PR #229 and Linear REC-154 with the exact validation,
 complete the final review record, then squash-merge to `main`.
+
+## 2026-07-26 09:41 PDT — Codex — REC-154 nearby widget refresh landing
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-154-merge-record`
+Linear: `REC-154`
+
+Landing completion:
+
+- Force-with-lease pushed reviewed implementation head `c8a1972ea`, updated
+  ready PR #229 with final scope/validation, and confirmed it was `CLEAN` and
+  `MERGEABLE` against exact base `03fb30e35`.
+- Squash-merged PR #229 to `main` as
+  `d3f70c03c7cc7bd194e7a5bf16cc3f25904d1c6b`:
+  `https://github.com/joelipshutz/wander/pull/229`. Verified `origin/main`
+  resolves to that exact commit and deleted the merged remote feature branch.
+- Final behavior: the large Nearby spots widget has a bottom-left interactive
+  Refresh control with brief `Refreshing…` feedback, then replaces its place
+  list and minute timestamp. Place rows use wider 12-point widget insets.
+  `See all` and background taps enter the in-app I'm Here Now nearby list;
+  individual rows still open the selected prefilled Rich Visit form.
+- The final review fixed unavailable-state recovery, live minute aging,
+  overlapping refresh completion, old-result overwrite, permission-revocation
+  cache clearing, bounded 24-hour retention, automatic reload throttling,
+  duplicate host/extension location work, configuration lookup error handling,
+  and unrelated shared-source compilation across widget targets. No unresolved
+  code, privacy, security, concurrency, performance, routing, accessibility,
+  or generated-project blocker remains.
+- Validation on the exact rebased source: 26/26 focused widget tests; 741/741
+  complete tests; successful generic iOS Simulator build; Xcode preview review
+  on iPhone 17 Pro and iPhone 17e; clean XcodeGen regeneration and
+  `git diff --check`.
+- The gstack review reader ran successfully and reported no prior review
+  suppressions. Its JSON logger could not persist the new clean review entry
+  because the local `bun` executable is absent; the review itself was completed
+  through testing, security, and performance/maintainability specialist passes,
+  and every actionable finding was fixed before merge.
+- Build 98 remains unchanged. This merge did not increment a build, archive,
+  upload to App Store Connect/TestFlight, change tester groups, or post Slack
+  release notes. The widget update will ride the next explicitly requested
+  release batch.
+
+Final outcome: the requested nearby-widget refresh, routing, and width changes
+are on `main`, validated, documented, and ready for Xcode/device testing.
