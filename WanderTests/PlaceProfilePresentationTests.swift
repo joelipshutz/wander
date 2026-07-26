@@ -24,6 +24,11 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(place.photoRequest.sourceProviderPlaceID, "google-maru-hillhurst")
         XCTAssertEqual(PlaceSheetAction.choose.systemImage, "checkmark")
         XCTAssertEqual(PlaceSheetAction.choose.accessibilityLabel, "Choose this place")
+        XCTAssertEqual(PlaceSheetAction.add.systemImage, "plus")
+        XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
+        XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Save to my map")
+        XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in again")
+        XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
     }
 
@@ -70,7 +75,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceRatingExplanation.recMe.title, "rec.me rating")
         XCTAssertEqual(
             PlaceRatingExplanation.recMe.message,
-            "The average rating from people you follow who have been here. Your own rating is shown separately."
+            "The average rating from people you follow who checked in here. Your own rating is shown separately."
         )
         XCTAssertEqual(PlaceRatingExplanation.recMe.accessibilityLabel, "About the rec.me rating")
 
@@ -371,7 +376,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(ownRating.source, .own)
         XCTAssertEqual(ownRating.displayScore, "4.7")
         XCTAssertEqual(ownRating.count, 3)
-        XCTAssertEqual(ownRating.subtitle, "3 visits")
+        XCTAssertEqual(ownRating.subtitle, "3 check-ins")
     }
 
     func testOverallRatingAveragesTrustedRatingsWhenUnsaved() throws {

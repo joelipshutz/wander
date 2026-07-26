@@ -332,7 +332,7 @@ private struct PlacePhotoCarouselCardMockup: View {
 
                 Spacer(minLength: WanderTheme.spacing3)
 
-                Text("BEEN")
+                Text(CheckInCopy.noun.uppercased())
                     .font(.system(size: 11, weight: .black))
                     .padding(.horizontal, WanderTheme.spacing2)
                     .frame(height: 30)
@@ -477,7 +477,7 @@ private struct PlacePhotoCarouselHero: View {
                     PlacePhotoCarouselRoundButton(systemImage: "chevron.left", accessibilityLabel: "Close place")
                     Spacer()
                     HStack(spacing: WanderTheme.spacing2) {
-                        PlacePhotoCarouselRoundButton(systemImage: "plus", isPrimary: true, accessibilityLabel: "Add a visit")
+                        PlacePhotoCarouselRoundButton(systemImage: "plus", isPrimary: true, accessibilityLabel: "Check in again")
                         PlacePhotoCarouselRoundButton(systemImage: "square.and.arrow.up", accessibilityLabel: "Share place")
                     }
                 }
@@ -739,7 +739,7 @@ private struct PlacePhotoCarouselFullscreenMockup: View {
 
                     Spacer(minLength: WanderTheme.spacing2)
 
-                    Text("been")
+                    Text("check-in")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(Color(red: 0.20, green: 0.55, blue: 0.40))
                         .padding(.horizontal, WanderTheme.spacing3)
@@ -835,7 +835,7 @@ private struct PlacePhotoCarouselProfileMockup: View {
                     .padding(.horizontal, WanderTheme.spacing4)
 
                 HStack(spacing: WanderTheme.spacing2) {
-                    PlacePhotoCarouselProfileStat(value: "84", label: "been")
+                    PlacePhotoCarouselProfileStat(value: "84", label: "check-ins")
                     PlacePhotoCarouselProfileStat(value: "31", label: "wanna")
                     PlacePhotoCarouselProfileStat(value: "22", label: "friends")
                 }

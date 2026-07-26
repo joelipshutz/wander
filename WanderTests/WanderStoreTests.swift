@@ -2524,7 +2524,7 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
-    func testSavingBeenCreatesBackfilledVisitAndPersistsPhotoMetadata() {
+    func testSavingCheckInCreatesExplicitVisitAndPersistsPhotoMetadata() {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
 
@@ -2554,7 +2554,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visit?.note, "window table")
         XCTAssertEqual(visit?.ratingScore, 5)
         XCTAssertEqual(visit?.tags, ["quiet", "wifi solid"])
-        XCTAssertEqual(visit?.backfilledFromUserPlace, true)
+        XCTAssertEqual(visit?.backfilledFromUserPlace, false)
 
         let photo = firstStore.createVisitPhoto(
             visitID: visit?.id ?? "",
@@ -2713,7 +2713,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved.visitedAt, Date(timeIntervalSince1970: 200))
     }
 
-    func testBackfilledVisitDoesNotMutateAfterExplicitVisitExists() {
+    func testEarlierExplicitCheckInDoesNotMutateAfterLaterCheckInsExist() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let candidate = PlaceCandidate(
@@ -2750,15 +2750,15 @@ final class WanderStoreTests: XCTestCase {
         )
 
         let visits = store.visits(for: result.userPlaceID)
-        let backfilled = visits.first { $0.backfilledFromUserPlace }
+        let first = visits.first { $0.note == "first visit" }
         let second = visits.first { $0.note == "second visit" }
         let latest = visits.first { $0.note == "latest parent note" }
         let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
 
         XCTAssertEqual(visits.count, 3)
-        XCTAssertEqual(backfilled?.note, "first visit")
-        XCTAssertEqual(backfilled?.ratingScore, 3)
-        XCTAssertEqual(backfilled?.tags, ["quiet"])
+        XCTAssertEqual(first?.backfilledFromUserPlace, false)
+        XCTAssertEqual(first?.ratingScore, 3)
+        XCTAssertEqual(first?.tags, ["quiet"])
         XCTAssertEqual(second?.ratingScore, 5)
         XCTAssertEqual(latest?.ratingScore, 2)
         XCTAssertEqual(latest?.tags, ["loud"])
@@ -3433,6 +3433,79 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertTrue(store.visits(for: result.userPlaceID).isEmpty)
         XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
+    }
+
+    func testFailedRemoteCheckInDeletePersistsAcrossRelaunchAndRetries() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")
+        let visitID: String
+
+        do {
+            let firstStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+            firstStore.apply(authState: .signedIn(session))
+            let saveRepository = FakeUserPlaceRepository(
+                result: SaveResult(
+                    userPlaceID: "up_remote_retry",
+                    syncState: .synced,
+                    placeID: "place_remote_retry"
+                )
+            )
+            let saved = await firstStore.saveCandidate(
+                PlaceCandidate(
+                    id: "mapkit_delete_retry",
+                    name: "Retry Check-In Cafe",
+                    category: "coffee",
+                    latitude: 34.0407,
+                    longitude: -118.2354,
+                    confidence: 0.92
+                ),
+                status: .been,
+                visibility: .followers,
+                note: "retry this delete",
+                sourceType: .manual,
+                ratingScore: 4,
+                backend: WanderBackend(userPlaceRepository: saveRepository)
+            )
+            let visit = try XCTUnwrap(firstStore.visits(for: saved.userPlaceID).first)
+            visitID = try XCTUnwrap(visit.serverID)
+
+            let failingRepository = FakeUserPlaceRepository(
+                error: WanderRemoteError.invalidResponse("network down")
+            )
+            let deleted = await firstStore.deleteVisit(
+                visitID: visit.id,
+                backend: WanderBackend(userPlaceRepository: failingRepository)
+            )
+
+            XCTAssertFalse(deleted)
+            XCTAssertEqual(failingRepository.deletedCheckInIDs, [visitID])
+            XCTAssertEqual(
+                firstStore.placeVisits.first { $0.serverID == visitID }?.syncState,
+                .failed
+            )
+            XCTAssertNotNil(firstStore.placeVisits.first { $0.serverID == visitID }?.deletedAt)
+        }
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
+        relaunchedStore.apply(authState: .signedIn(session))
+        XCTAssertEqual(
+            relaunchedStore.placeVisits.first { $0.serverID == visitID }?.syncState,
+            .failed
+        )
+        XCTAssertNotNil(relaunchedStore.placeVisits.first { $0.serverID == visitID }?.deletedAt)
+
+        let retryRepository = FakeUserPlaceRepository()
+        let retried = await relaunchedStore.retryPendingVisitDeletes(
+            backend: WanderBackend(userPlaceRepository: retryRepository)
+        )
+
+        XCTAssertEqual(retried, 1)
+        XCTAssertEqual(retryRepository.deletedCheckInIDs, [visitID])
+        XCTAssertEqual(
+            relaunchedStore.placeVisits.first { $0.serverID == visitID }?.syncState,
+            .tombstoned
+        )
     }
 
     func testFilePersistenceRestoresPrivateProfileModeAfterRelaunch() {
@@ -5731,7 +5804,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved.place.categoryConfidence, 0.86)
     }
 
-    func testSyncPendingVisitsSyncsParentThenExplicitVisit() async {
+    func testSyncPendingCheckInsUsesAtomicBoundaryForEachExplicitTicket() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let userPlaceRepository = FakeUserPlaceRepository(result: SaveResult(userPlaceID: "up_remote_maru", syncState: .synced, placeID: "place_remote_maru"))
@@ -5771,12 +5844,11 @@ final class WanderStoreTests: XCTestCase {
         let syncedCount = await store.syncPendingVisits(backend: backend)
 
         XCTAssertEqual(syncedCount, 2)
-        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 1)
-        XCTAssertEqual(visitRepository.visitRequests, ["up_remote_maru"])
-        XCTAssertEqual(visitRepository.upsertedVisitDrafts.count, 1)
-        XCTAssertEqual(visitRepository.upsertedVisitDrafts[0].userPlaceID, "up_remote_maru")
-        XCTAssertEqual(visitRepository.upsertedVisitDrafts[0].note, "second visit")
-        XCTAssertEqual(store.visits(for: "up_remote_maru").first { $0.backfilledFromUserPlace }?.serverID, "visit_backfill_remote")
+        XCTAssertEqual(userPlaceRepository.savedDrafts.count, 2)
+        XCTAssertEqual(userPlaceRepository.savedCheckInDrafts.count, 2)
+        XCTAssertEqual(userPlaceRepository.savedCheckInDrafts.map(\.visit.note), ["first visit", "second visit"])
+        XCTAssertTrue(visitRepository.visitRequests.isEmpty)
+        XCTAssertTrue(visitRepository.upsertedVisitDrafts.isEmpty)
         XCTAssertEqual(store.visits(for: "up_remote_maru").first { $0.id == explicitVisit?.id || $0.localID == explicitVisit?.localID }?.syncState, .synced)
     }
 
@@ -5824,7 +5896,7 @@ final class WanderStoreTests: XCTestCase {
             store.visits(for: result.userPlaceID).first {
                 $0.id == explicitVisit.id || $0.localID == explicitVisit.localID
             }?.syncState,
-            .pendingCreate
+            .failed
         )
     }
 
@@ -7571,7 +7643,7 @@ private final class FakePlacePhotoRepository: PlacePhotoRepository {
 }
 
 @MainActor
-private final class FakeUserPlaceRepository: UserPlaceRepository {
+private final class FakeUserPlaceRepository: UserPlaceRepository, CheckInRepository {
     struct UserPlaceRequest: Equatable {
         let userID: String
         let filters: PlaceFilters
@@ -7581,8 +7653,10 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
     private let error: Error?
     private let userPlacesByUserID: [String: [VisiblePlace]]
     private(set) var savedDrafts: [UserPlaceDraft] = []
+    private(set) var savedCheckInDrafts: [CheckInSaveDraft] = []
     private(set) var userPlaceRequests: [UserPlaceRequest] = []
     private(set) var deletedUserPlaceIDs: [String] = []
+    private(set) var deletedCheckInIDs: [String] = []
 
     init(result: SaveResult? = nil, error: Error? = nil, userPlacesByUserID: [String: [VisiblePlace]] = [:]) {
         self.result = result
@@ -7604,6 +7678,37 @@ private final class FakeUserPlaceRepository: UserPlaceRepository {
             throw error
         }
         return result ?? SaveResult(userPlaceID: "up_fake", syncState: .synced, placeID: "place_fake")
+    }
+
+    func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
+        savedCheckInDrafts.append(draft)
+        let saveResult = try await save(draft.userPlace)
+        return CheckInSaveResult(
+            saveResult: saveResult,
+            visitResult: PlaceVisitResult(
+                visitID: draft.visit.id ?? UUID().uuidString,
+                userPlaceID: saveResult.userPlaceID,
+                visitedAt: draft.visit.visitedAt,
+                note: draft.visit.note,
+                ratingScore: draft.visit.ratingScore,
+                tags: VisitAttributeAnswers.tags(
+                    fromAttributeAnswersJSON: draft.visit.attributeAnswersJSON
+                ),
+                backfilledFromUserPlace: false
+            )
+        )
+    }
+
+    func deleteCheckIn(visitID: String) async throws -> CheckInDeleteResult {
+        deletedCheckInIDs.append(visitID)
+        if let error {
+            throw error
+        }
+        return CheckInDeleteResult(
+            visitID: visitID,
+            userPlaceID: result?.userPlaceID,
+            transition: .checkedIn
+        )
     }
 
     func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}
