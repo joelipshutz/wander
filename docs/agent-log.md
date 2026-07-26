@@ -22668,3 +22668,22 @@ REC-132 post-merge validation — 2026-07-25 22:42 PDT:
   record, push the branch, open a ready PR, and move REC-132 to `In Review`.
 - No build number was changed and no TestFlight archive, upload, beta-group
   action, or tester Slack announcement was requested or performed.
+
+REC-132 handoff — 2026-07-25 22:45 PDT:
+
+- Committed the post-merge compile-stability extraction and validation record,
+  pushed `codex/rec-132-auth-session-gate`, and opened ready PR #223:
+  `https://github.com/joelipshutz/wander/pull/223`.
+- GitHub reports the PR `CLEAN` and `MERGEABLE` against `main`; no required
+  hosted status checks are configured. The exact validated source is on the
+  pushed branch, with only this final append-only handoff record following it.
+- Final behavior: an unresolved session shows loading; a signed-out session
+  shows non-dismissable Clerk sign-in; only a signed-in session can mount the
+  app shell. Clerk logout/account/session events and foreground activation both
+  re-resolve auth, clear stale gate state, and remove cached person metadata
+  from view immediately.
+- Validation remains: focused 13/13, full suite 692/692, generic simulator
+  build passed for arm64/x86_64, signed-out simulator visual passed, and
+  `git diff --check` passed. Known repository warnings are unchanged.
+- REC-132 should remain `In Review` until PR #223 lands. No TestFlight release
+  was requested; build 97 remains unchanged.
