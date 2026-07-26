@@ -85,6 +85,69 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         )
     }
 
+    func testColdLaunchQueueRetainsEveryWidgetRouteUntilAuthenticatedRootCanDeliver() throws {
+        let calendarDate = try XCTUnwrap(
+            WanderCalendarDate(year: 2026, month: 7, day: 26)
+        )
+        let widgetRoutes: [WanderDeepLinkRoute] = [
+            .quickCapture,
+            .quickSearch(query: nil),
+            .profileCalendar,
+            .profileCalendarDate(calendarDate),
+            .nearbyPlace(candidateID: "mapkit_ggiata")
+        ]
+
+        for route in widgetRoutes {
+            var queue = WanderDeepLinkLaunchQueue()
+            let url = try XCTUnwrap(route.url)
+
+            XCTAssertTrue(queue.enqueue(url))
+            XCTAssertNil(
+                queue.requestForDelivery(isReady: false),
+                "Cold-launch route \(route) must wait through session validation."
+            )
+
+            let readyRequest = try XCTUnwrap(
+                queue.requestForDelivery(isReady: true)
+            )
+            XCTAssertEqual(readyRequest.route, route)
+
+            queue.consume(id: readyRequest.id)
+            XCTAssertNil(queue.pendingRequest)
+        }
+    }
+
+    func testDeepLinkLaunchQueueUsesLatestValidURLForWarmAndColdLaunches() throws {
+        var queue = WanderDeepLinkLaunchQueue()
+
+        XCTAssertTrue(queue.enqueue(try XCTUnwrap(WanderDeepLinkRoute.quickCapture.url)))
+        let staleRequest = try XCTUnwrap(queue.pendingRequest)
+
+        XCTAssertTrue(
+            queue.enqueue(
+                try XCTUnwrap(
+                    WanderDeepLinkRoute.quickSearch(query: " coffee ").url
+                )
+            )
+        )
+        let latestRequest = try XCTUnwrap(queue.pendingRequest)
+        XCTAssertNotEqual(latestRequest.id, staleRequest.id)
+        XCTAssertEqual(latestRequest.route, .quickSearch(query: "coffee"))
+
+        XCTAssertFalse(queue.enqueue(try XCTUnwrap(URL(string: "https://example.com"))))
+        XCTAssertEqual(queue.pendingRequest, latestRequest)
+        XCTAssertEqual(
+            queue.requestForDelivery(isReady: true),
+            latestRequest,
+            "A warm launch should deliver the same retained request immediately."
+        )
+
+        queue.consume(id: staleRequest.id)
+        XCTAssertEqual(queue.pendingRequest, latestRequest)
+        queue.consume(id: latestRequest.id)
+        XCTAssertNil(queue.pendingRequest)
+    }
+
     func testDeepLinkHandoffWaitsForCurrentDismissalAndLatestRequestWins() {
         let staleRequestID = UUID()
         let latestRequestID = UUID()
@@ -320,13 +383,23 @@ final class WanderWidgetIntegrationTests: XCTestCase {
     }
 
     func testAppRoutesWidgetLaunchesIntoExistingAddAndMapFlows() throws {
+        let app = try source("Wander/App/WanderApp.swift")
+        let launchRequests = try source("Wander/App/WanderWidgetLaunchRequest.swift")
         let root = try source("Wander/App/WanderRootView.swift")
         let add = try source("Wander/Features/Add/AddScreen.swift")
         let map = try source("Wander/Features/Map/MapScreen.swift")
         let profileScreen = try source("Wander/Features/Profile/ProfileScreen.swift")
         let profileHome = try source("Wander/Features/Profile/ProfileOwnerHome.swift")
 
-        XCTAssertTrue(root.contains("WanderDeepLinkRoute.parse(url)"))
+        XCTAssertTrue(launchRequests.contains("WanderDeepLinkRoute.parse(url)"))
+        XCTAssertTrue(app.contains("@State private var deepLinkLaunchQueue = WanderDeepLinkLaunchQueue()"))
+        XCTAssertTrue(app.contains(".onOpenURL(perform: queueDeepLink)"))
+        XCTAssertTrue(app.contains("deepLinkLaunchRequest: deepLinkLaunchQueue.requestForDelivery("))
+        XCTAssertTrue(app.contains("onDeepLinkLaunchRequestHandled: consumeDeepLinkLaunchRequest"))
+        XCTAssertTrue(root.contains(".task(id: deepLinkLaunchRequest?.id)"))
+        XCTAssertTrue(root.contains("beginDeepLinkHandoff(to: request.route)"))
+        XCTAssertTrue(root.contains("onDeepLinkLaunchRequestHandled(request.id)"))
+        XCTAssertFalse(root.contains(".onOpenURL"))
         XCTAssertTrue(root.contains("WanderAddLaunchRequest(destination: .hereNow)"))
         XCTAssertTrue(root.contains("case .nearbyPlace(let candidateID):"))
         XCTAssertTrue(root.contains("WanderNearbyWidgetSnapshotStore()"))

@@ -24683,3 +24683,71 @@ TestFlight build 99 release completion — 2026-07-26 10:48 PDT:
 Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
+
+## 2026-07-26 12:59 PDT - Codex - REC-158 Widget Cold-Start Routing
+
+Agent: Codex
+Branch: `codex/rec-158-widget-cold-start`
+Worktree: `/private/tmp/recme-rec158-widget-cold-start`
+Linear: `REC-158` (`In Progress`)
+
+Goal: make every shipped WidgetKit deep link reach the same in-app destination
+when rec.me is terminated as it does while the app is already running.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact current
+  `origin/main` at `b4d7c98ce`.
+- The primary checkout remains untouched on the old
+  `codex/rec-142-widgets` branch with its unrelated untracked `.pnpm-store/`.
+- Active widget-related worktree `codex/rec-157-lock-widget-mockups` may touch
+  Lock Screen widget presentation. REC-158 will avoid widget visual source
+  unless investigation proves it necessary; expected implementation scope is
+  app launch routing plus navigation regression tests.
+- Created high-priority bug REC-158, assigned it to Ryan, related it to
+  REC-142, REC-153, and REC-154, and moved it to `In Progress`.
+- Expected files: `Wander/App/WanderApp.swift`,
+  `Wander/App/WanderWidgetLaunchRequest.swift`,
+  `Wander/App/WanderRootView.swift`, focused files under `WanderTests/`, and
+  this append-only log. Exact scope will be narrowed after root-cause proof.
+- No TestFlight release, build-number change, merge, or tester announcement was
+  requested. Complete work will end in a ready PR to `main`.
+
+Checkpoint — 2026-07-26 13:21 PDT:
+
+- Root cause proved: widget URLs were observed only by `WanderRootView`, whose
+  `.onOpenURL` handler returned while session validation was incomplete. On a
+  terminated launch, SwiftUI delivered the one-shot URL before the authenticated
+  root was ready, so the request was discarded.
+- Added an app-entry-owned latest-valid-request queue. `WanderAppEntryView`
+  now captures WidgetKit URLs throughout loading and authentication, retains
+  the parsed route, and delivers it exactly once after the authenticated root
+  becomes ready. `WanderRootView` continues to own destination presentation
+  through its existing handoff coordinator.
+- Added regression coverage for every shipped route: quick capture, quick
+  search, calendar, dated calendar, and nearby place. Tests also cover warm
+  delivery, invalid URL handling, multiple-launch latest-wins behavior, guarded
+  acknowledgement, and the source-level ownership contract.
+- The initial red focused run failed at compile time because the launch queue
+  did not exist, as expected:
+  `/tmp/DerivedData-rec158-red/Logs/Test/Test-Wander-2026.07.26_13-02-30--0700.xcresult`.
+- Validation after implementation:
+  - Widget integration suite: 18/18 passed.
+  - Combined widget snapshot/navigation/auth suite: 101/101 passed at
+    `/tmp/DerivedData-rec158-focused/Logs/Test/Test-Wander-2026.07.26_13-09-26--0700.xcresult`.
+  - Full suite: 746/746 passed with zero failures at
+    `/tmp/DerivedData-rec158-focused/Logs/Test/Test-Wander-2026.07.26_13-13-41--0700.xcresult`.
+  - `xcodegen generate` produced no project diff; `git diff --check` passed.
+- A fresh-process Simulator URL launch was attempted, but both locally booted
+  Simulators were signed out and stopped at authentication, so an authenticated
+  destination screenshot was not available without tester credentials. The
+  deterministic tests exercise the exact pre-ready capture → post-auth delivery
+  transition.
+- The clean generic iOS Simulator build succeeded for arm64 and x86_64 using
+  `/tmp/DerivedData-rec158-build`. Existing non-blocking warnings remain for
+  `WanderSupabaseClient` formatter actor isolation, traditional headermaps, and
+  unsigned Simulator entitlements; no new warnings were introduced by REC-158.
+- Files changed so far: `Wander/App/WanderApp.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/App/WanderWidgetLaunchRequest.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this log.

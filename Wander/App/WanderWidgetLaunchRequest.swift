@@ -1,5 +1,36 @@
 import Foundation
 
+struct WanderDeepLinkLaunchRequest: Equatable, Identifiable {
+    let id: UUID
+    let route: WanderDeepLinkRoute
+
+    init(id: UUID = UUID(), route: WanderDeepLinkRoute) {
+        self.id = id
+        self.route = route
+    }
+}
+
+struct WanderDeepLinkLaunchQueue: Equatable {
+    private(set) var pendingRequest: WanderDeepLinkLaunchRequest?
+
+    @discardableResult
+    mutating func enqueue(_ url: URL) -> Bool {
+        guard let route = WanderDeepLinkRoute.parse(url) else { return false }
+
+        pendingRequest = WanderDeepLinkLaunchRequest(route: route)
+        return true
+    }
+
+    func requestForDelivery(isReady: Bool) -> WanderDeepLinkLaunchRequest? {
+        isReady ? pendingRequest : nil
+    }
+
+    mutating func consume(id: UUID) {
+        guard pendingRequest?.id == id else { return }
+        pendingRequest = nil
+    }
+}
+
 struct WanderPresentationResetRequest: Equatable, Identifiable {
     let id: UUID
 

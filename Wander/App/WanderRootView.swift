@@ -320,18 +320,24 @@ struct WanderRootView: View {
     @StateObject private var importStore: PlaceImportStore
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
+    private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
+    private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
 
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
+        deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
+        onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         self.fixtureMode = fixtureMode
         self.isSessionValidated = isSessionValidated
+        self.deepLinkLaunchRequest = deepLinkLaunchRequest
+        self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
@@ -651,9 +657,14 @@ struct WanderRootView: View {
                 queueSaveStreakCelebration(store.saveStreakCelebration)
             }
         }
-        .onOpenURL { url in
-            guard isSessionValidated else { return }
-            handleDeepLink(url)
+        .task(id: deepLinkLaunchRequest?.id) {
+            guard isSessionValidated,
+                  let request = deepLinkLaunchRequest
+            else {
+                return
+            }
+            beginDeepLinkHandoff(to: request.route)
+            onDeepLinkLaunchRequestHandled(request.id)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, isSessionValidated else { return }
@@ -850,12 +861,6 @@ struct WanderRootView: View {
     static func sharedProfileRoute(for url: URL) -> SharedProfileRoute? {
         guard case .sharedProfile(let profileID) = WanderDeepLinkRoute.parse(url) else { return nil }
         return SharedProfileRoute(profileID: profileID)
-    }
-
-    private func handleDeepLink(_ url: URL) {
-        guard let route = WanderDeepLinkRoute.parse(url) else { return }
-
-        beginDeepLinkHandoff(to: route)
     }
 
     private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute) {
