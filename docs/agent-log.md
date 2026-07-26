@@ -24684,6 +24684,71 @@ Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
 
+## 2026-07-26 13:28 PDT - Codex - REC-159 Nearby Widget Plus Icons
+
+Agent: Codex
+Branch: `codex/rec-159-nearby-plus-icons`
+Worktree: `/private/tmp/recme-rec159-nearby-plus-icons`
+Linear: `REC-159` (`In Progress`)
+
+Goal: replace the trailing diagonal arrow on every place row in the large
+Nearby spots widget with a plus icon while preserving the existing selected
+place deep link and all other widget controls.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact current
+  `origin/main` at `b4d7c98ce`.
+- The primary checkout remains untouched with its unrelated untracked
+  `.pnpm-store/`.
+- PR #243 / REC-157 is active on the Lock Screen quick-capture widget, while
+  PR #244 / REC-158 is active on cold-start routing. Neither branch owns the
+  Nearby place-row presentation changed here.
+- Created medium-priority REC-159, assigned it to Ryan, related it to the
+  shipped Nearby widget issue REC-154, and moved it to `In Progress`.
+- Expected files: `WanderNearbyWidgets/WanderNearbyWidget.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this append-only log.
+- No TestFlight build, build-number change, merge, or release was requested.
+
+Implementation and validation — 2026-07-26 13:33 PDT:
+
+- Replaced the shared Nearby place-row trailing SF Symbol from
+  `arrow.up.right` to `plus`. Because all five visible rows use the same
+  `placeRow` view, the requested affordance changes consistently without
+  altering any row's existing `.nearbyPlace(candidateID:)` destination.
+- Added source-contract assertions requiring the plus symbol and forbidding
+  the prior diagonal arrow in the Nearby widget implementation. The See all
+  chevron, Refresh control, row layout, colors, and accessibility copy remain
+  unchanged.
+- `xcodegen generate` completed and produced no project-file diff.
+- Focused Nearby widget integration test passed 1/1:
+  `/tmp/DerivedData-rec159-focused/Logs/Test/Test-Wander-2026.07.26_13-29-04--0700.xcresult`.
+- The complete iPhone 17 Pro / iOS 26.5 suite passed 744/744 with zero
+  failures:
+  `/tmp/DerivedData-rec159-focused/Logs/Test/Test-Wander-2026.07.26_13-32-49--0700.xcresult`.
+- The initial sandboxed focused run could not access CoreSimulator or fetch
+  pinned packages; the required elevated rerun passed. Existing non-blocking
+  simulator entitlement, keychain, actor-isolation, and traditional headermap
+  warnings remain unchanged.
+- `git diff --check` passed. Final source scope is the Nearby widget, its
+  integration contract, and this log.
+
+Handoff — 2026-07-26 13:35 PDT:
+
+- Committed the scoped implementation as `60bd8f80c` (`Use plus icons in
+  nearby widget`) and pushed `codex/rec-159-nearby-plus-icons`.
+- Opened ready PR #246 to current `main`:
+  `https://github.com/joelipshutz/wander/pull/246`.
+- Linked PR #246 to REC-159, posted the implementation and validation receipt,
+  and moved the issue to `In Review`.
+- Final validation remains 744/744 complete-suite tests and the focused 1/1
+  Nearby widget contract, both with zero failures.
+- No TestFlight build number was changed and no build was uploaded or released.
+
+Final outcome: every visible Nearby widget place row now uses a plus icon while
+retaining the same selected-place check-in destination. PR #246 is ready for
+review.
+
 ## 2026-07-26 13:40 PDT - Codex - REC-160 Check-in here Action Button control
 
 Agent: Codex
@@ -24739,5 +24804,5 @@ Implementation checkpoint — 2026-07-26 13:47 PDT:
   packages; rerunning the same command with the repository-prescribed
   escalation succeeded.
 - `origin/main` advanced by REC-159 while this work was in progress. Its
-  Nearby-widget icon change does not overlap implementation files, but its
-  append-only agent-log entry will be preserved during reconciliation.
+  Nearby-widget icon change does not overlap implementation files, and this
+  reconciliation preserved its append-only agent-log entry.

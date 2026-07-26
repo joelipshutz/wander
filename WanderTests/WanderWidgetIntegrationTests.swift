@@ -574,6 +574,8 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("Text(\"Nearby spots\")"))
         XCTAssertTrue(widgetSource.contains("\"tap a place to check-in\""))
         XCTAssertTrue(widgetSource.contains("Label(\"See all\", systemImage: \"chevron.right\")"))
+        XCTAssertTrue(widgetSource.contains("Image(systemName: \"plus\")"))
+        XCTAssertFalse(widgetSource.contains("Image(systemName: \"arrow.up.right\")"))
         XCTAssertFalse(widgetSource.contains("style: .relative"))
         XCTAssertTrue(sharedSnapshot.contains("static let maximumVisiblePlaces = 5"))
         XCTAssertTrue(sharedSnapshot.contains("static let exactDistanceLifetime"))
