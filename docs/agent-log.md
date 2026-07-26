@@ -22668,3 +22668,90 @@ Final pre-push validation — 2026-07-25 23:32 PDT:
 - Existing Swift isolation, simulator entitlement/resource, App Intents, and
   traditional headermap warnings remain unchanged. No REC-146 regression or
   unresolved pre-landing review finding remains.
+
+## 2026-07-25 22:29 PDT - Codex - REC-150 Discover Search Engineering Plan
+
+Agent: Codex
+Branch: `codex/rec-150-eng-plan`
+Worktree: `/private/tmp/recme-rec150-eng-plan`
+Linear: `REC-150` (`In Progress`)
+
+Goal: turn the approved Discover search interaction direction into an
+implementation-ready engineering plan, including truthful per-result match
+metadata, the low-cost LLM boundary, fallback/caching/cost controls, testing,
+and rollout sequencing.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `e7b12a9`; no existing worktree advertises overlapping
+  Discover planning edits.
+- Read the latest coordination log and the existing REC-90 Discover research,
+  design review, parser/store/UI implementation, remote repository boundary,
+  shared structured-JSON provider layer, and parser/store repository tests.
+- The current app already makes one authenticated server-side structured parse
+  call through `parse-discover-query`, defaults to the configurable nano model,
+  caches successful filters in memory, and falls back to the deterministic
+  parser on failure. The plan will extend this path rather than introduce a
+  second LLM call per result.
+- Early truth constraint: the LLM may normalize the query into a strict typed
+  interpretation, but it must not invent free-form per-place explanations.
+  Every displayed `Why it matched` item must be derived deterministically from
+  visible place/profile evidence actually present in the result.
+- Expected files: a new REC-150 engineering plan, `docs/decisions.md`,
+  `docs/open-questions.md` if a stale question is resolved, and this append-only
+  log. No app, Edge Function, schema, or release change is authorized in this
+  planning branch.
+
+Planning checkpoint — 2026-07-25 22:39 PDT:
+
+- Added `docs/plans/2026-07-25-rec-150-discover-search-engineering-plan.md`.
+  It specifies the reversible Back/Clear interaction, static teaching examples,
+  submit-only model calls, schema-v2 query plan, exact owner resolution,
+  favorite truth/ranking, typed per-result evidence, zero/fallback behavior,
+  bounded cache, privacy-safe analytics, deployment order, file map, tests, and
+  six implementation tasks.
+- Verified the current configured default against official OpenAI material:
+  `gpt-5.4-nano` supports the Responses API and Structured Outputs and is priced
+  for low-cost extraction/classification. The plan retains provider/model env
+  configurability, requires a synthetic golden-query benchmark before pinning a
+  snapshot, and uses an illustrative sub-$0.40/1,000 uncached-search token
+  envelope rather than treating today's rate as permanent.
+- Locked the durable project decisions that the LLM translates one submitted
+  query but never generates per-place explanation copy; deterministic code
+  proves `Matched:` metadata from the exact visible owner-place row. Updated the
+  stale M5 open question to record the existing Edge Function/provider path as
+  resolved for REC-150.
+- Review found no need for a second model endpoint, database migration, RPC, new
+  dependency, or per-result LLM call. Existing app builds can ignore the Edge
+  response's new keys; the new native decoder must also tolerate the old
+  response during rollback.
+- `git diff --check` passed. This docs-only plan does not warrant an iOS build or
+  test run; the plan names the required Deno, focused/full iOS, hosted synthetic
+  invocation, visual, Dynamic Type, and VoiceOver gates for implementation.
+- Mission Control at `localhost:4000` remains unavailable, so no duplicate local
+  tracker task was created. Linear REC-150 already exists and remains correctly
+  `In Progress`; the bundled Linear tool was unavailable in this session, so the
+  branch/PR will carry the issue id and plan link instead of claiming a Linear
+  comment update.
+
+Completion — 2026-07-25 22:43 PDT:
+
+- Committed the engineering plan and durable decision updates as `bd3247b`
+  (`docs: add REC-150 Discover search engineering plan`) and pushed
+  `codex/rec-150-eng-plan`.
+- Opened ready PR #222, which is clean against `main`:
+  `https://github.com/joelipshutz/wander/pull/222`.
+- Validation: staged diff check passed; manual architecture review covered
+  privacy, one-call cost control, semantic invariants, evidence ownership,
+  stale-result protection, old/new response compatibility, failure states, and
+  implementation test gates. No app build or test was run for this docs-only
+  branch.
+- No application code, Edge Function, hosted configuration, database, release,
+  or TestFlight state changed. REC-150 remains `In Progress`; next action is to
+  review/merge this plan and execute REC150-E1 through REC150-E6 on a fresh
+  implementation branch.
+
+Final outcome: the approved Discover search direction now has an
+implementation-ready, costed, privacy-bounded engineering plan and a clean
+ready PR. The feature itself is not yet implemented.
