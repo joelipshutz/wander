@@ -22573,3 +22573,26 @@ Starting status and coordination:
   `Wander/Features/Profile/ProfileRedesignMockups.swift`, focused Profile
   presentation/navigation tests, and this log. Additional files will be logged
   if the approved direction needs a dedicated activity screen or presenter.
+
+Exploration checkpoint, 2026-07-25 22:28 PDT:
+
+- Pulled the current owner Profile mockup up on the booted iPhone 17 Pro Max
+  simulator and captured the baseline at
+  `~/.gstack/projects/joelipshutz-wander/designs/profile-recent-activity-20260725/current-profile.png`.
+  The live fixture route reaches the Clerk development sign-in gate in this
+  installed build, so the dedicated native Profile mockup is the clean visual
+  baseline for this stage.
+- Confirmed the current implementation order is identity, Visit invitations,
+  Been/Wanna tiles, streak, calendar, and map. REC-152 will preserve the
+  identity information while removing the small `profile` eyebrow unless an
+  approved mock intentionally compacts the whole identity block.
+- The first source build from exact `origin/main` hit the Swift compiler
+  type-check timeout in `WanderRootView.body` with `-jobs 4`. A second
+  single-job retry hit the same compiler timeout. No source edit caused this
+  baseline failure; the already-installed debug build remains usable for
+  visual exploration. Reassess after the mock direction is chosen and source
+  changes split the affected view graph.
+- Next design concepts will compare: a simple segmented timeline, compact
+  Been/Wanna count filters above one timeline, and a date-grouped activity
+  ledger. All keep five or six full-width rows, explicit timestamps, a See more
+  route, and no double-stacked status lists.
