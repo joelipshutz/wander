@@ -22643,3 +22643,28 @@ REC-132 latest-main checkpoint — 2026-07-25 22:09 PDT:
   append-only coordination log, resolved by preserving both complete histories.
 - Next: rerun focused auth/navigation validation and the full suite/build against
   the merged widget head, then finalize the conventional commit and ready PR.
+
+REC-132 post-merge validation — 2026-07-25 22:42 PDT:
+
+- Confirmed the final branch is based on current `origin/main` at `e7b12a9`,
+  including released build 97 and the complete REC-142 widget landing.
+- The first two standard focused-test attempts after that merge exposed a
+  deterministic Swift compiler type-check timeout in the newly enlarged
+  `WanderRootView.body`. Extracted the existing modifier chain into four small
+  private view-building properties without changing navigation, presentation,
+  lifecycle, or state-observation behavior. The same standard command then
+  compiled normally.
+- Focused auth/navigation validation passed 13/13 on iPhone 17 Pro Max
+  (iOS 26.2):
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_22-29-49--0700.xcresult`.
+- The complete current-main suite passed 692/692 on the same simulator:
+  `/tmp/DerivedData-rec132-auth-session/Logs/Test/Test-Wander-2026.07.25_22-32-42--0700.xcresult`.
+- The first generic-simulator build attempt was blocked before compilation by
+  Codex sandbox access to CoreSimulator and SwiftPM caches. Re-running the exact
+  required command with normal Xcode filesystem access succeeded for arm64 and
+  x86_64. Existing Swift isolation and headermap warnings remain unchanged.
+- `git fetch origin` after validation confirmed `origin/main` had not advanced.
+  Next: inspect the final diff, commit the compile-stability extraction and this
+  record, push the branch, open a ready PR, and move REC-132 to `In Review`.
+- No build number was changed and no TestFlight archive, upload, beta-group
+  action, or tester Slack announcement was requested or performed.

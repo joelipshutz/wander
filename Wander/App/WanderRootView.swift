@@ -284,6 +284,10 @@ struct WanderRootView: View {
     }
 
     var body: some View {
+        stateObservedRoot
+    }
+
+    private var tabRoot: some View {
         TabView(selection: tabSelection) {
             MapScreen(
                 presentationResetRequest: presentationResetRequest,
@@ -352,6 +356,10 @@ struct WanderRootView: View {
                 .zIndex(100)
             }
         }
+    }
+
+    private var presentedRoot: some View {
+        tabRoot
         .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
             WanderRootPresentationLifecycle(
                 surface: .add,
@@ -447,6 +455,10 @@ struct WanderRootView: View {
                     .environmentObject(backend)
             }
         }
+    }
+
+    private var lifecycleRoot: some View {
+        presentedRoot
         .onAppear {
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
@@ -483,6 +495,10 @@ struct WanderRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveRemoteNotification)) { _ in
             scheduleSignedInMaintenance(for: auth.state)
         }
+    }
+
+    private var stateObservedRoot: some View {
+        lifecycleRoot
         .onChange(of: pushNotifications.navigationRequest) { _, request in
             guard let request else { return }
             routeNotification(request)
