@@ -22087,3 +22087,24 @@ Implementation checkpoint — 2026-07-25 12:32 PDT:
 - Existing Supabase Swift-isolation, App Intents metadata, simulator-keychain,
   and resource-manifest warnings remain unrelated. No schema, build number,
   signing, TestFlight, or Slack change was made.
+
+Completion checkpoint — 2026-07-25 21:29 PDT:
+
+- The temporary implementation worktree was reaped during the long validation
+  run; recreated it at `/private/tmp/recme-rec122-streak-hierarchy-resume` from
+  the intact branch and commits without losing work. The branch remains based
+  on current `origin/main` (`74ab31b`) with no missing upstream commits.
+- Full-suite validation passed 640/640 with zero failures using iPhone 16 Plus,
+  iOS 18.6:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Logs/Test/Test-Wander-2026.07.25_21-12-46--0700.xcresult`.
+- Reinstalled that exact full-suite binary on rec.me Streak QA (iPhone 16 Plus)
+  and iPhone 16e, relaunched the takeover mock, and reconfirmed the final state
+  has no clipping, overlap, or safe-area regression. Stable screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/23/019f8d1e-bc62-7e91-a73c-d8e90747206c/rec122-streak-iphone16plus.png`
+  and
+  `/Users/joelipshutz/.codex/visualizations/2026/07/23/019f8d1e-bc62-7e91-a73c-d8e90747206c/rec122-streak-iphone16e.png`.
+- Implementation commit: `3010a44` (`fix: sharpen streak celebration
+  hierarchy`). Existing unrelated warnings are unchanged.
+- No TestFlight release, build-number bump, archive, upload, or tester Slack
+  post was requested or performed. Handoff is a ready PR and the isolated
+  branch opened in Xcode for local phone testing.
