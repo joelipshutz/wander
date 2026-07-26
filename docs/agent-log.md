@@ -22596,3 +22596,17 @@ Exploration checkpoint, 2026-07-25 22:28 PDT:
   Been/Wanna count filters above one timeline, and a date-grouped activity
   ledger. All keep five or six full-width rows, explicit timestamps, a See more
   route, and no double-stacked status lists.
+
+Mock comparison checkpoint, 2026-07-25 22:37 PDT:
+
+- Generated three artifact-only profile directions with `design-shotgun`:
+  A) a segmented All/Been/Wanna timeline, B) count-bearing Been/Wanna filters
+  above a mixed timeline, and C) a date-grouped activity ledger.
+- Published the interactive comparison board at
+  `http://127.0.0.1:54636/boards/b-20260726-053711-o9ocwg/`. Each direction keeps
+  one full-width activity list with timestamps and a See all entry point;
+  production Profile code remains unchanged pending Joe's selection.
+- Artifacts live outside the repo at
+  `~/.gstack/projects/joelipshutz-wander/designs/profile-recent-activity-20260725/`.
+  The next step is to capture an approved direction and only then implement it
+  in the isolated worktree.
