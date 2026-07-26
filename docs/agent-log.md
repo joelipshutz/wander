@@ -23891,3 +23891,34 @@ Pre-landing review checkpoint (09:26 PDT):
 - Linear remains intentionally untouched per Ryan's original request. This is
   a merge-only request, so build 98 remains unchanged and no TestFlight,
   App Store Connect, or Slack release action is authorized.
+
+## 2026-07-26 09:28 PDT - Codex - Full-Screen Photo Zoom Landing
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/photo-viewer-zoom-merge-record`
+Worktree: `/private/tmp/recme-photo-viewer-zoom-merge-record`
+Linear: intentionally untouched at Ryan's request
+
+Landing completion:
+
+- Squash-merged reviewed PR #233 into `main` as
+  `3fcca8378ed24c43c418092627d64ff8128718ec`:
+  `https://github.com/joelipshutz/wander/pull/233`.
+- The shipped behavior adds 1x-4x pinch zoom, bounded panning, double-tap
+  zoom/reset, and accessibility zoom actions to both production full-screen
+  photo viewers while preserving gallery paging at the resting scale.
+- Pre-landing review found no unresolved code, state, gesture ownership,
+  accessibility, performance, data, auth, security, documentation, human, or
+  Greptile finding. Review record:
+  `https://github.com/joelipshutz/wander/pull/233#issuecomment-5084354809`.
+- Validation: complete suite 727/727 on iPhone 17 Pro Max / iOS 26.5;
+  `xcodegen generate` remained clean; `git diff --check` passed. The prescribed
+  iPhone 16 Plus / iOS 18.6 runtime remains unavailable on this machine.
+- The implementation worktree remains open in Xcode for local interaction
+  testing. No known implementation issue remains.
+- Build 98 remains unchanged. This merge did not increment a build, archive,
+  upload, change TestFlight groups, or post tester Slack notes. The photo zoom
+  change will ride the next explicitly requested TestFlight release batch.
+
+Final outcome: full-screen photo zoom is on `main`, validated, and ready for
+local Xcode testing or inclusion in the next explicit TestFlight release.
