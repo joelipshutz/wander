@@ -22108,3 +22108,6 @@ Completion checkpoint — 2026-07-25 21:29 PDT:
 - No TestFlight release, build-number bump, archive, upload, or tester Slack
   post was requested or performed. Handoff is a ready PR and the isolated
   branch opened in Xcode for local phone testing.
+- Pushed the branch and opened ready PR #217:
+  `https://github.com/joelipshutz/wander/pull/217`. REC-122 is moving to
+  `In Review` with the test and visual-validation record attached.
