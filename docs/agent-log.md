@@ -24829,3 +24829,50 @@ PR handoff — 2026-07-26 11:13 PDT:
 - Mission Control remains unavailable at `localhost:4000`; no tracker state was
   fabricated. Build 99 remains unchanged, and no archive, upload, App Store
   Connect, TestFlight-group, or Slack action was performed by REC-150.
+
+Device handoff follow-up — 2026-07-26 12:47 PDT:
+
+- Agent: Codex using `ios-qa` for standard signed-device deployment only.
+  Branch/worktree: `codex/rec-150-discover-search` at
+  `/private/tmp/recme-rec150-implementation`.
+- Goal: incorporate current `origin/main`, prove PR #240 has no conflicts, then
+  build, install, and launch that exact feature branch on Joe's paired iPhone.
+- Starting state was clean. Fresh fetch confirmed current `origin/main`
+  `b4d7c98` is already an ancestor of the feature branch (branch divergence
+  versus main: one ahead, zero behind); GitHub reports PR #240 `MERGEABLE` and
+  `CLEAN`. No merge/rebase commit is needed.
+- Connected-device discovery found paired iPhone 16 Pro
+  `00008140-0018152C08A2201C`, iOS 26.5, with Developer Mode enabled. CoreDevice
+  currently reports it unavailable (`tunnelState: unavailable`, last connection
+  July 24), so the signed build will be prepared while waiting for the phone to
+  be plugged in and unlocked.
+- Expected tracked file is this append-only log only. No product, auth, signing,
+  schema, build-number, TestFlight, or release mutation is planned.
+
+Device handoff checkpoint — 2026-07-26 12:53 PDT:
+
+- Source integration is complete with no merge/rebase required: current
+  `origin/main` remains an ancestor of branch commit `e4e6d9c`, the worktree
+  source diff passes `git diff --check`, and PR #240 remains conflict-free.
+- The first generic iPhone build failed before compilation because this Mac has
+  no active Xcode account session and the wildcard profile cannot carry the
+  shared App Group used by the share/widget extensions. Retried without project
+  changes using the configured App Store Connect API key for automatic
+  provisioning; the signed Debug arm64 build then completed successfully,
+  including `WanderShareExtension`, `WanderWidgets`, and
+  `WanderNearbyWidgets`.
+- Signed app waiting for installation:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Build/Products/Debug-iphoneos/Wander.app`.
+- Installation/launch is blocked only by external device state. Three
+  CoreDevice checks, `xcdevice`, and a USB hardware check all report iPhone 16
+  Pro `00008140-0018152C08A2201C` unavailable; no USB tunnel is active and the
+  Mac cannot currently see a connected/unlocked phone. No install or launch was
+  falsely claimed.
+- Exact restart: plug in and unlock the iPhone, accept any Trust prompt, confirm
+  `xcrun devicectl list devices` reports `available`, then install the signed
+  app with `xcrun devicectl device install app` and launch bundle
+  `com.grayline.wander` with `xcrun devicectl device process launch`.
+- No product source, auth, entitlement, project signing, build number,
+  TestFlight, App Store Connect release, or Slack state changed. Existing
+  formatter actor-isolation and traditional-headermap warnings remain
+  non-blocking.
