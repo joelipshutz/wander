@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct WanderShareContent: Equatable {
     let item: URL
@@ -22,15 +23,20 @@ struct WanderShareContent: Equatable {
         serverID: String?,
         displayName: String,
         handle: String,
-        imageFileURL: URL
+        imageFileURL: URL,
+        filterTitle: String? = nil
     ) -> WanderShareContent? {
         guard imageFileURL.isFileURL, imageFileURL.pathExtension.lowercased() == "png" else { return nil }
         guard let item = appURL(host: "profiles", pathComponent: serverID) else { return nil }
+        let trimmedFilterTitle = filterTitle?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedFilterTitle = trimmedFilterTitle?.isEmpty == false ? trimmedFilterTitle : nil
         return WanderShareContent(
             item: item,
             additionalItems: [imageFileURL],
-            subject: "\(displayName)'s map",
-            message: "Explore @\(handle)'s saved places on rec.me"
+            subject: normalizedFilterTitle.map { "\(displayName)'s \($0) map" } ?? "\(displayName)'s map",
+            message: normalizedFilterTitle.map { "Explore \($0) on @\(handle)'s rec.me map" }
+                ?? "Explore @\(handle)'s saved places on rec.me"
         )
     }
 
@@ -58,6 +64,54 @@ struct WanderShareContent: Equatable {
     }
 }
 
+struct WanderShareSheet: UIViewControllerRepresentable {
+    let content: WanderShareContent
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        var activityItems: [Any] = [
+            WanderShareActivityItemSource(
+                message: content.message,
+                subject: content.subject
+            )
+        ]
+        activityItems.append(contentsOf: content.items)
+        return UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+final class WanderShareActivityItemSource: NSObject, UIActivityItemSource {
+    let message: String
+    let subject: String
+
+    init(message: String, subject: String) {
+        self.message = message
+        self.subject = subject
+    }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        message
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        itemForActivityType activityType: UIActivity.ActivityType?
+    ) -> Any? {
+        message
+    }
+
+    func activityViewController(
+        _ activityViewController: UIActivityViewController,
+        subjectForActivityType activityType: UIActivity.ActivityType?
+    ) -> String {
+        subject
+    }
+}
+
 enum WanderShareAttachmentStore {
     enum AttachmentError: Error {
         case invalidPNG
@@ -68,8 +122,28 @@ enum WanderShareAttachmentStore {
     private static let pngSignature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
 
     static func preparePNG(_ data: Data) async -> URL? {
-        await Task.detached(priority: .utility) {
+        guard !Task.isCancelled else { return nil }
+        let fileURL = await Task.detached(priority: .utility) {
             try? persistPNG(data)
+        }.value
+        guard !Task.isCancelled else {
+            if let fileURL {
+                await removePreparedPNG(at: fileURL)
+            }
+            return nil
+        }
+        return fileURL
+    }
+
+    static func removePreparedPNG(at fileURL: URL) async {
+        await Task.detached(priority: .utility) {
+            let fileManager = FileManager.default
+            let attachmentDirectory = fileManager.temporaryDirectory
+                .appendingPathComponent(directoryName, isDirectory: true)
+                .standardizedFileURL
+            let standardizedFileURL = fileURL.standardizedFileURL
+            guard standardizedFileURL.deletingLastPathComponent() == attachmentDirectory else { return }
+            try? fileManager.removeItem(at: standardizedFileURL)
         }.value
     }
 
