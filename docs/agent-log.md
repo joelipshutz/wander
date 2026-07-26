@@ -22602,3 +22602,18 @@ Implementation and validation — 2026-07-25 22:35 PDT:
 - Next: commit and push the feature branch, open a ready PR linked to REC-146,
   move the issue to In Review, and leave TestFlight/build 98 untouched because
   no release was requested.
+
+Handoff — 2026-07-25 22:38 PDT:
+
+- Committed the implementation as `070e8b636` and pushed
+  `codex/rec-146-profile-filter-sharing`.
+- Opened ready PR #221 against `main`:
+  `https://github.com/joelipshutz/wander/pull/221`.
+- Linked the PR to REC-146, posted the validation summary, and moved the Linear
+  issue to `In Review`.
+- Known issues: none specific to REC-146. Existing build warnings remain
+  unchanged. TestFlight/build 98, beta-group changes, and tester Slack notes
+  were intentionally not performed because no release was requested.
+
+Final outcome: accurate Profile map totals and per-filter share actions are
+implemented, fully tested, visually validated, and ready for review in PR #221.
