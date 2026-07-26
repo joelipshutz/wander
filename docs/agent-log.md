@@ -22012,6 +22012,41 @@ Final outcome: REC-140 is implemented, validated, merged to `main`, and closed.
 No known functional issue remains; existing compiler/headermap warnings are
 unchanged.
 
+## 2026-07-25 12:20 PDT - Codex - REC-122 Streak Celebration Hierarchy
+
+Agent: Codex
+Branch: `codex/rec-122-streak-hierarchy`
+Worktree: `/private/tmp/recme-rec122-streak-hierarchy`
+Linear: `REC-122` (`In Progress`)
+
+Goal: apply Joe's screenshot-based refinement to the daily save-streak
+takeover: retain the ticket flip and confetti, replace the poetic count copy
+with a bold numeric `4 day streak!` hierarchy, and replace the loose four-day
+path with a compact seven-day progress card in the rec.me visual system.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from current
+  `origin/main` at `74ab31b`; the root `joe/phone-build-latest` checkout's
+  unrelated untracked `tmp/` directory remains untouched.
+- Reopened REC-122 and recorded the approved visual direction. Mission Control
+  at `localhost:4000` was unavailable, so Linear and this log are the durable
+  tracking surfaces for this pass.
+- The design-consultation workflow routed this existing SwiftUI surface to the
+  focused iOS design review. The shared GBrain KB remained locked after the
+  one permitted retry, so the repo's current design system, implementation,
+  and supplied screenshot are the active sources.
+- The optional design-review artifact sync was not run because its external
+  push behavior was not approved. This does not affect local implementation or
+  validation.
+
+Expected files:
+
+- `Wander/Features/Streak/SaveStreakCelebrationView.swift`
+- `Wander/Models/SaveStreak.swift`
+- `WanderTests/SaveStreakTests.swift`
+- `docs/agent-log.md`
+
 ## 2026-07-25 12:41 PDT - Codex - REC-132 Logged-Out Session Gate
 
 Agent: Codex using `ios-fix` and Linear workflows
@@ -22060,7 +22095,74 @@ Expected files:
 - `WanderTests/NavigationContractTests.swift`
 - `docs/agent-log.md`
 
-Validation plan:
+Validation plan (REC-122):
+
+- Add focused coverage for the seven-day presentation model and exact streak
+  accessibility language.
+- Run the focused streak tests, then the full iOS suite.
+- Install and visually inspect the exact build on iPhone 16 Plus and iPhone
+  16e, including Dynamic Type/compact-height resilience and the existing
+  Reduce Motion path.
+- Push a ready PR, move REC-122 to `In Review`, and open the isolated branch in
+  Xcode for local review. No build-number or TestFlight release is requested.
+
+Implementation checkpoint — 2026-07-25 12:32 PDT:
+
+- Retained the existing confetti and spring ticket-flip entrance, then added a
+  short scale/fade reveal for the numeric streak count after the ticket lands.
+- Replaced `four days, still going` / `day one, keep it going` with a centered
+  numeric count and the fixed visual label `day streak!`; VoiceOver receives
+  the corresponding `4 day streak` compound label plus the saved place/status.
+- Replaced the loose four-date path with a compact cream seven-day card. The
+  card derives localized weekday initials from the save date, fills the last
+  seven consecutive streak days, caps longer streaks cleanly, distinguishes
+  today with a dark outline, and adds checks so completion is not color-only.
+- Added focused presentation tests for exact numeric language, the trailing
+  four-of-seven pattern, today's state, and a 1,000-day streak's visible cap.
+- `xcodegen generate` completed with no generated-project diff.
+- The first sandboxed test attempt failed before app compilation because
+  CoreSimulator and package-network access were blocked. The escalated run
+  then exposed one invalid token name (`spacing5`); replaced it with existing
+  8pt-grid tokens and reran successfully.
+- Focused streak validation passed 7/7:
+  `/private/tmp/DerivedData-rec122-streak-hierarchy/Logs/Test/Test-Wander-2026.07.25_12-27-59--0700.xcresult`.
+- Installed the exact focused-test build and inspected the completed takeover
+  on rec.me Streak QA (iPhone 16 Plus) and iPhone 16e, both iOS 18.6. The hero,
+  weekly card, helper copy, and 54pt confirmation control fit without clipping
+  or overlap:
+  `/private/tmp/rec122-streak-hierarchy-iphone16plus.png` and
+  `/private/tmp/rec122-streak-hierarchy-iphone16e.png`.
+- Existing Supabase Swift-isolation, App Intents metadata, simulator-keychain,
+  and resource-manifest warnings remain unrelated. No schema, build number,
+  signing, TestFlight, or Slack change was made.
+
+Completion checkpoint — 2026-07-25 21:29 PDT:
+
+- The temporary implementation worktree was reaped during the long validation
+  run; recreated it at `/private/tmp/recme-rec122-streak-hierarchy-resume` from
+  the intact branch and commits without losing work. After validation,
+  `origin/main` advanced first to `ba172e3` for build 97 and then to `e7b12a9`
+  for the widget landing. Merged both updates and retained every append-only
+  log record; neither sync touched the streak implementation files.
+- Full-suite validation passed 640/640 with zero failures using iPhone 16 Plus,
+  iOS 18.6:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Logs/Test/Test-Wander-2026.07.25_21-12-46--0700.xcresult`.
+- Reinstalled that exact full-suite binary on rec.me Streak QA (iPhone 16 Plus)
+  and iPhone 16e, relaunched the takeover mock, and reconfirmed the final state
+  has no clipping, overlap, or safe-area regression. Stable screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/23/019f8d1e-bc62-7e91-a73c-d8e90747206c/rec122-streak-iphone16plus.png`
+  and
+  `/Users/joelipshutz/.codex/visualizations/2026/07/23/019f8d1e-bc62-7e91-a73c-d8e90747206c/rec122-streak-iphone16e.png`.
+- Implementation commit: `3010a44` (`fix: sharpen streak celebration
+  hierarchy`). Existing unrelated warnings are unchanged.
+- No TestFlight release, build-number bump, archive, upload, or tester Slack
+  post was requested or performed. Handoff is a ready PR and the isolated
+  branch opened in Xcode for local phone testing.
+- Pushed the branch and opened ready PR #217:
+  `https://github.com/joelipshutz/wander/pull/217`. REC-122 is moving to
+  `In Review` with the test and visual-validation record attached.
+
+Validation plan (REC-132):
 
 - Prove the stale-provider transition fails before the fix, then add focused
   session-observation and app-entry routing tests.
@@ -22305,6 +22407,7 @@ Implementation checkpoint — 2026-07-25 22:05 PDT:
   fake-repository atomicity mismatch. After correcting those, the focused
   271-test regression run had one cache-refresh failure; that path is fixed
   and awaits the final full-suite rerun.
+
 ## 2026-07-24 14:52 PDT - Codex - REC-142 Home Screen Widgets
 
 Agent: Codex
@@ -22929,6 +23032,24 @@ Mock comparison checkpoint, 2026-07-25 22:37 PDT:
   `~/.gstack/projects/joelipshutz-wander/designs/profile-recent-activity-20260725/`.
   The next step is to capture an approved direction and only then implement it
   in the isolated worktree.
+REC-122 current-main sync validation — 2026-07-26 00:21 PDT:
+
+- Synced PR #217 through current `origin/main` at `e7b12a9`; the widget landing
+  had no conflict with `SaveStreak.swift`, `SaveStreakCelebrationView.swift`,
+  or `SaveStreakTests.swift`. Xcode is open on the isolated REC-122 worktree.
+- A post-sync focused retry was attempted after the independently green
+  REC-122 full suite (640/640) and widget-main suite (689/689). The first clean
+  retry exhausted the Mac's remaining disk while compiling package
+  dependencies. Removed only this run's failed 832 MB temporary DerivedData.
+- Cached retries compiled the streak files but did not reach test execution:
+  one hit Swift's type-check timeout in the newly landed
+  `WanderRootView.swift`, one found a transient locked build database, and the
+  last ended when the Xcode build service crashed. These are post-sync tooling
+  blockers outside the REC-122 diff; no new test failure was observed.
+- The handoff therefore remains the earlier exact-branch 640/640 suite plus
+  7/7 focused tests, exact-binary dual-device visual QA, and current-main diff
+  review. The PR is ready for review; no TestFlight release was requested.
+
 ## 2026-07-25 — Codex — REC-153 widget deep-link polish
 
 Start — 2026-07-25 22:24 PDT:
@@ -24482,6 +24603,21 @@ Landing completion:
 Final outcome: the requested nearby-widget refresh, routing, and width changes
 are on `main`, validated, documented, and ready for Xcode/device testing.
 
+REC-122 latest-main reconciliation — 2026-07-26:
+
+- Merged `origin/main` through `76872a6` into ready PR #217 after subsequent
+  share-extension, auth-gate, Check-in, photo, search, and widget work landed.
+  Preserved every unrelated upstream change and both sides of the append-only
+  coordination log.
+- The only product overlap was the streak helper sentence from the Check-in
+  terminology rollout. Kept the approved numeric hero, compact seven-day card,
+  ticket flip, and confetti; reconciled the short helper as
+  `One Check-in or Wanna keeps it going.`
+- Conflict-marker and whitespace validation pass. No fresh full build was
+  started because the Mac has only about 1.7 GiB free and the preceding cached
+  retries ended in Xcode build-service instability; the exact streak branch
+  remains validated by its earlier 7/7 focused tests, 640/640 full suite, and
+  dual-device visual QA. No TestFlight action was requested for REC-122.
 ## 2026-07-26 02:08 PDT - Codex - Atlas-Style Subcategory Picker Follow-up
 
 Agent: Codex using the `design-review` workflow for final visual QA
@@ -24854,6 +24990,56 @@ REC-152 Check-ins terminology validation — 2026-07-26 14:00 PDT:
 - Removed the temporary QA-only launch route and confirmed `WanderApp.swift`
   has no diff. `git diff --check` passed and no stale user-facing Been copy
   remains in the new activity module or history screen.
+REC-122 build-99-main reconciliation — 2026-07-26:
+
+- Merged current `origin/main` at `b4d7c98` into PR #217. The only conflict
+  was the append-only agent log; all REC-122 and upstream release records were
+  preserved. No product source required another resolution.
+- `git diff --check` and conflict-marker checks pass. REC-122 remains a ready
+  review PR with the previously recorded focused, full-suite, and dual-device
+  visual validation. Build 99 was released independently from `main`; this
+  branch did not trigger or modify that TestFlight release.
+
+REC-122 copy follow-up — 2026-07-26:
+
+- At Joe's direction, shortened the takeover helper from
+  `One Check-in or Wanna keeps it going.` to `Keep it up 🔥`. The counter,
+  seven-day card, ticket animation, confetti, and dismissal behavior are
+  unchanged.
+
+REC-122 explicit TestFlight release review — 2026-07-26:
+
+- Joe explicitly requested a TestFlight push. The latest completed release is
+  rec.me 0.1 (99), live and approved, with no unfinished archive/upload/helper
+  work. This release will land PR #217, include the independently merged
+  REC-159 Nearby-widget plus-icon polish since build 99, and cut build 100 from
+  exact latest `main`.
+- The required gstack review covered the complete product diff, DESIGN.md,
+  focused tests, prior review history, and Greptile (zero current comments).
+  Testing, maintainability, performance, design, red-team, and independent
+  adversarial passes were dispatched. The local Codex CLI probe reported ready
+  but its vendored executable is missing, so its redundant CLI pass could not
+  run; the primary Codex review and independent specialist passes remain the
+  review gate.
+- Fixed the actionable findings before landing: stale takeovers are discarded
+  if the local calendar day rolls over while the save sheet remains open;
+  Reduce Motion no longer applies scale/translation effects; primary new type
+  scales relative to Dynamic Type; the weekday caption uses the 12pt semantic
+  token; the seven-day window is one shared contract; the week model computes
+  once per render and uses its date for stable identity; weekday symbols are
+  loaded once; and focused tests now cover exact helper copy, stale-day expiry,
+  non-positive defensive clamps, and a localized DST boundary.
+- Joe's explicit `Keep it up 🔥` direction supersedes the older blanket
+  anti-streak wording. DESIGN.md now records the narrow exception: one private
+  daily takeover plus a compact Profile row, never a public rank or persistent
+  app-shell fixture.
+- The post-review streak regression gate passed 14/14 focused tests with zero
+  failures, including the newly added calendar-day expiry, Dynamic Type-facing
+  presentation model, DST, and defensive-count coverage. Result bundle:
+  `/Users/joelipshutz/Developer/Wander (nametbd)/DerivedData/Logs/Test/Test-Wander-2026.07.26_13-50-58--0700.xcresult`.
+- Next: run focused and complete validation on the reviewed head, sync current
+  `origin/main`, publish the clean PR, squash-merge it, then execute the build
+  100 release workflow. REC-122 stays In Review until build 100 is available.
 ## 2026-07-26 13:28 PDT - Codex - REC-159 Nearby Widget Plus Icons
 
 Agent: Codex
@@ -24964,3 +25150,29 @@ REC-152 latest-main conflict resolution — 2026-07-26 14:05 PDT:
   both complete REC-152 and REC-159 histories without source overlap.
 - Profile validation remains the clean 3/3 focused run, prior 747/747 full
   suite, passing iPhone 16e build, and compact screenshot recorded above.
+## 2026-07-26 13:58 PDT - Codex - TestFlight Build 100
+
+Agent: Codex
+Branch: `codex/testflight-build-100`
+Worktree: `/private/tmp/recme-testflight-build-100`
+Linear: `REC-122` (`In Review`)
+
+Goal: ship Joe's explicitly requested TestFlight release from exact latest
+`main`, containing the REC-122 streak hierarchy and REC-159 Nearby-widget
+plus-icon follow-up.
+
+Release start:
+
+- Created this clean release branch from exact `origin/main`
+  `0765ac64c740691a17a92f72bd5b141f22f1c0ad`, the squash merge of ready PR
+  #217. REC-159 landed immediately before it at
+  `977f7c654264fd21532fe1b4694ef10fc1192753`.
+- Incremented `CURRENT_PROJECT_VERSION` once from 99 to 100. This release keeps
+  marketing version 0.1 and will regenerate the Xcode project before review.
+- Intended tester coverage: the save sheet closes before the streak takeover;
+  the takeover waits for `got it`, shows the numeric counter, seven-day card,
+  ticket/confetti animation, and `Keep it up 🔥`; same-day saves only produce
+  confetti; Nearby widget rows use plus actions.
+- Next: regenerate the project, review and land the release metadata, validate
+  exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
+  external beta-review state, post `#testflight-feedback`, and close REC-122.
