@@ -466,7 +466,7 @@ final class WanderStoreTests: XCTestCase {
 
         let snapshot = try XCTUnwrap(snapshotStore.load())
         XCTAssertEqual(snapshot.currentMonth.beenCount, 1)
-        XCTAssertEqual(snapshot.currentMonth.wannaCount, 1)
+        XCTAssertEqual(snapshot.currentMonth.wannaCount, 0)
     }
 
     func testCurrentUserCalendarRefreshReportsRemoteFailure() async {

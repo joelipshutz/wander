@@ -357,7 +357,7 @@ private struct WanderActivityCalendarWidget: Widget {
             WanderActivityCalendarWidgetView(entry: entry)
         }
         .configurationDisplayName("Activity calendar")
-        .description("See your been and wanna activity for the current month.")
+        .description("See your been activity for the current month.")
         .supportedFamilies([.systemLarge])
     }
 }
@@ -452,26 +452,20 @@ private struct WanderActivityCalendarWidgetView: View {
 
             Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(model.beenCount) been")
-                    .foregroundStyle(WanderWidgetPalette.terracottaDark)
-                Text("\(model.wannaCount) wanna")
-                    .foregroundStyle(WanderWidgetPalette.textInk)
-            }
-            .font(.caption2.weight(.black))
-            .fontDesign(.rounded)
+            Text("\(model.beenCount) been")
+                .foregroundStyle(WanderWidgetPalette.terracottaDark)
+                .font(.caption2.weight(.black))
+                .fontDesign(.rounded)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(model.monthTitle). Been: \(model.beenCount). Wanna: \(model.wannaCount)."
+            "\(model.monthTitle). Been: \(model.beenCount)."
         )
     }
 
     private var footer: some View {
         HStack(spacing: 10) {
             WanderCalendarLegendItem(state: .been, title: "been")
-            WanderCalendarLegendItem(state: .wanna, title: "wanna")
-            WanderCalendarLegendItem(state: .both, title: "both")
 
             Spacer(minLength: 2)
 
@@ -487,7 +481,7 @@ private struct WanderActivityCalendarWidgetView: View {
         .accessibilityLabel(
             model.needsRefresh
                 ? "Calendar has not synced yet. Open rec.me to update."
-                : "Calendar legend: filled is been, dotted outline is wanna, and filled with a dotted outline is both."
+                : "Calendar legend: filled is been."
         )
     }
 }
@@ -503,7 +497,7 @@ private struct WanderCalendarDayCell: View {
     @ScaledMetric(relativeTo: .caption2) private var nowTextSize: CGFloat = 6
 
     private var state: WanderWidgetActivityState {
-        snapshot?.state ?? .none
+        (snapshot?.beenCount ?? 0) > 0 ? .been : .none
     }
 
     var body: some View {
@@ -545,10 +539,10 @@ private struct WanderCalendarDayCell: View {
         guard let dayNumber else { return "" }
         let dateLabel = "\(monthTitle) \(dayNumber)"
         let todayLabel = isToday ? ", today" : ""
-        guard let snapshot, snapshot.state != .none else {
+        guard let snapshot, snapshot.beenCount > 0 else {
             return "\(dateLabel)\(todayLabel), no activity"
         }
-        return "\(dateLabel)\(todayLabel). Been: \(snapshot.beenCount). Wanna: \(snapshot.wannaCount)."
+        return "\(dateLabel)\(todayLabel). Been: \(snapshot.beenCount)."
     }
 }
 
@@ -561,26 +555,10 @@ private struct WanderCalendarActivityMarker: View {
 
     var body: some View {
         ZStack {
-            if state == .wanna || state == .both {
-                Circle()
-                    .stroke(
-                        WanderWidgetPalette.categoryMoss,
-                        style: StrokeStyle(
-                            lineWidth: max(1.4, size * 0.065),
-                            lineCap: .round,
-                            dash: [0.1, max(3, size * 0.14)]
-                        )
-                    )
-                    .frame(width: size, height: size)
-            }
-
-            if state == .been || state == .both {
+            if state == .been {
                 Circle()
                     .fill(WanderWidgetPalette.terracottaDark)
-                    .frame(
-                        width: state == .both ? size - 6 : size - 3,
-                        height: state == .both ? size - 6 : size - 3
-                    )
+                    .frame(width: size - 3, height: size - 3)
             }
 
             if let label {
@@ -588,12 +566,12 @@ private struct WanderCalendarActivityMarker: View {
                     .font(
                         .system(
                             size: min(size * 0.45, size * 0.37 * labelScale),
-                            weight: state == .none || state == .wanna ? .bold : .black,
+                            weight: state == .none ? .bold : .black,
                             design: .rounded
                         )
                     )
                     .foregroundStyle(
-                        state == .been || state == .both
+                        state == .been
                             ? WanderWidgetPalette.textOnAction
                             : WanderWidgetPalette.textInk
                     )
@@ -628,7 +606,6 @@ private struct WanderCalendarDisplayModel {
     let leadingBlankCount: Int
     let dayCount: Int
     let beenCount: Int
-    let wannaCount: Int
     let weekdaySymbols: [String]
     let timeZoneIdentifier: String
     let daysByNumber: [Int: WanderCalendarDaySnapshot]
@@ -650,7 +627,6 @@ private struct WanderCalendarDisplayModel {
             leadingBlankCount = month.leadingBlankCount
             dayCount = month.dayCount
             beenCount = month.beenCount
-            wannaCount = month.wannaCount
             weekdaySymbols = snapshot.weekdaySymbols
             timeZoneIdentifier = snapshot.timeZoneIdentifier
             daysByNumber = Dictionary(
@@ -675,7 +651,6 @@ private struct WanderCalendarDisplayModel {
             leadingBlankCount = (firstWeekday - calendar.firstWeekday + 7) % 7
             dayCount = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 30
             beenCount = 0
-            wannaCount = 0
             weekdaySymbols = WanderWidgetCalendar.rotatedWeekdaySymbols(calendar: calendar)
             timeZoneIdentifier = calendar.timeZone.identifier
             daysByNumber = [:]
@@ -765,16 +740,6 @@ private enum WanderWidgetPalette {
         green: 224.0 / 255.0,
         blue: 210.0 / 255.0
     )
-    static let sage = Color(
-        red: 160.0 / 255.0,
-        green: 185.0 / 255.0,
-        blue: 138.0 / 255.0
-    )
-    static let categoryMoss = Color(
-        red: 111.0 / 255.0,
-        green: 143.0 / 255.0,
-        blue: 95.0 / 255.0
-    )
 }
 
 // MARK: - Previews
@@ -809,13 +774,10 @@ private enum WanderWidgetPreviewData {
             dayCount: 31,
             days: [
                 WanderCalendarDaySnapshot(dayNumber: 2, beenCount: 1, wannaCount: 0),
-                WanderCalendarDaySnapshot(dayNumber: 3, beenCount: 0, wannaCount: 1),
                 WanderCalendarDaySnapshot(dayNumber: 7, beenCount: 2, wannaCount: 0),
-                WanderCalendarDaySnapshot(dayNumber: 8, beenCount: 1, wannaCount: 2),
-                WanderCalendarDaySnapshot(dayNumber: 12, beenCount: 0, wannaCount: 1),
-                WanderCalendarDaySnapshot(dayNumber: 15, beenCount: 1, wannaCount: 1),
-                WanderCalendarDaySnapshot(dayNumber: 24, beenCount: 3, wannaCount: 0),
-                WanderCalendarDaySnapshot(dayNumber: 29, beenCount: 0, wannaCount: 2),
+                WanderCalendarDaySnapshot(dayNumber: 8, beenCount: 1, wannaCount: 0),
+                WanderCalendarDaySnapshot(dayNumber: 15, beenCount: 1, wannaCount: 0),
+                WanderCalendarDaySnapshot(dayNumber: 24, beenCount: 3, wannaCount: 0)
             ]
         ),
         nextMonth: WanderCalendarMonthSnapshot(

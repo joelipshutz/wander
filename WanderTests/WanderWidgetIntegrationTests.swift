@@ -409,9 +409,13 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("store.currentUserCalendarProjection"))
 
         XCTAssertTrue(profileHome.contains(".id(ProfileHomeScrollAnchor.calendar)"))
+        XCTAssertTrue(profileHome.contains(".scrollTargetLayout()"))
+        XCTAssertTrue(profileHome.contains(".scrollPosition(id: $profileScrollPosition, anchor: .top)"))
         XCTAssertTrue(profileHome.contains(".task(id: calendarScrollRequestID)"))
-        XCTAssertTrue(profileHome.contains("proxy.scrollTo(ProfileHomeScrollAnchor.calendar, anchor: .top)"))
+        XCTAssertTrue(profileHome.contains("profileScrollPosition = ProfileHomeScrollAnchor.calendar"))
+        XCTAssertTrue(profileHome.contains("profileScrollPosition == ProfileHomeScrollAnchor.calendar"))
         XCTAssertTrue(profileHome.contains("onCalendarScrollRequestHandled(calendarScrollRequestID)"))
+        XCTAssertFalse(profileHome.contains("proxy.scrollTo(ProfileHomeScrollAnchor.calendar"))
         XCTAssertFalse(profileHome.contains("Task { @MainActor"))
     }
 
@@ -464,6 +468,9 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("if model.needsRefresh"))
         XCTAssertFalse(widgetSource.contains("?? snapshot.currentMonth"))
         XCTAssertTrue(widgetSource.contains("WanderCalendarTimelineSchedule.make("))
+        XCTAssertTrue(widgetSource.contains("See your been activity for the current month."))
+        XCTAssertFalse(widgetSource.contains("model.wannaCount"))
+        XCTAssertFalse(widgetSource.contains("Wanna:"))
     }
 
     @MainActor
@@ -491,12 +498,14 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         )
 
         XCTAssertEqual(snapshot.currentMonth.beenCount, expected.monthVisitCount)
-        XCTAssertEqual(snapshot.currentMonth.wannaCount, expected.monthWannaCount)
+        XCTAssertEqual(expected.monthWannaCount, 0)
+        XCTAssertEqual(snapshot.currentMonth.wannaCount, 0)
         for summary in expected.monthDaySummaries.values {
             let dayNumber = Calendar.current.component(.day, from: summary.date)
             let day = try XCTUnwrap(snapshot.currentMonth.day(dayNumber))
             XCTAssertEqual(day.beenCount, summary.visitCount)
-            XCTAssertEqual(day.wannaCount, summary.wannaCount)
+            XCTAssertEqual(summary.wannaCount, 0)
+            XCTAssertEqual(day.wannaCount, 0)
         }
 
         WanderWidgetSnapshotPublisher.publish(

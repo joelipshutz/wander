@@ -3,8 +3,6 @@ import Foundation
 enum ProfileCalendarActivityState: String, Equatable, Hashable {
     case none
     case visit
-    case wanna
-    case both
 }
 
 struct ProfileCalendarDaySummary: Identifiable, Equatable, Hashable {
@@ -17,16 +15,11 @@ struct ProfileCalendarDaySummary: Identifiable, Equatable, Hashable {
     var id: Date { date }
 
     var state: ProfileCalendarActivityState {
-        switch (visitCount > 0, wannaCount > 0) {
-        case (true, true): .both
-        case (true, false): .visit
-        case (false, true): .wanna
-        case (false, false): .none
-        }
+        visitCount > 0 ? .visit : .none
     }
 
     var placeIDs: [String] {
-        Array(Set(visitPlaceIDs).union(wannaPlaceIDs)).sorted()
+        Array(Set(visitPlaceIDs)).sorted()
     }
 
     static func empty(on date: Date) -> Self {
@@ -64,9 +57,7 @@ struct ProfileInsights: Equatable {
     }
 
     var monthWannaCounts: [Date: Int] {
-        monthDaySummaries.compactMapValues { summary in
-            summary.wannaCount > 0 ? summary.wannaCount : nil
-        }
+        [:]
     }
 
     var monthPlaceIDs: [Date: [String]] {
@@ -323,24 +314,17 @@ private struct PlaceFingerprint: Equatable {
 
 private struct ProfileCalendarDayAccumulator {
     var visitCount = 0
-    var wannaCount = 0
     var visitPlaceIDs: Set<String> = []
-    var wannaPlaceIDs: Set<String> = []
 
     func summary(on date: Date) -> ProfileCalendarDaySummary {
         ProfileCalendarDaySummary(
             date: date,
             visitCount: visitCount,
-            wannaCount: wannaCount,
+            wannaCount: 0,
             visitPlaceIDs: visitPlaceIDs.sorted(),
-            wannaPlaceIDs: wannaPlaceIDs.sorted()
+            wannaPlaceIDs: []
         )
     }
-}
-
-private struct ProfileWannaActivity {
-    let userPlace: LocalUserPlace
-    let savedAt: Date
 }
 
 enum ProfileInsightsPresenter {
@@ -367,19 +351,6 @@ enum ProfileInsightsPresenter {
         let monthVisits = activeVisits.filter { visit in
             monthInterval?.contains(visit.visitedAt) == true
         }
-        let wannaActivities = activeOwnerPlaces.compactMap { userPlace -> ProfileWannaActivity? in
-            switch userPlace.status {
-            case .wannaGo:
-                ProfileWannaActivity(userPlace: userPlace, savedAt: userPlace.savedAt)
-            case .been:
-                userPlace.historicalWantedAt.map {
-                    ProfileWannaActivity(userPlace: userPlace, savedAt: $0)
-                }
-            }
-        }
-        let monthWannaActivities = wannaActivities.filter { activity in
-            monthInterval?.contains(activity.savedAt) == true
-        }
 
         var dayAccumulators: [Date: ProfileCalendarDayAccumulator] = [:]
         for visit in monthVisits {
@@ -391,14 +362,6 @@ enum ProfileInsightsPresenter {
                     .visitPlaceIDs
                     .insert(canonicalPlaceID)
             }
-        }
-        for activity in monthWannaActivities {
-            let day = calendar.startOfDay(for: activity.savedAt)
-            dayAccumulators[day, default: ProfileCalendarDayAccumulator()].wannaCount += 1
-            let canonicalPlaceID = placeByID[activity.userPlace.placeID]?.id ?? activity.userPlace.placeID
-            dayAccumulators[day, default: ProfileCalendarDayAccumulator()]
-                .wannaPlaceIDs
-                .insert(canonicalPlaceID)
         }
         let monthDaySummaries = Dictionary(
             uniqueKeysWithValues: dayAccumulators.map { day, accumulator in
@@ -439,7 +402,7 @@ enum ProfileInsightsPresenter {
             month: calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month,
             monthDaySummaries: monthDaySummaries,
             monthVisitCount: monthVisits.count,
-            monthWannaCount: monthWannaActivities.count,
+            monthWannaCount: 0,
             monthSpotCount: monthUserPlaces.count,
             monthCategoryCount: distinctMonthCategories.count,
             monthCityCount: distinctMonthCities.count,

@@ -1164,7 +1164,7 @@ struct ProfilePlaceCollectionRoute: Identifiable, Hashable {
     let calendarDay: ProfileCalendarDaySummary?
 
     var includesAllStatuses: Bool {
-        calendarDay != nil
+        false
     }
 
     static func calendar(_ summary: ProfileCalendarDaySummary, calendar: Calendar = .current) -> Self {
@@ -2129,7 +2129,7 @@ private struct SavedPlacesListScreen: View {
                         if collection?.calendarDay?.state == ProfileCalendarActivityState.none {
                             SmallEmptyRow(
                                 title: "No activity this day",
-                                subtitle: "been and wanna places will show up here"
+                                subtitle: "been places will show up here"
                             )
                         } else if collection?.calendarDay != nil {
                             SmallEmptyRow(title: "No matching places", subtitle: "try another type or tag")
@@ -2963,9 +2963,6 @@ private struct ProfileCalendarDayDetailHeader: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             metric(value: summary.visitCount, singular: "been", plural: "been", color: WanderTheme.terracotta.color)
-            Divider()
-                .overlay(WanderTheme.borderHairline.color)
-            metric(value: summary.wannaCount, singular: "wanna", plural: "wanna", color: WanderTheme.categorySage.color)
             Divider()
                 .overlay(WanderTheme.borderHairline.color)
             metric(value: summary.placeIDs.count, singular: "place", plural: "places", color: WanderTheme.textInk.color)

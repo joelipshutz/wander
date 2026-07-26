@@ -105,11 +105,11 @@ enum WanderWidgetSnapshotPublisher {
         let firstWeekday = calendar.component(.weekday, from: monthStart)
         let leadingBlankCount = (firstWeekday - calendar.firstWeekday + 7) % 7
         let days = insights.monthDaySummaries.values.compactMap { summary -> WanderCalendarDaySnapshot? in
-            guard summary.visitCount > 0 || summary.wannaCount > 0 else { return nil }
+            guard summary.visitCount > 0 else { return nil }
             return WanderCalendarDaySnapshot(
                 dayNumber: calendar.component(.day, from: summary.date),
                 beenCount: summary.visitCount,
-                wannaCount: summary.wannaCount
+                wannaCount: 0
             )
         }
 

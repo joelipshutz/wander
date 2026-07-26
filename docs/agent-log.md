@@ -22276,3 +22276,60 @@ REC-142 publication handoff — 2026-07-24 17:46 PDT:
 - Build number remains 96. No archive, upload, TestFlight group change, or
   tester Slack announcement was performed because this handoff requested a
   branch for Xcode testing, not a TestFlight release.
+
+REC-142 tester-feedback revision start — 2026-07-25 21:18 PDT:
+
+- Agent: Codex `/root`; branch `codex/rec-142-widgets`; Linear REC-142 moved
+  from `In Review` back to `In Progress`.
+- Goal: make the calendar widget deep link snap the Profile calendar fully
+  into view, remove Wanna activity from the in-app and widget calendars while
+  preserving Wanna elsewhere, and document the physical-device signing fixes
+  shown in Ryan's Xcode screenshot.
+- Git status before edits: branch matched
+  `origin/codex/rec-142-widgets`; only untracked `.pnpm-store/` was present.
+  It is unrelated user/tool state and will not be edited or committed.
+- No separate worktree is needed because the active checkout is already the
+  dedicated REC-142 branch and there are no overlapping source changes.
+- Expected files: Profile calendar presentation/routing, widget calendar
+  presentation/snapshot publishing, focused calendar/widget tests,
+  `docs/setup.md`, `docs/decisions.md`, and this log. `project.yml`,
+  entitlements, and signing identifiers are expected to remain unchanged
+  because the screenshot reflects Apple account/provisioning state rather than
+  an incorrect checked-in entitlement.
+
+REC-142 tester-feedback revision validation — 2026-07-25 21:43 PDT:
+
+- Replaced the one-shot Profile `ScrollViewReader` calendar jump with a
+  persistent `scrollPosition` target. A cold `recme://profile/calendar` launch
+  now activates Profile and holds the calendar's top anchor through TabView
+  layout before acknowledging the request.
+- Removed Wanna activity from both calendar presentations and their day-detail
+  routes. Profile and widget calendars now publish/render only Been visits;
+  Wanna-only dates, counts, rings, legends, accessibility copy, and day-detail
+  membership are excluded. The shared widget JSON keeps zero-valued Wanna
+  fields for backward decoding compatibility.
+- Added first-time physical-device signing guidance to `docs/setup.md`. The
+  checked-in App Group and bundle identifiers remain unchanged; Ryan's
+  screenshot is an Apple Account/team/App ID/profile setup issue rather than a
+  source entitlement defect.
+- Updated calendar/widget and navigation regression tests. Focused suites
+  passed 43/43 and the two corrected navigation contracts passed 2/2. The first
+  full run exposed only four stale source-contract assertions; after updating
+  them, the required full suite passed 689/689 on iPhone 17 Pro Max, iOS 26.5.
+- The generic iOS Simulator build passed with `CODE_SIGNING_ALLOWED=NO`. The
+  initial sandboxed build could not access CoreSimulator/SwiftPM caches, so it
+  was rerun with the required elevated Xcode access.
+- Visually opened `recme://profile/calendar` with deterministic demo fixtures
+  and captured `/private/tmp/rec142-been-calendar-snap.png` on iPhone 17 Pro Max
+  plus `/private/tmp/rec142-been-calendar-snap-17e.png` on iPhone 17e. Both
+  screenshots show the complete calendar card snapped into view, Been-only
+  summary/legend/markers, and no Profile-header landing.
+- Linear REC-144 was canceled with a comment because its historical Wanna
+  cross-device calendar hydration work is obsolete under the Been-only
+  calendar decision. REC-142 remains `In Progress` until this revision is
+  committed and pushed to PR #215.
+- Known existing warnings remain: traditional headermap migration warnings,
+  two Swift concurrency warnings in `WanderSupabaseClient`, and expected
+  no-entitlement App Group messages in `CODE_SIGNING_ALLOWED=NO` unit-test
+  launches. No TestFlight build, archive, upload, build-number increment, or
+  Slack release note was requested or performed; build remains 96.

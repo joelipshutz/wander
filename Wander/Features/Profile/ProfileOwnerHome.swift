@@ -59,47 +59,57 @@ struct ProfileOwnerHome: View {
     let calendarScrollRequestID: UUID?
     let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
+    @State private var profileScrollPosition: String?
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-                    identitySection
-                    ProfileSharedVisitInboxRow(
-                        invitationCount: sharedVisitInvitationCount,
-                        action: sharedVisitInvitationsAction
-                    )
-                    savedPlacesSection
-                    if mode.isOwner, let saveStreak {
-                        ProfileSaveStreakRow(summary: saveStreak)
-                    }
-                    ProfileCalendarSection(
-                        insights: insights,
-                        selectedMonth: $selectedMonth,
-                        ownerLabel: ownerLabel,
-                        dateAction: calendarDateAction
-                    )
-                    .id(ProfileHomeScrollAnchor.calendar)
-                    ProfileMapSection(
-                        profile: profile,
-                        insights: insights,
-                        beenCount: stats.been,
-                        ownerLabel: ownerLabel,
-                        summaryAction: mapSummaryAction
-                    )
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                identitySection
+                ProfileSharedVisitInboxRow(
+                    invitationCount: sharedVisitInvitationCount,
+                    action: sharedVisitInvitationsAction
+                )
+                savedPlacesSection
+                if mode.isOwner, let saveStreak {
+                    ProfileSaveStreakRow(summary: saveStreak)
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing3)
-                .padding(.bottom, WanderTheme.spacing12)
+                ProfileCalendarSection(
+                    insights: insights,
+                    selectedMonth: $selectedMonth,
+                    ownerLabel: ownerLabel,
+                    dateAction: calendarDateAction
+                )
+                .id(ProfileHomeScrollAnchor.calendar)
+                ProfileMapSection(
+                    profile: profile,
+                    insights: insights,
+                    beenCount: stats.been,
+                    ownerLabel: ownerLabel,
+                    summaryAction: mapSummaryAction
+                )
             }
-            .scrollIndicators(.hidden)
-            .task(id: calendarScrollRequestID) {
-                guard let calendarScrollRequestID else { return }
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                proxy.scrollTo(ProfileHomeScrollAnchor.calendar, anchor: .top)
-                onCalendarScrollRequestHandled(calendarScrollRequestID)
-            }
+            .scrollTargetLayout()
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing12)
+        }
+        .scrollIndicators(.hidden)
+        .scrollPosition(id: $profileScrollPosition, anchor: .top)
+        .task(id: calendarScrollRequestID) {
+            guard let calendarScrollRequestID else { return }
+
+            // Keep the target bound until the selected Profile tab has laid out.
+            // Unlike a one-shot proxy scroll, this also works during a cold
+            // widget launch when TabView is still activating the Profile view.
+            profileScrollPosition = nil
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            profileScrollPosition = ProfileHomeScrollAnchor.calendar
+            await Task.yield()
+            guard !Task.isCancelled,
+                  profileScrollPosition == ProfileHomeScrollAnchor.calendar
+            else { return }
+            onCalendarScrollRequestHandled(calendarScrollRequestID)
         }
         .wanderScreen()
         .toolbar(.hidden, for: .navigationBar)
@@ -705,9 +715,7 @@ private struct ProfileCalendarSection: View {
     }
 
     private var monthActivitySummary: String {
-        let been = "\(insights.monthVisitCount) been"
-        let wanna = "\(insights.monthWannaCount) wanna"
-        return "\(been)  •  \(wanna)"
+        "\(insights.monthVisitCount) been"
     }
 
     private var monthDays: [Date?] {
@@ -787,7 +795,7 @@ private struct ProfileCalendarDayCell: View {
         ZStack(alignment: .top) {
             if let date {
                 ProfileCalendarActivityMarker(
-                    state: summary?.state ?? .none,
+                    state: (summary?.visitCount ?? 0) > 0 ? .visit : .none,
                     size: 40,
                     label: "\(Calendar.current.component(.day, from: date))"
                 )
@@ -815,12 +823,10 @@ private struct ProfileCalendarDayCell: View {
         guard let date else { return "" }
         let base = date.formatted(.dateTime.month(.wide).day())
         let today = isToday ? ", today" : ""
-        guard let summary, summary.state != .none else {
+        guard let summary, summary.visitCount > 0 else {
             return "\(base)\(today), no activity"
         }
-        let been = "\(summary.visitCount) been"
-        let wanna = "\(summary.wannaCount) wanna"
-        return "\(base)\(today), \(been), \(wanna)"
+        return "\(base)\(today), \(summary.visitCount) been"
     }
 }
 
@@ -831,33 +837,17 @@ private struct ProfileCalendarActivityMarker: View {
 
     var body: some View {
         ZStack {
-            if state == .wanna || state == .both {
-                Circle()
-                    .stroke(
-                        WanderTheme.categorySage.color,
-                        style: StrokeStyle(
-                            lineWidth: max(1.5, size * 0.065),
-                            lineCap: .round,
-                            dash: [0.1, max(3, size * 0.14)]
-                        )
-                    )
-                    .frame(width: size, height: size)
-            }
-
-            if state == .visit || state == .both {
+            if state == .visit {
                 Circle()
                     .fill(WanderTheme.terracotta.color)
-                    .frame(
-                        width: state == .both ? size - 8 : size - 4,
-                        height: state == .both ? size - 8 : size - 4
-                    )
+                    .frame(width: size - 4, height: size - 4)
             }
 
             if let label {
                 Text(label)
-                    .font(.system(size: size * 0.35, weight: state == .none || state == .wanna ? .bold : .black))
+                    .font(.system(size: size * 0.35, weight: state == .none ? .bold : .black))
                     .foregroundStyle(
-                        state == .visit || state == .both
+                        state == .visit
                             ? WanderTheme.textOnAction.color
                             : WanderTheme.textInk.color
                     )
@@ -869,15 +859,13 @@ private struct ProfileCalendarActivityMarker: View {
 
 private struct ProfileCalendarLegend: View {
     var body: some View {
-        HStack(spacing: WanderTheme.spacing3) {
+        HStack(spacing: WanderTheme.spacing2) {
             item(state: .visit, title: "been")
-            item(state: .wanna, title: "wanna")
-            item(state: .both, title: "both")
         }
         .font(.system(size: 11, weight: .bold))
         .foregroundStyle(WanderTheme.textMuted.color)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Calendar legend: filled is been, dotted outline is wanna, filled with dotted outline is both")
+        .accessibilityLabel("Calendar legend: filled is been")
     }
 
     private func item(state: ProfileCalendarActivityState, title: String) -> some View {
