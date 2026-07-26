@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SaveStreakCelebrationView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var streakCountFontSize: CGFloat = 82
+    @ScaledMetric(relativeTo: .title) private var streakLabelFontSize: CGFloat = 28
     let celebration: SaveStreakCelebration
     let onDismiss: () -> Void
 
@@ -34,56 +36,75 @@ struct SaveStreakCelebrationView: View {
                         .foregroundStyle(WanderTheme.textOnAction.color)
                         .padding(.top, max(proxy.safeAreaInsets.top, WanderTheme.spacing4) + WanderTheme.spacing4)
 
-                        Spacer(minLength: WanderTheme.spacing6)
+                    Spacer(minLength: WanderTheme.spacing6)
 
-                        SaveStreakTicketCard(celebration: celebration, isFaceUp: ticketLanded)
-                            .frame(maxWidth: 340)
-                            .rotationEffect(
-                                accessibilityReduceMotion || ticketLanded
-                                    ? .zero
-                                    : .degrees(-8)
-                            )
-                            .rotation3DEffect(
-                                .degrees(accessibilityReduceMotion || ticketLanded ? 0 : -178),
-                                axis: (x: 0.08, y: 1, z: 0),
-                                perspective: 0.62
-                            )
-                            .offset(
-                                x: accessibilityReduceMotion || ticketLanded ? 0 : -proxy.size.width * 0.48,
-                                y: accessibilityReduceMotion || ticketLanded ? 0 : proxy.size.height * 0.23
-                            )
-                            .opacity(accessibilityReduceMotion && !ticketLanded ? 0 : 1)
-                            .animation(ticketAnimation, value: ticketLanded)
+                    SaveStreakTicketCard(celebration: celebration, isFaceUp: ticketLanded)
+                        .frame(maxWidth: 340)
+                        .frame(maxWidth: .infinity)
+                        .rotationEffect(
+                            accessibilityReduceMotion || ticketLanded
+                                ? .zero
+                                : .degrees(-8)
+                        )
+                        .rotation3DEffect(
+                            .degrees(accessibilityReduceMotion || ticketLanded ? 0 : -178),
+                            axis: (x: 0.08, y: 1, z: 0),
+                            perspective: 0.62
+                        )
+                        .offset(
+                            x: accessibilityReduceMotion || ticketLanded ? 0 : -proxy.size.width * 0.48,
+                            y: accessibilityReduceMotion || ticketLanded ? 0 : proxy.size.height * 0.23
+                        )
+                        .opacity(accessibilityReduceMotion && !ticketLanded ? 0 : 1)
+                        .animation(ticketAnimation, value: ticketLanded)
 
-                        SaveStreakDayPath(saveDate: celebration.saveDate)
-                            .padding(.top, WanderTheme.spacing8)
-                            .opacity(ticketLanded ? 1 : 0)
-                            .offset(y: ticketLanded ? 0 : 10)
-                            .animation(copyAnimation, value: ticketLanded)
+                    VStack(spacing: WanderTheme.spacing1) {
+                        Text(SaveStreakCelebrationPresentation.visualCount(for: celebration.streakCount))
+                            .font(.system(size: streakCountFontSize, weight: .black, design: .rounded))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.72)
+                            .lineLimit(1)
 
-                        Spacer(minLength: WanderTheme.spacing8)
+                        Text("day streak!")
+                            .font(.system(size: streakLabelFontSize, weight: .black, design: .rounded))
+                            .minimumScaleFactor(0.72)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, WanderTheme.spacing6)
+                    .opacity(ticketLanded ? 1 : 0)
+                    .scaleEffect(accessibilityReduceMotion || ticketLanded ? 1 : 0.82)
+                    .animation(countAnimation, value: ticketLanded)
 
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                            Text(headline)
-                                .font(.system(size: 52, weight: .black, design: .serif))
-                                .tracking(-2.2)
-                                .foregroundStyle(WanderTheme.textOnAction.color)
-                                .fixedSize(horizontal: false, vertical: true)
+                    SaveStreakWeekCard(
+                        streakCount: celebration.streakCount,
+                        saveDate: celebration.saveDate
+                    )
+                    .frame(maxWidth: 340)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, WanderTheme.spacing4)
+                    .opacity(ticketLanded ? 1 : 0)
+                    .offset(y: accessibilityReduceMotion || ticketLanded ? 0 : 10)
+                    .animation(copyAnimation, value: ticketLanded)
 
-                            Text("One check-in or Wanna keeps your streak alive for the day.")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                    Text(SaveStreakCelebrationPresentation.helperText)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, WanderTheme.spacing4)
                         .opacity(ticketLanded ? 1 : 0)
-                        .offset(y: ticketLanded ? 0 : 18)
+                        .offset(y: accessibilityReduceMotion || ticketLanded ? 0 : 12)
                         .animation(copyAnimation, value: ticketLanded)
 
-                        Spacer(minLength: WanderTheme.spacing6)
+                    Spacer(minLength: WanderTheme.spacing6)
 
                     Button(action: onDismiss) {
                         Text("got it")
-                            .font(.system(size: 16, weight: .black, design: .rounded))
+                            .font(.system(.body, design: .rounded, weight: .black))
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 54)
                             .foregroundStyle(WanderTheme.textInk.color)
@@ -120,22 +141,18 @@ struct SaveStreakCelebrationView: View {
             : .easeOut(duration: 0.34).delay(0.68)
     }
 
-    private var headline: String {
-        if celebration.streakCount <= 1 {
-            return "day one,\nkeep it going."
-        }
-
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .spellOut
-        let count = formatter.string(from: NSNumber(value: celebration.streakCount))
-            ?? "\(celebration.streakCount)"
-        return "\(count) days,\nstill going."
+    private var countAnimation: Animation {
+        accessibilityReduceMotion
+            ? .easeOut(duration: 0.22)
+            : .spring(duration: 0.5, bounce: 0.2).delay(0.56)
     }
 
     private var accessibilityLabel: String {
-        let dayLabel = celebration.streakCount == 1 ? "day" : "days"
+        let title = SaveStreakCelebrationPresentation.accessibilityTitle(
+            for: celebration.streakCount
+        )
         let activity = celebration.status == .been ? CheckInCopy.pastTense : "added to Wanna"
-        return "\(celebration.streakCount) \(dayLabel) streak. \(activity) at \(celebration.placeName)."
+        return "\(title). \(activity) at \(celebration.placeName)."
     }
 }
 
@@ -237,55 +254,71 @@ private struct SaveStreakTicketCard: View {
     }
 }
 
-private struct SaveStreakDayPath: View {
+private struct SaveStreakWeekCard: View {
+    let streakCount: Int
     let saveDate: Date
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            ForEach(Array(dayOffsets.enumerated()), id: \.offset) { index, offset in
-                dayCircle(offset: offset, isToday: index == dayOffsets.count - 1)
+        let days = weekdays
 
-                if index < dayOffsets.count - 1 {
-                    Capsule()
-                        .fill(WanderTheme.textOnAction.color.opacity(0.22))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 2)
+        HStack(spacing: WanderTheme.spacing2) {
+            ForEach(days, id: \.date) { day in
+                VStack(spacing: WanderTheme.spacing2) {
+                    Text(day.symbol)
+                        .font(.system(.caption, design: .rounded, weight: .black))
+                        .foregroundStyle(
+                            day.isToday
+                                ? WanderTheme.terracottaDark.color
+                                : WanderTheme.textMuted.color
+                        )
+
+                    ZStack {
+                        Circle()
+                            .fill(
+                                day.isCovered
+                                    ? WanderTheme.terracotta.color
+                                    : WanderTheme.surfaceSand.color
+                            )
+
+                        if day.isCovered {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundStyle(WanderTheme.textOnAction.color)
+                        }
+
+                        if day.isToday {
+                            Circle()
+                                .stroke(WanderTheme.textInk.color, lineWidth: 2)
+                                .padding(-3)
+                        }
+                    }
+                    .frame(width: 27, height: 27)
                 }
+                .frame(maxWidth: .infinity)
             }
         }
-        .accessibilityHidden(true)
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.borderHairline.color.opacity(0.78), lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(weekAccessibilityLabel(for: days))
     }
 
-    private let dayOffsets = [-3, -2, -1, 0]
+    private var weekdays: [SaveStreakWeekday] {
+        SaveStreakCelebrationPresentation.weekdays(
+            streakCount: streakCount,
+            endingOn: saveDate
+        )
+    }
 
-    private func dayCircle(offset: Int, isToday: Bool) -> some View {
-        let calendar = Calendar.current
-        let date = calendar.date(byAdding: .day, value: offset, to: saveDate) ?? saveDate
-        let day = calendar.component(.day, from: date)
-
-        return Text("\(day)")
-            .font(.system(size: 12, weight: .black, design: .rounded))
-            .foregroundStyle(WanderTheme.textOnAction.color)
-            .frame(width: isToday ? 50 : 42, height: isToday ? 50 : 42)
-            .background(
-                isToday
-                    ? WanderTheme.terracotta.color
-                    : WanderTheme.textOnAction.color.opacity(0.08)
-            )
-            .clipShape(Circle())
-            .overlay {
-                Circle()
-                    .stroke(
-                        WanderTheme.textOnAction.color.opacity(isToday ? 0.14 : 0.34),
-                        lineWidth: 1
-                    )
-            }
-            .shadow(
-                color: isToday ? WanderTheme.terracotta.color.opacity(0.34) : .clear,
-                radius: 0,
-                x: 0,
-                y: 0
-            )
+    private func weekAccessibilityLabel(for days: [SaveStreakWeekday]) -> String {
+        let coveredCount = days.filter(\.isCovered).count
+        return "Last \(SaveStreakWindow.dayCount) days. \(coveredCount) days complete. Today complete."
     }
 }
 

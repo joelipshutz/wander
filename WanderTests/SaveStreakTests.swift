@@ -46,6 +46,133 @@ final class SaveStreakCalculatorTests: XCTestCase {
         )
     }
 
+    func testCelebrationPresentationUsesNumericDayStreakLanguage() {
+        XCTAssertEqual(
+            SaveStreakCelebrationPresentation.visualCount(for: 4),
+            "4"
+        )
+        XCTAssertEqual(
+            SaveStreakCelebrationPresentation.accessibilityTitle(for: 4),
+            "4 day streak"
+        )
+        XCTAssertEqual(
+            SaveStreakCelebrationPresentation.accessibilityTitle(for: 1),
+            "1 day streak"
+        )
+        XCTAssertEqual(
+            SaveStreakCelebrationPresentation.helperText,
+            "Keep it up 🔥"
+        )
+    }
+
+    func testPresentationRejectsCelebrationAfterItsLocalSaveDayEnds() {
+        let calendar = testCalendar
+        let celebration = SaveStreakCelebration(
+            kind: .dailyTakeover,
+            placeName: "Maru Coffee",
+            placeDetail: nil,
+            status: .been,
+            streakCount: 4,
+            saveDate: date(2026, 7, 25, hour: 23)
+        )
+
+        XCTAssertTrue(
+            SaveStreakPresentationPolicy.canPresent(
+                celebration: celebration,
+                isSaveFlowPresented: false,
+                now: date(2026, 7, 25, hour: 23),
+                calendar: calendar
+            )
+        )
+        XCTAssertFalse(
+            SaveStreakPresentationPolicy.canPresent(
+                celebration: celebration,
+                isSaveFlowPresented: false,
+                now: date(2026, 7, 26, hour: 0),
+                calendar: calendar
+            )
+        )
+        XCTAssertTrue(
+            SaveStreakPresentationPolicy.isExpired(
+                celebration,
+                now: date(2026, 7, 26, hour: 0),
+                calendar: calendar
+            )
+        )
+    }
+
+    func testCelebrationPresentationBuildsSevenDayCardEndingToday() {
+        let calendar = testCalendar
+        let days = SaveStreakCelebrationPresentation.weekdays(
+            streakCount: 4,
+            endingOn: date(2026, 7, 25, hour: 12),
+            calendar: calendar
+        )
+
+        XCTAssertEqual(days.count, 7)
+        XCTAssertEqual(days.map(\.isCovered), [false, false, false, true, true, true, true])
+        XCTAssertEqual(days.filter(\.isToday).count, 1)
+        XCTAssertTrue(days.last?.isToday == true)
+        XCTAssertTrue(days.last?.isCovered == true)
+    }
+
+    func testCelebrationPresentationCapsVisibleCoverageAtSevenDays() {
+        let days = SaveStreakCelebrationPresentation.weekdays(
+            streakCount: 1_000,
+            endingOn: date(2026, 7, 25, hour: 12),
+            calendar: testCalendar
+        )
+
+        XCTAssertEqual(days.filter(\.isCovered).count, 7)
+    }
+
+    func testCelebrationPresentationClampsNonPositiveCountsToOne() {
+        for count in [0, -1, Int.min] {
+            XCTAssertEqual(SaveStreakCelebrationPresentation.visualCount(for: count), "1")
+            XCTAssertEqual(
+                SaveStreakCelebrationPresentation.accessibilityTitle(for: count),
+                "1 day streak"
+            )
+
+            let days = SaveStreakCelebrationPresentation.weekdays(
+                streakCount: count,
+                endingOn: date(2026, 7, 25, hour: 12),
+                calendar: testCalendar
+            )
+            XCTAssertEqual(days.filter(\.isCovered).count, 1)
+            XCTAssertTrue(days.last?.isCovered == true)
+        }
+    }
+
+    func testCelebrationWeekdaysPreserveLocalizedDatesAcrossDaylightSavingTime() throws {
+        var calendar = testCalendar
+        calendar.locale = Locale(identifier: "en_US_POSIX")
+        let end = try XCTUnwrap(calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: 2026,
+            month: 11,
+            day: 1,
+            hour: 12
+        )))
+
+        let days = SaveStreakCelebrationPresentation.weekdays(
+            streakCount: SaveStreakWindow.dayCount,
+            endingOn: end,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(
+            days.map { calendar.component(.day, from: $0.date) },
+            [26, 27, 28, 29, 30, 31, 1]
+        )
+        XCTAssertEqual(days.map(\.symbol), ["M", "T", "W", "T", "F", "S", "S"])
+        XCTAssertTrue(
+            zip(days, days.dropFirst()).allSatisfy { current, next in
+                calendar.dateComponents([.day], from: current.date, to: next.date).day == 1
+            }
+        )
+    }
+
     func testSummaryDeduplicatesSameDaySavesAndKeepsYesterdayRunActive() throws {
         let calendar = testCalendar
         let dates = [

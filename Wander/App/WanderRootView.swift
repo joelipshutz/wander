@@ -1138,6 +1138,11 @@ struct WanderRootView: View {
             return
         }
 
+        if SaveStreakPresentationPolicy.isExpired(celebration) {
+            dismissSaveStreakCelebration(celebration)
+            return
+        }
+
         guard SaveStreakPresentationPolicy.canPresent(
             celebration: celebration,
             isSaveFlowPresented: store.isSaveFlowPresented
@@ -1153,11 +1158,17 @@ struct WanderRootView: View {
             }
 
             guard !Task.isCancelled,
-                  !store.isSaveFlowPresented,
                   store.saveStreakCelebration?.id == celebration.id
             else {
                 return
             }
+
+            if SaveStreakPresentationPolicy.isExpired(celebration) {
+                dismissSaveStreakCelebration(celebration)
+                return
+            }
+
+            guard !store.isSaveFlowPresented else { return }
 
             withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.18)) {
                 presentedSaveStreakCelebration = celebration

@@ -746,7 +746,7 @@ private struct WanderNearbyWidgetView: View {
 
             Spacer(minLength: 4)
 
-            Image(systemName: "arrow.up.right")
+            Image(systemName: "plus")
                 .font(.caption.weight(.black))
                 .foregroundStyle(WanderNearbyPalette.terracotta)
         }
