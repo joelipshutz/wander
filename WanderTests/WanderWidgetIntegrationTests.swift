@@ -540,20 +540,24 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("CLLocationDistance(200)"))
         XCTAssertTrue(widgetSource.contains("CLLocationDistance(400)"))
         XCTAssertTrue(widgetSource.contains("CLLocationDistance(800)"))
-        XCTAssertTrue(widgetSource.contains("retryAfter: 5 * 60"))
-        XCTAssertTrue(widgetSource.contains("reloadAfter: now.addingTimeInterval(15 * 60)"))
+        XCTAssertTrue(widgetSource.contains("var reloadInterval: TimeInterval"))
+        XCTAssertTrue(widgetSource.contains("case .ready, .noPlaces:"))
+        XCTAssertTrue(widgetSource.contains("case .locationTemporarilyUnavailable:"))
         XCTAssertTrue(widgetSource.contains("Link(destination: destination)"))
         XCTAssertTrue(widgetSource.contains(".nearbyPlace(candidateID: place.id)"))
         XCTAssertTrue(widgetSource.contains("Text(\"Nearby spots\")"))
         XCTAssertTrue(widgetSource.contains("\"tap a place to check-in\""))
         XCTAssertTrue(widgetSource.contains("Label(\"See all\", systemImage: \"chevron.right\")"))
-        XCTAssertTrue(widgetSource.contains("freshness?.minuteAgeLabel"))
         XCTAssertFalse(widgetSource.contains("style: .relative"))
         XCTAssertTrue(sharedSnapshot.contains("static let maximumVisiblePlaces = 5"))
         XCTAssertTrue(sharedSnapshot.contains("static let exactDistanceLifetime"))
         XCTAssertTrue(publisher.contains("WidgetCenter.shared.currentConfigurations()"))
-        XCTAssertTrue(publisher.contains("store.currentLocationCandidates()"))
+        XCTAssertTrue(publisher.contains("case .unknown:"))
+        XCTAssertTrue(publisher.contains("case .notConfigured:"))
+        XCTAssertFalse(publisher.contains("store.currentLocationCandidates()"))
         XCTAssertTrue(publisher.contains("reloadTimelines("))
+        XCTAssertTrue(publisher.contains("WanderNearbyWidgetSnapshotStore.freshnessWriteInterval"))
+        XCTAssertTrue(publisher.contains("isAuthorizedForWidgetUpdates"))
         XCTAssertTrue(root.contains("refreshNearbyWidgetSnapshot()"))
         XCTAssertTrue(root.contains("case .map:"))
         XCTAssertTrue(root.contains("case .nearbyPlace(let candidateID):"))
@@ -639,6 +643,40 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(snapshot.contains(".appendingPathComponent(\"Library\", isDirectory: true)"))
         XCTAssertTrue(snapshot.contains(".appendingPathComponent(\"Caches\", isDirectory: true)"))
         XCTAssertTrue(snapshot.contains("resourceValues.isExcludedFromBackup = true"))
+    }
+
+    func testNearbyWidgetRefreshesInteractivelyAndRoutesSeeAllToHereNow() throws {
+        let widget = try source("WanderNearbyWidgets/WanderNearbyWidget.swift")
+        let sharedSnapshot = try source(
+            "WanderWidgetShared/WanderNearbyWidgetSnapshot.swift"
+        )
+
+        XCTAssertTrue(widget.contains("Button(intent: WanderRefreshNearbyPlacesIntent())"))
+        XCTAssertTrue(widget.contains("private var refreshFooter: some View"))
+        XCTAssertTrue(widget.contains("unavailableState\n            }\n\n            refreshFooter"))
+        XCTAssertTrue(widget.contains("TimelineView(.everyMinute)"))
+        XCTAssertTrue(widget.contains("now: context.date"))
+        XCTAssertTrue(widget.contains("entry.availability != .locationAuthorizationRequired"))
+        XCTAssertTrue(widget.contains("try? snapshotStore.clear()"))
+        XCTAssertTrue(widget.contains("\"Refreshing…\" : \"Refresh\""))
+        XCTAssertTrue(widget.contains("if case .refreshing = refreshStateStore.state(at: startedAt)"))
+        XCTAssertTrue(widget.contains("refreshStateStore.begin(at: startedAt)"))
+        XCTAssertTrue(widget.contains("refreshStateStore.complete("))
+        XCTAssertTrue(widget.contains("requestID: requestID"))
+        XCTAssertTrue(widget.contains("forceFreshnessAdvance: true"))
+        XCTAssertTrue(sharedSnapshot.contains("snapshot.generatedAt < existing.generatedAt"))
+        XCTAssertTrue(
+            widget.contains(
+                "WidgetCenter.shared.reloadTimelines(ofKind: WanderWidgetConstants.nearbyPlacesKind)"
+            )
+        )
+        XCTAssertTrue(widget.contains("Link(destination: WanderWidgetConstants.quickCaptureURL)"))
+        XCTAssertTrue(widget.contains(".widgetURL(WanderWidgetConstants.quickCaptureURL)"))
+        XCTAssertFalse(widget.contains("Link(destination: WanderWidgetConstants.mapURL)"))
+        XCTAssertTrue(widget.contains(".contentMarginsDisabled()"))
+        XCTAssertTrue(widget.contains(".padding(.horizontal, 12)"))
+        XCTAssertTrue(sharedSnapshot.contains("case refreshing(startedAt: Date)"))
+        XCTAssertTrue(sharedSnapshot.contains("case completed(at: Date"))
     }
 
     func testAppAndExtensionShareOneBuildNumberSource() throws {

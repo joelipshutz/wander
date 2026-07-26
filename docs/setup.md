@@ -135,6 +135,11 @@ Visit form. The file is excluded from backup, exact distances stop rendering
 after 30 minutes, and the whole result set stops rendering after 24 hours. The
 widget asks WidgetKit for a 15-minute refresh and a five-minute retry after a
 transient failure, but iOS ultimately schedules and budgets those reloads.
+Its bottom-left App Intent refresh requests a new widget-authorized location and
+MapKit search without opening the app, briefly displays `Refreshing…`, and
+forces the minute timestamp forward even if the same five places are returned.
+`See all` and taps outside an individual place row open the existing I'm Here
+Now nearby list; individual rows continue into the selected Rich Visit form.
 
 ### First-time physical-device setup
 

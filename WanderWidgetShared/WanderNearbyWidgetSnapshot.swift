@@ -1,6 +1,6 @@
 import Foundation
 
-enum WanderNearbyWidgetAvailability: Equatable, Sendable {
+enum WanderNearbyWidgetAvailability: String, Codable, Equatable, Sendable {
     case ready
     case locationAuthorizationRequired
     case locationTemporarilyUnavailable
@@ -301,7 +301,7 @@ struct WanderNearbyWidgetSnapshot: Codable, Equatable, Sendable {
             schemaVersion: schemaVersion,
             generatedAt: generatedAt,
             places: places,
-            recentPlaces: recentPlaces + (previous?.recentPlaces ?? [])
+            recentPlaces: recentPlaces + (previous?.places ?? [])
         )
     }
 
@@ -378,7 +378,7 @@ struct WanderNearbyWidgetSnapshotStore {
             .appendingPathComponent(WanderWidgetConstants.nearbySnapshotFilename, isDirectory: false)
     }
 
-    func load() -> WanderNearbyWidgetSnapshot? {
+    func load(now: Date = .now) -> WanderNearbyWidgetSnapshot? {
         guard let fileURL,
               let data = try? Data(contentsOf: fileURL),
               let snapshot = try? Self.decoder.decode(WanderNearbyWidgetSnapshot.self, from: data),
@@ -386,11 +386,30 @@ struct WanderNearbyWidgetSnapshotStore {
         else {
             return nil
         }
+        guard snapshot.isUsable(at: now) else {
+            _ = try? clear()
+            return nil
+        }
         return snapshot
     }
 
     @discardableResult
-    func save(_ snapshot: WanderNearbyWidgetSnapshot) throws -> Bool {
+    func clear() throws -> Bool {
+        guard let fileURL else {
+            throw WanderNearbyWidgetSnapshotStoreError.appGroupContainerUnavailable
+        }
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            return false
+        }
+        try fileManager.removeItem(at: fileURL)
+        return true
+    }
+
+    @discardableResult
+    func save(
+        _ snapshot: WanderNearbyWidgetSnapshot,
+        forceFreshnessAdvance: Bool = false
+    ) throws -> Bool {
         guard snapshot.schemaVersion == WanderNearbyWidgetSnapshot.currentSchemaVersion else {
             throw WanderNearbyWidgetSnapshotStoreError.unsupportedSchema(snapshot.schemaVersion)
         }
@@ -398,9 +417,14 @@ struct WanderNearbyWidgetSnapshotStore {
             throw WanderNearbyWidgetSnapshotStoreError.appGroupContainerUnavailable
         }
 
-        let existing = load()
+        let existing = load(now: snapshot.generatedAt)
+        if let existing, snapshot.generatedAt < existing.generatedAt {
+            return false
+        }
         let persisted = snapshot.mergingRouteHistory(from: existing)
-        if let existing, existing.hasSameRenderedContent(as: persisted) {
+        if !forceFreshnessAdvance,
+           let existing,
+           existing.hasSameRenderedContent(as: persisted) {
             let freshnessAdvance = persisted.generatedAt.timeIntervalSince(existing.generatedAt)
             if freshnessAdvance < Self.freshnessWriteInterval {
                 return false
@@ -418,6 +442,134 @@ struct WanderNearbyWidgetSnapshotStore {
         var persistedFileURL = fileURL
         try persistedFileURL.setResourceValues(resourceValues)
         return true
+    }
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+}
+
+enum WanderNearbyWidgetRefreshState: Equatable, Sendable {
+    case idle
+    case refreshing(startedAt: Date)
+    case completed(at: Date, availability: WanderNearbyWidgetAvailability)
+}
+
+struct WanderNearbyWidgetRefreshStateStore {
+    static let maximumRefreshDuration: TimeInterval = 30
+    static let completedStateLifetime: TimeInterval = 60
+
+    private struct PersistedState: Codable {
+        enum Phase: String, Codable {
+            case refreshing
+            case completed
+        }
+
+        let phase: Phase
+        let requestID: UUID?
+        let date: Date
+        let availability: WanderNearbyWidgetAvailability?
+    }
+
+    private let fileURL: URL?
+    private let fileManager: FileManager
+
+    init(fileURL: URL? = nil, fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        self.fileURL = fileURL ?? fileManager
+            .containerURL(forSecurityApplicationGroupIdentifier: WanderWidgetConstants.appGroupIdentifier)?
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Caches", isDirectory: true)
+            .appendingPathComponent(WanderWidgetConstants.nearbyRefreshStateFilename, isDirectory: false)
+    }
+
+    func state(at now: Date = .now) -> WanderNearbyWidgetRefreshState {
+        guard let persisted = load() else { return .idle }
+        let age = now.timeIntervalSince(persisted.date)
+        guard age >= 0 else { return .idle }
+
+        switch persisted.phase {
+        case .refreshing:
+            guard age <= Self.maximumRefreshDuration else { return .idle }
+            return .refreshing(startedAt: persisted.date)
+        case .completed:
+            guard age <= Self.completedStateLifetime,
+                  let availability = persisted.availability
+            else {
+                return .idle
+            }
+            return .completed(at: persisted.date, availability: availability)
+        }
+    }
+
+    @discardableResult
+    func begin(at date: Date = .now) throws -> UUID {
+        let requestID = UUID()
+        try save(
+            PersistedState(
+                phase: .refreshing,
+                requestID: requestID,
+                date: date,
+                availability: nil
+            )
+        )
+        return requestID
+    }
+
+    @discardableResult
+    func complete(
+        requestID: UUID,
+        at date: Date = .now,
+        availability: WanderNearbyWidgetAvailability
+    ) throws -> Bool {
+        guard let current = load(),
+              current.phase == .refreshing,
+              current.requestID == requestID
+        else {
+            return false
+        }
+        try save(
+            PersistedState(
+                phase: .completed,
+                requestID: requestID,
+                date: date,
+                availability: availability
+            )
+        )
+        return true
+    }
+
+    private func load() -> PersistedState? {
+        guard let fileURL,
+              let data = try? Data(contentsOf: fileURL)
+        else {
+            return nil
+        }
+        return try? Self.decoder.decode(PersistedState.self, from: data)
+    }
+
+    private func save(_ state: PersistedState) throws {
+        guard let fileURL else {
+            throw WanderNearbyWidgetSnapshotStoreError.appGroupContainerUnavailable
+        }
+        try fileManager.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Self.encoder.encode(state).write(to: fileURL, options: .atomic)
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        var persistedFileURL = fileURL
+        try persistedFileURL.setResourceValues(resourceValues)
     }
 
     private static let encoder: JSONEncoder = {

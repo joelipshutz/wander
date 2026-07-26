@@ -772,9 +772,7 @@ struct WanderRootView: View {
     private func refreshNearbyWidgetSnapshot() {
         nearbyWidgetRefreshTask?.cancel()
         nearbyWidgetRefreshTask = Task { @MainActor in
-            await WanderNearbyWidgetSnapshotPublisher.refreshIfConfigured(
-                store: store
-            )
+            await WanderNearbyWidgetSnapshotPublisher.refreshIfConfigured()
         }
     }
 

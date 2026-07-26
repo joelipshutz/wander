@@ -1,3 +1,4 @@
+import AppIntents
 import CoreLocation
 import MapKit
 import SwiftUI
@@ -15,6 +16,50 @@ struct WanderNearbyPlacesWidget: Widget {
         .configurationDisplayName("Nearby Rich Visit")
         .description("Pick a nearby place and add a Rich Visit in rec.me.")
         .supportedFamilies([.systemLarge])
+        .contentMarginsDisabled()
+    }
+}
+
+struct WanderRefreshNearbyPlacesIntent: AppIntent {
+    static let title: LocalizedStringResource = "Refresh nearby spots"
+    static let description = IntentDescription(
+        "Updates the nearby spots shown in the rec.me widget."
+    )
+    static let openAppWhenRun = false
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        let startedAt = Date()
+        let refreshStateStore = WanderNearbyWidgetRefreshStateStore()
+        if case .refreshing = refreshStateStore.state(at: startedAt) {
+            return .result()
+        }
+        guard let requestID = try? refreshStateStore.begin(at: startedAt) else {
+            return .result()
+        }
+        WidgetCenter.shared.reloadTimelines(ofKind: WanderWidgetConstants.nearbyPlacesKind)
+        await Task.yield()
+
+        let update = await WanderNearbyTimelineLoader().load(
+            now: startedAt,
+            forceFreshnessAdvance: true
+        )
+        let minimumFeedbackDuration: TimeInterval = 0.8
+        let remainingFeedbackDuration = minimumFeedbackDuration
+            - Date().timeIntervalSince(startedAt)
+        if remainingFeedbackDuration > 0 {
+            try? await Task.sleep(
+                nanoseconds: UInt64(remainingFeedbackDuration * 1_000_000_000)
+            )
+        }
+
+        _ = try? refreshStateStore.complete(
+            requestID: requestID,
+            at: .now,
+            availability: update.availability
+        )
+        WidgetCenter.shared.reloadTimelines(ofKind: WanderWidgetConstants.nearbyPlacesKind)
+        return .result()
     }
 }
 
@@ -22,6 +67,7 @@ private struct WanderNearbyEntry: TimelineEntry {
     let date: Date
     let snapshot: WanderNearbyWidgetSnapshot?
     let availability: WanderNearbyWidgetAvailability
+    let isRefreshing: Bool
 }
 
 private final class WanderNearbyTimelineCompletion: @unchecked Sendable {
@@ -32,12 +78,21 @@ private final class WanderNearbyTimelineCompletion: @unchecked Sendable {
     }
 }
 
+private final class WanderNearbySnapshotCompletion: @unchecked Sendable {
+    let call: (WanderNearbyEntry) -> Void
+
+    init(_ call: @escaping (WanderNearbyEntry) -> Void) {
+        self.call = call
+    }
+}
+
 private struct WanderNearbyTimelineProvider: TimelineProvider {
     func placeholder(in context: Context) -> WanderNearbyEntry {
         WanderNearbyEntry(
             date: WanderNearbyPreviewData.date,
             snapshot: WanderNearbyPreviewData.snapshot,
-            availability: .ready
+            availability: .ready,
+            isRefreshing: false
         )
     }
 
@@ -50,14 +105,33 @@ private struct WanderNearbyTimelineProvider: TimelineProvider {
             return
         }
 
-        let snapshot = WanderNearbyWidgetSnapshotStore().load()
-        completion(
-            WanderNearbyEntry(
-                date: .now,
-                snapshot: snapshot,
-                availability: snapshot == nil ? .locationTemporarilyUnavailable : .ready
+        let completion = WanderNearbySnapshotCompletion(completion)
+        Task { @MainActor in
+            let snapshotStore = WanderNearbyWidgetSnapshotStore()
+            let locationProvider = WanderNearbyWidgetLocationProvider()
+            guard locationProvider.isEligibleForWidgetLocation else {
+                _ = try? snapshotStore.clear()
+                completion.call(
+                    WanderNearbyEntry(
+                        date: .now,
+                        snapshot: nil,
+                        availability: .locationAuthorizationRequired,
+                        isRefreshing: false
+                    )
+                )
+                return
+            }
+
+            let snapshot = snapshotStore.load()
+            completion.call(
+                WanderNearbyEntry(
+                    date: .now,
+                    snapshot: snapshot,
+                    availability: snapshot == nil ? .locationTemporarilyUnavailable : .ready,
+                    isRefreshing: false
+                )
             )
-        )
+        }
     }
 
     func getTimeline(
@@ -66,6 +140,67 @@ private struct WanderNearbyTimelineProvider: TimelineProvider {
     ) {
         let completion = WanderNearbyTimelineCompletion(completion)
         Task { @MainActor in
+            let now = Date()
+            let snapshotStore = WanderNearbyWidgetSnapshotStore()
+            let locationProvider = WanderNearbyWidgetLocationProvider()
+            guard locationProvider.isEligibleForWidgetLocation else {
+                _ = try? snapshotStore.clear()
+                let update = WanderNearbyTimelineUpdate(
+                    date: now,
+                    snapshot: nil,
+                    availability: .locationAuthorizationRequired,
+                    reloadAfter: now.addingTimeInterval(
+                        WanderNearbyWidgetAvailability
+                            .locationAuthorizationRequired
+                            .reloadInterval
+                    )
+                )
+                completion.call(
+                    Timeline(
+                        entries: entries(for: update),
+                        policy: .after(update.reloadAfter)
+                    )
+                )
+                return
+            }
+
+            let snapshot = snapshotStore.load()
+            switch WanderNearbyWidgetRefreshStateStore().state(at: now) {
+            case .refreshing:
+                completion.call(
+                    Timeline(
+                        entries: [
+                            WanderNearbyEntry(
+                                date: now,
+                                snapshot: snapshot,
+                                availability: snapshot == nil
+                                    ? .locationTemporarilyUnavailable
+                                    : .ready,
+                                isRefreshing: true
+                            )
+                        ],
+                        policy: .after(now.addingTimeInterval(5))
+                    )
+                )
+                return
+            case .completed(_, let availability):
+                let update = WanderNearbyTimelineUpdate(
+                    date: now,
+                    snapshot: snapshot,
+                    availability: availability,
+                    reloadAfter: now.addingTimeInterval(availability.reloadInterval)
+                )
+                completion.call(
+                    Timeline(
+                        entries: entries(for: update),
+                        policy: .after(update.reloadAfter)
+                    )
+                )
+                return
+            case .idle:
+                break
+            }
+
             let update = await WanderNearbyTimelineLoader().load()
             completion.call(
                 Timeline(
@@ -83,7 +218,8 @@ private struct WanderNearbyTimelineProvider: TimelineProvider {
             WanderNearbyEntry(
                 date: date,
                 snapshot: update.snapshot,
-                availability: update.availability
+                availability: update.availability,
+                isRefreshing: false
             )
         }
 
@@ -106,6 +242,7 @@ private struct WanderNearbyTimelineProvider: TimelineProvider {
         .sorted())
         return entryDates.map { entry(at: $0) }
     }
+
 }
 
 @MainActor
@@ -120,16 +257,22 @@ private struct WanderNearbyTimelineUpdate {
 private struct WanderNearbyTimelineLoader {
     private let snapshotStore = WanderNearbyWidgetSnapshotStore()
 
-    func load(now: Date = .now) async -> WanderNearbyTimelineUpdate {
+    func load(
+        now: Date = .now,
+        forceFreshnessAdvance: Bool = false
+    ) async -> WanderNearbyTimelineUpdate {
         let cachedSnapshot = snapshotStore.load()
         let locationProvider = WanderNearbyWidgetLocationProvider()
 
         guard locationProvider.isEligibleForWidgetLocation else {
+            _ = try? snapshotStore.clear()
             return update(
                 now: now,
-                cachedSnapshot: cachedSnapshot,
+                cachedSnapshot: nil,
                 availability: .locationAuthorizationRequired,
-                retryAfter: 60 * 60
+                retryAfter: WanderNearbyWidgetAvailability
+                    .locationAuthorizationRequired
+                    .reloadInterval
             )
         }
 
@@ -141,7 +284,7 @@ private struct WanderNearbyTimelineLoader {
                     now: now,
                     cachedSnapshot: cachedSnapshot,
                     availability: .noPlaces,
-                    retryAfter: 15 * 60
+                    retryAfter: WanderNearbyWidgetAvailability.noPlaces.reloadInterval
                 )
             }
 
@@ -149,19 +292,26 @@ private struct WanderNearbyTimelineLoader {
                 generatedAt: now,
                 places: places
             )
-            _ = try? snapshotStore.save(snapshot)
+            _ = try? snapshotStore.save(
+                snapshot,
+                forceFreshnessAdvance: forceFreshnessAdvance
+            )
             return WanderNearbyTimelineUpdate(
                 date: now,
                 snapshot: snapshotStore.load() ?? snapshot,
                 availability: .ready,
-                reloadAfter: now.addingTimeInterval(15 * 60)
+                reloadAfter: now.addingTimeInterval(
+                    WanderNearbyWidgetAvailability.ready.reloadInterval
+                )
             )
         } catch {
             return update(
                 now: now,
                 cachedSnapshot: cachedSnapshot,
                 availability: .locationTemporarilyUnavailable,
-                retryAfter: 5 * 60
+                retryAfter: WanderNearbyWidgetAvailability
+                    .locationTemporarilyUnavailable
+                    .reloadInterval
             )
         }
     }
@@ -178,6 +328,19 @@ private struct WanderNearbyTimelineLoader {
             availability: availability,
             reloadAfter: now.addingTimeInterval(retryAfter)
         )
+    }
+}
+
+private extension WanderNearbyWidgetAvailability {
+    var reloadInterval: TimeInterval {
+        switch self {
+        case .ready, .noPlaces:
+            15 * 60
+        case .locationTemporarilyUnavailable:
+            5 * 60
+        case .locationAuthorizationRequired:
+            60 * 60
+        }
     }
 }
 
@@ -425,7 +588,9 @@ private struct WanderNearbyWidgetView: View {
     }
 
     private var canShowPlaces: Bool {
-        entry.snapshot?.places.isEmpty == false && freshness?.isUsable == true
+        entry.availability != .locationAuthorizationRequired
+            && entry.snapshot?.places.isEmpty == false
+            && freshness?.isUsable == true
     }
 
     var body: some View {
@@ -449,24 +614,55 @@ private struct WanderNearbyWidgetView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .privacySensitive()
-
-                HStack {
-                    Spacer()
-                    Text(freshness?.minuteAgeLabel ?? "")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(WanderNearbyPalette.textMuted)
-                        .monospacedDigit()
-                }
-                .frame(maxWidth: .infinity)
             } else {
                 unavailableState
             }
+
+            refreshFooter
         }
-        .padding(14)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 12)
         .containerBackground(for: .widget) {
             WanderNearbyPalette.canvasWarm
         }
-        .widgetURL(WanderWidgetConstants.mapURL)
+        .widgetURL(WanderWidgetConstants.quickCaptureURL)
+    }
+
+    private var refreshFooter: some View {
+        HStack(alignment: .center) {
+            Button(intent: WanderRefreshNearbyPlacesIntent()) {
+                Label(
+                    entry.isRefreshing ? "Refreshing…" : "Refresh",
+                    systemImage: "arrow.clockwise"
+                )
+                .font(.caption2.weight(.bold))
+                .fontDesign(.rounded)
+                .foregroundStyle(WanderNearbyPalette.terracottaDark)
+            }
+            .buttonStyle(.plain)
+            .disabled(entry.isRefreshing)
+            .accessibilityLabel(
+                entry.isRefreshing
+                    ? "Refreshing nearby spots"
+                    : "Refresh nearby spots"
+            )
+
+            Spacer()
+            if let generatedAt = entry.snapshot?.generatedAt {
+                TimelineView(.everyMinute) { context in
+                    Text(
+                        WanderNearbyWidgetFreshness(
+                            generatedAt: generatedAt,
+                            now: context.date
+                        ).minuteAgeLabel
+                    )
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(WanderNearbyPalette.textMuted)
+                    .monospacedDigit()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var header: some View {
@@ -486,7 +682,7 @@ private struct WanderNearbyWidgetView: View {
 
             Spacer()
 
-            Link(destination: WanderWidgetConstants.mapURL) {
+            Link(destination: WanderWidgetConstants.quickCaptureURL) {
                 Label("See all", systemImage: "chevron.right")
                     .font(.caption.weight(.bold))
                     .fontDesign(.rounded)
@@ -501,7 +697,7 @@ private struct WanderNearbyWidgetView: View {
                     }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("See all nearby spots on the map")
+            .accessibilityLabel("See all nearby spots in I'm Here Now")
         }
     }
 
@@ -758,6 +954,29 @@ private enum WanderNearbyPreviewData {
     WanderNearbyEntry(
         date: WanderNearbyPreviewData.date,
         snapshot: WanderNearbyPreviewData.snapshot,
-        availability: .ready
+        availability: .ready,
+        isRefreshing: false
+    )
+}
+
+#Preview("Nearby Rich Visit — Refreshing", as: .systemLarge) {
+    WanderNearbyPlacesWidget()
+} timeline: {
+    WanderNearbyEntry(
+        date: WanderNearbyPreviewData.date,
+        snapshot: WanderNearbyPreviewData.snapshot,
+        availability: .ready,
+        isRefreshing: true
+    )
+}
+
+#Preview("Nearby Rich Visit — Recovering", as: .systemLarge) {
+    WanderNearbyPlacesWidget()
+} timeline: {
+    WanderNearbyEntry(
+        date: WanderNearbyPreviewData.date,
+        snapshot: nil,
+        availability: .locationTemporarilyUnavailable,
+        isRefreshing: true
     )
 }

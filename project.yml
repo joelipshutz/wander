@@ -163,7 +163,9 @@ targets:
     platform: iOS
     sources:
       - WanderWidgets
-      - WanderWidgetShared
+      - path: WanderWidgetShared
+        excludes:
+          - WanderNearbyWidgetSnapshot.swift
     info:
       path: WanderWidgets/Info.plist
       properties:
@@ -198,7 +200,9 @@ targets:
     platform: iOS
     sources:
       - WanderNearbyWidgets
-      - WanderWidgetShared
+      - path: WanderWidgetShared
+        excludes:
+          - WanderCalendarWidgetSnapshot.swift
     info:
       path: WanderNearbyWidgets/Info.plist
       properties:

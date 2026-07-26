@@ -24162,3 +24162,113 @@ Final publication — 2026-07-26 02:10 PDT:
 - Added the same superseding handoff to Linear REC-154, which remains
   `In Review`. No known code, integration, visual, build, or tracking blocker
   remains.
+
+## 2026-07-26 08:58 PDT — Codex — REC-154 interactive refresh and landing
+
+Agent: Codex
+Branch: `codex/rec-154-nearby-widget`
+Worktree: `/private/tmp/recme-rec154-nearby-widget`
+Linear: `REC-154` (`In Review` before resuming implementation)
+
+Goal: add a bottom-left interactive Refresh control to the large nearby widget
+with brief `Refreshing…` feedback, route the top-right `See all` action to the
+in-app I'm Here Now nearby-place list instead of the map, reduce horizontal dead
+space around the place rows, then fully review and squash-merge PR #229 to
+`main`.
+
+Starting state:
+
+- Fetched `origin`; the branch is based on exact current `origin/main`
+  `9d51b0ec3`. PR #229 was previously confirmed ready and mergeable.
+- The isolated worktree has no tracked changes. Four task-local untracked
+  DerivedData directories remain and will not be committed or removed.
+- No overlapping agent-log entry reports edits to the nearby widget files.
+  Expected edits: `WanderNearbyWidgets/WanderNearbyWidget.swift`, shared widget
+  routing/constants and tests as required, `docs/agent-log.md`, and generated
+  project files only if `project.yml` changes.
+- TestFlight build 98 has a completed release record on `main`; this request is
+  merge-only, so no build-number bump, archive, upload, or Slack release note is
+  authorized.
+
+Implementation and validation checkpoint — 2026-07-26 09:15 PDT:
+
+- Added an interactive App Intent refresh button in the widget footer. It
+  persists a short-lived refresh state in the shared App Group, requests a
+  fresh widget-authorized Core Location reading and MapKit nearby search,
+  displays `Refreshing…` while that work runs, then reloads the widget timeline.
+- Explicit user refreshes bypass the normal five-minute equivalent-content
+  write throttle, so the displayed minute timestamp advances even when the
+  nearby place set has not changed. Refresh state expires safely after 30
+  seconds and completed state after 60 seconds.
+- Changed both the `See all` link and the widget background route to
+  `wander://add/quick-capture`, which enters the existing I'm Here Now nearby
+  list. Individual place rows still route to their selected Rich Visit form.
+- Disabled WidgetKit's default content margins and applied a 12-point custom
+  horizontal inset so all five place rows use more of the large widget width.
+- Added normal and refreshing Xcode previews. Visual QA passed on iPhone 17 Pro
+  and iPhone 17e: both footer states fit, rows remain full-width, and the minute
+  timestamp stays bottom-right.
+- Focused widget/deep-link/snapshot tests passed 33/33 with zero failures:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-08-13--0700.xcresult`.
+- Full Wander suite passed 733/733 with zero failures:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-12-58--0700.xcresult`.
+- `git diff --check` passed. Existing simulator-only App Group/keychain,
+  formatter actor-isolation, signed-XCTest stripping, and traditional headermap
+  warnings remain unchanged. No TestFlight action was performed.
+
+Next: finish the generic Simulator build, commit/push this follow-up, rebase if
+`main` advanced, run the required complete PR review, then squash-merge PR #229
+and mark REC-154 done.
+
+Review and final validation checkpoint — 2026-07-26 09:34 PDT:
+
+- Corrected the earlier checkpoint's route shorthand: `See all` and the widget
+  background use the existing `recme://add/here-now` route, which opens the
+  in-app I'm Here Now nearby list. Individual place rows still use
+  `recme://add/nearby/<candidate-id>` for the prefilled Rich Visit form.
+- A three-lens code review found and fixed refresh-state, cache-lifetime,
+  location-privacy, and performance edge cases. Refresh now blocks only while a
+  request is actually running; request IDs prevent a stale completion from
+  replacing newer state; older search results cannot overwrite a newer
+  snapshot; and the minute label updates through `TimelineView(.everyMinute)`.
+- The Refresh footer remains available in empty/error states so the user can
+  recover manually. Widget snapshot and timeline callbacks now clear cached
+  names/coordinates as soon as location is no longer widget-authorized.
+  Snapshots are also removed after the 24-hour usable lifetime or after a
+  successful configuration lookup confirms the widget is no longer installed.
+  Transient WidgetCenter lookup errors preserve the valid cache.
+- App-active updates now ask WidgetKit to reload rather than running a second
+  host-app location/search pipeline. They skip reloads inside the existing
+  five-minute freshness interval, avoiding duplicate Core Location/MapKit work.
+  The main and nearby widget extensions also exclude each other's unrelated
+  shared snapshot source from their generated build phases.
+- Focused widget tests passed 26/26 on the installed iPhone 17e / iOS 26.5
+  simulator:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-32-53--0700.xcresult`.
+- The complete Wander suite passed 735/735 with zero failures or skips on the
+  same simulator:
+  `/private/tmp/DerivedData-rec154-refresh/Logs/Test/Test-Wander-2026.07.26_09-33-13--0700.xcresult`.
+  The repo-documented iPhone 16 Plus / iOS 18.6 destination was not installed
+  in the current Xcode runtime; an initial iPhone 17 Pro run also exited before
+  XCTest bootstrap, so validation continued on the available iPhone 17e.
+- Prior normal/refreshing visual QA on iPhone 17 Pro and iPhone 17e remains
+  applicable to the final ready-state layout. `git diff --check` passes. The
+  remaining source-spelling integration assertions are consistent with the
+  repository's existing project-contract tests; refresh persistence, expiry,
+  monotonic writes, bounded route history, and candidate conversion have direct
+  behavioral unit coverage.
+
+Next: record the final generic Simulator build result, publish the reviewed
+commit to PR #229, update Linear, squash-merge to `main`, and add the landing
+record. No TestFlight action is authorized or planned.
+
+Build completion — 2026-07-26 09:35 PDT:
+
+- The final generic iOS Simulator build passed for the app, both widget
+  extensions, and the Share Extension using
+  `/private/tmp/DerivedData-rec154-refresh-build`.
+- Final pre-publication checks: 26/26 focused tests, 735/735 complete tests,
+  universal Simulator build, generated project/source-scope verification, and
+  `git diff --check` all pass. Existing formatter actor-isolation, simulator
+  App Group/keychain, signed-XCTest stripping, and headermap warnings are
+  unchanged and non-blocking.

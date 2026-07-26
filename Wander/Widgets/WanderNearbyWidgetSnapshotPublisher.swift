@@ -4,106 +4,75 @@ import WidgetKit
 
 @MainActor
 enum WanderNearbyWidgetSnapshotPublisher {
-    static func refreshIfConfigured(
-        store: WanderStore,
-        now: Date = .now,
-        snapshotStore: WanderNearbyWidgetSnapshotStore = WanderNearbyWidgetSnapshotStore()
-    ) async {
-        guard await isNearbyWidgetConfigured() else { return }
-
+    static func refreshIfConfigured(now: Date = .now) async {
+        let snapshotStore = WanderNearbyWidgetSnapshotStore()
+        switch await nearbyWidgetConfigurationState() {
+        case .notConfigured:
+            _ = try? snapshotStore.clear()
+            return
+        case .unknown:
+            return
+        case .configured:
+            break
+        }
         let locationManager = CLLocationManager()
         let authorizationStatus = locationManager.authorizationStatus
-        guard authorizationStatus == .authorizedWhenInUse
-                || authorizationStatus == .authorizedAlways
-        else {
+        let isAppAuthorized = authorizationStatus == .authorizedWhenInUse
+            || authorizationStatus == .authorizedAlways
+        guard isAppAuthorized && locationManager.isAuthorizedForWidgetUpdates else {
+            _ = try? snapshotStore.clear()
+            WidgetCenter.shared.reloadTimelines(
+                ofKind: WanderWidgetConstants.nearbyPlacesKind
+            )
             return
         }
 
-        if let existing = snapshotStore.load(),
-           now.timeIntervalSince(existing.generatedAt)
-                < WanderNearbyWidgetSnapshotStore.freshnessWriteInterval
-        {
+        if let generatedAt = snapshotStore.load()?.generatedAt,
+           now.timeIntervalSince(generatedAt)
+            < WanderNearbyWidgetSnapshotStore.freshnessWriteInterval {
             return
         }
-
-        do {
-            let candidates = try await store.currentLocationCandidates()
-            let places = candidates
-                .prefix(WanderNearbyWidgetSnapshot.maximumVisiblePlaces)
-                .compactMap(WanderNearbyPlaceSnapshot.init(candidate:))
-            guard !places.isEmpty else { return }
-
-            let snapshot = WanderNearbyWidgetSnapshot(
-                generatedAt: now,
-                places: places
-            )
-            if try snapshotStore.save(snapshot) {
-                WidgetCenter.shared.reloadTimelines(
-                    ofKind: WanderWidgetConstants.nearbyPlacesKind
-                )
-            }
-        } catch {
-            #if DEBUG
-            WanderDebugLog.sync.debug(
-                "nearby widget app refresh skipped error=\(String(describing: error), privacy: .public)"
-            )
-            #endif
-        }
+        WidgetCenter.shared.reloadTimelines(
+            ofKind: WanderWidgetConstants.nearbyPlacesKind
+        )
     }
 
-    private static func isNearbyWidgetConfigured() async -> Bool {
+    private enum ConfigurationState {
+        case configured
+        case notConfigured
+        case unknown
+    }
+
+    private static func nearbyWidgetConfigurationState() async -> ConfigurationState {
         if #available(iOS 18.0, *) {
-            guard let configurations = try? await WidgetCenter.shared.currentConfigurations()
-            else {
-                return false
-            }
-            return configurations.contains {
-                $0.kind == WanderWidgetConstants.nearbyPlacesKind
+            do {
+                let configurations = try await WidgetCenter.shared.currentConfigurations()
+                return configurations.contains {
+                    $0.kind == WanderWidgetConstants.nearbyPlacesKind
+                } ? .configured : .notConfigured
+            } catch {
+                return .unknown
             }
         }
 
         return await withCheckedContinuation { continuation in
             WidgetCenter.shared.getCurrentConfigurations { result in
-                let isConfigured = (try? result.get())?.contains {
-                    $0.kind == WanderWidgetConstants.nearbyPlacesKind
-                } ?? false
-                continuation.resume(returning: isConfigured)
+                switch result {
+                case .success(let configurations):
+                    continuation.resume(
+                        returning: configurations.contains {
+                            $0.kind == WanderWidgetConstants.nearbyPlacesKind
+                        } ? .configured : .notConfigured
+                    )
+                case .failure:
+                    continuation.resume(returning: .unknown)
+                }
             }
         }
     }
 }
 
 extension WanderNearbyPlaceSnapshot {
-    init?(candidate: PlaceCandidate) {
-        guard let latitude = candidate.latitude,
-              let longitude = candidate.longitude
-        else {
-            return nil
-        }
-
-        self.init(
-            id: candidate.id,
-            name: candidate.name,
-            category: candidate.primaryCategory,
-            categoryLabel: WanderPlaceCategory.broadCategory(for: candidate.primaryCategory),
-            categoryEmoji: candidate.categoryEmoji,
-            rawProviderType: candidate.rawProviderType,
-            address: candidate.address,
-            locality: candidate.locality,
-            region: candidate.region,
-            country: candidate.country,
-            latitude: latitude,
-            longitude: longitude,
-            sourceProvider: candidate.sourceProvider,
-            sourceProviderPlaceID: candidate.sourceProviderPlaceID ?? candidate.id,
-            distanceMeters: candidate.distanceMeters,
-            websiteURLString: candidate.websiteURLString,
-            phoneNumber: candidate.phoneNumber,
-            timeZoneIdentifier: candidate.timeZoneIdentifier,
-            confidence: candidate.confidence
-        )
-    }
-
     var placeCandidate: PlaceCandidate {
         PlaceCandidate(
             id: id,

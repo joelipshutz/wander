@@ -4,6 +4,7 @@ enum WanderWidgetConstants {
     static let appGroupIdentifier = "group.com.grayline.wander.shared"
     static let calendarSnapshotFilename = "activity-calendar-snapshot.json"
     static let nearbySnapshotFilename = "nearby-place-snapshot.json"
+    static let nearbyRefreshStateFilename = "nearby-place-refresh-state.json"
 
     static let quickCaptureKind = "QuickCaptureWidget"
     static let quickSearchKind = "QuickSearchWidget"
