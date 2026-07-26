@@ -22836,6 +22836,114 @@ Landing completion — 2026-07-25 22:03 PDT:
 Final outcome: the requested Been-only calendar behavior and completed REC-142
 widget work are on `main`; no known landing blocker remains.
 
+## 2026-07-25 23:00 PDT - Codex - REC-97 Universal Share Extension
+
+Agent: Codex
+Branch: `codex/rec-97-share-extension`
+Worktree: `/private/tmp/recme-rec97-share-extension`
+Linear: `REC-97` (`In Progress`, connector read retry pending)
+
+Goal: implement the first testable universal iOS Share Extension for rec.me so
+Google Maps, Apple Maps, Instagram, TikTok, and other apps can send supported
+URLs, text, and files into the existing place-import inbox through one
+app-independent capture surface.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from current
+  `origin/main` at `e7b12a97f`.
+- The primary checkout remains untouched on `codex/rec-142-widgets` with an
+  unrelated untracked `.pnpm-store/`; all other listed worktrees are unrelated.
+- REC-142 has landed, so its prior `project.yml`, generated project, entitlement,
+  and `docs/agent-log.md` work is now part of this branch's base rather than an
+  overlapping active edit.
+- Existing REC-97 code already provides the device-local import parser, store,
+  Profile source UI, Google Maps shared-list importer, social metadata helpers,
+  and review flow. This slice will add one Share Extension target, a bounded
+  App Group envelope/inbox contract shared with the app, host-app draining into
+  the existing import store, source routing, focused tests, signing/setup docs,
+  and generated project changes.
+- Expected high-conflict files are `project.yml`,
+  `Wander.xcodeproj/project.pbxproj`, `Wander/Resources/Wander.entitlements`,
+  and this append-only log. New sources are expected under a shared import
+  module and a dedicated extension directory. No Supabase migration, hosted
+  mutation, build-number bump, TestFlight release, or Slack announcement is
+  authorized by this implementation request.
+
+Implementation and validation checkpoint — 2026-07-25 23:31 PDT:
+
+- Reopened existing Linear issue REC-97 from Done to In Progress and added the
+  implementation-scope comment; no duplicate issue was created.
+- Added one app-independent `WanderShareExtension` target
+  (`com.grayline.wander.share`) that accepts up to 20 URLs, text items, or
+  supported files from any iOS host share sheet. Provider detection recognizes
+  Google Maps, Instagram, TikTok, and Google Maps Takeout-style filenames;
+  Apple Maps, Yelp, Resy, OpenTable, Safari, Notes, Messages, and other sources
+  intentionally use the generic link/text path rather than separate targets.
+- Added the versioned App Group inbox contract under
+  `WanderImportShared/`. Capture is bounded to 256 KB text, 10 MB per file,
+  25 MB total, and CSV/JSON/TXT/Markdown/RTF; it uses protected atomic writes,
+  SHA-256 deduplication, backup exclusion, seven-day expiry, corrupt-envelope
+  quarantine, safe attachment resolution, and delivery-ID traversal
+  protection.
+- The containing app drains the inbox on launch/foreground, persists a
+  delivery ID per import batch for idempotency, routes generic URLs through the
+  existing link resolver, and offers a Review action that opens the existing
+  Import Review surface. The extension never authenticates, calls social APIs,
+  resolves places, or uploads data.
+- Regenerated `Wander.xcodeproj` from `project.yml`. The first simulator install
+  correctly caught missing generated `NSExtension` metadata; moved the complete
+  activation dictionary into the XcodeGen source of truth, regenerated, and
+  confirmed the app installs.
+- Validation:
+  - Generic iOS Simulator build succeeded and Apple embedded-binary validation
+    passed for both `WanderWidgets.appex` and `WanderShareExtension.appex`.
+  - Focused share/import/embedding suite passed 8/8 after correcting one
+    attachment base-path defect found by the test.
+  - Final full simulator suite passed 696/696 on iPhone 17 Pro Max, iOS 26.5.
+  - An ad-hoc signed simulator build installed and launched; `pluginkit`
+    registered `com.grayline.wander.share (0.1)`.
+  - `xcodegen generate`, plist parsing, and `git diff --check` passed.
+- Environment gap: this Mac's simulator signing strips restricted App Group
+  entitlements from its ad-hoc signature, so automated validation covered the
+  shared-container behavior through an injected filesystem root rather than a
+  live simulator App Group. Physical-device acceptance requires registering
+  `com.grayline.wander.share`, enabling
+  `group.com.grayline.wander.shared`, and refreshing the host/widget/share
+  development profiles as documented in `docs/setup.md`.
+- No Supabase changes were made. Build 97 remains unchanged; no archive,
+  TestFlight upload, group attachment, or Slack announcement was performed.
+- Next: commit and push the implementation, open a ready PR to `main`, update
+  REC-97 to In Review with validation and the physical-device setup gap, then
+  open this worktree's project in Xcode for branch handoff.
+
+Handoff completion — 2026-07-25 23:34 PDT:
+
+- Committed the implementation as `56cc83248`, pushed
+  `codex/rec-97-share-extension`, and opened ready PR #226:
+  `https://github.com/joelipshutz/wander/pull/226`.
+- Linked PR #226 to REC-97, moved the issue to `In Review`, and posted the
+  validation plus physical-device signing prerequisites.
+- Opened `/private/tmp/recme-rec97-share-extension/Wander.xcodeproj` as its own
+  Xcode window. Xcode's Branch Chooser shows
+  `codex/rec-97-share-extension`; the active scheme is `Wander`.
+- Ready for tester acceptance after Apple Developer configuration for
+  `com.grayline.wander.share` and the shared App Group. Exact Safari, Notes,
+  Files, Google Maps, Apple Maps, Instagram, TikTok, duplicate, unsupported,
+  and Import Review checks are in `docs/setup.md`.
+- No known code or test blocker remains. The only outstanding external
+  prerequisite is provisioned App Group signing for live cross-process
+  delivery on a physical iPhone.
+- After PR creation, fetched newer `origin/main` at `e7b7122a5` and merged it
+  into the branch as `b1b98a65f`. The only overlap was this append-only log;
+  both REC-97 and REC-150 records were preserved. Upstream changes were
+  documentation-only, so the already-green 8/8 focused and 696/696 full test
+  results still cover the unchanged REC-97 application source.
+- `main` advanced again when PR #221 landed as `9feb4c795`; merged it as
+  `43901a698` and preserved the REC-97/REC-146/REC-150 log entries. Because that
+  upstream merge included Profile source changes, reran the complete iPhone 17
+  Pro Max, iOS 26.5 suite: 700/700 passed. Result bundle:
+  `/private/tmp/DerivedData-rec97-share-focused/Logs/Test/Test-Wander-2026.07.25_23-37-03--0700.xcresult`.
 REC-132 latest-main checkpoint — 2026-07-25 22:09 PDT:
 
 - Re-fetched after validation and found `origin/main` had advanced four commits
@@ -23336,6 +23444,74 @@ Landing completion:
 Final outcome: the requested Profile map totals and per-filter sharing are on
 `main`; no known REC-146 landing blocker remains.
 
+## 2026-07-26 01:34 PDT - Codex - REC-97 Share Extension Landing
+
+Agent: Codex using `recme-pr-review-merge-release` and `review`
+Branch: `codex/rec-97-share-extension`
+Worktree: `/private/tmp/recme-rec97-share-extension`
+Linear: `REC-97` (`In Review`)
+PR: `#226`
+
+Goal: review the completed universal Share Extension against exact latest
+`main`, squash-merge it when the landing gate is clean, and stop without a new
+TestFlight release.
+
+Starting status and coordination:
+
+- Fetched `origin`; the isolated feature worktree is clean at pushed head
+  `51db8d9d1`. The primary checkout remains on unrelated
+  `codex/rec-142-widgets` work with an untracked `.pnpm-store/`, which remains
+  untouched.
+- Build 98 is the latest completed TestFlight release and its release record is
+  complete. This merge-only request does not authorize build 99, an archive or
+  upload, beta-group changes, or tester Slack notes.
+- PR #226 is ready and has no hold label, human-review requirement, or failing
+  required check, but GitHub currently reports a conflict because five commits
+  landed on `main` after the last reconciliation. The overlap includes
+  generated project/build metadata, `WanderRootView.swift`, the widget
+  integration contract, `project.yml`, and this append-only log.
+- Expected landing files remain the existing universal Share Extension, shared
+  App Group inbox/drainer, import-flow wiring, generated project membership,
+  tests, setup docs, and this log. Any latest-main reconciliation will preserve
+  released build 98 and the intervening REC-143/auth changes.
+- Next: merge exact `origin/main`, resolve only genuine overlaps, regenerate the
+  Xcode project, review the full resulting diff and Greptile state, rerun the
+  focused and complete simulator validation required by the changed base, then
+  push and recheck GitHub mergeability before the squash merge.
+
+Latest-main review and validation — 2026-07-26 01:43 PDT:
+
+- Merged exact `origin/main` at `061edc336`, preserving REC-143 check-ins, the
+  logged-out session-boundary fix, released build 98, and all append-only work
+  records. The only manual source conflict was `WanderRootView.swift`; the
+  resolution keeps Share Extension inbox draining and its Review alert while
+  requiring the newly landed validated-session gate before any drain or
+  signed-in maintenance.
+- Regenerated the Xcode project. `CURRENT_PROJECT_VERSION` remains 98 for the
+  host, widget, and share targets; there is no build-99 or signing churn.
+- Completed the full gstack checklist and complete diff review. Scope is clean:
+  one universal Share Extension, shared bounded inbox/drainer, import-flow
+  wiring, project membership, tests, and setup docs. No SQL/backend migration,
+  LLM trust boundary, shell, enum, auth, concurrency, unsafe path, persistence,
+  extension-embedding, accessibility, performance, or documentation blocker
+  remains. No auto-fix or human decision was required.
+- GitHub has zero line-level and zero top-level PR comments, so there are no
+  Greptile or human review findings to resolve. PR #226 has no draft, hold, or
+  do-not-merge signal and no failing required check.
+- Focused Share Extension/source/inbox/drainer validation passed 7/7. The
+  complete iPhone 17 Pro Max / iOS 26.5 suite then passed 721/721, including
+  all 14 widget/project integration tests and embedded-binary validation for
+  both extensions:
+  `/private/tmp/DerivedData-rec97-landing/Logs/Test/Test-Wander-2026.07.26_01-41-58--0700.xcresult`.
+- Existing Swift isolation, simulator App Group/keychain, App Intents, and
+  traditional headermap warnings remain unchanged. The physical-device setup
+  prerequisite is still explicit App ID/App Group provisioning for
+  `com.grayline.wander.share`; it is documented and does not block merging the
+  tested implementation.
+- Next: commit and push this exact latest-main merge candidate, re-fetch and
+  confirm PR #226 is clean and mergeable at its new head, post the validation
+  record, squash-merge to `main`, and mark REC-97 Done. No TestFlight action is
+  authorized or planned.
 REC-132 final release-hardening checkpoint — 2026-07-26 00:38 PDT:
 
 - Completed the adversarial security, maintainability, and test review of the

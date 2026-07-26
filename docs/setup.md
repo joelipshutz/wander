@@ -82,18 +82,37 @@ checked in as non-secret project defaults for the Wander alpha project.
 Do not commit `Wander/Config/LocalAuth.xcconfig`; it is intentionally ignored and
 only for local overrides.
 
-## Widget Extension And Signing
+## Widget And Share Extensions
 
 `WanderWidgets` is one WidgetKit extension with bundle id
 `com.grayline.wander.widgets`. It hosts all three widget configurations: Quick
 Capture, Search, and Activity Calendar. The app and extension share App Group
 `group.com.grayline.wander.shared`.
 
-Only the calendar crosses the App Group boundary. The host app writes a redacted,
-aggregate-only JSON snapshot containing calendar layout and daily Been counts.
-The backward-compatible schema currently retains zero-valued Wanna fields; do
-not repopulate them. Do not add place names, notes, precise locations, user
-identities, or raw place records to that payload. The file lives under the App Group's
+`WanderShareExtension` is one app-independent Share Extension with bundle id
+`com.grayline.wander.share`. It appears in any host app that supplies a supported
+URL, text selection, or file through the iOS share sheet. The extension detects
+Google Maps, Instagram, and TikTok from the shared URL; Apple Maps, Yelp, Resy,
+OpenTable, Safari, Messages, Notes, and other sources enter through the generic
+text/link route. There are not separate extension targets for each provider.
+
+The Share Extension writes a bounded, versioned envelope to the same App Group
+and exits. It does not authenticate, call social APIs, resolve places, or upload
+content. The containing app drains the envelope idempotently on launch/foreground,
+then the existing Import Review flow performs matching. Text is limited to
+256 KB, individual files to 10 MB, the complete share to 25 MB, and each delivery
+to 20 attachments. Supported files are CSV, JSON, TXT, Markdown, and RTF.
+Pending envelopes expire after seven days and App Group import files are excluded
+from device backup.
+
+The App Group contains two intentionally narrow payloads. For widgets, the host
+app writes a redacted, aggregate-only JSON snapshot containing calendar layout
+and daily Been counts. The backward-compatible schema currently retains
+zero-valued Wanna fields; do not repopulate them. Do not add place names, notes,
+precise locations, user identities, or raw place records to that widget
+payload. For sharing, the extension writes only the user-selected link, text,
+or supported file into its bounded import inbox. Keep both privacy boundaries
+intact when changing either payload. The widget file lives under the App Group's
 `Library/Caches` directory, is excluded from backup after every atomic write,
 and is cleared immediately when the authenticated identity becomes unavailable
 or changes.
@@ -125,30 +144,59 @@ hides the problem and breaks live calendar updates.
    configure it, and assign `group.com.grayline.wander.shared`.
 4. Register the explicit iOS App ID `com.grayline.wander.widgets` if it does not
    exist. Enable **App Groups** on it and assign the same group.
-5. Changing either App ID invalidates older provisioning profiles. With
+5. Register the explicit iOS App ID `com.grayline.wander.share` if it does not
+   exist. Enable **App Groups** on it and assign the same group.
+6. Changing any of these App IDs invalidates older provisioning profiles. With
    automatic signing, return to Xcode and let it request replacements. With
    manual signing, regenerate and download an iOS App Development profile for
    each App ID, including the connected device and the developer's Apple
    Development certificate.
-6. In the **Wander** target's **Signing & Capabilities** pane, select team
+7. In the **Wander** target's **Signing & Capabilities** pane, select team
    `Y7TVK75RZ8`, keep **Automatically manage signing** enabled, and verify that
    `group.com.grayline.wander.shared` is checked under App Groups.
-7. Repeat the same team, automatic-signing, and App Group checks for the
+8. Repeat the same team, automatic-signing, and App Group checks for the
    **WanderWidgets** target. Its bundle identifier must remain
    `com.grayline.wander.widgets`.
-8. Re-select the connected iPhone and build. Automatic signing should register
-   the device and create/download both development profiles. If Xcode continues
+9. Repeat those checks for **WanderShareExtension**. Its bundle identifier must
+   remain `com.grayline.wander.share`.
+10. Re-select the connected iPhone and build. Automatic signing should register
+   the device and create/download all three development profiles. If Xcode continues
    to reuse the old host profile, use the Accounts pane to download profiles or
-   quit Xcode and move only the stale host/widget profile to a backup folder
+   quit Xcode and move only the stale host/widget/share profile to a backup folder
    from `~/Library/Developer/Xcode/UserData/Provisioning Profiles/` (current
    Xcode) or `~/Library/MobileDevice/Provisioning Profiles/` (older Xcode),
    then reopen Xcode and build again.
-9. On the iPhone, trust the Mac when prompted and enable **Settings → Privacy &
+11. On the iPhone, trust the Mac when prompted and enable **Settings → Privacy &
    Security → Developer Mode** if Xcode requests it.
 
 For a code-only test while portal access is being fixed, select an iPhone
-Simulator instead of a physical iPhone. The app and all three widgets can be
-built and exercised in Simulator without creating device provisioning profiles.
+Simulator instead of a physical iPhone. The app, all three widgets, and the
+Share Extension can be built and exercised in Simulator without creating device
+provisioning profiles.
+
+### Testing the Share Extension
+
+1. Build and run the **Wander** scheme once so rec.me and its embedded Share
+   Extension are installed.
+2. In Safari or Notes, share a public place URL or selected text. On a physical
+   device, also test the native share sheets in Google Maps, Apple Maps,
+   Instagram, and TikTok.
+3. If **Save to rec.me** is not visible, scroll to **More** in the share sheet,
+   enable it under **Edit**, and optionally favorite it.
+4. Select **Save to rec.me**, confirm the extension recognizes the content, and
+   tap **Add to rec.me**.
+5. Open rec.me. Its foreground drain should show **Shared places added**. Tap
+   **Review** and verify the item appears in Import Review with the correct
+   source badge.
+6. Repeat the same URL once to verify duplicate delivery does not create another
+   batch. Test a `Saved Places.csv` or JSON file from Files and verify private,
+   deleted, or unsupported social links enter the explicit needs-help state
+   instead of fabricating a place.
+
+The simulator is sufficient for Safari, Notes, Files, App Group delivery, and
+Import Review. Real Google Maps, Instagram, and TikTok host behavior must be
+accepted on a physical iPhone because those apps may provide different
+`NSItemProvider` payloads than their websites.
 
 ## Test
 

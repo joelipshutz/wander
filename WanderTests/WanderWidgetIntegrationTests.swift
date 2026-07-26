@@ -561,7 +561,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"98\""))
         XCTAssertEqual(
             project.components(separatedBy: "CFBundleVersion: $(CURRENT_PROJECT_VERSION)").count - 1,
-            2
+            3
         )
     }
 
