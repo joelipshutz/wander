@@ -24829,3 +24829,10 @@ REC-122 build-99-main reconciliation — 2026-07-26:
   review PR with the previously recorded focused, full-suite, and dual-device
   visual validation. Build 99 was released independently from `main`; this
   branch did not trigger or modify that TestFlight release.
+
+REC-122 copy follow-up — 2026-07-26:
+
+- At Joe's direction, shortened the takeover helper from
+  `One Check-in or Wanna keeps it going.` to `Keep it up 🔥`. The counter,
+  seven-day card, ticket animation, confetti, and dismissal behavior are
+  unchanged.

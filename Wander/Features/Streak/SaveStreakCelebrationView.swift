@@ -85,7 +85,7 @@ struct SaveStreakCelebrationView: View {
                     .offset(y: ticketLanded ? 0 : 10)
                     .animation(copyAnimation, value: ticketLanded)
 
-                    Text("One Check-in or Wanna keeps it going.")
+                    Text("Keep it up 🔥")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
                         .multilineTextAlignment(.center)
