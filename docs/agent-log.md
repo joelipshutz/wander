@@ -25216,3 +25216,32 @@ REC-152 reconciled-head validation — 2026-07-26 14:17 PDT:
   traditional-headermap warnings were emitted.
 - Review gate is complete with no remaining findings. PR #245 is ready to push
   and squash-merge before exact-main build-100 release validation.
+
+## 2026-07-26 14:23 PDT - Codex - TestFlight Build 101 Profile Activity
+
+Agent: Codex
+Branch: `codex/testflight-build-101-profile-activity`
+Worktree: `/private/tmp/recme-testflight-build-101`
+Linear: `REC-152` (`In Review`)
+
+Goal: ship Joe's explicit TestFlight request with the merged REC-152 Profile
+activity change from exact latest `main`.
+
+Release correction and start:
+
+- Squash-merged ready PR #245 into `main` as
+  `0c8b37b1929186be7ba6ce0ab0b3f9719b5f2613` after the recorded pre-landing
+  review and reconciled-head 3/3 focused regression gate.
+- An overlapping build-100 archive/helper process appeared after the merge.
+  Direct archive inspection proved its app binary was created at 14:17:03 PDT,
+  before PR #245 merged at 14:18:51 PDT. Therefore build 100 is the earlier
+  REC-122/REC-159 release and cannot satisfy the Profile release request.
+- Left the already-running build-100 helper untouched so the older explicit
+  release can finish. Created this clean isolated worktree from exact current
+  `origin/main` and incremented `CURRENT_PROJECT_VERSION` once from 100 to 101.
+  Marketing version remains 0.1.
+- Build 101 contains REC-152 in addition to the current `main` contents. Next:
+  regenerate/review and land release metadata, run exact-main full validation,
+  archive/upload with build-number management disabled, attach to `rec.me
+  Alpha`, post the tester-facing Slack note, and close REC-152 only when the
+  build is available.
