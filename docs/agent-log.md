@@ -27802,3 +27802,27 @@ approved and available through the public TestFlight link.
   stay tracked in Linear. Next: commit the build-number test repair and this
   handoff, push/update PR #267, move both issues to `In Review`, and open this
   isolated worktree in Xcode for branch-specific phone testing.
+
+### 2026-07-27 12:44 PDT - REC-165/166 review handoff
+
+- Pushed implementation head `3714761` to
+  `origin/codex/rec-165-typography-phase-2` and updated PR #267 in place:
+  https://github.com/joelipshutz/wander/pull/267
+- PR #267 is now ready for review with the regression root cause, Direction C
+  boundary, exact latest-main validation, and two-size visual QA summarized in
+  its title and description.
+- Linear REC-165 and REC-166 both moved to `In Review`, link PR #267, and have
+  comments recording the relevant commits, tests, protected surfaces, and
+  visual verification. They remain open until review/merge rather than being
+  marked Done prematurely.
+- Opened
+  `/private/tmp/recme-rec165-typography-phase2/Wander.xcodeproj` as its own Xcode
+  project. Xcode reports that exact workspace document path and its visible
+  Branch Chooser help text is `codex/rec-165-typography-phase-2`.
+- Also removed only the completed build-105 generated cache
+  `/private/tmp/DerivedData-recme-build105` when Xcode expanded the active
+  latest-main cache and left insufficient space for this final log write. The
+  signed build-105 archive, active REC-165/166 result bundles, and all source
+  worktrees remain intact.
+- No merge, build-number bump, archive, TestFlight upload, hosted backend/data
+  mutation, or tester-facing Slack announcement was performed for this handoff.
