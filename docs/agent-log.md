@@ -27511,3 +27511,22 @@ Validation checkpoint, 2026-07-27 10:55 PDT:
 
 Final status: rec.me 0.1 (105), including the Google sign-in presentation fix,
 is approved and available through the public TestFlight link.
+
+### 2026-07-27 12:06 PDT - REC-162 release reconciliation
+
+- Joe explicitly requested a light-triage TestFlight push for the Add-flow
+  refinement. Latest completed release is build 105; no unfinished release was
+  found, so the next release number is 106.
+- Light review found no blocking Add/import, navigation, persistence, asset,
+  auth-integration, or project-configuration issue. PR #259 had drifted behind
+  `main`; merging `origin/main` produced only an append-only conflict in this
+  coordination log. Both REC-162 and build-105/REC-164 histories were retained,
+  with all app and project changes from main accepted unchanged.
+- Post-reconciliation focused integration validation passed 141/141 tests with
+  zero failures: `PlaceImportStoreTests`, `GoogleMapsSharedListImporterTests`,
+  `NavigationContractTests`, `AuthSessionTests`, and `BuildConfigurationTests`.
+  Result bundle:
+  `/private/tmp/DerivedData-rec162-release-gate/Logs/Test/Test-Wander-2026.07.27_12-00-09--0700.xcresult`.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. Next: push the reconciled PR, squash-merge it, then prepare and
+  ship exact latest `main` as build 106.
