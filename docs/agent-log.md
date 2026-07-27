@@ -27068,3 +27068,31 @@ Coordination:
 - No overlapping REC-165 worktree was present. Several other agent worktrees
   exist, so this exploration is isolated from their code and project files.
 - Mission Control task creation failed because `localhost:4000` is offline.
+
+### 2026-07-27 10:34 PDT - REC-165 exploration checkpoint
+
+- Built and installed exact latest-main app state on the booted iPhone 16 Plus
+  simulator with deterministic demo fixtures, then captured Lists, Discover,
+  and owner Profile. The baseline includes the current persistent search,
+  tickets, images, list mosaics, profile data, and build-104 UI.
+- Generated three typography-only directions from that same data-faithful
+  baseline:
+  - A, Proper nouns only: list names and profile display name use system serif.
+  - B, Editorial spine (recommended): A plus major content-section headings.
+  - C, Editorial masthead: B plus eligible custom content-screen titles.
+- Kept navigation, tabs, search, buttons, filters, metadata, body copy, counts,
+  and timestamps in system sans. Ticket geometry/colors/punch-outs/photos,
+  streak UI, and check-in ratings are unchanged.
+- The external design generator was not used because its screenshot upload
+  would require explicit approval. Mocks were rendered locally with Apple's
+  system serif and the exact latest-main simulator captures instead.
+- Saved the baseline, A/B/C PNGs, self-contained comparison board, direction
+  notes, migration map, and local renderer under
+  `/Users/joelipshutz/.gstack/projects/Wandernametbd/designs/rec165-typography-phase2-20260727/`.
+- Removed only disposable REC-165 DerivedData after installing/capturing the
+  simulator build to preserve local disk space. No archive or user data was
+  removed.
+
+Current status: exploration is ready for Joe's A/B/C decision. No production
+SwiftUI has been changed. REC-165 remains `In Progress`; implementation should
+start only after a direction is selected.
