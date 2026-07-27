@@ -27055,3 +27055,51 @@ Starting state:
 - Auth/session work requires the engineering-review gate before implementation.
   Expected files are the current Clerk auth adapter, app entry/auth gate
   presentation, focused auth/onboarding tests, and this coordination log.
+
+### Engineering review
+
+Confirmed the presentation race against the Clerk SDK source bundled with
+build 104. Clerk emits `sessionChanged` for nil-to-session, session-to-nil,
+different-session, and same-session updates. `ClerkAuthService` converts any
+event without an active session into `.signedOut`, while
+`AuthSessionStore.synchronizeState` currently dismisses native auth for every
+non-signed-in state. A transient pending/null state during Google handoff can
+therefore close Clerk's sheet before authentication completes.
+
+Scope challenge and decision:
+
+- Keep the existing `ClerkAuthService`, SwiftUI sheet, and root coordinator.
+- Add an explicit native-auth-attempt lifetime to `AuthSessionStore`; do not
+  infer sheet lifetime from authentication state alone.
+- Treat signed-in, unavailable, explicit sign-out, and user dismissal as
+  terminal. Keep the sheet presented for transient `.loading`/`.signedOut`
+  callbacks only while an explicit attempt is active.
+- Keep carousel screenshot replacement outside REC-164.
+
+Data flow after the fix:
+
+```text
+Clerk AuthView
+  -> Clerk auth event (including transient sessionChanged)
+  -> ClerkAuthService state
+  -> AuthSessionStore
+       active attempt + loading/signedOut -> keep sheet
+       signedIn/unavailable              -> close sheet
+       user dismiss                      -> end attempt, then refresh
+  -> signed-in coordinator / onboarding
+```
+
+Failure-mode coverage:
+
+- Transient loading or signed-out event dismisses Google auth: regression test
+  keeps presentation active.
+- Successful sign-in leaves Clerk visible: success test requires dismissal.
+- User cancellation is undone by a later provider event: dismissal test ends
+  the attempt before refresh/events.
+- Real provider logout leaves stale auth UI: existing logout test continues to
+  require presentation to close.
+
+No schema, API, data migration, or visual-design change is required. This is a
+small state-lifecycle repair, so the broader product-design prerequisite is not
+applicable. Implementation will be sequential across the auth store, app-entry
+sheet callback, and focused tests.
