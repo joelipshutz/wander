@@ -27144,3 +27144,41 @@ sheet callback, and focused tests.
 - This handoff does not merge or release a TestFlight build. Next step is PR
   review, then a simulator/account validation of the remembered-Google path
   before packaging the next explicit TestFlight release.
+## 2026-07-27 10:47 PDT - Codex - TestFlight Build 105
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-105`
+Worktree: `/private/tmp/recme-build105-main`
+Linear: `REC-164` (`In Review`)
+PR: `#266` (squash-merged as `035daff`)
+
+Goal: ship exact latest `origin/main` containing the Clerk Google sign-in
+presentation repair as rec.me 0.1 (105). Scope since completed build 104 is PR
+#266 only: keep the Clerk auth sheet open across transient loading/signed-out
+callbacks after an explicit sign-out, while still closing on success, user
+dismissal, unavailable auth, explicit sign-out, or account deletion.
+
+Pre-release gate:
+
+- PR #266 was current with main, mergeable, narrowly scoped, and had no
+  blocking auth lifecycle, SwiftUI presentation, persistence, backend,
+  signing/project, or scope findings.
+- Exact feature head validation passed 91/91 AuthSession plus navigation tests
+  and 5/5 onboarding state tests with zero failures.
+- Release starts from clean exact `origin/main` commit `035daff`; unrelated
+  root-checkout and active worktree changes remain untouched.
+
+Release preparation: increment build 104 -> 105, regenerate the Xcode project,
+validate, archive exact release main, upload, attach to `rec.me Alpha`, update
+Linear, and post the required tester-facing Slack note.
+
+Validation checkpoint, 2026-07-27 10:55 PDT:
+
+- `CURRENT_PROJECT_VERSION` is 105 in `project.yml` and the regenerated Xcode
+  project; app and extension targets continue to inherit the shared value.
+- Exact release-branch validation passed 110/110 tests with zero failures:
+  `AuthSessionTests`, `OnboardingStateTests`, `NavigationContractTests`, and
+  `BuildConfigurationTests`. Result bundle:
+  `/private/tmp/DerivedData-recme-build105/Logs/Test/Test-Wander-2026.07.27_10-47-58--0700.xcresult`.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. No new warning or failure was introduced by build 105.
