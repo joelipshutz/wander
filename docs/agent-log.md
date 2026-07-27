@@ -27031,3 +27031,40 @@ to `rec.me Alpha`, and post the required tester note.
 
 Final status: rec.me 0.1 (104), including REC-132 onboarding, is approved and
 available through the public TestFlight link.
+
+## 2026-07-27 10:09 PDT - Codex - REC-165 typography phase-two exploration
+
+Agent: Codex using `design-shotgun` and Linear
+Branch: `codex/rec-165-typography-phase-2`
+Worktree: `/private/tmp/recme-rec165-typography-phase2`
+Linear: `REC-165` (`In Progress`)
+Starting commit: exact latest `origin/main` `a1fe52242`
+
+Goal: mock three Apple-native editorial typography directions across the
+current Lists, Discover, and owner Profile surfaces before any wider
+implementation.
+
+Locked boundaries:
+
+- Preserve all current production data, hierarchy, actions, navigation, layout,
+  colors, and media in the mocks.
+- Native navigation, search, controls, filters, tabs, body, metadata, and
+  timestamps remain system sans.
+- Do not change ticket geometry or typography, the streak screen, or ratings
+  inside individual check-ins. The approved serif treatment for the three
+  overall place-profile ratings remains intact.
+- Use the approved Direction A ticket system and REC-161 native/editorial split
+  as prior taste context. This is a new phase-two exploration, not a reopening
+  of those decisions.
+
+Expected outputs: current-state captures, three cross-screen visual directions,
+a comparison board, recommendation, and a token/migration map after Joe locks a
+direction. Design artifacts will live in the gstack user-artifact directory;
+only coordination/decision records belong in the repo.
+
+Coordination:
+
+- Root checkout has Joe's existing `tmp/` content and remains untouched.
+- No overlapping REC-165 worktree was present. Several other agent worktrees
+  exist, so this exploration is isolated from their code and project files.
+- Mission Control task creation failed because `localhost:4000` is offline.
