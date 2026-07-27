@@ -27512,6 +27512,51 @@ Validation checkpoint, 2026-07-27 10:55 PDT:
 Final status: rec.me 0.1 (105), including the Google sign-in presentation fix,
 is approved and available through the public TestFlight link.
 
+## 2026-07-27 12:08 PDT - Codex - TestFlight Build 106
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-106`
+Worktree: `/private/tmp/recme-build106-main`
+Linear: `REC-162` (`In Review`; connector unavailable in this session)
+PR: `#259` (squash-merged as `f0bbbbb`)
+
+Goal: ship Joe's explicitly requested light-triage TestFlight release from
+exact latest `origin/main`, containing the REC-162 Add-flow refinement, as
+rec.me 0.1 (106).
+
+Pre-release gate:
+
+- Latest completed release is build 105; no unfinished explicit release was
+  found. Scope since build 105 is PR #259 only.
+- PR #259 was reconciled with latest main, lightly reviewed with no blocking
+  Add/import, navigation, persistence, asset, auth-integration, or project
+  finding, and squash-merged as `f0bbbbb`.
+- Post-reconciliation focused integration validation passed 141/141 tests with
+  zero failures. Result bundle:
+  `/private/tmp/DerivedData-rec162-release-gate/Logs/Test/Test-Wander-2026.07.27_12-00-09--0700.xcresult`.
+- Release starts from clean exact `origin/main` commit `f0bbbbb`. The root
+  checkout and other active worktrees remain untouched.
+- Linear tools are unavailable in this Codex session, so REC-162 cannot be
+  updated directly; this log and the GitHub/TestFlight receipts remain the
+  durable release record.
+
+Release preparation: increment build 105 -> 106, regenerate the Xcode project,
+validate the build contract, commit and merge the build-number PR, archive
+exact release main, upload with build-number management disabled, attach to
+`rec.me Alpha`, and post the required tester-facing Slack note if the Slack
+connector is available.
+
+Validation checkpoint, 2026-07-27 12:15 PDT:
+
+- `CURRENT_PROJECT_VERSION` is 106 in `project.yml` and the regenerated Xcode
+  project; app and extension targets continue to inherit the shared value.
+- Exact release-branch validation passed 120/120 tests with zero failures:
+  `BuildConfigurationTests`, `NavigationContractTests`, and
+  `PlaceImportStoreTests`. Result bundle:
+  `/private/tmp/DerivedData-recme-build106/Logs/Test/Test-Wander-2026.07.27_12-07-48--0700.xcresult`.
+- Existing Supabase formatter actor-isolation, simulator keychain, and
+  traditional-headermap warnings remain unrelated and non-blocking.
+
 ### 2026-07-27 12:06 PDT - REC-162 release reconciliation
 
 - Joe explicitly requested a light-triage TestFlight push for the Add-flow
