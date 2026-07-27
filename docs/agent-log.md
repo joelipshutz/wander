@@ -26851,3 +26851,51 @@ Release preparation checkpoint:
   `/private/tmp/DerivedData-rec132-release-gate/Logs/Test/Test-Wander-2026.07.26_23-23-04--0700.xcresult`.
 - `xcodegen generate` and `git diff --check` passed. No unmerged product work
   was added to the release branch.
+
+## 2026-07-26 23:43 PDT — Codex — TestFlight build 103
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-103`
+Worktree: `/private/tmp/recme-testflight-build-103`
+Release scope: exact latest `origin/main` `4463bb1`
+
+Goal: ship the now-merged REC-147/REC-148/REC-161 ticket and editorial
+typography stack, including the profile-only overall rating treatment, together
+with all prior current-main changes.
+
+Release coordination:
+
+- Build 102 was prepared and uploaded concurrently at 23:34 PDT from an archive
+  created before PRs #241, #242, #254, #256, and #260 merged. Apple accepted
+  that binary, so its number is immutable and it does not contain this stack.
+- Starting a clean, isolated build 103 release from exact latest main instead
+  of reusing or mislabeling build 102.
+- Incrementing `CURRENT_PROJECT_VERSION` once from 102 to 103, regenerating the
+  Xcode project, and updating the shared build-number contract.
+- Intended tester scope: Direction A pins/filter pills; compact ticket family
+  across Map, Feed, and profile history; restored search and real photo paths;
+  native editorial place typography; and serif treatment only for the three
+  overall place-profile rating values. Check-in rating typography and the
+  streak screen remain unchanged by REC-161.
+- No backend, schema, data reset, marketing-version, or App Store production
+  submission is in scope.
+
+Release-prep validation checkpoint — 23:51 PDT:
+
+- `xcodegen generate` completed. In addition to the intentional 102 → 103
+  version update, regeneration added the two newly merged REC-161 JSON fixtures
+  to the test target resources, bringing the generated project back in sync
+  with `project.yml`.
+- Focused shared build-number contract passed 1/1. Result bundle:
+  `/private/tmp/DerivedData-recme-build103/Logs/Test/Test-Wander-2026.07.26_23-45-23--0700.xcresult`.
+- Full exact release-branch suite passed 771/771 tests with zero failures on
+  iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-recme-build103/Logs/Test/Test-Wander-2026.07.26_23-50-31--0700.xcresult`.
+- `git diff --check` passes. Existing simulator-only app-group/keychain logs,
+  Supabase formatter actor-isolation warnings, and traditional-headermap
+  warnings remain non-blocking.
+- Removed only the obsolete 1.5 GB REC-161 simulator DerivedData cache after
+  validation to leave room for the signed build-103 archive. Source, fixtures,
+  screenshots, and test result records were not removed.
+- Mission Control remains unavailable at `localhost:4000`; the attempted task
+  update failed without changing external state.
