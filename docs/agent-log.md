@@ -26095,3 +26095,41 @@ REC-162 handoff — 2026-07-26 19:43 PDT:
   switching or overwriting another active checkout.
 - No build-number change, archive, upload, TestFlight attachment, merge, or
   Slack release action was performed.
+
+REC-162 Add layout refinement start — 2026-07-26 20:02 PDT:
+
+- Ryan requested a follow-up on PR #259: place search belongs inside
+  **Suggested** above nearby results; nearby results should be a bounded
+  vertical list with **Show more** at the bottom; **Import** must remain visible
+  before the fold; existing Add sheet detents must not grow.
+- Reused the clean isolated worktree and existing
+  `codex/rec-162-add-unification` branch. Fetched origin; the branch is five
+  commits ahead of and zero behind `origin/main`. No dirty or overlapping work
+  was present.
+- Moved Linear REC-162 from `In Review` back to `In Progress` and attached the
+  refinement scope.
+- Expected changes remain limited to `Wander/Features/Add/AddScreen.swift`,
+  focused navigation/layout contracts, and this append-only log.
+
+REC-162 Add layout refinement validation — 2026-07-26 20:14 PDT:
+
+- Moved place search directly beneath the **Suggested** header and changed
+  nearby suggestions from a horizontal rail to a bounded vertical list.
+- The initial list exposes three of at most seven suggestions. **Show more**
+  lives at the bottom of that list and reveals the remaining loaded rows
+  inside the same 156-point viewport, so expanding suggestions does not move
+  **Import** or increase the existing Add sheet detents.
+- Added layout-contract coverage for the section order, vertical scrolling,
+  **Show more**, the seven-place cap, and identical initial/expanded viewport
+  bounds.
+- Focused Add contracts passed 3/3. The complete suite passed 760/760 with zero
+  failures on iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec162-build/Logs/Test/Test-Wander-2026.07.26_20-12-48--0700.xcresult`.
+- Visually verified the populated list on iPhone 17 Pro: scrolling reached
+  **Show more**, expansion stayed inside the list, and **Import** remained
+  visible. Verified the smaller iPhone 17e denied-location state separately:
+  search remained beneath **Suggested** and the complete **Import** section
+  stayed above the fold.
+- `xcodegen generate` produced no project drift and `git diff --check` passed.
+  The temporary DEBUG-only local-auth switch used for simulator inspection was
+  removed before final validation; no auth bypass remains in the branch.

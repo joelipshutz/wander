@@ -19,9 +19,27 @@ enum AddSheetLayout {
 
 enum AddSuggestedPlaces {
     static let maximumCount = 7
+    static let initialVisibleCount = 3
+    static let rowHeight: CGFloat = 58
+    static let rowSpacing: CGFloat = 8
+    static let showMoreHeight: CGFloat = 44
+    static let maximumViewportHeight: CGFloat = 156
 
     static func limited(_ candidates: [PlaceCandidate]) -> [PlaceCandidate] {
         Array(candidates.prefix(maximumCount))
+    }
+
+    static func visible(_ candidates: [PlaceCandidate], count: Int) -> [PlaceCandidate] {
+        Array(candidates.prefix(max(0, count)))
+    }
+
+    static func viewportHeight(visibleCount: Int, hasMore: Bool) -> CGFloat {
+        guard visibleCount > 0 else { return 0 }
+
+        let rowsHeight = CGFloat(visibleCount) * rowHeight
+        let rowsSpacing = CGFloat(max(0, visibleCount - 1)) * rowSpacing
+        let showMoreBlock = hasMore ? rowSpacing + showMoreHeight : 0
+        return min(maximumViewportHeight, rowsHeight + rowsSpacing + showMoreBlock)
     }
 }
 
@@ -43,6 +61,7 @@ struct AddScreen: View {
     @State private var quickAddQuery = ""
     @State private var isShowingInlineCandidateResults = false
     @State private var suggestedCandidates: [PlaceCandidate] = []
+    @State private var visibleSuggestionCount = AddSuggestedPlaces.initialVisibleCount
     @State private var isLoadingSuggestions = false
     @State private var suggestionMessage: String?
     @State private var hasRequestedSuggestions = false
@@ -278,7 +297,6 @@ struct AddScreen: View {
                 }
             } else {
                 suggestedPlaces
-                searchField
 
                 AddImportEntrySection(
                     summary: importStore.summary,
@@ -323,6 +341,8 @@ struct AddScreen: View {
                 .foregroundStyle(WanderTheme.textInk.color)
                 .accessibilityAddTraits(.isHeader)
 
+            searchField
+
             if isLoadingSuggestions {
                 HStack(spacing: WanderTheme.spacing2) {
                     ProgressView()
@@ -333,16 +353,51 @@ struct AddScreen: View {
                 }
                 .frame(minHeight: 82)
             } else if !suggestedCandidates.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: WanderTheme.spacing2) {
-                        ForEach(suggestedCandidates) { candidate in
+                let visibleCandidates = AddSuggestedPlaces.visible(
+                    suggestedCandidates,
+                    count: visibleSuggestionCount
+                )
+                let hasMore = visibleCandidates.count < suggestedCandidates.count
+
+                ScrollView(.vertical, showsIndicators: hasMore || visibleCandidates.count > 2) {
+                    LazyVStack(spacing: AddSuggestedPlaces.rowSpacing) {
+                        ForEach(visibleCandidates) { candidate in
                             SuggestedPlaceCard(candidate: candidate) {
                                 openSuggestedCandidate(candidate)
                             }
                         }
+
+                        if hasMore {
+                            Button {
+                                withAnimation(.snappy(duration: 0.28, extraBounce: 0)) {
+                                    visibleSuggestionCount = suggestedCandidates.count
+                                }
+                            } label: {
+                                Label("Show more", systemImage: "chevron.down")
+                                    .font(.system(size: 13, weight: .black))
+                                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                                    .frame(
+                                        maxWidth: .infinity,
+                                        minHeight: AddSuggestedPlaces.showMoreHeight
+                                    )
+                                    .background(WanderTheme.surfaceSand.color)
+                                    .clipShape(
+                                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Shows all nearby suggestions in this list")
+                        }
                     }
+                    .padding(.vertical, 1)
                 }
-                .contentMargins(.horizontal, 1, for: .scrollContent)
+                .frame(
+                    height: AddSuggestedPlaces.viewportHeight(
+                        visibleCount: visibleCandidates.count,
+                        hasMore: hasMore
+                    )
+                )
+                .scrollClipDisabled(false)
             } else {
                 Button {
                     hasRequestedSuggestions = false
@@ -437,6 +492,7 @@ struct AddScreen: View {
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
         suggestedCandidates = []
+        visibleSuggestionCount = AddSuggestedPlaces.initialVisibleCount
         isLoadingSuggestions = false
         suggestionMessage = nil
         hasRequestedSuggestions = false
@@ -558,6 +614,7 @@ struct AddScreen: View {
         do {
             let nearby = try await store.currentLocationCandidates()
             suggestedCandidates = AddSuggestedPlaces.limited(nearby)
+            visibleSuggestionCount = AddSuggestedPlaces.initialVisibleCount
             if suggestedCandidates.isEmpty {
                 suggestionMessage = "No nearby places found. Tap to try again."
             }
@@ -1043,7 +1100,11 @@ private struct SuggestedPlaceCard: View {
                     .clipShape(Circle())
             }
             .padding(WanderTheme.spacing2)
-            .frame(width: 244, height: 76, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: AddSuggestedPlaces.rowHeight,
+                alignment: .leading
+            )
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             .overlay(
