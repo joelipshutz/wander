@@ -10,6 +10,7 @@ enum WanderWidgetConstants {
     static let quickSearchKind = "QuickSearchWidget"
     static let activityCalendarKind = "ActivityCalendarWidget"
     static let nearbyPlacesKind = "NearbyPlacesWidget"
+    static let checkInControlKind = "com.grayline.wander.control.check-in-here"
 
     static let quickCaptureURL = URL(string: "recme://add/here-now")!
     static let mapURL = URL(string: "recme://map")!
