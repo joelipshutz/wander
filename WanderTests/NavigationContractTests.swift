@@ -160,9 +160,15 @@ final class NavigationContractTests: XCTestCase {
             mapSurface.components(separatedBy: "private var localPhoto: PlacePhoto?").last?
                 .components(separatedBy: "private var photoResolutionKey: String").first
         )
-        XCTAssertTrue(localPhotoSelection.contains("owner.id == currentUserID"))
+        XCTAssertTrue(localPhotoSelection.contains("PlaceProfilePreviewPhotoPolicy.canUseCurrentUserLocalPhoto("))
         XCTAssertFalse(localPhotoSelection.contains("!store.isPrivateProfile"))
         XCTAssertFalse(localPhotoSelection.contains("visibility == .followers"))
+
+        let localPhotoPolicy = try XCTUnwrap(
+            mapSurface.components(separatedBy: "enum PlaceProfilePreviewPhotoPolicy").last?
+                .components(separatedBy: "private struct PlaceProfilePreviewCard: View").first
+        )
+        XCTAssertTrue(localPhotoPolicy.contains("owner.id == currentUserID"))
     }
 
     func testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile() throws {

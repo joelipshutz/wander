@@ -107,6 +107,15 @@ struct PlaceProfileFullScreen: View {
     }
 }
 
+enum PlaceProfilePreviewPhotoPolicy {
+    static func canUseCurrentUserLocalPhoto(
+        saves: [PlaceSaveSummary],
+        currentUserID: String
+    ) -> Bool {
+        saves.contains { $0.visiblePlace.owner.id == currentUserID }
+    }
+}
+
 private struct PlaceProfilePreviewCard: View {
     let place: PlaceSheetPlace
     let presentation: PlaceProfilePresentation
@@ -214,9 +223,10 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var localPhoto: PlacePhoto? {
-        guard saves.contains(where: {
-            $0.visiblePlace.owner.id == currentUserID
-        })
+        guard PlaceProfilePreviewPhotoPolicy.canUseCurrentUserLocalPhoto(
+            saves: saves,
+            currentUserID: currentUserID
+        )
         else {
             return nil
         }

@@ -1351,7 +1351,7 @@ private struct FeedPlaceArtwork: View {
     }
 }
 
-private struct FeedResolvedPlacePhoto: View {
+struct FeedResolvedPlacePhoto: View {
     let place: VisiblePlace
     @EnvironmentObject private var backend: WanderBackend
     @State private var photo: PlacePhoto?
