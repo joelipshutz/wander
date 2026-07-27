@@ -19,10 +19,15 @@ enum AddSheetLayout {
 
 enum AddSuggestedPlaces {
     static let maximumCount = 7
-    static let previewCounts = [3, 2, 1]
     static let rowHeight: CGFloat = 58
     static let rowSpacing: CGFloat = 8
     static let showMoreHeight: CGFloat = 44
+
+    static func previewCount(screenHeight: CGFloat) -> Int {
+        if screenHeight >= 900 { return 3 }
+        if screenHeight >= 800 { return 2 }
+        return 1
+    }
 
     static func limited(_ candidates: [PlaceCandidate]) -> [PlaceCandidate] {
         Array(candidates.prefix(maximumCount))
@@ -99,6 +104,10 @@ struct AddScreen: View {
 
     private var showsPinnedImportEntry: Bool {
         step == .source && !isShowingInlineCandidateResults
+    }
+
+    private var isShowingHereNowResults: Bool {
+        isShowingInlineCandidateResults && selectedSource == .currentLocation
     }
 
     var body: some View {
@@ -272,10 +281,10 @@ struct AddScreen: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("add a place")
+                Text(isShowingHereNowResults ? "I'm here now" : "add a place")
                     .font(.system(size: 22, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text(step.subtitle)
+                Text(isShowingHereNowResults ? "choose the place you're at" : step.subtitle)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -362,11 +371,11 @@ struct AddScreen: View {
                 }
                 .frame(minHeight: 82)
             } else if !suggestedCandidates.isEmpty {
-                ViewThatFits(in: .vertical) {
-                    suggestedPlacePreview(count: AddSuggestedPlaces.previewCounts[0])
-                    suggestedPlacePreview(count: AddSuggestedPlaces.previewCounts[1])
-                    suggestedPlacePreview(count: AddSuggestedPlaces.previewCounts[2])
-                }
+                suggestedPlacePreview(
+                    count: AddSuggestedPlaces.previewCount(
+                        screenHeight: UIScreen.main.bounds.height
+                    )
+                )
             } else {
                 Button {
                     hasRequestedSuggestions = false

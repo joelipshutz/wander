@@ -701,7 +701,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("static let maximumCount = 7"))
         XCTAssertTrue(suggestedSection.contains("Text(\"Suggested\")"))
         XCTAssertTrue(suggestedSection.contains("searchField"))
-        XCTAssertTrue(suggestedSection.contains("ViewThatFits(in: .vertical)"))
+        XCTAssertTrue(suggestedSection.contains("AddSuggestedPlaces.previewCount("))
         XCTAssertTrue(suggestedSection.contains("Label(\"See more\", systemImage: \"arrow.up.right\")"))
         XCTAssertTrue(suggestedSection.contains("await resolveCurrentLocationCandidates()"))
         XCTAssertFalse(suggestedSection.contains("ScrollView(.vertical"))
@@ -709,12 +709,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("if showsPinnedImportEntry"))
         XCTAssertTrue(addScreen.contains("private var compactSheetContent: some View"))
         XCTAssertTrue(addScreen.contains("private var compactSourceContent: some View"))
-        XCTAssertFalse(addScreen.contains("\"I'm here now\""))
+        XCTAssertTrue(addScreen.contains("isShowingHereNowResults ? \"I'm here now\""))
+        XCTAssertTrue(addScreen.contains("\"choose the place you're at\""))
         XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
-    func testAddSuggestedPlacesOfferFittingPreviewCountsBeforeFullScreenResults() {
+    func testAddSuggestedPlacesScalePreviewCountByScreenHeight() {
         let candidates = (0..<8).map { index in
             PlaceCandidate(
                 id: "candidate_\(index)",
@@ -728,7 +729,9 @@ final class NavigationContractTests: XCTestCase {
         let limited = AddSuggestedPlaces.limited(candidates)
 
         XCTAssertEqual(limited.count, 7)
-        XCTAssertEqual(AddSuggestedPlaces.previewCounts, [3, 2, 1])
+        XCTAssertEqual(AddSuggestedPlaces.previewCount(screenHeight: 956), 3)
+        XCTAssertEqual(AddSuggestedPlaces.previewCount(screenHeight: 874), 2)
+        XCTAssertEqual(AddSuggestedPlaces.previewCount(screenHeight: 667), 1)
         XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 3).count, 3)
         XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 2).count, 2)
         XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 1).count, 1)

@@ -27295,3 +27295,27 @@ Starting status:
   more** destination. Moved Linear REC-162 back to `In Review`.
 - No merge, build-number change, archive, upload, TestFlight attachment, hosted
   data mutation, or Slack action was performed.
+
+### 2026-07-27 11:57 PDT - Responsive preview and I'm here now destination
+
+- Product follow-up: show one additional nearby suggestion on large phones,
+  keep fewer rows on smaller phones, and make **See more** explicitly open the
+  full Add **I'm here now** page.
+- Added deterministic device-height breakpoints: screens at least 900 points
+  tall show three suggestions, screens from 800 points show two, and smaller
+  screens show one. The existing 44-point **See more** control still fits on
+  iPhone 16 Plus, so it did not need to be reduced below the minimum tap target.
+- The expanded current-location result state now titles itself **I'm here now**
+  with **choose the place you're at**, while preserving the existing full-height
+  candidate list and pinned Save action.
+- Focused responsive-preview/navigation contracts passed 2/2. The complete
+  unit and contract suite passed 784/784. Result bundle:
+  `/private/tmp/DerivedData-rec162-entry-verify/Logs/Test/Test-Wander-2026.07.27_11-55-48--0700.xcresult`.
+- Visually verified three suggestions plus **See more** and the pinned Import
+  footer on iPhone 16 Plus, two suggestions on temporary iPhone 16e, and the
+  explicit full-height **I'm here now** destination after tapping **See more**.
+  Screenshots: `/private/tmp/rec162-add-three-suggestions-large.png`,
+  `/private/tmp/rec162-add-two-suggestions-small.png`, and
+  `/private/tmp/rec162-im-here-now-full-page.png`.
+- Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
+  passes. No release or hosted-data action is in scope.
