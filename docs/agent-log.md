@@ -25926,6 +25926,74 @@ Validation:
 No build-number bump, TestFlight upload, merge, backend/schema change, or
 typography migration was performed. Outcome is ready for review on PR #242;
 Joe's connected-phone validation is the next gate.
+## 2026-07-26 16:26 PDT — Codex — REC-148 typography and brand exploration
+
+Agent: Codex
+Branch: `codex/rec-148-typography-exploration`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-148-typography-exploration`
+Linear: `REC-148` (`In Progress`)
+
+Joe approved the REC-147 simulator screenshots and asked to begin typography
+and branding. This is an exploration gate, not a global font migration. The
+branch starts from PR #242 commit `1eee30d` so all variants use the approved
+Direction A ticket, Feed, map, and place-profile state as their common base.
+
+The `design-shotgun` workflow is active. Prior design memory confirms that Joe
+selected `Streak Ticket Exact` for the ticket family. The next artifact will
+compare three deliberately distinct typography/brand systems across the Feed,
+place profile, streak bridge, and a utility-heavy search/filter surface. The
+comparison must preserve the existing ownership colors, dotted/solid status
+grammar, data density, 44-point controls, compact widths, and Dynamic Type
+intent. No app code, typography tokens, build number, TestFlight release, or
+merge will change until Joe approves a direction.
+
+Expected tracked file for this exploration phase: `docs/agent-log.md`. Visual
+variants and comparison boards must remain under the gstack design artifact
+directory, outside the repository, per the selected workflow.
+
+Checkpoint:
+
+- Generated and manually inspected three four-surface comparison boards:
+  `A · New York Newsstand`, `B · Sunroom Journal`, and
+  `C · Pocket Gazette`.
+- A uses an Apple-native serif/sans boundary and is the lowest-risk migration.
+  Its corrected board preserves the current five-tab shell and exact
+  Feed/Woodcat/check-in #4/map semantics.
+- B is the warmest and most ownable brand expression, extending the semantic
+  palette with moss and sun. Its board is directionally useful but retains
+  small image-model drift in some shell/data details, so it must not be treated
+  as an implementation spec.
+- C is the strongest structured magazine system and uses serif most broadly.
+  Its corrected board preserves the exact Feed tickets, Woodcat profile,
+  check-in #4, and ownership/status filter grammar, though its navigation shell
+  follows the older four-tab contract and is not a nav proposal.
+- All variants passed the prompt-aware visual quality check. Artifacts, role
+  definitions, licensing notes, and migration map live at:
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/rec148-typography-branding-20260726/`.
+- Comparison board:
+  `http://127.0.0.1:56158/boards/b-20260726-234451-e9fy4d/`.
+
+The workflow is paused for Joe to select or remix a direction. No font files,
+SwiftUI typography tokens, or app screens have been changed.
+
+Decision / handoff:
+
+- Joe approved a constrained version of A and explicitly authorized the next
+  step. The approved system uses Apple-native serif only inside editorial
+  content and native sans for navigation chrome, controls, body, and metadata.
+- Native header means native SwiftUI navigation components and placements, not
+  serif navigation titles. Use `NavigationStack`, native title behavior,
+  toolbars, back buttons, search, and segmented controls where they preserve
+  the existing information architecture.
+- Ticket geometry, layout, colors, density, photos, and actions are locked;
+  typography is the only allowed ticket change. The streak screen is entirely
+  locked, including its typography.
+- Saved the constrained approval and migration notes in the design artifact
+  directory. Created `REC-161` for implementation so `REC-148` remains the
+  exploration/decision record.
+
+Draft PR #254 contains the tracked exploration log. No production app code was
+changed under REC-148.
 ## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
 
 Agent: Codex
