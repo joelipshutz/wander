@@ -25736,3 +25736,37 @@ Outcome:
   affect building, installing, or launching the app.
 - No app source, project settings, build number, TestFlight state, or release
   metadata changed.
+
+## 2026-07-26 23:00 PDT — Codex — REC-161 profile rating typography + TestFlight
+
+Agent: Codex using `ios-fix` and `recme-pr-review-merge-release`
+Branch: `codex/rec-161-profile-ratings`
+Worktree: `/private/tmp/recme-rec161-profile-ratings`
+Linear: `REC-161` (`In Progress`)
+Stack base: draft PR #256
+
+Goal: apply the approved native editorial serif only to the three overall
+place-profile rating values: Your rating, rec.me rating, and Fit Rating. Keep
+check-in, Feed, Discover, and rating-input typography unchanged. Then validate,
+land the full dependent stack in order, and release the resulting latest
+`main` to TestFlight as explicitly requested by Joe.
+
+Starting state: clean at `77b914a`, tracking the pushed #256 head. Joe's
+physical-device review is the reproducing visual evidence. This repo has no
+StateServer/DebugBridge snapshot API by documented design, so the source-state
+fixture `WanderTests/Fixtures/rec-161-profile-ratings-pre.json` records the
+pre-fix typography contract before Swift edits. The existing production source
+confirms `PlaceProfileRatingTile` uses fixed-size default-design black fonts for
+both numeric values and suffixes.
+
+Expected files: `Wander/DesignSystem/WanderTheme.swift`,
+`Wander/Features/Map/PlaceProfileMapSurface.swift`, focused typography contract
+coverage, this source-state fixture, and this log. No ticket geometry, check-in
+rating, streak, schema, backend, or data change.
+
+Coordination: REC-161 was moved from In Review back to In Progress and given a
+scope comment in Linear. Mission Control task
+`bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` could not be updated because
+`localhost:4000` remains unavailable. The working checkout is isolated because
+Joe's root checkout contains unrelated `tmp/` files and is 63 commits behind
+`origin/main`.
