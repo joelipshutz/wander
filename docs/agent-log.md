@@ -25492,3 +25492,17 @@ Visual QA checkpoint — 17:54 PDT:
   `/Users/joelipshutz/.codex/visualizations/rec161-native-editorial-type/`.
 - Temporary DEBUG fixture authentication used only to capture the screenshots
   was removed from the worktree before final testing.
+
+Final validation — 18:02 PDT:
+
+- Focused regression suites: 88 tests, 0 failures (`NavigationContractTests`,
+  `ThemeTokenTests`, `PlaceProfilePresentationTests`, and `SaveStreakTests`).
+- Full suite: 758 tests, 0 failures on iPhone 16 Plus / iOS 18.6 using the
+  repository-standard `xcodebuild test` command and `DerivedData` path.
+- `git diff --check` passed. The final diff contains no changes to
+  `SaveStreakCelebrationView.swift` or `CheckInTicketSurface.swift` relative to
+  the REC-148 branch base.
+- Existing unrelated compiler warnings in `WanderSupabaseClient` remain; there
+  are no new warnings attributable to REC-161.
+- No build-number bump or TestFlight work was performed. Next step is Joe's
+  visual review of the stacked implementation PR.
