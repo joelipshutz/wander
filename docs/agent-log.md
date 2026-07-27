@@ -27130,3 +27130,17 @@ sheet callback, and focused tests.
   were preserved. The subsequent compiled test run passed.
 - Existing Supabase formatter actor-isolation warnings remain unrelated and
   non-blocking. No backend, schema, or production data changed.
+
+### 2026-07-27 10:32 PDT - Review handoff
+
+- Ready PR: https://github.com/joelipshutz/wander/pull/266
+- Branch pushed at `05d7a0a`; PR is based on current `origin/main` and its diff
+  contains only the auth lifecycle repair, regression tests, and this log.
+- Linear REC-164 moved to `In Review`, linked to PR #266, and received the test
+  results plus implementation summary.
+- Mission Control at `localhost:4000` remains unreachable, so no duplicate
+  local tracker task could be created. Linear and this coordination log are the
+  durable tracking surfaces.
+- This handoff does not merge or release a TestFlight build. Next step is PR
+  review, then a simulator/account validation of the remembered-Google path
+  before packaging the next explicit TestFlight release.
