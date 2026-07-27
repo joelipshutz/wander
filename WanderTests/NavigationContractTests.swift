@@ -519,6 +519,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains(".navigationTitle(place.name)"))
         XCTAssertTrue(placeProfile.contains("ToolbarItem(placement: .topBarLeading)"))
         XCTAssertTrue(placeProfile.contains("ToolbarItemGroup(placement: .topBarTrailing)"))
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
         let mapHeader = try XCTUnwrap(
             placeProfile.components(separatedBy: "private struct PlaceProfileMapHeader: View").last
         )

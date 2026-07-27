@@ -868,7 +868,7 @@ private struct FeedFeaturedCard: View {
                     FeedPlaceArtwork(place: featured.visiblePlace, height: 88)
 
                     Text(featured.visiblePlace.place.canonicalName)
-                        .font(WanderTypography.editorialCardTitle)
+                        .font(WanderTypography.editorialCompactTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
 

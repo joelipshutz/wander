@@ -25471,3 +25471,24 @@ Checkpoint — 17:44 PDT:
 
 Next: capture and inspect implemented Feed and place-profile screenshots on
 iPhone 16 Plus and iPhone 16e before preparing the PR.
+
+Visual QA checkpoint — 17:54 PDT:
+
+- Captured and manually inspected the implemented Feed and Woodcat Coffee place
+  profile on iPhone 16 Plus and iPhone 16e, both on iOS 18.6.
+- The first map-profile capture exposed that the full-screen cover had no local
+  navigation container, so native toolbar items could not render. Wrapped the
+  map place-profile destination in `NavigationStack` and re-captured both phone
+  sizes; native back, inline title, check-in/add, and share chrome now render.
+- Feed uses native inline `Feed` title, toolbar search, and segmented
+  Places/People control. Ticket titles and editorial headings use the serif
+  role while author, status, metadata, controls, and navigation remain sans.
+- Added a compact semantic serif role for featured rail titles after the 16e
+  capture showed the regular card-title role truncating too aggressively.
+- Ticket cutout, color, spacing, media, and density remain the REC-147 design.
+  The streak source and shared ticket-shape source are unchanged from the
+  branch base.
+- Screenshot artifacts:
+  `/Users/joelipshutz/.codex/visualizations/rec161-native-editorial-type/`.
+- Temporary DEBUG fixture authentication used only to capture the screenshots
+  was removed from the worktree before final testing.

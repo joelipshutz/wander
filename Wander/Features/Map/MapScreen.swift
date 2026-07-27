@@ -389,7 +389,9 @@ struct MapScreen: View {
                 .presentationDragIndicator(.visible)
             }
             .fullScreenCover(isPresented: placeProfileDestinationBinding) {
-                selectedPlaceProfileDestination
+                NavigationStack {
+                    selectedPlaceProfileDestination
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
         }
