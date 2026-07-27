@@ -26996,3 +26996,38 @@ Pre-release validation already completed on the exact merged feature head:
 Release preparation: increment build 103 -> 104, regenerate the Xcode project,
 validate the shared build-number contract, archive exact main, upload, attach
 to `rec.me Alpha`, and post the required tester note.
+
+### 2026-07-27 08:31 PDT - Release outcome
+
+- Build-number preparation PR `#264` was squash-merged as `5c12b4a`; the
+  release archive was created from that exact clean `origin/main` commit.
+- `CURRENT_PROJECT_VERSION` is `104` in `project.yml`, the generated Xcode
+  project, the main app, and all three extensions.
+- The shared app/extension build-number contract passed 1/1. The exact-main
+  generic iOS Simulator build also succeeded after regeneration.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build104.xcarchive`. The first account-session
+  export attempt failed before upload with `Failed to Use Accounts`; retrying
+  the unchanged archive with the configured App Store Connect API key
+  succeeded and reported `Uploaded Wander` / `EXPORT SUCCEEDED`.
+- App Store Connect build id:
+  `a9e9a81e-a0c6-47a5-9bf8-45d2fb62e4fd`. Build `0.1 (104)` is `VALID`,
+  has `usesNonExemptEncryption=false`, includes the onboarding What to Test
+  copy, is attached to `rec.me Alpha`, and external beta review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- The required Slack tester note could not be posted because the local Mac was
+  locked and the available Slack path requires the desktop UI; automatic
+  unlock failed. No direct Slack connector or local Slack token was available.
+- Linear REC-132 could not be updated because the Linear connector was not
+  available in this session. Mission Control at `localhost:4000` was also
+  unreachable. The shipped PR, test, archive, and App Store Connect receipts
+  are recorded here so those tracker updates can be patched forward.
+- Existing Supabase formatter actor-isolation warnings remain non-blocking.
+  Clerk development branding/banner remains the tester-facing known alpha
+  issue.
+- Removed only `/private/tmp/DerivedData-rec132-focused` after validation to
+  recover 3 GB for the archive. This was disposable generated build cache; the
+  signed archive and test pass counts remain preserved.
+
+Final status: rec.me 0.1 (104), including REC-132 onboarding, is approved and
+available through the public TestFlight link.
