@@ -26879,3 +26879,23 @@ Release coordination:
   streak screen remain unchanged by REC-161.
 - No backend, schema, data reset, marketing-version, or App Store production
   submission is in scope.
+
+Release-prep validation checkpoint — 23:51 PDT:
+
+- `xcodegen generate` completed. In addition to the intentional 102 → 103
+  version update, regeneration added the two newly merged REC-161 JSON fixtures
+  to the test target resources, bringing the generated project back in sync
+  with `project.yml`.
+- Focused shared build-number contract passed 1/1. Result bundle:
+  `/private/tmp/DerivedData-recme-build103/Logs/Test/Test-Wander-2026.07.26_23-45-23--0700.xcresult`.
+- Full exact release-branch suite passed 771/771 tests with zero failures on
+  iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-recme-build103/Logs/Test/Test-Wander-2026.07.26_23-50-31--0700.xcresult`.
+- `git diff --check` passes. Existing simulator-only app-group/keychain logs,
+  Supabase formatter actor-isolation warnings, and traditional-headermap
+  warnings remain non-blocking.
+- Removed only the obsolete 1.5 GB REC-161 simulator DerivedData cache after
+  validation to leave room for the signed build-103 archive. Source, fixtures,
+  screenshots, and test result records were not removed.
+- Mission Control remains unavailable at `localhost:4000`; the attempted task
+  update failed without changing external state.
