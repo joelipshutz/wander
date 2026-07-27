@@ -76,6 +76,10 @@ enum WanderTheme {
 
     static let tapMinimum: CGFloat = 44
 
+    static func editorialDisplay(size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        .system(size: size, weight: weight, design: .serif)
+    }
+
     static let allColorTokens: [WanderColorToken] = [
         canvasWarm, surfaceBone, surfaceRaised, surfaceSand,
         textInk, textMuted, textFaint, textOnAction,
@@ -86,6 +90,25 @@ enum WanderTheme {
         stateSuccess, stateWarning, stateError, stateInfo,
         avatarJames, avatarRyan, avatarAndrew, avatarSofia
     ]
+}
+
+/// Semantic, Dynamic-Type-aware typography roles for the approved native
+/// editorial system. Navigation chrome and utility copy stay in the default
+/// system design; serif is reserved for authored place content.
+enum WanderTypography {
+    static let editorialDisplay = Font.system(.largeTitle, design: .serif, weight: .bold)
+    static let editorialTitle = Font.system(.title2, design: .serif, weight: .bold)
+    static let editorialCardTitle = Font.system(.title3, design: .serif, weight: .bold)
+    static let editorialCompactTitle = Font.system(.headline, design: .serif, weight: .bold)
+    static let editorialSectionTitle = Font.system(.title3, design: .serif, weight: .bold)
+    static let editorialRatingDisplay = Font.system(.title2, design: .serif, weight: .bold).monospacedDigit()
+    static let editorialRatingSuffix = Font.system(.caption, design: .serif, weight: .semibold).monospacedDigit()
+
+    static let body = Font.system(.body, design: .default, weight: .regular)
+    static let emphasizedBody = Font.system(.body, design: .default, weight: .semibold)
+    static let label = Font.system(.subheadline, design: .default, weight: .semibold)
+    static let metadata = Font.system(.caption, design: .default, weight: .semibold)
+    static let control = Font.system(.body, design: .default, weight: .semibold)
 }
 
 private extension Color {

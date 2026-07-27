@@ -26,7 +26,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.choose.accessibilityLabel, "Choose this place")
         XCTAssertEqual(PlaceSheetAction.add.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
-        XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Save to my map")
+        XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check in")
         XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in again")
         XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
@@ -104,6 +104,65 @@ final class PlaceProfilePresentationTests: XCTestCase {
 
         XCTAssertEqual(photo.providerPrimaryType, "restaurant")
         XCTAssertEqual(photo.providerTypes, ["food", "italian_restaurant", "point_of_interest"])
+    }
+
+    func testMapTicketAllowsCurrentUserCheckInPhotoAtEveryVisibility() {
+        let currentUser = profile(id: "user_current", handle: "current")
+        let otherUser = profile(id: "user_other", handle: "other")
+        let sharedPlace = place(id: "place_photo_policy", category: "coffee")
+        let ownSave = summary(owner: currentUser, place: sharedPlace, ratingScore: 4, tags: [])
+        let socialSave = summary(owner: otherUser, place: sharedPlace, ratingScore: 5, tags: [])
+
+        for visibility in [PlaceVisibility.followers, .mutuals, .selfOnly] {
+            ownSave.visiblePlace.userPlace.visibilityRaw = visibility.rawValue
+            XCTAssertTrue(
+                PlaceProfilePreviewPhotoPolicy.canUseCurrentUserLocalPhoto(
+                    saves: [ownSave, socialSave],
+                    currentUserID: currentUser.id
+                ),
+                "The owner should see their own \(visibility.rawValue) check-in photo"
+            )
+        }
+
+        XCTAssertFalse(
+            PlaceProfilePreviewPhotoPolicy.canUseCurrentUserLocalPhoto(
+                saves: [socialSave],
+                currentUserID: currentUser.id
+            )
+        )
+    }
+
+    @MainActor
+    func testFeedResolvedPhotoFallsBackFromBrokenGoogleImageToVisibleCheckInPhoto() async throws {
+        let checkInPhotoLoaded = expectation(description: "Visible check-in photo loaded")
+        let renderedImage = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        let repository = FeedPlacePhotoFallbackRepository(
+            checkInImageData: try XCTUnwrap(renderedImage.pngData()),
+            checkInPhotoLoaded: checkInPhotoLoaded
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let store = WanderStore(fixtures: .seed())
+        let visiblePlace = try XCTUnwrap(store.visiblePlaces().first)
+        let host = UIHostingController(
+            rootView: FeedResolvedPlacePhoto(place: visiblePlace)
+                .environmentObject(backend)
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 184, height: 88))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        host.view.setNeedsLayout()
+        host.view.layoutIfNeeded()
+
+        await fulfillment(of: [checkInPhotoLoaded], timeout: 2.0)
+
+        XCTAssertEqual(repository.metadataRequestCount, 1)
+        XCTAssertEqual(repository.visibleUserPhotoRequestCount, 1)
+        XCTAssertEqual(repository.requestedImageProviders, ["google_places", "visit_photo"])
+        window.isHidden = true
     }
 
     func testLegacyBeenActivityUsesVisitedDateThenSavedDateInsteadOfLastEdit() {
@@ -651,6 +710,69 @@ private final class CachingPlacePhotoRepository: PlacePhotoRepository {
     func imageData(for photo: PlacePhoto) async throws -> Data {
         imageRequestCount += 1
         return data
+    }
+}
+
+@MainActor
+private final class FeedPlacePhotoFallbackRepository: PlacePhotoRepository {
+    let googlePhoto = PlacePhoto(
+        provider: "google_places",
+        providerPlaceID: "broken-google-photo",
+        photoURLString: "https://lh3.googleusercontent.com/broken-photo",
+        width: 400,
+        height: 300,
+        authorName: nil,
+        authorProfileURLString: nil,
+        authorAvatarURLString: nil,
+        sourcePhotoURLString: "https://www.google.com/maps/broken-photo",
+        flagContentURLString: nil,
+        storageBucket: nil,
+        storagePath: nil,
+        localAssetRef: nil
+    )
+    let checkInPhoto = PlacePhoto(
+        provider: "visit_photo",
+        providerPlaceID: "visible-check-in-photo",
+        photoURLString: "",
+        width: 400,
+        height: 300,
+        authorName: "A person you follow",
+        authorProfileURLString: nil,
+        authorAvatarURLString: nil,
+        sourcePhotoURLString: nil,
+        flagContentURLString: nil,
+        storageBucket: "visit-photos",
+        storagePath: "visible/check-in/photo.jpg",
+        localAssetRef: nil
+    )
+    let checkInImageData: Data
+    let checkInPhotoLoaded: XCTestExpectation
+    private(set) var metadataRequestCount = 0
+    private(set) var visibleUserPhotoRequestCount = 0
+    private(set) var requestedImageProviders: [String] = []
+
+    init(checkInImageData: Data, checkInPhotoLoaded: XCTestExpectation) {
+        self.checkInImageData = checkInImageData
+        self.checkInPhotoLoaded = checkInPhotoLoaded
+    }
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        metadataRequestCount += 1
+        return googlePhoto
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        visibleUserPhotoRequestCount += 1
+        return checkInPhoto
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        requestedImageProviders.append(photo.provider)
+        if photo.provider == "visit_photo" {
+            checkInPhotoLoaded.fulfill()
+            return checkInImageData
+        }
+        return Data([0x00, 0x01, 0x02])
     }
 }
 

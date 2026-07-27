@@ -132,26 +132,27 @@ struct SaveStreakCelebrationView: View {
     private var ticketAnimation: Animation {
         accessibilityReduceMotion
             ? .easeOut(duration: 0.24)
-            : .spring(duration: 1.08, bounce: 0.22)
+            : .spring(duration: 0.72, bounce: 0.2)
     }
 
     private var copyAnimation: Animation {
         accessibilityReduceMotion
             ? .easeOut(duration: 0.22)
-            : .easeOut(duration: 0.34).delay(0.68)
+            : .easeOut(duration: 0.28).delay(0.42)
     }
 
     private var countAnimation: Animation {
         accessibilityReduceMotion
             ? .easeOut(duration: 0.22)
-            : .spring(duration: 0.5, bounce: 0.2).delay(0.56)
+            : .spring(duration: 0.4, bounce: 0.18).delay(0.32)
     }
 
     private var accessibilityLabel: String {
         let title = SaveStreakCelebrationPresentation.accessibilityTitle(
             for: celebration.streakCount
         )
-        return "\(title). \(celebration.placeName) saved as \(celebration.status.streakDisplayName)."
+        let activity = celebration.status == .been ? CheckInCopy.pastTense : "added to Wanna"
+        return "\(title). \(activity) at \(celebration.placeName)."
     }
 }
 
@@ -181,71 +182,75 @@ private struct SaveStreakTicketCard: View {
     }
 
     private var ticketFront: some View {
-        ZStack(alignment: .trailing) {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .fill(WanderTheme.surfaceBone.color)
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                Text(ticketEyebrow)
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .tracking(1.3)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
 
-            Circle()
-                .fill(WanderTheme.textInk.color)
-                .frame(width: 24, height: 24)
-                .offset(x: 12)
+                Spacer(minLength: 0)
 
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("SAVED TODAY  ·  \(celebration.status.streakDisplayName.uppercased())")
-                        .font(.system(size: 11, weight: .black, design: .rounded))
-                        .tracking(1.3)
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                Text(celebration.placeName)
+                    .font(.system(size: 29, weight: .black, design: .serif))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
 
-                    Spacer(minLength: 0)
-
-                    Text(celebration.placeName)
-                        .font(.system(size: 29, weight: .black, design: .serif))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.72)
-
-                    if let detail = celebration.placeDetail {
-                        Text(detail)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
-                    }
+                if let detail = celebration.placeDetail {
+                    Text(detail)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
                 }
-
-                Spacer(minLength: WanderTheme.spacing2)
-
-                Image(systemName: celebration.status == .been ? "checkmark" : "bookmark.fill")
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(width: 40, height: 40)
-                    .background(statusColor)
-                    .clipShape(Circle())
             }
-            .padding(WanderTheme.spacing4)
+
+            Spacer(minLength: WanderTheme.spacing2)
+
+            Image(systemName: celebration.status == .been ? "checkmark" : "plus")
+                .font(.system(size: 18, weight: .black))
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .frame(width: 40, height: 40)
+                .background(statusColor)
+                .clipShape(Circle())
         }
+        .padding(WanderTheme.spacing4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .checkInTicketSurface(
+            accent: .clear,
+            surface: WanderTheme.surfaceBone.color,
+            notchEdges: .trailing,
+            castsShadow: false
+        )
     }
 
     private var ticketBack: some View {
-        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-            .fill(WanderTheme.surfaceBone.color)
-            .overlay {
-                VStack(spacing: WanderTheme.spacing2) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 30, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                    Text("REC.ME")
-                        .font(.system(size: 12, weight: .black, design: .rounded))
-                        .tracking(1.8)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-            }
+        VStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "flame.fill")
+                .font(.system(size: 30, weight: .black))
+                .foregroundStyle(WanderTheme.terracotta.color)
+            Text("REC.ME")
+                .font(.system(size: 12, weight: .black, design: .rounded))
+                .tracking(1.8)
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .checkInTicketSurface(
+            accent: .clear,
+            surface: WanderTheme.surfaceBone.color,
+            notchEdges: .trailing,
+            castsShadow: false
+        )
     }
 
     private var statusColor: Color {
         celebration.status == .been
             ? WanderTheme.stateSuccess.color
             : WanderTheme.stateWarning.color
+    }
+
+    private var ticketEyebrow: String {
+        celebration.status == .been ? "CHECKED IN TODAY" : "ADDED TO WANNA TODAY"
     }
 }
 
@@ -386,15 +391,6 @@ private struct SaveStreakConfettiLayer: View {
     private func animation(_ index: Int) -> Animation {
         .easeIn(duration: 1.15 + Double(index % 5) * 0.12)
             .delay(Double(index % 9) * 0.035)
-    }
-}
-
-private extension PlaceStatus {
-    var streakDisplayName: String {
-        switch self {
-        case .been: CheckInCopy.noun.capitalized
-        case .wannaGo: "Wanna"
-        }
     }
 }
 

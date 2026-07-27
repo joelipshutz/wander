@@ -1,0 +1,11 @@
+{
+  "bug": "real place and check-in photos are replaced by category artwork",
+  "feed_featured_rail": {
+    "pre_fix": "FeedPlaceArtwork always renders the category gradient",
+    "expected": "resolve the existing place-photo pipeline and render the image before falling back"
+  },
+  "map_selected_ticket": {
+    "pre_fix": "the current user's local check-in photo is suppressed for private profiles and non-followers visibility",
+    "expected": "the signed-in owner can see their own local check-in photo for every visibility"
+  }
+}

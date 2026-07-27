@@ -56,11 +56,9 @@ These are the known unresolved questions and risks. Some are intentionally defer
 
 | Question | Recommendation | Notes |
 |---|---|---|
-| Native Contacts permission timing? | Later, after core loop and backend matching/privacy copy are ready. | M2 uses `FakeContactProvider`. |
 | Share extension timing? | Later, after in-app add/map/social loop works. | Share extension can be a capture booster but should not block v0.1. |
 | Private profiles/follow requests? | Defer. | v0.1 follow graph is open one-way follows with visibility per place. |
 | Following users not on Wander yet? | Defer. | Needs invite/link/contact matching model. |
-| Full onboarding? | Defer implementation; keep auth gates in critical flows. | Onboarding research exists under `research/screensdesign/`. |
 | iPad layout? | Defer. | Later use map + side panel, not stretched iPhone UI. |
 
 ## Operational Risks

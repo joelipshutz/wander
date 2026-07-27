@@ -328,6 +328,7 @@ struct WanderRootView: View {
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
+        initialSharedProfileRoute: SharedProfileRoute? = nil,
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
@@ -344,7 +345,7 @@ struct WanderRootView: View {
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
-        _sharedProfile = State(initialValue: Self.resolvedInitialSharedProfile())
+        _sharedProfile = State(initialValue: initialSharedProfileRoute ?? Self.resolvedInitialSharedProfile())
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
             wrappedValue: Self.makeStore(
@@ -489,21 +490,6 @@ struct WanderRootView: View {
             }
         }
         .sheet(
-            isPresented: $auth.isPresentingNativeAuth,
-            onDismiss: {
-                handleDeepLinkPresentationDismissal(of: .nativeAuth)
-            }
-        ) {
-            WanderRootPresentationLifecycle(
-                surface: .nativeAuth,
-                onPresent: handleDeepLinkPresentation,
-                onDismiss: handleDeepLinkPresentationWillDismiss
-            ) {
-                ClerkNativeAuthView()
-                    .environmentObject(auth)
-            }
-        }
-        .sheet(
             item: $initialPresentation,
             onDismiss: {
                 handleDeepLinkPresentationDismissal(of: .initialPresentation)
@@ -596,13 +582,6 @@ struct WanderRootView: View {
         .onChange(of: pushNotifications.navigationRequest) { _, request in
             guard isSessionValidated, let request else { return }
             routeNotification(request)
-        }
-        .onChange(of: auth.isPresentingNativeAuth) { _, isPresenting in
-            guard isSessionValidated, !isPresenting else { return }
-            Task {
-                await auth.refreshSession()
-                applyAuthStateIfNeeded(auth.state)
-            }
         }
         .onChange(of: auth.state) { _, state in
             applyAuthStateIfNeeded(state)

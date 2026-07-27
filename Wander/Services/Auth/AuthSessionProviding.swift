@@ -126,6 +126,12 @@ enum AuthSessionError: Error, Equatable {
     case tokenUnavailable
 }
 
+enum NativeAuthMode: String, Equatable {
+    case signInOrUp
+    case signIn
+    case signUp
+}
+
 @MainActor
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
@@ -156,6 +162,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published private(set) var state: AuthState
     @Published var activeGate: AuthGateRequest?
     @Published var isPresentingNativeAuth = false
+    @Published private(set) var activeNativeAuthMode: NativeAuthMode = .signInOrUp
     @Published private(set) var isSigningOut = false
     @Published private(set) var signOutError: String?
     @Published private(set) var isSessionValidated = false
@@ -237,9 +244,10 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         activeGate = nil
     }
 
-    func beginSignIn() {
+    func beginSignIn(mode: NativeAuthMode = .signInOrUp) {
         activeGate = nil
         if provider.canPresentNativeAuth {
+            activeNativeAuthMode = mode
             isPresentingNativeAuth = true
         } else {
             state = .unavailable("Clerk is not configured for this build.")

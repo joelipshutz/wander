@@ -24,10 +24,18 @@ struct SupabaseProfileRepository: ProfileRepository {
                 bio: update.bio,
                 homeArea: update.homeArea,
                 defaultVisibility: update.defaultVisibility?.rawValue,
-                isPrivateProfile: update.isPrivateProfile
+                isPrivateProfile: update.isPrivateProfile,
+                markOnboardingComplete: update.markOnboardingComplete
             )
         )
         return response.localProfile()
+    }
+
+    func isHandleAvailable(_ handle: String) async throws -> Bool {
+        try await rpc.call(
+            "profile_handle_available",
+            params: ProfileHandleAvailableParams(handle: handle)
+        )
     }
 
     func profile(id: String) async throws -> ProfileViewState {
@@ -1716,6 +1724,7 @@ private struct UpdateOwnProfileParams: Encodable {
     let homeArea: String?
     let defaultVisibility: String?
     let isPrivateProfile: Bool?
+    let markOnboardingComplete: Bool
 
     enum CodingKeys: String, CodingKey {
         case displayName = "input_display_name"
@@ -1724,6 +1733,15 @@ private struct UpdateOwnProfileParams: Encodable {
         case homeArea = "input_home_area"
         case defaultVisibility = "input_default_visibility"
         case isPrivateProfile = "input_is_private_profile"
+        case markOnboardingComplete = "input_mark_onboarding_complete"
+    }
+}
+
+private struct ProfileHandleAvailableParams: Encodable {
+    let handle: String
+
+    enum CodingKeys: String, CodingKey {
+        case handle = "input_handle"
     }
 }
 

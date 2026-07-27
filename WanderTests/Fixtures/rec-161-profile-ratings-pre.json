@@ -1,0 +1,16 @@
+{
+  "bug": "overall place-profile rating values use the same heavy sans treatment as utility labels",
+  "scope": [
+    "Your rating",
+    "rec.me rating",
+    "Fit Rating"
+  ],
+  "excluded": [
+    "check-in ratings",
+    "Feed ratings",
+    "Discover ratings",
+    "rating input"
+  ],
+  "pre_fix": "PlaceProfileRatingTile renders numeric values and suffixes with fixed-size default-design black fonts",
+  "expected": "numeric values and /5 or /10 suffixes use semantic Dynamic-Type-aware native serif roles while labels and subtitles remain native sans"
+}

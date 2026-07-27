@@ -266,7 +266,7 @@ struct SettingsScreen: View {
             ) {
                 activeDetail = .trust
             }
-            SettingsRow(title: "Contacts", subtitle: "planned native permission later", systemImage: "person.crop.rectangle.stack")
+            SettingsRow(title: "Contacts", subtitle: "managed in iOS Settings", systemImage: "person.crop.rectangle.stack")
             SettingsRow(title: "Notifications", subtitle: pushNotifications.statusTitle.lowercased(), systemImage: "bell") {
                 auth.requireSignIn(for: .manageNotifications) {
                     activeDetail = .notifications
@@ -727,8 +727,8 @@ struct SettingsTrustSurface {
         TrustFact(
             id: "contacts",
             icon: "person.crop.rectangle.stack",
-            title: "Contacts are later",
-            body: "Native Contacts permission is planned, but not part of this alpha. Username search works now."
+            title: "Contacts stay under your control",
+            body: "rec.me asks for Contacts access only to help find people you know. You can change access anytime in iOS Settings."
         )
     ]
 }

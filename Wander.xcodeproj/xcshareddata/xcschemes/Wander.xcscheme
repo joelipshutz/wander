@@ -65,6 +65,20 @@
          </BuildActionEntry>
          <BuildActionEntry
             buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "8C330C6117AF2935F6EFE207"
+               BuildableName = "WanderUITests.xctest"
+               BlueprintName = "WanderUITests"
+               ReferencedContainer = "container:Wander.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
             buildForRunning = "YES"
             buildForProfiling = "YES"
             buildForArchiving = "YES"
@@ -103,6 +117,17 @@
                BlueprintIdentifier = "0A325A118755573578F89F15"
                BuildableName = "WanderTests.xctest"
                BlueprintName = "WanderTests"
+               ReferencedContainer = "container:Wander.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "8C330C6117AF2935F6EFE207"
+               BuildableName = "WanderUITests.xctest"
+               BlueprintName = "WanderUITests"
                ReferencedContainer = "container:Wander.xcodeproj">
             </BuildableReference>
          </TestableReference>

@@ -19,6 +19,15 @@ struct NoopAnalyticsClient: AnalyticsClient {
 
 enum WanderAnalyticsEvents {
     static let onboardingStarted = "onboarding_started"
+    static let onboardingCarouselViewed = "onboarding_carousel_viewed"
+    static let onboardingCarouselAdvanced = "onboarding_carousel_advanced"
+    static let onboardingAuthStarted = "onboarding_auth_started"
+    static let onboardingAuthCompleted = "onboarding_auth_completed"
+    static let onboardingIdentitySubmitted = "onboarding_identity_submitted"
+    static let onboardingIdentityFailed = "onboarding_identity_failed"
+    static let onboardingPermissionResult = "onboarding_permission_result"
+    static let onboardingFriendSuggestionsCompleted = "onboarding_friend_suggestions_completed"
+    static let onboardingCompleted = "onboarding_completed"
     static let locationPermissionResult = "location_permission_result"
     static let firstPlaceStarted = "first_place_started"
     static let placeCandidateShown = "place_candidate_shown"
