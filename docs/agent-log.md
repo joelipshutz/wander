@@ -27329,3 +27329,185 @@ Starting status:
   smaller-screen two-row behavior, and explicit full-height destination.
 - Linear REC-162 remains `In Review`. No merge, build-number change, archive,
   upload, TestFlight attachment, hosted mutation, or Slack action was performed.
+## 2026-07-27 10:10 PDT - Codex - REC-164 Clerk Google sign-in dismissal
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher` and
+`plan-eng-review`
+Branch: `codex/rec-164-clerk-dismissal`
+Worktree: `/private/tmp/recme-rec164-clerk-dismissal`
+Linear: `REC-164` (`In Progress`)
+
+Goal: reproduce and fix the build-104 regression where, after an explicit
+sign-out, choosing Google from the Clerk screen dismisses the auth surface
+instead of completing sign-in or showing a recoverable error.
+
+Starting state:
+
+- Clean isolated worktree from exact `origin/main` commit `a1fe522`.
+- Existing stale REC-132 auth-hardening worktree is intentionally untouched;
+  this fix starts from shipped build-104 main.
+- Scope is the auth/onboarding presentation and session transition plus focused
+  regression coverage. Carousel screenshot replacement is separate follow-up
+  work.
+- Auth/session work requires the engineering-review gate before implementation.
+  Expected files are the current Clerk auth adapter, app entry/auth gate
+  presentation, focused auth/onboarding tests, and this coordination log.
+
+### Engineering review
+
+Confirmed the presentation race against the Clerk SDK source bundled with
+build 104. Clerk emits `sessionChanged` for nil-to-session, session-to-nil,
+different-session, and same-session updates. `ClerkAuthService` converts any
+event without an active session into `.signedOut`, while
+`AuthSessionStore.synchronizeState` currently dismisses native auth for every
+non-signed-in state. A transient pending/null state during Google handoff can
+therefore close Clerk's sheet before authentication completes.
+
+Scope challenge and decision:
+
+- Keep the existing `ClerkAuthService`, SwiftUI sheet, and root coordinator.
+- Add an explicit native-auth-attempt lifetime to `AuthSessionStore`; do not
+  infer sheet lifetime from authentication state alone.
+- Treat signed-in, unavailable, explicit sign-out, and user dismissal as
+  terminal. Keep the sheet presented for transient `.loading`/`.signedOut`
+  callbacks only while an explicit attempt is active.
+- Keep carousel screenshot replacement outside REC-164.
+
+Data flow after the fix:
+
+```text
+Clerk AuthView
+  -> Clerk auth event (including transient sessionChanged)
+  -> ClerkAuthService state
+  -> AuthSessionStore
+       active attempt + loading/signedOut -> keep sheet
+       signedIn/unavailable              -> close sheet
+       user dismiss                      -> end attempt, then refresh
+  -> signed-in coordinator / onboarding
+```
+
+Failure-mode coverage:
+
+- Transient loading or signed-out event dismisses Google auth: regression test
+  keeps presentation active.
+- Successful sign-in leaves Clerk visible: success test requires dismissal.
+- User cancellation is undone by a later provider event: dismissal test ends
+  the attempt before refresh/events.
+- Real provider logout leaves stale auth UI: existing logout test continues to
+  require presentation to close.
+
+No schema, API, data migration, or visual-design change is required. This is a
+small state-lifecycle repair, so the broader product-design prerequisite is not
+applicable. Implementation will be sequential across the auth store, app-entry
+sheet callback, and focused tests.
+
+### 2026-07-27 10:31 PDT - Implementation and validation checkpoint
+
+- Added an explicit native-auth-attempt lifetime to `AuthSessionStore`.
+  Transient Clerk `.loading` and `.signedOut` callbacks no longer dismiss an
+  auth sheet that the user explicitly opened. Signed-in, unavailable, explicit
+  sign-out/account deletion, and user sheet dismissal end the attempt.
+- Wired the SwiftUI sheet's `onDismiss` callback to end the attempt before the
+  authoritative session refresh and coordinator update.
+- Added regressions proving that a pending Google-style state sequence stays
+  presented until success and that a user dismissal cannot be undone by later
+  provider events. The existing provider-logout regression still requires the
+  auth surface to close.
+- Focused auth and navigation validation passed 91/91 tests with zero failures:
+  `AuthSessionTests` plus `NavigationContractTests`. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-29-13--0700.xcresult`.
+- Neighboring onboarding validation passed 5/5 `OnboardingStateTests` with zero
+  failures using the already-built products. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-30-27--0700.xcresult`.
+- The first two cold-build attempts were cancelled before executing tests when
+  the machine ran out of disk space. To complete validation, removed only
+  disposable generated caches tied to the already-shipped build 104/REC-132
+  runs and the older REC-147 visual branch, plus the REC-164 module cache after
+  linking. Source worktrees, the active REC-165 cache, and TestFlight archives
+  were preserved. The subsequent compiled test run passed.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. No backend, schema, or production data changed.
+
+### 2026-07-27 10:32 PDT - Review handoff
+
+- Ready PR: https://github.com/joelipshutz/wander/pull/266
+- Branch pushed at `05d7a0a`; PR is based on current `origin/main` and its diff
+  contains only the auth lifecycle repair, regression tests, and this log.
+- Linear REC-164 moved to `In Review`, linked to PR #266, and received the test
+  results plus implementation summary.
+- Mission Control at `localhost:4000` remains unreachable, so no duplicate
+  local tracker task could be created. Linear and this coordination log are the
+  durable tracking surfaces.
+- This handoff does not merge or release a TestFlight build. Next step is PR
+  review, then a simulator/account validation of the remembered-Google path
+  before packaging the next explicit TestFlight release.
+## 2026-07-27 10:47 PDT - Codex - TestFlight Build 105
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-105`
+Worktree: `/private/tmp/recme-build105-main`
+Linear: `REC-164` (`In Review`)
+PR: `#266` (squash-merged as `035daff`)
+
+Goal: ship exact latest `origin/main` containing the Clerk Google sign-in
+presentation repair as rec.me 0.1 (105). Scope since completed build 104 is PR
+#266 only: keep the Clerk auth sheet open across transient loading/signed-out
+callbacks after an explicit sign-out, while still closing on success, user
+dismissal, unavailable auth, explicit sign-out, or account deletion.
+
+Pre-release gate:
+
+- PR #266 was current with main, mergeable, narrowly scoped, and had no
+  blocking auth lifecycle, SwiftUI presentation, persistence, backend,
+  signing/project, or scope findings.
+- Exact feature head validation passed 91/91 AuthSession plus navigation tests
+  and 5/5 onboarding state tests with zero failures.
+- Release starts from clean exact `origin/main` commit `035daff`; unrelated
+  root-checkout and active worktree changes remain untouched.
+
+Release preparation: increment build 104 -> 105, regenerate the Xcode project,
+validate, archive exact release main, upload, attach to `rec.me Alpha`, update
+Linear, and post the required tester-facing Slack note.
+
+Validation checkpoint, 2026-07-27 10:55 PDT:
+
+- `CURRENT_PROJECT_VERSION` is 105 in `project.yml` and the regenerated Xcode
+  project; app and extension targets continue to inherit the shared value.
+- Exact release-branch validation passed 110/110 tests with zero failures:
+  `AuthSessionTests`, `OnboardingStateTests`, `NavigationContractTests`, and
+  `BuildConfigurationTests`. Result bundle:
+  `/private/tmp/DerivedData-recme-build105/Logs/Test/Test-Wander-2026.07.27_10-47-58--0700.xcresult`.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. No new warning or failure was introduced by build 105.
+
+### 2026-07-27 11:10 PDT - Release outcome
+
+- Build-number PR #268 was squash-merged as `4b4fd1e`; the signed archive and
+  upload were created from that exact clean `origin/main` commit.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build105.xcarchive` and independently reports rec.me
+  `0.1 (105)`. Export used automatic App Store distribution signing with
+  `manageAppVersionAndBuildNumber=false`.
+- API-key-authenticated `xcodebuild -exportArchive` uploaded the unchanged
+  archive successfully; Xcode reported `Uploaded Wander`, `Upload succeeded`,
+  and `EXPORT SUCCEEDED` with no build-number drift.
+- App Store Connect build id is
+  `7daa6c22-d3c7-4c9b-afb5-90827aaf0670`. Build 105 is `VALID`, has
+  `usesNonExemptEncryption=false`, includes the build-105 en-US What to Test
+  copy, is attached to `rec.me Alpha`, and external beta review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785175750049249
+- Linear REC-164 is Done and has the PR, merge commits, validation, build,
+  TestFlight, and Slack receipts. Mission Control remained unavailable because
+  `localhost:4000` is not running.
+- Tester focus: sign out, open Get started or Log in, choose the remembered
+  Google `Last used` account, and confirm Clerk remains presented through the
+  handoff until authentication completes. Cancel once and verify the splash is
+  stable for a retry.
+- Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking. Clerk development-mode branding remains the
+  tester-facing known alpha issue.
+
+Final status: rec.me 0.1 (105), including the Google sign-in presentation fix,
+is approved and available through the public TestFlight link.
