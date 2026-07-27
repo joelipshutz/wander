@@ -26082,3 +26082,16 @@ REC-162 implementation and validation checkpoint — 2026-07-26 19:42 PDT:
   but currently renders Squarespace's generic **Coming Soon** page. The app URL
   contract is wired; publishing the source-specific website instructions is an
   external content follow-up.
+
+REC-162 handoff — 2026-07-26 19:43 PDT:
+
+- Pushed `codex/rec-162-add-unification` and opened ready PR #259:
+  `https://github.com/joelipshutz/wander/pull/259`.
+- Linked PR #259 to Linear REC-162, moved the issue to `In Review`, and posted
+  the 759/759 test, build, two-size visual-QA, and website-content follow-up
+  receipt.
+- The feature branch is intended for Ryan's local Xcode testing. Open
+  `/private/tmp/recme-rec162-add-unification/Wander.xcodeproj` without
+  switching or overwriting another active checkout.
+- No build-number change, archive, upload, TestFlight attachment, merge, or
+  Slack release action was performed.
