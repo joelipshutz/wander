@@ -24971,3 +24971,20 @@ REC-157 sans-serif typography revision handoff — 2026-07-26 18:15 PDT:
   validation results, and commit recorded in a comment.
 - Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
   build number was changed and no release was attempted.
+
+REC-157 landing start — 2026-07-26 18:21 PDT:
+
+- Ryan approved the final two-ring, standard sans-serif Lock Screen widget and
+  requested that it be pushed to `main`.
+- Resuming ready PR #243 from the clean isolated
+  `codex/rec-157-lock-widget-mockups` worktree. Linear REC-157 remains `In
+  Review` while the final integration review runs.
+- Refreshed `origin`, checked branch/worktree state, read the latest
+  coordination log, and confirmed `origin/main` has advanced through
+  TestFlight build 101 since this branch split.
+- No unfinished explicit TestFlight release was found. This request is a
+  squash-merge only: no build-number change, archive, upload, or Slack release
+  note is authorized.
+- Next: merge current `origin/main` into the PR branch, review the exact
+  integrated diff, rerun relevant tests/build, squash-merge PR #243, mark
+  REC-157 Done, and record the landing on `main`.
