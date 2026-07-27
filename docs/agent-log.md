@@ -24291,15 +24291,18 @@ Implementation completion checkpoint, 2026-07-26 19:43 PDT:
 - Committed the implementation as `0b72b1098` and pushed it to
   `codex/rec-155-tags-labels-redesign`; existing PR #255 now contains the exact
   tested head and GitHub reports no base-branch conflicts.
-- Handoff metadata is the only remaining blocker: the local `gh` token is
-  invalid and the connected GitHub integration returned 403 for PR writes. The
-  authenticated GitHub page is open at PR #255, but browser safety requires
-  explicit user confirmation before submitting the replacement title/body and
-  moving the draft to Ready for review. Linear REC-155 remains In Progress
-  until that review transition succeeds.
-- Exact restart: update PR #255 to describe the implementation and 760/760 test
-  result, mark it Ready for review, move REC-155 to In Review with the same
-  validation receipt, then append the final PR/Linear status here.
+- After Ryan's explicit confirmation, updated PR #255's title and body to the
+  implementation scope and validation receipt, then moved it from Draft to
+  Ready for review. GitHub shows the PR Open, mergeable, and conflict-free.
+- Opened the isolated worktree's `Wander.xcodeproj` in its own Xcode window.
+  Xcode's visible Branch Chooser confirms
+  `codex/rec-155-tags-labels-redesign`; the previously active REC-162 Xcode
+  window and branch were not switched or overwritten.
+- Moved Linear REC-155 to In Review. The Linear safety guard rejected the
+  optional validation comment because it included internal implementation
+  metadata and a private PR link; it was not retried or routed around. The
+  issue's existing PR attachment reflects the updated title, and this log plus
+  PR #255 contain the complete validation receipt.
 
 ## 2026-07-26 09:05 PDT - Codex - Full-Screen Photo Zoom
 
