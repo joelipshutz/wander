@@ -25400,3 +25400,27 @@ Recent activity.
   hosted onboarding pgTAP validation pass.
 - No migration apply, merge, TestFlight build, build-number bump, or external
   announcement was performed. Next step is PR #182 review/merge after CI.
+
+## 2026-07-26 22:55 PDT — Codex — REC-132 TestFlight release start
+
+- Goal: fulfill Joe's explicit TestFlight request by reconciling onboarding PR
+  #182 onto latest `main`, completing the backend/merge gate, and releasing the
+  exact latest-main batch as build 102.
+- Agent/workflow: Codex using `recme-pr-review-merge-release`; the full
+  interactive `plan-eng-review` skill is not invoked because implementation is
+  already complete and the release request requires a diff-scoped landing gate.
+  Its architecture, data-flow, security, failure-mode, and coverage lens remains
+  part of the direct review because this PR changes auth and Supabase contracts.
+- Worktree/branch: `/private/tmp/recme-rec132-onboarding`,
+  `codex/rec-132-onboarding`. The worktree was clean at start. The primary
+  checkout remains on Joe's stale `joe/phone-build-latest` branch with an
+  unrelated untracked `tmp/` directory and will not be modified.
+- Starting release state: TestFlight build 101 is fully complete and approved.
+  Current `origin/main` is `c020432`; since build 101 it contains REC-160's
+  Check-in Action Button control and REC-157's Lock Screen quick-capture widget.
+  PR #182 is ready, not held, but GitHub reports it conflicting with current
+  `main`. REC-132 remains In Review until build 102 is available.
+- Expected overlap: `docs/agent-log.md`, generated project metadata, app/auth
+  entry code, and tests. Existing open PRs #255/#259 and all other worktrees are
+  out of scope and will not be merged. Mission Control task
+  `eb1a09fe-f2cb-473c-ace0-399ba5deead0` is In Progress.
