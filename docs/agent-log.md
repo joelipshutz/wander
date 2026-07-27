@@ -27284,3 +27284,14 @@ Starting status:
 - Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
   passes. No build-number, TestFlight, hosted data, or release action is in
   scope.
+
+### 2026-07-27 11:24 PDT - Fixed-footer handoff
+
+- Committed the compact-sheet refinement as `edff977` (`fix: pin import footer
+  in Add sheet`) and pushed `codex/rec-162-add-unification`, updating ready PR
+  #259.
+- Updated the PR description to replace the superseded embedded-scroll behavior
+  with the final fixed Import footer, fitting preview, and full-height **See
+  more** destination. Moved Linear REC-162 back to `In Review`.
+- No merge, build-number change, archive, upload, TestFlight attachment, hosted
+  data mutation, or Slack action was performed.
