@@ -2,144 +2,226 @@ import MapKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct AddImportSection: View {
+enum ImportHelpDestination {
+    static let url = URL(string: "https://getrec.me/import-help")!
+}
+
+struct AddImportEntrySection: View {
+    let summary: PlaceImportSummary
+    let action: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("Import")
+                .font(.system(size: 17, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .accessibilityAddTraits(.isHeader)
+
+            Button(action: action) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    PlaceImportSourceIconStack(iconSize: 34)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Import from")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text("Instagram, Google Maps, TikTok, Notes & more")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: WanderTheme.spacing1)
+
+                    if summary.hasPendingImports {
+                        Text("\(summary.processingCount + summary.remainingCount)")
+                            .font(.system(size: 11, weight: .black))
+                            .foregroundStyle(WanderTheme.textOnAction.color)
+                            .frame(minWidth: 22, minHeight: 22)
+                            .background(WanderTheme.terracotta.color)
+                            .clipShape(Capsule())
+                            .accessibilityLabel(
+                                "\(summary.processingCount + summary.remainingCount) imports in progress or ready"
+                            )
+                    }
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .black))
+                        .foregroundStyle(WanderTheme.textFaint.color)
+                }
+                .padding(.horizontal, WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Import from Instagram, Google Maps, TikTok, Notes, and more")
+            .accessibilityHint("Opens import sources")
+        }
+    }
+}
+
+struct PlaceImportHubScreen: View {
     let summary: PlaceImportSummary
     let sourceAction: (PlaceImportSource) -> Void
     let inboxAction: () -> Void
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    private var columns: [GridItem] {
-        let count = dynamicTypeSize.isAccessibilitySize ? 2 : 4
-        return Array(repeating: GridItem(.flexible(), spacing: WanderTheme.spacing2), count: count)
-    }
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("import places")
-                .font(.system(size: 21, weight: .black))
-                .accessibilityAddTraits(.isHeader)
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    PlaceImportSourceIconStack(iconSize: 48)
 
-            LazyVGrid(columns: columns, spacing: WanderTheme.spacing2) {
-                ForEach(PlaceImportSource.allCases) { source in
-                    AddImportSourceTile(source: source) {
-                        sourceAction(source)
+                    Text("Import from anywhere")
+                        .font(.system(size: 24, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("Bring over place links or notes. Everything lands in one private review flow before it reaches your map.")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(spacing: WanderTheme.spacing2) {
+                    ForEach(PlaceImportSource.allCases) { source in
+                        Button {
+                            sourceAction(source)
+                        } label: {
+                            HStack(spacing: WanderTheme.spacing3) {
+                                PlaceImportSourceIcon(source: source, size: 42)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(source.navigationTitle)
+                                        .font(.system(size: 15, weight: .black))
+                                        .foregroundStyle(WanderTheme.textInk.color)
+                                    Text(source.hubSubtitle)
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(WanderTheme.textMuted.color)
+                                        .lineLimit(2)
+                                }
+
+                                Spacer(minLength: WanderTheme.spacing2)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .black))
+                                    .foregroundStyle(WanderTheme.textFaint.color)
+                            }
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+                            .background(WanderTheme.surfaceRaised.color)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Import from \(source.accessibilityTitle)")
                     }
                 }
-            }
 
+                Button {
+                    openURL(ImportHelpDestination.url)
+                } label: {
+                    Label("Where do I find a link?", systemImage: "questionmark.circle")
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens Import Help on getrec.me")
+            }
+            .padding(WanderTheme.spacing4)
+            .padding(.bottom, summary.hasPendingImports ? 92 : WanderTheme.spacing6)
+        }
+        .wanderScreen()
+        .navigationTitle("Import")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    openURL(ImportHelpDestination.url)
+                } label: {
+                    Image(systemName: "questionmark.circle")
+                }
+                .accessibilityLabel("Import Help")
+                .accessibilityHint("Shows where to find links in each supported app")
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if summary.hasPendingImports {
                 Button(action: inboxAction) {
                     HStack(spacing: WanderTheme.spacing3) {
-                        ZStack {
-                            Circle()
-                                .fill(summary.processingCount > 0 ? WanderTheme.terracottaTint.color : WanderTheme.skyTint.color)
-                            if summary.processingCount > 0 {
-                                ProgressView()
-                                    .tint(WanderTheme.terracotta.color)
-                            } else {
-                                Image(systemName: "tray.full.fill")
-                                    .font(.system(size: 16, weight: .black))
-                                    .foregroundStyle(WanderTheme.stateInfo.color)
-                            }
-                        }
-
-                        .frame(width: 38, height: 38)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(actionTitle)
-                                .font(.system(size: 15, weight: .black))
-                                .foregroundStyle(WanderTheme.textInk.color)
-                            Text(actionSubtitle)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                                .lineLimit(2)
-                        }
-
-                        Spacer(minLength: WanderTheme.spacing2)
-
                         if summary.processingCount > 0 {
-                            Text(summary.progress.formatted(.percent.precision(.fractionLength(0))))
+                            ProgressView()
                                 .font(.system(size: 12, weight: .black))
-                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .tint(WanderTheme.textOnAction.color)
+                        } else {
+                            Image(systemName: "tray.full.fill")
                         }
+                        Text(actionTitle)
+                        Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
                     }
-                    .padding(WanderTheme.spacing3)
-                    .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-                    .background(WanderTheme.surfaceBone.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, WanderTheme.spacing2)
+                .background(WanderTheme.canvasWarm.color.opacity(0.97))
                 .accessibilityHint("Opens import progress and review")
             }
         }
     }
 
     private var actionTitle: String {
-        if summary.processingCount > 0, summary.remainingCount == 0 {
-            return "Importing \(summary.processedCount) of \(summary.totalCount)"
-        }
         if summary.remainingCount > 0 {
-            return "Import Review"
-        }
-        return "Import Review"
-    }
-
-    private var actionSubtitle: String {
-        if summary.processingCount > 0, summary.remainingCount > 0 {
-            return "\(summary.remainingCount) ready  •  \(summary.processingCount) still importing"
+            return "Review \(summary.remainingCount) import\(summary.remainingCount == 1 ? "" : "s")"
         }
         if summary.processingCount > 0 {
-            return "You can leave this page while matching continues"
+            return "Importing \(summary.processedCount) of \(summary.totalCount)"
         }
-        if summary.remainingCount > 0 {
-            return "\(summary.remainingCount) place\(summary.remainingCount == 1 ? "" : "s") waiting"
-        }
-        return "\(summary.remainingCount) place\(summary.remainingCount == 1 ? "" : "s") waiting"
+        return "Review Import"
     }
 }
 
-private struct AddImportSourceTile: View {
-    let source: PlaceImportSource
-    let action: () -> Void
+private struct PlaceImportSourceIconStack: View {
+    let iconSize: CGFloat
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                        .fill(source.tint)
-                    Image(systemName: source.systemImage)
-                        .font(.system(size: 22, weight: .black))
-                        .foregroundStyle(source.accent)
-                }
-                .frame(width: 42, height: 42)
-
-                Text(source.tileTitle)
-                    .font(.system(size: 12, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(spacing: -9) {
+            ForEach(PlaceImportSource.allCases) { source in
+                PlaceImportSourceIcon(source: source, size: iconSize)
             }
-            .padding(WanderTheme.spacing2)
-            .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                    .stroke(source.accent.opacity(0.32), lineWidth: 1.5)
-            )
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Import \(source.accessibilityTitle)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Google Maps, Instagram, TikTok, and Notes")
+    }
+}
+
+private struct PlaceImportSourceIcon: View {
+    let source: PlaceImportSource
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(source.tint)
+            Image(systemName: source.systemImage)
+                .font(.system(size: size * 0.43, weight: .black))
+                .foregroundStyle(source.accent)
+        }
+        .frame(width: size, height: size)
+        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
     }
 }
 
@@ -2245,6 +2327,15 @@ private extension PlaceImportSource {
     }
 
     var accessibilityTitle: String { navigationTitle }
+
+    var hubSubtitle: String {
+        switch self {
+        case .googleMaps: "Lists, shared places, or Takeout files"
+        case .instagram: "Public Reel and post links"
+        case .tiktok: "Public video and place links"
+        case .textNotes: "Pasted notes, texts, and place lists"
+        }
+    }
 
     var shortBadgeTitle: String {
         switch self {

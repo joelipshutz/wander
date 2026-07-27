@@ -451,9 +451,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("persistNewPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))
-        XCTAssertTrue(addScreen.contains("Search, paste a link, or add coordinates"))
-        XCTAssertTrue(addScreen.contains("\"I'm here now\""))
-        XCTAssertTrue(addScreen.contains("title: \"From a photo\""))
+        XCTAssertTrue(addScreen.contains("Text(\"Suggested\")"))
+        XCTAssertTrue(addScreen.contains("Search for a place"))
+        XCTAssertTrue(addScreen.contains("Label(\"Take a Photo\", systemImage: \"camera\")"))
+        XCTAssertTrue(addScreen.contains("Label(\"Photo Library\", systemImage: \"photo.on.rectangle\")"))
+        XCTAssertTrue(addScreen.contains("AddSuggestedPlaces.limited(nearby)"))
+        XCTAssertTrue(addScreen.contains("static let maximumCount = 7"))
+        XCTAssertFalse(addScreen.contains("\"I'm here now\""))
+        XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
@@ -501,11 +506,12 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(root.contains("@StateObject private var importStore: PlaceImportStore"))
         XCTAssertTrue(root.contains("importStore: importStore"))
-        XCTAssertTrue(addScreen.contains("AddImportSection("))
+        XCTAssertTrue(addScreen.contains("AddImportEntrySection("))
+        XCTAssertTrue(addScreen.contains("PlaceImportHubScreen("))
         XCTAssertTrue(addScreen.contains("PlaceImportSourceScreen("))
         XCTAssertTrue(addScreen.contains("PlaceImportInboxScreen(importStore: importStore)"))
-        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 410"))
-        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 480"))
+        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 520"))
+        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 570"))
         XCTAssertTrue(
             root.contains(
                 "AddSheetLayout.detents(\n                        hasPendingImports: importStore.summary.hasPendingImports"
@@ -513,6 +519,10 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(root.contains(".onChange(of: importStore.summary.hasPendingImports)"))
         XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
+        XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
+        XCTAssertTrue(importViews.contains("ForEach(PlaceImportSource.allCases)"))
+        XCTAssertTrue(importViews.contains("Image(systemName: \"questionmark.circle\")"))
+        XCTAssertTrue(importViews.contains("https://getrec.me/import-help"))
         XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
         XCTAssertFalse(profileHome.contains("ImportSection"))
     }

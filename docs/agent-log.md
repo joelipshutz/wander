@@ -25355,3 +25355,45 @@ TestFlight build 101 release completion — 2026-07-26 14:54 PDT:
 Final outcome: rec.me 0.1 (101) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with REC-152 Profile
 Recent activity.
+
+## 2026-07-26 18:24 PDT - Codex - REC-162 Add Capture Unification
+
+Agent: Codex
+Branch: `codex/rec-162-add-unification`
+Worktree: `/private/tmp/recme-rec162-add-unification`
+Linear: `REC-162` (`In Progress`)
+
+Goal: simplify the Add surface around 5–7 nearby suggestions, the existing
+search behavior, a native camera/photo-library menu inside the search field,
+and one separated Import entry point that opens the supported source stack and
+links to public Import Help.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from `origin/main` at
+  `759e7c9df`.
+- The primary checkout remains untouched on the removed
+  `codex/rec-142-widgets` branch; its untracked `.pnpm-store/` belongs to other
+  work.
+- REC-109 and REC-97 are completed predecessor issues. Created REC-162 for this
+  follow-up, assigned it to Ryan, related it to both predecessors, and moved it
+  to `In Progress`.
+- No active agent-log entry names the expected source files. The high-conflict
+  `docs/agent-log.md` is append-only; no other listed high-conflict file is in
+  scope.
+- Expected files are `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused test files, and
+  this agent log. `project.yml` or generated project membership should not be
+  needed unless implementation scope changes.
+- The proposed Import Help destination follows the public marketing site convention:
+  `https://getrec.me/import-help`; the app will own a single URL constant and open
+  it with the native browser environment.
+
+Planned validation:
+
+- Add focused tests for the new suggestion limit, camera/import hierarchy, and
+  Import Help contract.
+- Run focused Add/import tests, then the full iPhone simulator suite and a clean
+  generic simulator build.
+- Capture and inspect Add/import screenshots on the current large iPhone
+  simulator and one smaller phone before opening a ready PR.
