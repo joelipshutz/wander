@@ -25703,3 +25703,36 @@ Final handoff — 22:15 PDT:
   those services are available.
 - Handoff state: ready for Joe's simulator/phone test. No merge, TestFlight
   build, or release was performed.
+
+## 2026-07-26 22:42 PDT — Codex — REC-161 direct iPhone install
+
+Agent: Codex using `ios-qa`
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+PR: https://github.com/joelipshutz/wander/pull/256
+
+Goal: build the current pushed PR branch for Joe's connected physical iPhone,
+install it directly, launch it, and leave the same isolated project open in
+Xcode. This is a local development install, not a TestFlight release.
+
+Outcome:
+
+- Detected paired device `iPhone (254)` on iOS 26.5.
+- The first signed Debug device build reached final dSYM generation, then
+  failed because the Mac volume had only 117 MB free. Removed only recoverable
+  simulator products/intermediates and the Xcode index from this worktree's
+  `DerivedData`, freeing about 840 MB. No source, packages, device data, or user
+  files were removed.
+- Rebuilt successfully for the physical device with
+  `DEBUG_INFORMATION_FORMAT=dwarf`, preserving the existing signing and app
+  configuration. Existing Supabase formatter-concurrency and headermap warnings
+  remain; no new build errors were introduced.
+- Installed `DerivedData/Build/Products/Debug-iphoneos/Wander.app` as bundle
+  `com.grayline.wander` and successfully launched it on the connected phone.
+- Opened and verified Xcode's active workspace is the same REC-161 isolated
+  worktree project.
+- The `ios-qa` artifact-sync preamble was intentionally skipped after the
+  execution policy rejected its unrelated private-repository push. This did not
+  affect building, installing, or launching the app.
+- No app source, project settings, build number, TestFlight state, or release
+  metadata changed.
