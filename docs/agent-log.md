@@ -25620,3 +25620,26 @@ Handoff — 18:41 PDT:
   `localhost:4000`; its previously recorded review status is unchanged.
 - No merge, build-number bump, TestFlight build, release, or streak/ticket
   source change was performed.
+## 2026-07-26 21:41 PDT — Codex — REC-161 photo regression follow-up
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (implementation resumed from Joe's simulator feedback)
+
+Goal: restore real place/check-in photos anywhere the current stacked design is
+showing fallback artwork, specifically the Feed featured horizontal rail and
+the selected-place ticket on Map. Preserve the approved ticket geometry,
+typography direction, search behavior, and streak screen.
+
+Starting state: worktree clean at `acde7e8`; `origin/main` is now `c020432`,
+with no newer photo-resolution change in the relevant Feed/Map files. The
+existing REC-161 worktree is the only worktree editing this branch. Linear is
+not callable from this Codex session, so REC-161 cannot be moved from
+`In Review` back to `In Progress` before the edit. Mission Control task
+`bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` will be reconciled if its local API is
+available.
+
+Expected files: `Wander/Features/Feed/FeedScreen.swift`,
+`Wander/Features/Map/PlaceProfileMapSurface.swift`, focused regression tests,
+and this log. No ticket-shape, streak, build-number, or release changes.
