@@ -1,6 +1,7 @@
 import XCTest
 import UIKit
 import MapKit
+import SwiftUI
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
@@ -58,7 +59,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
     }
 
-    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndKeepsOnlyFeaturedCardsUniform() throws {
+    func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndMakesEveryActivityACompactTicket() throws {
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
@@ -74,8 +75,8 @@ final class NavigationContractTests: XCTestCase {
         let activityList = try XCTUnwrap(
             feedAfterActivityList.components(separatedBy: "private struct FeedActivityModule: View").first
         )
-        XCTAssertTrue(activityList.contains("Divider()"))
-        XCTAssertTrue(activityList.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
+        XCTAssertTrue(activityList.contains("LazyVStack(spacing: WanderTheme.spacing3)"))
+        XCTAssertFalse(activityList.contains("Divider()"))
         XCTAssertFalse(activityList.contains(".background(WanderTheme.surfaceBone.color)"))
         XCTAssertFalse(activityList.contains(".clipShape(RoundedRectangle"))
 
@@ -84,6 +85,22 @@ final class NavigationContractTests: XCTestCase {
         let activityModule = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
+        XCTAssertTrue(activityModule.contains("private var activityTicket: some View"))
+        XCTAssertTrue(activityModule.contains("activity.kind.ticketKind"))
+        XCTAssertTrue(activityModule.contains(".checkInTicketSurface("))
+        XCTAssertTrue(activityModule.contains("design: .serif"))
+        XCTAssertTrue(activityModule.contains("activity.note"))
+        XCTAssertTrue(activityModule.contains("activity.rating"))
+        XCTAssertTrue(activityModule.contains("Text(\"“\\(note)”\")"))
+        XCTAssertTrue(activityModule.contains("FeedActivityThumbnail(activity: activity)"))
+        XCTAssertTrue(activityModule.contains("Button(action: openActivityDestination)"))
+        XCTAssertTrue(activityModule.contains("if let place = activity.place"))
+        XCTAssertTrue(activityModule.contains("openPlace(place)"))
+        XCTAssertTrue(activityModule.contains("openList(list)"))
+        XCTAssertTrue(activityModule.contains("castsShadow: false"))
+        XCTAssertFalse(activityModule.contains("lightweightActivityRow"))
+        XCTAssertFalse(activityModule.contains("Label(\"View place\""))
+        XCTAssertFalse(activityModule.contains("FeedMediaRail"))
         XCTAssertFalse(activityModule.contains("FeedActivityLayout.rowHeight"))
         XCTAssertFalse(activityModule.contains("maxHeight:"))
 
@@ -93,6 +110,9 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(featuredCard.contains("height: FeedFeaturedLayout.cardHeight"))
         XCTAssertTrue(featuredCard.contains("width: FeedFeaturedLayout.cardWidth"))
+        XCTAssertTrue(featuredCard.contains("private var featuredReason: String"))
+        XCTAssertFalse(featuredCard.contains("Label(\"View place\""))
+        XCTAssertFalse(feed.contains("Label(featured.reason"))
     }
 
     func testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile() throws {
@@ -112,11 +132,6 @@ final class NavigationContractTests: XCTestCase {
         let activityModule = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
-        let activityAction = try XCTUnwrap(
-            activityModule.components(separatedBy: "private var actionButton: some View").last?
-                .components(separatedBy: "private var activityVerb: String").first
-        )
-
         XCTAssertTrue(feed.contains("@State private var selectedPlace: VisiblePlace?"))
         XCTAssertTrue(feed.contains(".navigationDestination(isPresented: selectedPlaceDestinationBinding)"))
         XCTAssertTrue(feed.contains("PlaceProfileFullScreen("))
@@ -127,7 +142,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(featuredRail.contains("let save:"))
         XCTAssertTrue(featuredCard.contains("let openPlace: (VisiblePlace) -> Void"))
         XCTAssertTrue(featuredCard.contains("openPlace(featured.visiblePlace)"))
-        XCTAssertTrue(featuredCard.contains("Label(\"View place\""))
+        XCTAssertFalse(featuredCard.contains("Label(\"View place\""))
         XCTAssertFalse(featuredCard.contains("save(featured)"))
 
         XCTAssertTrue(activityList.contains("let openPlace: (VisiblePlace) -> Void"))
@@ -136,10 +151,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityModule.contains("openPlace(place)"))
         XCTAssertTrue(activityModule.contains("Text(activity.actor.displayName)"))
         XCTAssertTrue(activityModule.contains("Text(place.place.canonicalName)"))
-        XCTAssertTrue(activityAction.contains("else if let place = activity.place"))
-        XCTAssertTrue(activityAction.contains("openPlace(place)"))
-        XCTAssertTrue(activityAction.contains("Label(\"View place\""))
-        XCTAssertFalse(activityAction.contains("save(activity)"))
+        XCTAssertTrue(activityModule.contains("private var primaryDestinationTitle: some View"))
+        XCTAssertTrue(activityModule.contains("openList(list)"))
+        XCTAssertFalse(activityModule.contains("private var actionButton"))
+        XCTAssertFalse(activityModule.contains("Label(\"View place\""))
+        XCTAssertFalse(activityModule.contains("save(activity)"))
 
         XCTAssertFalse(feed.contains("private func saveFeaturedPlace("))
         XCTAssertFalse(feed.contains("private func save(_ activity: FeedActivity)"))
@@ -404,6 +420,69 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityCard.contains("if entry.isCurrentUser"))
         XCTAssertTrue(activityCard.contains("activityIdentityLabel"))
         XCTAssertFalse(activityCard.contains(".disabled(entry.isCurrentUser)"))
+    }
+
+    func testMapFeedAndPlaceHistoryShareTheDirectionATicketSurface() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let ticketSurface = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/CheckInTicketSurface.swift")
+        )
+        let activityCard = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private struct PlaceActivityCard: View")
+                .last?
+                .components(separatedBy: "private struct VisitPhotoThumbnail: View")
+                .first
+        )
+
+        XCTAssertTrue(ticketSurface.contains("func checkInTicketSurface("))
+        XCTAssertTrue(ticketSurface.contains("struct CheckInTicketShape: InsettableShape"))
+        XCTAssertTrue(ticketSurface.contains(".clipShape(ticketShape)"))
+        XCTAssertTrue(ticketSurface.contains("addTrailingNotch("))
+        XCTAssertFalse(ticketSurface.contains("Circle()\n            .fill(surroundingSurface)"))
+        XCTAssertFalse(ticketSurface.contains(".compositingGroup()"))
+        XCTAssertTrue(ticketSurface.contains("case trailing"))
+        XCTAssertTrue(ticketSurface.contains("case both"))
+        XCTAssertTrue(placeProfile.contains(".checkInTicketSurface("))
+        let previewCard = try XCTUnwrap(
+            placeProfile
+                .components(separatedBy: "private struct PlaceProfilePreviewCard: View")
+                .last?
+                .components(separatedBy: "private struct PlaceProfileFullView: View")
+                .first
+        )
+        XCTAssertFalse(previewCard.contains("ticketEyebrow"))
+        XCTAssertFalse(previewCard.contains("YOUR CHECK-IN"))
+        XCTAssertFalse(previewCard.contains("YOUR WANNA"))
+        XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
+        XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
+        XCTAssertTrue(activityCard.contains("ticketAccentColor"))
+        XCTAssertTrue(activityCard.contains("design: .serif"))
+        XCTAssertTrue(activityCard.contains("StatusBadge(status: entry.status)"))
+        XCTAssertTrue(activityCard.contains("if let note = entry.note"))
+        XCTAssertTrue(activityCard.contains("ForEach(entry.tags.prefix(6)"))
+        XCTAssertTrue(activityCard.contains("photoThumbnails"))
+        XCTAssertTrue(activityCard.contains("addPhotoControl"))
+    }
+
+    func testTicketShapeUsesAConcaveCutoutInsteadOfAnAddedCircle() {
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let trailingPath = CheckInTicketShape(notchEdges: .trailing).path(in: rect)
+
+        XCTAssertFalse(trailingPath.contains(CGPoint(x: 199, y: 50)))
+        XCTAssertFalse(trailingPath.contains(CGPoint(x: 195, y: 50)))
+        XCTAssertTrue(trailingPath.contains(CGPoint(x: 180, y: 50)))
+        XCTAssertTrue(trailingPath.contains(CGPoint(x: 199, y: 30)))
+        XCTAssertTrue(trailingPath.contains(CGPoint(x: 199, y: 70)))
+
+        let bothEdgesPath = CheckInTicketShape(notchEdges: .both).path(in: rect)
+        XCTAssertFalse(bothEdgesPath.contains(CGPoint(x: 1, y: 50)))
+        XCTAssertTrue(bothEdgesPath.contains(CGPoint(x: 20, y: 50)))
     }
 
     func testUnavailableContentAvoidsStackedOpacityTreatments() throws {

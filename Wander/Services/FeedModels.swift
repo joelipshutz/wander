@@ -11,15 +11,6 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
     case listCreated = "list_created"
     case listItemAdded = "list_item_added"
 
-    var isPlaceActivity: Bool {
-        switch self {
-        case .placeSaved, .placeBeen, .placeWannaGo, .listItemAdded:
-            true
-        case .listCreated:
-            false
-        }
-    }
-
     var supportsRating: Bool {
         switch self {
         case .placeBeen, .listItemAdded:
@@ -28,6 +19,26 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
             false
         }
     }
+
+    var ticketKind: FeedTicketKind {
+        switch self {
+        case .placeBeen:
+            .checkIn
+        case .placeWannaGo:
+            .wanna
+        case .listCreated, .listItemAdded:
+            .list
+        case .placeSaved:
+            .droppedPin
+        }
+    }
+}
+
+enum FeedTicketKind: Equatable {
+    case checkIn
+    case wanna
+    case list
+    case droppedPin
 }
 
 struct FeedMediaPreview: Identifiable, Equatable {
@@ -136,7 +147,9 @@ enum FeedPresentation {
             results.append(
                 FeedFeaturedPlace(
                     visiblePlace: place,
-                    reason: "Saved by \(event.actor.displayName)"
+                    reason: place.userPlace.status == .been
+                        ? "Checked in by \(event.actor.displayName)"
+                        : "Wanna by \(event.actor.displayName)"
                 )
             )
             if results.count == max(0, limit) { break }

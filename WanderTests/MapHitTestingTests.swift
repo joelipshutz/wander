@@ -410,6 +410,50 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         XCTAssertEqual(groups.map(\.primary.place.canonicalName), ["Mutsu", "Maru Coffee"])
     }
 
+    @MainActor
+    func testSelectedMapAnnotationGroupMovesToTheEndWithoutRegroupingPlaces() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let places = [
+            visiblePlace(
+                owner: currentUser,
+                name: "First Place",
+                category: "coffee",
+                latitude: 34.050,
+                longitude: -118.250,
+                providerID: "mapkit_first",
+                status: .been
+            ),
+            visiblePlace(
+                owner: currentUser,
+                name: "Selected Place",
+                category: "restaurant",
+                latitude: 34.060,
+                longitude: -118.260,
+                providerID: "mapkit_selected",
+                status: .been
+            ),
+            visiblePlace(
+                owner: currentUser,
+                name: "Last Place",
+                category: "park",
+                latitude: 34.070,
+                longitude: -118.270,
+                providerID: "mapkit_last",
+                status: .wannaGo
+            )
+        ]
+        let groups = VisiblePlaceGrouping.groups(from: places, currentUserID: currentUser.id)
+        let selectedKey = groups[1].key
+
+        let ordered = MapScreen.orderedAnnotationGroups(
+            groups,
+            selectedGroupKey: selectedKey
+        )
+
+        XCTAssertEqual(ordered.map(\.key), [groups[0].key, groups[2].key, selectedKey])
+        XCTAssertEqual(Set(ordered.map(\.key)), Set(groups.map(\.key)))
+    }
+
     func testGroupsSameNamedAddressAcrossDifferentCoordinates() {
         let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")

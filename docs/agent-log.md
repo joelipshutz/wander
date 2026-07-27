@@ -24982,6 +24982,96 @@ PR handoff (11:32 PDT):
   dense same-coordinate MapKit collision follow-up. REC-147 should remain In
   Review until the PR lands; no TestFlight release was requested.
 
+## 2026-07-26 12:03 PDT — Codex — REC-147 Feed and place-profile tickets
+
+Agent: Codex using the repo's native feature implementation workflow
+Branch: `codex/rec-147-feed-profile-tickets`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-147-feed-profile-tickets`
+Linear: `REC-147` (`In Progress`); typography follow-up `REC-148` remains
+separate and in Backlog
+
+Goal: build the second Direction A slice as a stacked PR on map-ticket PR #241:
+turn Feed check-in activity and place-profile check-in history into the same
+recognizable ticket family while preserving all existing content and actions.
+
+Starting status and coordination:
+
+- Started clean from exact PR #241 head `eb6f95b`; stacked base is
+  `origin/codex/rec-147-direction-a-map`, whose underlying `origin/main` is
+  `b4d7c98`.
+- Fetched origin, inspected all worktrees, and left the stale root checkout and
+  its unrelated untracked `tmp/` content untouched. The existing REC-152
+  profile-activity worktree is docs-only and does not overlap production source.
+- REC-147 was moved from In Review back to In Progress and annotated with this
+  slice's scope. Mission Control task
+  `fc5cf02a-cb70-457d-9f9c-08d07f5898a8` is In Progress.
+- Locked scope: full tickets only for Feed check-ins; lighter rows for non-place
+  events; the same ticket language for place-profile history; shared reusable
+  presentation; current person/place/time/rating/note/media/tag/action data and
+  repeated check-ins retained.
+- Global typography migration, backend/schema changes, build-number changes,
+  TestFlight, and unrelated Profile redesign remain out of scope. REC-148 starts
+  after the ticket layouts are visually approved so serif hierarchy can be
+  tuned against real Map, Feed, and place-profile screens.
+- Expected files: `Wander/Features/Feed/FeedScreen.swift`, the existing
+  place-profile activity presentation, a shared DesignSystem component or
+  narrowly shared primitives, focused tests, and this coordination log.
+
+Implementation and validation checkpoint (12:31 PDT):
+
+- Added `CheckInTicketSurface` as the shared Direction A surface and applied it
+  to the selected Map ticket, explicit Feed check-ins, and place-profile
+  check-in history so border, notch, surface, and shadow behavior do not drift.
+- Feed `.placeBeen` events now render full tickets with actor, relative time,
+  serif place name, metadata, rating, note, media, and 44 pt place action.
+  Wanna, list, and other activity remain lighter rows. Featured cards now say
+  `Checked in by` or `Wanna by`, including a compatibility rewrite for stale
+  remote `Saved by` reasons; user-facing Feed success copy uses Check-in/Wanna.
+- Place-profile `check-in history` now uses social-blue or current-user
+  terracotta tickets and keeps every existing person, handle/date, rating,
+  note, tag, companion, photo, edit/remove, and repeated-visit path. No
+  field-notes, paperclip, or scrapbook treatment was added.
+- Updated the streak reference ticket to say `CHECKED IN TODAY` or
+  `ADDED TO WANNA TODAY` and removed the visible Been/Save vocabulary from that
+  celebration. Internal `.been` and save repository/model contracts remain
+  unchanged.
+- Focused Feed/navigation/place-profile/copy validation passed 91/91 tests.
+  The exact final branch then passed 749/749 tests with zero failures on iPhone
+  16 Plus / iOS 18.6. Result bundle:
+  `/tmp/DerivedData-rec147-direction-a/Logs/Test/Test-Wander-2026.07.26_12-30-20--0700.xcresult`.
+  The generic arm64 iOS Simulator build also succeeded, and `git diff --check`
+  passes. Existing headermap and Supabase formatter actor-isolation warnings
+  remain unrelated.
+- Visually inspected production fixture data on iPhone 16 Plus and iPhone 16e.
+  Final captures are
+  `/private/tmp/rec147-feed-profile-visuals/feed-16-plus-clean.png`,
+  `/private/tmp/rec147-feed-profile-visuals/feed-16e.png`,
+  `/private/tmp/rec147-feed-profile-visuals/history-16-plus-clean.png`, and
+  `/private/tmp/rec147-feed-profile-visuals/history-16e.png`. A temporary
+  debug-only auth/history route used for deterministic capture was removed;
+  the temporary `rec.me REC-147 QA 16 Plus` simulator was also deleted after
+  validation and can be recreated from the standard iOS 18.6 runtime.
+- Typography remains REC-148 and intentionally starts after Joe visually
+  approves the Map, Feed, and history ticket layouts. No backend/schema,
+  build-number, archive, TestFlight, App Store Connect, or Slack release action
+  was performed. Stacked PR handoff is next.
+
+PR handoff (12:35 PDT):
+
+- Implementation commit: `963cfd3` (`feat: add REC-147 feed and profile
+  tickets`). Pushed `codex/rec-147-feed-profile-tickets` and opened ready
+  stacked PR #242 against `codex/rec-147-direction-a-map`:
+  `https://github.com/joelipshutz/wander/pull/242`.
+- PR #242 links REC-147 and records the 749/749 result, generic build, two-size
+  visual QA, preserved data contract, stack base #241, and explicit typography
+  exclusion. REC-147 is back in In Review with the PR attachment and validation
+  comment.
+- Mission Control task `fc5cf02a-cb70-457d-9f9c-08d07f5898a8` is in Review
+  with the same proof. No TestFlight release was requested; build 99 remains the
+  latest shipped tester build.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode for Joe's local
+  testing. Xcode's Branch Chooser explicitly reports
+  `codex/rec-147-feed-profile-tickets`.
 ## 2026-07-26 14:06 PDT — Codex — REC-147 latest-main stack refresh
 
 Agent: Codex using the repo's native implementation and Linear workflow
@@ -25627,6 +25717,23 @@ Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
 
+## 2026-07-26 14:24 PDT — Codex — REC-147 phone feedback follow-up
+
+Joe's connected-phone review approved the Check-in direction but identified a
+follow-up before the stack is ready to merge: the ticket edge reads as a loose
+circle instead of a punch-out; the celebration feels slow; Feed tickets are too
+wide/tall; notes need quotation marks; and Wanna, list, and dropped-pin events
+need the same ticket family. Feed cards also need a small photo treatment and
+should not spend a full row on `View place`.
+
+Implementation stays on `codex/rec-147-feed-profile-tickets` / REC-147. The
+follow-up will convert the shared edge to a real clipped notch, speed up the
+celebration reveal, make every Feed event a compact semantic ticket, preserve
+all event data and destinations, lazy-render the Feed, and use event/provider
+photo imagery with an immediate category fallback. No typography migration,
+backend/schema change, build-number bump, TestFlight release, or merge is part
+of this pass.
+
 ## 2026-07-26 13:59 PDT - Codex - REC-160 Final Validation
 
 Agent: Codex
@@ -25700,6 +25807,125 @@ Release start:
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
 
+## 2026-07-26 14:59 PDT — Codex — REC-147 phone feedback implemented
+
+Completed the connected-phone refinement on
+`codex/rec-147-feed-profile-tickets`, stacked on the latest refreshed Direction
+A map branch and current `main` build 100.
+
+Outcome:
+
+- Replaced the loose circular overlay with one clipped, stroked ticket shape;
+  the right edge is now a true concave punch-out on both the streak celebration
+  and every shared ticket surface.
+- Shortened the streak ticket, count, and copy reveal timings while preserving
+  Reduce Motion behavior and the existing four-day celebration hierarchy.
+- Converted all five Feed event kinds into compact semantic tickets: Check-in,
+  Wanna, list created, added to list, and dropped pin. The cards retain actor,
+  timestamp, place/list title, category/location, destination list, rating,
+  note, and media data.
+- Reduced card width, padding, artwork size, and vertical density; quoted and
+  italicized notes; removed the redundant full-width `View place` / list CTA;
+  and kept the place/list destination on the card content itself.
+- Added a 72-point photo slot that prioritizes event media, then asynchronously
+  resolves the place provider photo, with an immediate category artwork
+  fallback. Feed rows now use `LazyVStack` so image work stays limited to
+  visible tickets.
+- Temporary visual-QA launch helpers were removed before the final test run.
+
+Validation:
+
+- `xcodegen generate`: passed with no generated project diff.
+- Focused XCTest: 91/91 passed (Feed models, navigation contracts, place
+  profile presentation, check-in copy, and save streak).
+- Full XCTest: 755/755 passed on iPhone 16 Plus, iOS 18.6.
+- `git diff --check`: passed.
+- Visual QA reviewed the streak punch-out plus the top and lower Feed states:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec147-feedback-qa/streak-cutout.png`,
+  `feed-top-reboot.png`, and `feed-bottom-states.png`.
+
+No build-number bump, TestFlight upload, merge, backend/schema change, or
+typography migration was performed. Next is Joe's connected-phone sign-off,
+then the remaining list/profile ticket expansion and the separate magazine
+typography exploration.
+
+## 2026-07-26 15:48 PDT — Codex — REC-147 second phone-feedback pass
+
+Agent: Codex
+Branch: `codex/rec-147-feed-profile-tickets`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-147-feed-profile-tickets`
+Linear: `REC-147` (`In Progress`)
+
+Joe's phone screenshots show mixed first-pass coverage: two Check-in events
+use the ticket while Wanna and later events remain legacy rows with visible
+`View place` / `View list` actions. Joe confirmed this was not simply an old
+build. Current PR #242 head `93a8dd5` already routes Check in, Wanna,
+list-created, list-item, and dropped-pin events through the same compact ticket
+renderer; this pass treats the screenshots as evidence of the earlier partial
+implementation and explicitly regression-tests the unified current branch.
+
+This follow-up will remove the colored map-preview `YOUR CHECK-IN / YOUR WANNA`
+eyebrow, make the Feed thumbnail route through the existing place/list
+destination, and harden the shared ticket surface with a directly tested
+concave punch-out while removing unnecessary offscreen compositing. The
+reported place-profile hang is a P2 regression candidate: current evidence does
+not tie it to REC-147 because this branch only changed place-profile ticket
+styling, but the shared compositing cost will be removed and the focused/full
+test suites plus exact-branch visual QA will be rerun.
+
+Engineering review gate: not needed for this pass. The thumbnail reuses the
+existing tested Feed destination and introduces no new route, persisted state,
+backend/schema contract, or cross-screen semantics. An exact deep link to one
+historical visit would require a separate `visit_id` Feed contract and is not
+being approximated here. Expected files: shared ticket surface, Feed, map place
+preview, navigation/design tests, and this log. No TestFlight release or merge
+is authorized.
+
+Checkpoint / correction:
+
+- Joe's second 15:51 screenshot established that the phone build was mixed,
+  not wholly old: two Check-in events used the first ticket pass while Wanna
+  and later events still used legacy rows. Current branch head already routes
+  all five event kinds through one `FeedActivityModule`; this pass retained and
+  regression-tested that single-renderer coverage.
+- The shared ticket is now one concave `InsettableShape`; there is no circle
+  overlay. A geometry test asserts that points inside the trailing and leading
+  center notches are outside the shape while adjacent ticket body points remain
+  inside.
+- Removed the map preview's colored `YOUR CHECK-IN / YOUR WANNA` eyebrow.
+- Feed photos/thumbnails now open the existing place destination, or the list
+  destination for list-only events. Notes stay quoted; there is no visible
+  `View place` CTA.
+- Removed the ticket surface's forced `.compositingGroup()` and kept its shadow
+  on the shape background, reducing per-row offscreen rendering work.
+- Reproduced a genuine selected-place hang under the deterministic 1,620-save /
+  900-place stress fixture. A process sample showed `MapScreen.body` repeatedly
+  rebuilding all `VisiblePlaceGrouping` groups from inside the annotation sort
+  and selected-marker checks, reaching 100% CPU and a 4.9 GB footprint. The map
+  now moves the already-grouped selected annotation to the end with one linear
+  pass and compares stable group keys inside marker rendering. A focused
+  regression test preserves ordering and group membership.
+- After that fix, the app-owned regrouping loop disappeared from the process
+  sample and memory dropped to about 439 MB. The 900-custom-annotation fixture
+  can still saturate MapKit itself; this is a separate extreme-scale map
+  rendering limit. Normal demo-data place profile presentation rendered fully
+  in under one second.
+
+Validation:
+
+- Focused XCTest: 98/98 passed, including ticket geometry, every Feed event
+  contract, thumbnail routing, place-profile presentation, map hit testing, and
+  selected annotation ordering.
+- Full XCTest: 757/757 passed on iPhone 16 Plus, iOS 18.6.
+- `xcodegen generate` and `git diff --check`: passed; no generated project diff.
+- Visual QA reviewed exact-branch Feed, Map ticket, and full place profile at:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec147-feedback-2/`.
+- Temporary fixture-auth bypass used only for simulator screenshots was removed
+  before the final focused and full suites.
+
+No build-number bump, TestFlight upload, merge, backend/schema change, or
+typography migration was performed. Outcome is ready for review on PR #242;
+Joe's connected-phone validation is the next gate.
 ## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
 
 Agent: Codex
