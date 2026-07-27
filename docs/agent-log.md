@@ -25506,3 +25506,13 @@ Final validation — 18:02 PDT:
   are no new warnings attributable to REC-161.
 - No build-number bump or TestFlight work was performed. Next step is Joe's
   visual review of the stacked implementation PR.
+
+Handoff:
+
+- Draft PR: https://github.com/joelipshutz/wander/pull/256, stacked on REC-148
+  draft PR #254 and REC-147 ticket foundation PR #242.
+- Linear REC-161 moved to `In Review` with the PR, validation, scope locks, and
+  device-QA summary attached in a comment.
+- Mission Control task `bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` moved to review.
+- Branch is pushed as `codex/rec-161-native-editorial-type`. The PR remains
+  draft until Joe reviews the implemented screenshots.
