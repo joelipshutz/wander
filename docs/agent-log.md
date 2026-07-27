@@ -23820,3 +23820,105 @@ Landing completion:
 Final outcome: the universal rec.me Share Extension is on `main`, fully
 validated in Simulator, and ready for physical-device testing once the
 documented Apple Developer provisioning is complete.
+
+## 2026-07-26 09:15 PDT - Codex - REC-155 Tags And Labels Design Exploration
+
+Agent: Codex using `design-shotgun`
+Branch: `codex/rec-155-tags-labels-redesign`
+Worktree: `/private/tmp/recme-rec155-tags-labels-mockups`
+Linear: `REC-155` (`In Progress`)
+
+Goal: create multiple reviewable iPhone mockup directions that make the
+difference between place tags and personal labels self-evident in rec.me's
+save/edit flow. This is design exploration only; production SwiftUI, schema,
+visibility, and TestFlight changes are not authorized.
+
+Starting status and coordination:
+
+- Ran `git fetch origin`, inspected the primary checkout, all worktrees, and
+  the latest agent-log entries before editing.
+- The primary checkout is on stale branch `codex/rec-142-widgets` with the
+  unrelated untracked `.pnpm-store/`; it remains untouched.
+- Created this clean isolated worktree from `origin/main` at `9d51b0ec3`.
+- Joe is concurrently working on REC-147 check-in cards. This exploration will
+  not edit production UI files, including the high-conflict `MapScreen.swift`.
+- Existing product contract: tags describe a place or why it fits, while
+  personal labels are user-owned memory/filter groupings. The current
+  side-by-side chip treatment and overlapping suggestions make that difference
+  unclear.
+- Design artifacts will live only in the gstack user-artifact directory, as
+  required by `design-shotgun`, not in the repository.
+
+Expected repository files:
+
+- `docs/agent-log.md`
+
+Expected external artifacts:
+
+- `~/.gstack/projects/<project>/designs/tags-labels-redesign-20260726/`
+  containing mockup variants, comparison board, and eventual feedback.
+
+Design checkpoint, 2026-07-26 09:28 PDT:
+
+- Created four distinct interactive iPhone HTML prototypes:
+  - A, `Describe it / Remember it`: two explicit tools with separate
+    structures for place description and personal organization.
+  - B, `One memory cloud`: one suggestion surface that routes selections into
+    `About Jitlada` and `For me`.
+  - C, `Place fingerprint / My shortcuts`: compact descriptive traits plus
+    larger personal destination tiles.
+  - D, `Save now, organize later`: descriptive traits in the main flow and
+    personal shortcuts as an optional post-save action.
+- Rendered and visually inspected all four at a 500x980 review viewport.
+  Tightened Variant C after its first render so both semantic halves are
+  visible above the anchored save action.
+- Built and rendered a responsive comparison board with 1-5 ratings,
+  preferred-direction selection, per-variant comments, remix controls, and a
+  local feedback endpoint. Local asset checks returned HTTP 200 for the board
+  and rendered images.
+- Persistent artifacts:
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/tags-labels-redesign-20260726/`.
+- The gstack image generator and bundled browse daemon were unavailable
+  because the design binary and Bun runtime are missing. Used self-contained
+  HTML/CSS/JS prototypes and installed headless Chrome rendering instead.
+- No production source, schema, project-generation, or TestFlight files were
+  changed. Awaiting Ryan's structured comparison-board feedback before
+  selecting or iterating a direction.
+
+Design revision, 2026-07-26 17:59 PDT:
+
+- Ryan replaced the two-field product model with one unified user-facing
+  **Tags** field. `Tags` is the clearer name because the values now cover both
+  place description and personal retrieval; `Labels` would imply personal
+  filing only.
+- Locked the suggestion contract for the later implementation:
+  - normalize and deduplicate one combined suggestion set;
+  - for Restaurants & Food, recompute from category + cuisine;
+  - for every other primary category, recompute from category + subcategory;
+  - remove incompatible taxonomy-specific suggestions in real time while
+    preserving still-valid selections and custom tags.
+- Replaced the earlier two-tool prototypes with four static, single-list
+  directions using the same fictional Mediterranean restaurant:
+  - A, `Tag Deck`: equal-height two-column selection cards.
+  - B, `Ranked Stack`: full-width suggestions with a concise relevance reason.
+  - C, `Flavor Board`: a symmetrical three-column tactile tile grid.
+  - D, `Tag Shelf`: selected tags above a compact faceted catalogue.
+- Each direction shows the same taxonomy context and a coherent, deduplicated
+  Mediterranean set. No variant includes the prior Asian-fusion mismatch,
+  separate personal-label pool, or loose asymmetrical bubble cloud.
+- Rendered and visually inspected all four at 500x980, refined Variant C's
+  custom-tag action to span the grid, then rendered a 1800x980 static
+  comparison image.
+- Final artifacts:
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/merged-tags-section-20260726/`.
+- Updated `docs/decisions.md` with the durable merged-field and taxonomy-aware
+  suggestion contract. No production SwiftUI, persistence, schema, tests,
+  build number, or TestFlight state changed.
+- Validation: all five PNGs rendered successfully and were visually inspected;
+  the persistent artifact directory contains the four source HTML files,
+  four individual PNGs, and one static comparison HTML/PNG pair.
+
+Final outcome: four reviewable static mockup directions now express one
+taxonomy-aware, deduplicated Tags field. REC-155 remains In Progress pending
+Ryan's visual-direction selection and a separately authorized implementation
+pass.
