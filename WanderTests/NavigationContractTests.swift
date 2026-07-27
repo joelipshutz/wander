@@ -122,6 +122,49 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(feed.contains("Label(featured.reason"))
     }
 
+    func testFeedFeaturedRailAndMapTicketResolveRealPhotosBeforeFallbackArtwork() throws {
+        let fixtureURL = projectRoot
+            .appendingPathComponent("WanderTests/Fixtures/rec-161-photo-fallback-pre.json")
+        let fixtureData = try Data(contentsOf: fixtureURL)
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
+        XCTAssertEqual(
+            fixture["bug"] as? String,
+            "real place and check-in photos are replaced by category artwork"
+        )
+
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let featuredArtwork = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedPlaceArtwork: View").last?
+                .components(separatedBy: "private struct FeedLoadingState: View").first
+        )
+        XCTAssertTrue(featuredArtwork.contains("@EnvironmentObject private var backend: WanderBackend"))
+        XCTAssertTrue(featuredArtwork.contains("@State private var photo: PlacePhoto?"))
+        XCTAssertTrue(featuredArtwork.contains("await backend.placePhoto("))
+        XCTAssertTrue(featuredArtwork.contains("PlaceProfilePhotoImage("))
+        XCTAssertTrue(featuredArtwork.contains("onLoadFailure:"))
+
+        let activityThumbnail = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedActivityThumbnail: View").last?
+                .components(separatedBy: "private struct FeedActivityArtworkFallback: View").first
+        )
+        XCTAssertTrue(activityThumbnail.contains("FeedResolvedPlacePhoto(place: place)"))
+
+        let mapSurface = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let localPhotoSelection = try XCTUnwrap(
+            mapSurface.components(separatedBy: "private var localPhoto: PlacePhoto?").last?
+                .components(separatedBy: "private var photoResolutionKey: String").first
+        )
+        XCTAssertTrue(localPhotoSelection.contains("owner.id == currentUserID"))
+        XCTAssertFalse(localPhotoSelection.contains("!store.isPrivateProfile"))
+        XCTAssertFalse(localPhotoSelection.contains("visibility == .followers"))
+    }
+
     func testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile() throws {
         let feed = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift"))
         let featuredRail = try XCTUnwrap(

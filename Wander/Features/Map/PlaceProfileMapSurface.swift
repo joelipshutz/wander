@@ -214,11 +214,9 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var localPhoto: PlacePhoto? {
-        guard !store.isPrivateProfile,
-              saves.contains(where: {
-                  $0.visiblePlace.owner.id == currentUserID
-                      && $0.visiblePlace.userPlace.visibility == .followers
-              })
+        guard saves.contains(where: {
+            $0.visiblePlace.owner.id == currentUserID
+        })
         else {
             return nil
         }

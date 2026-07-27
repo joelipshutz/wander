@@ -1270,12 +1270,14 @@ private struct FeedActivityModule: View {
 
 private struct FeedActivityThumbnail: View {
     let activity: FeedActivity
-    @EnvironmentObject private var backend: WanderBackend
-    @State private var providerPhoto: PlacePhoto?
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             FeedActivityArtworkFallback(activity: activity)
+
+            if let place = activity.place {
+                FeedResolvedPlacePhoto(place: place)
+            }
 
             if let preview = activity.media.first,
                let url = preview.urlString.flatMap(URL.init(string:)) {
@@ -1285,11 +1287,6 @@ private struct FeedActivityThumbnail: View {
                     Color.clear
                 }
                 .accessibilityLabel(preview.accessibilityLabel)
-            } else if let providerPhoto, let place = activity.place {
-                PlaceProfilePhotoImage(
-                    photo: providerPhoto,
-                    placeName: place.place.canonicalName
-                )
             }
 
             if activity.media.count > 1 {
@@ -1305,24 +1302,6 @@ private struct FeedActivityThumbnail: View {
         }
         .frame(width: FeedActivityLayout.photoSize, height: FeedActivityLayout.photoSize)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .task(id: photoResolutionKey) {
-            await resolveProviderPhoto()
-        }
-    }
-
-    private var photoResolutionKey: String {
-        guard activity.media.isEmpty, let place = activity.place else {
-            return "media-\(activity.media.first?.id ?? "none")"
-        }
-        return PlaceSheetPlace(visiblePlace: place).photoLookupKey
-    }
-
-    private func resolveProviderPhoto() async {
-        providerPhoto = nil
-        guard activity.media.isEmpty, let place = activity.place else { return }
-        providerPhoto = try? await backend.placePhoto(
-            for: PlaceSheetPlace(visiblePlace: place).photoRequest
-        )
     }
 }
 
@@ -1363,10 +1342,93 @@ private struct FeedPlaceArtwork: View {
             Image(systemName: categorySymbol(for: place.effectiveCategory))
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(WanderTheme.textInk.color.opacity(0.62))
+
+            FeedResolvedPlacePhoto(place: place)
         }
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+    }
+}
+
+private struct FeedResolvedPlacePhoto: View {
+    let place: VisiblePlace
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var photo: PlacePhoto?
+    @State private var failedGooglePhotoID: String?
+
+    private var sheetPlace: PlaceSheetPlace {
+        PlaceSheetPlace(visiblePlace: place)
+    }
+
+    private var photoResolutionKey: String {
+        "\(sheetPlace.photoLookupKey)|\(failedGooglePhotoID ?? "ready")"
+    }
+
+    var body: some View {
+        Group {
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: place.place.canonicalName,
+                    onLoadFailure: handlePhotoLoadFailure
+                )
+                .overlay(alignment: .bottomTrailing) {
+                    if photo.isGooglePlacesPhoto {
+                        Text("Google Maps")
+                            .font(.system(size: 8, weight: .regular))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4)
+                            .frame(minHeight: 16)
+                            .background(Color.black.opacity(0.68))
+                            .clipShape(Capsule())
+                            .padding(4)
+                            .allowsHitTesting(false)
+                    }
+                }
+            } else {
+                Color.clear
+                    .accessibilityHidden(true)
+            }
+        }
+        .task(id: photoResolutionKey) {
+            await resolvePhoto()
+        }
+    }
+
+    private func resolvePhoto() async {
+        let resolutionKey = photoResolutionKey
+        photo = nil
+
+        do {
+            let remotePhoto = try await backend.placePhoto(for: sheetPlace.photoRequest)
+            try Task.checkCancellation()
+            let resolvedPhoto: PlacePhoto
+            if remotePhoto.isGooglePlacesPhoto,
+               remotePhoto.providerPlaceID == failedGooglePhotoID {
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
+            } else {
+                resolvedPhoto = remotePhoto
+            }
+            try Task.checkCancellation()
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = resolvedPhoto
+        } catch is CancellationError {
+            return
+        } catch {
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = nil
+        }
+    }
+
+    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
+        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
+        if failedPhoto.isGooglePlacesPhoto {
+            failedGooglePhotoID = failedPhoto.providerPlaceID
+        } else {
+            photo = nil
+        }
     }
 }
 
