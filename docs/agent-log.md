@@ -25770,3 +25770,33 @@ scope comment in Linear. Mission Control task
 `localhost:4000` remains unavailable. The working checkout is isolated because
 Joe's root checkout contains unrelated `tmp/` files and is 63 commits behind
 `origin/main`.
+
+Implementation and validation checkpoint — 23:19 PDT:
+
+- Added `editorialRatingDisplay` and `editorialRatingSuffix` semantic tokens,
+  both native system serif with tabular/monospaced digits, and applied them only
+  to the numeric value and denominator inside `PlaceProfileRatingTile` when a
+  real rating suffix exists. Empty-state copy, the tile labels/subtitles,
+  check-in cards, Feed, Discover, the rating-input slider, and the streak screen
+  remain unchanged.
+- Added `testOverallPlaceProfileRatingsUseEditorialSerifWithoutChangingCheckInRatings`
+  and the pre-fix source-state fixture. The focused regression failed before the
+  production edit and passed after it.
+- Built successfully for the iPhone 16 Plus simulator. Existing Supabase
+  formatter-concurrency and traditional-headermap warnings remain; no new build
+  warnings or errors were introduced.
+- Visually verified the exact production rating tile at default Dynamic Type on
+  iPhone 16 Plus and iPhone 16e, then at accessibility sizes AX1 and AX3 on the
+  iPhone 16 Plus. All three ratings remain legible and fit their tiles. Evidence:
+  `rec161-profile-ratings-default-16plus.png`,
+  `rec161-profile-ratings-default-16e.png`,
+  `rec161-profile-ratings-ax1-16plus.png`, and
+  `rec161-profile-ratings-ax3-16plus.png` under the thread visualization folder.
+- Removed the temporary DEBUG-only visual harness before final validation and
+  restored both simulators to the default Dynamic Type size.
+- Full simulator suite passed: 762 tests, 0 failures. Result bundle:
+  `/private/tmp/DerivedData-rec161-ratings-visual/Logs/Test/Test-Wander-2026.07.26_23-17-24--0700.xcresult`.
+
+Next: complete the pre-merge diff review, push/open the stacked profile-rating
+PR, land the approved PR chain in dependency order, and release latest `main`
+as the next TestFlight build.
