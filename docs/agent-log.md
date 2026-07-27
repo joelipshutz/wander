@@ -27182,3 +27182,35 @@ Validation checkpoint, 2026-07-27 10:55 PDT:
   `/private/tmp/DerivedData-recme-build105/Logs/Test/Test-Wander-2026.07.27_10-47-58--0700.xcresult`.
 - Existing Supabase formatter actor-isolation warnings remain unrelated and
   non-blocking. No new warning or failure was introduced by build 105.
+
+### 2026-07-27 11:10 PDT - Release outcome
+
+- Build-number PR #268 was squash-merged as `4b4fd1e`; the signed archive and
+  upload were created from that exact clean `origin/main` commit.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build105.xcarchive` and independently reports rec.me
+  `0.1 (105)`. Export used automatic App Store distribution signing with
+  `manageAppVersionAndBuildNumber=false`.
+- API-key-authenticated `xcodebuild -exportArchive` uploaded the unchanged
+  archive successfully; Xcode reported `Uploaded Wander`, `Upload succeeded`,
+  and `EXPORT SUCCEEDED` with no build-number drift.
+- App Store Connect build id is
+  `7daa6c22-d3c7-4c9b-afb5-90827aaf0670`. Build 105 is `VALID`, has
+  `usesNonExemptEncryption=false`, includes the build-105 en-US What to Test
+  copy, is attached to `rec.me Alpha`, and external beta review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785175750049249
+- Linear REC-164 is Done and has the PR, merge commits, validation, build,
+  TestFlight, and Slack receipts. Mission Control remained unavailable because
+  `localhost:4000` is not running.
+- Tester focus: sign out, open Get started or Log in, choose the remembered
+  Google `Last used` account, and confirm Clerk remains presented through the
+  handoff until authentication completes. Cancel once and verify the splash is
+  stable for a retry.
+- Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking. Clerk development-mode branding remains the
+  tester-facing known alpha issue.
+
+Final status: rec.me 0.1 (105), including the Google sign-in presentation fix,
+is approved and available through the public TestFlight link.
