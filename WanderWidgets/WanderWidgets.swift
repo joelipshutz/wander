@@ -7,6 +7,9 @@ struct WanderWidgetsBundle: WidgetBundle {
         WanderQuickCaptureWidget()
         WanderQuickSearchWidget()
         WanderActivityCalendarWidget()
+        if #available(iOS 18.0, *) {
+            WanderCheckInControl()
+        }
     }
 }
 

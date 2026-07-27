@@ -25105,6 +25105,64 @@ Final outcome: every visible Nearby widget place row now uses a plus icon while
 retaining the same selected-place check-in destination. PR #246 is ready for
 review.
 
+## 2026-07-26 13:40 PDT - Codex - REC-160 Check-in here Action Button control
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Worktree: `/private/tmp/recme-rec160-action-control`
+Linear: `REC-160` (`In Progress`)
+
+Goal: add one iOS 18+ WidgetKit Control named `Check-in here` so rec.me can be
+assigned to the iPhone Action Button and open the existing nearby check-in
+flow. The shipped bottom Lock Screen accessory widget is explicitly out of
+scope and will not be rebuilt or changed.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact current
+  `origin/main` at `b4d7c98ce`.
+- The primary checkout remains untouched on the stale REC-142 branch with its
+  unrelated untracked `.pnpm-store/`.
+- Created REC-160 in the `recme` team / `mvp` project, assigned it to Ryan,
+  related it to REC-142 and REC-157, and moved it to `In Progress`.
+- Active REC-157 and REC-158 branches overlap widget-bundle registration and
+  app deep-link routing. REC-160 will place the control in a separate source
+  file, leave REC-157's accessory widget presentation untouched, and keep its
+  navigation changes additive. The branch will be reconciled with latest
+  `origin/main` before publication.
+- Expected files:
+  `project.yml`, regenerated project state, a small app/widget shared App
+  Intent and navigation handoff, one new control source file, the existing
+  widget bundle registration, focused widget/navigation tests, setup docs,
+  and this log.
+- No backend, schema, Supabase, notification, build-number, TestFlight, or
+  Slack release change is in scope.
+
+Implementation checkpoint — 2026-07-26 13:47 PDT:
+
+- Added an iOS 18 `ControlWidget` with exact display name and label
+  `Check-in here`, terracotta tint, `location.fill` symbol, and a dedicated
+  `OpenIntent`. The new source is registered only with the host app and the
+  existing primary widget extension.
+- The intent hands off to the existing `.quickCapture` / I'm Here Now route.
+  A main-actor navigation center retains the request until authenticated
+  session validation completes, then reuses the existing deep-link handoff.
+- Registered the control in the existing widget bundle behind an iOS 18
+  availability guard. The accessory-circular Lock Screen widget implementation
+  remains unchanged.
+- Added focused contract and behavior coverage plus physical-device Action
+  Button setup instructions in `docs/setup.md`.
+- `xcodegen generate` and `git diff --check` passed.
+- Focused `WanderActionButtonControlTests` passed 4/4 with zero failures on
+  iPhone 17 Pro / iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-42-07--0700.xcresult`.
+- The sandboxed first attempt could not access CoreSimulator or fetch Swift
+  packages; rerunning the same command with the repository-prescribed
+  escalation succeeded.
+- `origin/main` advanced by REC-159 while this work was in progress. Its
+  Nearby-widget icon change does not overlap implementation files, and this
+  reconciliation preserved its append-only agent-log entry.
+
 ## 2026-07-26 13:42 PDT - Codex - REC-159 Landing
 
 Agent: Codex
@@ -25139,6 +25197,42 @@ Landing and validation:
 Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
+
+## 2026-07-26 13:59 PDT - Codex - REC-160 Final Validation
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Progress`)
+
+Validation and handoff checkpoint:
+
+- Reconciled the branch through current `origin/main` at `ff20d52e7`,
+  preserving both REC-159 implementation and landing receipts. No REC-160
+  implementation file conflicted.
+- Following Apple's system-control privacy guidance, the final intent uses
+  `.requiresAuthentication` before opening the personal nearby-location
+  surface from a locked system placement.
+- Final focused Action Button and existing widget regression suite passed
+  20/20 with zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-56-50--0700.xcresult`.
+- Final complete suite passed 748/748 with zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-57-43--0700.xcresult`.
+- Final generic iOS Simulator build passed for the app and all embedded
+  extensions. `WanderWidgets.appex` is a universal arm64/x86_64 Simulator
+  binary.
+- Inspected the built App Intents metadata directly in both `Wander.app` and
+  `WanderWidgets.appex`. Both advertise `WanderOpenCheckInControlIntent` with
+  title `Check-in here`, iOS 18 introduction, `openAppWhenRun: true`,
+  authenticated execution, and the `WanderControlDestination` target.
+- Existing non-blocking warnings remain for traditional headermaps and
+  `WanderSupabaseClient` formatter actor isolation. No new control, intent,
+  widget, packaging, or metadata warning was introduced.
+- `git diff --check` passes. No build number, TestFlight binary, backend,
+  Supabase, or Slack announcement changed.
+- Physical Action Button validation remains a hardware-only check after a
+  signed install: assign **Settings → Action Button → Controls → rec.me →
+  Check-in here**, then verify locked, unlocked, cold-launch, and signed-out
+  behavior. These instructions are durable in `docs/setup.md`.
 
 REC-152 latest-main conflict resolution — 2026-07-26 14:05 PDT:
 
@@ -25177,6 +25271,128 @@ Release start:
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
 
+## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Review` at handoff)
+
+Final handoff:
+
+- Pushed the implementation branch and opened ready PR #249:
+  `https://github.com/joelipshutz/wander/pull/249`.
+- `origin/main` advanced again during publication with the REC-122 streak
+  hierarchy and build-100 release metadata. Merged exact current main
+  `c98612e41`, preserving its product, test, version, generated-project, and
+  append-only log changes. Only `docs/agent-log.md` required manual conflict
+  resolution.
+- Regenerated `Wander.xcodeproj` from the merged `project.yml`. The final
+  project retains build 100 and the REC-160 source membership in both the app
+  and primary widget extension.
+- The exact reconciled PR branch passed the complete 754/754 XCTest suite with
+  zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_14-01-46--0700.xcresult`.
+- The exact reconciled branch passed the generic iOS Simulator build. Both the
+  app and `WanderWidgets.appex` report build 100; the extension remains a
+  universal arm64/x86_64 binary.
+- Reinspected final built metadata in both app and widget extension: exact
+  title `Check-in here`, iOS 18 introduction, `openAppWhenRun: true`, and
+  authenticated execution remain present.
+- Implementation commits are `d63a4e6b0` and `f4b3f64b2`; current-main
+  reconciliation is `834efdfc4`.
+- No TestFlight release action for REC-160 was requested or performed. The
+  independently running build-100 release started from `main` before REC-160
+  and therefore does not contain this feature.
+
+Final outcome: the new authenticated **Check-in here** system control is
+implemented, tested, documented, and ready for review in PR #249. The existing
+bottom Lock Screen accessory widget remains unchanged. Physical Action Button
+validation after a signed install is the only remaining hardware-specific
+check.
+
+## 2026-07-26 17:37 PDT - Codex - REC-160 Xcode Test Handoff
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Review`)
+
+- Confirmed the isolated worktree was clean and matched pushed commit
+  `b94bee5c956bd221786f295178a755f925a230f5`.
+- Opened `/private/tmp/recme-rec160-action-control/Wander.xcodeproj` as its own
+  Xcode workspace window without switching or overwriting the primary checkout.
+- Verified Xcode's visible Branch Chooser reads
+  `codex/rec-160-action-control`; the active scheme is `Wander` and the current
+  run destination is `iPhone 17 Pro`.
+- Left Xcode open on the REC-160 worktree for signed device/simulator testing.
+  No new build, archive, TestFlight upload, or app-code change was performed
+  during this handoff.
+
+## 2026-07-26 18:09 PDT - Codex - REC-160 Control Copy/Icon Follow-up
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Worktree: `/private/tmp/recme-rec160-action-control`
+Linear: `REC-160` (`In Review`)
+PR: `#249`
+
+Goal: rename the Action Button/system control from **Check-in here** to
+**Check-in**, replace its navigation/location glyph with a plain plus, validate
+the current branch against latest `main`, and squash-merge the ready result to
+`main`. The existing bottom Lock Screen widget remains out of scope and must
+stay unchanged.
+
+Starting status and coordination:
+
+- The dedicated REC-160 worktree is clean at pushed commit `f99d43c3c`.
+- Latest `origin/main` is `759e7c9df` at build 101. The build-101 TestFlight
+  release is fully recorded as uploaded, externally approved, and live, so no
+  unfinished explicit release blocks this merge.
+- PR #249 is open and non-draft but currently behind `main`; it will be
+  reconciled before the landing review.
+- Expected edits are limited to
+  `WanderWidgets/WanderCheckInControl.swift`,
+  `WanderControlShared/WanderCheckInControlIntent.swift`,
+  `WanderTests/WanderActionButtonControlTests.swift`, `docs/setup.md`, and this
+  append-only log. `project.yml` and the generated project may change only as
+  required to reconcile build 101 from `main`.
+- No TestFlight build, build-number increment, archive/upload, or Slack release
+  note is authorized by this merge-only request.
+
+REC-160 copy/icon validation checkpoint — 2026-07-26 18:21 PDT:
+
+- Merged latest `origin/main` into the feature branch. The only conflict was
+  the append-only agent log; all histories were preserved. The reconciled
+  project remains on build 101.
+- Changed every user-visible control and intent title from **Check-in here** to
+  exact **Check-in** and changed the control label symbol from `location.fill`
+  to the plain SF Symbol `plus`. Kept the internal enum case and control-kind
+  identifier stable so existing system configuration identity is not
+  needlessly changed.
+- The separate accessory-circular Lock Screen widget remains registered and
+  unchanged; its location icon is intentionally outside this control source.
+- Updated the focused source-contract test to require the exact new title and
+  plus symbol and reject the old location symbol in the Action Button control.
+  Updated `docs/setup.md` assignment instructions to match.
+- `xcodegen generate` completed without an additional generated-project diff,
+  and `git diff --check` passed.
+- The required iPhone 16 Plus / iOS 18.6 destination is unavailable on this
+  host. The elevated replacement run on the available iPhone 17 Pro / iOS 26.5
+  Simulator passed the focused Action Button suite 4/4 and the complete suite
+  757/757 with zero failures. Result bundles:
+  `/tmp/DerivedData-rec160-followup/Logs/Test/Test-Wander-2026.07.26_18-13-16--0700.xcresult`
+  and
+  `/tmp/DerivedData-rec160-followup/Logs/Test/Test-Wander-2026.07.26_18-17-47--0700.xcresult`.
+- The elevated generic iOS Simulator build passed for the app and all embedded
+  extensions. Direct inspection of the generated App Intents metadata in both
+  `Wander.app` and `WanderWidgets.appex` confirmed the exact `Check-in` intent
+  title with `openAppWhenRun: true`; no old user-visible title remains.
+- Pre-landing scope and code review found no critical or informational issues.
+  PR #249 has no submitted reviews, review threads, comments, or Greptile
+  findings. Specialist subagents were skipped because the requested copy/icon
+  follow-up is narrow and orchestration policy does not permit delegation.
+- No TestFlight action was performed. Next: commit and push this reconciled
+  validation head, refresh PR #249 metadata, verify current-head status, and
+  squash-merge it to `main`.
 REC-152 build-100-main reconciliation and release review — 2026-07-26 14:07 PDT:
 
 - Joe explicitly requested a TestFlight push after approving the Profile
@@ -25397,3 +25613,44 @@ Planned validation:
   generic simulator build.
 - Capture and inspect Add/import screenshots on the current large iPhone
   simulator and one smaller phone before opening a ready PR.
+
+## 2026-07-26 18:25 PDT - Codex - REC-160 Landing Record
+
+Agent: Codex
+Branch: `codex/rec-160-landing-record`
+Worktree: `/private/tmp/recme-rec160-landing-record`
+Linear: `REC-160` (`Done`)
+PR: `#249` (merged)
+
+Final outcome:
+
+- Pushed the reconciled feature head `a262f6913`, refreshed PR #249 to describe
+  the exact **Check-in** title and plus icon, and confirmed it was mergeable
+  against current build-101 `main`.
+- GitHub reported no hosted statuses, submitted reviews, review threads,
+  comments, or Greptile findings on the exact reviewed head.
+- Squash-merged PR #249 to `main` as
+  `6dd51058198ba5dd9b1901054b5d617377ab4a2d`.
+- Fetched and directly inspected `origin/main`: the control label and display
+  name are exactly `Check-in`, its SF Symbol is `plus`, and the shared intent
+  title and destination display representation are also exactly `Check-in`.
+  The separate accessory-circular bottom Lock Screen widget remains unchanged.
+- Validation before merge passed the focused Action Button suite 4/4, the
+  complete XCTest suite 757/757 on iPhone 17 Pro / iOS 26.5 Simulator, a
+  generic iOS Simulator build, `xcodegen generate`, `git diff --check`, and
+  built App Intents metadata inspection in both app and widget products.
+- The repo-standard iPhone 16 Plus / iOS 18.6 destination was unavailable on
+  this host. Physical Action Button validation after a signed install remains
+  the hardware-specific release check.
+- The gstack review-log helper could not write its optional local review
+  history because the host does not have its `bun` runtime. The clean
+  pre-landing review and full validation evidence are preserved in this log,
+  PR #249, and Linear REC-160.
+- Marked REC-160 Done and added the merge/test receipt in Linear.
+- No build-number change, archive, upload, TestFlight attachment, or Slack
+  release note was performed; the user requested a merge to `main`, not a
+  TestFlight release.
+
+Next step: install a future signed build containing commit `6dd510581` on an
+Action Button iPhone, select **Settings → Action Button → Controls → rec.me →
+Check-in**, and verify locked, unlocked, cold-launch, and signed-out behavior.
