@@ -25398,3 +25398,22 @@ Checkpoint:
 
 The workflow is paused for Joe to select or remix a direction. No font files,
 SwiftUI typography tokens, or app screens have been changed.
+
+Decision / handoff:
+
+- Joe approved a constrained version of A and explicitly authorized the next
+  step. The approved system uses Apple-native serif only inside editorial
+  content and native sans for navigation chrome, controls, body, and metadata.
+- Native header means native SwiftUI navigation components and placements, not
+  serif navigation titles. Use `NavigationStack`, native title behavior,
+  toolbars, back buttons, search, and segmented controls where they preserve
+  the existing information architecture.
+- Ticket geometry, layout, colors, density, photos, and actions are locked;
+  typography is the only allowed ticket change. The streak screen is entirely
+  locked, including its typography.
+- Saved the constrained approval and migration notes in the design artifact
+  directory. Created `REC-161` for implementation so `REC-148` remains the
+  exploration/decision record.
+
+Draft PR #254 contains the tracked exploration log. No production app code was
+changed under REC-148.
