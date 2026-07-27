@@ -300,6 +300,7 @@ struct WanderRootView: View {
     @State private var deepLinkHandoffTask: Task<Void, Never>?
     @State private var deepLinkHandoff = WanderDeepLinkHandoffCoordinator()
     @State private var deepLinkPresentations = WanderDeepLinkPresentationRegistry()
+    @State private var handledDeepLinkLaunchRequestID: UUID?
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var sharedProfile: SharedProfileRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
@@ -318,20 +319,27 @@ struct WanderRootView: View {
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
+    @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
+    private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
+    private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
 
     init(
         initialTab: WanderTab? = nil,
         initialPresentation: WanderInitialPresentation? = nil,
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
+        deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
+        onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
         self.fixtureMode = fixtureMode
         self.isSessionValidated = isSessionValidated
+        self.deepLinkLaunchRequest = deepLinkLaunchRequest
+        self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
@@ -651,9 +659,14 @@ struct WanderRootView: View {
                 queueSaveStreakCelebration(store.saveStreakCelebration)
             }
         }
-        .onOpenURL { url in
-            guard isSessionValidated else { return }
-            handleDeepLink(url)
+        .onChange(of: deepLinkLaunchRequest, initial: true) { _, request in
+            handleDeepLinkLaunchRequestIfReady(request)
+        }
+        .onChange(
+            of: controlNavigationCenter.pendingRequest,
+            initial: true
+        ) { _, request in
+            handleControlNavigationRequestIfReady(request)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, isSessionValidated else { return }
@@ -671,9 +684,14 @@ struct WanderRootView: View {
                 onReview: presentSharedPlaceImportReview
             )
         )
-        .onChange(of: isSessionValidated) { _, isValidated in
-            guard !isValidated else { return }
-            cancelSignedInMaintenance()
+        .onChange(of: isSessionValidated, initial: true) { _, isValidated in
+            if isValidated {
+                handleControlNavigationRequestIfReady(
+                    controlNavigationCenter.pendingRequest
+                )
+            } else {
+                cancelSignedInMaintenance()
+            }
         }
         .onDisappear(perform: handleRootDisappear)
     }
@@ -852,10 +870,28 @@ struct WanderRootView: View {
         return SharedProfileRoute(profileID: profileID)
     }
 
-    private func handleDeepLink(_ url: URL) {
-        guard let route = WanderDeepLinkRoute.parse(url) else { return }
+    private func handleDeepLinkLaunchRequestIfReady(
+        _ request: WanderDeepLinkLaunchRequest?
+    ) {
+        guard isSessionValidated,
+              let request,
+              handledDeepLinkLaunchRequestID != request.id
+        else {
+            return
+        }
 
-        beginDeepLinkHandoff(to: route)
+        handledDeepLinkLaunchRequestID = request.id
+        beginDeepLinkHandoff(to: request.route)
+        onDeepLinkLaunchRequestHandled(request.id)
+    }
+
+    private func handleControlNavigationRequestIfReady(
+        _ request: WanderControlNavigationRequest?
+    ) {
+        guard isSessionValidated, let request else { return }
+
+        beginDeepLinkHandoff(to: request.route)
+        controlNavigationCenter.consume(request.id)
     }
 
     private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute) {
