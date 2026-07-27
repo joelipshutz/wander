@@ -27096,6 +27096,29 @@ Coordination:
 Current status: exploration is ready for Joe's A/B/C decision. No production
 SwiftUI has been changed. REC-165 remains `In Progress`; implementation should
 start only after a direction is selected.
+
+### 2026-07-27 12:11 PDT - Direction C selected; regression-first implementation start
+
+- Joe selected C, Editorial masthead. The locked type rule is system serif for
+  named content, major content-section headings, and eligible custom content
+  screen titles; native navigation, search, controls, filters, body copy,
+  metadata, and timestamps remain system sans.
+- Joe also reported that the redesign lost the Google Photos/Google Places
+  photo fallback. That regression must be restored and verified before the
+  typography implementation proceeds. Map selected-place tickets, feed cards,
+  and place profile are the required photo surfaces.
+- Updated this isolated branch to exact latest `origin/main` `5e4592f` (build
+  105 release record) before implementation. The merge preserved both the
+  REC-165 exploration record and the intervening REC-164/build-105 records.
+- Parallel read-only investigations are mapping the photo root cause/history
+  and Direction C code surface. No subagent is editing shared files.
+- Expected implementation surface: shared photo resolution/rendering views,
+  map/feed/place-profile photo consumers, semantic typography tokens, Lists
+  and Profile headings/named content, focused regression/contract tests, and
+  this log. Exact files will be narrowed after root-cause tracing.
+- Mission Control remained unavailable in the prior exploration; Linear
+  REC-165 remains the primary implementation tracker. A separate existing or
+  new Linear regression issue will be linked once the tracker audit completes.
 ## 2026-07-27 10:10 PDT - Codex - REC-164 Clerk Google sign-in dismissal
 
 Agent: Codex using `recme-testflight-feedback-bug-catcher` and
