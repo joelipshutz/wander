@@ -25955,3 +25955,20 @@ Final outcome:
 Next step: install a future signed build containing commit `6dd510581` on an
 Action Button iPhone, select **Settings → Action Button → Controls → rec.me →
 Check-in**, and verify locked, unlocked, cold-launch, and signed-out behavior.
+
+REC-157 final-main reconciliation — 2026-07-26 18:45 PDT:
+
+- `origin/main` advanced during REC-157 validation with REC-160's separate
+  **Check-in** Action Button control and its landing record. Merged current
+  `origin/main` at `9f12a04ea`; app/widget source auto-merged cleanly and the
+  only conflict was this append-only log, where both histories were retained.
+- Regenerated the Xcode project with no resulting diff and reconfirmed
+  `git diff --check`.
+- Reran the combined affected suites after the merge:
+  `WanderWidgetIntegrationTests` plus `WanderActionButtonControlTests` passed
+  22/22 with zero failures on iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec157-landing/Logs/Test/Test-Wander-2026.07.26_18-41-03--0700.xcresult`.
+- REC-157 remains ready for the authorized squash merge. The earlier 755/755
+  full-suite pass and generic Simulator build remain valid for the feature
+  diff; the newly landed REC-160 head independently passed 757/757 and a
+  generic Simulator build before its merge.
