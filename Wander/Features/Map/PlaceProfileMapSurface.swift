@@ -1731,14 +1731,14 @@ private struct PlaceProfileRatingTile: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: valueFontSize, weight: .black))
+                    .font(suffix == nil ? WanderTypography.label : WanderTypography.editorialRatingDisplay)
                     .foregroundStyle(tint)
                     .lineLimit(suffix == nil ? 2 : 1)
                     .multilineTextAlignment(.center)
                     .minimumScaleFactor(0.78)
                 if let suffix {
                     Text(suffix)
-                        .font(.system(size: 13, weight: .black))
+                        .font(WanderTypography.editorialRatingSuffix)
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
             }
@@ -1776,9 +1776,6 @@ private struct PlaceProfileRatingTile: View {
         explanation == .recMe ? 9 : 6
     }
 
-    private var valueFontSize: CGFloat {
-        suffix == nil ? 13 : 24
-    }
 }
 
 private struct PlaceProfileTagRail: View {

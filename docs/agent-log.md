@@ -26312,6 +26312,89 @@ Outcome:
   affect building, installing, or launching the app.
 - No app source, project settings, build number, TestFlight state, or release
   metadata changed.
+## 2026-07-26 23:00 PDT — Codex — REC-161 profile rating typography + TestFlight
+
+Agent: Codex using `ios-fix` and `recme-pr-review-merge-release`
+Branch: `codex/rec-161-profile-ratings`
+Worktree: `/private/tmp/recme-rec161-profile-ratings`
+Linear: `REC-161` (`In Progress`)
+Stack base: draft PR #256
+
+Goal: apply the approved native editorial serif only to the three overall
+place-profile rating values: Your rating, rec.me rating, and Fit Rating. Keep
+check-in, Feed, Discover, and rating-input typography unchanged. Then validate,
+land the full dependent stack in order, and release the resulting latest
+`main` to TestFlight as explicitly requested by Joe.
+
+Starting state: clean at `77b914a`, tracking the pushed #256 head. Joe's
+physical-device review is the reproducing visual evidence. This repo has no
+StateServer/DebugBridge snapshot API by documented design, so the source-state
+fixture `WanderTests/Fixtures/rec-161-profile-ratings-pre.json` records the
+pre-fix typography contract before Swift edits. The existing production source
+confirms `PlaceProfileRatingTile` uses fixed-size default-design black fonts for
+both numeric values and suffixes.
+
+Expected files: `Wander/DesignSystem/WanderTheme.swift`,
+`Wander/Features/Map/PlaceProfileMapSurface.swift`, focused typography contract
+coverage, this source-state fixture, and this log. No ticket geometry, check-in
+rating, streak, schema, backend, or data change.
+
+Coordination: REC-161 was moved from In Review back to In Progress and given a
+scope comment in Linear. Mission Control task
+`bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` could not be updated because
+`localhost:4000` remains unavailable. The working checkout is isolated because
+Joe's root checkout contains unrelated `tmp/` files and is 63 commits behind
+`origin/main`.
+
+Implementation and validation checkpoint — 23:19 PDT:
+
+- Added `editorialRatingDisplay` and `editorialRatingSuffix` semantic tokens,
+  both native system serif with tabular/monospaced digits, and applied them only
+  to the numeric value and denominator inside `PlaceProfileRatingTile` when a
+  real rating suffix exists. Empty-state copy, the tile labels/subtitles,
+  check-in cards, Feed, Discover, the rating-input slider, and the streak screen
+  remain unchanged.
+- Added `testOverallPlaceProfileRatingsUseEditorialSerifWithoutChangingCheckInRatings`
+  and the pre-fix source-state fixture. The focused regression failed before the
+  production edit and passed after it.
+- Built successfully for the iPhone 16 Plus simulator. Existing Supabase
+  formatter-concurrency and traditional-headermap warnings remain; no new build
+  warnings or errors were introduced.
+- Visually verified the exact production rating tile at default Dynamic Type on
+  iPhone 16 Plus and iPhone 16e, then at accessibility sizes AX1 and AX3 on the
+  iPhone 16 Plus. All three ratings remain legible and fit their tiles. Evidence:
+  `rec161-profile-ratings-default-16plus.png`,
+  `rec161-profile-ratings-default-16e.png`,
+  `rec161-profile-ratings-ax1-16plus.png`, and
+  `rec161-profile-ratings-ax3-16plus.png` under the thread visualization folder.
+- Removed the temporary DEBUG-only visual harness before final validation and
+  restored both simulators to the default Dynamic Type size.
+- Full simulator suite passed: 762 tests, 0 failures. Result bundle:
+  `/private/tmp/DerivedData-rec161-ratings-visual/Logs/Test/Test-Wander-2026.07.26_23-17-24--0700.xcresult`.
+
+Next: complete the pre-merge diff review, push/open the stacked profile-rating
+PR, land the approved PR chain in dependency order, and release latest `main`
+as the next TestFlight build.
+
+Latest-main stack reconciliation checkpoint — 23:34 PDT:
+
+- Opened ready PR #260 and linked it to REC-161. Pre-landing review of the
+  profile-only delta found no critical or informational issues.
+- Reconciled PRs #241, #242, #254, #256, and #260 in dependency order onto
+  exact `origin/main` `c020432`. Production changes merged automatically; the
+  only textual conflicts were append-only `docs/agent-log.md` sections, and
+  both sides were preserved each time.
+- The first exact-stack compile exposed one integration-only duplicate:
+  `CheckInCopy.pluralTitle` had independently landed in both the Direction A
+  branch and newer `main`. Removed the duplicate declaration at the lowest
+  stack layer, propagated that fix through every dependent branch, and kept the
+  single shared value plus its existing copy test.
+- The corrected exact combined head passed 771/771 tests with zero failures on
+  iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec161-ratings-visual/Logs/Test/Test-Wander-2026.07.26_23-31-50--0700.xcresult`.
+- All five PR branches are pushed, clean, and contain current `main`. PRs #254
+  and #256 can now leave draft after the already-recorded design approval and
+  phone feedback; no unresolved reviews or hosted checks are present.
 ## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
 
 Agent: Codex

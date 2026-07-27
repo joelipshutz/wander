@@ -586,6 +586,60 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
     }
 
+    func testOverallPlaceProfileRatingsUseEditorialSerifWithoutChangingCheckInRatings() throws {
+        let fixtureURL = projectRoot
+            .appendingPathComponent("WanderTests/Fixtures/rec-161-profile-ratings-pre.json")
+        let fixtureData = try Data(contentsOf: fixtureURL)
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
+        XCTAssertEqual(
+            fixture["bug"] as? String,
+            "overall place-profile rating values use the same heavy sans treatment as utility labels"
+        )
+
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let ratingSlider = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/PlaceRatingSlider.swift")
+        )
+
+        let typography = try XCTUnwrap(
+            theme.components(separatedBy: "enum WanderTypography").last?
+                .components(separatedBy: "private extension Color").first
+        )
+        XCTAssertTrue(typography.contains("editorialRatingDisplay"))
+        XCTAssertTrue(typography.contains("editorialRatingSuffix"))
+        XCTAssertTrue(typography.contains("design: .serif"))
+        XCTAssertTrue(typography.contains(".monospacedDigit()"))
+
+        let overallRatingTiles = try XCTUnwrap(
+            placeProfile.components(separatedBy: "private struct PlaceProfileRatingTile: View").last?
+                .components(separatedBy: "private struct PlaceProfileTagRail: View").first
+        )
+        XCTAssertTrue(overallRatingTiles.contains("WanderTypography.editorialRatingDisplay"))
+        XCTAssertTrue(overallRatingTiles.contains("WanderTypography.editorialRatingSuffix"))
+        XCTAssertFalse(overallRatingTiles.contains(".font(.system(size: valueFontSize, weight: .black))"))
+
+        let checkInRatings = try XCTUnwrap(
+            placeProfile.components(separatedBy: "private struct PlaceProfileSaveCard: View").last?
+                .components(separatedBy: "private enum PlaceProfileCopy").first
+        )
+        XCTAssertFalse(checkInRatings.contains("editorialRatingDisplay"))
+        XCTAssertFalse(checkInRatings.contains("editorialRatingSuffix"))
+        XCTAssertFalse(feed.contains("editorialRatingDisplay"))
+        XCTAssertFalse(feed.contains("editorialRatingSuffix"))
+        XCTAssertFalse(ratingSlider.contains("editorialRatingDisplay"))
+        XCTAssertFalse(ratingSlider.contains("editorialRatingSuffix"))
+    }
+
     func testUnavailableContentAvoidsStackedOpacityTreatments() throws {
         let privateProfileFiles = [
             "Wander/Features/Add/AddScreen.swift",
