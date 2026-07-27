@@ -88,6 +88,23 @@ enum WanderTheme {
     ]
 }
 
+/// Semantic, Dynamic-Type-aware typography roles for the approved native
+/// editorial system. Navigation chrome and utility copy stay in the default
+/// system design; serif is reserved for authored place content.
+enum WanderTypography {
+    static let editorialDisplay = Font.system(.largeTitle, design: .serif, weight: .bold)
+    static let editorialTitle = Font.system(.title2, design: .serif, weight: .bold)
+    static let editorialCardTitle = Font.system(.title3, design: .serif, weight: .bold)
+    static let editorialCompactTitle = Font.system(.headline, design: .serif, weight: .bold)
+    static let editorialSectionTitle = Font.system(.title3, design: .serif, weight: .bold)
+
+    static let body = Font.system(.body, design: .default, weight: .regular)
+    static let emphasizedBody = Font.system(.body, design: .default, weight: .semibold)
+    static let label = Font.system(.subheadline, design: .default, weight: .semibold)
+    static let metadata = Font.system(.caption, design: .default, weight: .semibold)
+    static let control = Font.system(.body, design: .default, weight: .semibold)
+}
+
 private extension Color {
     init(hex: String) {
         let cleaned = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))

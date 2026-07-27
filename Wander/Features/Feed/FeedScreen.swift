@@ -370,42 +370,14 @@ private struct FeedSurfaceTabs: View {
     @Binding var selectedSurface: FeedSurface
 
     var body: some View {
-        HStack(spacing: 0) {
+        Picker("Feed section", selection: $selectedSurface) {
             ForEach(FeedSurface.allCases) { surface in
-                Button {
-                    selectedSurface = surface
-                } label: {
-                    VStack(spacing: WanderTheme.spacing1) {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            Image(systemName: surface.systemImage)
-                                .font(.system(size: 15, weight: .black))
-                            Text(surface.title)
-                                .font(.system(size: 16, weight: .black, design: .rounded))
-                        }
-                        .foregroundStyle(
-                            selectedSurface == surface
-                                ? WanderTheme.textInk.color
-                                : WanderTheme.textMuted.color
-                        )
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-
-                        Rectangle()
-                            .fill(selectedSurface == surface ? WanderTheme.textInk.color : .clear)
-                            .frame(height: 3)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selectedSurface == surface ? .isSelected : [])
+                Text(surface.title)
+                    .tag(surface)
             }
         }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(WanderTheme.borderHairline.color)
-                .frame(height: 1)
-                .zIndex(-1)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Feed section")
+        .pickerStyle(.segmented)
+        .frame(minHeight: WanderTheme.tapMinimum)
     }
 }
 
@@ -895,7 +867,7 @@ private struct FeedSectionHeading: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 21, weight: .black, design: .rounded))
+                .font(WanderTypography.editorialSectionTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
 
             if let detail {
@@ -943,7 +915,7 @@ private struct FeedFeaturedCard: View {
                     FeedPlaceArtwork(place: featured.visiblePlace, height: 88)
 
                     Text(featured.visiblePlace.place.canonicalName)
-                        .font(.system(size: 15, weight: .black))
+                        .font(WanderTypography.editorialCompactTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
 
@@ -1152,7 +1124,7 @@ private struct FeedActivityModule: View {
                 openPlace(place)
             } label: {
                 Text(place.place.canonicalName)
-                    .font(.system(size: 20, weight: .black, design: .serif))
+                    .font(WanderTypography.editorialCardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -1166,7 +1138,7 @@ private struct FeedActivityModule: View {
                 openList(list)
             } label: {
                 Text(list.name)
-                    .font(.system(size: 20, weight: .black, design: .serif))
+                    .font(WanderTypography.editorialCardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -1177,7 +1149,7 @@ private struct FeedActivityModule: View {
             .accessibilityLabel("View list \(list.name)")
         } else {
             Text("Map activity")
-                .font(.system(size: 20, weight: .black, design: .serif))
+                .font(WanderTypography.editorialCardTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
         }
     }
@@ -1298,12 +1270,14 @@ private struct FeedActivityModule: View {
 
 private struct FeedActivityThumbnail: View {
     let activity: FeedActivity
-    @EnvironmentObject private var backend: WanderBackend
-    @State private var providerPhoto: PlacePhoto?
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             FeedActivityArtworkFallback(activity: activity)
+
+            if let place = activity.place {
+                FeedResolvedPlacePhoto(place: place)
+            }
 
             if let preview = activity.media.first,
                let url = preview.urlString.flatMap(URL.init(string:)) {
@@ -1313,11 +1287,6 @@ private struct FeedActivityThumbnail: View {
                     Color.clear
                 }
                 .accessibilityLabel(preview.accessibilityLabel)
-            } else if let providerPhoto, let place = activity.place {
-                PlaceProfilePhotoImage(
-                    photo: providerPhoto,
-                    placeName: place.place.canonicalName
-                )
             }
 
             if activity.media.count > 1 {
@@ -1333,24 +1302,6 @@ private struct FeedActivityThumbnail: View {
         }
         .frame(width: FeedActivityLayout.photoSize, height: FeedActivityLayout.photoSize)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .task(id: photoResolutionKey) {
-            await resolveProviderPhoto()
-        }
-    }
-
-    private var photoResolutionKey: String {
-        guard activity.media.isEmpty, let place = activity.place else {
-            return "media-\(activity.media.first?.id ?? "none")"
-        }
-        return PlaceSheetPlace(visiblePlace: place).photoLookupKey
-    }
-
-    private func resolveProviderPhoto() async {
-        providerPhoto = nil
-        guard activity.media.isEmpty, let place = activity.place else { return }
-        providerPhoto = try? await backend.placePhoto(
-            for: PlaceSheetPlace(visiblePlace: place).photoRequest
-        )
     }
 }
 
@@ -1391,10 +1342,93 @@ private struct FeedPlaceArtwork: View {
             Image(systemName: categorySymbol(for: place.effectiveCategory))
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(WanderTheme.textInk.color.opacity(0.62))
+
+            FeedResolvedPlacePhoto(place: place)
         }
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+    }
+}
+
+struct FeedResolvedPlacePhoto: View {
+    let place: VisiblePlace
+    @EnvironmentObject private var backend: WanderBackend
+    @State private var photo: PlacePhoto?
+    @State private var failedGooglePhotoID: String?
+
+    private var sheetPlace: PlaceSheetPlace {
+        PlaceSheetPlace(visiblePlace: place)
+    }
+
+    private var photoResolutionKey: String {
+        "\(sheetPlace.photoLookupKey)|\(failedGooglePhotoID ?? "ready")"
+    }
+
+    var body: some View {
+        Group {
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: place.place.canonicalName,
+                    onLoadFailure: handlePhotoLoadFailure
+                )
+                .overlay(alignment: .bottomTrailing) {
+                    if photo.isGooglePlacesPhoto {
+                        Text("Google Maps")
+                            .font(.system(size: 8, weight: .regular))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4)
+                            .frame(minHeight: 16)
+                            .background(Color.black.opacity(0.68))
+                            .clipShape(Capsule())
+                            .padding(4)
+                            .allowsHitTesting(false)
+                    }
+                }
+            } else {
+                Color.clear
+                    .accessibilityHidden(true)
+            }
+        }
+        .task(id: photoResolutionKey) {
+            await resolvePhoto()
+        }
+    }
+
+    private func resolvePhoto() async {
+        let resolutionKey = photoResolutionKey
+        photo = nil
+
+        do {
+            let remotePhoto = try await backend.placePhoto(for: sheetPlace.photoRequest)
+            try Task.checkCancellation()
+            let resolvedPhoto: PlacePhoto
+            if remotePhoto.isGooglePlacesPhoto,
+               remotePhoto.providerPlaceID == failedGooglePhotoID {
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
+            } else {
+                resolvedPhoto = remotePhoto
+            }
+            try Task.checkCancellation()
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = resolvedPhoto
+        } catch is CancellationError {
+            return
+        } catch {
+            guard resolutionKey == photoResolutionKey else { return }
+            photo = nil
+        }
+    }
+
+    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
+        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
+        if failedPhoto.isGooglePlacesPhoto {
+            failedGooglePhotoID = failedPhoto.providerPlaceID
+        } else {
+            photo = nil
+        }
     }
 }
 

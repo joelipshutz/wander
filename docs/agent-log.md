@@ -25994,6 +25994,324 @@ Decision / handoff:
 
 Draft PR #254 contains the tracked exploration log. No production app code was
 changed under REC-148.
+## 2026-07-26 17:27 PDT — Codex — REC-161 native editorial typography
+
+Agent: Codex
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (`In Progress`)
+
+Goal: implement the constrained REC-148 direction after Joe's explicit `Go`.
+Add semantic, Dynamic-Type-aware Apple-native typography roles; use native
+navigation header components where they preserve the current information
+architecture; and migrate the approved initial surfaces carefully.
+
+Hard scope locks:
+
+- Native sans remains the font for navigation chrome, controls, body,
+  metadata, filters, tabs, and timestamps.
+- Native serif is limited to place names, ticket titles, and selected editorial
+  content headings.
+- Do not change ticket geometry, layout, colors, spacing, density, media, or
+  actions. Typography is the only permitted ticket change.
+- Do not change the streak screen, including typography.
+- Do not add custom fonts, palette extensions, or a new magazine grid.
+- Preserve the current five-tab information architecture; native header work is
+  component treatment, not navigation redesign.
+
+Expected files: `Wander/DesignSystem/WanderTheme.swift`, scoped Feed and place
+profile views, navigation/typography tests, and this log. Before editing, the
+new worktree is clean and starts from REC-148 commit `9922112`, itself stacked
+on REC-147 PR #242. No build-number bump, TestFlight release, merge, backend,
+or schema change is authorized.
+
+Checkpoint — 17:44 PDT:
+
+- Added semantic Dynamic-Type roles in `WanderTypography`: Apple-native serif
+  for editorial titles and default system sans for body, labels, metadata, and
+  controls.
+- Feed now uses a native inline navigation title, trailing search toolbar item,
+  and native segmented Places/People picker. The retired custom animated
+  search launcher was removed.
+- Place profile now uses native back, save/check-in, share, and inline title
+  toolbar chrome. The photo/map header no longer owns custom overlaid header
+  buttons.
+- Applied the editorial title role to Feed place/ticket titles, the map place
+  preview, the place profile heading, and place check-in history titles. Ticket
+  geometry and layout were not edited.
+- `SaveStreakCelebrationView.swift` remains unmodified. A regression contract
+  now asserts it does not reference the new typography system and retains its
+  existing ticket-title font declaration.
+- Validation: focused Navigation, Theme, Place Profile, and Save Streak suites
+  passed: 88 tests, 0 failures on iPhone 16 Plus / iOS 18.6.
+
+Next: capture and inspect implemented Feed and place-profile screenshots on
+iPhone 16 Plus and iPhone 16e before preparing the PR.
+
+Visual QA checkpoint — 17:54 PDT:
+
+- Captured and manually inspected the implemented Feed and Woodcat Coffee place
+  profile on iPhone 16 Plus and iPhone 16e, both on iOS 18.6.
+- The first map-profile capture exposed that the full-screen cover had no local
+  navigation container, so native toolbar items could not render. Wrapped the
+  map place-profile destination in `NavigationStack` and re-captured both phone
+  sizes; native back, inline title, check-in/add, and share chrome now render.
+- Feed uses native inline `Feed` title, toolbar search, and segmented
+  Places/People control. Ticket titles and editorial headings use the serif
+  role while author, status, metadata, controls, and navigation remain sans.
+- Added a compact semantic serif role for featured rail titles after the 16e
+  capture showed the regular card-title role truncating too aggressively.
+- Ticket cutout, color, spacing, media, and density remain the REC-147 design.
+  The streak source and shared ticket-shape source are unchanged from the
+  branch base.
+- Screenshot artifacts:
+  `/Users/joelipshutz/.codex/visualizations/rec161-native-editorial-type/`.
+- Temporary DEBUG fixture authentication used only to capture the screenshots
+  was removed from the worktree before final testing.
+
+Final validation — 18:02 PDT:
+
+- Focused regression suites: 88 tests, 0 failures (`NavigationContractTests`,
+  `ThemeTokenTests`, `PlaceProfilePresentationTests`, and `SaveStreakTests`).
+- Full suite: 758 tests, 0 failures on iPhone 16 Plus / iOS 18.6 using the
+  repository-standard `xcodebuild test` command and `DerivedData` path.
+- `git diff --check` passed. The final diff contains no changes to
+  `SaveStreakCelebrationView.swift` or `CheckInTicketSurface.swift` relative to
+  the REC-148 branch base.
+- Existing unrelated compiler warnings in `WanderSupabaseClient` remain; there
+  are no new warnings attributable to REC-161.
+- No build-number bump or TestFlight work was performed. Next step is Joe's
+  visual review of the stacked implementation PR.
+
+Handoff:
+
+- Draft PR: https://github.com/joelipshutz/wander/pull/256, stacked on REC-148
+  draft PR #254 and REC-147 ticket foundation PR #242.
+- Linear REC-161 moved to `In Review` with the PR, validation, scope locks, and
+  device-QA summary attached in a comment.
+- Mission Control task `bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` moved to review.
+- Branch is pushed as `codex/rec-161-native-editorial-type`. The PR remains
+  draft until Joe reviews the implemented screenshots.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode, raised its
+  project window, and verified the Xcode Branch Chooser reports
+  `codex/rec-161-native-editorial-type`.
+
+## 2026-07-26 18:27 PDT — Codex — REC-161 Feed search/header correction
+
+Agent: Codex using `ios-fix` and Linear workflows
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (currently `In Review`; implementation resumed from Joe's
+visual feedback)
+
+Goal: apply Joe's approved Feed-header correction on the existing REC-161
+implementation. Remove the redundant visible native `Feed` title and toolbar
+search, restore the exact pre-REC-161 persistent animated search launcher and
+its full-screen Discover behavior, and retain the native Places/People
+segmented picker.
+
+Scope locks:
+
+- Keep the approved typography roles and all place-profile native navigation.
+- Do not change ticket geometry, layout, media, colors, actions, or the shared
+  ticket-shape component.
+- Do not change the streak screen.
+- Preserve the existing search destination and behavior rather than replacing
+  it with a new searchable implementation.
+
+Expected files: `Wander/Features/Feed/FeedScreen.swift`,
+`WanderTests/NavigationContractTests.swift`, `docs/agent-log.md`, and PR/tracker
+metadata. The isolated worktree is clean at `fec1c30`; no overlapping worktree
+is editing these REC-161 files. `origin/main` advanced independently, but this
+PR remains intentionally stacked on REC-148/REC-147.
+
+Pre-fix evidence: Joe's simulator review and the existing REC-161 screenshots
+show the oversized visible `Feed` navigation row with a toolbar search icon,
+while the source diff confirms the prior persistent `FeedSearchLauncher` was
+removed. This repo intentionally has no DebugBridge/StateServer snapshot API,
+so the literal `ios-fix` HTTP snapshot is unavailable without adding unrelated
+debug infrastructure. The supplied visual state, exact base-branch source, and
+deterministic navigation-contract test will serve as the regression evidence.
+
+Coordination notes: the Linear connector is not exposed in this Codex session,
+so the existing REC-161 status cannot be moved back to `In Progress` before the
+edit; reconcile it and add validation when the connector is available. Mission
+Control at `localhost:4000` is also currently unreachable. Neither tracker
+outage changes implementation scope.
+
+Validation and visual-QA checkpoint — 18:39 PDT:
+
+- Restored `tickerSuggestions`, `FeedSearchLauncher`, its 2.6-second animated
+  placeholder rotation, accessibility label, `isShowingSearch` action, and the
+  existing full-screen `DiscoverScreen` destination exactly from the REC-148
+  base implementation.
+- Removed the REC-161-only `Feed` navigation title, visible navigation-bar
+  background, and toolbar search button. Kept the approved native segmented
+  Places/People picker and all typography roles.
+- The focused `NavigationContractTests` suite passed: 68 tests, 0 failures.
+  Regression assertions now lock the persistent launcher, Discover
+  presentation, absent redundant Feed title/toolbar search, native segmented
+  picker, place-profile native chrome, ticket cutout, and untouched streak.
+- Captured and manually inspected the Feed on iPhone 16 Plus and iPhone 16e,
+  both iOS 18.6. On both sizes, the segmented control is the first visible row,
+  the persistent search launcher sits immediately below it, and the recovered
+  vertical space improves access to featured places and tickets without
+  changing ticket geometry.
+- Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec161-feed-search/feed-iphone-16-plus.png`
+  and `feed-iphone-16e.png` in the same directory.
+- Temporary DEBUG fixture authentication and unconfigured-backend wiring were
+  used only to create deterministic simulator captures. The temporary source
+  change was removed before final testing and is not present in the commit.
+- Full suite passed: 758 tests, 0 failures on iPhone 16 Plus / iOS 18.6 using
+  the repository-standard `xcodebuild test` command.
+- `git diff --check` passed before the implementation checkpoint. Relative to
+  REC-148, `FeedScreen.swift` now differs only for the approved native
+  segmented control and typography roles; the search implementation is no
+  longer part of the REC-161 diff.
+- Host disk space initially blocked simulator installation. Removed only
+  recoverable generated artifacts: this worktree's ModuleCache, Index, and
+  SourcePackages caches plus the stale REC-132 Xcode DerivedData contents. The
+  full suite rebuilt the required current dependencies successfully. No source,
+  simulator app data, or personal files were removed.
+
+Next: push the checkpoint, update draft PR #256 to describe the restored
+persistent search/no Feed title direction, and reconcile REC-161/Mission
+Control when their connectors are reachable.
+
+Handoff — 18:41 PDT:
+
+- Pushed source checkpoint `e6abbdf` and validation checkpoint `0f24c82` to
+  `codex/rec-161-native-editorial-type`.
+- Updated draft PR #256 to remove the obsolete native Feed-title/toolbar-search
+  claim and document the final segmented-control + persistent-search direction:
+  https://github.com/joelipshutz/wander/pull/256
+- A later iPhone 16e capture showed the launcher text advanced from
+  `Maya's date night spots` to `quiet work cafes with wifi`, confirming the
+  restored animation continues to run. The capture is
+  `feed-iphone-16e-rotated.png` beside the other screenshots.
+- REC-161 remains `In Review`, which matches the completed draft-PR state. The
+  Linear connector is unavailable in this session, so the new validation could
+  not be added as an issue comment. Mission Control remains unreachable on
+  `localhost:4000`; its previously recorded review status is unchanged.
+- No merge, build-number bump, TestFlight build, release, or streak/ticket
+  source change was performed.
+## 2026-07-26 21:41 PDT — Codex — REC-161 photo regression follow-up
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (implementation resumed from Joe's simulator feedback)
+
+Goal: restore real place/check-in photos anywhere the current stacked design is
+showing fallback artwork, specifically the Feed featured horizontal rail and
+the selected-place ticket on Map. Preserve the approved ticket geometry,
+typography direction, search behavior, and streak screen.
+
+Starting state: worktree clean at `acde7e8`; `origin/main` is now `c020432`,
+with no newer photo-resolution change in the relevant Feed/Map files. The
+existing REC-161 worktree is the only worktree editing this branch. Linear is
+not callable from this Codex session, so REC-161 cannot be moved from
+`In Review` back to `In Progress` before the edit. Mission Control task
+`bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` will be reconciled if its local API is
+available.
+
+Expected files: `Wander/Features/Feed/FeedScreen.swift`,
+`Wander/Features/Map/PlaceProfileMapSurface.swift`, focused regression tests,
+and this log. No ticket-shape, streak, build-number, or release changes.
+
+Photo regression validation and handoff — 22:10 PDT:
+
+- Root cause: `FeedPlaceArtwork` never asked the backend for a place photo, so
+  the Featured horizontal rail could only render category artwork. The Map
+  preview's local-photo path also excluded the owner's own Friends/Self
+  check-ins and every owner photo while the profile was private. Feed activity
+  thumbnails did not recover from an invalid Google image with an available
+  visible check-in photo.
+- Added one shared Feed photo resolver. It preserves the existing authenticated
+  `placePhoto` request, retries a failed or absent Google photo through the
+  existing RLS-backed `visibleUserPlacePhoto` request, and leaves category
+  artwork as the final fallback. Both Featured cards and activity tickets use
+  that resolver; explicit activity media remains the top layer.
+- The selected Map ticket now permits the current user's own local photo at
+  every visibility level and on private profiles. Other users' photos still
+  come only through the remote, RLS-authoritative visible-photo path.
+- Added the pre-fix source fixture
+  `WanderTests/Fixtures/rec-161-photo-fallback-pre.json` plus source and behavior
+  coverage for the Featured rail, activity fallback, Map ticket, and owner
+  visibility cases. The source regression test failed before the production
+  change and passed afterward.
+- Focused `NavigationContractTests` and `PlaceProfilePresentationTests` passed.
+  Full repository suite passed on iPhone 16 Plus / iOS 18.6: 761 tests, 0
+  failures, 0 skips. Existing headermap and Supabase formatter concurrency
+  warnings remain; no new warnings were introduced.
+- Captured and manually inspected the production components at iPhone 16 Plus
+  and iPhone 16e sizes. Real photo collages render in both the Featured card and
+  selected Map ticket without changing ticket geometry. Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec161-photo-fix-iphone16plus.png`
+  and `rec161-photo-fix-iphone16e.png` in the same directory.
+- The temporary DEBUG-only screenshot route and fake photo repository were
+  removed before final testing. `git diff --check` passed and the production
+  branch was clean afterward.
+- No schema, backend contract, data mutation, ticket geometry, typography,
+  search, streak, build-number, TestFlight, or release changes were made.
+- Linear and Mission Control were unavailable in this session; REC-161 and task
+  `bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` still need their validation comments
+  reconciled when those trackers are callable.
+
+Next: push these checkpoints to draft PR #256, add the validation summary to
+the PR, and reopen this isolated worktree in Xcode for Joe's next simulator or
+phone test.
+
+Final handoff — 22:15 PDT:
+
+- Pushed implementation checkpoints `2ba6210` and `59d71c0`, coordination
+  checkpoint `0f2bff2`, and validation-log checkpoint `13be04e` to
+  `codex/rec-161-native-editorial-type`.
+- Updated draft PR #256 with the photo-resolution behavior, corrected scope
+  locks, two-device visual QA, and 761-test result:
+  https://github.com/joelipshutz/wander/pull/256
+- Opened and verified Xcode is using the isolated project at
+  `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type/Wander.xcodeproj`;
+  that checkout is on `codex/rec-161-native-editorial-type` and matches origin.
+- Mission Control remained unreachable after a final update attempt. No Linear
+  tools were exposed in this session. Reconcile both trackers from the PR when
+  those services are available.
+- Handoff state: ready for Joe's simulator/phone test. No merge, TestFlight
+  build, or release was performed.
+
+## 2026-07-26 22:42 PDT — Codex — REC-161 direct iPhone install
+
+Agent: Codex using `ios-qa`
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+PR: https://github.com/joelipshutz/wander/pull/256
+
+Goal: build the current pushed PR branch for Joe's connected physical iPhone,
+install it directly, launch it, and leave the same isolated project open in
+Xcode. This is a local development install, not a TestFlight release.
+
+Outcome:
+
+- Detected paired device `iPhone (254)` on iOS 26.5.
+- The first signed Debug device build reached final dSYM generation, then
+  failed because the Mac volume had only 117 MB free. Removed only recoverable
+  simulator products/intermediates and the Xcode index from this worktree's
+  `DerivedData`, freeing about 840 MB. No source, packages, device data, or user
+  files were removed.
+- Rebuilt successfully for the physical device with
+  `DEBUG_INFORMATION_FORMAT=dwarf`, preserving the existing signing and app
+  configuration. Existing Supabase formatter-concurrency and headermap warnings
+  remain; no new build errors were introduced.
+- Installed `DerivedData/Build/Products/Debug-iphoneos/Wander.app` as bundle
+  `com.grayline.wander` and successfully launched it on the connected phone.
+- Opened and verified Xcode's active workspace is the same REC-161 isolated
+  worktree project.
+- The `ios-qa` artifact-sync preamble was intentionally skipped after the
+  execution policy rejected its unrelated private-repository push. This did not
+  affect building, installing, or launching the app.
+- No app source, project settings, build number, TestFlight state, or release
+  metadata changed.
 ## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
 
 Agent: Codex

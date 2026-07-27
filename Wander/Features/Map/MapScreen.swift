@@ -389,7 +389,9 @@ struct MapScreen: View {
                 .presentationDragIndicator(.visible)
             }
             .fullScreenCover(isPresented: placeProfileDestinationBinding) {
-                selectedPlaceProfileDestination
+                NavigationStack {
+                    selectedPlaceProfileDestination
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
         }
@@ -7639,7 +7641,7 @@ private struct PlaceActivityCard: View {
                     .foregroundStyle(ticketAccentColor)
                     .lineLimit(1)
                 Text(entry.displayName)
-                    .font(.system(size: 20, weight: .black, design: .serif))
+                    .font(WanderTypography.editorialCardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(1)
                 Text(entry.isCurrentUser ? entry.timestampText : "@\(entry.owner.handle) · \(entry.timestampText)")

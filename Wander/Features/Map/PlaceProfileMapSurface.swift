@@ -107,7 +107,6 @@ struct PlaceProfileFullScreen: View {
         )
         .preferredColorScheme(.light)
         .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .simultaneousGesture(edgeSwipeBackGesture)
     }
@@ -139,6 +138,15 @@ struct PlaceProfileFullScreen: View {
     }
 }
 
+enum PlaceProfilePreviewPhotoPolicy {
+    static func canUseCurrentUserLocalPhoto(
+        saves: [PlaceSaveSummary],
+        currentUserID: String
+    ) -> Bool {
+        saves.contains { $0.visiblePlace.owner.id == currentUserID }
+    }
+}
+
 private struct PlaceProfilePreviewCard: View {
     let place: PlaceSheetPlace
     let presentation: PlaceProfilePresentation
@@ -164,7 +172,7 @@ private struct PlaceProfilePreviewCard: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(place.name)
-                        .font(.system(size: 25, weight: .black, design: .serif))
+                        .font(WanderTypography.editorialTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
                         .minimumScaleFactor(0.78)
@@ -246,11 +254,10 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var localPhoto: PlacePhoto? {
-        guard !store.isPrivateProfile,
-              saves.contains(where: {
-                  $0.visiblePlace.owner.id == currentUserID
-                      && $0.visiblePlace.userPlace.visibility == .followers
-              })
+        guard PlaceProfilePreviewPhotoPolicy.canUseCurrentUserLocalPhoto(
+            saves: saves,
+            currentUserID: currentUserID
+        )
         else {
             return nil
         }
@@ -432,12 +439,7 @@ private struct PlaceProfileFullView: View {
                     place: place,
                     photos: galleryItems,
                     selectedPhotoID: $selectedHeaderPhotoID,
-                    action: action,
-                    shareURL: shareURL,
-                    shareText: shareText,
                     topInset: headerTopInset,
-                    onBack: onBack,
-                    onAction: onAction,
                     onOpenPhoto: { photoID in
                         viewerRoute = PlacePhotoGalleryViewerRoute(photoID: photoID)
                     },
@@ -495,6 +497,36 @@ private struct PlaceProfileFullView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: .top)
+        .navigationTitle(place.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(action: onBack) {
+                    Label("Back", systemImage: "chevron.left")
+                        .labelStyle(.iconOnly)
+                }
+            }
+
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if action != .none {
+                    Button(action: onAction) {
+                        Label(action.accessibilityLabel, systemImage: action.systemImage)
+                            .labelStyle(.iconOnly)
+                    }
+                }
+
+                if let shareURL {
+                    WanderShareButton(
+                        content: .place(item: shareURL, name: place.name, message: shareText)
+                    ) {
+                        Label("Share place", systemImage: "square.and.arrow.up")
+                            .labelStyle(.iconOnly)
+                    }
+                }
+            }
+        }
         .task(id: place.photoLookupKey) {
             await reloadGallery()
         }
@@ -671,7 +703,7 @@ private struct PlaceProfileFullView: View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text(place.name)
-                    .font(.system(size: 34, weight: .black))
+                    .font(WanderTypography.editorialDisplay)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(3)
                     .minimumScaleFactor(0.74)
@@ -1323,12 +1355,7 @@ private struct PlaceProfileMapHeader: View {
     let place: PlaceSheetPlace
     let photos: [PlacePhotoGalleryItem]
     @Binding var selectedPhotoID: String?
-    let action: PlaceSheetAction
-    let shareURL: URL?
-    let shareText: String
     let topInset: CGFloat
-    let onBack: () -> Void
-    let onAction: () -> Void
     let onOpenPhoto: (String) -> Void
     let onNearEnd: (String) -> Void
     let onPhotoLoadFailure: (PlacePhoto) -> Void
@@ -1376,55 +1403,6 @@ private struct PlaceProfileMapHeader: View {
                 }
             }
 
-            VStack {
-                HStack {
-                    Button(action: onBack) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .black))
-                            .frame(width: 44, height: 44)
-                            .background(WanderTheme.surfaceBone.color.opacity(0.96))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .clipShape(Circle())
-                            .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, x: 0, y: 4)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close place profile")
-
-                    Spacer()
-
-                    HStack(spacing: WanderTheme.spacing2) {
-                        if action != .none {
-                            Button(action: onAction) {
-                                Image(systemName: action.systemImage)
-                                    .font(.system(size: action.isPrimaryAction ? 20 : 17, weight: .black))
-                                    .frame(width: 44, height: 44)
-                                    .background(action.isPrimaryAction ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
-                                    .foregroundStyle(WanderTheme.textOnAction.color)
-                                    .clipShape(Circle())
-                                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, x: 0, y: 4)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(action.accessibilityLabel)
-                        }
-
-                        if let shareURL {
-                            WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 16, weight: .black))
-                                    .frame(width: 44, height: 44)
-                                    .background(WanderTheme.surfaceBone.color.opacity(0.96))
-                                    .foregroundStyle(WanderTheme.textInk.color)
-                                    .clipShape(Circle())
-                                    .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 10, x: 0, y: 4)
-                            }
-                            .accessibilityLabel("Share place")
-                        }
-                    }
-                }
-                Spacer()
-            }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing4 + topInset)
         }
         .frame(height: 214 + topInset)
         .background(WanderTheme.surfaceSand.color)
