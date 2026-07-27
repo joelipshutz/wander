@@ -27031,3 +27031,27 @@ to `rec.me Alpha`, and post the required tester note.
 
 Final status: rec.me 0.1 (104), including REC-132 onboarding, is approved and
 available through the public TestFlight link.
+
+## 2026-07-27 10:10 PDT - Codex - REC-164 Clerk Google sign-in dismissal
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher` and
+`plan-eng-review`
+Branch: `codex/rec-164-clerk-dismissal`
+Worktree: `/private/tmp/recme-rec164-clerk-dismissal`
+Linear: `REC-164` (`In Progress`)
+
+Goal: reproduce and fix the build-104 regression where, after an explicit
+sign-out, choosing Google from the Clerk screen dismisses the auth surface
+instead of completing sign-in or showing a recoverable error.
+
+Starting state:
+
+- Clean isolated worktree from exact `origin/main` commit `a1fe522`.
+- Existing stale REC-132 auth-hardening worktree is intentionally untouched;
+  this fix starts from shipped build-104 main.
+- Scope is the auth/onboarding presentation and session transition plus focused
+  regression coverage. Carousel screenshot replacement is separate follow-up
+  work.
+- Auth/session work requires the engineering-review gate before implementation.
+  Expected files are the current Clerk auth adapter, app entry/auth gate
+  presentation, focused auth/onboarding tests, and this coordination log.
