@@ -1,5 +1,49 @@
 import Foundation
 
+struct WanderDeepLinkLaunchRequest: Equatable, Identifiable {
+    let id: UUID
+    let route: WanderDeepLinkRoute
+
+    init(id: UUID = UUID(), route: WanderDeepLinkRoute) {
+        self.id = id
+        self.route = route
+    }
+
+    init?(id: UUID = UUID(), url: URL) {
+        guard let route = WanderDeepLinkRoute.parse(url) else {
+            return nil
+        }
+
+        self.init(id: id, route: route)
+    }
+}
+
+struct WanderDeepLinkInbox: Equatable {
+    private(set) var pendingRequest: WanderDeepLinkLaunchRequest?
+
+    mutating func receive(_ url: URL) {
+        guard let request = WanderDeepLinkLaunchRequest(url: url) else {
+            return
+        }
+
+        pendingRequest = request
+    }
+
+    func request(ifSessionValidated isSessionValidated: Bool)
+        -> WanderDeepLinkLaunchRequest?
+    {
+        isSessionValidated ? pendingRequest : nil
+    }
+
+    mutating func consume(_ requestID: UUID) {
+        guard pendingRequest?.id == requestID else {
+            return
+        }
+
+        pendingRequest = nil
+    }
+}
+
 struct WanderPresentationResetRequest: Equatable, Identifiable {
     let id: UUID
 
