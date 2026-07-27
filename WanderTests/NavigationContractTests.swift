@@ -1513,6 +1513,59 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testOwnerProfileKeepsMobileLayoutWhileReorderingOnlyRequestedModules() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let screen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let body = try sourceSection(
+            home,
+            after: "struct ProfileOwnerHome: View {",
+            before: "private var identitySection: some View"
+        )
+        let identity = try sourceSection(
+            home,
+            after: "private var identitySection: some View {",
+            before: "private var profileAvatar: some View"
+        )
+        let recentActivity = try sourceSection(
+            home,
+            after: "private struct ProfileRecentActivitySection: View",
+            before: "struct ProfileActivityRow: View"
+        )
+
+        let identityIndex = try XCTUnwrap(body.range(of: "identitySection")?.lowerBound)
+        let streakIndex = try XCTUnwrap(body.range(of: "ProfileSaveStreakRow")?.lowerBound)
+        let invitationsIndex = try XCTUnwrap(body.range(of: "ProfileSharedVisitInboxRow")?.lowerBound)
+        let activityIndex = try XCTUnwrap(body.range(of: "ProfileRecentActivitySection")?.lowerBound)
+        let calendarIndex = try XCTUnwrap(body.range(of: "ProfileCalendarSection")?.lowerBound)
+
+        XCTAssertLessThan(identityIndex, streakIndex)
+        XCTAssertLessThan(streakIndex, invitationsIndex)
+        XCTAssertLessThan(invitationsIndex, activityIndex)
+        XCTAssertLessThan(activityIndex, calendarIndex)
+        XCTAssertFalse(identity.contains("Text(\"profile\")"))
+        XCTAssertTrue(recentActivity.contains("ProfileActivityFilterControl("))
+        XCTAssertTrue(home.contains("case checkIns = \"check_ins\""))
+        XCTAssertTrue(home.contains("case .checkIns: CheckInCopy.pluralTitle"))
+        XCTAssertFalse(home.contains("case .been: \"Been\""))
+        XCTAssertFalse(screen.contains("No Been activity"))
+        XCTAssertTrue(recentActivity.contains("filteredItems.prefix(6)"))
+        XCTAssertTrue(recentActivity.contains("Text(\"See more\")"))
+        XCTAssertTrue(screen.contains("ProfileActivityHistoryScreen("))
+        XCTAssertTrue(screen.contains("initialSection: .activity"))
+        XCTAssertTrue(
+            placeProfile.contains(
+                "scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)"
+            )
+        )
+    }
+
     private var projectRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
