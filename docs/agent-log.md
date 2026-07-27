@@ -26899,3 +26899,39 @@ Release-prep validation checkpoint — 23:51 PDT:
   screenshots, and test result records were not removed.
 - Mission Control remains unavailable at `localhost:4000`; the attempted task
   update failed without changing external state.
+
+Release completion — 2026-07-27 00:13 PDT:
+
+- PR #262 was squash-merged to `main` as
+  `8d0e95176ea9dad10f02536736c1c10d533d46e8`. The merged tree exactly matched
+  the validated release branch (`b2323b74486cb42dc626a6f1899a700f1122ff96`).
+- A final generic iOS Simulator build from detached exact `main` passed. The
+  signed Release archive also succeeded from that same checkout:
+  `/private/tmp/Wander-0.1-build103.xcarchive`.
+- Archive inspection confirmed marketing version `0.1` and build `103` for the
+  app plus `WanderWidgets`, `WanderNearbyWidgets`, and `WanderShareExtension`.
+- Export used `manageAppVersionAndBuildNumber=false`; Xcode upload completed
+  successfully at 00:08 PDT. App Store Connect build id:
+  `826039f1-0844-4e35-9885-ca0206cb4940`.
+- The release helper confirmed processing state `VALID`, set
+  `usesNonExemptEncryption=false`, updated the `en-US` What to Test copy,
+  attached build 103 to `rec.me Alpha`, and returned external review state
+  `APPROVED`.
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785136313782839
+- Added the shipped build, test, PR, and tester-note receipts to Linear
+  REC-147, REC-148, and REC-161. All three issues are Done.
+- The final release preserves the clarified typography boundary: only the
+  three overall place-profile rating values receive the serif numeric style.
+  Individual check-in ratings and the streak screen are unchanged.
+- Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking. Clerk development branding/banner remains the
+  tester-facing known alpha issue.
+- After the archive succeeded, removed only
+  `/private/tmp/DerivedData-recme-build103` to recover local disk space for the
+  export. This deleted its disposable build products and ephemeral xcresult
+  bundles; the signed archive, uploaded binary, PR/Linear receipts, screenshots,
+  and test pass counts remain preserved elsewhere.
+
+Final status: rec.me 0.1 (103) is approved and available through the public
+TestFlight link: https://testflight.apple.com/join/knEhRa6t
