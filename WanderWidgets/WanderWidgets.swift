@@ -205,8 +205,8 @@ private struct WanderQuickCaptureWidgetView: View {
             AccessoryWidgetBackground()
 
             GeometryReader { geometry in
-                let outerRingBandRadius =
-                    min(geometry.size.width, geometry.size.height) / 2 - 7
+                let ringBandRadius =
+                    min(geometry.size.width, geometry.size.height) / 2 - 10
 
                 ZStack {
                     Circle()
@@ -216,18 +216,13 @@ private struct WanderQuickCaptureWidgetView: View {
 
                     Circle()
                         .stroke(lineWidth: 1)
-                        .opacity(0.4)
-                        .padding(10)
-
-                    Circle()
-                        .stroke(lineWidth: 1)
                         .opacity(0.36)
                         .padding(16)
 
                     WanderCircularWidgetArcText(
                         text: "rec.me",
                         placement: .top,
-                        radius: outerRingBandRadius
+                        radius: ringBandRadius
                     )
 
                     Image(systemName: "plus")
@@ -236,7 +231,7 @@ private struct WanderQuickCaptureWidgetView: View {
                     WanderCircularWidgetArcText(
                         text: "CHECK-IN",
                         placement: .bottom,
-                        radius: outerRingBandRadius
+                        radius: ringBandRadius
                     )
                 }
             }
@@ -287,15 +282,15 @@ private struct WanderCircularWidgetArcText: View {
 
         var angularStep: Double {
             switch self {
-            case .top: 9.5
-            case .bottom: -8
+            case .top: 19
+            case .bottom: -14.5
             }
         }
 
         var fontSize: CGFloat {
             switch self {
-            case .top: 6.5
-            case .bottom: 5.5
+            case .top: 11
+            case .bottom: 9.5
             }
         }
     }
