@@ -20,6 +20,8 @@ struct ProfileScreen: View {
     @State private var listMode: GraphListMode?
     @State private var selectedPeopleMode: GraphListMode = .following
     @State private var savedListMode: SavedPlacesListMode?
+    @State private var activityListFilter: ProfileActivityFilter?
+    @State private var selectedActivityItemID: String?
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
     @State private var showsVisitInvitations = false
     @State private var showsEditProfile = false
@@ -75,6 +77,13 @@ struct ProfileScreen: View {
                 sharedVisitInvitationsAction: { showsVisitInvitations = true },
                 savedPlacesAction: { status in
                     savedListMode = status == .been ? .been : .wanna
+                },
+                recentActivity: profileActivityItems,
+                recentActivityAction: { item in
+                    selectedActivityItemID = item.id
+                },
+                allActivityAction: { filter in
+                    activityListFilter = filter
                 },
                 inCommonAction: {},
                 calendarDateAction: { summary in
@@ -132,6 +141,20 @@ struct ProfileScreen: View {
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
+                }
+                .navigationDestination(item: $activityListFilter) { filter in
+                    ProfileActivityHistoryScreen(
+                        items: profileActivityItems,
+                        initialFilter: filter,
+                        checkInCount: profileStats.checkIns,
+                        wannaCount: profileStats.wanna,
+                        itemAction: { item in
+                            selectedActivityItemID = item.id
+                        }
+                    )
+                }
+                .navigationDestination(isPresented: activityPlaceDestinationBinding) {
+                    selectedActivityPlaceDestination
                 }
                 .navigationDestination(item: $placeCollectionRoute) { route in
                     SavedPlacesListScreen(collection: route, profileID: store.currentUser.id)
@@ -224,6 +247,8 @@ struct ProfileScreen: View {
         socialGraphTab = nil
         listMode = nil
         savedListMode = nil
+        activityListFilter = nil
+        selectedActivityItemID = nil
         placeCollectionRoute = nil
         showsVisitInvitations = false
         showsEditProfile = false
@@ -286,6 +311,81 @@ struct ProfileScreen: View {
             wanna: active.filter { $0.status == .wannaGo }.count,
             friends: store.friends(of: store.currentUser.id).count
         )
+    }
+
+    private var profileActivityItems: [ProfileActivityItem] {
+        let projection = store.currentUserCalendarProjection
+        return ProfileActivityPresenter.items(
+            visiblePlaces: projection.visiblePlaces,
+            visits: projection.visits,
+            currentUserID: store.currentUser.id
+        )
+    }
+
+    private var selectedActivityItem: ProfileActivityItem? {
+        guard let selectedActivityItemID else { return nil }
+        return profileActivityItems.first { $0.id == selectedActivityItemID }
+    }
+
+    private var activityPlaceDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { selectedActivityItem != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedActivityItemID = nil
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedActivityPlaceDestination: some View {
+        if let item = selectedActivityItem {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: item.visiblePlace),
+                saves: activitySaveSummaries(for: item.visiblePlace),
+                tasteSaves: activityTasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .none,
+                initialSection: .activity,
+                onBack: {
+                    selectedActivityItemID = nil
+                },
+                onAction: {}
+            )
+        }
+    }
+
+    private func activitySaveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
+        var seen = Set<String>()
+        return store.visiblePlaces()
+            .filter { VisiblePlaceGrouping.matches($0, selectedPlace) }
+            .filter { visiblePlace in
+                guard seen.insert(visiblePlace.userPlace.id).inserted else { return false }
+                return true
+            }
+            .map { visiblePlace in
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: store.attributes(for: visiblePlace.userPlace.id)
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
+                if rhs.visiblePlace.owner.id == store.currentUser.id { return false }
+                return lhs.visiblePlace.owner.displayName.localizedCaseInsensitiveCompare(
+                    rhs.visiblePlace.owner.displayName
+                ) == .orderedAscending
+            }
+    }
+
+    private var activityTasteSummaries: [PlaceSaveSummary] {
+        store.currentUserVisiblePlaces.map { visiblePlace in
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id)
+            )
+        }
     }
 
     private var pageTitle: some View {
@@ -957,6 +1057,9 @@ struct ProfileDetailView: View {
                             savedPlacesAction: { status in
                                 savedListMode = status == .been ? .been : .wanna
                             },
+                            recentActivity: [],
+                            recentActivityAction: { _ in },
+                            allActivityAction: { _ in },
                             inCommonAction: { savedListMode = .inCommon },
                             calendarDateAction: { summary in
                                 placeCollectionRoute = .calendar(summary)
@@ -1155,6 +1258,84 @@ private enum GraphListMode: String, CaseIterable, Identifiable {
         case .following: "follow someone from contacts or username search"
         case .followers: "people who follow you will show up here"
         case .friends: "mutual follows show up here"
+        }
+    }
+}
+
+private struct ProfileActivityHistoryScreen: View {
+    let items: [ProfileActivityItem]
+    let checkInCount: Int
+    let wannaCount: Int
+    let itemAction: (ProfileActivityItem) -> Void
+    @State private var filter: ProfileActivityFilter
+
+    init(
+        items: [ProfileActivityItem],
+        initialFilter: ProfileActivityFilter,
+        checkInCount: Int,
+        wannaCount: Int,
+        itemAction: @escaping (ProfileActivityItem) -> Void
+    ) {
+        self.items = items
+        self.checkInCount = checkInCount
+        self.wannaCount = wannaCount
+        self.itemAction = itemAction
+        _filter = State(initialValue: initialFilter)
+    }
+
+    private var filteredItems: [ProfileActivityItem] {
+        items.filter(filter.includes)
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                ProfileActivityFilterControl(
+                    selection: $filter,
+                    checkInCount: checkInCount,
+                    wannaCount: wannaCount
+                )
+
+                if filteredItems.isEmpty {
+                    SmallEmptyRow(
+                        title: emptyStateTitle,
+                        subtitle: "Your saved places and check-ins will appear here"
+                    )
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
+                            ProfileActivityRow(item: item) {
+                                itemAction(item)
+                            }
+                            if index < filteredItems.count - 1 {
+                                Divider()
+                                    .overlay(WanderTheme.borderHairline.color)
+                                    .padding(.leading, 58)
+                            }
+                        }
+                    }
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    }
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing3)
+            .padding(.bottom, WanderTheme.spacing8)
+        }
+        .wanderScreen()
+        .navigationTitle("Activity")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var emptyStateTitle: String {
+        switch filter {
+        case .all: "No activity yet"
+        case .checkIns: "No check-ins yet"
+        case .wanna: "No Wanna activity yet"
         }
     }
 }

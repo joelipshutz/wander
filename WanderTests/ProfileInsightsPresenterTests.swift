@@ -1191,6 +1191,111 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
         XCTAssertTrue(lifecycle.hasAppliedViewportFit)
     }
 
+    func testProfileActivityBuildsReverseChronologicalCheckInAndWannaEvents() throws {
+        let owner = profile(id: "owner")
+        let checkedIn = visiblePlace(
+            owner: owner,
+            userPlaceID: "checked-in",
+            placeLocalID: "place-checked-in",
+            placeServerID: "server-place-checked-in",
+            name: "Republique",
+            latitude: 34.06,
+            longitude: -118.34,
+            status: .been
+        )
+        let wanna = visiblePlace(
+            owner: owner,
+            userPlaceID: "wanna",
+            placeLocalID: "place-wanna",
+            placeServerID: "server-place-wanna",
+            name: "Kismet",
+            latitude: 34.10,
+            longitude: -118.29,
+            status: .wannaGo
+        )
+        let calendar = Calendar(identifier: .gregorian)
+        let historicalWant = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 18, hour: 9))
+        )
+        let olderVisit = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 20, hour: 19))
+        )
+        let wannaSave = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 22, hour: 14))
+        )
+        let newestVisit = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 25, hour: 20))
+        )
+        checkedIn.userPlace.historicalWantedAt = historicalWant
+        wanna.userPlace.savedAt = wannaSave
+
+        let visits = [
+            LocalPlaceVisit(
+                localID: "visit-old",
+                userPlaceID: checkedIn.userPlace.id,
+                visitedAt: olderVisit
+            ),
+            LocalPlaceVisit(
+                localID: "visit-new",
+                userPlaceID: checkedIn.userPlace.id,
+                visitedAt: newestVisit
+            )
+        ]
+
+        let items = ProfileActivityPresenter.items(
+            visiblePlaces: [wanna, checkedIn],
+            visits: visits,
+            currentUserID: owner.id
+        )
+
+        XCTAssertEqual(items.map(\.timestamp), [newestVisit, wannaSave, olderVisit, historicalWant])
+        XCTAssertEqual(items.map(\.kind), [.checkIn, .wanna, .checkIn, .wanna])
+        XCTAssertEqual(items.filter(ProfileActivityFilter.checkIns.includes).count, 2)
+        XCTAssertEqual(items.filter(ProfileActivityFilter.wanna.includes).count, 2)
+        XCTAssertEqual(items.first?.visiblePlace.place.canonicalName, "Republique")
+        XCTAssertEqual(items.first?.visitID, "visit-new")
+    }
+
+    func testProfileActivityKeepsLegacyCheckInAndFormatsExplicitDateAndTime() throws {
+        let owner = profile(id: "owner")
+        let checkedIn = visiblePlace(
+            owner: owner,
+            userPlaceID: "legacy",
+            placeLocalID: "place-legacy",
+            placeServerID: nil,
+            name: "Little Dom's",
+            latitude: 34.11,
+            longitude: -118.29,
+            status: .been
+        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 26, hour: 12))
+        )
+        let visitedAt = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 25, hour: 20, minute: 42))
+        )
+        checkedIn.userPlace.visitedAt = visitedAt
+
+        let item = try XCTUnwrap(
+            ProfileActivityPresenter.items(
+                visiblePlaces: [checkedIn],
+                visits: [],
+                currentUserID: owner.id
+            ).first
+        )
+        let timestamp = ProfileActivityPresenter.timestampText(
+            for: item.timestamp,
+            relativeTo: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(item.kind, .checkIn)
+        XCTAssertNil(item.visitID)
+        XCTAssertEqual(timestamp, ProfileActivityTimestampText(date: "Yesterday", time: "8:42 PM"))
+    }
+
     private func profile(id: String) -> LocalProfile {
         LocalProfile(
             localID: "local-\(id)",
