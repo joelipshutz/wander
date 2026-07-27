@@ -27228,3 +27228,19 @@ Starting status:
   visual QA and removed before final diff review. The temporary iPhone 16e
   simulator was also deleted. `git diff --check` passes; no auth bypass, build
   number, TestFlight, hosted data, or release action is included.
+
+### 2026-07-27 10:56 PDT - Handoff
+
+- Committed the unified Import refinement as `a09269e` (`feat: unify place
+  import entry`) and pushed `codex/rec-162-add-unification`, updating ready PR
+  #259 in place.
+- Updated PR #259's description with the one-field mixed-source behavior,
+  unchanged Suggested scroll, brand facepile, and current validation receipt.
+- Moved Linear REC-162 back to `In Review`. A detailed Linear validation comment
+  was rejected by the connector's external-data safety policy, so the receipt
+  remains in the PR and this log rather than attempting a workaround.
+- Ryan can review or continue from
+  `/private/tmp/recme-rec162-add-unification/Wander.xcodeproj`. The original root
+  checkout and all other worktrees remain untouched.
+- No build-number change, merge, archive, upload, TestFlight attachment, hosted
+  data mutation, or Slack action was performed.
