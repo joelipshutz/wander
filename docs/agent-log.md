@@ -25571,3 +25571,44 @@ TestFlight build 101 release completion — 2026-07-26 14:54 PDT:
 Final outcome: rec.me 0.1 (101) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with REC-152 Profile
 Recent activity.
+
+## 2026-07-26 18:25 PDT - Codex - REC-160 Landing Record
+
+Agent: Codex
+Branch: `codex/rec-160-landing-record`
+Worktree: `/private/tmp/recme-rec160-landing-record`
+Linear: `REC-160` (`Done`)
+PR: `#249` (merged)
+
+Final outcome:
+
+- Pushed the reconciled feature head `a262f6913`, refreshed PR #249 to describe
+  the exact **Check-in** title and plus icon, and confirmed it was mergeable
+  against current build-101 `main`.
+- GitHub reported no hosted statuses, submitted reviews, review threads,
+  comments, or Greptile findings on the exact reviewed head.
+- Squash-merged PR #249 to `main` as
+  `6dd51058198ba5dd9b1901054b5d617377ab4a2d`.
+- Fetched and directly inspected `origin/main`: the control label and display
+  name are exactly `Check-in`, its SF Symbol is `plus`, and the shared intent
+  title and destination display representation are also exactly `Check-in`.
+  The separate accessory-circular bottom Lock Screen widget remains unchanged.
+- Validation before merge passed the focused Action Button suite 4/4, the
+  complete XCTest suite 757/757 on iPhone 17 Pro / iOS 26.5 Simulator, a
+  generic iOS Simulator build, `xcodegen generate`, `git diff --check`, and
+  built App Intents metadata inspection in both app and widget products.
+- The repo-standard iPhone 16 Plus / iOS 18.6 destination was unavailable on
+  this host. Physical Action Button validation after a signed install remains
+  the hardware-specific release check.
+- The gstack review-log helper could not write its optional local review
+  history because the host does not have its `bun` runtime. The clean
+  pre-landing review and full validation evidence are preserved in this log,
+  PR #249, and Linear REC-160.
+- Marked REC-160 Done and added the merge/test receipt in Linear.
+- No build-number change, archive, upload, TestFlight attachment, or Slack
+  release note was performed; the user requested a merge to `main`, not a
+  TestFlight release.
+
+Next step: install a future signed build containing commit `6dd510581` on an
+Action Button iPhone, select **Settings → Action Button → Controls → rec.me →
+Check-in**, and verify locked, unlocked, cold-launch, and signed-out behavior.
