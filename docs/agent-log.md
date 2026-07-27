@@ -25129,3 +25129,20 @@ implemented, tested, documented, and ready for review in PR #249. The existing
 bottom Lock Screen accessory widget remains unchanged. Physical Action Button
 validation after a signed install is the only remaining hardware-specific
 check.
+
+## 2026-07-26 17:37 PDT - Codex - REC-160 Xcode Test Handoff
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Review`)
+
+- Confirmed the isolated worktree was clean and matched pushed commit
+  `b94bee5c956bd221786f295178a755f925a230f5`.
+- Opened `/private/tmp/recme-rec160-action-control/Wander.xcodeproj` as its own
+  Xcode workspace window without switching or overwriting the primary checkout.
+- Verified Xcode's visible Branch Chooser reads
+  `codex/rec-160-action-control`; the active scheme is `Wander` and the current
+  run destination is `iPhone 17 Pro`.
+- Left Xcode open on the REC-160 worktree for signed device/simulator testing.
+  No new build, archive, TestFlight upload, or app-code change was performed
+  during this handoff.
