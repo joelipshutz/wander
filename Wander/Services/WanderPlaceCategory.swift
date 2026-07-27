@@ -151,6 +151,28 @@ struct PlaceMemoryDefaultSuggestions: Equatable {
     let defaultTags: [String]
     let labelOptions: [String]
     let defaultLabels: [String]
+
+    var unifiedTagOptions: [String] {
+        Self.unique(tagOptions + labelOptions)
+    }
+
+    var unifiedDefaultTags: [String] {
+        let optionKeys = Set(unifiedTagOptions.map(WanderPlaceCategory.normalizedCategoryText))
+        return Self.unique(defaultTags + defaultLabels).filter {
+            optionKeys.contains(WanderPlaceCategory.normalizedCategoryText($0))
+        }
+    }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+
+        return values.compactMap { value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            let key = WanderPlaceCategory.normalizedCategoryText(trimmed)
+            return seen.insert(key).inserted ? trimmed : nil
+        }
+    }
 }
 
 enum PlaceMemoryDefaultCatalog {

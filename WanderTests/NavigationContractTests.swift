@@ -591,7 +591,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("noteSection"))
         XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
         XCTAssertTrue(optionalDetails.contains("visibilitySection"))
-        XCTAssertTrue(optionalDetails.contains("note, tags, labels & privacy"))
+        XCTAssertTrue(optionalDetails.contains("note, tags & privacy"))
         XCTAssertEqual(
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1

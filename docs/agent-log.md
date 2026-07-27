@@ -24226,6 +24226,69 @@ Git handoff, 2026-07-26 18:04 PDT:
   `docs/agent-log.md` and `docs/decisions.md`; static mockups remain outside
   the repository in the recorded gstack artifact directory.
 
+Implementation restart, 2026-07-26 18:30 PDT:
+
+- Ryan selected Option D (`Tag Shelf`) and authorized production
+  implementation with a strict boundary: keep the unified Tags section inside
+  the existing More Options disclosure and do not redesign any other part of
+  the Check-in page.
+- Updated Linear REC-155 from design-only scope to implementation acceptance
+  criteria. The More Options summary must remove `labels`; its question blocks
+  must recompute from status plus category/cuisine or category/subcategory,
+  including Check-in price/questions and Wanna excitement, planning, and
+  why-save questions.
+- Fetched and merged current `origin/main` at `9f12a04ea`; the REC-160
+  Check-in Action Button landing auto-merged without save-flow conflicts.
+- Found concurrent uncommitted REC-162 work in `AddScreen.swift`,
+  `ProfileImportViews.swift`, `NavigationContractTests.swift`, and its agent
+  log. This task will not edit those overlapping production/test files.
+- Planned implementation files:
+  - `Wander/Features/Map/MapScreen.swift`
+  - `Wander/Features/Add/AddQuestionTemplates.swift`
+  - `Wander/Services/WanderPlaceCategory.swift`
+  - `WanderTests/WanderPlaceCategoryTests.swift`
+  - `WanderTests/WanderStoreTests.swift`
+  - `docs/agent-log.md`
+  - `docs/decisions.md`
+
+Implementation completion checkpoint, 2026-07-26 19:43 PDT:
+
+- Implemented Option D as one **Tags** shelf inside the existing More Options
+  disclosure. Selected tags sit above one uncategorized, equal-width suggestion
+  grid with an accessible custom-tag entry; the previous loose bubble layout and
+  separate personal-label block are gone.
+- The save sheet now reads legacy personal labels into the unified selection and
+  writes the edited result through the active `*_tags` attribute. Suggestions
+  are normalized and deduplicated case-insensitively.
+- Status or taxonomy changes now refresh every applicable More Options block,
+  not only tags. Check-in price feel and contextual questions, plus Wanna
+  excitement, `planning for?`, and `why save it?`, all follow the current
+  category plus cuisine/subcategory. Generated values that no longer apply are
+  removed while custom values survive.
+- Kept the implementation boundary to save-sheet state and More Options. The
+  Check-in disclosure summary is now `note, tags & privacy`; no rating, visit
+  date, photos, note, privacy, place header, or other Check-in surface changed.
+- Added regression coverage for unified suggestion deduplication, cuisine-aware
+  updates, Wanna restaurant/bar/park templates, stale generated-value pruning,
+  custom-value preservation, all optional-question refreshes, and the updated
+  navigation copy contract.
+- Focused tag/template/taxonomy tests passed 4/4 and the focused navigation
+  contract passed 1/1. The exact final source then passed the complete XCTest
+  suite: 760/760 with zero failures on iPhone 17e / iOS 26.5. Result bundle:
+  `/tmp/recme-rec155-tags-labels-mockups/DerivedData-rec155/Logs/Test/Test-Wander-2026.07.26_19-42-33--0700.xcresult`.
+- The repo-standard iPhone 16 Plus / iOS 18.6 destination was unavailable on
+  this host. Visually inspected the actual production component on iPhone 17e
+  and iPhone 17 Pro Max / iOS 26.5; final screenshots are
+  `tags-option-d-iphone-17e.png` and
+  `tags-option-d-iphone-17-pro-max.png` in the REC-155 Codex visualization
+  artifact folder. The temporary DEBUG-only screenshot harness was removed.
+- `git diff --check` passed and the tree contains no leftover mockup-harness
+  symbols. The only added `valueType:` use is the already-supported
+  `multi_tag`; no new cross-layer value type, Supabase migration, RPC, or hosted
+  smoke-test surface was introduced.
+- No build number, archive, upload, TestFlight group, or tester Slack state was
+  changed. Commit, push, PR readiness, and Linear handoff remain to be recorded.
+
 ## 2026-07-26 09:05 PDT - Codex - Full-Screen Photo Zoom
 
 Agent: Codex

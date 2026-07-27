@@ -1307,6 +1307,42 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertTrue(chocolateLounge.labelOptions.contains("dessert list"))
     }
 
+    func testUnifiedTagSuggestionsMergeLabelsWithoutDuplicatesAndTrackCuisine() {
+        let thaiRestaurant = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Thai",
+            status: .been,
+            locality: "Los Angeles",
+            localTagOptions: ["Date Night"],
+            localLabelOptions: ["date night"]
+        )
+        let mediterraneanRestaurant = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            cuisine: "Mediterranean",
+            status: .been,
+            locality: "Los Angeles"
+        )
+
+        XCTAssertTrue(thaiRestaurant.unifiedTagOptions.contains("Thai craving"))
+        XCTAssertTrue(thaiRestaurant.unifiedTagOptions.contains("craving list"))
+        XCTAssertTrue(thaiRestaurant.unifiedTagOptions.contains("LA favorite"))
+        XCTAssertEqual(
+            thaiRestaurant.unifiedTagOptions
+                .filter { WanderPlaceCategory.normalizedCategoryText($0) == "date night" }
+                .count,
+            1
+        )
+        XCTAssertTrue(mediterraneanRestaurant.unifiedTagOptions.contains("Mediterranean craving"))
+        XCTAssertFalse(mediterraneanRestaurant.unifiedTagOptions.contains("Thai craving"))
+        XCTAssertFalse(mediterraneanRestaurant.unifiedTagOptions.contains("Asian Fusion craving"))
+        XCTAssertEqual(
+            Set(thaiRestaurant.unifiedTagOptions.map(WanderPlaceCategory.normalizedCategoryText)).count,
+            thaiRestaurant.unifiedTagOptions.count
+        )
+    }
+
     func testCoffeeTeaSweetsIncludesLoungeSubcategories() {
         let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets)
         XCTAssertEqual(suggestions.count, 25)
