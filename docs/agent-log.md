@@ -25602,3 +25602,21 @@ Validation and visual-QA checkpoint — 18:39 PDT:
 Next: push the checkpoint, update draft PR #256 to describe the restored
 persistent search/no Feed title direction, and reconcile REC-161/Mission
 Control when their connectors are reachable.
+
+Handoff — 18:41 PDT:
+
+- Pushed source checkpoint `e6abbdf` and validation checkpoint `0f24c82` to
+  `codex/rec-161-native-editorial-type`.
+- Updated draft PR #256 to remove the obsolete native Feed-title/toolbar-search
+  claim and document the final segmented-control + persistent-search direction:
+  https://github.com/joelipshutz/wander/pull/256
+- A later iPhone 16e capture showed the launcher text advanced from
+  `Maya's date night spots` to `quiet work cafes with wifi`, confirming the
+  restored animation continues to run. The capture is
+  `feed-iphone-16e-rotated.png` beside the other screenshots.
+- REC-161 remains `In Review`, which matches the completed draft-PR state. The
+  Linear connector is unavailable in this session, so the new validation could
+  not be added as an issue comment. Mission Control remains unreachable on
+  `localhost:4000`; its previously recorded review status is unchanged.
+- No merge, build-number bump, TestFlight build, release, or streak/ticket
+  source change was performed.
