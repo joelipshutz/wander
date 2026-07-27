@@ -26133,3 +26133,14 @@ REC-162 Add layout refinement validation — 2026-07-26 20:14 PDT:
 - `xcodegen generate` produced no project drift and `git diff --check` passed.
   The temporary DEBUG-only local-auth switch used for simulator inspection was
   removed before final validation; no auth bypass remains in the branch.
+
+REC-162 Add layout refinement handoff — 2026-07-26 20:16 PDT:
+
+- Committed the refinement as `da06fab29` (**Refine suggested places layout**)
+  and pushed it to `codex/rec-162-add-unification`, updating ready PR #259.
+- Updated the PR description with the bounded vertical-list behavior and final
+  760/760 validation receipt.
+- Moved Linear REC-162 back to `In Review` and posted the implementation,
+  two-size visual-QA, test, commit, and PR receipt.
+- No build-number change, archive, upload, TestFlight attachment, merge, or
+  Slack release action was performed.
