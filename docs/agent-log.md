@@ -26375,6 +26375,26 @@ Implementation and validation checkpoint — 23:19 PDT:
 Next: complete the pre-merge diff review, push/open the stacked profile-rating
 PR, land the approved PR chain in dependency order, and release latest `main`
 as the next TestFlight build.
+
+Latest-main stack reconciliation checkpoint — 23:34 PDT:
+
+- Opened ready PR #260 and linked it to REC-161. Pre-landing review of the
+  profile-only delta found no critical or informational issues.
+- Reconciled PRs #241, #242, #254, #256, and #260 in dependency order onto
+  exact `origin/main` `c020432`. Production changes merged automatically; the
+  only textual conflicts were append-only `docs/agent-log.md` sections, and
+  both sides were preserved each time.
+- The first exact-stack compile exposed one integration-only duplicate:
+  `CheckInCopy.pluralTitle` had independently landed in both the Direction A
+  branch and newer `main`. Removed the duplicate declaration at the lowest
+  stack layer, propagated that fix through every dependent branch, and kept the
+  single shared value plus its existing copy test.
+- The corrected exact combined head passed 771/771 tests with zero failures on
+  iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec161-ratings-visual/Logs/Test/Test-Wander-2026.07.26_23-31-50--0700.xcresult`.
+- All five PR branches are pushed, clean, and contain current `main`. PRs #254
+  and #256 can now leave draft after the already-recorded design approval and
+  phone feedback; no unresolved reviews or hosted checks are present.
 ## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
 
 Agent: Codex
