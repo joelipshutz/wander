@@ -25972,3 +25972,37 @@ REC-157 final-main reconciliation — 2026-07-26 18:45 PDT:
   full-suite pass and generic Simulator build remain valid for the feature
   diff; the newly landed REC-160 head independently passed 757/757 and a
   generic Simulator build before its merge.
+
+## 2026-07-26 18:46 PDT - Codex - REC-157 Landing Record
+
+Agent: Codex
+Branch: `codex/rec-157-merge-record`
+Worktree: `/private/tmp/recme-rec157-lock-widget-mockups`
+Linear: `REC-157` (`Done`)
+PR: `#243` (merged)
+
+Final outcome:
+
+- Pushed the latest-main reconciled REC-157 feature head `c956e0279` and
+  confirmed PR #243 was clean and mergeable against `9f12a04ea`.
+- Squash-merged PR #243 to `main` as
+  `7894692e53091e792829549700f0336e375392b5`.
+- `origin/main` now contains the approved two-ring accessory-circular Lock
+  Screen design with curved sans-serif `rec.me` and `CHECK-IN` labels, the
+  central plus, and retained app-level deep-link handling so a cold or crashed
+  launch reaches **I'm here now** after authentication resolves.
+- Validation passed: focused widget suite 18/18; complete suite 755/755 on
+  iPhone 17 Pro / iOS 26.5; final reconciliation's combined widget and Action
+  Button suites 22/22; generic iOS Simulator build; `xcodegen generate`; and
+  `git diff --check`.
+- GitHub had no reviews, comments, Greptile findings, hosted check failures, or
+  unresolved threads on the reviewed head. Only existing Swift concurrency
+  and traditional-headermap warnings were observed.
+- Marked Linear REC-157 Done and attached the merge and validation receipt.
+- No build-number increment, archive, upload, TestFlight attachment, or Slack
+  release note was performed. The change will ship in the next explicitly
+  requested TestFlight batch.
+
+Next step: include `7894692e5` in the next requested TestFlight release and
+verify the accessory-circular Lock Screen widget on a signed physical device,
+including locked, unlocked, signed-out, cold-launch, and post-crash behavior.
