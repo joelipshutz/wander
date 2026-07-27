@@ -13,13 +13,6 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var selectedSurface: FeedSurface = .places
 
-    private let tickerSuggestions = [
-        "Joe's favorite coffee shops in LA",
-        "Maya's date night spots",
-        "quiet work cafes with wifi",
-        "friends' sunset hikes"
-    ]
-
     private var page: FollowedFeedPage? { store.followedFeedPage }
 
     var body: some View {
@@ -37,6 +30,20 @@ struct FeedScreen: View {
                 }
             }
             .wanderScreen()
+            .navigationTitle("Feed")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(WanderTheme.canvasWarm.color, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingSearch = true
+                    } label: {
+                        Label("Search places and people", systemImage: "magnifyingglass")
+                            .labelStyle(.iconOnly)
+                    }
+                }
+            }
             .task(id: auth.isSignedIn) {
                 await refresh()
             }
@@ -77,10 +84,6 @@ struct FeedScreen: View {
     private var placesSurface: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                FeedSearchLauncher(placeholders: tickerSuggestions) {
-                    isShowingSearch = true
-                }
-
                 content
             }
             .padding(.horizontal, WanderTheme.spacing4)
@@ -370,42 +373,14 @@ private struct FeedSurfaceTabs: View {
     @Binding var selectedSurface: FeedSurface
 
     var body: some View {
-        HStack(spacing: 0) {
+        Picker("Feed section", selection: $selectedSurface) {
             ForEach(FeedSurface.allCases) { surface in
-                Button {
-                    selectedSurface = surface
-                } label: {
-                    VStack(spacing: WanderTheme.spacing1) {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            Image(systemName: surface.systemImage)
-                                .font(.system(size: 15, weight: .black))
-                            Text(surface.title)
-                                .font(.system(size: 16, weight: .black, design: .rounded))
-                        }
-                        .foregroundStyle(
-                            selectedSurface == surface
-                                ? WanderTheme.textInk.color
-                                : WanderTheme.textMuted.color
-                        )
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-
-                        Rectangle()
-                            .fill(selectedSurface == surface ? WanderTheme.textInk.color : .clear)
-                            .frame(height: 3)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selectedSurface == surface ? .isSelected : [])
+                Text(surface.title)
+                    .tag(surface)
             }
         }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(WanderTheme.borderHairline.color)
-                .frame(height: 1)
-                .zIndex(-1)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Feed section")
+        .pickerStyle(.segmented)
+        .frame(minHeight: WanderTheme.tapMinimum)
     }
 }
 
@@ -838,56 +813,6 @@ private struct FeedProfileRoute: Identifiable {
     let id: String
 }
 
-private struct FeedSearchLauncher: View {
-    let placeholders: [String]
-    let action: () -> Void
-    @State private var placeholderIndex = 0
-
-    private var placeholder: String {
-        guard !placeholders.isEmpty else { return "Search places and people" }
-        return placeholders[placeholderIndex % placeholders.count]
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-
-                Text(placeholder)
-                    .id(placeholder)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textFaint.color)
-                    .lineLimit(1)
-                    .transition(.push(from: .bottom).combined(with: .opacity))
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, WanderTheme.spacing3)
-            .frame(minHeight: 44)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Search places and people")
-        .task {
-            guard placeholders.count > 1 else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2.6))
-                guard !Task.isCancelled else { return }
-                withAnimation(.easeInOut(duration: 0.24)) {
-                    placeholderIndex = (placeholderIndex + 1) % placeholders.count
-                }
-            }
-        }
-    }
-}
-
 private struct FeedSectionHeading: View {
     let title: String
     var detail: String? = nil
@@ -895,7 +820,7 @@ private struct FeedSectionHeading: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 21, weight: .black, design: .rounded))
+                .font(WanderTypography.editorialSectionTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
 
             if let detail {
@@ -943,7 +868,7 @@ private struct FeedFeaturedCard: View {
                     FeedPlaceArtwork(place: featured.visiblePlace, height: 88)
 
                     Text(featured.visiblePlace.place.canonicalName)
-                        .font(.system(size: 15, weight: .black))
+                        .font(WanderTypography.editorialCardTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
 
@@ -1152,7 +1077,7 @@ private struct FeedActivityModule: View {
                 openPlace(place)
             } label: {
                 Text(place.place.canonicalName)
-                    .font(.system(size: 20, weight: .black, design: .serif))
+                    .font(WanderTypography.editorialCardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -1166,7 +1091,7 @@ private struct FeedActivityModule: View {
                 openList(list)
             } label: {
                 Text(list.name)
-                    .font(.system(size: 20, weight: .black, design: .serif))
+                    .font(WanderTypography.editorialCardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -1177,7 +1102,7 @@ private struct FeedActivityModule: View {
             .accessibilityLabel("View list \(list.name)")
         } else {
             Text("Map activity")
-                .font(.system(size: 20, weight: .black, design: .serif))
+                .font(WanderTypography.editorialCardTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
         }
     }

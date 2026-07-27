@@ -25448,3 +25448,26 @@ profile views, navigation/typography tests, and this log. Before editing, the
 new worktree is clean and starts from REC-148 commit `9922112`, itself stacked
 on REC-147 PR #242. No build-number bump, TestFlight release, merge, backend,
 or schema change is authorized.
+
+Checkpoint — 17:44 PDT:
+
+- Added semantic Dynamic-Type roles in `WanderTypography`: Apple-native serif
+  for editorial titles and default system sans for body, labels, metadata, and
+  controls.
+- Feed now uses a native inline navigation title, trailing search toolbar item,
+  and native segmented Places/People picker. The retired custom animated
+  search launcher was removed.
+- Place profile now uses native back, save/check-in, share, and inline title
+  toolbar chrome. The photo/map header no longer owns custom overlaid header
+  buttons.
+- Applied the editorial title role to Feed place/ticket titles, the map place
+  preview, the place profile heading, and place check-in history titles. Ticket
+  geometry and layout were not edited.
+- `SaveStreakCelebrationView.swift` remains unmodified. A regression contract
+  now asserts it does not reference the new typography system and retains its
+  existing ticket-title font declaration.
+- Validation: focused Navigation, Theme, Place Profile, and Save Streak suites
+  passed: 88 tests, 0 failures on iPhone 16 Plus / iOS 18.6.
+
+Next: capture and inspect implemented Feed and place-profile screenshots on
+iPhone 16 Plus and iPhone 16e before preparing the PR.
