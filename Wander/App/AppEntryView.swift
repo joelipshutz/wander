@@ -62,6 +62,7 @@ struct AppEntryView: View {
         .environmentObject(backend)
         .environmentObject(pushNotifications)
         .sheet(isPresented: $auth.isPresentingNativeAuth, onDismiss: {
+            auth.nativeAuthDidDismiss()
             Task {
                 await auth.refreshSession()
                 coordinator.authStateChanged(auth.state)

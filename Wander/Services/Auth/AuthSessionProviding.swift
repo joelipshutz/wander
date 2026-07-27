@@ -171,6 +171,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     private var sessionObservationTask: Task<Void, Never>?
     private var foregroundObservationTask: Task<Void, Never>?
     private var refreshGeneration = 0
+    private var isNativeAuthAttemptActive = false
 
     init(provider: AuthSessionProviding) {
         self.provider = provider
@@ -248,10 +249,17 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         activeGate = nil
         if provider.canPresentNativeAuth {
             activeNativeAuthMode = mode
+            isNativeAuthAttemptActive = true
             isPresentingNativeAuth = true
         } else {
+            nativeAuthDidDismiss()
             state = .unavailable("Clerk is not configured for this build.")
         }
+    }
+
+    func nativeAuthDidDismiss() {
+        isNativeAuthAttemptActive = false
+        isPresentingNativeAuth = false
     }
 
     func supabaseAccessToken() async throws -> String {
@@ -294,6 +302,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     func signOut() async throws {
         beginSessionValidation()
+        nativeAuthDidDismiss()
         isSigningOut = true
         signOutError = nil
         defer { isSigningOut = false }
@@ -311,6 +320,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     func deleteAccount() async throws {
         beginSessionValidation()
+        nativeAuthDidDismiss()
         try await provider.deleteAccount()
         await provider.refreshSession()
         synchronizeStateFromProvider()
@@ -323,9 +333,18 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     private func synchronizeState(_ state: AuthState) {
         self.state = state
         isSessionValidated = state.isSignedIn
-        guard !state.isSignedIn else { return }
-        activeGate = nil
-        isPresentingNativeAuth = false
+        switch state {
+        case .signedIn:
+            nativeAuthDidDismiss()
+        case .unavailable:
+            activeGate = nil
+            nativeAuthDidDismiss()
+        case .loading, .signedOut:
+            activeGate = nil
+            if !isNativeAuthAttemptActive {
+                isPresentingNativeAuth = false
+            }
+        }
     }
 }
 

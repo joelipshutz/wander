@@ -52,6 +52,54 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.state, .loading)
     }
 
+    func testNativeAuthAttemptSurvivesTransientProviderStatesAndClosesOnSuccess() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true
+        )
+        let store = AuthSessionStore(provider: provider)
+
+        store.beginSignIn(mode: .signUp)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+
+        provider.setState(.loading)
+        await waitForState(.loading, in: store)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+
+        provider.setState(.signedOut)
+        await waitForState(.signedOut, in: store)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        provider.setState(.signedIn(session))
+        await waitForState(.signedIn(session), in: store)
+
+        XCTAssertFalse(store.isPresentingNativeAuth)
+        XCTAssertTrue(store.isSessionValidated)
+    }
+
+    func testNativeAuthDismissalEndsAttemptBeforeLaterProviderEvents() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true
+        )
+        let store = AuthSessionStore(provider: provider)
+
+        store.beginSignIn()
+        XCTAssertTrue(store.isPresentingNativeAuth)
+
+        store.nativeAuthDidDismiss()
+        XCTAssertFalse(store.isPresentingNativeAuth)
+
+        provider.setState(.loading)
+        await waitForState(.loading, in: store)
+        XCTAssertFalse(store.isPresentingNativeAuth)
+
+        provider.setState(.signedOut)
+        await waitForState(.signedOut, in: store)
+        XCTAssertFalse(store.isPresentingNativeAuth)
+    }
+
     func testClerkAuthServiceDoesNotPresentNativeAuthWhenSDKConfigureReturnsUnconfiguredClient() {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
@@ -429,6 +477,23 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("username can appear in search again"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("existing places will stay in stealth mode"))
         XCTAssertTrue(SettingsProfilePrivacySurface.warningBody(enabling: false).contains("future saves will follow"))
+    }
+
+    private func waitForState(
+        _ expectedState: AuthState,
+        in store: AuthSessionStore,
+        timeout: TimeInterval = 1
+    ) async {
+        let stateReached = expectation(description: "auth store reaches expected state")
+        let observation = Task { @MainActor in
+            while store.state != expectedState {
+                guard !Task.isCancelled else { return }
+                await Task.yield()
+            }
+            stateReached.fulfill()
+        }
+        await fulfillment(of: [stateReached], timeout: timeout)
+        observation.cancel()
     }
 }
 
