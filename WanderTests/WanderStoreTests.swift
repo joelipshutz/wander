@@ -49,9 +49,9 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(store.currentUser.bio)
         XCTAssertNil(store.currentUser.homeArea)
         XCTAssertNil(store.currentUser.onboardingCompletedAt)
-        XCTAssertFalse(store.currentUser.isPrivateProfile)
-        XCTAssertFalse(store.isPrivateProfile)
-        XCTAssertEqual(store.defaultVisibility, .followers)
+        XCTAssertTrue(store.currentUser.isPrivateProfile)
+        XCTAssertTrue(store.isPrivateProfile)
+        XCTAssertEqual(store.defaultVisibility, .selfOnly)
     }
 
     func testSigningOutClearsPrivateIdentityFields() {

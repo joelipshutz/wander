@@ -26074,3 +26074,34 @@ Final outcome:
 Next step: include `7894692e5` in the next requested TestFlight release and
 verify the accessory-circular Lock Screen widget on a signed physical device,
 including locked, unlocked, signed-out, cold-launch, and post-crash behavior.
+
+## 2026-07-27 00:17 PDT - Codex - REC-132 pre-merge validation repair
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-132-onboarding`
+Worktree: `/private/tmp/recme-rec132-onboarding`
+Linear: `REC-132` (`In Review`)
+PR: `#182`
+
+- Replaced two stale current-main contract expectations: the app entry contract
+  now asserts the signed-out carousel and Clerk handoff, and a newly signed-in
+  account retains main's private/self-only defaults.
+- Made the carousel page indicator observable to UI automation and added a
+  DEBUG-only force-auto-advance switch so XCTest automation does not pause the
+  timer by presenting as an accessibility client. Production still pauses for
+  Reduce Motion and VoiceOver and still uses the required seven-second cadence.
+- Verified the live task from the simulator console advancing `0 -> 1 -> 2 ->
+  0` at the two-second test interval. Replaced the brittle exact-page sample
+  with an assertion that the page value changes.
+- Focused validation passed 3/3: the app-entry contract, account-isolation
+  contract, and logged-out carousel UI auto-advance/action visibility test.
+  Latest UI result bundle:
+  `/private/tmp/DerivedData-rec132-focused/Logs/Test/Test-Wander-2026.07.27_00-15-55--0700.xcresult`.
+- Build 103 was already being archived from current main by a separate active
+  release process, so REC-132 is intentionally targeting the next build after
+  landing. The completed build-103 archive was preserved; only its generated
+  3.7 GB DerivedData cache was removed after the archive process exited to make
+  room for REC-132 validation.
+
+Next: commit these repairs, merge latest `origin/main`, regenerate the project,
+resolve the known source/log conflicts, and run the full integrated gate.

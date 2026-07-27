@@ -4,31 +4,32 @@ import MapKit
 @testable import Wander
 
 final class NavigationContractTests: XCTestCase {
-    func testAppRootHardGatesSignedOutSessionsBehindNonDismissableAuth() throws {
+    func testAppRootRoutesSignedOutSessionsThroughLoggedOutOnboarding() throws {
         let app = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderApp.swift")
+        )
+        let entry = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/AppEntryView.swift")
         )
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
-        let authGate = try String(
-            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Auth/AuthGateSheet.swift")
-        )
 
-        XCTAssertTrue(app.contains("WanderAppEntryView(analytics: analytics, parser: discoverParser)"))
-        XCTAssertTrue(app.contains("ClerkNativeAuthView(isDismissable: false)"))
-        XCTAssertTrue(app.contains("if case .signedIn(let session) = auth.state"))
-        XCTAssertTrue(app.contains("initialSession: session"))
-        XCTAssertTrue(app.contains("isSessionValidated: destination == .authenticated"))
-        XCTAssertTrue(app.contains("isSessionValidated: auth.isSessionValidated"))
-        XCTAssertTrue(app.contains(".allowsHitTesting(destination == .authenticated)"))
-        XCTAssertTrue(app.contains(".task(id: sessionRefreshGeneration)"))
-        XCTAssertTrue(app.contains("guard phase == .active else { return }"))
+        XCTAssertTrue(app.contains("AppEntryView(coordinator: entryCoordinator, analytics: analytics, parser: discoverParser)"))
+        XCTAssertTrue(entry.contains("case .signedOut:"))
+        XCTAssertTrue(entry.contains("LoggedOutCarouselView(analytics: analytics)"))
+        XCTAssertTrue(entry.contains("auth.beginSignIn(mode: .signUp)"))
+        XCTAssertTrue(entry.contains("auth.beginSignIn(mode: .signIn)"))
+        XCTAssertTrue(entry.contains("case .ready(let session):"))
+        XCTAssertTrue(entry.contains("initialSession: session"))
+        XCTAssertTrue(entry.contains("isSessionValidated: auth.isSessionValidated"))
+        XCTAssertTrue(entry.contains(".sheet(isPresented: $auth.isPresentingNativeAuth"))
+        XCTAssertTrue(entry.contains("ClerkNativeAuthView(mode: auth.activeNativeAuthMode)"))
+        XCTAssertTrue(entry.contains("guard phase == .active, didFinishInitialResolution else { return }"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
         XCTAssertTrue(root.contains(".task(id: isSessionValidated)"))
         XCTAssertTrue(root.contains("guard phase == .active, isSessionValidated else { return }"))
         XCTAssertTrue(root.contains("guard isSessionValidated,"))
-        XCTAssertTrue(authGate.contains("AuthView(isDismissable: isDismissable)"))
     }
 
     func testBottomNavigationUsesRequestedFiveItemOrder() {

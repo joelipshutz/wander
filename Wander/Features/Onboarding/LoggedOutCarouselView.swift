@@ -62,6 +62,15 @@ struct LoggedOutCarouselView: View {
         return .milliseconds(Int(OnboardingCarouselTiming.defaultAutoAdvanceSeconds * 1_000))
     }
 
+    private var accessibilityPausesAutoAdvance: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["WANDER_ONBOARDING_FORCE_AUTO_ADVANCE"] == "1" {
+            return false
+        }
+        #endif
+        return reduceMotion || voiceOverEnabled
+    }
+
     var body: some View {
         ZStack {
             WanderTheme.surfaceBone.color.ignoresSafeArea()
@@ -92,7 +101,10 @@ struct LoggedOutCarouselView: View {
                             .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: selection)
                     }
                 }
-                .accessibilityHidden(true)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Carousel page")
+                .accessibilityValue(String(selection + 1))
+                .accessibilityIdentifier("onboarding.carouselPage")
                 .padding(.bottom, WanderTheme.spacing4)
 
                 VStack(spacing: WanderTheme.spacing2) {
@@ -130,10 +142,9 @@ struct LoggedOutCarouselView: View {
         .task(id: AutoAdvanceID(
             generation: autoAdvanceGeneration,
             sceneIsActive: scenePhase == .active,
-            reduceMotion: reduceMotion,
-            voiceOverEnabled: voiceOverEnabled
+            accessibilityPaused: accessibilityPausesAutoAdvance
         )) {
-            guard scenePhase == .active, !reduceMotion, !voiceOverEnabled else { return }
+            guard scenePhase == .active, !accessibilityPausesAutoAdvance else { return }
             do {
                 try await Task.sleep(for: interval)
                 guard !Task.isCancelled else { return }
@@ -158,8 +169,7 @@ struct LoggedOutCarouselView: View {
 private struct AutoAdvanceID: Equatable {
     let generation: Int
     let sceneIsActive: Bool
-    let reduceMotion: Bool
-    let voiceOverEnabled: Bool
+    let accessibilityPaused: Bool
 }
 
 private struct OnboardingCarouselSlideView: View {
