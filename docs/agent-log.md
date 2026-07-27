@@ -25562,3 +25562,43 @@ so the existing REC-161 status cannot be moved back to `In Progress` before the
 edit; reconcile it and add validation when the connector is available. Mission
 Control at `localhost:4000` is also currently unreachable. Neither tracker
 outage changes implementation scope.
+
+Validation and visual-QA checkpoint — 18:39 PDT:
+
+- Restored `tickerSuggestions`, `FeedSearchLauncher`, its 2.6-second animated
+  placeholder rotation, accessibility label, `isShowingSearch` action, and the
+  existing full-screen `DiscoverScreen` destination exactly from the REC-148
+  base implementation.
+- Removed the REC-161-only `Feed` navigation title, visible navigation-bar
+  background, and toolbar search button. Kept the approved native segmented
+  Places/People picker and all typography roles.
+- The focused `NavigationContractTests` suite passed: 68 tests, 0 failures.
+  Regression assertions now lock the persistent launcher, Discover
+  presentation, absent redundant Feed title/toolbar search, native segmented
+  picker, place-profile native chrome, ticket cutout, and untouched streak.
+- Captured and manually inspected the Feed on iPhone 16 Plus and iPhone 16e,
+  both iOS 18.6. On both sizes, the segmented control is the first visible row,
+  the persistent search launcher sits immediately below it, and the recovered
+  vertical space improves access to featured places and tickets without
+  changing ticket geometry.
+- Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec161-feed-search/feed-iphone-16-plus.png`
+  and `feed-iphone-16e.png` in the same directory.
+- Temporary DEBUG fixture authentication and unconfigured-backend wiring were
+  used only to create deterministic simulator captures. The temporary source
+  change was removed before final testing and is not present in the commit.
+- Full suite passed: 758 tests, 0 failures on iPhone 16 Plus / iOS 18.6 using
+  the repository-standard `xcodebuild test` command.
+- `git diff --check` passed before the implementation checkpoint. Relative to
+  REC-148, `FeedScreen.swift` now differs only for the approved native
+  segmented control and typography roles; the search implementation is no
+  longer part of the REC-161 diff.
+- Host disk space initially blocked simulator installation. Removed only
+  recoverable generated artifacts: this worktree's ModuleCache, Index, and
+  SourcePackages caches plus the stale REC-132 Xcode DerivedData contents. The
+  full suite rebuilt the required current dependencies successfully. No source,
+  simulator app data, or personal files were removed.
+
+Next: push the checkpoint, update draft PR #256 to describe the restored
+persistent search/no Feed title direction, and reconcile REC-161/Mission
+Control when their connectors are reachable.
