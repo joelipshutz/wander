@@ -27103,3 +27103,30 @@ No schema, API, data migration, or visual-design change is required. This is a
 small state-lifecycle repair, so the broader product-design prerequisite is not
 applicable. Implementation will be sequential across the auth store, app-entry
 sheet callback, and focused tests.
+
+### 2026-07-27 10:31 PDT - Implementation and validation checkpoint
+
+- Added an explicit native-auth-attempt lifetime to `AuthSessionStore`.
+  Transient Clerk `.loading` and `.signedOut` callbacks no longer dismiss an
+  auth sheet that the user explicitly opened. Signed-in, unavailable, explicit
+  sign-out/account deletion, and user sheet dismissal end the attempt.
+- Wired the SwiftUI sheet's `onDismiss` callback to end the attempt before the
+  authoritative session refresh and coordinator update.
+- Added regressions proving that a pending Google-style state sequence stays
+  presented until success and that a user dismissal cannot be undone by later
+  provider events. The existing provider-logout regression still requires the
+  auth surface to close.
+- Focused auth and navigation validation passed 91/91 tests with zero failures:
+  `AuthSessionTests` plus `NavigationContractTests`. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-29-13--0700.xcresult`.
+- Neighboring onboarding validation passed 5/5 `OnboardingStateTests` with zero
+  failures using the already-built products. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-30-27--0700.xcresult`.
+- The first two cold-build attempts were cancelled before executing tests when
+  the machine ran out of disk space. To complete validation, removed only
+  disposable generated caches tied to the already-shipped build 104/REC-132
+  runs and the older REC-147 visual branch, plus the REC-164 module cache after
+  linking. Source worktrees, the active REC-165 cache, and TestFlight archives
+  were preserved. The subsequent compiled test run passed.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. No backend, schema, or production data changed.
