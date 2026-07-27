@@ -25417,3 +25417,34 @@ Decision / handoff:
 
 Draft PR #254 contains the tracked exploration log. No production app code was
 changed under REC-148.
+
+## 2026-07-26 17:27 PDT — Codex — REC-161 native editorial typography
+
+Agent: Codex
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (`In Progress`)
+
+Goal: implement the constrained REC-148 direction after Joe's explicit `Go`.
+Add semantic, Dynamic-Type-aware Apple-native typography roles; use native
+navigation header components where they preserve the current information
+architecture; and migrate the approved initial surfaces carefully.
+
+Hard scope locks:
+
+- Native sans remains the font for navigation chrome, controls, body,
+  metadata, filters, tabs, and timestamps.
+- Native serif is limited to place names, ticket titles, and selected editorial
+  content headings.
+- Do not change ticket geometry, layout, colors, spacing, density, media, or
+  actions. Typography is the only permitted ticket change.
+- Do not change the streak screen, including typography.
+- Do not add custom fonts, palette extensions, or a new magazine grid.
+- Preserve the current five-tab information architecture; native header work is
+  component treatment, not navigation redesign.
+
+Expected files: `Wander/DesignSystem/WanderTheme.swift`, scoped Feed and place
+profile views, navigation/typography tests, and this log. Before editing, the
+new worktree is clean and starts from REC-148 commit `9922112`, itself stacked
+on REC-147 PR #242. No build-number bump, TestFlight release, merge, backend,
+or schema change is authorized.
