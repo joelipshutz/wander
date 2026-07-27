@@ -27319,3 +27319,13 @@ Starting status:
   `/private/tmp/rec162-im-here-now-full-page.png`.
 - Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
   passes. No release or hosted-data action is in scope.
+
+### 2026-07-27 11:59 PDT - Responsive-preview handoff
+
+- Committed the responsive preview and **I'm here now** destination refinement
+  as `162cbdd` (`fix: scale Add suggestions by screen height`) and pushed the
+  branch, updating ready PR #259.
+- Updated the PR description with the large-screen three-row behavior,
+  smaller-screen two-row behavior, and explicit full-height destination.
+- Linear REC-162 remains `In Review`. No merge, build-number change, archive,
+  upload, TestFlight attachment, hosted mutation, or Slack action was performed.
