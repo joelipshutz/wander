@@ -25516,3 +25516,6 @@ Handoff:
 - Mission Control task `bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` moved to review.
 - Branch is pushed as `codex/rec-161-native-editorial-type`. The PR remains
   draft until Joe reviews the implemented screenshots.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode, raised its
+  project window, and verified the Xcode Branch Chooser reports
+  `codex/rec-161-native-editorial-type`.
