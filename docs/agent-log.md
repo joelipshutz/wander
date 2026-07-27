@@ -27244,3 +27244,14 @@ Starting status:
   checkout and all other worktrees remain untouched.
 - No build-number change, merge, archive, upload, TestFlight attachment, hosted
   data mutation, or Slack action was performed.
+
+### 2026-07-27 11:06 PDT - Add entry facepile verification
+
+- Confirmed the main Add-screen `AddImportEntrySection` uses the same shared
+  Google Maps, Instagram, and TikTok brand facepile as the dedicated Import
+  page; no additional product-source change was required.
+- An initial simulator screenshot showed the superseded four-tile entry because
+  the full UI-test run had replaced the installed app with a stale cached build.
+  Created and installed a fresh build from this isolated worktree, then visually
+  verified the branded facepile on the actual Add entry row. Screenshot:
+  `/private/tmp/rec162-add-entry-icons-final.png`.
