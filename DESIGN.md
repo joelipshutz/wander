@@ -644,7 +644,9 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 - No Lists tab.
 - No public global feed in v0.1.
 - No live-location affordances.
-- No badges, streaks, mayorships, or ranking people.
+- No public badges, mayorships, leaderboards, or ranking people. The private
+  save streak is limited to a once-daily celebration and a compact Profile row;
+  it must not become a persistent app-shell fixture.
 - No early paywall.
 - No generic card-grid marketplace feel.
 
@@ -658,6 +660,7 @@ Plan-eng-review locked the backend/auth, visibility, block, share-extension, pla
 | 2026-06-01 | Use Everyone/Friends/Self visibility | Everyone means followers can see it, Friends means mutual follows, Self means only me. Helper copy must prevent global-public confusion. |
 | 2026-06-01 | Contacts-first lookup, native Contacts planned later | People can be found through contacts or username; v0.1 uses `FakeContactProvider` and username search, with native Contacts planned behind the same provider contract after the core graph loop is validated. |
 | 2026-06-01 | Adopt design handoff package as visual source of truth | `preview/follow-profile-settings-mocks/tokens.css` owns tokens; `index.html` and `screens.html` are the SwiftUI recreation references. |
+| 2026-07-25 | Allow a private save streak | Saving a Check-in or Wanna can trigger one daily full-screen celebration; the durable indicator stays compact in Profile and never becomes a public rank or persistent shell element. |
 | 2026-06-01 | Collapse `you` into Profile and keep four tabs | Current nav is `map`, `add (+)`, `discover`, `profile`; settings opens from Profile and there are no grouping labels. |
 | 2026-06-01 | Use Clerk + Supabase | Clerk owns identity/account surfaces; Supabase owns social data, RLS, PostGIS, functions, and storage. |
 | 2026-06-01 | Defer share extension | In-app add, map, and social loop ship first; share extension is a later TODO. |

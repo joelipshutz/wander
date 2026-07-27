@@ -658,6 +658,8 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("Text(\"Nearby spots\")"))
         XCTAssertTrue(widgetSource.contains("\"tap a place to check-in\""))
         XCTAssertTrue(widgetSource.contains("Label(\"See all\", systemImage: \"chevron.right\")"))
+        XCTAssertTrue(widgetSource.contains("Image(systemName: \"plus\")"))
+        XCTAssertFalse(widgetSource.contains("Image(systemName: \"arrow.up.right\")"))
         XCTAssertFalse(widgetSource.contains("style: .relative"))
         XCTAssertTrue(sharedSnapshot.contains("static let maximumVisiblePlaces = 5"))
         XCTAssertTrue(sharedSnapshot.contains("static let exactDistanceLifetime"))
@@ -794,7 +796,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let declarations = project.components(separatedBy: "CURRENT_PROJECT_VERSION:").count - 1
 
         XCTAssertEqual(declarations, 1)
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"99\""))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"101\""))
         XCTAssertEqual(
             project.components(separatedBy: "CFBundleVersion: $(CURRENT_PROJECT_VERSION)").count - 1,
             4
