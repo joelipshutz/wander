@@ -19,11 +19,10 @@ enum AddSheetLayout {
 
 enum AddSuggestedPlaces {
     static let maximumCount = 7
-    static let initialVisibleCount = 3
+    static let previewCounts = [3, 2, 1]
     static let rowHeight: CGFloat = 58
     static let rowSpacing: CGFloat = 8
     static let showMoreHeight: CGFloat = 44
-    static let maximumViewportHeight: CGFloat = 156
 
     static func limited(_ candidates: [PlaceCandidate]) -> [PlaceCandidate] {
         Array(candidates.prefix(maximumCount))
@@ -31,15 +30,6 @@ enum AddSuggestedPlaces {
 
     static func visible(_ candidates: [PlaceCandidate], count: Int) -> [PlaceCandidate] {
         Array(candidates.prefix(max(0, count)))
-    }
-
-    static func viewportHeight(visibleCount: Int, hasMore: Bool) -> CGFloat {
-        guard visibleCount > 0 else { return 0 }
-
-        let rowsHeight = CGFloat(visibleCount) * rowHeight
-        let rowsSpacing = CGFloat(max(0, visibleCount - 1)) * rowSpacing
-        let showMoreBlock = hasMore ? rowSpacing + showMoreHeight : 0
-        return min(maximumViewportHeight, rowsHeight + rowsSpacing + showMoreBlock)
     }
 }
 
@@ -61,7 +51,6 @@ struct AddScreen: View {
     @State private var quickAddQuery = ""
     @State private var isShowingInlineCandidateResults = false
     @State private var suggestedCandidates: [PlaceCandidate] = []
-    @State private var visibleSuggestionCount = AddSuggestedPlaces.initialVisibleCount
     @State private var isLoadingSuggestions = false
     @State private var suggestionMessage: String?
     @State private var hasRequestedSuggestions = false
@@ -108,23 +97,18 @@ struct AddScreen: View {
             && selectedCandidate != nil
     }
 
+    private var showsPinnedImportEntry: Bool {
+        step == .source && !isShowingInlineCandidateResults
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    header
-
-                    switch step {
-                    case .source:
-                        sourcePicker
-                    case .confirm:
-                        confirmPlace
-                    case .draft:
-                        draftView
-                    }
+            Group {
+                if showsPinnedImportEntry {
+                    compactSheetContent
+                } else {
+                    scrollableFlowContent
                 }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -225,6 +209,55 @@ struct AddScreen: View {
         }
     }
 
+    private var compactSheetContent: some View {
+        VStack(spacing: 0) {
+            compactSourceContent
+
+            AddImportEntrySection(
+                summary: importStore.summary,
+                action: openImportHub
+            )
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing2)
+            .padding(.bottom, WanderTheme.spacing3)
+            .background(WanderTheme.canvasWarm.color)
+        }
+    }
+
+    private var compactSourceContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            header
+            suggestedPlaces
+
+            if let resolutionMessage {
+                InlineMessage(text: resolutionMessage)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing4)
+    }
+
+    private var scrollableFlowContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                header
+
+                switch step {
+                case .source:
+                    sourcePicker
+                case .confirm:
+                    confirmPlace
+                case .draft:
+                    draftView
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .padding(.bottom, WanderTheme.spacing8)
+        }
+    }
+
     private var header: some View {
         HStack(alignment: .center, spacing: WanderTheme.spacing3) {
             if step.canGoBack {
@@ -284,19 +317,6 @@ struct AddScreen: View {
                 if let resolutionMessage {
                     InlineMessage(text: resolutionMessage)
                 }
-            } else {
-                suggestedPlaces
-
-                AddImportEntrySection(
-                    summary: importStore.summary,
-                    action: openImportHub
-                )
-
-                if let resolutionMessage {
-                    InlineMessage(text: resolutionMessage)
-                        .padding(.top, WanderTheme.spacing2)
-                }
-
             }
         }
     }
@@ -342,51 +362,11 @@ struct AddScreen: View {
                 }
                 .frame(minHeight: 82)
             } else if !suggestedCandidates.isEmpty {
-                let visibleCandidates = AddSuggestedPlaces.visible(
-                    suggestedCandidates,
-                    count: visibleSuggestionCount
-                )
-                let hasMore = visibleCandidates.count < suggestedCandidates.count
-
-                ScrollView(.vertical, showsIndicators: hasMore || visibleCandidates.count > 2) {
-                    LazyVStack(spacing: AddSuggestedPlaces.rowSpacing) {
-                        ForEach(visibleCandidates) { candidate in
-                            SuggestedPlaceCard(candidate: candidate) {
-                                openSuggestedCandidate(candidate)
-                            }
-                        }
-
-                        if hasMore {
-                            Button {
-                                withAnimation(.snappy(duration: 0.28, extraBounce: 0)) {
-                                    visibleSuggestionCount = suggestedCandidates.count
-                                }
-                            } label: {
-                                Label("Show more", systemImage: "chevron.down")
-                                    .font(.system(size: 13, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                                    .frame(
-                                        maxWidth: .infinity,
-                                        minHeight: AddSuggestedPlaces.showMoreHeight
-                                    )
-                                    .background(WanderTheme.surfaceSand.color)
-                                    .clipShape(
-                                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityHint("Shows all nearby suggestions in this list")
-                        }
-                    }
-                    .padding(.vertical, 1)
+                ViewThatFits(in: .vertical) {
+                    suggestedPlacePreview(count: AddSuggestedPlaces.previewCounts[0])
+                    suggestedPlacePreview(count: AddSuggestedPlaces.previewCounts[1])
+                    suggestedPlacePreview(count: AddSuggestedPlaces.previewCounts[2])
                 }
-                .frame(
-                    height: AddSuggestedPlaces.viewportHeight(
-                        visibleCount: visibleCandidates.count,
-                        hasMore: hasMore
-                    )
-                )
-                .scrollClipDisabled(false)
             } else {
                 Button {
                     hasRequestedSuggestions = false
@@ -404,6 +384,37 @@ struct AddScreen: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Tries nearby suggestions again")
+            }
+        }
+    }
+
+    private func suggestedPlacePreview(count: Int) -> some View {
+        let visibleCandidates = AddSuggestedPlaces.visible(suggestedCandidates, count: count)
+        let hasMore = visibleCandidates.count < suggestedCandidates.count
+
+        return VStack(spacing: AddSuggestedPlaces.rowSpacing) {
+            ForEach(visibleCandidates) { candidate in
+                SuggestedPlaceCard(candidate: candidate) {
+                    openSuggestedCandidate(candidate)
+                }
+            }
+
+            if hasMore {
+                Button {
+                    expandSheet()
+                    Task {
+                        await resolveCurrentLocationCandidates()
+                    }
+                } label: {
+                    Label("See more", systemImage: "arrow.up.right")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(maxWidth: .infinity, minHeight: AddSuggestedPlaces.showMoreHeight)
+                        .background(WanderTheme.surfaceSand.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens all nearby suggestions in the full-screen nearby view")
             }
         }
     }
@@ -481,7 +492,6 @@ struct AddScreen: View {
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
         suggestedCandidates = []
-        visibleSuggestionCount = AddSuggestedPlaces.initialVisibleCount
         isLoadingSuggestions = false
         suggestionMessage = nil
         hasRequestedSuggestions = false
@@ -590,7 +600,6 @@ struct AddScreen: View {
         do {
             let nearby = try await store.currentLocationCandidates()
             suggestedCandidates = AddSuggestedPlaces.limited(nearby)
-            visibleSuggestionCount = AddSuggestedPlaces.initialVisibleCount
             if suggestedCandidates.isEmpty {
                 suggestionMessage = "No nearby places found. Tap to try again."
             }

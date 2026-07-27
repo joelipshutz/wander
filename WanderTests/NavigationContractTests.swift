@@ -701,16 +701,20 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("static let maximumCount = 7"))
         XCTAssertTrue(suggestedSection.contains("Text(\"Suggested\")"))
         XCTAssertTrue(suggestedSection.contains("searchField"))
-        XCTAssertTrue(suggestedSection.contains("ScrollView(.vertical"))
-        XCTAssertTrue(suggestedSection.contains("Label(\"Show more\", systemImage: \"chevron.down\")"))
-        XCTAssertTrue(suggestedSection.contains("AddSuggestedPlaces.viewportHeight("))
+        XCTAssertTrue(suggestedSection.contains("ViewThatFits(in: .vertical)"))
+        XCTAssertTrue(suggestedSection.contains("Label(\"See more\", systemImage: \"arrow.up.right\")"))
+        XCTAssertTrue(suggestedSection.contains("await resolveCurrentLocationCandidates()"))
+        XCTAssertFalse(suggestedSection.contains("ScrollView(.vertical"))
         XCTAssertFalse(suggestedSection.contains("ScrollView(.horizontal"))
+        XCTAssertTrue(addScreen.contains("if showsPinnedImportEntry"))
+        XCTAssertTrue(addScreen.contains("private var compactSheetContent: some View"))
+        XCTAssertTrue(addScreen.contains("private var compactSourceContent: some View"))
         XCTAssertFalse(addScreen.contains("\"I'm here now\""))
         XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
-    func testAddSuggestedPlacesExpandInsideTheSameBoundedViewport() {
+    func testAddSuggestedPlacesOfferFittingPreviewCountsBeforeFullScreenResults() {
         let candidates = (0..<8).map { index in
             PlaceCandidate(
                 id: "candidate_\(index)",
@@ -722,22 +726,12 @@ final class NavigationContractTests: XCTestCase {
             )
         }
         let limited = AddSuggestedPlaces.limited(candidates)
-        let initial = AddSuggestedPlaces.visible(
-            limited,
-            count: AddSuggestedPlaces.initialVisibleCount
-        )
 
         XCTAssertEqual(limited.count, 7)
-        XCTAssertEqual(initial.count, 3)
-        XCTAssertEqual(
-            AddSuggestedPlaces.viewportHeight(visibleCount: initial.count, hasMore: true),
-            AddSuggestedPlaces.maximumViewportHeight
-        )
-        XCTAssertEqual(
-            AddSuggestedPlaces.viewportHeight(visibleCount: limited.count, hasMore: false),
-            AddSuggestedPlaces.maximumViewportHeight,
-            "Show more must add rows inside the existing viewport instead of pushing Import below the fold."
-        )
+        XCTAssertEqual(AddSuggestedPlaces.previewCounts, [3, 2, 1])
+        XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 3).count, 3)
+        XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 2).count, 2)
+        XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 1).count, 1)
     }
 
     func testCurrentLocationCandidateActionFloatsAboveScrollableResults() throws {

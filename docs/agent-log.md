@@ -27255,3 +27255,32 @@ Starting status:
   Created and installed a fresh build from this isolated worktree, then visually
   verified the branded facepile on the actual Add entry row. Screenshot:
   `/private/tmp/rec162-add-entry-icons-final.png`.
+
+### 2026-07-27 11:23 PDT - Fixed Import footer and non-scrolling preview
+
+- Product follow-up: the compact Add sheet should not scroll internally;
+  Import should stay fixed at the bottom; nearby suggestions should show only
+  the rows that fit; and **See more** should open the full-height nearby chooser.
+- Replaced the compact source-state `ScrollView` with a strict two-part vertical
+  layout: a flexible Suggested/search region and a fixed Import footer. Other
+  expanded search, nearby-results, confirm, and draft states retain their
+  existing full-height scrolling behavior.
+- Replaced the bounded nested suggestion scroll with a vertical `ViewThatFits`
+  over 3-, 2-, and 1-row previews. On both tested devices SwiftUI selected two
+  rows plus **See more**. **See more** now expands the sheet and reuses the
+  existing current-location candidate flow rather than revealing rows inside
+  the compact sheet.
+- Focused Add layout contracts passed 2/2. The complete unit and contract suite
+  passed 784/784. Result bundle:
+  `/private/tmp/DerivedData-rec162-entry-verify/Logs/Test/Test-Wander-2026.07.27_11-20-57--0700.xcresult`.
+- Visually verified the populated half sheet on iPhone 16 Plus and temporary
+  iPhone 16e; neither compact sheet scrolls, the fixed Import footer remains
+  visible at the bottom, and both show two rows plus **See more**. Also tapped
+  **See more** and verified the full-height nearby chooser and pinned Save
+  action. Screenshots:
+  `/private/tmp/rec162-add-fixed-footer-populated.png`,
+  `/private/tmp/rec162-add-fixed-footer-16e.png`, and
+  `/private/tmp/rec162-add-see-more-full-screen.png`.
+- Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
+  passes. No build-number, TestFlight, hosted data, or release action is in
+  scope.
