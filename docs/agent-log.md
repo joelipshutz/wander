@@ -24887,6 +24887,310 @@ Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
 
+## 2026-07-26 12:53 PDT — Codex — REC-157 Lock Screen widget design exploration
+
+- Goal: create several visually distinct mockups for the small Lock Screen
+  quick-capture widget so both the `rec.me` brand and the “I’m here now” /
+  check-in action are recognizable at a glance.
+- Linear: REC-157 (`In Progress`), related to REC-142 and assigned to Ryan.
+- Branch: `codex/rec-157-lock-widget-mockups`. Clean isolated worktree:
+  `/private/tmp/recme-rec157-lock-widget-mockups`, based on current
+  `origin/main` `b4d7c98ce`.
+- The primary checkout was intentionally left untouched because it is on the
+  now-merged `codex/rec-142-widgets` branch and contains an unrelated untracked
+  `.pnpm-store/`.
+- Design-shotgun artifacts will be saved outside the repository under
+  `~/.gstack/projects/joelipshutz-wander/designs/`, per that workflow.
+- Expected repository files: this append-only coordination log only. Source
+  files under `WanderWidgets/`, widget deep-link contracts, and `DESIGN.md`
+  will be inspected but not changed until Ryan approves a mockup direction.
+- Next: audit the accessory widget implementation and Lock Screen constraints,
+  inspect prior design memory, propose distinct concepts, generate the approved
+  comparison set, and record the design feedback.
+
+REC-157 design-shotgun checkpoint — 2026-07-26 13:02 PDT:
+
+- Audited `WanderWidgets/WanderWidgets.swift`: the current
+  `.accessoryCircular` treatment is a generic `location.fill` plus `HERE`;
+  the deep link and accessibility label already route to the intended
+  “I’m here now” flow.
+- Reviewed `DESIGN.md` and the canonical rec.me app-icon contract/master. The
+  relevant recognizable grammar is the location pin, bookmark cutout, orbit,
+  and monochrome-safe silhouette.
+- The local gstack design binary and browser helper were unavailable, so
+  design-shotgun used its HTML/SVG fallback. Optional cross-machine artifact
+  sync was privacy-blocked and deliberately skipped; all artifacts remain
+  local.
+- Generated and XML-validated four 1200×900 SVG directions, each shown at
+  realistic accessory-circular scale plus magnified detail:
+  A App Badge, B rec·HERE, C Check-in Pulse, and D Radial Label.
+- Saved the local comparison board and PNG/SVG artifacts at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`
+  and opened `design-board.html` in the default browser.
+- No product source, project configuration, or tests changed. Awaiting Ryan’s
+  comparison-board feedback before locking a direction or implementing it.
+
+REC-157 implementation and validation — 2026-07-26 13:18 PDT:
+
+- Ryan selected the Check-in Pulse direction with a revised composition:
+  curved `rec.me` at the top, a centered plus sign, matching curved `CHECK-IN`
+  at the bottom, and the concentric pulse rings retained.
+- Created and visually inspected the revised C2 mockup at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/variant-C2.png`
+  (with an editable SVG beside it). The design artifacts remain local because
+  optional cross-machine artifact sync was privacy-blocked. Saved the confirmed
+  choice and Ryan's feedback in the adjacent `approved.json`; the optional
+  taste-profile updater could not run because its required `bun` runtime is not
+  installed on this machine.
+- Implemented the design in the `.accessoryCircular` quick-capture widget using
+  monochrome-safe SwiftUI shapes, SF Symbols, and per-character arc layout.
+  Added a dedicated accessory-circular Xcode preview.
+- Moved URL intake to `WanderAppEntryView` and added a one-shot deep-link inbox.
+  Widget URLs received while authentication/session restoration is unresolved
+  are retained, then handed to `WanderRootView` after validation. This makes the
+  quick-capture link reliably open the existing “I’m here now” flow after a
+  terminated/crashed-app launch as well as during warm launches.
+- Added regression coverage for deferred cold-start routing, invalid URL
+  rejection, latest-valid-request behavior, one-shot consumption, and the
+  revised widget source contract.
+- Regenerated the Xcode project with `xcodegen generate`; it produced no
+  `project.pbxproj` diff.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on the available iPhone 17 Pro /
+    iOS 26.5 simulator. The documented iPhone 16 Plus / iOS 18.6 runtime is not
+    installed on this machine.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - `git diff --check`: passed.
+- Existing warnings in `WanderSupabaseClient.swift` about actor-isolated date
+  formatters and Xcode's traditional headermap warning remain unchanged and are
+  outside REC-157.
+- Files changed: `Wander/App/WanderApp.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/App/WanderWidgetLaunchRequest.swift`,
+  `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this log.
+- Next: commit and push `codex/rec-157-lock-widget-mockups`, open a ready PR,
+  link it to REC-157, and move the issue to `In Review`. No TestFlight build
+  number change or release was requested.
+
+REC-157 handoff — 2026-07-26 13:20 PDT:
+
+- Implementation commit: `7dd6f652e` (`Redesign Lock Screen quick capture
+  widget`), pushed to `origin/codex/rec-157-lock-widget-mockups`.
+- Ready PR: https://github.com/joelipshutz/wander/pull/243
+- Linear REC-157 is now `In Review`, has PR #243 attached, and includes the
+  validation summary and simulator-runtime caveat.
+- No known REC-157 implementation blockers. Remaining work is PR review/merge
+  and optional hands-on Lock Screen visual confirmation on a signed device.
+- Opened `/private/tmp/recme-rec157-lock-widget-mockups/Wander.xcodeproj` as its
+  own Xcode project and verified Xcode's Branch Chooser displays
+  `codex/rec-157-lock-widget-mockups`.
+- No TestFlight build number was changed and no release was attempted because
+  the request did not include a TestFlight release.
+
+REC-157 typography revision start — 2026-07-26 13:38 PDT:
+
+- Ryan requested a tighter ring-band treatment: move curved `rec.me` down into
+  the band between the inner rings and enlarge both `rec.me` and `CHECK-IN` so
+  the letterforms better fill that space.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; PR #243 remains open.
+- Current checkout was clean. `git fetch origin` completed after rerunning with
+  the required worktree metadata permission.
+- No overlapping uncommitted work was found. Expected files:
+  `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 typography revision completion — 2026-07-26 13:43 PDT:
+
+- Moved both arc baselines from a 20-point radius to an 18-point radius so
+  `rec.me` sits lower and both labels are centered in the same inner ring band.
+- Increased `rec.me` from 5.5pt to 6.5pt and `CHECK-IN` from 4.5pt to 5.5pt.
+  Added source-contract assertions for the approved metrics.
+- Generated, XML-validated, and visually inspected the matching C3 mockup at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/variant-C3.png`
+  with editable SVG and updated the adjacent `approved.json`.
+- Ran `xcodegen generate`; no project file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing `WanderSupabaseClient.swift` actor-isolation warnings and Xcode's
+  traditional headermap warnings are unchanged and outside this visual tweak.
+- Next: commit and push the revision to PR #243, return REC-157 to `In Review`,
+  and leave Xcode on the existing REC-157 worktree for device testing.
+
+REC-157 typography revision handoff — 2026-07-26 13:43 PDT:
+
+- Commit `ab2049ff5` (`Refine Lock Screen widget ring typography`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated.
+- Linear REC-157 returned to `In Review` with the new metrics, commit, and
+  validation results recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number change or release was requested.
+
+REC-157 outer-ring alignment revision start — 2026-07-26 17:39 PDT:
+
+- Ryan clarified that curved `rec.me` and `CHECK-IN` should sit in the outer
+  band, exactly centered between the outermost and second stroked circles.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; ready PR #243 remains
+  open.
+- `git fetch origin`, `git status --short --branch`, and `git worktree list`
+  completed. No overlapping uncommitted work was found.
+- Implementation approach: derive the label-arc radius from the actual
+  WidgetKit geometry and the two ring insets, avoiding a fixed offset that can
+  drift with the accessory-circular container size.
+- Expected files: `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 outer-ring alignment revision completion — 2026-07-26 17:46 PDT:
+
+- Replaced the fixed 18-point label offsets with a geometry-derived outer-band
+  radius: half the accessory-circular canvas minus 7 points, the exact midpoint
+  between the 4-point and 10-point stroked-ring insets.
+- Both curved labels now receive the same derived radius; top/bottom placement
+  only changes the sign. Added source-contract coverage for the formula, both
+  label usages, and the symmetric offsets.
+- Generated, XML-validated, and visually inspected the matching C4 mockup.
+  Editable SVG, PNG, and updated approval metadata are stored at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing `WanderSupabaseClient.swift` actor-isolation warnings, simulator
+  keychain/app-group diagnostics under unsigned tests, and Xcode's traditional
+  headermap warnings remain unchanged and are outside this visual tweak.
+- Next: commit and push the revision to ready PR #243, return REC-157 to
+  `In Review`, and leave Xcode on the existing REC-157 worktree for testing.
+  No TestFlight build-number change or release was requested.
+
+REC-157 outer-ring alignment revision handoff — 2026-07-26 17:46 PDT:
+
+- Commit `fff2b87a4` (`Center Lock Screen labels in outer ring`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated:
+  https://github.com/joelipshutz/wander/pull/243
+- Linear REC-157 returned to `In Review` with the exact geometry formula,
+  validation results, and commit recorded in a comment.
+- The branch was clean after the implementation push. A follow-up GitHub API
+  read was unavailable in the sandbox, but the existing ready PR and successful
+  branch push are confirmed.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
+
+REC-157 two-ring legibility revision start — 2026-07-26 17:58 PDT:
+
+- Ryan requested removing the middle concentric ring and making `rec.me` and
+  `CHECK-IN` substantially larger while keeping both labels symmetrically
+  centered, with visible clearance, between the remaining outer and inner
+  rings.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; ready PR #243 remains
+  open.
+- `git fetch origin`, `git status --short --branch`, and `git worktree list`
+  completed. No overlapping uncommitted work was found.
+- Expected files: `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 two-ring legibility revision completion — 2026-07-26 18:07 PDT:
+
+- Removed the middle 10-point-inset concentric stroke, leaving the outer
+  4-point-inset ring and inner 16-point-inset ring.
+- Recentered both labels at the exact midpoint of the remaining 12-point band:
+  half the accessory-circular canvas minus 10 points.
+- Increased `rec.me` from 6.5pt to 11pt and `CHECK-IN` from 5.5pt to 9.5pt.
+  Expanded their angular steps from 9.5/-8 degrees to 19/-14.5 degrees so the
+  larger letters remain readable instead of crowding.
+- Added source-contract assertions for the two-ring structure, midpoint
+  formula, enlarged type, and revised arc spacing.
+- Generated, XML-validated, and visually inspected the C5 two-ring mockup.
+  Editable SVG, PNG, and approval metadata are stored at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing actor-isolation, unsigned simulator keychain/app-group, and
+  traditional headermap warnings remain unchanged and outside REC-157.
+- Next: commit and push to ready PR #243, return REC-157 to `In Review`, and
+  keep Xcode on this isolated branch. No TestFlight release was requested.
+
+REC-157 two-ring legibility revision handoff — 2026-07-26 18:07 PDT:
+
+- Commit `9479cbfad` (`Make Lock Screen widget labels readable`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated:
+  https://github.com/joelipshutz/wander/pull/243
+- Linear REC-157 returned to `In Review` with the final ring/type metrics,
+  validation results, and commit recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
+
+REC-157 sans-serif typography revision start — 2026-07-26 18:09 PDT:
+
+- Ryan requested standard sans-serif type for the curved `rec.me` and
+  `CHECK-IN` labels.
+- Resuming `codex/rec-157-lock-widget-mockups` in the clean isolated worktree.
+  Linear REC-157 moved back to `In Progress`; ready PR #243 remains open.
+- `git fetch origin`, `git status --short --branch`, and the relevant worktree
+  entries were checked. No overlapping uncommitted work was found.
+- Scope is limited to changing the curved labels from SwiftUI's rounded system
+  design to the standard system sans-serif design, preserving the approved
+  two-ring geometry, sizes, spacing, and cold-start route.
+
+REC-157 sans-serif typography revision completion — 2026-07-26 18:15 PDT:
+
+- Changed the curved-label font design from `.rounded` to `.default`, which
+  uses Apple's standard sans-serif system face while preserving the approved
+  11pt/9.5pt sizes, weight, arc spacing, and two-ring geometry.
+- Added source-contract coverage for the standard sans-serif font selection.
+- Generated, XML-validated, and visually inspected the C6 sans-serif mockup.
+  Editable SVG, PNG, and approval metadata are stored with the earlier variants
+  in the REC-157 design-artifact folder.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing unrelated build/test warnings remain unchanged.
+- Next: commit and push to ready PR #243, return REC-157 to `In Review`, and
+  keep Xcode on this isolated branch. No TestFlight release was requested.
+
+REC-157 sans-serif typography revision handoff — 2026-07-26 18:15 PDT:
+
+- Commit `1f3ec4eef` (`Use sans serif Lock Screen widget labels`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated.
+- Linear REC-157 returned to `In Review` with the typography decision,
+  validation results, and commit recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
+
+REC-157 landing start — 2026-07-26 18:21 PDT:
+
+- Ryan approved the final two-ring, standard sans-serif Lock Screen widget and
+  requested that it be pushed to `main`.
+- Resuming ready PR #243 from the clean isolated
+  `codex/rec-157-lock-widget-mockups` worktree. Linear REC-157 remains `In
+  Review` while the final integration review runs.
+- Refreshed `origin`, checked branch/worktree state, read the latest
+  coordination log, and confirmed `origin/main` has advanced through
+  TestFlight build 101 since this branch split.
+- No unfinished explicit TestFlight release was found. This request is a
+  squash-merge only: no build-number change, archive, upload, or Slack release
+  note is authorized.
+- Next: merge current `origin/main` into the PR branch, review the exact
+  integrated diff, rerun relevant tests/build, squash-merge PR #243, mark
+  REC-157 Done, and record the landing on `main`.
 REC-152 implementation approval checkpoint — 2026-07-26 11:10 PDT:
 
 - Joe selected the middle mock's information pattern but rejected the wide,
@@ -25105,6 +25409,64 @@ Final outcome: every visible Nearby widget place row now uses a plus icon while
 retaining the same selected-place check-in destination. PR #246 is ready for
 review.
 
+## 2026-07-26 13:40 PDT - Codex - REC-160 Check-in here Action Button control
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Worktree: `/private/tmp/recme-rec160-action-control`
+Linear: `REC-160` (`In Progress`)
+
+Goal: add one iOS 18+ WidgetKit Control named `Check-in here` so rec.me can be
+assigned to the iPhone Action Button and open the existing nearby check-in
+flow. The shipped bottom Lock Screen accessory widget is explicitly out of
+scope and will not be rebuilt or changed.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact current
+  `origin/main` at `b4d7c98ce`.
+- The primary checkout remains untouched on the stale REC-142 branch with its
+  unrelated untracked `.pnpm-store/`.
+- Created REC-160 in the `recme` team / `mvp` project, assigned it to Ryan,
+  related it to REC-142 and REC-157, and moved it to `In Progress`.
+- Active REC-157 and REC-158 branches overlap widget-bundle registration and
+  app deep-link routing. REC-160 will place the control in a separate source
+  file, leave REC-157's accessory widget presentation untouched, and keep its
+  navigation changes additive. The branch will be reconciled with latest
+  `origin/main` before publication.
+- Expected files:
+  `project.yml`, regenerated project state, a small app/widget shared App
+  Intent and navigation handoff, one new control source file, the existing
+  widget bundle registration, focused widget/navigation tests, setup docs,
+  and this log.
+- No backend, schema, Supabase, notification, build-number, TestFlight, or
+  Slack release change is in scope.
+
+Implementation checkpoint — 2026-07-26 13:47 PDT:
+
+- Added an iOS 18 `ControlWidget` with exact display name and label
+  `Check-in here`, terracotta tint, `location.fill` symbol, and a dedicated
+  `OpenIntent`. The new source is registered only with the host app and the
+  existing primary widget extension.
+- The intent hands off to the existing `.quickCapture` / I'm Here Now route.
+  A main-actor navigation center retains the request until authenticated
+  session validation completes, then reuses the existing deep-link handoff.
+- Registered the control in the existing widget bundle behind an iOS 18
+  availability guard. The accessory-circular Lock Screen widget implementation
+  remains unchanged.
+- Added focused contract and behavior coverage plus physical-device Action
+  Button setup instructions in `docs/setup.md`.
+- `xcodegen generate` and `git diff --check` passed.
+- Focused `WanderActionButtonControlTests` passed 4/4 with zero failures on
+  iPhone 17 Pro / iOS 26.5. Result:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-42-07--0700.xcresult`.
+- The sandboxed first attempt could not access CoreSimulator or fetch Swift
+  packages; rerunning the same command with the repository-prescribed
+  escalation succeeded.
+- `origin/main` advanced by REC-159 while this work was in progress. Its
+  Nearby-widget icon change does not overlap implementation files, and this
+  reconciliation preserved its append-only agent-log entry.
+
 ## 2026-07-26 13:42 PDT - Codex - REC-159 Landing
 
 Agent: Codex
@@ -25139,6 +25501,42 @@ Landing and validation:
 Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
+
+## 2026-07-26 13:59 PDT - Codex - REC-160 Final Validation
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Progress`)
+
+Validation and handoff checkpoint:
+
+- Reconciled the branch through current `origin/main` at `ff20d52e7`,
+  preserving both REC-159 implementation and landing receipts. No REC-160
+  implementation file conflicted.
+- Following Apple's system-control privacy guidance, the final intent uses
+  `.requiresAuthentication` before opening the personal nearby-location
+  surface from a locked system placement.
+- Final focused Action Button and existing widget regression suite passed
+  20/20 with zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-56-50--0700.xcresult`.
+- Final complete suite passed 748/748 with zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_13-57-43--0700.xcresult`.
+- Final generic iOS Simulator build passed for the app and all embedded
+  extensions. `WanderWidgets.appex` is a universal arm64/x86_64 Simulator
+  binary.
+- Inspected the built App Intents metadata directly in both `Wander.app` and
+  `WanderWidgets.appex`. Both advertise `WanderOpenCheckInControlIntent` with
+  title `Check-in here`, iOS 18 introduction, `openAppWhenRun: true`,
+  authenticated execution, and the `WanderControlDestination` target.
+- Existing non-blocking warnings remain for traditional headermaps and
+  `WanderSupabaseClient` formatter actor isolation. No new control, intent,
+  widget, packaging, or metadata warning was introduced.
+- `git diff --check` passes. No build number, TestFlight binary, backend,
+  Supabase, or Slack announcement changed.
+- Physical Action Button validation remains a hardware-only check after a
+  signed install: assign **Settings → Action Button → Controls → rec.me →
+  Check-in here**, then verify locked, unlocked, cold-launch, and signed-out
+  behavior. These instructions are durable in `docs/setup.md`.
 
 REC-152 latest-main conflict resolution — 2026-07-26 14:05 PDT:
 
@@ -25177,6 +25575,128 @@ Release start:
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
 
+## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Review` at handoff)
+
+Final handoff:
+
+- Pushed the implementation branch and opened ready PR #249:
+  `https://github.com/joelipshutz/wander/pull/249`.
+- `origin/main` advanced again during publication with the REC-122 streak
+  hierarchy and build-100 release metadata. Merged exact current main
+  `c98612e41`, preserving its product, test, version, generated-project, and
+  append-only log changes. Only `docs/agent-log.md` required manual conflict
+  resolution.
+- Regenerated `Wander.xcodeproj` from the merged `project.yml`. The final
+  project retains build 100 and the REC-160 source membership in both the app
+  and primary widget extension.
+- The exact reconciled PR branch passed the complete 754/754 XCTest suite with
+  zero failures:
+  `/private/tmp/DerivedData-rec160-focused/Logs/Test/Test-Wander-2026.07.26_14-01-46--0700.xcresult`.
+- The exact reconciled branch passed the generic iOS Simulator build. Both the
+  app and `WanderWidgets.appex` report build 100; the extension remains a
+  universal arm64/x86_64 binary.
+- Reinspected final built metadata in both app and widget extension: exact
+  title `Check-in here`, iOS 18 introduction, `openAppWhenRun: true`, and
+  authenticated execution remain present.
+- Implementation commits are `d63a4e6b0` and `f4b3f64b2`; current-main
+  reconciliation is `834efdfc4`.
+- No TestFlight release action for REC-160 was requested or performed. The
+  independently running build-100 release started from `main` before REC-160
+  and therefore does not contain this feature.
+
+Final outcome: the new authenticated **Check-in here** system control is
+implemented, tested, documented, and ready for review in PR #249. The existing
+bottom Lock Screen accessory widget remains unchanged. Physical Action Button
+validation after a signed install is the only remaining hardware-specific
+check.
+
+## 2026-07-26 17:37 PDT - Codex - REC-160 Xcode Test Handoff
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Linear: `REC-160` (`In Review`)
+
+- Confirmed the isolated worktree was clean and matched pushed commit
+  `b94bee5c956bd221786f295178a755f925a230f5`.
+- Opened `/private/tmp/recme-rec160-action-control/Wander.xcodeproj` as its own
+  Xcode workspace window without switching or overwriting the primary checkout.
+- Verified Xcode's visible Branch Chooser reads
+  `codex/rec-160-action-control`; the active scheme is `Wander` and the current
+  run destination is `iPhone 17 Pro`.
+- Left Xcode open on the REC-160 worktree for signed device/simulator testing.
+  No new build, archive, TestFlight upload, or app-code change was performed
+  during this handoff.
+
+## 2026-07-26 18:09 PDT - Codex - REC-160 Control Copy/Icon Follow-up
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Worktree: `/private/tmp/recme-rec160-action-control`
+Linear: `REC-160` (`In Review`)
+PR: `#249`
+
+Goal: rename the Action Button/system control from **Check-in here** to
+**Check-in**, replace its navigation/location glyph with a plain plus, validate
+the current branch against latest `main`, and squash-merge the ready result to
+`main`. The existing bottom Lock Screen widget remains out of scope and must
+stay unchanged.
+
+Starting status and coordination:
+
+- The dedicated REC-160 worktree is clean at pushed commit `f99d43c3c`.
+- Latest `origin/main` is `759e7c9df` at build 101. The build-101 TestFlight
+  release is fully recorded as uploaded, externally approved, and live, so no
+  unfinished explicit release blocks this merge.
+- PR #249 is open and non-draft but currently behind `main`; it will be
+  reconciled before the landing review.
+- Expected edits are limited to
+  `WanderWidgets/WanderCheckInControl.swift`,
+  `WanderControlShared/WanderCheckInControlIntent.swift`,
+  `WanderTests/WanderActionButtonControlTests.swift`, `docs/setup.md`, and this
+  append-only log. `project.yml` and the generated project may change only as
+  required to reconcile build 101 from `main`.
+- No TestFlight build, build-number increment, archive/upload, or Slack release
+  note is authorized by this merge-only request.
+
+REC-160 copy/icon validation checkpoint — 2026-07-26 18:21 PDT:
+
+- Merged latest `origin/main` into the feature branch. The only conflict was
+  the append-only agent log; all histories were preserved. The reconciled
+  project remains on build 101.
+- Changed every user-visible control and intent title from **Check-in here** to
+  exact **Check-in** and changed the control label symbol from `location.fill`
+  to the plain SF Symbol `plus`. Kept the internal enum case and control-kind
+  identifier stable so existing system configuration identity is not
+  needlessly changed.
+- The separate accessory-circular Lock Screen widget remains registered and
+  unchanged; its location icon is intentionally outside this control source.
+- Updated the focused source-contract test to require the exact new title and
+  plus symbol and reject the old location symbol in the Action Button control.
+  Updated `docs/setup.md` assignment instructions to match.
+- `xcodegen generate` completed without an additional generated-project diff,
+  and `git diff --check` passed.
+- The required iPhone 16 Plus / iOS 18.6 destination is unavailable on this
+  host. The elevated replacement run on the available iPhone 17 Pro / iOS 26.5
+  Simulator passed the focused Action Button suite 4/4 and the complete suite
+  757/757 with zero failures. Result bundles:
+  `/tmp/DerivedData-rec160-followup/Logs/Test/Test-Wander-2026.07.26_18-13-16--0700.xcresult`
+  and
+  `/tmp/DerivedData-rec160-followup/Logs/Test/Test-Wander-2026.07.26_18-17-47--0700.xcresult`.
+- The elevated generic iOS Simulator build passed for the app and all embedded
+  extensions. Direct inspection of the generated App Intents metadata in both
+  `Wander.app` and `WanderWidgets.appex` confirmed the exact `Check-in` intent
+  title with `openAppWhenRun: true`; no old user-visible title remains.
+- Pre-landing scope and code review found no critical or informational issues.
+  PR #249 has no submitted reviews, review threads, comments, or Greptile
+  findings. Specialist subagents were skipped because the requested copy/icon
+  follow-up is narrow and orchestration policy does not permit delegation.
+- No TestFlight action was performed. Next: commit and push this reconciled
+  validation head, refresh PR #249 metadata, verify current-head status, and
+  squash-merge it to `main`.
 REC-152 build-100-main reconciliation and release review — 2026-07-26 14:07 PDT:
 
 - Joe explicitly requested a TestFlight push after approving the Profile
@@ -25424,3 +25944,133 @@ Recent activity.
   entry code, and tests. Existing open PRs #255/#259 and all other worktrees are
   out of scope and will not be merged. Mission Control task
   `eb1a09fe-f2cb-473c-ace0-399ba5deead0` is In Progress.
+REC-157 latest-main reconciliation — 2026-07-26 18:24 PDT:
+
+- GitHub reported PR #243 conflicting after later widget/Profile work and
+  TestFlight builds 100–101 landed. Merged current `origin/main` at
+  `759e7c9df` into `codex/rec-157-lock-widget-mockups`.
+- Product source auto-merged cleanly. The sole conflict was the append-only
+  `docs/agent-log.md`; preserved the complete REC-157 history and all incoming
+  REC-152, REC-159, streak, and build 100–101 records.
+- The resulting feature diff against current `origin/main` remains limited to
+  the Lock Screen quick-capture design, cold-start deep-link retention, widget
+  integration tests, and this log. No release metadata differs from `main`.
+- Next: commit the reconciliation, run the exact integrated pre-landing review
+  and validation, push the refreshed PR, then squash-merge if clean.
+
+REC-157 pre-landing validation — 2026-07-26 18:32 PDT:
+
+- Reviewed the complete PR #243 diff against current `origin/main`; scope is
+  limited to the approved Lock Screen quick-capture design, authenticated
+  cold-start deep-link retention, matching widget integration coverage, and
+  coordination records. Found no blocking, warning, or informational issues.
+- GitHub has no unresolved review threads, PR comments, check failures, or
+  Greptile findings on PR #243. `git diff --check` passed and `xcodegen
+  generate` produced no project-file drift.
+- Focused `WanderWidgetIntegrationTests` passed 18/18 on iPhone 17 Pro /
+  iOS 26.5, including both cold-start inbox regressions and the Lock Screen
+  widget source contract.
+- The complete `WanderTests` suite passed 755/755 with zero failures on iPhone
+  17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec157-landing/Logs/Test/Test-Wander-2026.07.26_18-28-54--0700.xcresult`.
+- The required generic iOS Simulator build passed with code signing disabled.
+  Only existing Swift concurrency and traditional-headermap warnings remain;
+  no new warning was attributed to the REC-157 diff.
+- No TestFlight build number was changed and no archive, upload, tester group,
+  or Slack release action was performed. This merge is queued for the next
+  explicitly requested TestFlight batch.
+
+Outcome: PR #243 is validated and ready for its authorized squash merge to
+`main`.
+
+## 2026-07-26 18:25 PDT - Codex - REC-160 Landing Record
+
+Agent: Codex
+Branch: `codex/rec-160-landing-record`
+Worktree: `/private/tmp/recme-rec160-landing-record`
+Linear: `REC-160` (`Done`)
+PR: `#249` (merged)
+
+Final outcome:
+
+- Pushed the reconciled feature head `a262f6913`, refreshed PR #249 to describe
+  the exact **Check-in** title and plus icon, and confirmed it was mergeable
+  against current build-101 `main`.
+- GitHub reported no hosted statuses, submitted reviews, review threads,
+  comments, or Greptile findings on the exact reviewed head.
+- Squash-merged PR #249 to `main` as
+  `6dd51058198ba5dd9b1901054b5d617377ab4a2d`.
+- Fetched and directly inspected `origin/main`: the control label and display
+  name are exactly `Check-in`, its SF Symbol is `plus`, and the shared intent
+  title and destination display representation are also exactly `Check-in`.
+  The separate accessory-circular bottom Lock Screen widget remains unchanged.
+- Validation before merge passed the focused Action Button suite 4/4, the
+  complete XCTest suite 757/757 on iPhone 17 Pro / iOS 26.5 Simulator, a
+  generic iOS Simulator build, `xcodegen generate`, `git diff --check`, and
+  built App Intents metadata inspection in both app and widget products.
+- The repo-standard iPhone 16 Plus / iOS 18.6 destination was unavailable on
+  this host. Physical Action Button validation after a signed install remains
+  the hardware-specific release check.
+- The gstack review-log helper could not write its optional local review
+  history because the host does not have its `bun` runtime. The clean
+  pre-landing review and full validation evidence are preserved in this log,
+  PR #249, and Linear REC-160.
+- Marked REC-160 Done and added the merge/test receipt in Linear.
+- No build-number change, archive, upload, TestFlight attachment, or Slack
+  release note was performed; the user requested a merge to `main`, not a
+  TestFlight release.
+
+Next step: install a future signed build containing commit `6dd510581` on an
+Action Button iPhone, select **Settings → Action Button → Controls → rec.me →
+Check-in**, and verify locked, unlocked, cold-launch, and signed-out behavior.
+
+REC-157 final-main reconciliation — 2026-07-26 18:45 PDT:
+
+- `origin/main` advanced during REC-157 validation with REC-160's separate
+  **Check-in** Action Button control and its landing record. Merged current
+  `origin/main` at `9f12a04ea`; app/widget source auto-merged cleanly and the
+  only conflict was this append-only log, where both histories were retained.
+- Regenerated the Xcode project with no resulting diff and reconfirmed
+  `git diff --check`.
+- Reran the combined affected suites after the merge:
+  `WanderWidgetIntegrationTests` plus `WanderActionButtonControlTests` passed
+  22/22 with zero failures on iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec157-landing/Logs/Test/Test-Wander-2026.07.26_18-41-03--0700.xcresult`.
+- REC-157 remains ready for the authorized squash merge. The earlier 755/755
+  full-suite pass and generic Simulator build remain valid for the feature
+  diff; the newly landed REC-160 head independently passed 757/757 and a
+  generic Simulator build before its merge.
+
+## 2026-07-26 18:46 PDT - Codex - REC-157 Landing Record
+
+Agent: Codex
+Branch: `codex/rec-157-merge-record`
+Worktree: `/private/tmp/recme-rec157-lock-widget-mockups`
+Linear: `REC-157` (`Done`)
+PR: `#243` (merged)
+
+Final outcome:
+
+- Pushed the latest-main reconciled REC-157 feature head `c956e0279` and
+  confirmed PR #243 was clean and mergeable against `9f12a04ea`.
+- Squash-merged PR #243 to `main` as
+  `7894692e53091e792829549700f0336e375392b5`.
+- `origin/main` now contains the approved two-ring accessory-circular Lock
+  Screen design with curved sans-serif `rec.me` and `CHECK-IN` labels, the
+  central plus, and retained app-level deep-link handling so a cold or crashed
+  launch reaches **I'm here now** after authentication resolves.
+- Validation passed: focused widget suite 18/18; complete suite 755/755 on
+  iPhone 17 Pro / iOS 26.5; final reconciliation's combined widget and Action
+  Button suites 22/22; generic iOS Simulator build; `xcodegen generate`; and
+  `git diff --check`.
+- GitHub had no reviews, comments, Greptile findings, hosted check failures, or
+  unresolved threads on the reviewed head. Only existing Swift concurrency
+  and traditional-headermap warnings were observed.
+- Marked Linear REC-157 Done and attached the merge and validation receipt.
+- No build-number increment, archive, upload, TestFlight attachment, or Slack
+  release note was performed. The change will ship in the next explicitly
+  requested TestFlight batch.
+
+Next step: include `7894692e5` in the next requested TestFlight release and
+verify the accessory-circular Lock Screen widget on a signed physical device,
+including locked, unlocked, signed-out, cold-launch, and post-crash behavior.

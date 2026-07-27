@@ -116,6 +116,7 @@ struct WanderAppEntryView: View {
     @State private var hasResolvedSession = false
     @State private var sessionRefreshGeneration = 0
     @State private var authenticatedUserID: String?
+    @State private var deepLinkInbox = WanderDeepLinkInbox()
 
     init(analytics: AnalyticsClient, parser: any LLMFilterParser) {
         self.analytics = analytics
@@ -134,6 +135,12 @@ struct WanderAppEntryView: View {
                 WanderRootView(
                     initialSession: session,
                     isSessionValidated: destination == .authenticated,
+                    deepLinkLaunchRequest: deepLinkInbox.request(
+                        ifSessionValidated: destination == .authenticated
+                    ),
+                    onDeepLinkLaunchRequestHandled: { requestID in
+                        deepLinkInbox.consume(requestID)
+                    },
                     analytics: analytics,
                     parser: parser
                 )
@@ -146,6 +153,9 @@ struct WanderAppEntryView: View {
         }
         .task(id: sessionRefreshGeneration) {
             await resolveSession()
+        }
+        .onOpenURL { url in
+            deepLinkInbox.receive(url)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }

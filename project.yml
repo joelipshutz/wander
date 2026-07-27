@@ -53,6 +53,7 @@ targets:
       - Wander
       - WanderImportShared
       - WanderWidgetShared
+      - WanderControlShared
     configFiles:
       Debug: Wander/Config/Auth.xcconfig
       Release: Wander/Config/Auth.xcconfig
@@ -166,6 +167,7 @@ targets:
     platform: iOS
     sources:
       - WanderWidgets
+      - WanderControlShared
       - path: WanderWidgetShared
         excludes:
           - WanderNearbyWidgetSnapshot.swift
