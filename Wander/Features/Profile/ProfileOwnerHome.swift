@@ -6,6 +6,179 @@ private enum ProfileHomeScrollAnchor {
     static let calendar = "profile.calendar"
 }
 
+enum ProfileActivityFilter: String, CaseIterable, Identifiable, Hashable {
+    case all
+    case checkIns = "check_ins"
+    case wanna
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .checkIns: CheckInCopy.pluralTitle
+        case .wanna: "Wanna"
+        }
+    }
+
+    func includes(_ item: ProfileActivityItem) -> Bool {
+        switch self {
+        case .all: true
+        case .checkIns: item.kind == .checkIn
+        case .wanna: item.kind == .wanna
+        }
+    }
+}
+
+enum ProfileActivityKind: String, Equatable {
+    case checkIn
+    case wanna
+
+    var status: PlaceStatus {
+        switch self {
+        case .checkIn: .been
+        case .wanna: .wannaGo
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .checkIn: CheckInCopy.title
+        case .wanna: "Wanna"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .checkIn: "ticket.fill"
+        case .wanna: "bookmark.fill"
+        }
+    }
+}
+
+struct ProfileActivityItem: Identifiable {
+    let id: String
+    let visiblePlace: VisiblePlace
+    let kind: ProfileActivityKind
+    let timestamp: Date
+    let visitID: String?
+}
+
+struct ProfileActivityTimestampText: Equatable {
+    let date: String
+    let time: String
+}
+
+enum ProfileActivityPresenter {
+    static func items(
+        visiblePlaces: [VisiblePlace],
+        visits: [LocalPlaceVisit],
+        currentUserID: String
+    ) -> [ProfileActivityItem] {
+        let representativePlaces = VisiblePlaceGrouping.representativePlaces(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        )
+
+        return representativePlaces
+            .flatMap { visiblePlace -> [ProfileActivityItem] in
+                let userPlace = visiblePlace.userPlace
+                let referenceIDs = Set(
+                    [userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 }
+                )
+                let matchingVisits = visits.filter {
+                    $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
+                }
+
+                if userPlace.status == .been {
+                    var activity = matchingVisits.map { visit in
+                        ProfileActivityItem(
+                            id: "check-in-\(visit.id)",
+                            visiblePlace: visiblePlace,
+                            kind: .checkIn,
+                            timestamp: visit.visitedAt,
+                            visitID: visit.id
+                        )
+                    }
+
+                    if activity.isEmpty {
+                        activity.append(
+                            ProfileActivityItem(
+                                id: "check-in-legacy-\(userPlace.id)",
+                                visiblePlace: visiblePlace,
+                                kind: .checkIn,
+                                timestamp: userPlace.visitedAt ?? userPlace.savedAt,
+                                visitID: nil
+                            )
+                        )
+                    }
+
+                    if let historicalWantedAt = userPlace.historicalWantedAt {
+                        activity.append(
+                            ProfileActivityItem(
+                                id: "wanna-history-\(userPlace.id)-\(historicalWantedAt.timeIntervalSince1970)",
+                                visiblePlace: visiblePlace,
+                                kind: .wanna,
+                                timestamp: historicalWantedAt,
+                                visitID: nil
+                            )
+                        )
+                    }
+                    return activity
+                }
+
+                return [
+                    ProfileActivityItem(
+                        id: "wanna-\(userPlace.id)",
+                        visiblePlace: visiblePlace,
+                        kind: .wanna,
+                        timestamp: userPlace.savedAt,
+                        visitID: nil
+                    )
+                ]
+            }
+            .sorted { lhs, rhs in
+                if lhs.timestamp != rhs.timestamp {
+                    return lhs.timestamp > rhs.timestamp
+                }
+                return lhs.id < rhs.id
+            }
+    }
+
+    static func timestampText(
+        for timestamp: Date,
+        relativeTo now: Date = .now,
+        calendar: Calendar = .current
+    ) -> ProfileActivityTimestampText {
+        let date: String
+        if calendar.isDate(timestamp, inSameDayAs: now) {
+            date = "Today"
+        } else if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+                  calendar.isDate(timestamp, inSameDayAs: yesterday) {
+            date = "Yesterday"
+        } else {
+            let dateFormatter = DateFormatter()
+            dateFormatter.calendar = calendar
+            dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+            dateFormatter.timeZone = calendar.timeZone
+            dateFormatter.dateFormat = calendar.isDate(timestamp, equalTo: now, toGranularity: .year)
+                ? "MMM d"
+                : "MMM d, yyyy"
+            date = dateFormatter.string(from: timestamp)
+        }
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.calendar = calendar
+        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+        timeFormatter.timeZone = calendar.timeZone
+        timeFormatter.dateFormat = "h:mm a"
+        return ProfileActivityTimestampText(
+            date: date,
+            time: timeFormatter.string(from: timestamp)
+        )
+    }
+}
+
 enum ProfileHomeMode: Equatable {
     case owner
     case member(relationship: ViewerRelationship, inCommonCount: Int)
@@ -53,6 +226,9 @@ struct ProfileOwnerHome: View {
     let graphAction: (ProfileSocialGraphTab) -> Void
     let sharedVisitInvitationsAction: () -> Void
     let savedPlacesAction: (PlaceStatus) -> Void
+    let recentActivity: [ProfileActivityItem]
+    let recentActivityAction: (ProfileActivityItem) -> Void
+    let allActivityAction: (ProfileActivityFilter) -> Void
     let inCommonAction: () -> Void
     let calendarDateAction: (ProfileCalendarDaySummary) -> Void
     let mapSummaryAction: (ProfileMapSummaryKind, ProfileSummaryItem) -> Void
@@ -65,13 +241,27 @@ struct ProfileOwnerHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 identitySection
-                ProfileSharedVisitInboxRow(
-                    invitationCount: sharedVisitInvitationCount,
-                    action: sharedVisitInvitationsAction
-                )
-                savedPlacesSection
-                if mode.isOwner, let saveStreak {
-                    ProfileSaveStreakRow(summary: saveStreak)
+                if mode.isOwner {
+                    if let saveStreak {
+                        ProfileSaveStreakRow(summary: saveStreak)
+                    }
+                    ProfileSharedVisitInboxRow(
+                        invitationCount: sharedVisitInvitationCount,
+                        action: sharedVisitInvitationsAction
+                    )
+                    ProfileRecentActivitySection(
+                        items: recentActivity,
+                        checkInCount: stats.checkIns,
+                        wannaCount: stats.wanna,
+                        itemAction: recentActivityAction,
+                        allActivityAction: allActivityAction
+                    )
+                } else {
+                    ProfileSharedVisitInboxRow(
+                        invitationCount: sharedVisitInvitationCount,
+                        action: sharedVisitInvitationsAction
+                    )
+                    savedPlacesSection
                 }
                 ProfileCalendarSection(
                     insights: insights,
@@ -117,11 +307,6 @@ struct ProfileOwnerHome: View {
     private var identitySection: some View {
         VStack(spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("profile")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .accessibilityAddTraits(.isHeader)
-
                 HStack(alignment: .center, spacing: WanderTheme.spacing2) {
                     if let backAction {
                         ProfileHeaderActionButton(
@@ -484,6 +669,229 @@ private struct OwnerProfileSaveTile: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+struct ProfileActivityFilterControl: View {
+    @Binding var selection: ProfileActivityFilter
+    let checkInCount: Int
+    let wannaCount: Int
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            ForEach(ProfileActivityFilter.allCases) { filter in
+                Button {
+                    selection = filter
+                } label: {
+                    Text(title(for: filter))
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(
+                            selection == filter
+                                ? WanderTheme.terracottaDark.color
+                                : WanderTheme.textMuted.color
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                        .background(
+                            selection == filter
+                                ? WanderTheme.sunTint.color.opacity(0.72)
+                                : WanderTheme.surfaceBone.color
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
+                                .stroke(
+                                    selection == filter
+                                        ? WanderTheme.terracotta.color.opacity(0.32)
+                                        : WanderTheme.borderHairline.color,
+                                    lineWidth: 1
+                                )
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel(for: filter))
+                .accessibilityAddTraits(selection == filter ? .isSelected : [])
+            }
+        }
+    }
+
+    private func title(for filter: ProfileActivityFilter) -> String {
+        switch filter {
+        case .all: filter.title
+        case .checkIns: "\(checkInCount) \(filter.title)"
+        case .wanna: "\(wannaCount) \(filter.title)"
+        }
+    }
+
+    private func accessibilityLabel(for filter: ProfileActivityFilter) -> String {
+        switch filter {
+        case .all: "All activity"
+        case .checkIns: "\(CheckInCopy.pluralTitle) activity, \(checkInCount)"
+        case .wanna: "Wanna activity, \(wannaCount)"
+        }
+    }
+}
+
+private struct ProfileRecentActivitySection: View {
+    let items: [ProfileActivityItem]
+    let checkInCount: Int
+    let wannaCount: Int
+    let itemAction: (ProfileActivityItem) -> Void
+    let allActivityAction: (ProfileActivityFilter) -> Void
+    @State private var filter: ProfileActivityFilter = .all
+
+    private var filteredItems: [ProfileActivityItem] {
+        items.filter(filter.includes)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            Text("Recent activity")
+                .font(.system(size: 23, weight: .black))
+                .accessibilityAddTraits(.isHeader)
+
+            ProfileActivityFilterControl(
+                selection: $filter,
+                checkInCount: checkInCount,
+                wannaCount: wannaCount
+            )
+
+            VStack(spacing: 0) {
+                if filteredItems.isEmpty {
+                    Text(emptyStateText)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, minHeight: 72, alignment: .center)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                } else {
+                    ForEach(Array(filteredItems.prefix(6).enumerated()), id: \.element.id) { index, item in
+                        ProfileActivityRow(item: item) {
+                            itemAction(item)
+                        }
+                        if index < min(filteredItems.count, 6) - 1 {
+                            Divider()
+                                .overlay(WanderTheme.borderHairline.color)
+                                .padding(.leading, 58)
+                        }
+                    }
+                }
+            }
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            }
+
+            Button {
+                allActivityAction(filter)
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Text("See more")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .black))
+                }
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var emptyStateText: String {
+        switch filter {
+        case .all: "Your activity will show up here."
+        case .checkIns: "No check-ins yet."
+        case .wanna: "No Wanna activity yet."
+        }
+    }
+}
+
+struct ProfileActivityRow: View {
+    let item: ProfileActivityItem
+    let action: () -> Void
+
+    private var timestamp: ProfileActivityTimestampText {
+        ProfileActivityPresenter.timestampText(for: item.timestamp)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing2) {
+                WanderCategoryEmoji(emoji: item.visiblePlace.categoryEmoji, size: 24)
+                    .frame(width: 42, height: 42)
+                    .background(WanderTheme.surfaceSand.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.visiblePlace.place.canonicalName)
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: item.kind.symbol)
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(statusColor)
+                        Text(item.kind.title)
+                        if let locality = normalized(item.visiblePlace.place.locality) {
+                            Text("·")
+                            Text(locality)
+                        }
+                    }
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(timestamp.date)
+                    Text(timestamp.time)
+                }
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(minWidth: 62, alignment: .trailing)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(WanderTheme.textFaint.color)
+            }
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(minHeight: 64)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "\(item.visiblePlace.place.canonicalName), \(item.kind.title), \(timestamp.date) at \(timestamp.time)"
+        )
+        .accessibilityHint("Opens this place at its activity")
+    }
+
+    private var statusColor: Color {
+        item.kind == .checkIn
+            ? WanderTheme.stateSuccess.color
+            : WanderTheme.stateWarning.color
+    }
+
+    private func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
     }
 }
 
