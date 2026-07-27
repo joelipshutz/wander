@@ -25357,6 +25357,42 @@ Starting status and coordination:
   required to reconcile build 101 from `main`.
 - No TestFlight build, build-number increment, archive/upload, or Slack release
   note is authorized by this merge-only request.
+
+REC-160 copy/icon validation checkpoint — 2026-07-26 18:21 PDT:
+
+- Merged latest `origin/main` into the feature branch. The only conflict was
+  the append-only agent log; all histories were preserved. The reconciled
+  project remains on build 101.
+- Changed every user-visible control and intent title from **Check-in here** to
+  exact **Check-in** and changed the control label symbol from `location.fill`
+  to the plain SF Symbol `plus`. Kept the internal enum case and control-kind
+  identifier stable so existing system configuration identity is not
+  needlessly changed.
+- The separate accessory-circular Lock Screen widget remains registered and
+  unchanged; its location icon is intentionally outside this control source.
+- Updated the focused source-contract test to require the exact new title and
+  plus symbol and reject the old location symbol in the Action Button control.
+  Updated `docs/setup.md` assignment instructions to match.
+- `xcodegen generate` completed without an additional generated-project diff,
+  and `git diff --check` passed.
+- The required iPhone 16 Plus / iOS 18.6 destination is unavailable on this
+  host. The elevated replacement run on the available iPhone 17 Pro / iOS 26.5
+  Simulator passed the focused Action Button suite 4/4 and the complete suite
+  757/757 with zero failures. Result bundles:
+  `/tmp/DerivedData-rec160-followup/Logs/Test/Test-Wander-2026.07.26_18-13-16--0700.xcresult`
+  and
+  `/tmp/DerivedData-rec160-followup/Logs/Test/Test-Wander-2026.07.26_18-17-47--0700.xcresult`.
+- The elevated generic iOS Simulator build passed for the app and all embedded
+  extensions. Direct inspection of the generated App Intents metadata in both
+  `Wander.app` and `WanderWidgets.appex` confirmed the exact `Check-in` intent
+  title with `openAppWhenRun: true`; no old user-visible title remains.
+- Pre-landing scope and code review found no critical or informational issues.
+  PR #249 has no submitted reviews, review threads, comments, or Greptile
+  findings. Specialist subagents were skipped because the requested copy/icon
+  follow-up is narrow and orchestration policy does not permit delegation.
+- No TestFlight action was performed. Next: commit and push this reconciled
+  validation head, refresh PR #249 metadata, verify current-head status, and
+  squash-merge it to `main`.
 REC-152 build-100-main reconciliation and release review — 2026-07-26 14:07 PDT:
 
 - Joe explicitly requested a TestFlight push after approving the Profile

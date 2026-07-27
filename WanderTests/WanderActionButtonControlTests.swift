@@ -48,11 +48,13 @@ final class WanderActionButtonControlTests: XCTestCase {
         XCTAssertTrue(control.contains("struct WanderCheckInControl: ControlWidget"))
         XCTAssertTrue(control.contains("StaticControlConfiguration("))
         XCTAssertTrue(control.contains("ControlWidgetButton("))
-        XCTAssertTrue(control.contains(".displayName(\"Check-in here\")"))
-        XCTAssertTrue(control.contains("Label(\"Check-in here\", systemImage: \"location.fill\")"))
+        XCTAssertTrue(control.contains(".displayName(\"Check-in\")"))
+        XCTAssertTrue(control.contains("Label(\"Check-in\", systemImage: \"plus\")"))
+        XCTAssertFalse(control.contains("systemImage: \"location.fill\""))
         XCTAssertTrue(control.contains(".controlWidgetActionHint(\"Start a check-in\")"))
 
         XCTAssertTrue(sharedIntent.contains("struct WanderOpenCheckInControlIntent: OpenIntent"))
+        XCTAssertTrue(sharedIntent.contains("static let title: LocalizedStringResource = \"Check-in\""))
         XCTAssertTrue(sharedIntent.contains("WanderControlNavigationCenter.shared.request(target.route)"))
         XCTAssertTrue(sharedIntent.contains("static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication"))
 

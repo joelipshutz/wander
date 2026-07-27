@@ -10,7 +10,7 @@ struct WanderCheckInControl: ControlWidget {
             ControlWidgetButton(
                 action: WanderOpenCheckInControlIntent(target: .checkInHere)
             ) {
-                Label("Check-in here", systemImage: "location.fill")
+                Label("Check-in", systemImage: "plus")
                     .controlWidgetActionHint("Start a check-in")
             }
             .tint(
@@ -21,7 +21,7 @@ struct WanderCheckInControl: ControlWidget {
                 )
             )
         }
-        .displayName("Check-in here")
+        .displayName("Check-in")
         .description("Open rec.me to check in at the place where you are.")
     }
 }
