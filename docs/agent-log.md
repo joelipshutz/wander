@@ -24921,3 +24921,13 @@ REC-157 two-ring legibility revision completion — 2026-07-26 18:07 PDT:
   traditional headermap warnings remain unchanged and outside REC-157.
 - Next: commit and push to ready PR #243, return REC-157 to `In Review`, and
   keep Xcode on this isolated branch. No TestFlight release was requested.
+
+REC-157 two-ring legibility revision handoff — 2026-07-26 18:07 PDT:
+
+- Commit `9479cbfad` (`Make Lock Screen widget labels readable`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated:
+  https://github.com/joelipshutz/wander/pull/243
+- Linear REC-157 returned to `In Review` with the final ring/type metrics,
+  validation results, and commit recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
