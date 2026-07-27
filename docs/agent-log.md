@@ -26048,3 +26048,37 @@ Final outcome:
 Next step: include `7894692e5` in the next requested TestFlight release and
 verify the accessory-circular Lock Screen widget on a signed physical device,
 including locked, unlocked, signed-out, cold-launch, and post-crash behavior.
+
+REC-162 implementation and validation checkpoint — 2026-07-26 19:42 PDT:
+
+- Reworked Add into the requested hierarchy: up to seven nearby suggestions,
+  the existing place search, a camera menu inside the search field, and one
+  separated Import entry point.
+- The camera menu uses native iOS presentation with **Take a Photo** and
+  **Photo Library**. Both routes reuse the existing OCR/location candidate and
+  unresolved-draft pipeline.
+- The Import entry opens one hub with Google Maps, Instagram Reels, TikToks,
+  and Texts & Notes, plus toolbar and inline help actions targeting
+  `https://getrec.me/import-help`.
+- Merged latest `origin/main` through `c0204328b`, preserving REC-157 and
+  REC-160 widget work. The only conflicts were append-only agent-log entries;
+  product source merged cleanly.
+- Focused Add/import navigation regressions passed 3/3 on iPhone 17 Pro /
+  iOS 26.5. The exact latest-main complete suite passed 759/759 with zero
+  failures. Result bundle:
+  `/tmp/DerivedData-rec162-build/Logs/Test/Test-Wander-2026.07.26_19-37-16--0700.xcresult`.
+- Simulator build passed with code signing disabled. `xcodegen generate`
+  produced no project drift, and `git diff --check` passed. Only existing Swift
+  concurrency, signed-XCTest-stripping, and traditional-headermap warnings
+  remained.
+- Visually inspected Add, the native camera menu, and the Import hub on iPhone
+  17 Pro, then inspected the denied-location fallback and Import hub on the
+  smaller iPhone 17e. Layout, safe areas, labels, and controls remained usable
+  on both sizes.
+- Used a temporary DEBUG-only local-auth launch switch solely for visual QA so
+  no personal account was used. Removed the switch before final diff review;
+  no auth bypass is present in the branch.
+- Direct verification found `https://getrec.me/import-help` responds HTTP 200
+  but currently renders Squarespace's generic **Coming Soon** page. The app URL
+  contract is wired; publishing the source-specific website instructions is an
+  external content follow-up.
