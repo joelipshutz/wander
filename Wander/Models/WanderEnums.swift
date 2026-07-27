@@ -22,7 +22,6 @@ enum CheckInCopy {
     static let noun = "check-in"
     static let pluralNoun = "check-ins"
     static let title = "Check-in"
-    static let pluralTitle = "Check-ins"
     static let pastTense = "checked in"
     static let againAction = "Check in again"
     static let editAction = "Edit check-in"
