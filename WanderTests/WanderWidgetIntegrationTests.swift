@@ -596,8 +596,17 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("text: \"rec.me\""))
         XCTAssertTrue(widgetSource.contains("Image(systemName: \"plus\")"))
         XCTAssertTrue(widgetSource.contains("text: \"CHECK-IN\""))
-        XCTAssertTrue(widgetSource.contains("case .top: -18"))
-        XCTAssertTrue(widgetSource.contains("case .bottom: 18"))
+        XCTAssertTrue(
+            widgetSource.contains(
+                "min(geometry.size.width, geometry.size.height) / 2 - 7"
+            )
+        )
+        XCTAssertEqual(
+            widgetSource.components(separatedBy: "radius: outerRingBandRadius").count - 1,
+            2
+        )
+        XCTAssertTrue(widgetSource.contains("case .top: -radius"))
+        XCTAssertTrue(widgetSource.contains("case .bottom: radius"))
         XCTAssertTrue(widgetSource.contains("case .top: 6.5"))
         XCTAssertTrue(widgetSource.contains("case .bottom: 5.5"))
         XCTAssertTrue(widgetSource.contains("Quick capture — Lock Screen"))

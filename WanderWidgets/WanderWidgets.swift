@@ -204,34 +204,41 @@ private struct WanderQuickCaptureWidgetView: View {
         ZStack {
             AccessoryWidgetBackground()
 
-            ZStack {
-                Circle()
-                    .stroke(lineWidth: 1)
-                    .opacity(0.44)
-                    .padding(4)
+            GeometryReader { geometry in
+                let outerRingBandRadius =
+                    min(geometry.size.width, geometry.size.height) / 2 - 7
 
-                Circle()
-                    .stroke(lineWidth: 1)
-                    .opacity(0.4)
-                    .padding(10)
+                ZStack {
+                    Circle()
+                        .stroke(lineWidth: 1)
+                        .opacity(0.44)
+                        .padding(4)
 
-                Circle()
-                    .stroke(lineWidth: 1)
-                    .opacity(0.36)
-                    .padding(16)
+                    Circle()
+                        .stroke(lineWidth: 1)
+                        .opacity(0.4)
+                        .padding(10)
 
-                WanderCircularWidgetArcText(
-                    text: "rec.me",
-                    placement: .top
-                )
+                    Circle()
+                        .stroke(lineWidth: 1)
+                        .opacity(0.36)
+                        .padding(16)
 
-                Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .black))
+                    WanderCircularWidgetArcText(
+                        text: "rec.me",
+                        placement: .top,
+                        radius: outerRingBandRadius
+                    )
 
-                WanderCircularWidgetArcText(
-                    text: "CHECK-IN",
-                    placement: .bottom
-                )
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .black))
+
+                    WanderCircularWidgetArcText(
+                        text: "CHECK-IN",
+                        placement: .bottom,
+                        radius: outerRingBandRadius
+                    )
+                }
             }
             .widgetAccentable()
         }
@@ -271,10 +278,10 @@ private struct WanderCircularWidgetArcText: View {
         case top
         case bottom
 
-        var radius: CGFloat {
+        func yOffset(for radius: CGFloat) -> CGFloat {
             switch self {
-            case .top: -18
-            case .bottom: 18
+            case .top: -radius
+            case .bottom: radius
             }
         }
 
@@ -295,6 +302,7 @@ private struct WanderCircularWidgetArcText: View {
 
     let text: String
     let placement: Placement
+    let radius: CGFloat
 
     private var characters: [Character] {
         Array(text)
@@ -311,7 +319,7 @@ private struct WanderCircularWidgetArcText: View {
                             design: .rounded
                         )
                     )
-                    .offset(y: placement.radius)
+                    .offset(y: placement.yOffset(for: radius))
                     .rotationEffect(.degrees(angle(for: index)))
             }
         }

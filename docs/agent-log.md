@@ -24828,3 +24828,43 @@ REC-157 typography revision handoff — 2026-07-26 13:43 PDT:
   validation results recorded in a comment.
 - Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
   build number change or release was requested.
+
+REC-157 outer-ring alignment revision start — 2026-07-26 17:39 PDT:
+
+- Ryan clarified that curved `rec.me` and `CHECK-IN` should sit in the outer
+  band, exactly centered between the outermost and second stroked circles.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; ready PR #243 remains
+  open.
+- `git fetch origin`, `git status --short --branch`, and `git worktree list`
+  completed. No overlapping uncommitted work was found.
+- Implementation approach: derive the label-arc radius from the actual
+  WidgetKit geometry and the two ring insets, avoiding a fixed offset that can
+  drift with the accessory-circular container size.
+- Expected files: `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 outer-ring alignment revision completion — 2026-07-26 17:46 PDT:
+
+- Replaced the fixed 18-point label offsets with a geometry-derived outer-band
+  radius: half the accessory-circular canvas minus 7 points, the exact midpoint
+  between the 4-point and 10-point stroked-ring insets.
+- Both curved labels now receive the same derived radius; top/bottom placement
+  only changes the sign. Added source-contract coverage for the formula, both
+  label usages, and the symmetric offsets.
+- Generated, XML-validated, and visually inspected the matching C4 mockup.
+  Editable SVG, PNG, and updated approval metadata are stored at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing `WanderSupabaseClient.swift` actor-isolation warnings, simulator
+  keychain/app-group diagnostics under unsigned tests, and Xcode's traditional
+  headermap warnings remain unchanged and are outside this visual tweak.
+- Next: commit and push the revision to ready PR #243, return REC-157 to
+  `In Review`, and leave Xcode on the existing REC-157 worktree for testing.
+  No TestFlight build-number change or release was requested.
