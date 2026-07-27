@@ -27031,3 +27031,116 @@ to `rec.me Alpha`, and post the required tester note.
 
 Final status: rec.me 0.1 (104), including REC-132 onboarding, is approved and
 available through the public TestFlight link.
+
+## 2026-07-27 10:10 PDT - Codex - REC-164 Clerk Google sign-in dismissal
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher` and
+`plan-eng-review`
+Branch: `codex/rec-164-clerk-dismissal`
+Worktree: `/private/tmp/recme-rec164-clerk-dismissal`
+Linear: `REC-164` (`In Progress`)
+
+Goal: reproduce and fix the build-104 regression where, after an explicit
+sign-out, choosing Google from the Clerk screen dismisses the auth surface
+instead of completing sign-in or showing a recoverable error.
+
+Starting state:
+
+- Clean isolated worktree from exact `origin/main` commit `a1fe522`.
+- Existing stale REC-132 auth-hardening worktree is intentionally untouched;
+  this fix starts from shipped build-104 main.
+- Scope is the auth/onboarding presentation and session transition plus focused
+  regression coverage. Carousel screenshot replacement is separate follow-up
+  work.
+- Auth/session work requires the engineering-review gate before implementation.
+  Expected files are the current Clerk auth adapter, app entry/auth gate
+  presentation, focused auth/onboarding tests, and this coordination log.
+
+### Engineering review
+
+Confirmed the presentation race against the Clerk SDK source bundled with
+build 104. Clerk emits `sessionChanged` for nil-to-session, session-to-nil,
+different-session, and same-session updates. `ClerkAuthService` converts any
+event without an active session into `.signedOut`, while
+`AuthSessionStore.synchronizeState` currently dismisses native auth for every
+non-signed-in state. A transient pending/null state during Google handoff can
+therefore close Clerk's sheet before authentication completes.
+
+Scope challenge and decision:
+
+- Keep the existing `ClerkAuthService`, SwiftUI sheet, and root coordinator.
+- Add an explicit native-auth-attempt lifetime to `AuthSessionStore`; do not
+  infer sheet lifetime from authentication state alone.
+- Treat signed-in, unavailable, explicit sign-out, and user dismissal as
+  terminal. Keep the sheet presented for transient `.loading`/`.signedOut`
+  callbacks only while an explicit attempt is active.
+- Keep carousel screenshot replacement outside REC-164.
+
+Data flow after the fix:
+
+```text
+Clerk AuthView
+  -> Clerk auth event (including transient sessionChanged)
+  -> ClerkAuthService state
+  -> AuthSessionStore
+       active attempt + loading/signedOut -> keep sheet
+       signedIn/unavailable              -> close sheet
+       user dismiss                      -> end attempt, then refresh
+  -> signed-in coordinator / onboarding
+```
+
+Failure-mode coverage:
+
+- Transient loading or signed-out event dismisses Google auth: regression test
+  keeps presentation active.
+- Successful sign-in leaves Clerk visible: success test requires dismissal.
+- User cancellation is undone by a later provider event: dismissal test ends
+  the attempt before refresh/events.
+- Real provider logout leaves stale auth UI: existing logout test continues to
+  require presentation to close.
+
+No schema, API, data migration, or visual-design change is required. This is a
+small state-lifecycle repair, so the broader product-design prerequisite is not
+applicable. Implementation will be sequential across the auth store, app-entry
+sheet callback, and focused tests.
+
+### 2026-07-27 10:31 PDT - Implementation and validation checkpoint
+
+- Added an explicit native-auth-attempt lifetime to `AuthSessionStore`.
+  Transient Clerk `.loading` and `.signedOut` callbacks no longer dismiss an
+  auth sheet that the user explicitly opened. Signed-in, unavailable, explicit
+  sign-out/account deletion, and user sheet dismissal end the attempt.
+- Wired the SwiftUI sheet's `onDismiss` callback to end the attempt before the
+  authoritative session refresh and coordinator update.
+- Added regressions proving that a pending Google-style state sequence stays
+  presented until success and that a user dismissal cannot be undone by later
+  provider events. The existing provider-logout regression still requires the
+  auth surface to close.
+- Focused auth and navigation validation passed 91/91 tests with zero failures:
+  `AuthSessionTests` plus `NavigationContractTests`. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-29-13--0700.xcresult`.
+- Neighboring onboarding validation passed 5/5 `OnboardingStateTests` with zero
+  failures using the already-built products. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-30-27--0700.xcresult`.
+- The first two cold-build attempts were cancelled before executing tests when
+  the machine ran out of disk space. To complete validation, removed only
+  disposable generated caches tied to the already-shipped build 104/REC-132
+  runs and the older REC-147 visual branch, plus the REC-164 module cache after
+  linking. Source worktrees, the active REC-165 cache, and TestFlight archives
+  were preserved. The subsequent compiled test run passed.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. No backend, schema, or production data changed.
+
+### 2026-07-27 10:32 PDT - Review handoff
+
+- Ready PR: https://github.com/joelipshutz/wander/pull/266
+- Branch pushed at `05d7a0a`; PR is based on current `origin/main` and its diff
+  contains only the auth lifecycle repair, regression tests, and this log.
+- Linear REC-164 moved to `In Review`, linked to PR #266, and received the test
+  results plus implementation summary.
+- Mission Control at `localhost:4000` remains unreachable, so no duplicate
+  local tracker task could be created. Linear and this coordination log are the
+  durable tracking surfaces.
+- This handoff does not merge or release a TestFlight build. Next step is PR
+  review, then a simulator/account validation of the remembered-Google path
+  before packaging the next explicit TestFlight release.
