@@ -27328,3 +27328,47 @@ Validation checkpoint, 2026-07-27 10:55 PDT:
 
 Final status: rec.me 0.1 (105), including the Google sign-in presentation fix,
 is approved and available through the public TestFlight link.
+
+## 2026-07-27 12:32 PDT - Codex - REC-165 Direction C implementation
+
+Agent: Codex with parallel subagent audits and `ios-fix`
+Branch: `codex/rec-165-typography-phase-2`
+Worktree: `/private/tmp/recme-rec165-typography-phase2`
+Linear: `REC-165` (`In Progress`); blocking photo regression `REC-166`
+
+Joe selected typography Direction C and required the redesign's missing Google
+photo fallback to be fixed first. The photo repair is checkpointed separately
+at commit `b50b970`; its focused suites passed 94/94 plus 2/2 final regression
+tests, and simulator proof covers Feed photos plus the selected map ticket.
+
+Direction C now uses semantic Dynamic-Type-aware Apple system serif roles for
+eligible custom screen mastheads, named place/list/profile content, and major
+profile content-section headings. Persistent search, native/navigation chrome,
+tabs, filters, buttons, body copy, metadata, counts, timestamps, Feed tickets,
+the streak screen, and check-in rating typography remain unchanged. The
+approved overall place-profile rating serif treatment also remains unchanged.
+Long list titles align lock/collaboration symbols to the first text baseline.
+
+Validation checkpoint:
+
+- Focused Direction C and protected-surface contract tests passed 5/5 with zero
+  failures. Result bundle:
+  `/private/tmp/DerivedData-rec166/Logs/Test/Test-Wander-2026.07.27_12-19-25--0700.xcresult`.
+- Final Lists visual QA passed on iPhone 16 Plus and the smaller iPhone 16e:
+  `/private/tmp/rec165-c-lists-plus-final.png` and
+  `/private/tmp/rec165-c-lists-16e-final.png`.
+- Earlier final-state visual QA also covered Feed/Discover and owner Profile on
+  both phone sizes, with photos present and search/tickets/streak preserved.
+- The full run executed 788 tests. 787 passed; the sole failure is the existing
+  `testAppAndExtensionShareOneBuildNumberSource`, which hard-codes build 104
+  while this branch has build 105. Latest `origin/main` is already build 106
+  and retains the same stale assertion, confirming it is not introduced by
+  REC-165/166. This test-contract defect will be corrected before handoff and
+  the full suite rerun.
+- The first full-run attempt stopped at link time with `errno=28`; removed only
+  the disposable `/private/tmp/DerivedData-rec165-photo-investigation` cache,
+  preserving source worktrees and test result bundles. A sandboxed retry could
+  not access CoreSimulator/SwiftPM caches, so the required escalated retry was
+  used.
+- Mission Control at `localhost:4000` remains unreachable. Linear and this log
+  remain the durable trackers.

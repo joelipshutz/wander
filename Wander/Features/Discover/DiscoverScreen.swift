@@ -348,7 +348,7 @@ struct DiscoverScreen: View {
         return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(placeResultTitle)
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(WanderTypography.editorialMasthead)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                 Text(resultExplanation(groupCount: groups.count, selectedOwner: selectedOwner))
@@ -907,7 +907,7 @@ private struct SectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 16, weight: .black))
+            .font(WanderTypography.editorialNamedContent)
     }
 }
 
@@ -1235,7 +1235,7 @@ private struct DiscoverPlaceResultCard: View {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         HStack(spacing: WanderTheme.spacing2) {
                             Text(visiblePlace.place.canonicalName)
-                                .font(.system(size: 17, weight: .black))
+                                .font(WanderTypography.editorialNamedContent)
                                 .foregroundStyle(WanderTheme.textInk.color)
                                 .lineLimit(1)
 

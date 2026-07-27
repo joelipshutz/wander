@@ -270,7 +270,7 @@ struct ListsScreen: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("lists")
-                    .font(.system(size: 30, weight: .black, design: .rounded))
+                    .font(WanderTypography.editorialMasthead)
                 Text("save places into a plan you can actually use")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -590,9 +590,9 @@ private struct ListTile: View {
                 .aspectRatio(1, contentMode: .fit)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                HStack(spacing: WanderTheme.spacing1) {
+                HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing1) {
                     Text(list.name)
-                        .font(.system(size: 16, weight: .black))
+                        .font(WanderTypography.editorialNamedContent)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -863,7 +863,7 @@ private struct ListDetailScreen: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     HStack(spacing: WanderTheme.spacing2) {
                         Text(renderedList.name)
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(WanderTypography.editorialMasthead)
                             .lineLimit(2)
                             .minimumScaleFactor(0.82)
 
@@ -1547,7 +1547,7 @@ private struct ListVisiblePlaceAddRow: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(place.name)
-                            .font(.system(size: 15, weight: .black))
+                            .font(WanderTypography.editorialSmallNamedContent)
                             .foregroundStyle(WanderTheme.textInk.color)
                             .lineLimit(1)
                         Text(supportingText.isEmpty ? place.metadata : supportingText)
@@ -1608,7 +1608,7 @@ private struct ListPlaceCandidateAddRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(candidate.name)
-                        .font(.system(size: 15, weight: .black))
+                        .font(WanderTypography.editorialSmallNamedContent)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(1)
                     Text(subtitle.isEmpty ? "Map search" : subtitle)
@@ -1872,7 +1872,7 @@ private struct ListPlaceRow: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(place.name)
-                            .font(.system(size: 16, weight: .black))
+                            .font(WanderTypography.editorialNamedContent)
                             .foregroundStyle(WanderTheme.textInk.color)
                             .lineLimit(1)
 
@@ -2465,7 +2465,7 @@ private struct ListMapFullScreen: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(list.name)
-                    .font(.system(.headline, design: .rounded, weight: .black))
+                    .font(WanderTypography.editorialNamedContent)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                     .multilineTextAlignment(.leading)
@@ -2840,7 +2840,7 @@ private struct ListMapPlaceTile: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                     Text(place.name)
-                        .font(.headline.weight(.black))
+                        .font(WanderTypography.editorialNamedContent)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
                         .multilineTextAlignment(.leading)

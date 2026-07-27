@@ -605,6 +605,67 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
     }
 
+    func testDirectionCTypographyTargetsNamedContentHeadingsAndCustomMastheads() throws {
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let discover = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let profile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let streak = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Streak/SaveStreakCelebrationView.swift")
+        )
+
+        let typography = try XCTUnwrap(
+            theme.components(separatedBy: "enum WanderTypography").last?
+                .components(separatedBy: "private extension Color").first
+        )
+        XCTAssertTrue(typography.contains("editorialMasthead = Font.system(.title, design: .serif, weight: .bold)"))
+        XCTAssertTrue(typography.contains("editorialNamedContent = Font.system(.headline, design: .serif, weight: .bold)"))
+        XCTAssertTrue(typography.contains("editorialSmallNamedContent = Font.system(.subheadline, design: .serif, weight: .bold)"))
+        XCTAssertTrue(typography.contains("editorialMajorSectionTitle = Font.system(.title2, design: .serif, weight: .semibold)"))
+
+        XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialMasthead").count - 1, 2)
+        XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialNamedContent").count - 1, 4)
+        XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialSmallNamedContent").count - 1, 2)
+        XCTAssertTrue(lists.contains("Text(\"save places into a plan you can actually use\")\n                    .font(.system(size: 14, weight: .semibold))"))
+
+        XCTAssertEqual(discover.components(separatedBy: "WanderTypography.editorialMasthead").count - 1, 1)
+        XCTAssertEqual(discover.components(separatedBy: "WanderTypography.editorialNamedContent").count - 1, 2)
+        let discoverSearch = try XCTUnwrap(
+            discover.components(separatedBy: "private struct DiscoverSearchField: View").last?
+                .components(separatedBy: "private struct DiscoverPlaceResultCard: View").first
+        )
+        XCTAssertTrue(discoverSearch.contains("TextField(\"\", text: $text)\n                    .font(.system(size: 17, weight: .bold))"))
+        XCTAssertFalse(discoverSearch.contains("WanderTypography.editorial"))
+
+        XCTAssertTrue(profile.contains("Text(profile.displayName)\n                        .font(WanderTypography.editorialDisplay)"))
+        XCTAssertEqual(profile.components(separatedBy: "WanderTypography.editorialMajorSectionTitle").count - 1, 3)
+        let profileStreak = try XCTUnwrap(
+            profile.components(separatedBy: "private struct ProfileSaveStreakRow: View").last?
+                .components(separatedBy: "#if DEBUG").first
+        )
+        XCTAssertFalse(profileStreak.contains("editorialMasthead"))
+        XCTAssertFalse(profileStreak.contains("editorialNamedContent"))
+        XCTAssertFalse(profileStreak.contains("editorialMajorSectionTitle"))
+
+        for source in [feed, streak] {
+            XCTAssertFalse(source.contains("editorialMasthead"))
+            XCTAssertFalse(source.contains("editorialNamedContent"))
+            XCTAssertFalse(source.contains("editorialSmallNamedContent"))
+            XCTAssertFalse(source.contains("editorialMajorSectionTitle"))
+        }
+    }
+
     func testOverallPlaceProfileRatingsUseEditorialSerifWithoutChangingCheckInRatings() throws {
         let fixtureURL = projectRoot
             .appendingPathComponent("WanderTests/Fixtures/rec-161-profile-ratings-pre.json")

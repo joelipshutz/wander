@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -76,6 +76,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Warm utility map style | Locked | Cream/sand/espresso/terracotta/sky with useful map-first UI. |
 | No competing visual direction | Locked unless Joe asks | Do not generate new variants as implementation blockers. |
 | Native font stack | Locked for REC-132 | Use New York/native editorial serif for first-run onboarding display copy and the system sans stack for controls/body. No external font dependency is required. |
+| Editorial typography phase two | Locked for REC-165 direction C | Use Apple's Dynamic-Type-aware system serif for named content, major content-section headings, and eligible custom content-screen mastheads. Keep navigation and header controls, persistent search, tabs, filters, buttons, body copy, metadata, counts, and timestamps in native system sans. This typography pass must not alter check-in ticket geometry/colors/media, the streak screen, check-in rating typography, or the approved serif treatment for overall place-profile rating values. |
 | SF Symbols/native controls | Locked | Use native symbols instead of mock emoji chrome for structural UI. |
 | iPhone-first visual QA | Locked | Verify real simulator screenshots before calling UI accepted. |
 | Map filter selected state | Locked | Inactive chips keep the bone/sand fill; active chips add a terracotta ring and terracotta icon, with no checkmark. |
