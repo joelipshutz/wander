@@ -40,6 +40,14 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(activity.rating, 4.5)
     }
 
+    func testEveryFeedActivityMapsToTheCompactTicketFamily() {
+        XCTAssertEqual(FeedActivityKind.placeBeen.ticketKind, .checkIn)
+        XCTAssertEqual(FeedActivityKind.placeWannaGo.ticketKind, .wanna)
+        XCTAssertEqual(FeedActivityKind.listCreated.ticketKind, .list)
+        XCTAssertEqual(FeedActivityKind.listItemAdded.ticketKind, .list)
+        XCTAssertEqual(FeedActivityKind.placeSaved.ticketKind, .droppedPin)
+    }
+
     private var actor: ProfileShell {
         ProfileShell(
             id: "user_maya",
