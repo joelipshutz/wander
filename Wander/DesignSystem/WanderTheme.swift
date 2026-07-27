@@ -97,6 +97,8 @@ enum WanderTypography {
     static let editorialCardTitle = Font.system(.title3, design: .serif, weight: .bold)
     static let editorialCompactTitle = Font.system(.headline, design: .serif, weight: .bold)
     static let editorialSectionTitle = Font.system(.title3, design: .serif, weight: .bold)
+    static let editorialRatingDisplay = Font.system(.title2, design: .serif, weight: .bold).monospacedDigit()
+    static let editorialRatingSuffix = Font.system(.caption, design: .serif, weight: .semibold).monospacedDigit()
 
     static let body = Font.system(.body, design: .default, weight: .regular)
     static let emphasizedBody = Font.system(.body, design: .default, weight: .semibold)
