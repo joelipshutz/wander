@@ -26851,3 +26851,31 @@ Release preparation checkpoint:
   `/private/tmp/DerivedData-rec132-release-gate/Logs/Test/Test-Wander-2026.07.26_23-23-04--0700.xcresult`.
 - `xcodegen generate` and `git diff --check` passed. No unmerged product work
   was added to the release branch.
+
+## 2026-07-26 23:43 PDT — Codex — TestFlight build 103
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-103`
+Worktree: `/private/tmp/recme-testflight-build-103`
+Release scope: exact latest `origin/main` `4463bb1`
+
+Goal: ship the now-merged REC-147/REC-148/REC-161 ticket and editorial
+typography stack, including the profile-only overall rating treatment, together
+with all prior current-main changes.
+
+Release coordination:
+
+- Build 102 was prepared and uploaded concurrently at 23:34 PDT from an archive
+  created before PRs #241, #242, #254, #256, and #260 merged. Apple accepted
+  that binary, so its number is immutable and it does not contain this stack.
+- Starting a clean, isolated build 103 release from exact latest main instead
+  of reusing or mislabeling build 102.
+- Incrementing `CURRENT_PROJECT_VERSION` once from 102 to 103, regenerating the
+  Xcode project, and updating the shared build-number contract.
+- Intended tester scope: Direction A pins/filter pills; compact ticket family
+  across Map, Feed, and profile history; restored search and real photo paths;
+  native editorial place typography; and serif treatment only for the three
+  overall place-profile rating values. Check-in rating typography and the
+  streak screen remain unchanged by REC-161.
+- No backend, schema, data reset, marketing-version, or App Store production
+  submission is in scope.
