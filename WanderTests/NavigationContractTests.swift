@@ -172,6 +172,24 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(localPhotoPolicy.contains("owner.id == currentUserID"))
     }
 
+    func testDebugRedesignCaptureUsesDeterministicPhotoBackendWithoutWeakeningProductionAuth() throws {
+        let app = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderApp.swift")
+        )
+        let mapCaptureRoot = try XCTUnwrap(
+            app.components(separatedBy: "private var mapCaptureRoot: some View").last?
+                .components(separatedBy: "private static func makeDiscoverParser").first
+        )
+
+        XCTAssertTrue(app.contains("struct MapCapturePlacePhotoRepository: PlacePhotoRepository"))
+        XCTAssertTrue(app.contains("WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())"))
+        XCTAssertTrue(mapCaptureRoot.contains(".environmentObject(mapCaptureBackend)"))
+        XCTAssertFalse(mapCaptureRoot.contains(".environmentObject(backend)"))
+        XCTAssertTrue(app.contains("provider: \"google_places\""))
+        XCTAssertTrue(app.contains("provider: \"visit_photo\""))
+        XCTAssertTrue(app.contains("UIImage(named: assetName)"))
+    }
+
     func testFeedPlaceActionsAllRouteThroughCurrentPlaceProfile() throws {
         let feed = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift"))
         let featuredRail = try XCTUnwrap(

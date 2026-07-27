@@ -27119,6 +27119,33 @@ start only after a direction is selected.
 - Mission Control remained unavailable in the prior exploration; Linear
   REC-165 remains the primary implementation tracker. A separate existing or
   new Linear regression issue will be linked once the tracker audit completes.
+
+### 2026-07-27 12:12 PDT - REC-166 Google photo regression checkpoint
+
+- Created and linked `REC-166` as a blocking regression issue for REC-165. The
+  production Google Places -> visible check-in photo -> category artwork
+  resolver introduced by REC-161 is still present on latest main.
+- Root cause was isolated to the DEBUG redesign capture root: it rendered
+  `WanderRootView` directly without resolving an authenticated app session, so
+  the authenticated `place-photo` function failed and every redesigned capture
+  fell through to category artwork.
+- Added a DEBUG-only deterministic capture photo repository backed by the
+  existing `PlaceCarouselPhotos` asset. It supplies Google-attributed crops for
+  eligible places and visible-user-photo crops for coordinate/dropped-pin
+  places. Production authentication and `SupabasePlacePhotoRepository` are
+  unchanged.
+- Focused validation passed 94/94 tests with zero failures:
+  `NavigationContractTests` plus `PlaceProfilePresentationTests`. The new
+  runtime test decodes both deterministic Google and visible-user image data;
+  the contract test locks the capture backend boundary. Result bundle:
+  `/private/tmp/DerivedData-rec166/Logs/Test/Test-Wander-2026.07.27_12-05-20--0700.xcresult`.
+- iPhone 16 Plus simulator captures verify real photos in the Featured rail,
+  compact feed tickets, and the selected map ticket:
+  `/private/tmp/rec166-photo-fallback-feed-post.png` and
+  `/private/tmp/rec166-photo-fallback-map-ticket-post.png`.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. With this regression checkpoint green, Direction C typography
+  implementation can begin without changing Feed ticket geometry or media.
 ## 2026-07-27 10:10 PDT - Codex - REC-164 Clerk Google sign-in dismissal
 
 Agent: Codex using `recme-testflight-feedback-bug-catcher` and

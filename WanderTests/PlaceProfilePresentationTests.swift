@@ -34,6 +34,45 @@ final class PlaceProfilePresentationTests: XCTestCase {
 
     #if DEBUG
     @MainActor
+    func testMapCaptureRepositoryProvidesDeterministicGoogleAndVisibleUserPhotos() async throws {
+        let repository = MapCapturePlacePhotoRepository()
+        let googleRequest = PlacePhotoRequest(
+            placeID: "place-maru",
+            name: "Maru Coffee",
+            address: "1936 Hillhurst Ave, Los Angeles, CA",
+            latitude: 34.10662,
+            longitude: -118.28762,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "google-maru-hillhurst"
+        )
+
+        let googlePhoto = try await repository.photo(for: googleRequest)
+        let googleImageData = try await repository.imageData(for: googlePhoto)
+
+        XCTAssertEqual(googlePhoto.provider, "google_places")
+        XCTAssertTrue(googlePhoto.providerPlaceID.hasPrefix("capture-google-"))
+        XCTAssertEqual(URL(string: try XCTUnwrap(googlePhoto.sourcePhotoURLString))?.host, "www.google.com")
+        XCTAssertNotNil(UIImage(data: googleImageData))
+
+        let coordinateRequest = PlacePhotoRequest(
+            placeID: "place-dropped-pin",
+            name: "Dropped pin",
+            address: "Yosemite National Park, CA",
+            latitude: 37.73635,
+            longitude: -119.57366,
+            sourceProvider: "coordinate",
+            sourceProviderPlaceID: "coordinate_37.73635_-119.57366"
+        )
+        let visibleUserPhoto = try await repository.photo(for: coordinateRequest)
+        let visibleUserImageData = try await repository.imageData(for: visibleUserPhoto)
+
+        XCTAssertEqual(visibleUserPhoto.provider, "visit_photo")
+        XCTAssertTrue(visibleUserPhoto.providerPlaceID.hasPrefix("capture-visit-"))
+        XCTAssertNil(visibleUserPhoto.sourcePhotoURLString)
+        XCTAssertNotNil(UIImage(data: visibleUserImageData))
+    }
+
+    @MainActor
     func testCandidatePickerDoesNotRequestProviderPhotosBeforeOpeningProfile() async throws {
         let photo = PlacePhoto(
             provider: "google_places",
