@@ -13,6 +13,13 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var selectedSurface: FeedSurface = .places
 
+    private let tickerSuggestions = [
+        "Joe's favorite coffee shops in LA",
+        "Maya's date night spots",
+        "quiet work cafes with wifi",
+        "friends' sunset hikes"
+    ]
+
     private var page: FollowedFeedPage? { store.followedFeedPage }
 
     var body: some View {
@@ -30,20 +37,6 @@ struct FeedScreen: View {
                 }
             }
             .wanderScreen()
-            .navigationTitle("Feed")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(WanderTheme.canvasWarm.color, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isShowingSearch = true
-                    } label: {
-                        Label("Search places and people", systemImage: "magnifyingglass")
-                            .labelStyle(.iconOnly)
-                    }
-                }
-            }
             .task(id: auth.isSignedIn) {
                 await refresh()
             }
@@ -84,6 +77,10 @@ struct FeedScreen: View {
     private var placesSurface: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                FeedSearchLauncher(placeholders: tickerSuggestions) {
+                    isShowingSearch = true
+                }
+
                 content
             }
             .padding(.horizontal, WanderTheme.spacing4)
@@ -811,6 +808,56 @@ private struct FeedFollowedPersonRow: View {
 
 private struct FeedProfileRoute: Identifiable {
     let id: String
+}
+
+private struct FeedSearchLauncher: View {
+    let placeholders: [String]
+    let action: () -> Void
+    @State private var placeholderIndex = 0
+
+    private var placeholder: String {
+        guard !placeholders.isEmpty else { return "Search places and people" }
+        return placeholders[placeholderIndex % placeholders.count]
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Text(placeholder)
+                    .id(placeholder)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.textFaint.color)
+                    .lineLimit(1)
+                    .transition(.push(from: .bottom).combined(with: .opacity))
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, WanderTheme.spacing3)
+            .frame(minHeight: 44)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search places and people")
+        .task {
+            guard placeholders.count > 1 else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2.6))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.24)) {
+                    placeholderIndex = (placeholderIndex + 1) % placeholders.count
+                }
+            }
+        }
+    }
 }
 
 private struct FeedSectionHeading: View {

@@ -36,7 +36,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
     }
 
-    func testDiscoverTabPresentsTheDedicatedFeedWithNativeHeaderSearch() throws {
+    func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
@@ -47,10 +47,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("FeedScreen()"))
         XCTAssertTrue(root.contains("case .discover: \"Feed\""))
         XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
-        XCTAssertTrue(feed.contains(".navigationTitle(\"Feed\")"))
-        XCTAssertTrue(feed.contains("ToolbarItem(placement: .topBarTrailing)"))
-        XCTAssertTrue(feed.contains("Label(\"Search places and people\", systemImage: \"magnifyingglass\")"))
-        XCTAssertFalse(feed.contains("private struct FeedSearchLauncher"))
+        XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
+        XCTAssertFalse(feed.contains("ToolbarItem(placement: .topBarTrailing)"))
+        XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
+        XCTAssertTrue(feed.contains("FeedSearchLauncher(placeholders: tickerSuggestions)"))
+        XCTAssertTrue(feed.contains("isShowingSearch = true"))
+        XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search places and people\")"))
+        XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
+        XCTAssertTrue(feed.contains("DiscoverScreen()"))
         XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
         XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
         XCTAssertTrue(feed.contains("private enum FeedSurface"))
@@ -511,8 +515,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("Font.system(.body, design: .default"))
         XCTAssertFalse(typography.contains("size:"))
 
-        XCTAssertTrue(feed.contains(".navigationTitle(\"Feed\")"))
-        XCTAssertTrue(feed.contains(".navigationBarTitleDisplayMode(.inline)"))
+        XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
+        XCTAssertTrue(feed.contains("FeedSearchLauncher(placeholders: tickerSuggestions)"))
         XCTAssertTrue(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
         XCTAssertTrue(feed.contains(".pickerStyle(.segmented)"))
 

@@ -25519,3 +25519,46 @@ Handoff:
 - Opened this isolated worktree's `Wander.xcodeproj` in Xcode, raised its
   project window, and verified the Xcode Branch Chooser reports
   `codex/rec-161-native-editorial-type`.
+
+## 2026-07-26 18:27 PDT — Codex — REC-161 Feed search/header correction
+
+Agent: Codex using `ios-fix` and Linear workflows
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (currently `In Review`; implementation resumed from Joe's
+visual feedback)
+
+Goal: apply Joe's approved Feed-header correction on the existing REC-161
+implementation. Remove the redundant visible native `Feed` title and toolbar
+search, restore the exact pre-REC-161 persistent animated search launcher and
+its full-screen Discover behavior, and retain the native Places/People
+segmented picker.
+
+Scope locks:
+
+- Keep the approved typography roles and all place-profile native navigation.
+- Do not change ticket geometry, layout, media, colors, actions, or the shared
+  ticket-shape component.
+- Do not change the streak screen.
+- Preserve the existing search destination and behavior rather than replacing
+  it with a new searchable implementation.
+
+Expected files: `Wander/Features/Feed/FeedScreen.swift`,
+`WanderTests/NavigationContractTests.swift`, `docs/agent-log.md`, and PR/tracker
+metadata. The isolated worktree is clean at `fec1c30`; no overlapping worktree
+is editing these REC-161 files. `origin/main` advanced independently, but this
+PR remains intentionally stacked on REC-148/REC-147.
+
+Pre-fix evidence: Joe's simulator review and the existing REC-161 screenshots
+show the oversized visible `Feed` navigation row with a toolbar search icon,
+while the source diff confirms the prior persistent `FeedSearchLauncher` was
+removed. This repo intentionally has no DebugBridge/StateServer snapshot API,
+so the literal `ios-fix` HTTP snapshot is unavailable without adding unrelated
+debug infrastructure. The supplied visual state, exact base-branch source, and
+deterministic navigation-contract test will serve as the regression evidence.
+
+Coordination notes: the Linear connector is not exposed in this Codex session,
+so the existing REC-161 status cannot be moved back to `In Progress` before the
+edit; reconcile it and add validation when the connector is available. Mission
+Control at `localhost:4000` is also currently unreachable. Neither tracker
+outage changes implementation scope.
