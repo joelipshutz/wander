@@ -26696,6 +26696,48 @@ Final outcome: rec.me 0.1 (101) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with REC-152 Profile
 Recent activity.
 
+## 2026-07-26 18:24 PDT - Codex - REC-162 Add Capture Unification
+
+Agent: Codex
+Branch: `codex/rec-162-add-unification`
+Worktree: `/private/tmp/recme-rec162-add-unification`
+Linear: `REC-162` (`In Progress`)
+
+Goal: simplify the Add surface around 5–7 nearby suggestions, the existing
+search behavior, a native camera/photo-library menu inside the search field,
+and one separated Import entry point that opens the supported source stack and
+links to public Import Help.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from `origin/main` at
+  `759e7c9df`.
+- The primary checkout remains untouched on the removed
+  `codex/rec-142-widgets` branch; its untracked `.pnpm-store/` belongs to other
+  work.
+- REC-109 and REC-97 are completed predecessor issues. Created REC-162 for this
+  follow-up, assigned it to Ryan, related it to both predecessors, and moved it
+  to `In Progress`.
+- No active agent-log entry names the expected source files. The high-conflict
+  `docs/agent-log.md` is append-only; no other listed high-conflict file is in
+  scope.
+- Expected files are `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused test files, and
+  this agent log. `project.yml` or generated project membership should not be
+  needed unless implementation scope changes.
+- The proposed Import Help destination follows the public marketing site convention:
+  `https://getrec.me/import-help`; the app will own a single URL constant and open
+  it with the native browser environment.
+
+Planned validation:
+
+- Add focused tests for the new suggestion limit, camera/import hierarchy, and
+  Import Help contract.
+- Run focused Add/import tests, then the full iPhone simulator suite and a clean
+  generic simulator build.
+- Capture and inspect Add/import screenshots on the current large iPhone
+  simulator and one smaller phone before opening a ready PR.
+
 REC-157 latest-main reconciliation — 2026-07-26 18:24 PDT:
 
 - GitHub reported PR #243 conflicting after later widget/Profile work and
@@ -26827,6 +26869,101 @@ Next step: include `7894692e5` in the next requested TestFlight release and
 verify the accessory-circular Lock Screen widget on a signed physical device,
 including locked, unlocked, signed-out, cold-launch, and post-crash behavior.
 
+REC-162 implementation and validation checkpoint — 2026-07-26 19:42 PDT:
+
+- Reworked Add into the requested hierarchy: up to seven nearby suggestions,
+  the existing place search, a camera menu inside the search field, and one
+  separated Import entry point.
+- The camera menu uses native iOS presentation with **Take a Photo** and
+  **Photo Library**. Both routes reuse the existing OCR/location candidate and
+  unresolved-draft pipeline.
+- The Import entry opens one hub with Google Maps, Instagram Reels, TikToks,
+  and Texts & Notes, plus toolbar and inline help actions targeting
+  `https://getrec.me/import-help`.
+- Merged latest `origin/main` through `c0204328b`, preserving REC-157 and
+  REC-160 widget work. The only conflicts were append-only agent-log entries;
+  product source merged cleanly.
+- Focused Add/import navigation regressions passed 3/3 on iPhone 17 Pro /
+  iOS 26.5. The exact latest-main complete suite passed 759/759 with zero
+  failures. Result bundle:
+  `/tmp/DerivedData-rec162-build/Logs/Test/Test-Wander-2026.07.26_19-37-16--0700.xcresult`.
+- Simulator build passed with code signing disabled. `xcodegen generate`
+  produced no project drift, and `git diff --check` passed. Only existing Swift
+  concurrency, signed-XCTest-stripping, and traditional-headermap warnings
+  remained.
+- Visually inspected Add, the native camera menu, and the Import hub on iPhone
+  17 Pro, then inspected the denied-location fallback and Import hub on the
+  smaller iPhone 17e. Layout, safe areas, labels, and controls remained usable
+  on both sizes.
+- Used a temporary DEBUG-only local-auth launch switch solely for visual QA so
+  no personal account was used. Removed the switch before final diff review;
+  no auth bypass is present in the branch.
+- Direct verification found `https://getrec.me/import-help` responds HTTP 200
+  but currently renders Squarespace's generic **Coming Soon** page. The app URL
+  contract is wired; publishing the source-specific website instructions is an
+  external content follow-up.
+
+REC-162 handoff — 2026-07-26 19:43 PDT:
+
+- Pushed `codex/rec-162-add-unification` and opened ready PR #259:
+  `https://github.com/joelipshutz/wander/pull/259`.
+- Linked PR #259 to Linear REC-162, moved the issue to `In Review`, and posted
+  the 759/759 test, build, two-size visual-QA, and website-content follow-up
+  receipt.
+- The feature branch is intended for Ryan's local Xcode testing. Open
+  `/private/tmp/recme-rec162-add-unification/Wander.xcodeproj` without
+  switching or overwriting another active checkout.
+- No build-number change, archive, upload, TestFlight attachment, merge, or
+  Slack release action was performed.
+
+REC-162 Add layout refinement start — 2026-07-26 20:02 PDT:
+
+- Ryan requested a follow-up on PR #259: place search belongs inside
+  **Suggested** above nearby results; nearby results should be a bounded
+  vertical list with **Show more** at the bottom; **Import** must remain visible
+  before the fold; existing Add sheet detents must not grow.
+- Reused the clean isolated worktree and existing
+  `codex/rec-162-add-unification` branch. Fetched origin; the branch is five
+  commits ahead of and zero behind `origin/main`. No dirty or overlapping work
+  was present.
+- Moved Linear REC-162 from `In Review` back to `In Progress` and attached the
+  refinement scope.
+- Expected changes remain limited to `Wander/Features/Add/AddScreen.swift`,
+  focused navigation/layout contracts, and this append-only log.
+
+REC-162 Add layout refinement validation — 2026-07-26 20:14 PDT:
+
+- Moved place search directly beneath the **Suggested** header and changed
+  nearby suggestions from a horizontal rail to a bounded vertical list.
+- The initial list exposes three of at most seven suggestions. **Show more**
+  lives at the bottom of that list and reveals the remaining loaded rows
+  inside the same 156-point viewport, so expanding suggestions does not move
+  **Import** or increase the existing Add sheet detents.
+- Added layout-contract coverage for the section order, vertical scrolling,
+  **Show more**, the seven-place cap, and identical initial/expanded viewport
+  bounds.
+- Focused Add contracts passed 3/3. The complete suite passed 760/760 with zero
+  failures on iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec162-build/Logs/Test/Test-Wander-2026.07.26_20-12-48--0700.xcresult`.
+- Visually verified the populated list on iPhone 17 Pro: scrolling reached
+  **Show more**, expansion stayed inside the list, and **Import** remained
+  visible. Verified the smaller iPhone 17e denied-location state separately:
+  search remained beneath **Suggested** and the complete **Import** section
+  stayed above the fold.
+- `xcodegen generate` produced no project drift and `git diff --check` passed.
+  The temporary DEBUG-only local-auth switch used for simulator inspection was
+  removed before final validation; no auth bypass remains in the branch.
+
+REC-162 Add layout refinement handoff — 2026-07-26 20:16 PDT:
+
+- Committed the refinement as `da06fab29` (**Refine suggested places layout**)
+  and pushed it to `codex/rec-162-add-unification`, updating ready PR #259.
+- Updated the PR description with the bounded vertical-list behavior and final
+  760/760 validation receipt.
+- Moved Linear REC-162 back to `In Review` and posted the implementation,
+  two-size visual-QA, test, commit, and PR receipt.
+- No build-number change, archive, upload, TestFlight attachment, merge, or
+  Slack release action was performed.
 ## 2026-07-26 23:22 PDT - Codex - TestFlight Build 102
 
 Agent: Codex
@@ -27032,6 +27169,166 @@ to `rec.me Alpha`, and post the required tester note.
 Final status: rec.me 0.1 (104), including REC-132 onboarding, is approved and
 available through the public TestFlight link.
 
+## 2026-07-27 10:26 PDT - Codex - REC-162 unified Import refinement
+
+Agent: Codex
+Branch: `codex/rec-162-add-unification`
+Worktree: `/private/tmp/recme-rec162-add-unification`
+Linear: `REC-162` (`In Progress`)
+PR: `#259`
+
+Goal: simplify the dedicated Import page to one paste field with instructions
+at the top, preserve the current bounded Suggested scroll for now, and replace
+generic source symbols with a compact facepile of recognizable Google Maps,
+Instagram, and TikTok brand marks.
+
+Starting status:
+
+- Fetched origin and merged exact current `origin/main` into the isolated
+  branch as `8541285`. The only conflict was the append-only agent log; both
+  REC-162 history and newer main release/onboarding entries were preserved.
+- The original root checkout and every other worktree remain untouched.
+- Linear REC-162 moved from In Review back to In Progress. The follow-up
+  comment could not be posted because the connector rejected a payload that
+  included a local filesystem path; no workaround was attempted.
+- Mission Control remains unavailable at `localhost:4000`; task creation could
+  not change tracker state.
+- Expected files: `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileImportViews.swift`, import store/parser and
+  focused tests if needed for mixed-source routing, brand assets, and this log.
+
+### 2026-07-27 10:54 PDT - Implementation and validation
+
+- Replaced the four source-specific Import choices and their separate entry
+  screens with one instructions-first text field. Users can paste Google Maps,
+  Instagram, and TikTok links together with manual place names, one per line.
+- Added mixed-source detection before enqueueing so the simplified UI preserves
+  the correct existing provider/resolver behavior instead of treating every
+  line as a text-note import. Added regression coverage for a four-source mixed
+  payload and for the one-field navigation contract.
+- Replaced the generic SF Symbols with round, facepiled Google Maps, Instagram,
+  and TikTok brand marks in the asset catalog. Text/notes remain represented by
+  the input itself rather than a fourth icon.
+- Left the bounded Suggested vertical scroll and its current behavior unchanged,
+  per product direction.
+- `xcodegen generate` succeeded with no generated-project drift. The focused
+  mixed-source and navigation regressions passed 2/2. The complete unit and
+  contract suite passed 784/784. The unrelated onboarding UI smoke test missed
+  a carousel headline during its first timing window, then passed 1/1 on an
+  immediate isolated rerun. Result bundles:
+  `/private/tmp/DerivedData-rec162-unified-import/Logs/Test/Test-Wander-2026.07.27_10-50-14--0700.xcresult`
+  and
+  `/private/tmp/DerivedData-rec162-unified-import/Logs/Test/Test-Wander-2026.07.27_10-51-38--0700.xcresult`.
+- Visually inspected the final Import page on iPhone 16 Plus and a temporary
+  iPhone 16e. Instructions, facepile, field, primary action, help action, safe
+  areas, and wrapping remained usable on both sizes. Screenshots:
+  `/private/tmp/rec162-import-unified-16plus.png` and
+  `/private/tmp/rec162-import-unified-16e.png`.
+- A temporary DEBUG-only direct-launch route was used solely for deterministic
+  visual QA and removed before final diff review. The temporary iPhone 16e
+  simulator was also deleted. `git diff --check` passes; no auth bypass, build
+  number, TestFlight, hosted data, or release action is included.
+
+### 2026-07-27 10:56 PDT - Handoff
+
+- Committed the unified Import refinement as `a09269e` (`feat: unify place
+  import entry`) and pushed `codex/rec-162-add-unification`, updating ready PR
+  #259 in place.
+- Updated PR #259's description with the one-field mixed-source behavior,
+  unchanged Suggested scroll, brand facepile, and current validation receipt.
+- Moved Linear REC-162 back to `In Review`. A detailed Linear validation comment
+  was rejected by the connector's external-data safety policy, so the receipt
+  remains in the PR and this log rather than attempting a workaround.
+- Ryan can review or continue from
+  `/private/tmp/recme-rec162-add-unification/Wander.xcodeproj`. The original root
+  checkout and all other worktrees remain untouched.
+- No build-number change, merge, archive, upload, TestFlight attachment, hosted
+  data mutation, or Slack action was performed.
+
+### 2026-07-27 11:06 PDT - Add entry facepile verification
+
+- Confirmed the main Add-screen `AddImportEntrySection` uses the same shared
+  Google Maps, Instagram, and TikTok brand facepile as the dedicated Import
+  page; no additional product-source change was required.
+- An initial simulator screenshot showed the superseded four-tile entry because
+  the full UI-test run had replaced the installed app with a stale cached build.
+  Created and installed a fresh build from this isolated worktree, then visually
+  verified the branded facepile on the actual Add entry row. Screenshot:
+  `/private/tmp/rec162-add-entry-icons-final.png`.
+
+### 2026-07-27 11:23 PDT - Fixed Import footer and non-scrolling preview
+
+- Product follow-up: the compact Add sheet should not scroll internally;
+  Import should stay fixed at the bottom; nearby suggestions should show only
+  the rows that fit; and **See more** should open the full-height nearby chooser.
+- Replaced the compact source-state `ScrollView` with a strict two-part vertical
+  layout: a flexible Suggested/search region and a fixed Import footer. Other
+  expanded search, nearby-results, confirm, and draft states retain their
+  existing full-height scrolling behavior.
+- Replaced the bounded nested suggestion scroll with a vertical `ViewThatFits`
+  over 3-, 2-, and 1-row previews. On both tested devices SwiftUI selected two
+  rows plus **See more**. **See more** now expands the sheet and reuses the
+  existing current-location candidate flow rather than revealing rows inside
+  the compact sheet.
+- Focused Add layout contracts passed 2/2. The complete unit and contract suite
+  passed 784/784. Result bundle:
+  `/private/tmp/DerivedData-rec162-entry-verify/Logs/Test/Test-Wander-2026.07.27_11-20-57--0700.xcresult`.
+- Visually verified the populated half sheet on iPhone 16 Plus and temporary
+  iPhone 16e; neither compact sheet scrolls, the fixed Import footer remains
+  visible at the bottom, and both show two rows plus **See more**. Also tapped
+  **See more** and verified the full-height nearby chooser and pinned Save
+  action. Screenshots:
+  `/private/tmp/rec162-add-fixed-footer-populated.png`,
+  `/private/tmp/rec162-add-fixed-footer-16e.png`, and
+  `/private/tmp/rec162-add-see-more-full-screen.png`.
+- Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
+  passes. No build-number, TestFlight, hosted data, or release action is in
+  scope.
+
+### 2026-07-27 11:24 PDT - Fixed-footer handoff
+
+- Committed the compact-sheet refinement as `edff977` (`fix: pin import footer
+  in Add sheet`) and pushed `codex/rec-162-add-unification`, updating ready PR
+  #259.
+- Updated the PR description to replace the superseded embedded-scroll behavior
+  with the final fixed Import footer, fitting preview, and full-height **See
+  more** destination. Moved Linear REC-162 back to `In Review`.
+- No merge, build-number change, archive, upload, TestFlight attachment, hosted
+  data mutation, or Slack action was performed.
+
+### 2026-07-27 11:57 PDT - Responsive preview and I'm here now destination
+
+- Product follow-up: show one additional nearby suggestion on large phones,
+  keep fewer rows on smaller phones, and make **See more** explicitly open the
+  full Add **I'm here now** page.
+- Added deterministic device-height breakpoints: screens at least 900 points
+  tall show three suggestions, screens from 800 points show two, and smaller
+  screens show one. The existing 44-point **See more** control still fits on
+  iPhone 16 Plus, so it did not need to be reduced below the minimum tap target.
+- The expanded current-location result state now titles itself **I'm here now**
+  with **choose the place you're at**, while preserving the existing full-height
+  candidate list and pinned Save action.
+- Focused responsive-preview/navigation contracts passed 2/2. The complete
+  unit and contract suite passed 784/784. Result bundle:
+  `/private/tmp/DerivedData-rec162-entry-verify/Logs/Test/Test-Wander-2026.07.27_11-55-48--0700.xcresult`.
+- Visually verified three suggestions plus **See more** and the pinned Import
+  footer on iPhone 16 Plus, two suggestions on temporary iPhone 16e, and the
+  explicit full-height **I'm here now** destination after tapping **See more**.
+  Screenshots: `/private/tmp/rec162-add-three-suggestions-large.png`,
+  `/private/tmp/rec162-add-two-suggestions-small.png`, and
+  `/private/tmp/rec162-im-here-now-full-page.png`.
+- Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
+  passes. No release or hosted-data action is in scope.
+
+### 2026-07-27 11:59 PDT - Responsive-preview handoff
+
+- Committed the responsive preview and **I'm here now** destination refinement
+  as `162cbdd` (`fix: scale Add suggestions by screen height`) and pushed the
+  branch, updating ready PR #259.
+- Updated the PR description with the large-screen three-row behavior,
+  smaller-screen two-row behavior, and explicit full-height destination.
+- Linear REC-162 remains `In Review`. No merge, build-number change, archive,
+  upload, TestFlight attachment, hosted mutation, or Slack action was performed.
 ## 2026-07-27 10:10 PDT - Codex - REC-164 Clerk Google sign-in dismissal
 
 Agent: Codex using `recme-testflight-feedback-bug-catcher` and
@@ -27214,3 +27511,22 @@ Validation checkpoint, 2026-07-27 10:55 PDT:
 
 Final status: rec.me 0.1 (105), including the Google sign-in presentation fix,
 is approved and available through the public TestFlight link.
+
+### 2026-07-27 12:06 PDT - REC-162 release reconciliation
+
+- Joe explicitly requested a light-triage TestFlight push for the Add-flow
+  refinement. Latest completed release is build 105; no unfinished release was
+  found, so the next release number is 106.
+- Light review found no blocking Add/import, navigation, persistence, asset,
+  auth-integration, or project-configuration issue. PR #259 had drifted behind
+  `main`; merging `origin/main` produced only an append-only conflict in this
+  coordination log. Both REC-162 and build-105/REC-164 histories were retained,
+  with all app and project changes from main accepted unchanged.
+- Post-reconciliation focused integration validation passed 141/141 tests with
+  zero failures: `PlaceImportStoreTests`, `GoogleMapsSharedListImporterTests`,
+  `NavigationContractTests`, `AuthSessionTests`, and `BuildConfigurationTests`.
+  Result bundle:
+  `/private/tmp/DerivedData-rec162-release-gate/Logs/Test/Test-Wander-2026.07.27_12-00-09--0700.xcresult`.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. Next: push the reconciled PR, squash-merge it, then prepare and
+  ship exact latest `main` as build 106.

@@ -5,8 +5,8 @@ import UIKit
 import Vision
 
 enum AddSheetLayout {
-    static let emptyRestingHeight: CGFloat = 410
-    static let pendingReviewRestingHeight: CGFloat = 480
+    static let emptyRestingHeight: CGFloat = 520
+    static let pendingReviewRestingHeight: CGFloat = 570
 
     static func restingDetent(hasPendingImports: Bool) -> PresentationDetent {
         .height(hasPendingImports ? pendingReviewRestingHeight : emptyRestingHeight)
@@ -14,6 +14,27 @@ enum AddSheetLayout {
 
     static func detents(hasPendingImports: Bool) -> Set<PresentationDetent> {
         [restingDetent(hasPendingImports: hasPendingImports), .large]
+    }
+}
+
+enum AddSuggestedPlaces {
+    static let maximumCount = 7
+    static let rowHeight: CGFloat = 58
+    static let rowSpacing: CGFloat = 8
+    static let showMoreHeight: CGFloat = 44
+
+    static func previewCount(screenHeight: CGFloat) -> Int {
+        if screenHeight >= 900 { return 3 }
+        if screenHeight >= 800 { return 2 }
+        return 1
+    }
+
+    static func limited(_ candidates: [PlaceCandidate]) -> [PlaceCandidate] {
+        Array(candidates.prefix(maximumCount))
+    }
+
+    static func visible(_ candidates: [PlaceCandidate], count: Int) -> [PlaceCandidate] {
+        Array(candidates.prefix(max(0, count)))
     }
 }
 
@@ -32,19 +53,23 @@ struct AddScreen: View {
     @State private var selectedCandidateID: String?
     @State private var selectedSource: AddSourceType = .manual
     @State private var manualName = ""
-    @State private var linkInput = ""
     @State private var quickAddQuery = ""
     @State private var isShowingInlineCandidateResults = false
+    @State private var suggestedCandidates: [PlaceCandidate] = []
+    @State private var isLoadingSuggestions = false
+    @State private var suggestionMessage: String?
+    @State private var hasRequestedSuggestions = false
     @State private var draft: UnresolvedDraft?
     @State private var isResolvingCandidates = false
     @State private var resolutionMessage: String?
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showsPhotoLibrary = false
+    @State private var showsCamera = false
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
-    @State private var selectedImportSource: PlaceImportSource?
+    @State private var showsImportHub = false
     @State private var showsImportInbox = false
-    @State private var opensImportInboxAfterSource = false
     @FocusState private var isQuickAddFocused: Bool
 
     init(
@@ -77,25 +102,22 @@ struct AddScreen: View {
             && selectedCandidate != nil
     }
 
+    private var showsPinnedImportEntry: Bool {
+        step == .source && !isShowingInlineCandidateResults
+    }
+
+    private var isShowingHereNowResults: Bool {
+        isShowingInlineCandidateResults && selectedSource == .currentLocation
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    header
-
-                    switch step {
-                    case .source:
-                        sourcePicker
-                    case .photo:
-                        photoForm
-                    case .confirm:
-                        confirmPlace
-                    case .draft:
-                        draftView
-                    }
+            Group {
+                if showsPinnedImportEntry {
+                    compactSheetContent
+                } else {
+                    scrollableFlowContent
                 }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -106,6 +128,9 @@ struct AddScreen: View {
             .wanderScreen()
             .onChange(of: resetToken) { _, _ in
                 reset()
+            }
+            .task(id: resetToken) {
+                await loadNearbySuggestionsIfNeeded()
             }
             .onChange(of: isQuickAddFocused) { _, isFocused in
                 if isFocused {
@@ -159,13 +184,30 @@ struct AddScreen: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .sheet(item: $selectedImportSource, onDismiss: openImportInboxAfterSourceIfNeeded) { source in
-                PlaceImportSourceScreen(
-                    source: source,
-                    importStore: importStore
-                ) { _ in
-                    opensImportInboxAfterSource = true
+            .sheet(isPresented: $showsCamera) {
+                AddCameraPicker { image in
+                    Task {
+                        await importCapturedPhoto(image)
+                    }
                 }
+                .ignoresSafeArea()
+            }
+            .photosPicker(
+                isPresented: $showsPhotoLibrary,
+                selection: $selectedPhotoItem,
+                matching: .images
+            )
+            .onChange(of: selectedPhotoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    await importPhotoDraft(from: item)
+                }
+            }
+            .navigationDestination(isPresented: $showsImportHub) {
+                PlaceImportHubScreen(
+                    importStore: importStore,
+                    inboxAction: openImportInbox
+                )
             }
             .navigationDestination(isPresented: $showsImportInbox) {
                 PlaceImportInboxScreen(importStore: importStore)
@@ -173,6 +215,55 @@ struct AddScreen: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
             }
+        }
+    }
+
+    private var compactSheetContent: some View {
+        VStack(spacing: 0) {
+            compactSourceContent
+
+            AddImportEntrySection(
+                summary: importStore.summary,
+                action: openImportHub
+            )
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing2)
+            .padding(.bottom, WanderTheme.spacing3)
+            .background(WanderTheme.canvasWarm.color)
+        }
+    }
+
+    private var compactSourceContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            header
+            suggestedPlaces
+
+            if let resolutionMessage {
+                InlineMessage(text: resolutionMessage)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing4)
+    }
+
+    private var scrollableFlowContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                header
+
+                switch step {
+                case .source:
+                    sourcePicker
+                case .confirm:
+                    confirmPlace
+                case .draft:
+                    draftView
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .padding(.bottom, WanderTheme.spacing8)
         }
     }
 
@@ -190,10 +281,10 @@ struct AddScreen: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("add a place")
+                Text(isShowingHereNowResults ? "I'm here now" : "add a place")
                     .font(.system(size: 22, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text(step.subtitle)
+                Text(isShowingHereNowResults ? "choose the place you're at" : step.subtitle)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -217,20 +308,9 @@ struct AddScreen: View {
 
     private var sourcePicker: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            AddSearchField(
-                query: $quickAddQuery,
-                isLoading: isResolvingCandidates,
-                isFocused: $isQuickAddFocused,
-                submit: {
-                    expandSheet()
-                    isQuickAddFocused = false
-                    Task {
-                        await resolveQuickAddQuery()
-                    }
-                }
-            )
-
             if isShowingInlineCandidateResults {
+                searchField
+
                 Button {
                     clearInlineCandidateResults()
                 } label: {
@@ -246,97 +326,104 @@ struct AddScreen: View {
                 if let resolutionMessage {
                     InlineMessage(text: resolutionMessage)
                 }
-            } else {
-                VStack(spacing: 0) {
-                    SourceRow(
-                        title: isResolvingCandidates ? "finding nearby places..." : "I'm here now",
-                        subtitle: "find nearby places",
-                        systemImage: "location.fill",
-                        isPrimary: true,
-                        isDisabled: isResolvingCandidates
-                    ) {
-                        expandSheet()
-                        Task {
-                            await resolveCurrentLocationCandidates()
-                        }
-                    }
-                    Divider().background(WanderTheme.borderHairline.color)
-                    SourceRow(
-                        title: "From a photo",
-                        subtitle: "scan a place from a photo",
-                        systemImage: "photo.fill",
-                        isDisabled: isResolvingCandidates
-                    ) {
-                        resolutionMessage = nil
-                        selectedSource = .photo
-                        step = .photo
-                        expandSheet()
-                    }
-                }
-                .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
-
-                AddImportSection(
-                    summary: importStore.summary,
-                    sourceAction: openImportSource,
-                    inboxAction: openImportInbox
-                )
-
-                if let resolutionMessage {
-                    InlineMessage(text: resolutionMessage)
-                        .padding(.top, WanderTheme.spacing2)
-                }
-
             }
         }
     }
 
-    private var photoForm: some View {
-        let title = isImportingPhoto ? "importing photo..." : "choose a photo"
-        let subtitle = "we'll scan visible text and photo location"
-
-        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                HStack(spacing: WanderTheme.spacing3) {
-                    Image(systemName: "photo.badge.plus")
-                        .font(.system(size: 20, weight: .bold))
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text(title)
-                            .font(.system(size: 16, weight: .bold))
-                        Text(subtitle)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-                    Spacer()
-                }
-                .foregroundStyle(WanderTheme.textInk.color)
-                .frame(minHeight: 64)
-                .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            }
-            .disabled(isImportingPhoto)
-            .onChange(of: selectedPhotoItem) { _, item in
-                guard let item else { return }
-                Task {
-                    await importPhotoDraft(from: item)
-                }
-            }
-
-            if let resolutionMessage {
-                InlineMessage(text: resolutionMessage)
-            }
-
-            Text("We'll search likely place names and nearby photo locations. If we read a name but cannot match it, you can edit the search before saving.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
-
-            WanderPrimaryButton(title: "search by name instead", systemImage: "magnifyingglass") {
-                step = .source
+    private var searchField: some View {
+        AddSearchField(
+            query: $quickAddQuery,
+            isLoading: isResolvingCandidates || isImportingPhoto,
+            isFocused: $isQuickAddFocused,
+            isCameraAvailable: isCameraAvailable,
+            submit: {
                 expandSheet()
-                isQuickAddFocused = true
+                isQuickAddFocused = false
+                Task {
+                    await resolveQuickAddQuery()
+                }
+            },
+            takePhoto: {
+                showsCamera = true
+            },
+            chooseFromLibrary: {
+                showsPhotoLibrary = true
+            }
+        )
+    }
+
+    private var suggestedPlaces: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("Suggested")
+                .font(.system(size: 17, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .accessibilityAddTraits(.isHeader)
+
+            searchField
+
+            if isLoadingSuggestions {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ProgressView()
+                        .tint(WanderTheme.terracotta.color)
+                    Text("Finding places near you…")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                .frame(minHeight: 82)
+            } else if !suggestedCandidates.isEmpty {
+                suggestedPlacePreview(
+                    count: AddSuggestedPlaces.previewCount(
+                        screenHeight: UIScreen.main.bounds.height
+                    )
+                )
+            } else {
+                Button {
+                    hasRequestedSuggestions = false
+                    Task {
+                        await loadNearbySuggestionsIfNeeded()
+                    }
+                } label: {
+                    Label(
+                        suggestionMessage ?? "Use your location to suggest nearby places",
+                        systemImage: "location.fill"
+                    )
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Tries nearby suggestions again")
+            }
+        }
+    }
+
+    private func suggestedPlacePreview(count: Int) -> some View {
+        let visibleCandidates = AddSuggestedPlaces.visible(suggestedCandidates, count: count)
+        let hasMore = visibleCandidates.count < suggestedCandidates.count
+
+        return VStack(spacing: AddSuggestedPlaces.rowSpacing) {
+            ForEach(visibleCandidates) { candidate in
+                SuggestedPlaceCard(candidate: candidate) {
+                    openSuggestedCandidate(candidate)
+                }
+            }
+
+            if hasMore {
+                Button {
+                    expandSheet()
+                    Task {
+                        await resolveCurrentLocationCandidates()
+                    }
+                } label: {
+                    Label("See more", systemImage: "arrow.up.right")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(maxWidth: .infinity, minHeight: AddSuggestedPlaces.showMoreHeight)
+                        .background(WanderTheme.surfaceSand.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens all nearby suggestions in the full-screen nearby view")
             }
         }
     }
@@ -411,19 +498,23 @@ struct AddScreen: View {
         selectedCandidateID = nil
         selectedSource = .manual
         manualName = ""
-        linkInput = ""
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
+        suggestedCandidates = []
+        isLoadingSuggestions = false
+        suggestionMessage = nil
+        hasRequestedSuggestions = false
         draft = nil
         resolutionMessage = nil
         isResolvingCandidates = false
         selectedPhotoItem = nil
+        showsPhotoLibrary = false
+        showsCamera = false
         pendingVisitPhotoAttachments = []
         isImportingPhoto = false
         addSaveFlow = nil
-        selectedImportSource = nil
+        showsImportHub = false
         showsImportInbox = false
-        opensImportInboxAfterSource = false
         selectedDetent = restingDetent
     }
 
@@ -433,7 +524,6 @@ struct AddScreen: View {
         selectedCandidateID = nil
         selectedSource = .manual
         manualName = ""
-        linkInput = ""
         quickAddQuery = ""
         isShowingInlineCandidateResults = false
         draft = nil
@@ -448,8 +538,6 @@ struct AddScreen: View {
         resolutionMessage = nil
 
         switch step {
-        case .photo:
-            step = .source
         case .confirm:
             step = .source
         case .draft:
@@ -476,20 +564,14 @@ struct AddScreen: View {
         }
     }
 
-    private func openImportSource(_ source: PlaceImportSource) {
+    private func openImportHub() {
         expandSheet()
-        selectedImportSource = source
+        showsImportHub = true
     }
 
     private func openImportInbox() {
         expandSheet()
         showsImportInbox = true
-    }
-
-    private func openImportInboxAfterSourceIfNeeded() {
-        guard opensImportInboxAfterSource else { return }
-        opensImportInboxAfterSource = false
-        openImportInbox()
     }
 
     private func openSharedSaveFlow() {
@@ -501,6 +583,39 @@ struct AddScreen: View {
             defaultVisibility: store.effectiveDefaultVisibility,
             initialPhotoAttachments: pendingVisitPhotoAttachments
         )
+    }
+
+    private var isCameraAvailable: Bool {
+        UIImagePickerController.isSourceTypeAvailable(.camera)
+    }
+
+    private func openSuggestedCandidate(_ candidate: PlaceCandidate) {
+        expandSheet()
+        selectedSource = .currentLocation
+        candidates = [candidate]
+        selectedCandidateID = candidate.id
+        pendingVisitPhotoAttachments = []
+        openSharedSaveFlow()
+    }
+
+    @MainActor
+    private func loadNearbySuggestionsIfNeeded() async {
+        guard !hasRequestedSuggestions else { return }
+        hasRequestedSuggestions = true
+        isLoadingSuggestions = true
+        suggestionMessage = nil
+        defer { isLoadingSuggestions = false }
+
+        do {
+            let nearby = try await store.currentLocationCandidates()
+            suggestedCandidates = AddSuggestedPlaces.limited(nearby)
+            if suggestedCandidates.isEmpty {
+                suggestionMessage = "No nearby places found. Tap to try again."
+            }
+        } catch {
+            suggestedCandidates = []
+            suggestionMessage = resolutionCopy(for: error)
+        }
     }
 
     @MainActor
@@ -577,52 +692,12 @@ struct AddScreen: View {
     }
 
     @MainActor
-    private func resolveLinkCandidates(inline: Bool = false) async {
-        selectedSource = .link
-        resolutionMessage = nil
-        isShowingInlineCandidateResults = false
-        isResolvingCandidates = true
-        defer { isResolvingCandidates = false }
-
-        do {
-            candidates = try await store.linkCandidates(linkInput)
-            selectedCandidateID = candidates.first?.id
-            guard !candidates.isEmpty else {
-                resolutionMessage = PlaceResolutionError.noCandidates.localizedDescription
-                return
-            }
-            isShowingInlineCandidateResults = inline
-            step = inline ? .source : .confirm
-        } catch {
-            if auth.isSignedIn {
-                let draft = await store.createUnresolvedDraft(
-                    sourceType: .link,
-                    originalInput: linkInput,
-                    backend: backend
-                )
-
-                if let result = await store.processExtractionJob(for: draft, backend: backend),
-                   applyExtractionResult(result, source: .link) {
-                    return
-                }
-            }
-
-            candidates = []
-            selectedCandidateID = nil
-            resolutionMessage = resolutionCopy(for: error)
-        }
-    }
-
-    @MainActor
     private func resolveQuickAddQuery() async {
         let query = quickAddQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
 
         if let coordinate = Self.coordinate(from: query) {
             await resolveCoordinateCandidates(coordinate)
-        } else if Self.looksLikeLink(query) {
-            linkInput = query
-            await resolveLinkCandidates(inline: true)
         } else {
             manualName = query
             await resolveManualCandidates(inline: true)
@@ -664,15 +739,6 @@ struct AddScreen: View {
         }
     }
 
-    private static func looksLikeLink(_ value: String) -> Bool {
-        let normalized = value.lowercased()
-        return normalized.hasPrefix("http://")
-            || normalized.hasPrefix("https://")
-            || normalized.contains("maps.apple.com")
-            || normalized.contains("google.com/maps")
-            || normalized.contains("maps.app.goo.gl")
-    }
-
     static func coordinate(from value: String) -> CLLocationCoordinate2D? {
         let pattern = #"[-+]?\d{1,3}(?:\.\d+)?"#
         guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
@@ -692,61 +758,79 @@ struct AddScreen: View {
 
     @MainActor
     private func importPhotoDraft(from item: PhotosPickerItem) async {
-        selectedSource = .photo
-        resolutionMessage = nil
-        isImportingPhoto = true
         defer {
-            isImportingPhoto = false
             selectedPhotoItem = nil
         }
 
         do {
-            let data = try await item.loadTransferable(type: Data.self)
-            let byteCount = data?.count ?? 0
-            if let data {
-                let recognizedText = await recognizeText(in: data)
-                let photoCoordinate = PhotoPlaceMetadataExtractor.coordinate(from: data)
-                let resolution = await PhotoPlaceImportResolver.resolve(
-                    recognizedText: recognizedText,
-                    photoCoordinate: photoCoordinate,
-                    searcher: store
-                )
-
-                if applyPhotoImportResolution(resolution) {
-                    let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
-                    if let image = UIImage(data: data),
-                       let attachment = MapPlaceSavePhotoAttachment.make(
-                           image: image,
-                           data: data,
-                           fallbackAssetRef: assetRef
-                       ) {
-                        pendingVisitPhotoAttachments = [attachment]
-                    } else {
-                        pendingVisitPhotoAttachments = []
-                    }
-                    return
-                }
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                throw WanderImageProcessingError.invalidImageData
             }
-
-            let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" } ?? "photos_picker:imported_photo_\(byteCount)"
-            draft = await store.createUnresolvedDraft(
-                sourceType: .photo,
-                originalInput: "photo import · \(byteCount) bytes",
-                localAssetRef: assetRef,
-                backend: auth.isSignedIn ? backend : nil
-            )
-
-            if auth.isSignedIn,
-               let draft,
-               let result = await store.processExtractionJob(for: draft, backend: backend),
-               applyExtractionResult(result, source: .photo) {
-                return
-            }
-
-            step = .draft
+            let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
+            await importPhotoDraft(data: data, assetRef: assetRef)
         } catch {
             resolutionMessage = "Could not import that photo. Try another one or search by name."
         }
+    }
+
+    @MainActor
+    private func importCapturedPhoto(_ image: UIImage) async {
+        guard let data = image.jpegData(compressionQuality: 0.92) else {
+            resolutionMessage = "Could not use that photo. Try another one or search by name."
+            return
+        }
+        await importPhotoDraft(
+            data: data,
+            assetRef: "camera:capture_\(UUID().uuidString.lowercased())"
+        )
+    }
+
+    @MainActor
+    private func importPhotoDraft(data: Data, assetRef: String?) async {
+        selectedSource = .photo
+        resolutionMessage = nil
+        isImportingPhoto = true
+        expandSheet()
+        defer { isImportingPhoto = false }
+
+        let recognizedText = await recognizeText(in: data)
+        let photoCoordinate = PhotoPlaceMetadataExtractor.coordinate(from: data)
+        let resolution = await PhotoPlaceImportResolver.resolve(
+            recognizedText: recognizedText,
+            photoCoordinate: photoCoordinate,
+            searcher: store
+        )
+
+        if applyPhotoImportResolution(resolution) {
+            if let image = UIImage(data: data),
+               let attachment = MapPlaceSavePhotoAttachment.make(
+                   image: image,
+                   data: data,
+                   fallbackAssetRef: assetRef
+               ) {
+                pendingVisitPhotoAttachments = [attachment]
+            } else {
+                pendingVisitPhotoAttachments = []
+            }
+            return
+        }
+
+        let resolvedAssetRef = assetRef ?? "photo:imported_\(data.count)"
+        draft = await store.createUnresolvedDraft(
+            sourceType: .photo,
+            originalInput: "photo import · \(data.count) bytes",
+            localAssetRef: resolvedAssetRef,
+            backend: auth.isSignedIn ? backend : nil
+        )
+
+        if auth.isSignedIn,
+           let draft,
+           let result = await store.processExtractionJob(for: draft, backend: backend),
+           applyExtractionResult(result, source: .photo) {
+            return
+        }
+
+        step = .draft
     }
 
     @MainActor
@@ -874,14 +958,12 @@ enum ExtractionCandidateFilter {
 
 private enum AddStep {
     case source
-    case photo
     case confirm
     case draft
 
     var subtitle: String {
         switch self {
-        case .source: "pick the fastest way"
-        case .photo: "Choose a photo; we'll look for a place."
+        case .source: "find it nearby, search, or import"
         case .confirm: "Pick the right place, then save it."
         case .draft: "we could not find enough place info yet."
         }
@@ -889,7 +971,7 @@ private enum AddStep {
 
     var canGoBack: Bool {
         switch self {
-        case .photo, .confirm, .draft:
+        case .confirm, .draft:
             true
         case .source:
             false
@@ -901,7 +983,10 @@ private struct AddSearchField: View {
     @Binding var query: String
     let isLoading: Bool
     let isFocused: FocusState<Bool>.Binding
+    let isCameraAvailable: Bool
     let submit: () -> Void
+    let takePhoto: () -> Void
+    let chooseFromLibrary: () -> Void
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -912,7 +997,7 @@ private struct AddSearchField: View {
             TextField(
                 "",
                 text: $query,
-                prompt: Text("Search, paste a link, or add coordinates")
+                prompt: Text("Search for a place")
                     .foregroundStyle(WanderTheme.textFaint.color)
             )
                 .font(.system(size: 14, weight: .medium))
@@ -935,6 +1020,29 @@ private struct AddSearchField: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear add search")
             }
+
+            Menu {
+                Button(action: takePhoto) {
+                    Label("Take a Photo", systemImage: "camera")
+                }
+                .disabled(!isCameraAvailable)
+
+                Button(action: chooseFromLibrary) {
+                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 16, weight: .bold))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .black))
+                }
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Add from a photo")
+            .accessibilityHint("Choose Take a Photo or Photo Library")
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(minHeight: 48)
@@ -950,49 +1058,57 @@ private struct AddSearchField: View {
         )
         .animation(.easeOut(duration: 0.16), value: isFocused.wrappedValue)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Search, paste a link, or add coordinates")
+        .accessibilityLabel("Search for a place")
         .disabled(isLoading)
         .opacity(isLoading ? 0.78 : 1)
     }
 }
 
-private struct SourceRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    var isPrimary = false
-    var isDisabled = false
+private struct SuggestedPlaceCard: View {
+    let candidate: PlaceCandidate
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: WanderTheme.spacing3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color : WanderTheme.terracottaDark.color)
-                    .frame(width: 34, height: 34)
-                    .background(isPrimary ? WanderTheme.terracotta.color : WanderTheme.terracottaTint.color)
-                    .clipShape(Circle())
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .bold))
+            HStack(spacing: WanderTheme.spacing2) {
+                CategoryIcon(category: candidate.category)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(candidate.name)
+                        .font(.system(size: 14, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    Text(candidate.subtitle)
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(2)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundStyle(WanderTheme.textFaint.color)
+
+                Spacer(minLength: WanderTheme.spacing1)
+
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(width: 28, height: 28)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(Circle())
             }
-            .foregroundStyle(WanderTheme.textInk.color)
-            .frame(minHeight: 54)
-            .contentShape(Rectangle())
+            .padding(WanderTheme.spacing2)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: AddSuggestedPlaces.rowHeight,
+                alignment: .leading
+            )
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .opacity(isDisabled ? 0.72 : 1)
+        .accessibilityLabel("Add \(candidate.name)")
+        .accessibilityHint("Opens the save flow for this nearby place")
     }
 }
 
@@ -1079,5 +1195,51 @@ private struct CategoryIcon: View {
             .frame(width: 40, height: 40)
             .background(WanderTheme.terracottaTint.color)
             .clipShape(Circle())
+    }
+}
+
+private struct AddCameraPicker: UIViewControllerRepresentable {
+    let onImage: @MainActor (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.allowsEditing = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImage: onImage) {
+            dismiss()
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        private let onImage: @MainActor (UIImage) -> Void
+        private let dismiss: () -> Void
+
+        init(onImage: @escaping @MainActor (UIImage) -> Void, dismiss: @escaping () -> Void) {
+            self.onImage = onImage
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            if let image = info[.originalImage] as? UIImage {
+                onImage(image)
+            }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
+        }
     }
 }

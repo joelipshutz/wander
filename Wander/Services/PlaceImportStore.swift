@@ -836,6 +836,42 @@ final class PlaceImportStore: ObservableObject {
         return batch.id
     }
 
+    @discardableResult
+    func enqueueUnified(text: String) throws -> [String] {
+        let seeds = try PlaceImportParser.parse(source: .textNotes, text: text)
+        var sourceOrder: [PlaceImportSource] = []
+        var seedsBySource: [PlaceImportSource: [PlaceImportSeed]] = [:]
+
+        for seed in seeds {
+            let source = PlaceImportSourceDetector.source(for: seed)
+            if seedsBySource[source] == nil {
+                sourceOrder.append(source)
+                seedsBySource[source] = []
+            }
+            seedsBySource[source, default: []].append(seed)
+        }
+
+        let batches = sourceOrder.compactMap { source -> PlaceImportBatch? in
+            guard let sourceSeeds = seedsBySource[source], !sourceSeeds.isEmpty else { return nil }
+            let batch = PlaceImportBatch(
+                source: source,
+                sourceName: nil,
+                totalCount: sourceSeeds.count
+            )
+            self.batches.append(batch)
+            items.append(contentsOf: sourceSeeds.map { seed in
+                PlaceImportItem(batchID: batch.id, source: source, seed: seed)
+            })
+            return batch
+        }
+
+        persist()
+        for batch in batches {
+            startProcessing(batchID: batch.id)
+        }
+        return batches.map(\.id)
+    }
+
     func batch(captureDeliveryID: String) -> PlaceImportBatch? {
         batches.first(where: { $0.captureDeliveryID == captureDeliveryID })
     }

@@ -1,6 +1,6 @@
 import Foundation
 
-enum PlaceImportSource: String, Codable, CaseIterable, Equatable, Identifiable {
+enum PlaceImportSource: String, Codable, CaseIterable, Equatable, Hashable, Identifiable {
     case googleMaps = "google_maps"
     case instagram
     case tiktok
