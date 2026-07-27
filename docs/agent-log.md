@@ -24288,6 +24288,18 @@ Implementation completion checkpoint, 2026-07-26 19:43 PDT:
   smoke-test surface was introduced.
 - No build number, archive, upload, TestFlight group, or tester Slack state was
   changed. Commit, push, PR readiness, and Linear handoff remain to be recorded.
+- Committed the implementation as `0b72b1098` and pushed it to
+  `codex/rec-155-tags-labels-redesign`; existing PR #255 now contains the exact
+  tested head and GitHub reports no base-branch conflicts.
+- Handoff metadata is the only remaining blocker: the local `gh` token is
+  invalid and the connected GitHub integration returned 403 for PR writes. The
+  authenticated GitHub page is open at PR #255, but browser safety requires
+  explicit user confirmation before submitting the replacement title/body and
+  moving the draft to Ready for review. Linear REC-155 remains In Progress
+  until that review transition succeeds.
+- Exact restart: update PR #255 to describe the implementation and 760/760 test
+  result, mark it Ready for review, move REC-155 to In Review with the same
+  validation receipt, then append the final PR/Linear status here.
 
 ## 2026-07-26 09:05 PDT - Codex - Full-Screen Photo Zoom
 
