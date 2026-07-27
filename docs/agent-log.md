@@ -26966,3 +26966,33 @@ PR: `#182`
 
 Next: commit these repairs, merge latest `origin/main`, regenerate the project,
 resolve the known source/log conflicts, and run the full integrated gate.
+
+## 2026-07-27 00:27 PDT - Codex - TestFlight Build 104
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-104`
+Worktree: `/private/tmp/recme-testflight-build-103` (reused after the completed
+build-103 release because the environment blocked creating another worktree)
+Linear: `REC-132`
+PR: `#182` (squash-merged as `f69a8df`)
+
+Goal: ship the exact latest `origin/main` containing REC-132 onboarding as
+rec.me 0.1 (104). Scope is the signed-out three-slide carousel, Clerk signup
+and login handoff, required name/username, optional profile photo, and the
+phase-A location, contacts, friend suggestions, and notification steps.
+
+Pre-release validation already completed on the exact merged feature head:
+
+- Integrated focused gate passed 147/147 after reconciling build 103 main.
+- Complete gate passed 782 unit tests and 1 onboarding UI test with zero
+  failures. Result bundle:
+  `/private/tmp/DerivedData-rec132-focused/Logs/Test/Test-Wander-2026.07.27_00-23-16--0700.xcresult`.
+- Hosted onboarding migration `20260723043000_onboarding_phase_a.sql` is
+  applied. RPC security metadata, grants, authenticated ownership scoping, and
+  the existing-user completion backfill were directly verified. The broader
+  smoke script's only failure is the separately tracked, unrelated current-main
+  check-in delete trigger issue; per release direction it is not included here.
+
+Release preparation: increment build 103 -> 104, regenerate the Xcode project,
+validate the shared build-number contract, archive exact main, upload, attach
+to `rec.me Alpha`, and post the required tester note.
