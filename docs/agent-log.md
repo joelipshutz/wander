@@ -24962,3 +24962,12 @@ REC-157 sans-serif typography revision completion — 2026-07-26 18:15 PDT:
 - Existing unrelated build/test warnings remain unchanged.
 - Next: commit and push to ready PR #243, return REC-157 to `In Review`, and
   keep Xcode on this isolated branch. No TestFlight release was requested.
+
+REC-157 sans-serif typography revision handoff — 2026-07-26 18:15 PDT:
+
+- Commit `1f3ec4eef` (`Use sans serif Lock Screen widget labels`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated.
+- Linear REC-157 returned to `In Review` with the typography decision,
+  validation results, and commit recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
