@@ -26,7 +26,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.choose.accessibilityLabel, "Choose this place")
         XCTAssertEqual(PlaceSheetAction.add.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
-        XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Save to my map")
+        XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check in")
         XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in again")
         XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)

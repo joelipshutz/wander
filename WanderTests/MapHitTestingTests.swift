@@ -56,6 +56,28 @@ final class MapCoordinateCandidateTests: XCTestCase {
 }
 
 final class MapFilterSelectionTests: XCTestCase {
+    func testFilterPillsMirrorPinOwnershipAndStatusGrammar() {
+        XCTAssertEqual(MapFilter.you.title, "You")
+        XCTAssertEqual(MapFilter.social.title, "Social")
+        XCTAssertEqual(MapFilter.been.title, "Check-ins")
+        XCTAssertEqual(MapFilter.wanna.title, "Wanna")
+
+        XCTAssertEqual(MapFilter.you.systemImage, "person.fill")
+        XCTAssertEqual(MapFilter.social.systemImage, "person.2.fill")
+        XCTAssertEqual(MapFilter.been.systemImage, "circle.fill")
+        XCTAssertEqual(MapFilter.wanna.systemImage, "circle.dotted")
+
+        XCTAssertEqual(MapFilter.you.trimStyle(isSelected: true).dash, [])
+        XCTAssertEqual(MapFilter.social.trimStyle(isSelected: true).dash, [])
+        XCTAssertEqual(MapFilter.been.trimStyle(isSelected: true).dash, [])
+        XCTAssertEqual(
+            MapFilter.wanna.trimStyle(isSelected: true).dash,
+            MapPinVisualMetrics.wannaDashPattern
+        )
+        XCTAssertEqual(MapFilter.you.trimStyle(isSelected: true).lineWidth, 2)
+        XCTAssertEqual(MapFilter.you.trimStyle(isSelected: false).lineWidth, 1.25)
+    }
+
     func testNoOwnerFiltersSelectedProducesNoPlaceFilters() {
         XCTAssertNil(
             MapFilterSelection.placeFilters(
@@ -123,7 +145,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(outlines.map(\.ownership), [.currentUser, .social])
         XCTAssertEqual(outlines.map(\.status), [.wannaGo, .been])
         XCTAssertEqual(outlines.compactMap(\.secondaryStatus), [])
-        XCTAssertEqual(outlines.first?.dashPattern ?? [], [5, 4])
+        XCTAssertEqual(outlines.first?.dashPattern ?? [], MapPinVisualMetrics.wannaDashPattern)
         XCTAssertEqual(outlines.last?.dashPattern ?? [], [CGFloat]())
     }
 
@@ -180,7 +202,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(socialOutline.arcs[0].status, .wannaGo)
         XCTAssertEqual(socialOutline.arcs[0].trimFrom, 0)
         XCTAssertEqual(socialOutline.arcs[0].trimTo, 1)
-        XCTAssertEqual(socialOutline.arcs[0].dashPattern, [5, 4])
+        XCTAssertEqual(socialOutline.arcs[0].dashPattern, MapPinVisualMetrics.wannaDashPattern)
     }
 
     func testMixedCurrentUserHistoryKeepsExistingBeenPrecedence() throws {
@@ -196,6 +218,32 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(personalOutline.status, .been)
         XCTAssertNil(personalOutline.secondaryStatus)
         XCTAssertEqual(personalOutline.dashPattern, [])
+    }
+
+    func testDirectionAVisualMetricsKeepThreePointConcentricRingsAndSelectionHalo() {
+        XCTAssertEqual(MapPinVisualMetrics.discDiameter, 38)
+        XCTAssertEqual(MapPinVisualMetrics.outlineWidth, 3)
+        XCTAssertEqual(MapPinVisualMetrics.secondaryOutlinePadding, -6)
+        XCTAssertEqual(MapPinVisualMetrics.selectionHaloPadding, -10)
+        XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 3.5])
+    }
+
+    func testAccessibilityLabelDescribesOwnershipAndEveryVisibleStatusWithoutSaveCopy() {
+        let label = MapPinAccessibility.label(
+            outlines: [
+                MapPinOutline(ownership: .currentUser, status: .been),
+                MapPinOutline(ownership: .social, status: .been, secondaryStatus: .wannaGo)
+            ],
+            category: "Restaurant",
+            placeName: "Bar Nido"
+        )
+
+        XCTAssertEqual(
+            label,
+            "Bar Nido, Restaurant, you checked in, social checked in and wanna"
+        )
+        XCTAssertFalse(label.localizedCaseInsensitiveContains("save"))
+        XCTAssertFalse(label.localizedCaseInsensitiveContains("been"))
     }
 }
 

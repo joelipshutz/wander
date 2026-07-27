@@ -4,6 +4,8 @@ import XCTest
 final class CheckInCopyTests: XCTestCase {
     func testCheckInVocabularyIsConsistent() {
         XCTAssertEqual(CheckInCopy.verb, "check in")
+        XCTAssertEqual(CheckInCopy.action, "Check in")
+        XCTAssertEqual(CheckInCopy.pluralTitle, "Check-ins")
         XCTAssertEqual(CheckInCopy.noun, "check-in")
         XCTAssertEqual(CheckInCopy.pluralNoun, "check-ins")
         XCTAssertEqual(CheckInCopy.pastTense, "checked in")

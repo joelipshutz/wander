@@ -158,25 +158,19 @@ private struct PlaceProfilePreviewCard: View {
                 PlaceProfilePhotoThumb(
                     place: place,
                     photo: photo,
-                    size: 82,
+                    size: 88,
                     onLoadFailure: handlePhotoLoadFailure
                 )
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    if let previewSignal {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            Circle()
-                                .fill(WanderTheme.pinSocial.color)
-                                .frame(width: 8, height: 8)
-                            Text(previewSignal)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                                .lineLimit(1)
-                        }
-                    }
+                    Text(ticketEyebrow)
+                        .font(.system(size: 10, weight: .black, design: .rounded))
+                        .tracking(1.1)
+                        .foregroundStyle(ticketAccentColor)
+                        .lineLimit(1)
 
                     Text(place.name)
-                        .font(.system(size: 21, weight: .black))
+                        .font(.system(size: 25, weight: .black, design: .serif))
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(2)
                         .minimumScaleFactor(0.78)
@@ -186,6 +180,18 @@ private struct PlaceProfilePreviewCard: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .lineLimit(1)
+                    }
+
+                    if let previewSignal {
+                        HStack(spacing: WanderTheme.spacing1) {
+                            Circle()
+                                .fill(ticketAccentColor)
+                                .frame(width: 8, height: 8)
+                            Text(previewSignal)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .lineLimit(1)
+                        }
                     }
 
                     if let fitSentence {
@@ -204,10 +210,14 @@ private struct PlaceProfilePreviewCard: View {
                         Button(action: onAction) {
                             Image(systemName: action.systemImage)
                                 .font(.system(size: 17, weight: .black))
-                                .frame(width: 36, height: 36)
-                                .background(action.isPrimaryAction ? WanderTheme.textInk.color : WanderTheme.terracotta.color)
-                                .foregroundStyle(WanderTheme.textOnAction.color)
+                                .frame(width: 44, height: 44)
+                                .background(WanderTheme.surfaceRaised.color)
+                                .foregroundStyle(WanderTheme.textInk.color)
                                 .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(ticketAccentColor.opacity(0.82), lineWidth: 1.5)
+                                )
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(action.accessibilityLabel)
@@ -217,7 +227,7 @@ private struct PlaceProfilePreviewCard: View {
                         WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 15, weight: .black))
-                                .frame(width: 36, height: 36)
+                                .frame(width: 44, height: 44)
                                 .background(WanderTheme.surfaceSand.color)
                                 .foregroundStyle(WanderTheme.textInk.color)
                                 .clipShape(Circle())
@@ -227,9 +237,24 @@ private struct PlaceProfilePreviewCard: View {
                 }
             }
             .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceRaised.color.opacity(0.98))
-            .clipShape(RoundedRectangle(cornerRadius: 24))
-            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 26, x: 0, y: 12)
+            .background(WanderTheme.surfaceBone.color.opacity(0.98))
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(ticketAccentColor.opacity(0.72), lineWidth: 1)
+            )
+            .overlay(alignment: .trailing) {
+                Circle()
+                    .fill(WanderTheme.canvasWarm.color)
+                    .frame(width: 16, height: 16)
+                    .overlay(
+                        Circle()
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
+                    .offset(x: 8)
+                    .accessibilityHidden(true)
+            }
+            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 20, x: 0, y: 10)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open \(place.name)")
@@ -303,20 +328,76 @@ private struct PlaceProfilePreviewCard: View {
 
     private var previewSignal: String? {
         if let rating = presentation.overallRating {
-            let names = participantNames(limit: 2)
-            let prefix = names.isEmpty ? rating.title : names.joined(separator: " + ")
+            let prefix = socialStatusSignal ?? rating.title
             return "\(prefix) · ★ \(rating.displayScore)"
         }
 
         if let rating = presentation.ownRating {
-            return "You · ★ \(rating.displayScore)"
+            let prefix = ownStatus == .been ? "You checked in" : "You"
+            return "\(prefix) · ★ \(rating.displayScore)"
         }
 
         let names = participantNames(limit: 2)
         if !names.isEmpty {
-            return "\(names.joined(separator: " + ")) saved this"
+            return socialStatusSignal
         }
 
+        return nil
+    }
+
+    private var ownStatus: PlaceStatus? {
+        saves.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace.userPlace.status
+    }
+
+    private var socialSaves: [PlaceSaveSummary] {
+        saves.filter { $0.visiblePlace.owner.id != currentUserID }
+    }
+
+    private var ticketEyebrow: String {
+        switch ownStatus {
+        case .been:
+            return "YOUR CHECK-IN"
+        case .wannaGo:
+            return "YOUR WANNA"
+        case nil:
+            let hasCheckIn = socialSaves.contains { $0.visiblePlace.userPlace.status == .been }
+            let hasWanna = socialSaves.contains { $0.visiblePlace.userPlace.status == .wannaGo }
+            if hasCheckIn && hasWanna { return "SOCIAL · CHECK-IN + WANNA" }
+            if hasCheckIn { return "SOCIAL · CHECKED IN" }
+            if hasWanna { return "SOCIAL · WANNA" }
+            return "PLACE"
+        }
+    }
+
+    private var ticketAccentColor: Color {
+        if ownStatus != nil {
+            return WanderTheme.pinYou.color
+        }
+        if !socialSaves.isEmpty {
+            return WanderTheme.pinSocial.color
+        }
+        return WanderTheme.textInk.color
+    }
+
+    private var socialStatusSignal: String? {
+        let checkedInNames = socialSaves
+            .filter { $0.visiblePlace.userPlace.status == .been }
+            .map { firstName(for: $0.visiblePlace.owner) }
+            .uniquePreservingOrder()
+        let wannaNames = socialSaves
+            .filter { $0.visiblePlace.userPlace.status == .wannaGo }
+            .map { firstName(for: $0.visiblePlace.owner) }
+            .uniquePreservingOrder()
+
+        if !checkedInNames.isEmpty, !wannaNames.isEmpty {
+            return "\(checkedInNames.prefix(2).joined(separator: " + ")) checked in · \(wannaNames.prefix(2).joined(separator: " + ")) wanna"
+        }
+        if !checkedInNames.isEmpty {
+            return "\(checkedInNames.prefix(2).joined(separator: " + ")) checked in"
+        }
+        if !wannaNames.isEmpty {
+            return "\(wannaNames.prefix(2).joined(separator: " + ")) wanna"
+        }
         return nil
     }
 
@@ -343,10 +424,14 @@ private struct PlaceProfilePreviewCard: View {
     private func participantNames(limit: Int) -> [String] {
         saves
             .filter { $0.visiblePlace.owner.id != currentUserID }
-            .map { $0.visiblePlace.owner.id == currentUserID ? "You" : $0.visiblePlace.owner.displayName.components(separatedBy: " ").first ?? $0.visiblePlace.owner.displayName }
+            .map { firstName(for: $0.visiblePlace.owner) }
             .uniquePreservingOrder()
             .prefix(limit)
             .map { $0 }
+    }
+
+    private func firstName(for profile: LocalProfile) -> String {
+        profile.displayName.components(separatedBy: " ").first ?? profile.displayName
     }
 }
 
@@ -850,17 +935,17 @@ private struct PlaceProfileFullView: View {
             return "You rated this \(ownRating.displayScore)/5."
         }
         if trustedSaves.count >= 2 {
-            return "\(trustedSaves.count) people you follow saved this place."
+            return "\(trustedSaves.count) people you follow checked in here."
         }
-        return "Save it to make this place yours."
+        return "Check in to add your own take."
     }
 
     private var whyItFitsSecondary: String {
         if presentation.fitRating != nil {
-            return "Based on places you saved and people you follow."
+            return "Based on your check-ins and people you follow."
         }
         if presentation.overallRating != nil || presentation.ownRating != nil {
-            return "Your map gets more personal as you save places."
+            return "Your map gets more personal with every check-in."
         }
         if displayTags.count >= 2 {
             return "People mention: \(displayTags.prefix(3).joined(separator: ", "))."
@@ -868,7 +953,7 @@ private struct PlaceProfileFullView: View {
         if let category = PlaceProfileCopy.categoryDisplay(for: place) {
             return "Category: \(category)."
         }
-        return "Save it to add your own context."
+        return "Check in to add your own context."
     }
 
     private var addressLine: String? {
@@ -891,7 +976,7 @@ private struct PlaceProfileFullView: View {
         if place.websiteURLString != nil || place.phoneNumber != nil {
             return "Map/business search details"
         }
-        return "Saved place"
+        return "Place on \(AppBrand.displayName)"
     }
 
     private func iconName(for kind: PlaceExternalAction.Kind) -> String {
@@ -2138,7 +2223,7 @@ private enum PlaceProfileCopy {
         }
 
         if presentation.fitRating != nil {
-            return "Strong fit based on your saved places."
+            return "Strong fit based on your check-ins."
         }
 
         if let overallRating = presentation.overallRating {
