@@ -760,15 +760,60 @@ final class NavigationContractTests: XCTestCase {
         let addScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
         )
+        let suggestedSection = try XCTUnwrap(
+            addScreen
+                .components(separatedBy: "private var suggestedPlaces: some View")
+                .last?
+                .components(separatedBy: "private var confirmPlace: some View")
+                .first
+        )
 
         XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet(context: context)"))
         XCTAssertTrue(addScreen.contains("persistNewPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))
-        XCTAssertTrue(addScreen.contains("Search, paste a link, or add coordinates"))
-        XCTAssertTrue(addScreen.contains("\"I'm here now\""))
-        XCTAssertTrue(addScreen.contains("title: \"From a photo\""))
+        XCTAssertTrue(addScreen.contains("Text(\"Suggested\")"))
+        XCTAssertTrue(addScreen.contains("Search for a place"))
+        XCTAssertTrue(addScreen.contains("Label(\"Take a Photo\", systemImage: \"camera\")"))
+        XCTAssertTrue(addScreen.contains("Label(\"Photo Library\", systemImage: \"photo.on.rectangle\")"))
+        XCTAssertTrue(addScreen.contains("AddSuggestedPlaces.limited(nearby)"))
+        XCTAssertTrue(addScreen.contains("static let maximumCount = 7"))
+        XCTAssertTrue(suggestedSection.contains("Text(\"Suggested\")"))
+        XCTAssertTrue(suggestedSection.contains("searchField"))
+        XCTAssertTrue(suggestedSection.contains("AddSuggestedPlaces.previewCount("))
+        XCTAssertTrue(suggestedSection.contains("Label(\"See more\", systemImage: \"arrow.up.right\")"))
+        XCTAssertTrue(suggestedSection.contains("await resolveCurrentLocationCandidates()"))
+        XCTAssertFalse(suggestedSection.contains("ScrollView(.vertical"))
+        XCTAssertFalse(suggestedSection.contains("ScrollView(.horizontal"))
+        XCTAssertTrue(addScreen.contains("if showsPinnedImportEntry"))
+        XCTAssertTrue(addScreen.contains("private var compactSheetContent: some View"))
+        XCTAssertTrue(addScreen.contains("private var compactSourceContent: some View"))
+        XCTAssertTrue(addScreen.contains("isShowingHereNowResults ? \"I'm here now\""))
+        XCTAssertTrue(addScreen.contains("\"choose the place you're at\""))
+        XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
+    }
+
+    func testAddSuggestedPlacesScalePreviewCountByScreenHeight() {
+        let candidates = (0..<8).map { index in
+            PlaceCandidate(
+                id: "candidate_\(index)",
+                name: "Candidate \(index)",
+                category: "coffee",
+                latitude: 34.0,
+                longitude: -118.0,
+                confidence: 0.9
+            )
+        }
+        let limited = AddSuggestedPlaces.limited(candidates)
+
+        XCTAssertEqual(limited.count, 7)
+        XCTAssertEqual(AddSuggestedPlaces.previewCount(screenHeight: 956), 3)
+        XCTAssertEqual(AddSuggestedPlaces.previewCount(screenHeight: 874), 2)
+        XCTAssertEqual(AddSuggestedPlaces.previewCount(screenHeight: 667), 1)
+        XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 3).count, 3)
+        XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 2).count, 2)
+        XCTAssertEqual(AddSuggestedPlaces.visible(limited, count: 1).count, 1)
     }
 
     func testCurrentLocationCandidateActionFloatsAboveScrollableResults() throws {
@@ -815,11 +860,12 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(root.contains("@StateObject private var importStore: PlaceImportStore"))
         XCTAssertTrue(root.contains("importStore: importStore"))
-        XCTAssertTrue(addScreen.contains("AddImportSection("))
-        XCTAssertTrue(addScreen.contains("PlaceImportSourceScreen("))
+        XCTAssertTrue(addScreen.contains("AddImportEntrySection("))
+        XCTAssertTrue(addScreen.contains("PlaceImportHubScreen("))
+        XCTAssertFalse(addScreen.contains("PlaceImportSourceScreen("))
         XCTAssertTrue(addScreen.contains("PlaceImportInboxScreen(importStore: importStore)"))
-        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 410"))
-        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 480"))
+        XCTAssertTrue(addScreen.contains("emptyRestingHeight: CGFloat = 520"))
+        XCTAssertTrue(addScreen.contains("pendingReviewRestingHeight: CGFloat = 570"))
         XCTAssertTrue(
             root.contains(
                 "AddSheetLayout.detents(\n                        hasPendingImports: importStore.summary.hasPendingImports"
@@ -827,6 +873,13 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(root.contains(".onChange(of: importStore.summary.hasPendingImports)"))
         XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
+        XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
+        XCTAssertTrue(importViews.contains("TextEditor(text: $input)"))
+        XCTAssertTrue(importViews.contains("enqueueUnified(text: input)"))
+        XCTAssertTrue(importViews.contains("private let sources: [PlaceImportSource] = [.googleMaps, .instagram, .tiktok]"))
+        XCTAssertFalse(importViews.contains("ForEach(PlaceImportSource.allCases)"))
+        XCTAssertTrue(importViews.contains("Image(systemName: \"questionmark.circle\")"))
+        XCTAssertTrue(importViews.contains("https://getrec.me/import-help"))
         XCTAssertFalse(profileScreen.contains("PlaceImportStore"))
         XCTAssertFalse(profileHome.contains("ImportSection"))
     }
