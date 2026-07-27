@@ -33,8 +33,8 @@ async function main() {
   const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
   const strangerUserID = DEFAULT_SMOKE_STRANGER_ID;
   const migrationPreviews = options.migrationPreviews ?? [];
-  if (options.migrationTest && (!options.linked || migrationPreviews.length === 0)) {
-    throw new Error("--migration-test requires --linked and --migration-preview.");
+  if (options.migrationTest && migrationPreviews.length === 0) {
+    throw new Error("--migration-test requires --migration-preview.");
   }
   if (options.linked) {
     runLinkedSmokeChecks(
@@ -67,13 +67,22 @@ async function main() {
         await client.query(loadMigrationPreview(migrationPreview));
         console.log(`ok - migration preview loaded from ${migrationPreview}`);
       }
-      await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
-      await runOwnPlaceSmokeChecks(client, smokeUserID);
-      await runCheckInSmokeChecks(client, smokeUserID);
-      await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
-      await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
-      await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
-      console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, lists, photo visibility, and Discover profile recommendations are valid.");
+      if (options.migrationTest) {
+        const testSQL = transactionBody(
+          loadStrictPgTapSQL(new URL(resolve(options.migrationTest), "file:")),
+          "rollback",
+        );
+        await client.query(testSQL);
+        console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${options.migrationTest}`);
+      } else {
+        await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
+        await runOwnPlaceSmokeChecks(client, smokeUserID);
+        await runCheckInSmokeChecks(client, smokeUserID);
+        await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
+        await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
+        await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
+        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, lists, photo visibility, and Discover profile recommendations are valid.");
+      }
     } finally {
       await client.query("rollback");
     }
@@ -144,7 +153,7 @@ Options:
   --db-url <postgres-url>          Hosted Postgres URL. Defaults to WANDER_SUPABASE_DB_URL or project ref/password env.
   --linked                         Run the preferred-photo hosted checks through the linked Supabase Management API.
   --migration-preview <path>       Apply a transaction-wrapped migration inside the rollback-only smoke transaction. Repeatable.
-  --migration-test <path>          With --linked and --migration-preview, run one strict pgTAP file in the same rollback-only transaction.
+  --migration-test <path>          With --migration-preview, run one strict pgTAP file in the same rollback-only transaction.
 
 Required env when --db-url is omitted:
   WANDER_SUPABASE_PROJECT_REF
@@ -478,12 +487,33 @@ begin
   where n.nspname = 'public'
     and p.proname = 'update_own_profile'
     and pg_get_function_identity_arguments(p.oid) =
-      'input_bio text, input_home_area text, input_default_visibility text, input_is_private_profile boolean, input_display_name text, input_handle text';
+      'input_bio text, input_home_area text, input_default_visibility text, input_is_private_profile boolean, input_display_name text, input_handle text, input_mark_onboarding_complete boolean';
   if valid is distinct from true then
     raise exception 'profile update metadata contract failed';
   end if;
 end
 $profile_metadata$;
+
+do $profile_handle_metadata$
+declare
+  valid boolean;
+begin
+  select
+    p.prosecdef
+    and 'search_path=public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', 'public.profile_handle_available(text)', 'execute')
+    and not has_function_privilege('anon', 'public.profile_handle_available(text)', 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app'
+    and p.proname = 'profile_handle_available'
+    and pg_get_function_identity_arguments(p.oid) = 'input_handle text';
+  if valid is distinct from true then
+    raise exception 'profile handle availability metadata contract failed';
+  end if;
+end
+$profile_handle_metadata$;
 
 do $member_profile_metadata$
 declare
@@ -721,11 +751,16 @@ do $profile_behavior$
 declare updated jsonb; muted_id text; visible_city text; member_home text; member_relationship text;
 begin
   updated := public.update_own_profile(
-    'Backend smoke-test profile.', 'Test', 'mutuals', true, 'Backend Smoke Tester', 'recme_smoke_profile'
+    'Backend smoke-test profile.', 'Test', 'mutuals', true, 'Backend Smoke Tester', 'recme_smoke_profile', false
   );
   if updated->>'default_visibility' is distinct from 'mutuals'
      or (updated->>'is_private_profile')::boolean is distinct from true then
     raise exception 'profile preference persistence failed';
+  end if;
+  if public.profile_handle_available('@recme_smoke_profile') is distinct from true
+     or public.profile_handle_available('codex_smoke_collab') is distinct from false
+     or public.profile_handle_available('not valid') is distinct from false then
+    raise exception 'profile handle availability behavior failed';
   end if;
 
   perform public.mute_profile(${collaboratorUser});
@@ -749,7 +784,7 @@ begin
   end if;
 
   perform public.unmute_profile(${collaboratorUser});
-  perform public.update_own_profile(null, null, null, false, null, null);
+  perform public.update_own_profile(null, null, null, false, null, null, true);
   update public.user_places up
   set visibility = 'followers', updated_at = now()
   from public.places p
@@ -1769,18 +1804,32 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
         'search_path=public, app' = any(mute_proc.proconfig) as mute_search_path,
         has_function_privilege(
           'authenticated',
-          'public.update_own_profile(text,text,text,boolean,text,text)',
+          'public.update_own_profile(text,text,text,boolean,text,text,boolean)',
           'execute'
         ) as update_authenticated,
         not has_function_privilege(
           'anon',
-          'public.update_own_profile(text,text,text,boolean,text,text)',
+          'public.update_own_profile(text,text,text,boolean,text,text,boolean)',
           'execute'
-        ) as update_anon_denied
+        ) as update_anon_denied,
+        handle_proc.prosecdef as handle_definer,
+        'search_path=public, app' = any(handle_proc.proconfig) as handle_search_path,
+        has_function_privilege(
+          'authenticated',
+          'public.profile_handle_available(text)',
+          'execute'
+        ) as handle_authenticated,
+        not has_function_privilege(
+          'anon',
+          'public.profile_handle_available(text)',
+          'execute'
+        ) as handle_anon_denied
       from pg_proc update_proc
       cross join pg_proc mute_proc
-      where update_proc.oid = 'app.update_own_profile(text,text,text,boolean,text,text)'::regprocedure
+      cross join pg_proc handle_proc
+      where update_proc.oid = 'app.update_own_profile(text,text,text,boolean,text,text,boolean)'::regprocedure
         and mute_proc.oid = 'app.mute_profile(text)'::regprocedure
+        and handle_proc.oid = 'app.profile_handle_available(text)'::regprocedure
     `,
     [],
     (result) => {
@@ -1790,7 +1839,11 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
         && row?.mute_invoker === true
         && row?.mute_search_path === true
         && row?.update_authenticated === true
-        && row?.update_anon_denied === true;
+        && row?.update_anon_denied === true
+        && row?.handle_definer === true
+        && row?.handle_search_path === true
+        && row?.handle_authenticated === true
+        && row?.handle_anon_denied === true;
     },
   );
 
@@ -1827,7 +1880,8 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
         'mutuals',
         true,
         'Backend Smoke Tester',
-        'recme_smoke_profile'
+        'recme_smoke_profile',
+        false
       ) as profile
     `,
     [],
@@ -1836,6 +1890,33 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
       && result.rows[0]?.profile?.display_name === "Backend Smoke Tester"
       && result.rows[0]?.profile?.handle === "recme_smoke_profile"
       && Boolean(result.rows[0]?.profile?.created_at),
+  );
+
+  await expectQuery(
+    client,
+    "handle availability normalizes input without exposing its owner",
+    `
+      select
+        public.profile_handle_available('@recme_smoke_profile') as own_handle,
+        public.profile_handle_available('codex_smoke_collab') as taken_handle,
+        public.profile_handle_available('not valid') as invalid_handle
+    `,
+    [],
+    (result) => result.rows[0]?.own_handle === true
+      && result.rows[0]?.taken_handle === false
+      && result.rows[0]?.invalid_handle === false,
+  );
+
+  await expectQuery(
+    client,
+    "onboarding completion persists server-authoritative state",
+    `
+      select public.update_own_profile(
+        null, null, null, null, null, null, true
+      ) as profile
+    `,
+    [],
+    (result) => Boolean(result.rows[0]?.profile?.onboarding_completed_at),
   );
 
   await expectQuery(

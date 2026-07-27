@@ -29,7 +29,7 @@ struct MapScreen: View {
     @State private var isSearchingMapKit = false
     @State private var mapSearchRevision: UInt64 = 0
     @State private var mapSearchTask: Task<Void, Never>?
-    @State private var selectedFilters: Set<MapFilter> = [.you, .social, .been, .wanna]
+    @State private var selectedFilters: Set<MapFilter>
     @State private var selectedSocialOwnerID: String?
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
@@ -70,6 +70,7 @@ struct MapScreen: View {
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
+        _selectedFilters = State(initialValue: Self.resolvedInitialMapFilters())
     }
 
     private var visiblePlaces: [VisiblePlace] {
@@ -173,7 +174,9 @@ struct MapScreen: View {
             ZStack(alignment: .bottom) {
                 MapReader { proxy in
                     Map(position: $position, selection: $selectedMapFeature) {
-                        UserAnnotation()
+                        if Self.canShowUserLocation {
+                            UserAnnotation()
+                        }
 
                         ForEach(annotationGroups) { group in
                             Annotation(
@@ -1794,6 +1797,14 @@ struct MapScreen: View {
         }
     }
 
+    /// Merely rendering `UserAnnotation` triggers the system location prompt.
+    /// Keep permission requests behind the onboarding upsell or the explicit
+    /// recenter action so "Not now" remains a real choice.
+    private static var canShowUserLocation: Bool {
+        let status = CLLocationManager().authorizationStatus
+        return status == .authorizedWhenInUse || status == .authorizedAlways
+    }
+
     private func currentUserCoordinate() async -> (latitude: Double, longitude: Double)? {
         do {
             let location = try await CoreLocationProvider().currentLocation()
@@ -1958,6 +1969,27 @@ struct MapScreen: View {
 
     static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         arguments.contains("-WanderMapSheetExpanded")
+    }
+
+    static func resolvedInitialMapFilters(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Set<MapFilter> {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapCaptureMode") else {
+            return [.you, .social, .been, .wanna]
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else {
+            return [.you, .social, .been, .wanna]
+        }
+
+        switch arguments[valueIndex] {
+        case "diary":
+            return [.you, .been]
+        case "friends":
+            return [.social, .been, .wanna]
+        case "trusted":
+            return [.social, .been]
+        default:
+            return [.you, .social, .been, .wanna]
+        }
     }
 
     static func coordinateCandidate(at coordinate: CLLocationCoordinate2D) -> PlaceCandidate {

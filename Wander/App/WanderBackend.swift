@@ -241,6 +241,13 @@ final class WanderBackend: ObservableObject {
         return try await profileRepository.currentProfile()
     }
 
+    func isProfileHandleAvailable(_ handle: String) async throws -> Bool {
+        guard let profileRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await profileRepository.isHandleAvailable(handle)
+    }
+
     func profile(id: String) async throws -> ProfileViewState {
         guard let profileRepository else {
             throw WanderRemoteError.notConfigured

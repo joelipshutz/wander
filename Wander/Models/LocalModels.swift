@@ -11,6 +11,7 @@ final class LocalProfile {
     var avatarURL: String?
     var bio: String?
     var homeArea: String?
+    var onboardingCompletedAt: Date?
     var isPrivateProfile: Bool
     var defaultVisibilityRaw: String
     var syncStateRaw: String
@@ -29,6 +30,7 @@ final class LocalProfile {
         avatarURL: String? = nil,
         bio: String? = nil,
         homeArea: String? = nil,
+        onboardingCompletedAt: Date? = nil,
         isPrivateProfile: Bool = false,
         defaultVisibility: PlaceVisibility = .followers,
         syncState: SyncState = .localOnly,
@@ -47,6 +49,7 @@ final class LocalProfile {
         self.avatarURL = avatarURL
         self.bio = bio
         self.homeArea = homeArea
+        self.onboardingCompletedAt = onboardingCompletedAt
         self.isPrivateProfile = isPrivateProfile
         self.defaultVisibilityRaw = defaultVisibility.rawValue
         self.syncStateRaw = syncState.rawValue

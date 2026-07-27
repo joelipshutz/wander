@@ -102,13 +102,7 @@ struct ProfileEditScreen: View {
     }
 
     private var isValid: Bool {
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedHandle = handle
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "@", with: "")
-            .lowercased()
-        return !normalizedName.isEmpty
-            && normalizedHandle.range(of: "^[A-Za-z0-9_]{2,39}$", options: .regularExpression) != nil
+        ProfileIdentityDraft(displayName: name, handle: handle).isValid
     }
 
     private func loadIfNeeded() {
@@ -127,24 +121,20 @@ struct ProfileEditScreen: View {
         errorMessage = nil
         defer { isSaving = false }
 
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedHandle = handle
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "@", with: "")
-            .lowercased()
+        let identity = ProfileIdentityDraft(displayName: name, handle: handle)
 
         do {
             try await store.updateCurrentUserDetails(
                 ProfileDetailsUpdate(
-                    displayName: normalizedName,
-                    handle: normalizedHandle,
+                    displayName: identity.normalizedDisplayName,
+                    handle: identity.normalizedHandle,
                     bio: bio,
                     homeArea: homeArea
                 ),
                 backend: auth.isSignedIn ? backend : nil
             )
         } catch {
-            errorMessage = "Profile changes could not be synced. Check the username and try again."
+            errorMessage = ProfileIdentitySubmissionError.map(error).message
             return
         }
 

@@ -95,6 +95,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
     let homeArea: String?
     let defaultVisibility: String
     let isPrivateProfile: Bool
+    let onboardingCompletedAt: Date?
     let createdAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -106,6 +107,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
         case homeArea = "home_area"
         case defaultVisibility = "default_visibility"
         case isPrivateProfile = "is_private_profile"
+        case onboardingCompletedAt = "onboarding_completed_at"
         case createdAt = "created_at"
     }
 
@@ -118,6 +120,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
             avatarURL: avatarURL,
             bio: bio,
             homeArea: homeArea,
+            onboardingCompletedAt: onboardingCompletedAt,
             isPrivateProfile: isPrivateProfile,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibility) ?? .followers,
             syncState: .synced,

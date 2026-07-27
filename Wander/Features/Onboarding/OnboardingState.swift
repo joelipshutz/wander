@@ -1,0 +1,252 @@
+import Foundation
+
+enum OnboardingStep: String, CaseIterable, Codable, Equatable {
+    case identity
+    case location
+    case contacts
+    case friends
+    case notifications
+
+    var next: OnboardingStep? {
+        guard let index = Self.allCases.firstIndex(of: self) else { return nil }
+        let nextIndex = Self.allCases.index(after: index)
+        return nextIndex < Self.allCases.endIndex ? Self.allCases[nextIndex] : nil
+    }
+}
+
+struct OnboardingLocalState: Codable, Equatable {
+    var nextStep: OnboardingStep
+    var isComplete: Bool
+    var needsServerCompletion: Bool
+
+    static let fresh = OnboardingLocalState(
+        nextStep: .identity,
+        isComplete: false,
+        needsServerCompletion: false
+    )
+}
+
+@MainActor
+final class OnboardingCompletionStore {
+    private let defaults: UserDefaults
+    private let keyPrefix = "recme.onboarding.v1."
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func state(for userID: String) -> OnboardingLocalState {
+        guard let data = defaults.data(forKey: key(for: userID)),
+              let decoded = try? JSONDecoder().decode(OnboardingLocalState.self, from: data)
+        else { return .fresh }
+        return decoded
+    }
+
+    func setNextStep(_ step: OnboardingStep, for userID: String) {
+        var value = state(for: userID)
+        value.nextStep = step
+        save(value, for: userID)
+    }
+
+    func markComplete(for userID: String, needsServerCompletion: Bool) {
+        var value = state(for: userID)
+        value.isComplete = true
+        value.needsServerCompletion = needsServerCompletion
+        save(value, for: userID)
+    }
+
+    func confirmServerCompletion(for userID: String) {
+        var value = state(for: userID)
+        value.isComplete = true
+        value.needsServerCompletion = false
+        save(value, for: userID)
+    }
+
+    func clear(for userID: String) {
+        defaults.removeObject(forKey: key(for: userID))
+    }
+
+    private func key(for userID: String) -> String {
+        keyPrefix + userID
+    }
+
+    private func save(_ state: OnboardingLocalState, for userID: String) {
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        defaults.set(data, forKey: key(for: userID))
+    }
+}
+
+enum AppEntryState: Equatable {
+    case launching
+    case signedOut
+    case onboarding(session: AuthSession, step: OnboardingStep)
+    case ready(session: AuthSession)
+    case recoverableFailure(session: AuthSession, message: String, canContinueOffline: Bool)
+    case unavailable(String)
+}
+
+enum AppEntryStateResolver {
+    static func signedInState(
+        session: AuthSession,
+        localState: OnboardingLocalState,
+        remoteProfile: LocalProfile?
+    ) -> AppEntryState {
+        if localState.isComplete || remoteProfile?.onboardingCompletedAt != nil {
+            return .ready(session: session)
+        }
+        return .onboarding(session: session, step: localState.nextStep)
+    }
+}
+
+@MainActor
+final class AppEntryCoordinator: ObservableObject {
+    @Published private(set) var state: AppEntryState = .launching
+    @Published private(set) var pendingSharedProfileRoute: SharedProfileRoute?
+
+    private let auth: AuthSessionStore
+    private let backend: WanderBackend
+    private let completionStore: OnboardingCompletionStore
+    private let analytics: AnalyticsClient
+    private var resolutionTask: Task<Void, Never>?
+    private var resolvedUserID: String?
+
+    init(
+        auth: AuthSessionStore,
+        backend: WanderBackend,
+        completionStore: OnboardingCompletionStore = OnboardingCompletionStore(),
+        analytics: AnalyticsClient = NoopAnalyticsClient()
+    ) {
+        self.auth = auth
+        self.backend = backend
+        self.completionStore = completionStore
+        self.analytics = analytics
+    }
+
+    func start() async {
+        state = .launching
+        await auth.refreshSession()
+        await resolve(auth.state, forceRemote: false)
+    }
+
+    func authStateChanged(_ authState: AuthState) {
+        resolutionTask?.cancel()
+        resolutionTask = Task { [weak self] in
+            await self?.resolve(authState, forceRemote: false)
+        }
+    }
+
+    func retry() {
+        switch state {
+        case .recoverableFailure(let session, _, _):
+            state = .launching
+            resolutionTask?.cancel()
+            resolutionTask = Task { [weak self] in
+                await self?.resolve(.signedIn(session), forceRemote: true)
+            }
+        case .unavailable:
+            state = .launching
+            resolutionTask?.cancel()
+            resolutionTask = Task { [weak self] in
+                await self?.start()
+            }
+        default:
+            return
+        }
+    }
+
+    func continueOffline() {
+        guard case .recoverableFailure(let session, _, true) = state else { return }
+        completionStore.markComplete(for: session.userID, needsServerCompletion: true)
+        analytics.identify(userID: session.userID)
+        state = .ready(session: session)
+    }
+
+    func completeOnboarding(for session: AuthSession, serverConfirmed: Bool) {
+        completionStore.markComplete(for: session.userID, needsServerCompletion: !serverConfirmed)
+        analytics.identify(userID: session.userID)
+        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingCompleted, properties: [:]))
+        state = .ready(session: session)
+    }
+
+    func saveProgress(_ step: OnboardingStep, for session: AuthSession) {
+        completionStore.setNextStep(step, for: session.userID)
+    }
+
+    func capturePendingURL(_ url: URL) {
+        guard let route = WanderRootView.sharedProfileRoute(for: url) else { return }
+        pendingSharedProfileRoute = route
+    }
+
+    private func resolve(_ authState: AuthState, forceRemote: Bool) async {
+        guard !Task.isCancelled else { return }
+        switch authState {
+        case .loading:
+            state = .launching
+        case .signedOut:
+            if resolvedUserID != nil {
+                analytics.resetIdentity()
+            }
+            resolvedUserID = nil
+            state = .signedOut
+        case .unavailable(let message):
+            state = .unavailable(message)
+        case .signedIn(let session):
+            guard auth.isSessionValidated else {
+                state = .launching
+                return
+            }
+            let local = completionStore.state(for: session.userID)
+            if local.isComplete && !forceRemote {
+                resolvedUserID = session.userID
+                analytics.identify(userID: session.userID)
+                state = .ready(session: session)
+                if local.needsServerCompletion {
+                    Task { [weak self] in await self?.retryServerCompletion(for: session) }
+                }
+                return
+            }
+
+            do {
+                let profile = try await backend.currentProfile()
+                guard !Task.isCancelled else { return }
+                if profile?.onboardingCompletedAt != nil {
+                    completionStore.confirmServerCompletion(for: session.userID)
+                }
+                resolvedUserID = session.userID
+                analytics.identify(userID: session.userID)
+                analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingAuthCompleted, properties: [:]))
+                state = AppEntryStateResolver.signedInState(
+                    session: session,
+                    localState: completionStore.state(for: session.userID),
+                    remoteProfile: profile
+                )
+            } catch {
+                guard !Task.isCancelled else { return }
+                let canContinue = local.nextStep != .identity || validAuthIdentity(session)
+                state = .recoverableFailure(
+                    session: session,
+                    message: "We couldn’t check your profile. Try again, or continue if you’re offline.",
+                    canContinueOffline: canContinue
+                )
+            }
+        }
+    }
+
+    private func retryServerCompletion(for session: AuthSession) async {
+        do {
+            _ = try await backend.updateCurrentProfile(
+                ProfileDetailsUpdate(markOnboardingComplete: true)
+            )
+            completionStore.confirmServerCompletion(for: session.userID)
+        } catch {
+            // Local positive cache keeps startup fast; a later launch retries.
+        }
+    }
+
+    private func validAuthIdentity(_ session: AuthSession) -> Bool {
+        ProfileIdentityDraft(
+            displayName: session.displayName ?? "",
+            handle: session.handle ?? ""
+        ).isValid
+    }
+}
