@@ -26425,3 +26425,28 @@ Final outcome:
 Next step: include `7894692e5` in the next requested TestFlight release and
 verify the accessory-circular Lock Screen widget on a signed physical device,
 including locked, unlocked, signed-out, cold-launch, and post-crash behavior.
+
+## 2026-07-26 23:22 PDT - Codex - TestFlight Build 102
+
+Agent: Codex
+Branch: `codex/testflight-build-102`
+Worktree: `/private/tmp/recme-testflight-build-102`
+Goal: Ship the exact current `origin/main` (`c0204328b`) to TestFlight without
+triaging or including any unmerged work.
+Starting status: clean branch from `origin/main`; App Store build 101.
+Expected files: `project.yml`, generated Xcode project, build-number contract
+test, and this coordination log.
+
+Release scope is intentionally limited to changes already merged on `main`,
+including REC-160's Check-in Action Button control and REC-157's Lock Screen
+quick-capture widget. REC-132 onboarding and later forward fixes are excluded.
+
+Release preparation checkpoint:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 101 to 102 and regenerated the Xcode
+  project so the app and all extensions share build 102.
+- Updated the build-number contract assertion and passed its focused simulator
+  test 1/1 on iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec132-release-gate/Logs/Test/Test-Wander-2026.07.26_23-23-04--0700.xcresult`.
+- `xcodegen generate` and `git diff --check` passed. No unmerged product work
+  was added to the release branch.
