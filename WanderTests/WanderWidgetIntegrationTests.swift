@@ -612,6 +612,13 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("case .bottom: -14.5"))
         XCTAssertTrue(widgetSource.contains("case .top: 11"))
         XCTAssertTrue(widgetSource.contains("case .bottom: 9.5"))
+        XCTAssertTrue(
+            widgetSource.contains(
+                "size: placement.fontSize,\n" +
+                    "                            weight: .black,\n" +
+                    "                            design: .default"
+            )
+        )
         XCTAssertTrue(widgetSource.contains("Quick capture — Lock Screen"))
         XCTAssertFalse(widgetSource.contains("TextField("))
         XCTAssertTrue(widgetSource.contains(".widgetURL("))

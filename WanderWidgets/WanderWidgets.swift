@@ -311,7 +311,7 @@ private struct WanderCircularWidgetArcText: View {
                         .system(
                             size: placement.fontSize,
                             weight: .black,
-                            design: .rounded
+                            design: .default
                         )
                     )
                     .offset(y: placement.yOffset(for: radius))

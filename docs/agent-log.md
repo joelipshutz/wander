@@ -24931,3 +24931,34 @@ REC-157 two-ring legibility revision handoff — 2026-07-26 18:07 PDT:
   validation results, and commit recorded in a comment.
 - Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
   build number was changed and no release was attempted.
+
+REC-157 sans-serif typography revision start — 2026-07-26 18:09 PDT:
+
+- Ryan requested standard sans-serif type for the curved `rec.me` and
+  `CHECK-IN` labels.
+- Resuming `codex/rec-157-lock-widget-mockups` in the clean isolated worktree.
+  Linear REC-157 moved back to `In Progress`; ready PR #243 remains open.
+- `git fetch origin`, `git status --short --branch`, and the relevant worktree
+  entries were checked. No overlapping uncommitted work was found.
+- Scope is limited to changing the curved labels from SwiftUI's rounded system
+  design to the standard system sans-serif design, preserving the approved
+  two-ring geometry, sizes, spacing, and cold-start route.
+
+REC-157 sans-serif typography revision completion — 2026-07-26 18:15 PDT:
+
+- Changed the curved-label font design from `.rounded` to `.default`, which
+  uses Apple's standard sans-serif system face while preserving the approved
+  11pt/9.5pt sizes, weight, arc spacing, and two-ring geometry.
+- Added source-contract coverage for the standard sans-serif font selection.
+- Generated, XML-validated, and visually inspected the C6 sans-serif mockup.
+  Editable SVG, PNG, and approval metadata are stored with the earlier variants
+  in the REC-157 design-artifact folder.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing unrelated build/test warnings remain unchanged.
+- Next: commit and push to ready PR #243, return REC-157 to `In Review`, and
+  keep Xcode on this isolated branch. No TestFlight release was requested.
