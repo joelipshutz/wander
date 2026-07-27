@@ -25146,3 +25146,34 @@ Linear: `REC-160` (`In Review`)
 - Left Xcode open on the REC-160 worktree for signed device/simulator testing.
   No new build, archive, TestFlight upload, or app-code change was performed
   during this handoff.
+
+## 2026-07-26 18:09 PDT - Codex - REC-160 Control Copy/Icon Follow-up
+
+Agent: Codex
+Branch: `codex/rec-160-action-control`
+Worktree: `/private/tmp/recme-rec160-action-control`
+Linear: `REC-160` (`In Review`)
+PR: `#249`
+
+Goal: rename the Action Button/system control from **Check-in here** to
+**Check-in**, replace its navigation/location glyph with a plain plus, validate
+the current branch against latest `main`, and squash-merge the ready result to
+`main`. The existing bottom Lock Screen widget remains out of scope and must
+stay unchanged.
+
+Starting status and coordination:
+
+- The dedicated REC-160 worktree is clean at pushed commit `f99d43c3c`.
+- Latest `origin/main` is `759e7c9df` at build 101. The build-101 TestFlight
+  release is fully recorded as uploaded, externally approved, and live, so no
+  unfinished explicit release blocks this merge.
+- PR #249 is open and non-draft but currently behind `main`; it will be
+  reconciled before the landing review.
+- Expected edits are limited to
+  `WanderWidgets/WanderCheckInControl.swift`,
+  `WanderControlShared/WanderCheckInControlIntent.swift`,
+  `WanderTests/WanderActionButtonControlTests.swift`, `docs/setup.md`, and this
+  append-only log. `project.yml` and the generated project may change only as
+  required to reconcile build 101 from `main`.
+- No TestFlight build, build-number increment, archive/upload, or Slack release
+  note is authorized by this merge-only request.
