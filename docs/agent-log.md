@@ -27168,3 +27168,63 @@ to `rec.me Alpha`, and post the required tester note.
 
 Final status: rec.me 0.1 (104), including REC-132 onboarding, is approved and
 available through the public TestFlight link.
+
+## 2026-07-27 10:26 PDT - Codex - REC-162 unified Import refinement
+
+Agent: Codex
+Branch: `codex/rec-162-add-unification`
+Worktree: `/private/tmp/recme-rec162-add-unification`
+Linear: `REC-162` (`In Progress`)
+PR: `#259`
+
+Goal: simplify the dedicated Import page to one paste field with instructions
+at the top, preserve the current bounded Suggested scroll for now, and replace
+generic source symbols with a compact facepile of recognizable Google Maps,
+Instagram, and TikTok brand marks.
+
+Starting status:
+
+- Fetched origin and merged exact current `origin/main` into the isolated
+  branch as `8541285`. The only conflict was the append-only agent log; both
+  REC-162 history and newer main release/onboarding entries were preserved.
+- The original root checkout and every other worktree remain untouched.
+- Linear REC-162 moved from In Review back to In Progress. The follow-up
+  comment could not be posted because the connector rejected a payload that
+  included a local filesystem path; no workaround was attempted.
+- Mission Control remains unavailable at `localhost:4000`; task creation could
+  not change tracker state.
+- Expected files: `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileImportViews.swift`, import store/parser and
+  focused tests if needed for mixed-source routing, brand assets, and this log.
+
+### 2026-07-27 10:54 PDT - Implementation and validation
+
+- Replaced the four source-specific Import choices and their separate entry
+  screens with one instructions-first text field. Users can paste Google Maps,
+  Instagram, and TikTok links together with manual place names, one per line.
+- Added mixed-source detection before enqueueing so the simplified UI preserves
+  the correct existing provider/resolver behavior instead of treating every
+  line as a text-note import. Added regression coverage for a four-source mixed
+  payload and for the one-field navigation contract.
+- Replaced the generic SF Symbols with round, facepiled Google Maps, Instagram,
+  and TikTok brand marks in the asset catalog. Text/notes remain represented by
+  the input itself rather than a fourth icon.
+- Left the bounded Suggested vertical scroll and its current behavior unchanged,
+  per product direction.
+- `xcodegen generate` succeeded with no generated-project drift. The focused
+  mixed-source and navigation regressions passed 2/2. The complete unit and
+  contract suite passed 784/784. The unrelated onboarding UI smoke test missed
+  a carousel headline during its first timing window, then passed 1/1 on an
+  immediate isolated rerun. Result bundles:
+  `/private/tmp/DerivedData-rec162-unified-import/Logs/Test/Test-Wander-2026.07.27_10-50-14--0700.xcresult`
+  and
+  `/private/tmp/DerivedData-rec162-unified-import/Logs/Test/Test-Wander-2026.07.27_10-51-38--0700.xcresult`.
+- Visually inspected the final Import page on iPhone 16 Plus and a temporary
+  iPhone 16e. Instructions, facepile, field, primary action, help action, safe
+  areas, and wrapping remained usable on both sizes. Screenshots:
+  `/private/tmp/rec162-import-unified-16plus.png` and
+  `/private/tmp/rec162-import-unified-16e.png`.
+- A temporary DEBUG-only direct-launch route was used solely for deterministic
+  visual QA and removed before final diff review. The temporary iPhone 16e
+  simulator was also deleted. `git diff --check` passes; no auth bypass, build
+  number, TestFlight, hosted data, or release action is included.

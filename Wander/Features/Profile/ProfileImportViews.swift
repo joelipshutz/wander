@@ -1,6 +1,5 @@
 import MapKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 enum ImportHelpDestination {
     static let url = URL(string: "https://getrec.me/import-help")!
@@ -66,10 +65,17 @@ struct AddImportEntrySection: View {
 }
 
 struct PlaceImportHubScreen: View {
-    let summary: PlaceImportSummary
-    let sourceAction: (PlaceImportSource) -> Void
+    @ObservedObject var importStore: PlaceImportStore
     let inboxAction: () -> Void
     @Environment(\.openURL) private var openURL
+    @State private var input = ""
+    @State private var errorMessage: String?
+    @State private var isStarting = false
+    @FocusState private var isInputFocused: Bool
+
+    private var summary: PlaceImportSummary {
+        importStore.summary
+    }
 
     var body: some View {
         ScrollView {
@@ -80,49 +86,70 @@ struct PlaceImportHubScreen: View {
                     Text("Import from anywhere")
                         .font(.system(size: 24, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                    Text("Bring over place links or notes. Everything lands in one private review flow before it reaches your map.")
+                    Text("Paste links from Google Maps, Instagram, or TikTok, or type place names from your notes.")
                         .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Use one line per place. You can mix sources in the same import. Everything stays private until you review and save it.")
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                VStack(spacing: WanderTheme.spacing2) {
-                    ForEach(PlaceImportSource.allCases) { source in
-                        Button {
-                            sourceAction(source)
-                        } label: {
-                            HStack(spacing: WanderTheme.spacing3) {
-                                PlaceImportSourceIcon(source: source, size: 42)
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text("places and links")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textMuted.color)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(source.navigationTitle)
-                                        .font(.system(size: 15, weight: .black))
-                                        .foregroundStyle(WanderTheme.textInk.color)
-                                    Text(source.hubSubtitle)
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(WanderTheme.textMuted.color)
-                                        .lineLimit(2)
-                                }
-
-                                Spacer(minLength: WanderTheme.spacing2)
-
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .black))
-                                    .foregroundStyle(WanderTheme.textFaint.color)
-                            }
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
-                            .background(WanderTheme.surfaceRaised.color)
-                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                            )
+                    ZStack(alignment: .topLeading) {
+                        if input.isEmpty {
+                            Text("https://maps.app.goo.gl/…\nhttps://www.instagram.com/reel/…\nMaru Coffee, Los Angeles")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(WanderTheme.textFaint.color)
+                                .padding(.horizontal, 17)
+                                .padding(.vertical, 18)
+                                .allowsHitTesting(false)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Import from \(source.accessibilityTitle)")
+
+                        TextEditor(text: $input)
+                            .focused($isInputFocused)
+                            .font(.system(size: 15, weight: .medium))
+                            .scrollContentBackground(.hidden)
+                            .padding(WanderTheme.spacing2)
+                            .frame(minHeight: 220)
+                            .background(Color.clear)
                     }
+                    .background(WanderTheme.surfaceRaised.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                            .stroke(
+                                isInputFocused
+                                    ? WanderTheme.terracotta.color
+                                    : WanderTheme.borderHairline.color,
+                                lineWidth: isInputFocused ? 2 : 1
+                            )
+                    )
                 }
+
+                Button(action: startImport) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        if isStarting {
+                            ProgressView()
+                                .tint(WanderTheme.textOnAction.color)
+                        } else {
+                            Image(systemName: "arrow.down.doc.fill")
+                        }
+                        Text("Start Import")
+                    }
+                    .font(.system(size: 16, weight: .black))
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(canStart ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canStart || isStarting)
 
                 Button {
                     openURL(ImportHelpDestination.url)
@@ -138,9 +165,15 @@ struct PlaceImportHubScreen: View {
             .padding(WanderTheme.spacing4)
             .padding(.bottom, summary.hasPendingImports ? 92 : WanderTheme.spacing6)
         }
+        .scrollDismissesKeyboard(.interactively)
         .wanderScreen()
         .navigationTitle("Import")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("Import could not start", isPresented: errorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "Try again.")
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -192,200 +225,9 @@ struct PlaceImportHubScreen: View {
         }
         return "Review Import"
     }
-}
-
-private struct PlaceImportSourceIconStack: View {
-    let iconSize: CGFloat
-
-    var body: some View {
-        HStack(spacing: -9) {
-            ForEach(PlaceImportSource.allCases) { source in
-                PlaceImportSourceIcon(source: source, size: iconSize)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Google Maps, Instagram, TikTok, and Notes")
-    }
-}
-
-private struct PlaceImportSourceIcon: View {
-    let source: PlaceImportSource
-    let size: CGFloat
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(source.tint)
-            Image(systemName: source.systemImage)
-                .font(.system(size: size * 0.43, weight: .black))
-                .foregroundStyle(source.accent)
-        }
-        .frame(width: size, height: size)
-        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
-    }
-}
-
-struct PlaceImportSourceScreen: View {
-    let source: PlaceImportSource
-    @ObservedObject var importStore: PlaceImportStore
-    let onImportStarted: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @State private var input = ""
-    @State private var selectedFile: PlaceImportFileContents?
-    @State private var showsFileImporter = false
-    @State private var errorMessage: String?
-    @State private var isStarting = false
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    sourceHeader
-
-                    if source.supportsFiles {
-                        Button {
-                            showsFileImporter = true
-                        } label: {
-                            Label(selectedFile?.fileName ?? source.fileButtonTitle, systemImage: "doc.badge.plus")
-                                .font(.system(size: 15, weight: .black))
-                                .frame(maxWidth: .infinity, minHeight: 52)
-                                .background(WanderTheme.surfaceBone.color)
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                                        .stroke(WanderTheme.borderStrong.color, lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text(selectedFile == nil ? source.inputLabel : "or paste instead")
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-
-                        ZStack(alignment: .topLeading) {
-                            if input.isEmpty {
-                                Text(source.placeholder)
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundStyle(WanderTheme.textFaint.color)
-                                    .padding(.horizontal, 17)
-                                    .padding(.vertical, 18)
-                                    .allowsHitTesting(false)
-                            }
-                            TextEditor(text: $input)
-                                .font(.system(size: 15, weight: .medium))
-                                .scrollContentBackground(.hidden)
-                                .padding(WanderTheme.spacing2)
-                                .frame(minHeight: 210)
-                                .background(Color.clear)
-                        }
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                        )
-                    }
-
-                    if let selectedFile {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(WanderTheme.stateSuccess.color)
-                            Text(selectedFile.fileName)
-                                .font(.system(size: 13, weight: .bold))
-                                .lineLimit(1)
-                            Spacer()
-                            Button {
-                                self.selectedFile = nil
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Remove selected file")
-                        }
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .background(WanderTheme.surfaceBone.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-                    }
-
-                    Button {
-                        startImport()
-                    } label: {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            if isStarting {
-                                ProgressView()
-                                    .tint(WanderTheme.textOnAction.color)
-                            } else {
-                                Image(systemName: "arrow.down.doc.fill")
-                            }
-                            Text("Start Import")
-                        }
-                        .font(.system(size: 16, weight: .black))
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(canStart ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canStart || isStarting)
-                }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing6)
-            }
-            .wanderScreen()
-            .navigationTitle(source.navigationTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .fileImporter(
-                isPresented: $showsFileImporter,
-                allowedContentTypes: source.allowedFileTypes,
-                allowsMultipleSelection: false,
-                onCompletion: handleFileSelection
-            )
-            .onChange(of: input) { _, newValue in
-                if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    selectedFile = nil
-                }
-            }
-            .alert("Import could not start", isPresented: errorBinding) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage ?? "Try again.")
-            }
-        }
-    }
-
-    private var sourceHeader: some View {
-        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            ZStack {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                    .fill(source.tint)
-                Image(systemName: source.systemImage)
-                    .font(.system(size: 28, weight: .black))
-                    .foregroundStyle(source.accent)
-            }
-            .frame(width: 58, height: 58)
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text(source.navigationTitle)
-                    .font(.system(size: 24, weight: .black))
-                Text(source.entrySubtitle)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
 
     private var canStart: Bool {
-        selectedFile != nil || !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var errorBinding: Binding<Bool> {
@@ -397,30 +239,74 @@ struct PlaceImportSourceScreen: View {
         )
     }
 
-    private func handleFileSelection(_ result: Result<[URL], Error>) {
-        do {
-            guard let url = try result.get().first else { return }
-            selectedFile = try PlaceImportFileReader.read(url)
-            input = ""
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     private func startImport() {
         isStarting = true
         do {
-            let contents = selectedFile?.text ?? input
-            let batchID = try importStore.enqueue(
-                source: source,
-                text: contents,
-                sourceName: selectedFile?.fileName
-            )
-            onImportStarted(batchID)
-            dismiss()
+            _ = try importStore.enqueueUnified(text: input)
+            input = ""
+            isInputFocused = false
+            isStarting = false
+            inboxAction()
         } catch {
             errorMessage = error.localizedDescription
             isStarting = false
+        }
+    }
+}
+
+private struct PlaceImportSourceIconStack: View {
+    let iconSize: CGFloat
+    private let sources: [PlaceImportSource] = [.googleMaps, .instagram, .tiktok]
+
+    var body: some View {
+        HStack(spacing: -9) {
+            ForEach(sources) { source in
+                PlaceImportSourceIcon(source: source, size: iconSize)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Google Maps, Instagram, and TikTok")
+    }
+}
+
+private struct PlaceImportSourceIcon: View {
+    let source: PlaceImportSource
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            background
+
+            if let assetName = source.brandAssetName {
+                Image(assetName)
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
+                    .foregroundStyle(source.brandMarkColor)
+                    .padding(size * 0.22)
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        switch source {
+        case .googleMaps:
+            Circle().fill(Color.white)
+        case .instagram:
+            Circle().fill(
+                LinearGradient(
+                    colors: [Color(red: 0.51, green: 0.18, blue: 0.78), Color(red: 0.95, green: 0.19, blue: 0.42), Color(red: 1, green: 0.72, blue: 0.24)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        case .tiktok:
+            Circle().fill(Color.black)
+        case .textNotes:
+            Circle().fill(WanderTheme.surfaceSand.color)
         }
     }
 }
@@ -2308,15 +2194,6 @@ private struct PlaceImportRescueScreen: View {
 }
 
 private extension PlaceImportSource {
-    var tileTitle: String {
-        switch self {
-        case .googleMaps: "GOOGLE\nMAPS"
-        case .instagram: "INSTAGRAM\nREELS"
-        case .tiktok: "TIKTOKS"
-        case .textNotes: "TEXTS /\nNOTES"
-        }
-    }
-
     var navigationTitle: String {
         switch self {
         case .googleMaps: "Google Maps"
@@ -2327,15 +2204,6 @@ private extension PlaceImportSource {
     }
 
     var accessibilityTitle: String { navigationTitle }
-
-    var hubSubtitle: String {
-        switch self {
-        case .googleMaps: "Lists, shared places, or Takeout files"
-        case .instagram: "Public Reel and post links"
-        case .tiktok: "Public video and place links"
-        case .textNotes: "Pasted notes, texts, and place lists"
-        }
-    }
 
     var shortBadgeTitle: String {
         switch self {
@@ -2355,6 +2223,23 @@ private extension PlaceImportSource {
         }
     }
 
+    var brandAssetName: String? {
+        switch self {
+        case .googleMaps: "BrandGoogleMaps"
+        case .instagram: "BrandInstagram"
+        case .tiktok: "BrandTikTok"
+        case .textNotes: nil
+        }
+    }
+
+    var brandMarkColor: Color {
+        switch self {
+        case .googleMaps: Color(red: 0.26, green: 0.52, blue: 0.96)
+        case .instagram, .tiktok: Color.white
+        case .textNotes: WanderTheme.textInk.color
+        }
+    }
+
     var accent: Color {
         switch self {
         case .googleMaps: WanderTheme.stateInfo.color
@@ -2370,60 +2255,6 @@ private extension PlaceImportSource {
         case .instagram: WanderTheme.terracottaTint.color
         case .tiktok: WanderTheme.surfaceSand.color
         case .textNotes: WanderTheme.categorySage.color.opacity(0.24)
-        }
-    }
-
-    var entrySubtitle: String {
-        switch self {
-        case .googleMaps:
-            "Paste a public map link or choose an unzipped Google Takeout CSV or JSON file."
-        case .instagram:
-            "Paste public Reel or post links. Add place details during review when the post does not expose them."
-        case .tiktok:
-            "Paste public TikTok links. Captions are matched to Apple Maps when metadata is available."
-        case .textNotes:
-            "Paste one place per line or choose a text, Markdown, RTF, or CSV file."
-        }
-    }
-
-    var inputLabel: String {
-        switch self {
-        case .googleMaps: "links or place names"
-        case .instagram: "public links"
-        case .tiktok: "public links"
-        case .textNotes: "places"
-        }
-    }
-
-    var placeholder: String {
-        switch self {
-        case .googleMaps:
-            "https://maps.app.goo.gl/...\nMaru Coffee, Los Angeles"
-        case .instagram:
-            "https://www.instagram.com/reel/...\nGjusta, Venice | https://www.instagram.com/p/..."
-        case .tiktok:
-            "https://www.tiktok.com/@.../video/..."
-        case .textNotes:
-            "Maru Coffee, Los Angeles\nNight + Market - West Hollywood\nGjusta | Venice"
-        }
-    }
-
-    var supportsFiles: Bool {
-        self == .googleMaps || self == .textNotes
-    }
-
-    var fileButtonTitle: String {
-        self == .googleMaps ? "Choose Google Maps file" : "Choose text or notes file"
-    }
-
-    var allowedFileTypes: [UTType] {
-        switch self {
-        case .googleMaps:
-            [.commaSeparatedText, .json, .plainText, .zip]
-        case .textNotes:
-            [.plainText, .commaSeparatedText, .rtf, UTType(filenameExtension: "md") ?? .plainText]
-        case .instagram, .tiktok:
-            []
         }
     }
 

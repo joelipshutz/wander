@@ -74,10 +74,8 @@ struct AddScreen: View {
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
-    @State private var selectedImportSource: PlaceImportSource?
     @State private var showsImportHub = false
     @State private var showsImportInbox = false
-    @State private var opensImportInboxAfterSource = false
     @FocusState private var isQuickAddFocused: Bool
 
     init(
@@ -193,14 +191,6 @@ struct AddScreen: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .sheet(item: $selectedImportSource, onDismiss: openImportInboxAfterSourceIfNeeded) { source in
-                PlaceImportSourceScreen(
-                    source: source,
-                    importStore: importStore
-                ) { _ in
-                    opensImportInboxAfterSource = true
-                }
-            }
             .sheet(isPresented: $showsCamera) {
                 AddCameraPicker { image in
                     Task {
@@ -222,8 +212,7 @@ struct AddScreen: View {
             }
             .navigationDestination(isPresented: $showsImportHub) {
                 PlaceImportHubScreen(
-                    summary: importStore.summary,
-                    sourceAction: openImportSource,
+                    importStore: importStore,
                     inboxAction: openImportInbox
                 )
             }
@@ -505,10 +494,8 @@ struct AddScreen: View {
         pendingVisitPhotoAttachments = []
         isImportingPhoto = false
         addSaveFlow = nil
-        selectedImportSource = nil
         showsImportHub = false
         showsImportInbox = false
-        opensImportInboxAfterSource = false
         selectedDetent = restingDetent
     }
 
@@ -558,11 +545,6 @@ struct AddScreen: View {
         }
     }
 
-    private func openImportSource(_ source: PlaceImportSource) {
-        expandSheet()
-        selectedImportSource = source
-    }
-
     private func openImportHub() {
         expandSheet()
         showsImportHub = true
@@ -571,12 +553,6 @@ struct AddScreen: View {
     private func openImportInbox() {
         expandSheet()
         showsImportInbox = true
-    }
-
-    private func openImportInboxAfterSourceIfNeeded() {
-        guard opensImportInboxAfterSource else { return }
-        opensImportInboxAfterSource = false
-        openImportInbox()
     }
 
     private func openSharedSaveFlow() {
