@@ -27763,3 +27763,42 @@ approved and available through the public TestFlight link.
 - Existing Supabase formatter actor-isolation warnings remain unrelated and
   non-blocking. Next: push the reconciled PR, squash-merge it, then prepare and
   ship exact latest `main` as build 106.
+
+### 2026-07-27 12:39 PDT - REC-165/166 latest-main validation handoff
+
+- Merged exact latest `origin/main` `822ba52` (build 106 plus REC-162) into the
+  typography/photo branch as `5fc69a2`. The only conflict was this append-only
+  coordination log; all REC-165, REC-166, REC-162, and release history was
+  retained. No app conflict resolution or production behavior rewrite was
+  needed.
+- The complete latest-main gate passed 789/789 unit/contract tests and 1/1
+  onboarding UI test with zero failures. Result bundle:
+  `/private/tmp/DerivedData-rec166/Logs/Test/Test-Wander-2026.07.27_12-36-58--0700.xcresult`.
+- The prior full run exposed an existing release-test defect: the shared build
+  number test hard-coded build 104 while main had advanced through 105 and 106.
+  Replaced the literal with a numeric single-source assertion; its focused
+  rerun passed 1/1. Result bundle:
+  `/private/tmp/DerivedData-rec166/Logs/Test/Test-Wander-2026.07.27_12-34-56--0700.xcresult`.
+- Installed the final build-106 stack and repeated deterministic visual QA on
+  iPhone 16 Plus and iPhone 16e. Final screenshots:
+  `/private/tmp/rec165-final-main106-lists-plus.png`,
+  `/private/tmp/rec165-final-main106-lists-16e.png`,
+  `/private/tmp/rec165-final-main106-feed-plus.png`,
+  `/private/tmp/rec165-final-main106-feed-16e.png`,
+  `/private/tmp/rec165-final-main106-profile-plus.png`,
+  `/private/tmp/rec165-final-main106-profile-16e.png`, and
+  `/private/tmp/rec166-final-main106-map-ticket-plus.png`.
+- Visual review confirms Direction C's serif hierarchy, persistent search,
+  data-rich Lists/Profile/Feed, Google-attributed photos, compact ticket media,
+  and the selected map ticket photo. Ticket geometry/punch-out, streak UI,
+  navigation/control typography, check-in ratings, and overall profile-rating
+  boundary remain intact.
+- Removed only disposable generated caches
+  `/private/tmp/DerivedData-rec165-photo-investigation` and
+  `/private/tmp/DerivedData-recme-build105-archive` after disk pressure blocked
+  linking. The signed build-105 archive, source worktrees, and final REC-165/166
+  result bundles were preserved.
+- Mission Control remains unreachable at `localhost:4000`; REC-165 and REC-166
+  stay tracked in Linear. Next: commit the build-number test repair and this
+  handoff, push/update PR #267, move both issues to `In Review`, and open this
+  isolated worktree in Xcode for branch-specific phone testing.
