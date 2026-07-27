@@ -5890,7 +5890,6 @@ final class WanderStore: ObservableObject {
 
     private func applySignedOutProfile() {
         let localID = "local_profile_current"
-        let preferredVisibility = PlaceVisibility.followers
         let preferredPrivateProfile = false
         cancelSharedVisitInboxTask()
         sharedVisitInvitations = []
@@ -5903,7 +5902,6 @@ final class WanderStore: ObservableObject {
             avatarURL: nil,
             bio: nil,
             homeArea: nil,
-            isPrivateProfile: preferredPrivateProfile,
             onboardingCompletedAt: nil,
             isPrivateProfile: preferredPrivateProfile,
             syncState: .localOnly,

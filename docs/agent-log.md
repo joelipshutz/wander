@@ -25354,6 +25354,26 @@ TestFlight build 101 release completion — 2026-07-26 14:54 PDT:
 Final outcome: rec.me 0.1 (101) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with REC-152 Profile
 Recent activity.
+
+## 2026-07-26 17:36 PDT — Codex — REC-132 simulator handoff
+
+- Goal: open the isolated onboarding worktree in Xcode and launch the approved
+  logged-out carousel on an iPhone 16 Plus simulator for Joe to test.
+- Worktree/branch: `/private/tmp/recme-rec132-onboarding`,
+  `codex/rec-132-onboarding`; branch was clean and tracking its remote at start.
+- Opened this worktree's `Wander.xcodeproj` in Xcode and brought Simulator
+  forward. The first simulator build exposed a duplicate `isPrivateProfile`
+  argument left by the prior rebase in `applySignedOutProfile`; removing only
+  the duplicate is required before the app can install and launch.
+- Removed that duplicate and the resulting unused local. Added a DEBUG-only
+  `-WanderForceSignedOut` launch argument that signs out Clerk before normal
+  entry resolution, so the simulator uses the real interactive onboarding
+  path rather than the static UI-test carousel stub.
+- The incremental iPhone 16 Plus / iOS 18.6 build passed. Installed and launched
+  the app with the new argument, then verified via simulator screenshot that it
+  displays the first logged-out slide with working Get started and Log in
+  actions. Screenshot: `/private/tmp/rec132-loggedout-final.png`.
+- No migration, merge, build-number change, or TestFlight release was performed.
 ## 2026-07-26 14:20 PDT — Codex — REC-132 onboarding carousel wiring
 
 - Goal: wire Joe-approved logged-out carousel artwork and copy into existing

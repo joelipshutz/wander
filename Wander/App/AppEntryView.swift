@@ -71,6 +71,11 @@ struct AppEntryView: View {
                 .environmentObject(auth)
         }
         .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-WanderForceSignedOut") {
+                try? await auth.signOut()
+            }
+            #endif
             await coordinator.start()
             didFinishInitialResolution = true
         }
