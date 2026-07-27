@@ -1,5 +1,9 @@
 import Foundation
 
+enum SaveStreakWindow {
+    static let dayCount = 7
+}
+
 struct SaveStreakSummary: Equatable {
     let currentCount: Int
     let bestCount: Int
@@ -10,7 +14,7 @@ struct SaveStreakSummary: Equatable {
         currentCount: 0,
         bestCount: 0,
         isTodayCovered: false,
-        recentDayCoverage: Array(repeating: false, count: 7)
+        recentDayCoverage: Array(repeating: false, count: SaveStreakWindow.dayCount)
     )
 }
 
@@ -60,7 +64,7 @@ enum SaveStreakCalculator {
             }
         }
 
-        let recentDayCoverage = (-6...0).map { offset in
+        let recentDayCoverage = (-(SaveStreakWindow.dayCount - 1)...0).map { offset in
             guard let day = calendar.date(byAdding: .day, value: offset, to: today) else {
                 return false
             }
@@ -109,14 +113,72 @@ struct SaveStreakCelebration: Identifiable, Equatable {
     }
 }
 
+struct SaveStreakWeekday: Equatable {
+    let date: Date
+    let symbol: String
+    let isCovered: Bool
+    let isToday: Bool
+}
+
+enum SaveStreakCelebrationPresentation {
+    static let helperText = "Keep it up 🔥"
+
+    static func visualCount(for streakCount: Int) -> String {
+        "\(max(streakCount, 1))"
+    }
+
+    static func accessibilityTitle(for streakCount: Int) -> String {
+        let count = max(streakCount, 1)
+        return "\(count) day streak"
+    }
+
+    static func weekdays(
+        streakCount: Int,
+        endingOn saveDate: Date,
+        calendar: Calendar = .current
+    ) -> [SaveStreakWeekday] {
+        let endDay = calendar.startOfDay(for: saveDate)
+        let coveredDayCount = min(max(streakCount, 1), SaveStreakWindow.dayCount)
+        let firstCoveredOffset = -(coveredDayCount - 1)
+        let symbols = calendar.veryShortWeekdaySymbols
+
+        return (-(SaveStreakWindow.dayCount - 1)...0).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: endDay) else {
+                return nil
+            }
+
+            let weekdayIndex = calendar.component(.weekday, from: date) - 1
+            let symbol = symbols.indices.contains(weekdayIndex) ? symbols[weekdayIndex] : ""
+
+            return SaveStreakWeekday(
+                date: date,
+                symbol: symbol,
+                isCovered: offset >= firstCoveredOffset,
+                isToday: offset == 0
+            )
+        }
+    }
+}
+
 enum SaveStreakPresentationPolicy {
     static let postSaveSheetDelay = Duration.milliseconds(140)
 
     static func canPresent(
         celebration: SaveStreakCelebration?,
-        isSaveFlowPresented: Bool
+        isSaveFlowPresented: Bool,
+        now: Date = .now,
+        calendar: Calendar = .current
     ) -> Bool {
-        celebration != nil && !isSaveFlowPresented
+        guard let celebration, !isSaveFlowPresented else { return false }
+        return !isExpired(celebration, now: now, calendar: calendar)
+    }
+
+    static func isExpired(
+        _ celebration: SaveStreakCelebration,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Bool {
+        !calendar.isDate(celebration.saveDate, inSameDayAs: now)
     }
 
     static func autoDismissDelay(

@@ -425,7 +425,8 @@ private struct WanderActivityCalendarWidgetView: View {
                         monthTitle: model.monthTitle,
                         isToday: dayNumber.map(model.isToday(dayNumber:)) ?? false,
                         cellHeight: rowHeight,
-                        markerSize: markerSize
+                        markerSize: markerSize,
+                        destination: dayNumber.flatMap(model.deepLinkURL(dayNumber:))
                     )
                 }
             }
@@ -493,6 +494,7 @@ private struct WanderCalendarDayCell: View {
     let isToday: Bool
     let cellHeight: CGFloat
     let markerSize: CGFloat
+    let destination: URL?
 
     @ScaledMetric(relativeTo: .caption2) private var nowTextSize: CGFloat = 6
 
@@ -501,6 +503,22 @@ private struct WanderCalendarDayCell: View {
     }
 
     var body: some View {
+        Group {
+            if let destination {
+                Link(destination: destination) {
+                    content
+                }
+                .buttonStyle(.plain)
+            } else {
+                content
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHidden(dayNumber == nil)
+    }
+
+    private var content: some View {
         VStack(spacing: 2) {
             if dayNumber != nil, isToday {
                 Text("NOW")
@@ -530,9 +548,6 @@ private struct WanderCalendarDayCell: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: cellHeight, maxHeight: cellHeight)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityHidden(dayNumber == nil || (state == .none && !isToday))
     }
 
     private var accessibilityLabel: String {
@@ -673,6 +688,17 @@ private struct WanderCalendarDisplayModel {
         return components.year == year
             && components.month == month
             && components.day == dayNumber
+    }
+
+    func deepLinkURL(dayNumber: Int) -> URL? {
+        guard let date = WanderCalendarDate(
+            year: year,
+            month: month,
+            day: dayNumber
+        ) else {
+            return nil
+        }
+        return WanderDeepLinkRoute.profileCalendarDate(date).url
     }
 
 }

@@ -29,6 +29,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "AE294465F9516B04DD43A25A"
+               BuildableName = "WanderNearbyWidgets.appex"
+               BlueprintName = "WanderNearbyWidgets"
+               ReferencedContainer = "container:Wander.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "37043FFD3A7F40BE4ED75C0F"
                BuildableName = "WanderShareExtension.appex"
                BlueprintName = "WanderShareExtension"
