@@ -25643,3 +25643,46 @@ available.
 Expected files: `Wander/Features/Feed/FeedScreen.swift`,
 `Wander/Features/Map/PlaceProfileMapSurface.swift`, focused regression tests,
 and this log. No ticket-shape, streak, build-number, or release changes.
+
+Photo regression validation and handoff — 22:10 PDT:
+
+- Root cause: `FeedPlaceArtwork` never asked the backend for a place photo, so
+  the Featured horizontal rail could only render category artwork. The Map
+  preview's local-photo path also excluded the owner's own Friends/Self
+  check-ins and every owner photo while the profile was private. Feed activity
+  thumbnails did not recover from an invalid Google image with an available
+  visible check-in photo.
+- Added one shared Feed photo resolver. It preserves the existing authenticated
+  `placePhoto` request, retries a failed or absent Google photo through the
+  existing RLS-backed `visibleUserPlacePhoto` request, and leaves category
+  artwork as the final fallback. Both Featured cards and activity tickets use
+  that resolver; explicit activity media remains the top layer.
+- The selected Map ticket now permits the current user's own local photo at
+  every visibility level and on private profiles. Other users' photos still
+  come only through the remote, RLS-authoritative visible-photo path.
+- Added the pre-fix source fixture
+  `WanderTests/Fixtures/rec-161-photo-fallback-pre.json` plus source and behavior
+  coverage for the Featured rail, activity fallback, Map ticket, and owner
+  visibility cases. The source regression test failed before the production
+  change and passed afterward.
+- Focused `NavigationContractTests` and `PlaceProfilePresentationTests` passed.
+  Full repository suite passed on iPhone 16 Plus / iOS 18.6: 761 tests, 0
+  failures, 0 skips. Existing headermap and Supabase formatter concurrency
+  warnings remain; no new warnings were introduced.
+- Captured and manually inspected the production components at iPhone 16 Plus
+  and iPhone 16e sizes. Real photo collages render in both the Featured card and
+  selected Map ticket without changing ticket geometry. Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec161-photo-fix-iphone16plus.png`
+  and `rec161-photo-fix-iphone16e.png` in the same directory.
+- The temporary DEBUG-only screenshot route and fake photo repository were
+  removed before final testing. `git diff --check` passed and the production
+  branch was clean afterward.
+- No schema, backend contract, data mutation, ticket geometry, typography,
+  search, streak, build-number, TestFlight, or release changes were made.
+- Linear and Mission Control were unavailable in this session; REC-161 and task
+  `bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` still need their validation comments
+  reconciled when those trackers are callable.
+
+Next: push these checkpoints to draft PR #256, add the validation summary to
+the PR, and reopen this isolated worktree in Xcode for Joe's next simulator or
+phone test.
