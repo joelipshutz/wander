@@ -27557,6 +27557,37 @@ Validation checkpoint, 2026-07-27 12:15 PDT:
 - Existing Supabase formatter actor-isolation, simulator keychain, and
   traditional-headermap warnings remain unrelated and non-blocking.
 
+### 2026-07-27 12:28 PDT - Release outcome
+
+- Build-number PR #270 was squash-merged as `fb40e3d`; the signed archive and
+  upload were created from that exact clean `origin/main` commit.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build106.xcarchive` and independently reports rec.me
+  `0.1 (106)`. Export used automatic App Store distribution signing with
+  `manageAppVersionAndBuildNumber=false`.
+- API-key-authenticated `xcodebuild -exportArchive` uploaded the unchanged
+  archive successfully; Xcode reported `Uploaded Wander`, `Upload succeeded`,
+  and `EXPORT SUCCEEDED` with no build-number drift.
+- App Store Connect build id is
+  `652cd3eb-5c96-4d7d-960a-dc57545e612d`. Build 106 is `VALID`, has
+  `usesNonExemptEncryption=false`, includes the build-106 en-US What to Test
+  copy, is attached to `rec.me Alpha`, and external beta review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785180462202599
+- Linear REC-162 remains `In Review` because this session did not expose the
+  Linear connector; the PR, tests, build, TestFlight, and Slack receipts are
+  recorded here for the next connected agent to move it to `Done`.
+- Tester focus: verify responsive nearby suggestions without nested scrolling,
+  the full **I'm here now** destination from **See more**, the pinned Import
+  entry, unified link/text intake, and the Google Maps/Instagram/TikTok icons.
+- Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking. Clerk development-mode branding remains the
+  tester-facing known alpha issue.
+
+Final status: rec.me 0.1 (106), including the REC-162 Add-flow refinement, is
+approved and available through the public TestFlight link.
+
 ### 2026-07-27 12:06 PDT - REC-162 release reconciliation
 
 - Joe explicitly requested a light-triage TestFlight push for the Add-flow
