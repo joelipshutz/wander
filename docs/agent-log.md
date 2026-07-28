@@ -27879,3 +27879,43 @@ REC-155 pre-landing validation completion — 2026-07-27 13:22 PDT:
   PR #255 is ready to push and squash-merge into current `main`, after which
   the explicit release workflow will prepare build 107 from exact latest
   `main`.
+
+## 2026-07-27 13:26 PDT - Codex - TestFlight Build 107
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-107`
+Worktree: `/private/tmp/recme-testflight-build-107`
+Linear: `REC-155` (`In Review`)
+PR: `#255` (squash-merged as `3485b3df5`)
+
+Goal: package exact latest `main` with REC-155 as rec.me 0.1 (107), upload the
+unchanged archive to App Store Connect, attach it to public group
+`rec.me Alpha`, submit external beta review, and announce the tester scope.
+
+Release scope and starting state:
+
+- Build 106 is the latest completed public TestFlight release. No unfinished
+  explicit release is pending.
+- Ryan's other named changes are already live: `977f7c654` / REC-159 in build
+  100, and REC-157 plus PR #249 / REC-160 in build 102.
+- REC-155 is the only newly merged requested behavior. It landed on exact
+  `main` as `3485b3df592005d9041304388147928be61dff85` after the focused 6/6,
+  complete 792/792, generic Simulator, and visual review gates recorded above.
+- This clean isolated branch will increment only
+  `CURRENT_PROJECT_VERSION` from 106 to 107, regenerate the Xcode project, and
+  update the single build-number contract. Marketing version remains 0.1.
+- No App Store production metadata, marketing-version change, or broad
+  `#all-recme` announcement is authorized.
+
+Release metadata validation:
+
+- Incremented the single shared build source from 106 to 107 and regenerated
+  `Wander.xcodeproj`. The generated project changed only the matching Debug
+  and Release build settings.
+- Updated the build-number contract to 107; its focused iPhone 17 Pro /
+  iOS 26.5 Simulator test passed 1/1.
+- `git diff --check` passed. The release-branch diff is limited to
+  `project.yml`, generated project metadata, the matching contract assertion,
+  and this coordination record.
+- Next: commit/push a ready release-metadata PR, squash-merge it into current
+  `main`, then validate/archive/upload that exact merged `main`.
