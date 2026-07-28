@@ -6,6 +6,7 @@ This file is the source of truth for the production rec.me app icon.
 
 - Master: `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`
 - Manifest: `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json`
+- Master generator: `scripts/generate-app-icon-master.swift`
 - Rendition generator: `scripts/generate-app-icon-renditions.sh`
 - Regression coverage: `WanderTests/BuildConfigurationTests.swift`
 
@@ -15,31 +16,36 @@ master above owns the design.
 
 ## Visual Contract
 
-The icon is a full-bleed terracotta field with:
+The app icon is the loading treatment from `OnboardingLaunchView`, scaled for
+small-icon legibility:
 
-- a dominant cream location pin;
-- an espresso bookmark inside the pin;
-- cream orbit strokes around the pin;
-- one small sky-blue social dot.
+- full-bleed warm canvas `#F3DFCA`;
+- native SF Symbol `mappin.and.ellipse`, bold, in terracotta `#D46F4D`;
+- lowercase wordmark `rec.me`, verbatim, in the native system serif at black
+  weight and solid black;
+- approved option B uses a slight `-2.5` optical kern at the 1024 px master;
+  this is an app-icon wordmark exception to the UI's no-negative-tracking rule;
+- icon above wordmark in one centered vertical lockup;
+- generous negative space, with no shadows, gradients, borders, textures, or
+  additional objects.
 
-The lower-right area remains clear terracotta. Do not add a folded map/page corner,
-folded sheet, pencil, road lines, extra object, text, letters, people,
-watermarks, transparency, alpha, or baked rounded corners.
+The PNG must be square and opaque. Do not bake rounded corners into the asset;
+iOS applies the platform mask. Do not substitute another map pin, typeface,
+wordmark spelling, palette, model-generated artwork, or decorative element.
 
 ## Editing Workflow
 
-1. Start from the canonical 1024 px master or an approved lossless source.
-2. Preserve the pin, bookmark, orbit, dot, palette, and their proportions.
-3. Keep the lower-right field clear.
-4. Replace the canonical master with a square, opaque PNG.
-5. Run `scripts/generate-app-icon-renditions.sh`.
-6. Run `BuildConfigurationTests` and inspect at least one 180 px and one 87 px
+1. Keep `OnboardingLaunchView` and this contract aligned if the loading mark
+   changes.
+2. Run `scripts/generate-app-icon-master.swift` to replace the canonical master
+   deterministically from the native symbol, typeface, and palette.
+3. Run `scripts/generate-app-icon-renditions.sh`.
+4. Run `BuildConfigurationTests` and inspect at least one 180 px and one 87 px
    rendition before approval.
 
-The current master was produced with built-in image editing using this direction:
+Sizing overrides are preview-only. Set `RECME_ICON_PREVIEW=1` and pass an
+explicit alternate output path; preview mode rejects the canonical master path.
 
-> Remove the entire cream folded-map/pencil-like object from the lower-right
-> corner and replace that whole object and internal lines with a seamless
-> continuation of terracotta. Preserve the central cream location pin, espresso
-> bookmark, oval, cream orbit strokes, blue social dot, exact positions,
-> proportions, colors, and style. Add nothing new.
+The tracked Swift generator is the lossless source recipe. Image generation is
+not part of this workflow because the production mark is already defined by
+native SwiftUI/SF Symbol primitives.
