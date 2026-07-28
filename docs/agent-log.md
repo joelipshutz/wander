@@ -28047,3 +28047,12 @@ Outcome: requested save-flow layout and context-aware titles are implemented,
 regression-covered, and visually verified. The branch is ready to push and
 open as a ready PR; the PR URL and final Linear state will be recorded in the
 next handoff entry after publication.
+
+Publication handoff:
+
+- Pushed `codex/rec-174-save-flow-header` and opened ready PR #276:
+  https://github.com/joelipshutz/wander/pull/276.
+- Linked PR #276 to REC-174, added the test/build/visual validation receipt,
+  and moved the Linear issue from `In Progress` to `In Review`.
+- No known REC-174 functional issues remain. Next step: review and merge PR
+  #276; no TestFlight release was requested or performed.
