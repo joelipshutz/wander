@@ -8,7 +8,7 @@ This repo contains the product spec, design system, research, planning-grade moc
 
 - `AGENTS.md` - durable repo guidance for agents/developers
 - `docs/codex-handoff.md` - catch-up summary for new Codex/developer instances
-- `docs/agent-log.md` - required shared work log for all agents
+- `docs/agent-log.md` - frozen historical archive; current work lives in Linear and PRs
 - `docs/roadmap.md` - current milestones and next steps
 - `docs/decisions.md` - durable product/engineering/design decisions
 - `docs/open-questions.md` - unresolved questions, risks, and deferred decisions
