@@ -94,7 +94,7 @@ final class NavigationContractTests: XCTestCase {
             feed.components(separatedBy: "private struct FeedActivityModule: View").last
         )
         XCTAssertTrue(activityModule.contains("private var activityTicket: some View"))
-        XCTAssertTrue(activityModule.contains("activity.kind.ticketKind"))
+        XCTAssertTrue(activityModule.contains("activity.resolvedTicketKind"))
         XCTAssertTrue(activityModule.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityModule.contains("WanderTypography.editorialCardTitle"))
         XCTAssertTrue(activityModule.contains("activity.note"))
@@ -499,6 +499,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(ticketSurface.contains("func checkInTicketSurface("))
         XCTAssertTrue(ticketSurface.contains("struct CheckInTicketShape: InsettableShape"))
+        XCTAssertTrue(ticketSurface.contains("borderWidth: CGFloat = 1"))
         XCTAssertTrue(ticketSurface.contains(".clipShape(ticketShape)"))
         XCTAssertTrue(ticketSurface.contains("addTrailingNotch("))
         XCTAssertFalse(ticketSurface.contains("Circle()\n            .fill(surroundingSurface)"))
@@ -525,6 +526,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityCard.contains("ForEach(entry.tags.prefix(6)"))
         XCTAssertTrue(activityCard.contains("photoThumbnails"))
         XCTAssertTrue(activityCard.contains("addPhotoControl"))
+
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        XCTAssertTrue(feed.contains("WanderTheme.stateInfo.color"))
+        XCTAssertTrue(feed.contains("borderWidth: 1.5"))
+        XCTAssertTrue(feed.contains("activity.resolvedTicketKind"))
+        XCTAssertFalse(feed.contains("DROPPED A PIN"))
     }
 
     func testTicketShapeUsesAConcaveCutoutInsteadOfAnAddedCircle() {

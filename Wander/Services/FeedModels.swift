@@ -29,7 +29,7 @@ enum FeedActivityKind: String, Codable, CaseIterable, Equatable {
         case .listCreated, .listItemAdded:
             .list
         case .placeSaved:
-            .droppedPin
+            .saved
         }
     }
 }
@@ -38,7 +38,7 @@ enum FeedTicketKind: Equatable {
     case checkIn
     case wanna
     case list
-    case droppedPin
+    case saved
 }
 
 struct FeedMediaPreview: Identifiable, Equatable {
@@ -87,6 +87,15 @@ struct FeedActivity: Identifiable {
         self.note = note
         self.rating = kind.supportsRating ? rating : nil
         self.media = media
+    }
+
+    /// `place_saved` is the legacy event name for saving from another person's
+    /// map. Provenance is not a distinct place status, so render the ticket as
+    /// the Been or Wanna action the person actually chose.
+    var resolvedTicketKind: FeedTicketKind {
+        guard kind == .placeSaved else { return kind.ticketKind }
+        guard let place else { return .saved }
+        return place.userPlace.status == .been ? .checkIn : .wanna
     }
 }
 

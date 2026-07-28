@@ -941,7 +941,7 @@ private struct FeedFeaturedCard: View {
             } label: {
                 Label(featuredReason, systemImage: "person.2.fill")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.skyTint.color)
+                    .foregroundStyle(WanderTheme.stateInfo.color)
                     .lineLimit(1)
             }
             .buttonStyle(.plain)
@@ -1038,7 +1038,8 @@ private struct FeedActivityModule: View {
             surface: WanderTheme.surfaceBone.color,
             surroundingSurface: WanderTheme.canvasWarm.color,
             notchEdges: .trailing,
-            castsShadow: false
+            castsShadow: false,
+            borderWidth: 1.5
         )
     }
 
@@ -1240,30 +1241,30 @@ private struct FeedActivityModule: View {
     }
 
     private var ticketEyebrow: String {
-        switch activity.kind {
-        case .placeBeen: "CHECKED IN"
-        case .placeWannaGo: "ADDED TO WANNA"
-        case .listCreated: "CREATED A LIST"
-        case .listItemAdded: "ADDED TO LIST"
-        case .placeSaved: "DROPPED A PIN"
+        switch activity.resolvedTicketKind {
+        case .checkIn: "CHECKED IN"
+        case .wanna: "ADDED TO WANNA"
+        case .list:
+            activity.kind == .listCreated ? "CREATED A LIST" : "ADDED TO LIST"
+        case .saved: "SAVED A PLACE"
         }
     }
 
     private var ticketIcon: String {
-        switch activity.kind.ticketKind {
+        switch activity.resolvedTicketKind {
         case .checkIn: "checkmark"
         case .wanna: "plus"
         case .list: "list.bullet"
-        case .droppedPin: "mappin"
+        case .saved: "mappin"
         }
     }
 
     private var ticketAccent: Color {
-        switch activity.kind.ticketKind {
+        switch activity.resolvedTicketKind {
         case .checkIn: WanderTheme.pinSocial.color
         case .wanna: WanderTheme.stateWarning.color
         case .list: WanderTheme.terracotta.color
-        case .droppedPin: WanderTheme.categorySage.color
+        case .saved: WanderTheme.categorySage.color
         }
     }
 }
