@@ -131,14 +131,23 @@ final class BuildConfigurationTests: XCTestCase {
         let agents = try String(contentsOf: projectRoot.appendingPathComponent("AGENTS.md"))
         let contract = try String(contentsOf: projectRoot.appendingPathComponent("docs/brand/recme-app-icon.md"))
         let releaseHelper = try String(contentsOf: projectRoot.appendingPathComponent("scripts/testflight-release.mjs"))
-        let generator = projectRoot.appendingPathComponent("scripts/generate-app-icon-renditions.sh")
+        let masterGenerator = projectRoot.appendingPathComponent("scripts/generate-app-icon-master.swift")
+        let renditionGenerator = projectRoot.appendingPathComponent("scripts/generate-app-icon-renditions.sh")
+        let masterGeneratorSource = try String(contentsOf: masterGenerator)
 
         XCTAssertTrue(agents.contains("docs/brand/recme-app-icon.md"))
+        XCTAssertTrue(agents.contains("scripts/generate-app-icon-master.swift"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
-        XCTAssertTrue(contract.contains("folded map/page corner"))
-        XCTAssertTrue(contract.contains("pencil"))
+        XCTAssertTrue(contract.contains("mappin.and.ellipse"))
+        XCTAssertTrue(contract.contains("native system serif"))
+        XCTAssertTrue(contract.contains("#F3DFCA"))
+        XCTAssertTrue(contract.contains("#D46F4D"))
+        XCTAssertTrue(masterGeneratorSource.contains("mappin.and.ellipse"))
+        XCTAssertTrue(masterGeneratorSource.contains("withDesign(.serif)"))
+        XCTAssertTrue(masterGeneratorSource.contains("string: \"rec.me\""))
         XCTAssertTrue(releaseHelper.contains(#"groupName: "rec.me Alpha""#))
-        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: generator.path))
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: masterGenerator.path))
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: renditionGenerator.path))
     }
 
     func testTrackedClerkPublishableKeyDecodesToDefaultFrontendAPI() throws {
