@@ -28379,3 +28379,91 @@ Starting status and coordination:
 - Merge-only closeout: no build-number bump, archive, TestFlight upload, or
   Slack release note was requested. REC-174 can move to Done; the change will
   ride the next explicit TestFlight release batch.
+
+## 2026-07-28 04:30 PDT - Codex - REC-175 Loading Mark App Icon
+
+Agent: Codex using the `imagegen` and `linear` skills
+Branch: `codex/rec-175-loading-icon`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-175-loading-icon`
+Linear: `REC-175` (`In Progress`)
+Mission Control: `c0ca049f-defd-40b0-9519-ea0a6316a518` (`in_progress`)
+
+Goal: replace the production app icon with the exact current rec.me loading
+treatment: warm canvas, terracotta `mappin.and.ellipse`, and the black serif
+`rec.me` wordmark.
+
+Starting status and coordination:
+
+- Created a clean isolated worktree from exact current `origin/main` commit
+  `f17d97d`; the primary checkout is 88 commits behind and contains user-owned
+  untracked `tmp/`, so it remains untouched.
+- No active agent-log entry overlaps the app-icon asset, generator, brand
+  contract, or build-configuration icon tests.
+- The source treatment is `OnboardingLaunchView` in
+  `Wander/Features/Onboarding/LoggedOutCarouselView.swift`: canvas `#F3DFCA`,
+  SF Symbol `mappin.and.ellipse` in terracotta `#D46F4D`, and `rec.me` in the
+  native system serif at black weight.
+- The `imagegen` workflow routes this to deterministic native rendering rather
+  than model generation because the exact mark already exists as SwiftUI/SF
+  Symbol typography. No generated visual variation is authorized or needed.
+- Expected files: canonical AppIcon PNGs, deterministic icon-source tooling,
+  `docs/brand/recme-app-icon.md`, focused build-configuration tests, and this
+  log. No build-number bump or TestFlight release is requested.
+
+### 2026-07-28 05:06 PDT - Option B selected and validated
+
+- Presented four labeled icon-size directions (A-D); Joe selected B and asked
+  to ship it. The canonical 1024-point recipe is a 340-point symbol, 230-point
+  wordmark, and 24-point gap, centered as one vertical lockup.
+- Added `scripts/generate-app-icon-master.swift` so the exact native SF Symbol,
+  system-serif wordmark, colors, and approved B proportions can be regenerated
+  deterministically. Regenerated all nine AppIcon renditions from the master;
+  every PNG is square, opaque, and has no alpha channel.
+- Updated the brand contract, root icon guidance, and discoverability coverage
+  to replace the prior illustrated-pin rules with the loading-mark contract.
+- Installed the compiled B asset on an iPhone 16 Plus / iOS 18.6 simulator and
+  visually inspected it on the real Home Screen. SpringBoard cached the existing
+  production bundle's prior icon, so the visual check used a temporary preview
+  bundle id and display name `rec.me B`; the compiled asset itself was unchanged.
+  Screenshot: `tmp/rec-175-icon-previews/B-on-iPhone-16-Plus.png` (local QA
+  artifact, intentionally not committed).
+- Validation passed: focused AppIcon configuration tests 2/2; full suite 794/794
+  unit and contract tests plus 1/1 UI test; generic iOS Simulator build; and
+  `git diff --check`. The first generic build attempt exhausted local disk space
+  while generating a dSYM; after deleting only that attempt's DerivedData, the
+  same build passed with DWARF debug output. Existing unrelated Swift concurrency
+  and traditional-headermap warnings remain.
+- This is an app-code/QA-relevant PR but not an explicit TestFlight request, so
+  the build number was not incremented and no archive, upload, or Slack release
+  note was performed.
+
+### 2026-07-28 05:07 PDT - Ready-for-review handoff
+
+- Committed the implementation as `260ac70` and pushed
+  `codex/rec-175-loading-icon`.
+- Opened ready PR #280 and linked it to REC-175:
+  <https://github.com/joelipshutz/wander/pull/280>.
+- Moved REC-175 and Mission Control to review with the validation evidence.
+- The worktree is clean except for intentionally untracked local preview/QA
+  files under `tmp/`; those files are excluded from the PR.
+
+### 2026-07-28 05:24 PDT - Explicit TestFlight release review
+
+- Joe explicitly requested a new TestFlight release containing everything on
+  latest `main` plus approved icon option B. Build 107 is the last completed
+  release, so the requested batch will be build 108 after PR #280 lands.
+- The repo-owned PR/release workflow and gstack pre-landing review found no
+  runtime correctness, data, security, performance, or asset-size blockers.
+  Review specialists did identify preview-tooling hazards: environment overrides
+  could overwrite the canonical icon and malformed dimensions could reach
+  AppKit. Preview overrides now require `RECME_ICON_PREVIEW=1`, an explicit
+  non-canonical output path, finite bounded dimensions, and controlled errors.
+  Hostile-input checks and the 2/2 focused icon tests pass.
+- Joe reconfirmed that the final tracked assets should remain the exact approved
+  `mappin.and.ellipse` option B. A temporary alternate-mark exploration was
+  fully removed and is not part of the implementation or release.
+- The external Codex CLI review passes could not run because the locally
+  installed package points to a missing native executable. The main review,
+  independent specialist passes, prior full-suite validation (794 unit/contract
+  plus 1 UI test), generic Simulator build, Home Screen visual QA, and focused
+  post-hardening checks provide the merge evidence.
