@@ -3852,6 +3852,48 @@ enum PlaceTypePickerMode {
     case cuisine
 }
 
+enum CheckInDatePickerSelection {
+    static func calendarSelection(
+        for date: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Set<DateComponents> {
+        WannaGoDate.calendarSelection(for: date, calendar: calendar)
+    }
+
+    static func resolvedDate(
+        from selection: Set<DateComponents>,
+        currentDate: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Date {
+        guard !selection.isEmpty else {
+            return currentDate
+        }
+
+        let currentDay = calendar.dateComponents([.year, .month, .day], from: currentDate)
+        let selectedDay = selection.first { components in
+            components.year != currentDay.year
+                || components.month != currentDay.month
+                || components.day != currentDay.day
+        } ?? selection.first
+        guard let selectedDay else {
+            return currentDate
+        }
+
+        var resolvedComponents = calendar.dateComponents(
+            [.era, .hour, .minute, .second, .nanosecond],
+            from: currentDate
+        )
+        resolvedComponents.calendar = calendar
+        resolvedComponents.timeZone = calendar.timeZone
+        resolvedComponents.era = selectedDay.era ?? resolvedComponents.era
+        resolvedComponents.year = selectedDay.year
+        resolvedComponents.month = selectedDay.month
+        resolvedComponents.day = selectedDay.day
+
+        return calendar.date(from: resolvedComponents) ?? currentDate
+    }
+}
+
 struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
@@ -3874,6 +3916,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
     @State private var visitedAt: Date
+    @State private var isShowingCheckInDatePicker = false
     @State private var plannedDate: Date?
     @State private var isShowingPlannedDatePicker = false
     @State private var isSaving = false
@@ -4458,16 +4501,65 @@ struct MapPlaceSaveFlowSheet: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            DatePicker(
-                "Check-in date",
-                selection: $visitedAt,
-                in: ...Date.now,
-                displayedComponents: [.date]
-            )
-            .datePickerStyle(.compact)
-            .font(.system(size: 14, weight: .bold))
-            .tint(WanderTheme.terracotta.color)
-            .padding(WanderTheme.spacing3)
+            VStack(spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isShowingCheckInDatePicker.toggle()
+                    }
+                } label: {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .frame(width: 38, height: 38)
+                            .background(WanderTheme.terracottaTint.color)
+                            .clipShape(Circle())
+
+                        Text(visitedAt.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .rotationEffect(.degrees(isShowingCheckInDatePicker ? 180 : 0))
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 58)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Check-in date")
+                .accessibilityValue(visitedAt.formatted(date: .long, time: .omitted))
+
+                if isShowingCheckInDatePicker {
+                    Divider().background(WanderTheme.borderHairline.color)
+
+                    MultiDatePicker(
+                        "Check-in date",
+                        selection: Binding(
+                            get: {
+                                CheckInDatePickerSelection.calendarSelection(for: visitedAt)
+                            },
+                            set: { selection in
+                                visitedAt = CheckInDatePickerSelection.resolvedDate(
+                                    from: selection,
+                                    currentDate: visitedAt
+                                )
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    isShowingCheckInDatePicker = false
+                                }
+                            }
+                        ),
+                        in: ..<Date.now
+                    )
+                    .tint(WanderTheme.terracotta.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                    .padding(.bottom, WanderTheme.spacing2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
