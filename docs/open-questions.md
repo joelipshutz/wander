@@ -1,8 +1,19 @@
 # Open Questions
 
-Last updated: 2026-07-25
+Last updated: 2026-07-28
 
 These are the known unresolved questions and risks. Some are intentionally deferred; do not reopen locked decisions unless Joe asks.
+
+## App Store Launch Decisions
+
+| Question | Recommendation | Notes |
+|---|---|---|
+| Which owned domain should Clerk production use? | Use `getrec.me` unless the brand/domain plan has changed. | Clerk production deploy requires DNS control and will generate production Frontend API, email, and certificate records. The production instance does not exist yet. |
+| What happens to development tester identities/data? | Back up, then fresh-start production identities and remove or namespace obsolete alpha profiles before handles are claimed. | Clerk development users cannot be transferred to production. A reassignment migration is possible but materially more complex and must preserve RLS ownership across all dependent rows. No reset is authorized yet. |
+| How should production login satisfy App Review Guideline 4.8? | Enable Sign in with Apple alongside the currently enabled Google and email methods. | Faster fallback: disable Google and launch with first-party email authentication only. Production Google and Apple OAuth each need owned credentials. |
+| Should PostHog be enabled for the public launch? | Enable non-PII product analytics only after the privacy policy/label and an accessible analytics control are ready. | Build 108 has no PostHog token and currently runs the no-op analytics client. Apple crash/metric reporting remains available if launch intentionally omits PostHog. |
+| What public marketing version should the first App Store release use? | Use `1.0`. | The current `0.1` is the internal alpha/TestFlight marketing version. Changing `MARKETING_VERSION` and creating an App Store version require explicit release approval. |
+| How should the first approved version release? | Manual release after approval. | This prevents an unexpected immediate launch and gives time to verify production backend/support coverage after App Review accepts the build. |
 
 ## Needs Answer Before M2 Is Accepted
 
