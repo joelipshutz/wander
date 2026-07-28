@@ -28333,3 +28333,37 @@ Starting status and coordination:
 - Final validation remains 3/3 focused regressions, 794/794 unit/contract
   tests, 1/1 UI test, generic Simulator build, visual QA on iPhone 17e and
   iPhone 17 Pro, and `git diff --check`.
+
+### 2026-07-28 01:33 PDT - Final centering and main landing follow-up
+
+- User requested that `Check in`, `Wanna go`, `Check in or Wanna`, and
+  `Check in again` be centered to the full sheet width, then landed on `main`.
+- REC-174 returned to `In Progress` with the centered-title acceptance
+  criterion. Existing isolated worktree and PR #276 remain the implementation
+  path; the starting branch and worktree were clean.
+- Confirmed TestFlight build 107 has a completed release record. This is a
+  merge-only request, so no build-number bump, archive, upload, or Slack release
+  note is authorized.
+- Expected edits: `Wander/Features/Map/MapScreen.swift`, its navigation
+  contract test, and this append-only log. Planned validation is the focused
+  header contract plus diff review before updating and squash-merging PR #276.
+
+### 2026-07-28 01:37 PDT - Centering validation and review
+
+- Replaced the title/control `HStack` with a full-width `ZStack`: the title is
+  centered against the sheet width while a transparent-width control row keeps
+  Back at the leading edge and Close at the trailing edge. Existing 44-point
+  control heights and the shared vertical center are preserved.
+- Updated the navigation contract to require the centered title frame,
+  multiline centering, and independent overlay control row.
+- The first focused command used a stale test method name and executed zero
+  tests; it is not counted as validation. The correctly named focused contract
+  then passed 1/1 on iPhone 17 Pro / iOS 26.5:
+  `testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions`.
+- Pre-landing review found no blocking correctness, accessibility, state,
+  security, data-contract, or scope issues. The centered titles are short
+  enough to avoid the edge controls in every state: the long choice title has
+  no Back control, while detail titles with Back are `Check in` or `Wanna go`.
+- Prior branch validation remains 794/794 unit/contract tests, 1/1 UI test,
+  generic Simulator build, and visual QA on iPhone 17e and iPhone 17 Pro.
+  `git diff --check` passes.
