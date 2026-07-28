@@ -89,8 +89,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: suggestions.tagOptions,
-                defaultValues: suggestions.defaultTags,
+                options: suggestions.unifiedTagOptions,
+                defaultValues: suggestions.unifiedDefaultTags,
                 minimumOptionWidth: minimumOptionWidth
             )
         }
@@ -150,10 +150,20 @@ enum AddQuestionTemplates {
             ]
         case "park":
             return [
-                tagBlock(
+                AddQuestionBlock(
                     key: "best_for",
                     title: "planning for?",
+                    tag: "multi",
+                    kind: .multiTag,
+                    valueType: "multi_tag",
+                    options: suggestions.tagOptions,
+                    defaultValues: suggestions.defaultTags,
                     minimumOptionWidth: 84
+                ),
+                tagBlock(
+                    key: "park_tags",
+                    title: "why save it?",
+                    minimumOptionWidth: 96
                 )
             ]
         default:
@@ -200,8 +210,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: suggestions.tagOptions,
-                defaultValues: suggestions.defaultTags,
+                options: suggestions.unifiedTagOptions,
+                defaultValues: suggestions.unifiedDefaultTags,
                 minimumOptionWidth: 102
             )
         ]
@@ -225,8 +235,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: suggestions.tagOptions,
-                defaultValues: suggestions.defaultTags,
+                options: suggestions.unifiedTagOptions,
+                defaultValues: suggestions.unifiedDefaultTags,
                 minimumOptionWidth: 98
             )
         ]
@@ -260,8 +270,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: suggestions.tagOptions,
-                defaultValues: suggestions.defaultTags,
+                options: suggestions.unifiedTagOptions,
+                defaultValues: suggestions.unifiedDefaultTags,
                 minimumOptionWidth: 104
             )
         ]
@@ -285,8 +295,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: suggestions.tagOptions,
-                defaultValues: suggestions.defaultTags,
+                options: suggestions.unifiedTagOptions,
+                defaultValues: suggestions.unifiedDefaultTags,
                 minimumOptionWidth: 104
             )
         ]
@@ -310,8 +320,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: suggestions.tagOptions,
-                defaultValues: Array(suggestions.defaultTags.prefix(1)),
+                options: suggestions.unifiedTagOptions,
+                defaultValues: Array(suggestions.unifiedDefaultTags.prefix(1)),
                 minimumOptionWidth: 96
             )
         ]
@@ -330,8 +340,8 @@ enum AddQuestionTemplates {
                 tag: "multi",
                 kind: .multiTag,
                 valueType: "multi_tag",
-                options: suggestions.tagOptions,
-                defaultValues: suggestions.defaultTags,
+                options: suggestions.unifiedTagOptions,
+                defaultValues: suggestions.unifiedDefaultTags,
                 minimumOptionWidth: 104
             )
         ]

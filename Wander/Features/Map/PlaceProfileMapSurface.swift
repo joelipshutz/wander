@@ -796,7 +796,7 @@ private struct PlaceProfileFullView: View {
 
     private var primaryPlaceAction: some View {
         Button(action: onAction) {
-            Label(action.displayTitle, systemImage: action.systemImage)
+            Label(primaryActionTitle, systemImage: action.systemImage)
                 .font(.system(size: 15, weight: .black))
                 .frame(maxWidth: .infinity, minHeight: 48)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -805,7 +805,17 @@ private struct PlaceProfileFullView: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(action.accessibilityLabel)
+        .accessibilityLabel(primaryActionTitle)
+    }
+
+    private var primaryActionTitle: String {
+        action.displayTitle(
+            placeName: place.name,
+            hasPriorCheckIn: saves.contains { summary in
+                summary.visiblePlace.userPlace.userID == currentUserID
+                    && summary.visiblePlace.userPlace.status == .been
+            }
+        )
     }
 
     @ViewBuilder

@@ -3536,6 +3536,12 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: nil), .add)
         XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: wantPlace), .addVisit)
         XCTAssertEqual(wantContext.initialStatus, .been)
+        XCTAssertFalse(wantContext.hasPriorCheckIn)
+        XCTAssertEqual(wantContext.title, "Check in at Add Visit Defaults Cafe")
+        XCTAssertEqual(
+            wantContext.flowTitle(status: .been, isShowingDetails: true),
+            "Check in at Add Visit Defaults Cafe"
+        )
         XCTAssertNil(wantContext.initialRatingScore)
         XCTAssertEqual(wantContext.initialNote, "want because patio")
         XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
@@ -3559,6 +3565,12 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(visitContext.initialStatus, .been)
+        XCTAssertTrue(visitContext.hasPriorCheckIn)
+        XCTAssertEqual(visitContext.title, CheckInCopy.againAction)
+        XCTAssertEqual(
+            visitContext.flowTitle(status: .been, isShowingDetails: true),
+            CheckInCopy.againAction
+        )
         XCTAssertEqual(visitContext.initialRatingScore, 4.5)
         XCTAssertEqual(visitContext.initialNote, "")
         XCTAssertNil(visitContext.initialAnswers["coffee_tags"])
@@ -4208,6 +4220,7 @@ final class WanderStoreTests: XCTestCase {
         let restaurantBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .wannaGo)
         let coffeeBlocks = AddQuestionTemplates.blocks(category: "coffee", status: .wannaGo)
         let hikeBlocks = AddQuestionTemplates.blocks(category: "hike", status: .wannaGo)
+        let parkBlocks = AddQuestionTemplates.blocks(category: "park", status: .wannaGo)
 
         XCTAssertEqual(restaurantBlocks.map(\.key), ["interest_signal", "occasion", "restaurant_tags"])
         XCTAssertEqual(restaurantBlocks.first?.title, "how excited are you?")
@@ -4215,16 +4228,22 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(restaurantBlocks.first { $0.key == "price" })
         XCTAssertEqual(restaurantBlocks.first { $0.key == "occasion" }?.title, "planning for?")
         XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.title, "why save it?")
-        XCTAssertEqual(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues, ["recommended"])
+        XCTAssertTrue(restaurantBlocks.first { $0.key == "restaurant_tags" }?.defaultValues.contains("recommended") == true)
+        XCTAssertTrue(restaurantBlocks.first { $0.key == "restaurant_tags" }?.options.contains("food shortlist") == true)
 
         XCTAssertEqual(coffeeBlocks.map(\.key), ["interest_signal", "coffee_tags"])
         XCTAssertNil(coffeeBlocks.first { $0.key == "work_setup" })
         XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.title, "why save it?")
-        XCTAssertEqual(coffeeBlocks.first { $0.key == "coffee_tags" }?.defaultValues, ["work maybe"])
+        XCTAssertTrue(coffeeBlocks.first { $0.key == "coffee_tags" }?.defaultValues.contains("work maybe") == true)
 
         XCTAssertEqual(hikeBlocks.map(\.key), ["interest_signal", "hike_tags"])
         XCTAssertNil(hikeBlocks.first { $0.key == "strenuousness" })
         XCTAssertEqual(hikeBlocks.first { $0.key == "hike_tags" }?.options.contains("weekend maybe"), true)
+
+        XCTAssertEqual(parkBlocks.map(\.key), ["interest_signal", "best_for", "park_tags"])
+        XCTAssertEqual(parkBlocks.first { $0.key == "best_for" }?.title, "planning for?")
+        XCTAssertEqual(parkBlocks.first { $0.key == "park_tags" }?.title, "why save it?")
+        XCTAssertEqual(parkBlocks.first { $0.key == "park_tags" }?.options.contains("outdoor shortlist"), true)
     }
 
     func testNewSaveKeepsOptionalQuestionSelectionsUnselectedByDefault() throws {
@@ -4267,6 +4286,22 @@ final class WanderStoreTests: XCTestCase {
         )
         XCTAssertTrue(context.requiresStatusConfirmation)
         XCTAssertFalse(context.startsOnDetails)
+        XCTAssertEqual(
+            context.flowTitle(status: .wannaGo, isShowingDetails: false),
+            "Check in or Wanna"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .wannaGo, isShowingDetails: true),
+            "Wanna go"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .been, isShowingDetails: false),
+            "Check in or Wanna"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .been, isShowingDetails: true),
+            "Check in"
+        )
         XCTAssertFalse(preselectedImport.requiresStatusConfirmation)
         XCTAssertTrue(preselectedImport.startsOnDetails)
         XCTAssertEqual(preselectedImport.initialStatus, .been)
@@ -4315,6 +4350,95 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(synchronized[bestFor.key], [])
         XCTAssertEqual(synchronized[tags.key], ["late-night"])
         XCTAssertEqual(synchronized[price.key], [])
+    }
+
+    func testChangingTaxonomyDropsStaleSuggestedTagsButKeepsCustomTags() {
+        let existing: Set<String> = ["Thai craving", "date night", "Joe's pick"]
+        let synchronized = MapPlaceSaveDetailsPolicy.synchronizedUnifiedTagSelections(
+            existing: existing,
+            previousSuggestedOptions: ["Thai craving", "date night", "craving list"],
+            nextSuggestedOptions: ["Mediterranean craving", "date night", "dinner rotation"]
+        )
+
+        XCTAssertEqual(synchronized, ["date night", "Joe's pick"])
+    }
+
+    func testLocalTagSuggestionsRequireMatchingSubcategoryAndRestaurantCuisine() {
+        XCTAssertTrue(
+            MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                sourceSubcategory: "Restaurant",
+                sourceCuisine: "Mediterranean",
+                selectedPrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                selectedSubcategory: "Restaurant",
+                selectedCuisine: "Mediterranean"
+            )
+        )
+        XCTAssertFalse(
+            MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                sourceSubcategory: "Restaurant",
+                sourceCuisine: "Thai",
+                selectedPrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                selectedSubcategory: "Restaurant",
+                selectedCuisine: "Mediterranean"
+            )
+        )
+        XCTAssertFalse(
+            MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: WanderPlaceCategory.outdoorsNature,
+                sourceSubcategory: "National Park",
+                sourceCuisine: nil,
+                selectedPrimaryCategory: WanderPlaceCategory.outdoorsNature,
+                selectedSubcategory: "Playground",
+                selectedCuisine: nil
+            )
+        )
+    }
+
+    func testUnifiedTagOrderingCanonicalizesSuggestedCaseAndKeepsCustomTags() {
+        XCTAssertEqual(
+            MapPlaceSaveDetailsPolicy.orderedSelections(
+                values: ["Date Night", "Joe's Pick"],
+                options: ["date night", "group"]
+            ),
+            ["date night", "Joe's Pick"]
+        )
+    }
+
+    func testChangingTaxonomyRefreshesEveryOptionalQuestionBlock() {
+        let candidate = PlaceCandidate(
+            id: "mapkit_reactive_questions",
+            name: "Reactive Questions",
+            category: "restaurant",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let context = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+        let restaurantBlocks = AddQuestionTemplates.blocks(category: "restaurant", status: .been)
+        let barBlocks = AddQuestionTemplates.blocks(category: "bar", status: .been)
+        let previousOptions = Dictionary(
+            uniqueKeysWithValues: restaurantBlocks.map { ($0.key, $0.options) }
+        )
+        let synchronized = MapPlaceSaveDetailsPolicy.synchronizedSelections(
+            existing: [
+                "price": ["$$$"],
+                "occasion": ["rainy night", "custom anniversary"]
+            ],
+            blocks: barBlocks,
+            context: context,
+            status: .been,
+            previousSuggestedOptions: previousOptions
+        )
+
+        XCTAssertNil(synchronized["price"])
+        XCTAssertEqual(synchronized["occasion"], ["custom anniversary"])
+        XCTAssertEqual(barBlocks.map(\.key), ["occasion", "bar_tags"])
     }
 
     func testNewSaveContextsClearInheritedPriceFeelWhileEditPreservesIt() throws {

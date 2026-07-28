@@ -24113,6 +24113,197 @@ Final outcome: the universal rec.me Share Extension is on `main`, fully
 validated in Simulator, and ready for physical-device testing once the
 documented Apple Developer provisioning is complete.
 
+## 2026-07-26 09:15 PDT - Codex - REC-155 Tags And Labels Design Exploration
+
+Agent: Codex using `design-shotgun`
+Branch: `codex/rec-155-tags-labels-redesign`
+Worktree: `/private/tmp/recme-rec155-tags-labels-mockups`
+Linear: `REC-155` (`In Progress`)
+
+Goal: create multiple reviewable iPhone mockup directions that make the
+difference between place tags and personal labels self-evident in rec.me's
+save/edit flow. This is design exploration only; production SwiftUI, schema,
+visibility, and TestFlight changes are not authorized.
+
+Starting status and coordination:
+
+- Ran `git fetch origin`, inspected the primary checkout, all worktrees, and
+  the latest agent-log entries before editing.
+- The primary checkout is on stale branch `codex/rec-142-widgets` with the
+  unrelated untracked `.pnpm-store/`; it remains untouched.
+- Created this clean isolated worktree from `origin/main` at `9d51b0ec3`.
+- Joe is concurrently working on REC-147 check-in cards. This exploration will
+  not edit production UI files, including the high-conflict `MapScreen.swift`.
+- Existing product contract: tags describe a place or why it fits, while
+  personal labels are user-owned memory/filter groupings. The current
+  side-by-side chip treatment and overlapping suggestions make that difference
+  unclear.
+- Design artifacts will live only in the gstack user-artifact directory, as
+  required by `design-shotgun`, not in the repository.
+
+Expected repository files:
+
+- `docs/agent-log.md`
+
+Expected external artifacts:
+
+- `~/.gstack/projects/<project>/designs/tags-labels-redesign-20260726/`
+  containing mockup variants, comparison board, and eventual feedback.
+
+Design checkpoint, 2026-07-26 09:28 PDT:
+
+- Created four distinct interactive iPhone HTML prototypes:
+  - A, `Describe it / Remember it`: two explicit tools with separate
+    structures for place description and personal organization.
+  - B, `One memory cloud`: one suggestion surface that routes selections into
+    `About Jitlada` and `For me`.
+  - C, `Place fingerprint / My shortcuts`: compact descriptive traits plus
+    larger personal destination tiles.
+  - D, `Save now, organize later`: descriptive traits in the main flow and
+    personal shortcuts as an optional post-save action.
+- Rendered and visually inspected all four at a 500x980 review viewport.
+  Tightened Variant C after its first render so both semantic halves are
+  visible above the anchored save action.
+- Built and rendered a responsive comparison board with 1-5 ratings,
+  preferred-direction selection, per-variant comments, remix controls, and a
+  local feedback endpoint. Local asset checks returned HTTP 200 for the board
+  and rendered images.
+- Persistent artifacts:
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/tags-labels-redesign-20260726/`.
+- The gstack image generator and bundled browse daemon were unavailable
+  because the design binary and Bun runtime are missing. Used self-contained
+  HTML/CSS/JS prototypes and installed headless Chrome rendering instead.
+- No production source, schema, project-generation, or TestFlight files were
+  changed. Awaiting Ryan's structured comparison-board feedback before
+  selecting or iterating a direction.
+
+Design revision, 2026-07-26 17:59 PDT:
+
+- Ryan replaced the two-field product model with one unified user-facing
+  **Tags** field. `Tags` is the clearer name because the values now cover both
+  place description and personal retrieval; `Labels` would imply personal
+  filing only.
+- Locked the suggestion contract for the later implementation:
+  - normalize and deduplicate one combined suggestion set;
+  - for Restaurants & Food, recompute from category + cuisine;
+  - for every other primary category, recompute from category + subcategory;
+  - remove incompatible taxonomy-specific suggestions in real time while
+    preserving still-valid selections and custom tags.
+- Replaced the earlier two-tool prototypes with four static, single-list
+  directions using the same fictional Mediterranean restaurant:
+  - A, `Tag Deck`: equal-height two-column selection cards.
+  - B, `Ranked Stack`: full-width suggestions with a concise relevance reason.
+  - C, `Flavor Board`: a symmetrical three-column tactile tile grid.
+  - D, `Tag Shelf`: selected tags above a compact faceted catalogue.
+- Each direction shows the same taxonomy context and a coherent, deduplicated
+  Mediterranean set. No variant includes the prior Asian-fusion mismatch,
+  separate personal-label pool, or loose asymmetrical bubble cloud.
+- Rendered and visually inspected all four at 500x980, refined Variant C's
+  custom-tag action to span the grid, then rendered a 1800x980 static
+  comparison image.
+- Final artifacts:
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/merged-tags-section-20260726/`.
+- Updated `docs/decisions.md` with the durable merged-field and taxonomy-aware
+  suggestion contract. No production SwiftUI, persistence, schema, tests,
+  build number, or TestFlight state changed.
+- Validation: all five PNGs rendered successfully and were visually inspected;
+  the persistent artifact directory contains the four source HTML files,
+  four individual PNGs, and one static comparison HTML/PNG pair.
+
+Final outcome: four reviewable static mockup directions now express one
+taxonomy-aware, deduplicated Tags field. REC-155 remains In Progress pending
+Ryan's visual-direction selection and a separately authorized implementation
+pass.
+
+Git handoff, 2026-07-26 18:04 PDT:
+
+- Committed the documentation record as `4c5c8eafc`, merged latest
+  `origin/main` at `759e7c9df` while preserving both append-only log histories,
+  and pushed `codex/rec-155-tags-labels-redesign`.
+- Opened conflict-free draft PR #255:
+  `https://github.com/joelipshutz/wander/pull/255`.
+- `git diff --check origin/main...HEAD` passed. The PR contains only
+  `docs/agent-log.md` and `docs/decisions.md`; static mockups remain outside
+  the repository in the recorded gstack artifact directory.
+
+Implementation restart, 2026-07-26 18:30 PDT:
+
+- Ryan selected Option D (`Tag Shelf`) and authorized production
+  implementation with a strict boundary: keep the unified Tags section inside
+  the existing More Options disclosure and do not redesign any other part of
+  the Check-in page.
+- Updated Linear REC-155 from design-only scope to implementation acceptance
+  criteria. The More Options summary must remove `labels`; its question blocks
+  must recompute from status plus category/cuisine or category/subcategory,
+  including Check-in price/questions and Wanna excitement, planning, and
+  why-save questions.
+- Fetched and merged current `origin/main` at `9f12a04ea`; the REC-160
+  Check-in Action Button landing auto-merged without save-flow conflicts.
+- Found concurrent uncommitted REC-162 work in `AddScreen.swift`,
+  `ProfileImportViews.swift`, `NavigationContractTests.swift`, and its agent
+  log. This task will not edit those overlapping production/test files.
+- Planned implementation files:
+  - `Wander/Features/Map/MapScreen.swift`
+  - `Wander/Features/Add/AddQuestionTemplates.swift`
+  - `Wander/Services/WanderPlaceCategory.swift`
+  - `WanderTests/WanderPlaceCategoryTests.swift`
+  - `WanderTests/WanderStoreTests.swift`
+  - `docs/agent-log.md`
+  - `docs/decisions.md`
+
+Implementation completion checkpoint, 2026-07-26 19:43 PDT:
+
+- Implemented Option D as one **Tags** shelf inside the existing More Options
+  disclosure. Selected tags sit above one uncategorized, equal-width suggestion
+  grid with an accessible custom-tag entry; the previous loose bubble layout and
+  separate personal-label block are gone.
+- The save sheet now reads legacy personal labels into the unified selection and
+  writes the edited result through the active `*_tags` attribute. Suggestions
+  are normalized and deduplicated case-insensitively.
+- Status or taxonomy changes now refresh every applicable More Options block,
+  not only tags. Check-in price feel and contextual questions, plus Wanna
+  excitement, `planning for?`, and `why save it?`, all follow the current
+  category plus cuisine/subcategory. Generated values that no longer apply are
+  removed while custom values survive.
+- Kept the implementation boundary to save-sheet state and More Options. The
+  Check-in disclosure summary is now `note, tags & privacy`; no rating, visit
+  date, photos, note, privacy, place header, or other Check-in surface changed.
+- Added regression coverage for unified suggestion deduplication, cuisine-aware
+  updates, Wanna restaurant/bar/park templates, stale generated-value pruning,
+  custom-value preservation, all optional-question refreshes, and the updated
+  navigation copy contract.
+- Focused tag/template/taxonomy tests passed 4/4 and the focused navigation
+  contract passed 1/1. The exact final source then passed the complete XCTest
+  suite: 760/760 with zero failures on iPhone 17e / iOS 26.5. Result bundle:
+  `/tmp/recme-rec155-tags-labels-mockups/DerivedData-rec155/Logs/Test/Test-Wander-2026.07.26_19-42-33--0700.xcresult`.
+- The repo-standard iPhone 16 Plus / iOS 18.6 destination was unavailable on
+  this host. Visually inspected the actual production component on iPhone 17e
+  and iPhone 17 Pro Max / iOS 26.5; final screenshots are
+  `tags-option-d-iphone-17e.png` and
+  `tags-option-d-iphone-17-pro-max.png` in the REC-155 Codex visualization
+  artifact folder. The temporary DEBUG-only screenshot harness was removed.
+- `git diff --check` passed and the tree contains no leftover mockup-harness
+  symbols. The only added `valueType:` use is the already-supported
+  `multi_tag`; no new cross-layer value type, Supabase migration, RPC, or hosted
+  smoke-test surface was introduced.
+- No build number, archive, upload, TestFlight group, or tester Slack state was
+  changed. Commit, push, PR readiness, and Linear handoff remain to be recorded.
+- Committed the implementation as `0b72b1098` and pushed it to
+  `codex/rec-155-tags-labels-redesign`; existing PR #255 now contains the exact
+  tested head and GitHub reports no base-branch conflicts.
+- After Ryan's explicit confirmation, updated PR #255's title and body to the
+  implementation scope and validation receipt, then moved it from Draft to
+  Ready for review. GitHub shows the PR Open, mergeable, and conflict-free.
+- Opened the isolated worktree's `Wander.xcodeproj` in its own Xcode window.
+  Xcode's visible Branch Chooser confirms
+  `codex/rec-155-tags-labels-redesign`; the previously active REC-162 Xcode
+  window and branch were not switched or overwritten.
+- Moved Linear REC-155 to In Review. The Linear safety guard rejected the
+  optional validation comment because it included internal implementation
+  metadata and a private PR link; it was not retried or routed around. The
+  issue's existing PR attachment reflects the updated title, and this log plus
+  PR #255 contain the complete validation receipt.
+
 ## 2026-07-26 09:05 PDT - Codex - Full-Screen Photo Zoom
 
 Agent: Codex
@@ -26818,6 +27009,38 @@ Next step: install a future signed build containing commit `6dd510581` on an
 Action Button iPhone, select **Settings → Action Button → Controls → rec.me →
 Check-in**, and verify locked, unlocked, cold-launch, and signed-out behavior.
 
+## 2026-07-27 13:08 PDT - Codex - REC-155 Landing and Build 107 Release Start
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-155-tags-labels-redesign`
+Worktree: `/private/tmp/recme-rec155-tags-labels-mockups`
+Linear: `REC-155` (`In Review`)
+PR: `#255`
+
+Goal: fulfill Ryan's explicit TestFlight request by landing the remaining
+REC-155 unified Tags implementation, then package exact latest `main` as the
+next TestFlight build. The other named changes are already released:
+`977f7c654` / REC-159 in build 100, and REC-157 plus PR #249 / REC-160 in
+build 102.
+
+Starting status and coordination:
+
+- Fetched `origin`; current `main` is `822ba5273` and build 106 is the latest
+  completed, approved public TestFlight release.
+- REC-155 is the only requested code not already merged or released. Ready PR
+  #255 remains open at `16f368620` and is based on build-101-era `main`.
+- This dedicated worktree is clean except for the pre-existing untracked
+  `DerivedData-rec155/`, which is regenerable test output and will remain
+  untouched and uncommitted.
+- Expected feature-branch work is limited to latest-main reconciliation,
+  append-only release coordination, any verified review fix required for
+  compatibility, and validation. High-conflict source includes
+  `Wander/Features/Map/MapScreen.swift`.
+- If the exact integrated PR remains clean, squash-merge it, increment build
+  106 to 107 once on a separate release branch, validate exact latest `main`,
+  archive/upload without build-number drift, attach to `rec.me Alpha`, submit
+  external beta review, update Linear, and post the required
+  `#testflight-feedback` note.
 REC-157 final-main reconciliation — 2026-07-26 18:45 PDT:
 
 - `origin/main` advanced during REC-157 validation with REC-160's separate
@@ -27826,3 +28049,553 @@ approved and available through the public TestFlight link.
   worktrees remain intact.
 - No merge, build-number bump, archive, TestFlight upload, hosted backend/data
   mutation, or tester-facing Slack announcement was performed for this handoff.
+
+REC-155 integrated review checkpoint — 2026-07-27 13:15 PDT:
+
+- Merged exact current `origin/main` at `822ba5273` into PR #255. Product,
+  project, test, and decision files auto-merged cleanly; the only conflict was
+  this append-only log, where both histories were preserved.
+- Full-diff review found two related completeness bugs in the older branch:
+  locally learned tag suggestions were still allowed to cross restaurant
+  cuisines and sibling subcategories, and a selected legacy tag whose casing
+  differed from a canonical suggestion could be omitted from the saved draft.
+- Fixed local tag sources to require the selected primary category and
+  subcategory, plus exact cuisine for Restaurants & Food. Canonical suggestion
+  spelling now wins case-insensitively while custom tags remain preserved.
+- Added focused regressions for taxonomy matching and case-insensitive
+  canonicalization. The six targeted REC-155 taxonomy, synchronization,
+  persistence, and navigation tests passed 6/6 on iPhone 17 Pro / iOS 26.5:
+  `/tmp/DerivedData-rec155-landing/Logs/Test/Test-Wander-2026.07.27_23-11-15--0700.xcresult`.
+- Verified the hosted save contract replaces the prior place-attribute set
+  before inserting the new payload, so folding legacy `personal_labels` into
+  the active `*_tags` attribute does not leave duplicate remote rows. No new
+  attribute value type or schema migration is introduced.
+- Next: commit the review fixes, run the exact integrated complete suite,
+  generic Simulator build, and two-size visual QA, then push and squash-merge
+  PR #255 if all gates remain green.
+
+REC-155 pre-landing validation completion — 2026-07-27 13:22 PDT:
+
+- The first exact integrated full-suite run executed 792 tests: 791 passed and
+  the sole failure was the build-number source contract still expecting 104
+  on build-106 `main`. No REC-155 behavior test failed.
+- Updated that stale contract to current build 106. Its focused rerun passed
+  1/1, then the complete suite passed 792/792 with zero failures on iPhone 17
+  Pro / iOS 26.5:
+  `/tmp/DerivedData-rec155-landing/Logs/Test/Test-Wander-2026.07.27_23-18-31--0700.xcresult`.
+- The generic arm64/x86_64 iOS Simulator build passed for the app and embedded
+  extensions with code signing disabled. Only existing Supabase formatter
+  actor-isolation and traditional-headermap warnings remain.
+- Prior production-component visual QA remains applicable because latest
+  `main` auto-merged the save surface without source conflict and the review
+  fixes are data-selection only. The retained iPhone 17e and iPhone 17 Pro Max
+  screenshots show the actual Tag Shelf without clipping or unrelated Check-in
+  layout drift.
+- Final gstack/manual diff review: two informational correctness/completeness
+  findings were fixed with focused regressions; zero unresolved critical or
+  informational findings remain. PR #255 has no human, Greptile, or hosted
+  check feedback to resolve.
+- `xcodegen generate` produced no project drift and `git diff --check` passed.
+  PR #255 is ready to push and squash-merge into current `main`, after which
+  the explicit release workflow will prepare build 107 from exact latest
+  `main`.
+
+## 2026-07-27 13:26 PDT - Codex - TestFlight Build 107
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-107`
+Worktree: `/private/tmp/recme-testflight-build-107`
+Linear: `REC-155` (`In Review`)
+PR: `#255` (squash-merged as `3485b3df5`)
+
+Goal: package exact latest `main` with REC-155 as rec.me 0.1 (107), upload the
+unchanged archive to App Store Connect, attach it to public group
+`rec.me Alpha`, submit external beta review, and announce the tester scope.
+
+Release scope and starting state:
+
+- Build 106 is the latest completed public TestFlight release. No unfinished
+  explicit release is pending.
+- Ryan's other named changes are already live: `977f7c654` / REC-159 in build
+  100, and REC-157 plus PR #249 / REC-160 in build 102.
+- REC-155 is the only newly merged requested behavior. It landed on exact
+  `main` as `3485b3df592005d9041304388147928be61dff85` after the focused 6/6,
+  complete 792/792, generic Simulator, and visual review gates recorded above.
+- This clean isolated branch will increment only
+  `CURRENT_PROJECT_VERSION` from 106 to 107, regenerate the Xcode project, and
+  update the single build-number contract. Marketing version remains 0.1.
+- No App Store production metadata, marketing-version change, or broad
+  `#all-recme` announcement is authorized.
+
+Release metadata validation:
+
+- Incremented the single shared build source from 106 to 107 and regenerated
+  `Wander.xcodeproj`. The generated project changed only the matching Debug
+  and Release build settings.
+- Updated the build-number contract to 107; its focused iPhone 17 Pro /
+  iOS 26.5 Simulator test passed 1/1.
+- `git diff --check` passed. The release-branch diff is limited to
+  `project.yml`, generated project metadata, the matching contract assertion,
+  and this coordination record.
+- Next: commit/push a ready release-metadata PR, squash-merge it into current
+  `main`, then validate/archive/upload that exact merged `main`.
+
+### 2026-07-28 00:00 PDT - Build 107 release completion
+
+- Ready release metadata PR #272 squash-merged to `main` as
+  `62b6babb7e150b155c029027f672ca21bc100ede`:
+  https://github.com/joelipshutz/wander/pull/272. This exact commit is the
+  archived release source.
+- Exact-main validation on iPhone 17 Pro / iOS 26.5 passed 792/792 tests with
+  zero failures:
+  `/tmp/DerivedData-build107-main/Logs/Test/Test-Wander-2026.07.27_23-42-23--0700.xcresult`.
+  One prior complete run passed 791 tests and hit only the unrelated,
+  non-reproducible onboarding carousel timing assertion; that test passed in a
+  clean focused rerun before the fully green aggregate run. The generic iOS
+  Simulator build also passed.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build107.xcarchive`. Archive metadata and all three
+  embedded extensions independently report rec.me `0.1 (107)`, and strict
+  deep code-signature verification passed.
+- Export options used automatic App Store distribution signing,
+  `destination=upload`, `uploadSymbols=true`, team `Y7TVK75RZ8`, and
+  `manageAppVersionAndBuildNumber=false`. The first account-session export
+  stopped before upload with `Failed to Use Accounts`; retrying the unchanged
+  archive with the configured Ryan-local App Store Connect API key succeeded.
+  Xcode reported `Uploaded Wander`, `Upload succeeded`, and
+  `EXPORT SUCCEEDED` without build-number drift.
+- App Store Connect build
+  `bd4de62b-e065-4594-bd5e-bff668f90690` is `VALID`, reports build 107, and
+  has `usesNonExemptEncryption=false`. The release helper published the
+  `en-US` What to Test copy, attached build 107 to public group
+  `rec.me Alpha`, submitted external beta review, and confirmed `APPROVED`.
+  Public link: https://testflight.apple.com/join/knEhRa6t.
+- REC-155 is `Done` in Linear with the implementation, validation, archive,
+  App Store Connect, and public TestFlight receipts. Requested commit
+  `977f7c654` / REC-159 and REC-157 plus PR #249 / REC-160 were already
+  present in public builds 100 and 102 respectively and remain included in
+  exact latest-main build 107.
+- Posted the required live/approved tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785222003542219.
+  It includes the public link, tester-facing unified Tags scope, focused
+  checklist, prior widget rechecks, known Clerk alpha branding issue, and
+  requested device/account/screenshot/repro details.
+- No Supabase schema/RPC/value-type contract changed, so the hosted Supabase
+  smoke suite was not applicable. Existing Supabase formatter actor-isolation
+  and traditional-headermap warnings remain non-blocking.
+
+Final status: rec.me 0.1 (107) is approved and available through the public
+TestFlight link. This completion record is docs-only and does not require
+another build-number increment.
+
+## 2026-07-28 00:00 PDT - Codex - REC-174 Save-Flow Header and Titles
+
+Agent: Codex
+Branch: `codex/rec-174-save-flow-header`
+Worktree: `/private/tmp/recme-rec174-save-header`
+Linear: `REC-174` (`In Progress`)
+
+Goal: place the save-flow dismiss control inline with its title, update a
+selected Wanna flow to say `Wanna go`, and reserve `Check in again` for places
+with an actual prior check-in.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `62b6babb7`.
+- The primary checkout is on stale branch `codex/rec-142-widgets` with an
+  unrelated untracked `.pnpm-store/`; it remains untouched.
+- `Wander/Features/Map/MapScreen.swift` is a high-conflict file. No current
+  worktree/log entry declares overlapping REC-174 work, but active REC-173 may
+  touch nearby optional-question styling, so this change will stay narrowly
+  scoped to save-context title derivation and the sheet header.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this append-only log.
+- Planned validation: focused context/navigation regressions, full test suite,
+  generic Simulator build, `xcodegen generate`, diff review, and visual QA on
+  the current large and smaller iPhone simulator targets.
+
+Implementation and validation checkpoint:
+
+- Moved the save-flow close control into the same header row as the dynamic
+  title while retaining a 44-point tap target. The initial choice screen keeps
+  `Check in or Wanna`; explicitly selecting Wanna changes the title to
+  `Wanna go`.
+- Added explicit prior-check-in state to save contexts. A Wanna-only place now
+  uses `Check in at <place>` in the place profile action and save sheet;
+  `Check in again` is reserved for a current-user save with an actual prior
+  check-in.
+- Added context/title, presentation-copy, and source-contract regressions in
+  `WanderStoreTests`, `PlaceProfilePresentationTests`, and
+  `NavigationContractTests`.
+- `xcodegen generate` completed without project drift. The generic arm64/x86_64
+  iOS Simulator build passed with only existing actor-isolation, headermap, and
+  App Intents warnings.
+- Focused regressions passed, including the final two presentation/navigation
+  checks:
+  `/tmp/DerivedData-rec174-focused/Logs/Test/Test-Wander-2026.07.28_00-21-04--0700.xcresult`.
+- The complete suite passed before the final place-profile label wiring:
+  791 unit/contract tests and 1 onboarding UI test, zero failures:
+  `/tmp/DerivedData-rec174-focused/Logs/Test/Test-Wander-2026.07.28_00-17-41--0700.xcresult`.
+  A final complete rerun remains required after syncing with latest `main`.
+- Simulator visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Reviewed
+  `/private/tmp/rec174-iphone17pro-wanna.png`,
+  `/private/tmp/rec174-iphone17e-initial.png`, and
+  `/private/tmp/rec174-iphone17e-wanna.png`; the close control is inline, the
+  dead header row is removed, and Wanna selection reads `Wanna go`. A final
+  live fixture check also showed `Check in at Elysian Picnic Steps` for the
+  current user's Wanna-only save.
+
+Final validation and handoff checkpoint:
+
+- Rebased the implementation onto current `origin/main` at `2621838b4`. The
+  only conflict was this append-only coordination log; both agents' entries
+  were preserved.
+- The post-rebase clean full suite passed 791 unit/contract tests and 1
+  onboarding UI test with zero failures:
+  `/tmp/DerivedData-rec174-final/Logs/Test/Test-Wander-2026.07.28_00-23-59--0700.xcresult`.
+- The final generic iOS Simulator build passed for arm64 and x86_64. Only
+  pre-existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain.
+- `git diff --check` passed. No Supabase schema, RPC, RLS, attribute value
+  type, build-number, or TestFlight release work was in scope.
+- Implementation commit before this completion-log update:
+  `9454534a1` (`fix: tighten save flow headers and titles`).
+
+Outcome: requested save-flow layout and context-aware titles are implemented,
+regression-covered, and visually verified. The branch is ready to push and
+open as a ready PR; the PR URL and final Linear state will be recorded in the
+next handoff entry after publication.
+
+Publication handoff:
+
+- Pushed `codex/rec-174-save-flow-header` and opened ready PR #276:
+  https://github.com/joelipshutz/wander/pull/276.
+- Linked PR #276 to REC-174, added the test/build/visual validation receipt,
+  and moved the Linear issue from `In Progress` to `In Review`.
+- No known REC-174 functional issues remain. Next step: review and merge PR
+  #276; no TestFlight release was requested or performed.
+
+## 2026-07-28 00:10 PDT - Codex - REC-168 Date Picker Dismissal
+
+Agent: Codex
+Branch: `codex/rec-168-date-picker-dismiss`
+Worktree: `/private/tmp/recme-rec168-date-picker`
+Linear: `REC-168` (`In Progress`)
+
+Goal: make the check-in date calendar apply a tapped date immediately and
+collapse without requiring a tap outside the calendar, then push a branch and
+open its isolated Xcode project for Ryan to test.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from exact
+  `origin/main` at `2621838b4b`.
+- The primary checkout is on unrelated `codex/rec-142-widgets` work and has an
+  untracked `.pnpm-store/`; neither will be touched.
+- No active worktree overlaps the expected source or test files.
+- Root cause: the check-in field uses SwiftUI's compact `DatePicker`, whose
+  system calendar presentation has no binding the app can use to dismiss
+  immediately after its date binding changes.
+- Planned fix: replace that opaque compact presentation with an app-controlled
+  expandable graphical calendar, close it from the selected-date binding, and
+  add a focused source contract that preserves immediate application,
+  dismissal, the no-future-date limit, and date-only behavior.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+
+Validation checkpoint — 2026-07-28 00:16 PDT:
+
+- Replaced the opaque compact picker popover with a controlled expandable
+  graphical calendar. The date binding assigns the tapped date and then
+  animates `isShowingCheckInDatePicker` to `false`, so the calendar collapses
+  in the same interaction. The field still limits selection through today and
+  exposes date-only accessibility text.
+- Added a focused navigation/source contract covering the graphical picker,
+  explicit selected-date assignment, immediate controlled collapse, removal of
+  the non-dismissible compact style, and the existing date-only behavior.
+- The initial sandboxed focused test could not access CoreSimulator or fetch
+  Swift packages. Per repository policy, it was rerun with approved simulator
+  access and passed 1/1:
+  `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-10-56--0700.xcresult`.
+- The complete simulator suite then passed 792/792 total tests: 791 unit and
+  integration tests plus the onboarding UI test, all with zero failures:
+  `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-15-55--0700.xcresult`.
+- `git diff --check` passed. Existing Supabase formatter actor-isolation
+  warnings remain unchanged and non-blocking. No schema, RPC, build number,
+  TestFlight, or release behavior changed.
+- Next: commit and push the branch, open a ready PR, attach it to REC-168,
+  move the issue to `In Review`, and open this isolated worktree's
+  `Wander.xcodeproj` in Xcode for Ryan's hands-on interaction and visual check.
+
+Handoff checkpoint — 2026-07-28 00:17 PDT:
+
+- Committed the implementation and validation record as `64858933d`
+  (`fix: dismiss check-in date picker on selection`) and pushed
+  `codex/rec-168-date-picker-dismiss`.
+- Opened ready PR #275 against `main`:
+  https://github.com/joelipshutz/wander/pull/275
+- Linked PR #275 from REC-168, posted the implementation and 792-test
+  validation summary, and moved the issue to `In Review`.
+- Opened `/private/tmp/recme-rec168-date-picker/Wander.xcodeproj` as its own
+  Xcode workspace window. Xcode's Branch Chooser explicitly shows
+  `codex/rec-168-date-picker-dismiss`, the active run destination is iPhone 17
+  Pro, and PR #275 is open, ready, and cleanly mergeable against `main`.
+- No known code or test blocker remains. Ryan's requested final handoff is to
+  test the expanded calendar visually in Xcode and confirm a tapped past date
+  updates the field and collapses the calendar immediately.
+
+REC-168 same-date follow-up start — 2026-07-28 00:36 PDT:
+
+- Ryan's physical Xcode test confirmed the first fix handles a newly selected
+  date, but tapping the already-selected date leaves the calendar expanded.
+  REC-168 moved from `In Review` back to `In Progress`.
+- Root cause: SwiftUI's single-value graphical `DatePicker` does not write its
+  `Binding<Date>` when the tapped day equals the current value, so the binding
+  setter that owns collapse never runs.
+- The `ios-fix` HTTP snapshot endpoint is unavailable by the repo's documented
+  decision: this app intentionally has no DebugBridge/StateServer. Ryan's exact
+  physical reproduction is the pre-fix interaction evidence, and
+  `WanderTests/Fixtures/rec-168-check-in-date-reselection-pre.json` durably
+  records the state before Swift edits.
+- Planned fix: use a controlled single-selection `MultiDatePicker`. Its set
+  binding emits on both new-day selection and deselection of the current day;
+  interpret an empty set as explicit confirmation of the existing date, then
+  collapse in either case. Add behavior-level date-selection tests plus the
+  existing source contract.
+- Expected files remain `Wander/Features/Map/MapScreen.swift`,
+  date-selection/test coverage, the pre-fix fixture, and this log. After
+  focused and complete validation, update PR #275 and squash-merge it to
+  `main`. No TestFlight build, release bump, archive, upload, or Slack note is
+  authorized.
+### 2026-07-28 00:43 PDT — Codex — REC-168 same-date confirmation validation
+
+- Goal: ensure tapping the already-selected check-in date explicitly resolves to that date and closes the expanded picker.
+- Branch: `codex/rec-168-date-picker-dismiss`
+- Implementation: replaced the single-value graphical `DatePicker` with a controlled `MultiDatePicker`; an empty selection now means the current day was confirmed, while a different selected day replaces only the date components and preserves the original check-in time.
+- Regression fixture: `WanderTests/Fixtures/rec-168-check-in-date-reselection-pre.json`, based on Ryan's physical Xcode reproduction. This repository intentionally has no DebugBridge/StateServer snapshot endpoint, so no live HTTP state snapshot was available.
+- Validation:
+  - Focused REC-168 regression tests: 3 passed, 0 failed.
+  - Full test suite: 794 passed, 0 failed, 0 skipped.
+  - Result bundle: `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-40-25--0700.xcresult`.
+  - `git diff --check`: passed.
+- Review: direct diff review against `origin/main` found no unrelated changes, schema/data/privacy impact, or generated project churn. The optional gstack review workflow could not run because its installed `checklist.md` and `greptile-triage.md` resources are missing, so equivalent manual review was completed and recorded here.
+- Handoff: PR #275 is ready for the user-authorized squash merge to `main`. This is merge-only work; no build-number bump, archive, TestFlight upload, or Slack release note is authorized.
+
+## 2026-07-27 23:51 PDT - Codex - REC-173 Unified More Options Styling
+
+Agent: Codex
+Branch: `codex/rec-173-more-options-shelf`
+Worktree: `/private/tmp/recme-rec173-more-options-shelf`
+Linear: `REC-173` (`In Progress`)
+
+Goal: extend REC-155's approved Option D Tag Shelf visual language to every
+option-based question inside Check-in and Wanna More Options, including price
+feel, best for/planning for, excitement, occasion, work setup, strenuousness,
+and taxonomy-specific multi-select questions, without changing selection
+semantics or the surrounding save page.
+
+Starting status and coordination:
+
+- Fetched `origin` and confirmed REC-155/PR #255 is already squash-merged as
+  `3485b3df5`; build 107 preparation is also on `origin/main`.
+- Created this clean isolated worktree from exact current `origin/main` at
+  `62b6babb7`. The earlier REC-155 worktree contains only regenerable untracked
+  DerivedData and will not be reused or modified.
+- Existing worktrees include ongoing unrelated efforts, but no uncommitted
+  overlapping `MapScreen.swift` work was found in this checkout. Any newly
+  discovered overlap will be logged and preserved.
+- Locked boundary: only More Options question rendering and its focused
+  contracts/tests may change. Single-select, multi-select, slider, persistence,
+  taxonomy refresh, the unified Tags shelf, and all surrounding Check-in/Wanna
+  content retain their existing behavior.
+- Expected files:
+  - `Wander/Features/Map/MapScreen.swift`
+  - focused tests under `WanderTests/`
+  - `docs/agent-log.md`
+  - `docs/decisions.md` only if a durable component contract needs expansion.
+
+### 2026-07-28 00:12 PDT - Implementation and validation checkpoint
+
+- Replaced `MapSaveQuestionOptions`' loose wrapping chips with structured
+  Tag-Shelf-style tiles. Three-value single-choice scales render as balanced
+  icon-over-label cards; multi-select questions render as a two-column
+  add/check grid with a full-width dashed custom-entry card. Accessibility
+  Dynamic Type collapses either layout to one column.
+- Preserved all `AddQuestionBlock` templates, keys, `valueType` values,
+  defaults, selection callbacks, custom-value normalization, and More Options
+  placement. No schema, RPC, persistence, taxonomy, or surrounding Check-in /
+  Wanna layout change was introduced.
+- Added a navigation source contract that prevents these questions from
+  regressing to `MapSaveWrappingChipLayout`, `WanderChip`, or capsule controls.
+- Focused regression passed 1/1 on iPhone 17 Pro / iOS 26.5.
+- Full suite passed 793/793 with zero failures on iPhone 17 Pro / iOS 26.5.
+  Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain unrelated and non-blocking.
+- Visual QA used a temporary DEBUG-only harness that rendered the actual
+  production question and unified Tags components, then was fully removed.
+  Reviewed Check-in and Wanna on iPhone 17 Pro plus Check-in on the narrower
+  iPhone 17e. The initial Wanna render exposed horizontal overflow in the
+  three-column scale; switching single-choice cards to a compact vertical
+  layout fixed it. Final renders had no clipping, overflow, or tap-target
+  issue. Temporary harness code, screenshots, and DerivedData were removed.
+- `git diff --check` passes. Next: commit, reconcile the append-only log with
+  latest `origin/main`, push, open a ready PR linked to REC-173, move Linear to
+  In Review, and open this worktree project in Xcode for local testing.
+
+### 2026-07-28 00:28 PDT - Ready-for-review handoff
+
+- Rebased the implementation onto current `origin/main` at `2621838b4`,
+  committed it as `35d4b3da3`, and pushed
+  `codex/rec-173-more-options-shelf`.
+- Opened ready PR #274:
+  <https://github.com/joelipshutz/wander/pull/274>.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser shows `codex/rec-173-more-options-shelf`; the prior REC-155
+  Xcode window was not switched or overwritten.
+- Validation remains: focused contract 1/1, full suite 793/793, final visual QA
+  on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
+- No TestFlight build or release was requested or performed. Next step is PR
+  review and merge after CI/reviewer approval.
+
+### 2026-07-28 00:53 PDT - Merged to main
+
+- Reviewed PR #274 against current `origin/main`; no blocking correctness,
+  security, data-contract, or scope findings were found. GitHub had no review
+  comments or CI checks configured for the PR. The optional gstack review-log
+  helper could not record telemetry because `bun` is not installed; the manual
+  review and validation are recorded here.
+- Rebased onto `d56c734e8` after PR #275 advanced `main`; the only conflict was
+  the append-only `docs/agent-log.md`, resolved by preserving both entries.
+- Re-ran the focused combined-head navigation contract: 1/1 passed on iPhone
+  17 Pro / iOS 26.5. Prior branch validation remains full suite 793/793, visual
+  QA on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
+- Squash-merged ready PR #274 into `main` as `5f4b3308f`. Linear `REC-173` was
+  moved to Done with the merge and validation evidence.
+- Merge-only closeout: no build-number bump, archive, TestFlight upload, or
+  Slack release note was requested or performed. The change will ride the next
+  explicit TestFlight release batch.
+
+## 2026-07-28 00:54 PDT - Codex - REC-174 Device-Test Follow-up
+
+Agent: Codex
+Branch: `codex/rec-174-save-flow-header`
+Worktree: `/private/tmp/recme-rec174-save-header`
+Linear: `REC-174` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/276
+
+Goal: refine the save-flow title transitions after device testing and align
+the back, title, and close controls on a shared vertical center with slightly
+more space below the sheet grabber.
+
+Starting status and coordination:
+
+- The worktree was clean and matched the pushed PR branch. Fetched `origin`;
+  `main` had advanced by REC-168 and REC-173, both touching the save flow.
+- Merged current `origin/main` (`5f4b3308f`) before editing. The only conflict
+  was this append-only log; all entries were preserved. The merged Map screen
+  and navigation tests applied automatically.
+- Updated REC-174's acceptance criteria and returned it from `In Review` to
+  `In Progress`.
+- Expected edits remain narrowly scoped to
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+- Planned validation: focused title/alignment regressions, full test suite,
+  generic Simulator build, `git diff --check`, and visual QA on iPhone 17 Pro
+  plus the smaller iPhone 17e.
+
+### 2026-07-28 01:27 PDT - Follow-up implementation and validation
+
+- Kept the choice-step title persistently `Check in or Wanna` for both status
+  selections. After Continue, confirmation-backed flows now show `Check in`
+  for Been and `Wanna go` for Wanna. Direct add-visit flows intentionally keep
+  their contextual titles, including `Check in at <place>` for a Wanna-only
+  save and `Check in again` after a prior visit.
+- Rebuilt the header row around one vertical centerline: back, title, and close
+  controls all use the shared 44-point minimum height. Added 4 points of top
+  spacing below the sheet grabber. Removed the now-unnecessary
+  `didSelectStatus` state.
+- Regenerated `Wander.xcodeproj` after merging current `main`; XcodeGen added
+  REC-168's already-merged JSON fixture to the Resources phase. No manual
+  project membership or signing change was introduced.
+- Focused regression validation passed 3/3 on iPhone 17 Pro / iOS 26.5. The
+  first focused run caught an overly broad test expectation for direct
+  add-visit flows; the production behavior and final assertions preserve their
+  contextual titles.
+- Full suite passed: 794 unit/contract tests and 1 UI test, zero failures.
+  Result bundle:
+  `/tmp/DerivedData-rec174-followup-full/Logs/Test/Test-Wander-2026.07.28_01-14-59--0700.xcresult`.
+- Generic iOS Simulator build passed after rerunning outside the sandbox, which
+  had blocked CoreSimulator and SwiftPM caches. Existing Supabase formatter
+  actor-isolation and traditional-headermap warnings remain unrelated.
+- Visual QA passed on iPhone 17e and iPhone 17 Pro. On both sizes, the choice
+  title stayed `Check in or Wanna` after selecting either option; the details
+  titles were `Check in` and `Wanna go`; and back/title/close shared the same
+  visual centerline without clipping or excess top space. Temporary launch
+  arguments were disabled and removed from the tracked scheme diff afterward.
+- `git diff --check` passes. No schema, RPC, build-number, TestFlight, or Slack
+  release action was required. Next: commit, push PR #276, return REC-174 to
+  `In Review`, and leave this worktree's Xcode project on the branch for Ryan.
+
+### 2026-07-28 01:28 PDT - Ready-for-review handoff
+
+- Committed the follow-up as `ddb2844d8` and pushed
+  `codex/rec-174-save-flow-header`; ready PR #276 is open and GitHub reports a
+  clean merge state:
+  <https://github.com/joelipshutz/wander/pull/276>.
+- Updated REC-174 with the device validation evidence and returned it to
+  `In Review`.
+- Xcode remains open on this isolated worktree, with Branch Chooser on
+  `codex/rec-174-save-flow-header` and iPhone 17 Pro selected. The normal Run
+  scheme is restored with no enabled visual-QA launch arguments.
+- Final validation remains 3/3 focused regressions, 794/794 unit/contract
+  tests, 1/1 UI test, generic Simulator build, visual QA on iPhone 17e and
+  iPhone 17 Pro, and `git diff --check`.
+
+### 2026-07-28 01:33 PDT - Final centering and main landing follow-up
+
+- User requested that `Check in`, `Wanna go`, `Check in or Wanna`, and
+  `Check in again` be centered to the full sheet width, then landed on `main`.
+- REC-174 returned to `In Progress` with the centered-title acceptance
+  criterion. Existing isolated worktree and PR #276 remain the implementation
+  path; the starting branch and worktree were clean.
+- Confirmed TestFlight build 107 has a completed release record. This is a
+  merge-only request, so no build-number bump, archive, upload, or Slack release
+  note is authorized.
+- Expected edits: `Wander/Features/Map/MapScreen.swift`, its navigation
+  contract test, and this append-only log. Planned validation is the focused
+  header contract plus diff review before updating and squash-merging PR #276.
+
+### 2026-07-28 01:37 PDT - Centering validation and review
+
+- Replaced the title/control `HStack` with a full-width `ZStack`: the title is
+  centered against the sheet width while a transparent-width control row keeps
+  Back at the leading edge and Close at the trailing edge. Existing 44-point
+  control heights and the shared vertical center are preserved.
+- Updated the navigation contract to require the centered title frame,
+  multiline centering, and independent overlay control row.
+- The first focused command used a stale test method name and executed zero
+  tests; it is not counted as validation. The correctly named focused contract
+  then passed 1/1 on iPhone 17 Pro / iOS 26.5:
+  `testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions`.
+- Pre-landing review found no blocking correctness, accessibility, state,
+  security, data-contract, or scope issues. The centered titles are short
+  enough to avoid the edge controls in every state: the long choice title has
+  no Back control, while detail titles with Back are `Check in` or `Wanna go`.
+- Prior branch validation remains 794/794 unit/contract tests, 1/1 UI test,
+  generic Simulator build, and visual QA on iPhone 17e and iPhone 17 Pro.
+  `git diff --check` passes.
+### 2026-07-28 01:39 PDT - Merged to main
+
+- Pushed centered-title commit `94aa1a577`, updated ready PR #276, and
+  rechecked it against latest `origin/main`. GitHub reported a clean merge
+  state, no required checks, no review blockers, and no Greptile comments.
+- Squash-merged PR #276 into `main` as `b7470f02f`.
+- `gh pr merge --delete-branch` returned a local checkout error because another
+  registered worktree owns `main`; the server-side merge completed
+  successfully and `origin/main` resolves to `b7470f02f`.
+- Merge-only closeout: no build-number bump, archive, TestFlight upload, or
+  Slack release note was requested. REC-174 can move to Done; the change will
+  ride the next explicit TestFlight release batch.
