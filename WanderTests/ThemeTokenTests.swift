@@ -78,4 +78,32 @@ final class PlaceRatingReactionTests: XCTestCase {
         XCTAssertFalse(PlaceRatingReaction.resolve(1.5).isExtreme)
         XCTAssertFalse(PlaceRatingReaction.resolve(4.5).isExtreme)
     }
+
+    func testLiquidLevelAndBoilIntensityRiseWithTheRating() {
+        let cool = PlaceRatingLiquidState.resolve(1)
+        let middle = PlaceRatingLiquidState.resolve(3)
+        let hot = PlaceRatingLiquidState.resolve(5)
+
+        XCTAssertEqual(cool.level, 0.14, accuracy: 0.001)
+        XCTAssertEqual(middle.level, 0.50, accuracy: 0.001)
+        XCTAssertEqual(hot.level, 0.86, accuracy: 0.001)
+        XCTAssertEqual(cool.bubbleCount, 3)
+        XCTAssertEqual(middle.bubbleCount, 8)
+        XCTAssertEqual(hot.bubbleCount, 12)
+        XCTAssertLessThan(cool.activity, middle.activity)
+        XCTAssertLessThan(middle.activity, hot.activity)
+    }
+
+    func testLiquidToneMovesFromBlueThroughAmberToDarkRed() {
+        let cool = PlaceRatingLiquidState.resolve(1)
+        let middle = PlaceRatingLiquidState.resolve(3)
+        let hot = PlaceRatingLiquidState.resolve(5)
+
+        XCTAssertGreaterThan(cool.blue, cool.red)
+        XCTAssertGreaterThan(middle.red, middle.blue)
+        XCTAssertGreaterThan(middle.green, middle.blue)
+        XCTAssertGreaterThan(hot.red, hot.green)
+        XCTAssertLessThan(hot.green, 0.1)
+        XCTAssertLessThan(hot.blue, 0.1)
+    }
 }
