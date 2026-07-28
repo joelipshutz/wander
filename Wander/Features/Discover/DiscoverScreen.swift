@@ -468,6 +468,7 @@ struct DiscoverScreen: View {
                     let primary = group.primary
                     DiscoverPlaceResultCard(
                         group: group,
+                        currentUserStatus: currentUserSave(matching: primary)?.userPlace.status,
                         matchedOwnerName: selectedOwner?.displayName ?? primary.owner.displayName
                     ) {
                         selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
@@ -664,6 +665,7 @@ struct DiscoverScreen: View {
     private func addDiscoverPlaceToWanna(_ visiblePlace: VisiblePlace) {
         auth.requireSignIn(for: .socialSave) {
             Task { @MainActor in
+                guard currentUserSave(matching: visiblePlace) == nil else { return }
                 let result = await store.saveVisiblePlace(
                     visiblePlace,
                     status: .wannaGo,
@@ -1393,6 +1395,7 @@ private struct DiscoverSearchField: View {
 
 private struct DiscoverPlaceResultCard: View {
     let group: VisiblePlaceGroup
+    let currentUserStatus: PlaceStatus?
     let matchedOwnerName: String
     let openPlace: () -> Void
     let addToWanna: () -> Void
@@ -1439,9 +1442,10 @@ private struct DiscoverPlaceResultCard: View {
 
             HStack(spacing: WanderTheme.spacing2) {
                 DiscoverResultActionButton(
-                    title: "Wanna go",
-                    systemImage: "bookmark",
+                    title: wannaActionTitle,
+                    systemImage: wannaActionSystemImage,
                     isPrimary: true,
+                    isDisabled: currentUserStatus != nil,
                     action: addToWanna
                 )
 
@@ -1474,6 +1478,28 @@ private struct DiscoverPlaceResultCard: View {
             return "rec.me rating · Not rated yet"
         }
         return "rec.me rating · \(PlaceRating.averageDisplay(score))"
+    }
+
+    private var wannaActionTitle: String {
+        switch currentUserStatus {
+        case .wannaGo:
+            "In Wanna"
+        case .been:
+            "Visited"
+        case nil:
+            "Wanna go"
+        }
+    }
+
+    private var wannaActionSystemImage: String {
+        switch currentUserStatus {
+        case .wannaGo:
+            "bookmark.fill"
+        case .been:
+            "checkmark"
+        case nil:
+            "bookmark"
+        }
     }
 
     private var shareContent: WanderShareContent? {
@@ -1510,6 +1536,7 @@ private struct DiscoverResultActionButton: View {
     let title: String
     let systemImage: String
     var isPrimary = false
+    var isDisabled = false
     let action: () -> Void
 
     var body: some View {
@@ -1521,6 +1548,8 @@ private struct DiscoverResultActionButton: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.62 : 1)
     }
 }
 
