@@ -28379,3 +28379,37 @@ Starting status and coordination:
 - Merge-only closeout: no build-number bump, archive, TestFlight upload, or
   Slack release note was requested. REC-174 can move to Done; the change will
   ride the next explicit TestFlight release batch.
+
+## 2026-07-28 04:32 PDT - Codex - REC-176 Onboarding Polish
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-176-onboarding-polish`
+Worktree: `/private/tmp/recme-rec176-onboarding-polish`
+Linear: `REC-176` (`In Progress`)
+Mission Control: `4d64fc67-adce-4200-b935-6e16f90fddaa` (`in_progress`)
+
+Goal: implement Joe's approved onboarding follow-up: replace the generic
+location permission splash with a real rec.me map-value preview, make location
+authorization state-aware, prevent premature username-taken feedback, and add
+an Instagram-style circular profile-photo crop/zoom step.
+
+Starting status and coordination:
+
+- Created a clean isolated worktree from exact `origin/main` commit `f17d97d`.
+  The primary checkout is 88 commits behind and contains unrelated untracked
+  `tmp/`, so it remains untouched.
+- No active log entry or worktree overlaps the onboarding source files. Existing
+  REC-132 worktrees are completed historical work and remain untouched.
+- The repo has no live-device StateServer/debug snapshot bridge. The approved
+  simulator screenshots and deterministic native regression tests are the
+  fallback pre-fix evidence; no unowned debug-server infrastructure will be
+  introduced for this UI/permission follow-up.
+- Approved location copy: `Find the good stuff nearby`; explain that friends'
+  recommendations and faster nearby saves are unlocked; reassure that location
+  is never shown to friends; primary `Use my location`; secondary `Not now`.
+- Expected edits: `Wander/Features/Onboarding/OnboardingFlowView.swift`,
+  `Wander/Features/Onboarding/OnboardingPermissionManagers.swift`, a focused
+  photo-crop component, matching onboarding tests, and this append-only log.
+- Planned validation: focused onboarding contracts, full test suite, generic
+  Simulator build, visual QA on a current large and small iPhone, and
+  `git diff --check`. No TestFlight release is authorized in this task.
