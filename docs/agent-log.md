@@ -28134,3 +28134,18 @@ Starting status and coordination:
 - `git diff --check` passes. Next: commit, reconcile the append-only log with
   latest `origin/main`, push, open a ready PR linked to REC-173, move Linear to
   In Review, and open this worktree project in Xcode for local testing.
+
+### 2026-07-28 00:28 PDT - Ready-for-review handoff
+
+- Rebased the implementation onto current `origin/main` at `2621838b4`,
+  committed it as `35d4b3da3`, and pushed
+  `codex/rec-173-more-options-shelf`.
+- Opened ready PR #274:
+  <https://github.com/joelipshutz/wander/pull/274>.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser shows `codex/rec-173-more-options-shelf`; the prior REC-155
+  Xcode window was not switched or overwritten.
+- Validation remains: focused contract 1/1, full suite 793/793, final visual QA
+  on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
+- No TestFlight build or release was requested or performed. Next step is PR
+  review and merge after CI/reviewer approval.
