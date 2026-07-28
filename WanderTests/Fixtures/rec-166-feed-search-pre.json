@@ -1,14 +1,15 @@
 {
-  "bug": "Feed search opens a generic Discover modal instead of the approved temporary search state",
+  "bug": "Build 109 Feed search stacks a centered Discover header above a shifted, clipped search field",
   "pre_fix": {
-    "launcher": "shows the normal Places and People tabs inside a separate full-screen presentation",
-    "search": "uses the older live-query Discover screen instead of REC-150 submitted search",
-    "dismissal": "uses a toolbar chevron workaround rather than the search state's persistent Back behavior"
+    "feed": "the resting Feed correctly shows Places and People above its persistent search launcher",
+    "search": "opening search adds a second Discover header and pushes the focused field underneath it",
+    "dismissal": "the shifted search surface does not expose the approved single-toolbar Back-to-Feed behavior"
   },
   "expected": {
-    "launcher": "opens directly into the REC-150 place-search state with the field focused",
-    "chrome": "pins Back and the search field at the top while hiding normal Discover tabs and body",
-    "clear": "clears results but remains in the teaching search state",
-    "dismissal": "Back cancels in-flight work and returns to the prior Feed state"
+    "feed": "the resting Feed keeps build 109's Places and People header and persistent search launcher",
+    "chrome": "active search replaces that header with one pinned Back and focused Search toolbar and no Discover title",
+    "results": "submitted search preserves REC-150 semantics and REC-169 result actions under the same pinned toolbar",
+    "clear": "Clear removes the query but keeps the focused suggested-search state open",
+    "dismissal": "Back cancels in-flight work and restores the prior Feed tab and scroll context"
   }
 }

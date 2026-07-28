@@ -21,22 +21,42 @@ final class OnboardingUITests: XCTestCase {
         let backButton = app.buttons["discover.searchBack"]
         XCTAssertTrue(backButton.waitForExistence(timeout: 2))
         XCTAssertEqual(backButton.label, "Back to Feed")
-        XCTAssertTrue(app.staticTexts["Ask for a place the way you'd ask a friend"].exists)
+        XCTAssertFalse(app.staticTexts["Discover"].exists)
+        XCTAssertTrue(app.staticTexts["Try a search"].exists)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
 
         let keyboardTutorialContinue = app.buttons["Continue"]
         if keyboardTutorialContinue.waitForExistence(timeout: 1) {
             keyboardTutorialContinue.tap()
         }
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        let focusedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        focusedScreenshot.name = "Feed search focused"
+        focusedScreenshot.lifetime = .keepAlways
+        add(focusedScreenshot)
 
         searchField.tap()
         searchField.typeText("coffee")
         XCTAssertEqual(searchField.value as? String, "coffee")
+        searchField.typeText("\n")
+        XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 4))
+
+        app.swipeUp()
+        XCTAssertTrue(backButton.exists)
+        XCTAssertTrue(backButton.isHittable)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        let resultsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        resultsScreenshot.name = "Feed search results with pinned toolbar"
+        resultsScreenshot.lifetime = .keepAlways
+        add(resultsScreenshot)
 
         let clearButton = app.buttons["Clear search"]
         XCTAssertTrue(clearButton.waitForExistence(timeout: 2))
         clearButton.tap()
-        XCTAssertTrue(app.staticTexts["Ask for a place the way you'd ask a friend"].exists)
+        XCTAssertTrue(app.staticTexts["Try a search"].exists)
         XCTAssertTrue(backButton.exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

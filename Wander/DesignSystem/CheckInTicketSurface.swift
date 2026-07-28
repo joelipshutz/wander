@@ -10,6 +10,7 @@ private struct CheckInTicketSurfaceModifier: ViewModifier {
     let surface: Color
     let notchEdges: CheckInTicketNotchEdges
     let castsShadow: Bool
+    let borderWidth: CGFloat
 
     func body(content: Content) -> some View {
         let ticketShape = CheckInTicketShape(notchEdges: notchEdges)
@@ -28,7 +29,7 @@ private struct CheckInTicketSurfaceModifier: ViewModifier {
             }
             .overlay {
                 ticketShape
-                    .strokeBorder(accent.opacity(0.72), lineWidth: 1)
+                    .strokeBorder(accent.opacity(0.72), lineWidth: borderWidth)
             }
     }
 }
@@ -146,14 +147,16 @@ extension View {
         surface: Color = WanderTheme.surfaceBone.color,
         surroundingSurface _: Color = WanderTheme.canvasWarm.color,
         notchEdges: CheckInTicketNotchEdges = .trailing,
-        castsShadow: Bool = true
+        castsShadow: Bool = true,
+        borderWidth: CGFloat = 1
     ) -> some View {
         modifier(
             CheckInTicketSurfaceModifier(
                 accent: accent,
                 surface: surface,
                 notchEdges: notchEdges,
-                castsShadow: castsShadow
+                castsShadow: castsShadow,
+                borderWidth: borderWidth
             )
         )
     }
