@@ -25803,3 +25803,36 @@ Final outcome:
 Next step: install a future signed build containing commit `6dd510581` on an
 Action Button iPhone, select **Settings → Action Button → Controls → rec.me →
 Check-in**, and verify locked, unlocked, cold-launch, and signed-out behavior.
+
+## 2026-07-27 13:08 PDT - Codex - REC-155 Landing and Build 107 Release Start
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-155-tags-labels-redesign`
+Worktree: `/private/tmp/recme-rec155-tags-labels-mockups`
+Linear: `REC-155` (`In Review`)
+PR: `#255`
+
+Goal: fulfill Ryan's explicit TestFlight request by landing the remaining
+REC-155 unified Tags implementation, then package exact latest `main` as the
+next TestFlight build. The other named changes are already released:
+`977f7c654` / REC-159 in build 100, and REC-157 plus PR #249 / REC-160 in
+build 102.
+
+Starting status and coordination:
+
+- Fetched `origin`; current `main` is `822ba5273` and build 106 is the latest
+  completed, approved public TestFlight release.
+- REC-155 is the only requested code not already merged or released. Ready PR
+  #255 remains open at `16f368620` and is based on build-101-era `main`.
+- This dedicated worktree is clean except for the pre-existing untracked
+  `DerivedData-rec155/`, which is regenerable test output and will remain
+  untouched and uncommitted.
+- Expected feature-branch work is limited to latest-main reconciliation,
+  append-only release coordination, any verified review fix required for
+  compatibility, and validation. High-conflict source includes
+  `Wander/Features/Map/MapScreen.swift`.
+- If the exact integrated PR remains clean, squash-merge it, increment build
+  106 to 107 once on a separate release branch, validate exact latest `main`,
+  archive/upload without build-number drift, attach to `rec.me Alpha`, submit
+  external beta review, update Linear, and post the required
+  `#testflight-feedback` note.
