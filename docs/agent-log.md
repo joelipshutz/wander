@@ -28019,3 +28019,16 @@ Validation checkpoint — 2026-07-28 00:16 PDT:
 - Next: commit and push the branch, open a ready PR, attach it to REC-168,
   move the issue to `In Review`, and open this isolated worktree's
   `Wander.xcodeproj` in Xcode for Ryan's hands-on interaction and visual check.
+
+Handoff checkpoint — 2026-07-28 00:17 PDT:
+
+- Committed the implementation and validation record as `64858933d`
+  (`fix: dismiss check-in date picker on selection`) and pushed
+  `codex/rec-168-date-picker-dismiss`.
+- Opened ready PR #275 against `main`:
+  https://github.com/joelipshutz/wander/pull/275
+- Linked PR #275 from REC-168, posted the implementation and 792-test
+  validation summary, and moved the issue to `In Review`.
+- No known code or test blocker remains. Ryan's requested final handoff is to
+  test the expanded calendar visually in Xcode and confirm a tapped past date
+  updates the field and collapses the calendar immediately.
