@@ -225,14 +225,80 @@ struct OnboardingLaunchView: View {
         ZStack {
             WanderTheme.canvasWarm.color.ignoresSafeArea()
             VStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
+                RecmeLocatorMark()
+                    .frame(width: 58, height: 58)
                 Text(AppBrand.displayName)
                     .font(WanderTheme.editorialDisplay(size: 42, weight: .black))
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Opening rec.me")
+    }
+}
+
+private struct RecmeLocatorMark: View {
+    var body: some View {
+        Canvas { context, size in
+            let side = min(size.width, size.height)
+            let origin = CGPoint(x: (size.width - side) / 2, y: (size.height - side) / 2)
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: origin.x + side * x, y: origin.y + side * y)
+            }
+
+            var ripples = Path()
+            ripples.addArc(
+                center: point(0.5, 0.47),
+                radius: side * 0.43,
+                startAngle: .degrees(119),
+                endAngle: .degrees(221),
+                clockwise: false
+            )
+            ripples.addArc(
+                center: point(0.5, 0.47),
+                radius: side * 0.43,
+                startAngle: .degrees(-49),
+                endAngle: .degrees(25),
+                clockwise: false
+            )
+            context.stroke(
+                ripples,
+                with: .color(WanderTheme.terracotta.color),
+                style: StrokeStyle(lineWidth: side * 0.065, lineCap: .round)
+            )
+
+            var pin = Path()
+            pin.move(to: point(0.5, 0.92))
+            pin.addCurve(
+                to: point(0.22, 0.41),
+                control1: point(0.47, 0.81),
+                control2: point(0.22, 0.64)
+            )
+            pin.addCurve(
+                to: point(0.5, 0.06),
+                control1: point(0.22, 0.20),
+                control2: point(0.34, 0.06)
+            )
+            pin.addCurve(
+                to: point(0.78, 0.41),
+                control1: point(0.66, 0.06),
+                control2: point(0.78, 0.20)
+            )
+            pin.addCurve(
+                to: point(0.5, 0.92),
+                control1: point(0.78, 0.64),
+                control2: point(0.53, 0.81)
+            )
+            pin.closeSubpath()
+            context.fill(pin, with: .color(WanderTheme.terracotta.color))
+
+            let dot = CGRect(
+                x: origin.x + side * 0.395,
+                y: origin.y + side * 0.245,
+                width: side * 0.21,
+                height: side * 0.21
+            )
+            context.fill(Path(ellipseIn: dot), with: .color(WanderTheme.canvasWarm.color))
+        }
+        .accessibilityHidden(true)
     }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env swift
 
 import AppKit
+import Darwin
 import Foundation
 
 enum LoadingMarkIcon {
@@ -85,25 +86,8 @@ enum LoadingMarkIcon {
             wordmark.draw(in: wordmarkRect)
 
             if sizing.showsSymbol {
-                guard let baseSymbol = NSImage(
-                    systemSymbolName: "mappin.and.ellipse",
-                    accessibilityDescription: nil
-                ) else {
-                    NSGraphicsContext.restoreGraphicsState()
-                    throw RenderError.missingSystemSymbol
-                }
-                let configuration = NSImage.SymbolConfiguration(
-                    pointSize: sizing.symbolHeight,
-                    weight: .bold
-                )
-                .applying(NSImage.SymbolConfiguration(paletteColors: [terracotta]))
-                guard let symbol = baseSymbol.withSymbolConfiguration(configuration) else {
-                    NSGraphicsContext.restoreGraphicsState()
-                    throw RenderError.couldNotConfigureSystemSymbol
-                }
-                let aspectRatio = symbol.size.width / symbol.size.height
                 let symbolSize = NSSize(
-                    width: sizing.symbolHeight * aspectRatio,
+                    width: sizing.symbolHeight,
                     height: sizing.symbolHeight
                 )
                 let symbolRect = NSRect(
@@ -112,7 +96,7 @@ enum LoadingMarkIcon {
                     width: symbolSize.width,
                     height: symbolSize.height
                 )
-                symbol.draw(in: symbolRect)
+                drawOriginalLocator(in: symbolRect, context: cgContext)
             }
 
             cgContext.flush()
@@ -134,10 +118,76 @@ enum LoadingMarkIcon {
         return NSFont(descriptor: descriptor, size: size) ?? system
     }
 
+    private static func drawOriginalLocator(in rect: NSRect, context: CGContext) {
+        let side = min(rect.width, rect.height)
+        let origin = CGPoint(
+            x: rect.midX - side / 2,
+            y: rect.midY - side / 2
+        )
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: origin.x + side * x, y: origin.y + side * y)
+        }
+
+        context.saveGState()
+        context.setStrokeColor(terracotta.cgColor)
+        context.setLineWidth(side * 0.065)
+        context.setLineCap(.round)
+        context.addArc(
+            center: point(0.5, 0.53),
+            radius: side * 0.43,
+            startAngle: .pi * 0.66,
+            endAngle: .pi * 1.23,
+            clockwise: false
+        )
+        context.strokePath()
+        context.addArc(
+            center: point(0.5, 0.53),
+            radius: side * 0.43,
+            startAngle: -.pi * 0.27,
+            endAngle: .pi * 0.14,
+            clockwise: false
+        )
+        context.strokePath()
+
+        let pin = CGMutablePath()
+        pin.move(to: point(0.5, 0.08))
+        pin.addCurve(
+            to: point(0.22, 0.59),
+            control1: point(0.47, 0.19),
+            control2: point(0.22, 0.36)
+        )
+        pin.addCurve(
+            to: point(0.5, 0.94),
+            control1: point(0.22, 0.80),
+            control2: point(0.34, 0.94)
+        )
+        pin.addCurve(
+            to: point(0.78, 0.59),
+            control1: point(0.66, 0.94),
+            control2: point(0.78, 0.80)
+        )
+        pin.addCurve(
+            to: point(0.5, 0.08),
+            control1: point(0.78, 0.36),
+            control2: point(0.53, 0.19)
+        )
+        pin.closeSubpath()
+        context.addPath(pin)
+        context.setFillColor(terracotta.cgColor)
+        context.fillPath()
+
+        context.setFillColor(canvas.cgColor)
+        context.fillEllipse(in: CGRect(
+            x: origin.x + side * 0.395,
+            y: origin.y + side * 0.545,
+            width: side * 0.21,
+            height: side * 0.21
+        ))
+        context.restoreGState()
+    }
+
     enum RenderError: Error {
         case couldNotCreateContext
-        case missingSystemSymbol
-        case couldNotConfigureSystemSymbol
         case couldNotEncodePNG
     }
 }
@@ -155,21 +205,44 @@ let outputURL = previewOutputPath.map {
 
 let environment = ProcessInfo.processInfo.environment
 let canonicalSizing = LoadingMarkIcon.Sizing.canonical
-func dimension(_ key: String, fallback: CGFloat) -> CGFloat {
-    guard previewOutputPath != nil,
-          let rawValue = environment[key],
-          let value = Double(rawValue)
-    else {
-        return fallback
+let usesPreviewOverrides = environment["RECME_ICON_PREVIEW"] == "1"
+let canonicalURL = defaultOutput.standardizedFileURL.resolvingSymlinksInPath()
+let resolvedOutputURL = outputURL.standardizedFileURL.resolvingSymlinksInPath()
+
+if usesPreviewOverrides && resolvedOutputURL == canonicalURL {
+    fail("RECME_ICON_PREVIEW=1 requires an explicit non-canonical output path")
+}
+
+func dimension(_ key: String, fallback: CGFloat, range: ClosedRange<Double>) throws -> CGFloat {
+    guard usesPreviewOverrides, let rawValue = environment[key] else { return fallback }
+    guard let value = Double(rawValue), value.isFinite, range.contains(value) else {
+        fail("Invalid preview dimension \(key)=\(rawValue)")
     }
     return CGFloat(value)
 }
-let sizing = LoadingMarkIcon.Sizing(
-    symbolHeight: dimension("RECME_ICON_SYMBOL_HEIGHT", fallback: canonicalSizing.symbolHeight),
-    wordmarkPointSize: dimension("RECME_ICON_WORDMARK_SIZE", fallback: canonicalSizing.wordmarkPointSize),
-    markSpacing: dimension("RECME_ICON_SPACING", fallback: canonicalSizing.markSpacing),
-    showsSymbol: previewOutputPath == nil || environment["RECME_ICON_WORDMARK_ONLY"] != "1"
+let sizing = try LoadingMarkIcon.Sizing(
+    symbolHeight: dimension(
+        "RECME_ICON_SYMBOL_HEIGHT",
+        fallback: canonicalSizing.symbolHeight,
+        range: 1 ... 1024
+    ),
+    wordmarkPointSize: dimension(
+        "RECME_ICON_WORDMARK_SIZE",
+        fallback: canonicalSizing.wordmarkPointSize,
+        range: 1 ... 1024
+    ),
+    markSpacing: dimension(
+        "RECME_ICON_SPACING",
+        fallback: canonicalSizing.markSpacing,
+        range: 0 ... 1024
+    ),
+    showsSymbol: !usesPreviewOverrides || environment["RECME_ICON_WORDMARK_ONLY"] != "1"
 )
 
 try LoadingMarkIcon.render(to: outputURL, sizing: sizing)
 print("Generated rec.me loading-mark app icon master at \(outputURL.path)")
+
+func fail(_ message: String) -> Never {
+    FileHandle.standardError.write(Data("Error: \(message)\n".utf8))
+    Darwin.exit(2)
+}
