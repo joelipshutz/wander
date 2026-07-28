@@ -2926,6 +2926,17 @@ enum PlaceSheetAction {
         accessibilityLabel
     }
 
+    func displayTitle(placeName: String, hasPriorCheckIn: Bool) -> String {
+        switch self {
+        case .addVisit:
+            return hasPriorCheckIn
+                ? CheckInCopy.againAction
+                : "Check in at \(placeName)"
+        case .add, .choose, .none:
+            return displayTitle
+        }
+    }
+
     var isPrimaryAction: Bool {
         switch self {
         case .add, .addVisit, .choose:
@@ -3065,6 +3076,7 @@ struct MapPlaceSaveContext: Identifiable {
     let candidate: PlaceCandidate
     let mode: MapPlaceSaveMode
     let requiresStatusConfirmation: Bool
+    let hasPriorCheckIn: Bool
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
     let initialRatingScore: Double?
@@ -3143,7 +3155,9 @@ struct MapPlaceSaveContext: Identifiable {
         case .add:
             "Check in or Wanna"
         case .addVisit:
-            CheckInCopy.againAction
+            hasPriorCheckIn
+                ? CheckInCopy.againAction
+                : "Check in at \(candidate.name)"
         case .sharedVisit:
             "Check in from invite"
         case .editVisit:
@@ -3151,6 +3165,18 @@ struct MapPlaceSaveContext: Identifiable {
         case .editWant:
             "Edit Wanna"
         }
+    }
+
+    func flowTitle(status: PlaceStatus, isShowingDetails: Bool) -> String {
+        guard isShowingDetails else {
+            return title
+        }
+
+        if requiresStatusConfirmation {
+            return status == .wannaGo ? "Wanna go" : "Check in"
+        }
+
+        return title
     }
 
     var subtitle: String {
@@ -3226,6 +3252,7 @@ struct MapPlaceSaveContext: Identifiable {
             candidate: candidate,
             mode: .add(sourceType),
             requiresStatusConfirmation: true,
+            hasPriorCheckIn: false,
             initialStatus: .wannaGo,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
@@ -3248,6 +3275,7 @@ struct MapPlaceSaveContext: Identifiable {
             candidate: candidate,
             mode: .add(sourceType),
             requiresStatusConfirmation: false,
+            hasPriorCheckIn: false,
             initialStatus: status,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
@@ -3269,6 +3297,7 @@ struct MapPlaceSaveContext: Identifiable {
             candidate: candidate(from: visiblePlace),
             mode: .add(.socialSave),
             requiresStatusConfirmation: true,
+            hasPriorCheckIn: false,
             initialStatus: visiblePlace.userPlace.status,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
@@ -3293,6 +3322,7 @@ struct MapPlaceSaveContext: Identifiable {
             candidate: candidate(from: visiblePlace),
             mode: .addVisit(visiblePlace),
             requiresStatusConfirmation: false,
+            hasPriorCheckIn: latestVisit != nil,
             initialStatus: .been,
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: latestVisit?.ratingScore,
@@ -3313,6 +3343,7 @@ struct MapPlaceSaveContext: Identifiable {
             candidate: invitation.candidate,
             mode: .sharedVisit(invitation),
             requiresStatusConfirmation: false,
+            hasPriorCheckIn: false,
             initialStatus: .been,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
@@ -3334,6 +3365,7 @@ struct MapPlaceSaveContext: Identifiable {
             candidate: candidate(from: visiblePlace),
             mode: .editVisit(visiblePlace, visit),
             requiresStatusConfirmation: false,
+            hasPriorCheckIn: true,
             initialStatus: .been,
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: visit.ratingScore,
@@ -3354,6 +3386,7 @@ struct MapPlaceSaveContext: Identifiable {
             candidate: candidate(from: visiblePlace),
             mode: .editWant(visiblePlace),
             requiresStatusConfirmation: false,
+            hasPriorCheckIn: false,
             initialStatus: .wannaGo,
             initialVisibility: visiblePlace.userPlace.visibility,
             initialRatingScore: nil,
@@ -4098,63 +4131,66 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack {
-                if step == .details && context.requiresStatusConfirmation {
+            ZStack {
+                Text(flowTitle)
+                    .font(.system(size: 28, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.center)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: WanderTheme.tapMinimum,
+                        alignment: .center
+                    )
+
+                HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                    if step == .details && context.requiresStatusConfirmation {
+                        Button {
+                            errorMessage = nil
+                            step = .confirm
+                        } label: {
+                            Label("back", systemImage: "chevron.left")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .frame(minHeight: WanderTheme.tapMinimum)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Spacer(minLength: 0)
+
                     Button {
-                        errorMessage = nil
-                        step = .confirm
+                        dismiss()
                     } label: {
-                        Label("back", systemImage: "chevron.left")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(WanderTheme.terracotta.color)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .black))
+                            .frame(
+                                minWidth: WanderTheme.tapMinimum,
+                                minHeight: WanderTheme.tapMinimum
+                            )
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .background(WanderTheme.surfaceSand.color)
+                            .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Close")
                 }
-
-                Spacer()
-
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .black))
-                        .frame(width: 32, height: 32)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
             }
 
-            Text(flowTitle)
-                .font(.system(size: 28, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
             if step == .confirm {
                 Text(context.subtitle)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
         }
+        .padding(.top, WanderTheme.spacing1)
     }
 
     private var flowTitle: String {
-        guard step == .details, selectedStatus == .been else {
-            return context.title
-        }
-
-        switch context.mode {
-        case .add:
-            return "Check in at \(context.candidate.name)"
-        case .addVisit:
-            return CheckInCopy.againAction
-        case .sharedVisit:
-            return "Check in from invite"
-        case .editVisit:
-            return CheckInCopy.editAction
-        case .editWant:
-            return context.title
-        }
+        return context.flowTitle(
+            status: selectedStatus,
+            isShowingDetails: step == .details
+        )
     }
 
     private var confirmContent: some View {
@@ -7422,7 +7458,7 @@ struct PlaceSheet: View {
         if action != .none {
             Button(action: onAction) {
                 if action == .addVisit {
-                    Label(CheckInCopy.againAction, systemImage: action.systemImage)
+                    Label(actionTitle, systemImage: action.systemImage)
                         .font(.system(size: 14, weight: .black))
                         .padding(.horizontal, WanderTheme.spacing3)
                         .frame(minHeight: max(size, WanderTheme.tapMinimum))
@@ -7438,8 +7474,18 @@ struct PlaceSheet: View {
                         .clipShape(Circle())
                 }
             }
-            .accessibilityLabel(action.accessibilityLabel)
+            .accessibilityLabel(actionTitle)
         }
+    }
+
+    private var actionTitle: String {
+        action.displayTitle(
+            placeName: place.name,
+            hasPriorCheckIn: saves.contains { summary in
+                summary.visiblePlace.userPlace.userID == currentUserID
+                    && summary.visiblePlace.userPlace.status == .been
+            }
+        )
     }
 }
 

@@ -27968,6 +27968,95 @@ Final status: rec.me 0.1 (107) is approved and available through the public
 TestFlight link. This completion record is docs-only and does not require
 another build-number increment.
 
+## 2026-07-28 00:00 PDT - Codex - REC-174 Save-Flow Header and Titles
+
+Agent: Codex
+Branch: `codex/rec-174-save-flow-header`
+Worktree: `/private/tmp/recme-rec174-save-header`
+Linear: `REC-174` (`In Progress`)
+
+Goal: place the save-flow dismiss control inline with its title, update a
+selected Wanna flow to say `Wanna go`, and reserve `Check in again` for places
+with an actual prior check-in.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `62b6babb7`.
+- The primary checkout is on stale branch `codex/rec-142-widgets` with an
+  unrelated untracked `.pnpm-store/`; it remains untouched.
+- `Wander/Features/Map/MapScreen.swift` is a high-conflict file. No current
+  worktree/log entry declares overlapping REC-174 work, but active REC-173 may
+  touch nearby optional-question styling, so this change will stay narrowly
+  scoped to save-context title derivation and the sheet header.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this append-only log.
+- Planned validation: focused context/navigation regressions, full test suite,
+  generic Simulator build, `xcodegen generate`, diff review, and visual QA on
+  the current large and smaller iPhone simulator targets.
+
+Implementation and validation checkpoint:
+
+- Moved the save-flow close control into the same header row as the dynamic
+  title while retaining a 44-point tap target. The initial choice screen keeps
+  `Check in or Wanna`; explicitly selecting Wanna changes the title to
+  `Wanna go`.
+- Added explicit prior-check-in state to save contexts. A Wanna-only place now
+  uses `Check in at <place>` in the place profile action and save sheet;
+  `Check in again` is reserved for a current-user save with an actual prior
+  check-in.
+- Added context/title, presentation-copy, and source-contract regressions in
+  `WanderStoreTests`, `PlaceProfilePresentationTests`, and
+  `NavigationContractTests`.
+- `xcodegen generate` completed without project drift. The generic arm64/x86_64
+  iOS Simulator build passed with only existing actor-isolation, headermap, and
+  App Intents warnings.
+- Focused regressions passed, including the final two presentation/navigation
+  checks:
+  `/tmp/DerivedData-rec174-focused/Logs/Test/Test-Wander-2026.07.28_00-21-04--0700.xcresult`.
+- The complete suite passed before the final place-profile label wiring:
+  791 unit/contract tests and 1 onboarding UI test, zero failures:
+  `/tmp/DerivedData-rec174-focused/Logs/Test/Test-Wander-2026.07.28_00-17-41--0700.xcresult`.
+  A final complete rerun remains required after syncing with latest `main`.
+- Simulator visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Reviewed
+  `/private/tmp/rec174-iphone17pro-wanna.png`,
+  `/private/tmp/rec174-iphone17e-initial.png`, and
+  `/private/tmp/rec174-iphone17e-wanna.png`; the close control is inline, the
+  dead header row is removed, and Wanna selection reads `Wanna go`. A final
+  live fixture check also showed `Check in at Elysian Picnic Steps` for the
+  current user's Wanna-only save.
+
+Final validation and handoff checkpoint:
+
+- Rebased the implementation onto current `origin/main` at `2621838b4`. The
+  only conflict was this append-only coordination log; both agents' entries
+  were preserved.
+- The post-rebase clean full suite passed 791 unit/contract tests and 1
+  onboarding UI test with zero failures:
+  `/tmp/DerivedData-rec174-final/Logs/Test/Test-Wander-2026.07.28_00-23-59--0700.xcresult`.
+- The final generic iOS Simulator build passed for arm64 and x86_64. Only
+  pre-existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain.
+- `git diff --check` passed. No Supabase schema, RPC, RLS, attribute value
+  type, build-number, or TestFlight release work was in scope.
+- Implementation commit before this completion-log update:
+  `9454534a1` (`fix: tighten save flow headers and titles`).
+
+Outcome: requested save-flow layout and context-aware titles are implemented,
+regression-covered, and visually verified. The branch is ready to push and
+open as a ready PR; the PR URL and final Linear state will be recorded in the
+next handoff entry after publication.
+
+Publication handoff:
+
+- Pushed `codex/rec-174-save-flow-header` and opened ready PR #276:
+  https://github.com/joelipshutz/wander/pull/276.
+- Linked PR #276 to REC-174, added the test/build/visual validation receipt,
+  and moved the Linear issue from `In Progress` to `In Review`.
+- No known REC-174 functional issues remain. Next step: review and merge PR
+  #276; no TestFlight release was requested or performed.
+
 ## 2026-07-28 00:10 PDT - Codex - REC-168 Date Picker Dismissal
 
 Agent: Codex
@@ -28167,3 +28256,114 @@ Starting status and coordination:
 - Merge-only closeout: no build-number bump, archive, TestFlight upload, or
   Slack release note was requested or performed. The change will ride the next
   explicit TestFlight release batch.
+
+## 2026-07-28 00:54 PDT - Codex - REC-174 Device-Test Follow-up
+
+Agent: Codex
+Branch: `codex/rec-174-save-flow-header`
+Worktree: `/private/tmp/recme-rec174-save-header`
+Linear: `REC-174` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/276
+
+Goal: refine the save-flow title transitions after device testing and align
+the back, title, and close controls on a shared vertical center with slightly
+more space below the sheet grabber.
+
+Starting status and coordination:
+
+- The worktree was clean and matched the pushed PR branch. Fetched `origin`;
+  `main` had advanced by REC-168 and REC-173, both touching the save flow.
+- Merged current `origin/main` (`5f4b3308f`) before editing. The only conflict
+  was this append-only log; all entries were preserved. The merged Map screen
+  and navigation tests applied automatically.
+- Updated REC-174's acceptance criteria and returned it from `In Review` to
+  `In Progress`.
+- Expected edits remain narrowly scoped to
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+- Planned validation: focused title/alignment regressions, full test suite,
+  generic Simulator build, `git diff --check`, and visual QA on iPhone 17 Pro
+  plus the smaller iPhone 17e.
+
+### 2026-07-28 01:27 PDT - Follow-up implementation and validation
+
+- Kept the choice-step title persistently `Check in or Wanna` for both status
+  selections. After Continue, confirmation-backed flows now show `Check in`
+  for Been and `Wanna go` for Wanna. Direct add-visit flows intentionally keep
+  their contextual titles, including `Check in at <place>` for a Wanna-only
+  save and `Check in again` after a prior visit.
+- Rebuilt the header row around one vertical centerline: back, title, and close
+  controls all use the shared 44-point minimum height. Added 4 points of top
+  spacing below the sheet grabber. Removed the now-unnecessary
+  `didSelectStatus` state.
+- Regenerated `Wander.xcodeproj` after merging current `main`; XcodeGen added
+  REC-168's already-merged JSON fixture to the Resources phase. No manual
+  project membership or signing change was introduced.
+- Focused regression validation passed 3/3 on iPhone 17 Pro / iOS 26.5. The
+  first focused run caught an overly broad test expectation for direct
+  add-visit flows; the production behavior and final assertions preserve their
+  contextual titles.
+- Full suite passed: 794 unit/contract tests and 1 UI test, zero failures.
+  Result bundle:
+  `/tmp/DerivedData-rec174-followup-full/Logs/Test/Test-Wander-2026.07.28_01-14-59--0700.xcresult`.
+- Generic iOS Simulator build passed after rerunning outside the sandbox, which
+  had blocked CoreSimulator and SwiftPM caches. Existing Supabase formatter
+  actor-isolation and traditional-headermap warnings remain unrelated.
+- Visual QA passed on iPhone 17e and iPhone 17 Pro. On both sizes, the choice
+  title stayed `Check in or Wanna` after selecting either option; the details
+  titles were `Check in` and `Wanna go`; and back/title/close shared the same
+  visual centerline without clipping or excess top space. Temporary launch
+  arguments were disabled and removed from the tracked scheme diff afterward.
+- `git diff --check` passes. No schema, RPC, build-number, TestFlight, or Slack
+  release action was required. Next: commit, push PR #276, return REC-174 to
+  `In Review`, and leave this worktree's Xcode project on the branch for Ryan.
+
+### 2026-07-28 01:28 PDT - Ready-for-review handoff
+
+- Committed the follow-up as `ddb2844d8` and pushed
+  `codex/rec-174-save-flow-header`; ready PR #276 is open and GitHub reports a
+  clean merge state:
+  <https://github.com/joelipshutz/wander/pull/276>.
+- Updated REC-174 with the device validation evidence and returned it to
+  `In Review`.
+- Xcode remains open on this isolated worktree, with Branch Chooser on
+  `codex/rec-174-save-flow-header` and iPhone 17 Pro selected. The normal Run
+  scheme is restored with no enabled visual-QA launch arguments.
+- Final validation remains 3/3 focused regressions, 794/794 unit/contract
+  tests, 1/1 UI test, generic Simulator build, visual QA on iPhone 17e and
+  iPhone 17 Pro, and `git diff --check`.
+
+### 2026-07-28 01:33 PDT - Final centering and main landing follow-up
+
+- User requested that `Check in`, `Wanna go`, `Check in or Wanna`, and
+  `Check in again` be centered to the full sheet width, then landed on `main`.
+- REC-174 returned to `In Progress` with the centered-title acceptance
+  criterion. Existing isolated worktree and PR #276 remain the implementation
+  path; the starting branch and worktree were clean.
+- Confirmed TestFlight build 107 has a completed release record. This is a
+  merge-only request, so no build-number bump, archive, upload, or Slack release
+  note is authorized.
+- Expected edits: `Wander/Features/Map/MapScreen.swift`, its navigation
+  contract test, and this append-only log. Planned validation is the focused
+  header contract plus diff review before updating and squash-merging PR #276.
+
+### 2026-07-28 01:37 PDT - Centering validation and review
+
+- Replaced the title/control `HStack` with a full-width `ZStack`: the title is
+  centered against the sheet width while a transparent-width control row keeps
+  Back at the leading edge and Close at the trailing edge. Existing 44-point
+  control heights and the shared vertical center are preserved.
+- Updated the navigation contract to require the centered title frame,
+  multiline centering, and independent overlay control row.
+- The first focused command used a stale test method name and executed zero
+  tests; it is not counted as validation. The correctly named focused contract
+  then passed 1/1 on iPhone 17 Pro / iOS 26.5:
+  `testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions`.
+- Pre-landing review found no blocking correctness, accessibility, state,
+  security, data-contract, or scope issues. The centered titles are short
+  enough to avoid the edge controls in every state: the long choice title has
+  no Back control, while detail titles with Back are `Check in` or `Wanna go`.
+- Prior branch validation remains 794/794 unit/contract tests, 1/1 UI test,
+  generic Simulator build, and visual QA on iPhone 17e and iPhone 17 Pro.
+  `git diff --check` passes.

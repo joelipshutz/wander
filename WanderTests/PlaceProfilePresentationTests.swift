@@ -28,6 +28,14 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check in")
         XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in again")
+        XCTAssertEqual(
+            PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: false),
+            "Check in at Maru Coffee"
+        )
+        XCTAssertEqual(
+            PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: true),
+            "Check in again"
+        )
         XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
     }
