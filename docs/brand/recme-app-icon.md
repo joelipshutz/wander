@@ -20,8 +20,7 @@ The app icon is the loading treatment from `OnboardingLaunchView`, scaled for
 small-icon legibility:
 
 - full-bleed warm canvas `#F3DFCA`;
-- original filled rec.me locator with two broken memory-ripple arcs in
-  terracotta `#D46F4D` and a warm-canvas center;
+- native SF Symbol `mappin.and.ellipse`, bold, in terracotta `#D46F4D`;
 - lowercase wordmark `rec.me`, verbatim, in the native system serif at black
   weight and solid black;
 - approved option B uses a slight `-2.5` optical kern at the 1024 px master;
@@ -30,9 +29,7 @@ small-icon legibility:
 - generous negative space, with no shadows, gradients, borders, textures, or
   additional objects.
 
-The locator is owned vector geometry, not an SF Symbol or an exported/modified
-SF Symbol. Apple prohibits SF Symbols and confusingly similar images in app
-icons and logos. The PNG must be square and opaque. Do not bake rounded corners into the asset;
+The PNG must be square and opaque. Do not bake rounded corners into the asset;
 iOS applies the platform mask. Do not substitute another map pin, typeface,
 wordmark spelling, palette, model-generated artwork, or decorative element.
 
@@ -41,7 +38,7 @@ wordmark spelling, palette, model-generated artwork, or decorative element.
 1. Keep `OnboardingLaunchView` and this contract aligned if the loading mark
    changes.
 2. Run `scripts/generate-app-icon-master.swift` to replace the canonical master
-   deterministically from the owned locator geometry, typeface, and palette.
+   deterministically from the native symbol, typeface, and palette.
 3. Run `scripts/generate-app-icon-renditions.sh`.
 4. Run `BuildConfigurationTests` and inspect at least one 180 px and one 87 px
    rendition before approval.

@@ -86,8 +86,25 @@ enum LoadingMarkIcon {
             wordmark.draw(in: wordmarkRect)
 
             if sizing.showsSymbol {
+                guard let baseSymbol = NSImage(
+                    systemSymbolName: "mappin.and.ellipse",
+                    accessibilityDescription: nil
+                ) else {
+                    NSGraphicsContext.restoreGraphicsState()
+                    throw RenderError.missingSystemSymbol
+                }
+                let configuration = NSImage.SymbolConfiguration(
+                    pointSize: sizing.symbolHeight,
+                    weight: .bold
+                )
+                .applying(NSImage.SymbolConfiguration(paletteColors: [terracotta]))
+                guard let symbol = baseSymbol.withSymbolConfiguration(configuration) else {
+                    NSGraphicsContext.restoreGraphicsState()
+                    throw RenderError.couldNotConfigureSystemSymbol
+                }
+                let aspectRatio = symbol.size.width / symbol.size.height
                 let symbolSize = NSSize(
-                    width: sizing.symbolHeight,
+                    width: sizing.symbolHeight * aspectRatio,
                     height: sizing.symbolHeight
                 )
                 let symbolRect = NSRect(
@@ -96,7 +113,7 @@ enum LoadingMarkIcon {
                     width: symbolSize.width,
                     height: symbolSize.height
                 )
-                drawOriginalLocator(in: symbolRect, context: cgContext)
+                symbol.draw(in: symbolRect)
             }
 
             cgContext.flush()
@@ -118,76 +135,10 @@ enum LoadingMarkIcon {
         return NSFont(descriptor: descriptor, size: size) ?? system
     }
 
-    private static func drawOriginalLocator(in rect: NSRect, context: CGContext) {
-        let side = min(rect.width, rect.height)
-        let origin = CGPoint(
-            x: rect.midX - side / 2,
-            y: rect.midY - side / 2
-        )
-        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-            CGPoint(x: origin.x + side * x, y: origin.y + side * y)
-        }
-
-        context.saveGState()
-        context.setStrokeColor(terracotta.cgColor)
-        context.setLineWidth(side * 0.065)
-        context.setLineCap(.round)
-        context.addArc(
-            center: point(0.5, 0.53),
-            radius: side * 0.43,
-            startAngle: .pi * 0.66,
-            endAngle: .pi * 1.23,
-            clockwise: false
-        )
-        context.strokePath()
-        context.addArc(
-            center: point(0.5, 0.53),
-            radius: side * 0.43,
-            startAngle: -.pi * 0.27,
-            endAngle: .pi * 0.14,
-            clockwise: false
-        )
-        context.strokePath()
-
-        let pin = CGMutablePath()
-        pin.move(to: point(0.5, 0.08))
-        pin.addCurve(
-            to: point(0.22, 0.59),
-            control1: point(0.47, 0.19),
-            control2: point(0.22, 0.36)
-        )
-        pin.addCurve(
-            to: point(0.5, 0.94),
-            control1: point(0.22, 0.80),
-            control2: point(0.34, 0.94)
-        )
-        pin.addCurve(
-            to: point(0.78, 0.59),
-            control1: point(0.66, 0.94),
-            control2: point(0.78, 0.80)
-        )
-        pin.addCurve(
-            to: point(0.5, 0.08),
-            control1: point(0.78, 0.36),
-            control2: point(0.53, 0.19)
-        )
-        pin.closeSubpath()
-        context.addPath(pin)
-        context.setFillColor(terracotta.cgColor)
-        context.fillPath()
-
-        context.setFillColor(canvas.cgColor)
-        context.fillEllipse(in: CGRect(
-            x: origin.x + side * 0.395,
-            y: origin.y + side * 0.545,
-            width: side * 0.21,
-            height: side * 0.21
-        ))
-        context.restoreGState()
-    }
-
     enum RenderError: Error {
         case couldNotCreateContext
+        case missingSystemSymbol
+        case couldNotConfigureSystemSymbol
         case couldNotEncodePNG
     }
 }

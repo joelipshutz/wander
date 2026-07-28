@@ -28446,3 +28446,27 @@ Starting status and coordination:
 - Moved REC-175 and Mission Control to review with the validation evidence.
 - The worktree is clean except for intentionally untracked local preview/QA
   files under `tmp/`; those files are excluded from the PR.
+
+### 2026-07-28 05:24 PDT - Explicit TestFlight release review
+
+- Joe explicitly requested a new TestFlight release containing everything on
+  latest `main` plus approved icon option B. Build 107 is the last completed
+  release, so the requested batch will be build 108 after PR #280 lands.
+- The repo-owned PR/release workflow and gstack pre-landing review found no
+  runtime correctness, data, security, performance, or asset-size blockers.
+  Review specialists did identify preview-tooling hazards: environment overrides
+  could overwrite the canonical icon and malformed dimensions could reach
+  AppKit. Preview overrides now require `RECME_ICON_PREVIEW=1`, an explicit
+  non-canonical output path, finite bounded dimensions, and controlled errors.
+  Hostile-input checks and the 2/2 focused icon tests pass.
+- Apple’s current SF Symbols guidance still states that symbols must not be used
+  in app icons or logos. Joe explicitly directed the team to ship the approved
+  `mappin.and.ellipse` treatment anyway and accepted Apple’s enforcement/review
+  risk. A temporary original locator alternative was rejected and fully removed;
+  the final tracked assets and loading screen remain the exact approved SF Symbol
+  option B.
+- The external Codex CLI review passes could not run because the locally
+  installed package points to a missing native executable. The main review,
+  independent specialist passes, prior full-suite validation (794 unit/contract
+  plus 1 UI test), generic Simulator build, Home Screen visual QA, and focused
+  post-hardening checks provide the merge evidence.

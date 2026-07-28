@@ -300,11 +300,10 @@ Observability policy:
 - Before editing the app icon, read `docs/brand/recme-app-icon.md`.
 - The canonical icon master is
   `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
-- The icon mirrors `OnboardingLaunchView`: warm canvas, the original terracotta
-  rec.me locator-ripple mark, and the black native-serif `rec.me` wordmark.
-  Regenerate the master with `scripts/generate-app-icon-master.swift`; do not
-  substitute an SF Symbol, different mark, typeface, palette, or generated
-  illustration.
+- The icon mirrors `OnboardingLaunchView`: warm canvas, terracotta
+  `mappin.and.ellipse`, and the black native-serif `rec.me` wordmark. Regenerate
+  the master with `scripts/generate-app-icon-master.swift`; do not substitute a
+  different pin, typeface, palette, or generated illustration.
 - Regenerate all platform renditions with
   `scripts/generate-app-icon-renditions.sh`, then retain the
   `BuildConfigurationTests` size, alpha, and discoverability coverage.
