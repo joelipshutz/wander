@@ -6,6 +6,7 @@ enum DiscoverSection: String, Equatable {
 }
 
 struct DiscoverScreen: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -18,6 +19,8 @@ struct DiscoverScreen: View {
     @State private var selectedPlace: SelectedDiscoverPlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
+    @State private var listSelectionPlace: VisiblePlace?
+    @State private var listMessage: String?
     @State private var selectedOwnerCandidateID: String?
     @State private var activityLoadState: DiscoverActivityLoadState = .loading
     @State private var followInFlightProfileIDs: Set<String> = []
@@ -26,8 +29,13 @@ struct DiscoverScreen: View {
     @State private var lastHandledVisiblePlaceSignature: [DiscoverVisiblePlaceSignature]?
     @FocusState private var searchFieldFocused: Bool
     @Binding private var requestedSection: DiscoverSection?
+    private let startsFocused: Bool
 
-    init(requestedSection: Binding<DiscoverSection?> = .constant(nil)) {
+    init(
+        startsFocused: Bool = false,
+        requestedSection: Binding<DiscoverSection?> = .constant(nil)
+    ) {
+        self.startsFocused = startsFocused
         _requestedSection = requestedSection
     }
 
@@ -36,6 +44,17 @@ struct DiscoverScreen: View {
         "Maya's date night spots",
         "quiet work cafes with wifi",
         "friends' sunset hikes"
+    ]
+
+    private let suggestedSearches = [
+        DiscoverSuggestedSearch(emoji: "☕️", query: "coffee worth crossing town for"),
+        DiscoverSuggestedSearch(emoji: "🍝", query: "cozy date-night restaurants"),
+        DiscoverSuggestedSearch(emoji: "🌅", query: "sunset parks with a view"),
+        DiscoverSuggestedSearch(emoji: "💻", query: "quiet cafes with wifi"),
+        DiscoverSuggestedSearch(emoji: "🍸", query: "cocktail bars for date night"),
+        DiscoverSuggestedSearch(emoji: "🥐", query: "best pastries and bakeries"),
+        DiscoverSuggestedSearch(emoji: "🥾", query: "easy weekend hikes"),
+        DiscoverSuggestedSearch(emoji: "🍜", query: "late-night noodles")
     ]
 
     private var profileResults: [ProfileShell] {
@@ -63,6 +82,10 @@ struct DiscoverScreen: View {
             )
             .flatMap(\.aliases)
         )
+    }
+
+    private var addableLists: [LocalPlaceList] {
+        store.visiblePlaceLists.filter { store.canAddPlaces(to: $0) }
     }
 
     private var filteredPlaceResults: [VisiblePlace] {
@@ -130,23 +153,24 @@ struct DiscoverScreen: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    modeTabs
+            VStack(spacing: 0) {
+                DiscoverHeader {
+                    dismiss()
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
 
-                    switch selectedMode {
-                    case .places:
+                ScrollView {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                         placesSearchField
                         placesContent
-                    case .members:
-                        membersSearchField
-                        membersContent
                     }
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing8)
                 }
-                .padding(WanderTheme.spacing4)
-                .padding(.bottom, WanderTheme.spacing8)
+                .scrollDismissesKeyboard(.interactively)
             }
-            .scrollDismissesKeyboard(.interactively)
             .wanderScreen()
             .task {
                 applyRequestedSection()
@@ -154,6 +178,9 @@ struct DiscoverScreen: View {
                 await refreshDiscoverDefaultContent()
                 lastHandledAuthState = auth.isSignedIn
                 lastHandledVisiblePlaceSignature = visiblePlaceSignature
+                guard startsFocused else { return }
+                await Task.yield()
+                searchFieldFocused = true
             }
             .task(id: auth.isSignedIn) {
                 let requestedAuthState = auth.isSignedIn
@@ -226,6 +253,42 @@ struct DiscoverScreen: View {
                 Button("OK", role: .cancel) { savedMessage = nil }
             } message: {
                 Text(savedMessage ?? "")
+            }
+            .confirmationDialog(
+                "Add to list",
+                isPresented: Binding(
+                    get: { listSelectionPlace != nil },
+                    set: { if !$0 { listSelectionPlace = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                ForEach(addableLists) { list in
+                    Button(list.name) {
+                        addSelectedPlace(to: list)
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    listSelectionPlace = nil
+                }
+            } message: {
+                if addableLists.isEmpty {
+                    Text("Create a list first, then come back to add this place.")
+                } else {
+                    Text("Choose a list for \(listSelectionPlace?.place.canonicalName ?? "this place").")
+                }
+            }
+            .alert(
+                "List updated",
+                isPresented: Binding(
+                    get: { listMessage != nil },
+                    set: { if !$0 { listMessage = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    listMessage = nil
+                }
+            } message: {
+                Text(listMessage ?? "")
             }
         }
     }
@@ -333,11 +396,64 @@ struct DiscoverScreen: View {
             ) { profile in
                 selectedOwnerCandidateID = profile.id
             }
-            latestActivitySection
         } else if isPlacesSearchActive {
             placeResultsSection
         } else {
-            latestActivitySection
+            suggestedSearchesSection
+        }
+    }
+
+    private var suggestedSearchesSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                SectionTitle("Try a search")
+                Text("A few useful ways to explore places your people recommend.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHGrid(
+                    rows: [
+                        GridItem(.fixed(64), spacing: WanderTheme.spacing2),
+                        GridItem(.fixed(64), spacing: WanderTheme.spacing2)
+                    ],
+                    alignment: .top,
+                    spacing: WanderTheme.spacing2
+                ) {
+                    ForEach(suggestedSearches) { suggestion in
+                        Button {
+                            placesQuery = suggestion.query
+                            searchFieldFocused = true
+                        } label: {
+                            HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                                Text(suggestion.emoji)
+                                    .font(.system(size: 20))
+                                    .accessibilityHidden(true)
+
+                                Text(suggestion.query)
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(2)
+
+                                Spacer(minLength: 0)
+                            }
+                            .padding(WanderTheme.spacing3)
+                            .frame(width: 204, height: 64, alignment: .topLeading)
+                            .background(WanderTheme.surfaceBone.color)
+                            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Search \(suggestion.query)")
+                    }
+                }
+                .padding(.vertical, 1)
+            }
         }
     }
 
@@ -365,14 +481,15 @@ struct DiscoverScreen: View {
                         group: group,
                         isSavedByCurrentUser: primary.owner.id == store.currentUser.id
                             || !group.aliases.isDisjoint(with: savedAliases),
-                        matchedOwnerName: selectedOwner?.displayName ?? primary.owner.displayName,
-                        currentUserID: store.currentUser.id
+                        matchedOwnerName: selectedOwner?.displayName ?? primary.owner.displayName
                     ) {
                         selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
                     } save: {
                         beginSaveDiscoverPlace(primary)
                     } edit: {
                         beginAddVisitDiscoverPlace(primary)
+                    } addToList: {
+                        listSelectionPlace = primary
                     }
                 }
             }
@@ -556,6 +673,29 @@ struct DiscoverScreen: View {
                 defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: attributes(for: visiblePlace)
             ))
+        }
+    }
+
+    private func addSelectedPlace(to list: LocalPlaceList) {
+        guard let visiblePlace = listSelectionPlace else { return }
+        listSelectionPlace = nil
+
+        Task { @MainActor in
+            let result = await store.addVisiblePlace(
+                visiblePlace,
+                to: list,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            switch result.outcome {
+            case .added:
+                listMessage = result.createdWantSave
+                    ? "Added \(visiblePlace.place.canonicalName) to \(list.name) and Wanna."
+                    : "Added \(visiblePlace.place.canonicalName) to \(list.name)."
+            case .alreadyInList:
+                listMessage = "\(visiblePlace.place.canonicalName) is already in \(list.name)."
+            case .permissionDenied:
+                listMessage = "You can’t add places to \(list.name)."
+            }
         }
     }
 
@@ -880,6 +1020,40 @@ private enum DiscoverMode: String, CaseIterable, Identifiable {
     }
 }
 
+private struct DiscoverSuggestedSearch: Identifiable, Equatable {
+    let emoji: String
+    let query: String
+
+    var id: String { query }
+}
+
+private struct DiscoverHeader: View {
+    let back: () -> Void
+
+    var body: some View {
+        ZStack {
+            Text("Discover")
+                .font(WanderTypography.editorialSectionTitle)
+                .foregroundStyle(WanderTheme.textInk.color)
+
+            HStack {
+                Button(action: back) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back to Feed")
+
+                Spacer()
+            }
+        }
+        .frame(minHeight: WanderTheme.tapMinimum)
+    }
+}
+
 private enum DiscoverActivityLoadState: Equatable {
     case loading
     case loaded
@@ -1149,14 +1323,14 @@ private struct DiscoverSearchField: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 19, weight: .black))
+                .font(.system(size: 17, weight: .black))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
             ZStack(alignment: .leading) {
                 if text.isEmpty {
                     Text(placeholder)
                         .id(placeholder)
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(WanderTheme.textFaint.color)
                         .lineLimit(1)
                         .transition(isTicker ? .push(from: .bottom).combined(with: .opacity) : .opacity)
@@ -1164,7 +1338,7 @@ private struct DiscoverSearchField: View {
                 }
 
                 TextField("", text: $text)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
@@ -1183,9 +1357,9 @@ private struct DiscoverSearchField: View {
                 .accessibilityLabel("Clear search")
             }
         }
-        .padding(.leading, WanderTheme.spacing4)
-        .padding(.trailing, text.isEmpty ? WanderTheme.spacing4 : WanderTheme.spacing1)
-        .frame(minHeight: 58)
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
+        .frame(minHeight: WanderTheme.tapMinimum)
         .background(WanderTheme.surfaceRaised.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
         .overlay(
@@ -1219,78 +1393,72 @@ private struct DiscoverPlaceResultCard: View {
     let group: VisiblePlaceGroup
     let isSavedByCurrentUser: Bool
     let matchedOwnerName: String
-    let currentUserID: String
     let openPlace: () -> Void
     let save: () -> Void
     let edit: () -> Void
+    let addToList: () -> Void
 
     private var visiblePlace: VisiblePlace { group.primary }
 
     var body: some View {
-        HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Button(action: openPlace) {
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     DiscoverCategoryThumb(emoji: visiblePlace.categoryEmoji, size: 62, iconSize: 24)
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            Text(visiblePlace.place.canonicalName)
-                                .font(.system(size: 17, weight: .black))
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .lineLimit(1)
+                        Text(visiblePlace.place.canonicalName)
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(2)
 
-                            if let score = group.recommendedScore {
-                                Text(PlaceRating.averageDisplay(score))
-                                    .font(.system(size: 12, weight: .black))
-                                    .foregroundStyle(WanderTheme.textOnAction.color)
-                                    .padding(.horizontal, WanderTheme.spacing2)
-                                    .frame(minHeight: 24)
-                                    .background(WanderTheme.textInk.color)
-                                    .clipShape(Capsule())
-                            }
-                        }
-
-                        Text(subtitle)
+                        Text(visiblePlace.effectiveCategoryDisplay.compactTitle)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
+
+                        Text(recMeRating)
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
 
                         if let noteLine {
                             Text(noteLine)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(WanderTheme.textMuted.color)
-                                .lineLimit(1)
-                        }
-
-                        HStack(spacing: WanderTheme.spacing2) {
-                            WanderAvatar(
-                                initials: displayOwner.initials,
-                                avatarURL: displayOwner.avatarURL,
-                                size: 24,
-                                color: displayOwnerColor
-                            )
-
-                            Text(matchLine)
-                                .font(.system(size: 12, weight: .black))
-                                .foregroundStyle(WanderTheme.terracotta.color)
-                                .lineLimit(1)
+                                .lineLimit(2)
                         }
                     }
+
+                    Spacer(minLength: WanderTheme.spacing2)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textFaint.color)
                 }
             }
             .buttonStyle(.plain)
 
-            Spacer(minLength: WanderTheme.spacing2)
+            HStack(spacing: WanderTheme.spacing2) {
+                DiscoverResultActionButton(
+                    title: isSavedByCurrentUser ? "Add visit" : "Add",
+                    systemImage: "plus",
+                    isPrimary: true,
+                    action: isSavedByCurrentUser ? edit : save
+                )
 
-            Button(action: isSavedByCurrentUser ? edit : save) {
-                Image(systemName: "plus")
-                    .font(.system(size: 17, weight: .black))
-                    .frame(width: 48, height: 48)
-                    .background(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
+                DiscoverResultActionButton(
+                    title: "Add to list",
+                    systemImage: "text.badge.plus",
+                    action: addToList
+                )
+
+                if let shareContent {
+                    WanderShareButton(content: shareContent) {
+                        DiscoverResultActionLabel(title: "Share", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Share \(visiblePlace.place.canonicalName)")
+                }
             }
-            .accessibilityLabel(isSavedByCurrentUser ? CheckInCopy.againAction : "Save place")
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
@@ -1301,17 +1469,31 @@ private struct DiscoverPlaceResultCard: View {
         )
     }
 
-    private var subtitle: String {
-        [
-            visiblePlace.place.locality,
-            visiblePlace.place.region,
-            visiblePlace.effectiveCategoryDisplay.compactTitle
-        ]
-            .compactMap { value in
-                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed?.isEmpty == false ? trimmed : nil
-            }
-            .joined(separator: " · ")
+    private var recMeRating: String {
+        guard let score = group.recommendedScore else {
+            return "rec.me rating · Not rated yet"
+        }
+        return "rec.me rating · \(PlaceRating.averageDisplay(score))"
+    }
+
+    private var shareContent: WanderShareContent? {
+        let place = PlaceSheetPlace(visiblePlace: visiblePlace)
+        guard let url = PlaceExternalLinks.googleMapsSearchURL(
+            placeName: place.name,
+            address: place.address,
+            locality: place.locality
+        ) else {
+            return nil
+        }
+        return .place(
+            item: url,
+            name: place.name,
+            message: PlaceExternalLinks.shareSummary(
+                placeName: place.name,
+                locality: place.locality,
+                status: place.status
+            )
+        )
     }
 
     private var noteLine: String? {
@@ -1322,31 +1504,47 @@ private struct DiscoverPlaceResultCard: View {
         }
         return "\(matchedOwnerName): \(note)"
     }
+}
 
-    private var matchLine: String {
-        [
-            matchedOwnerName,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
-            visiblePlace.userPlace.status.displayTitle,
-            visiblePlace.place.locality
-        ]
-            .compactMap { value in
-                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed?.isEmpty == false ? trimmed : nil
+private struct DiscoverResultActionButton: View {
+    let title: String
+    let systemImage: String
+    var isPrimary = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            DiscoverResultActionLabel(
+                title: title,
+                systemImage: systemImage,
+                isPrimary: isPrimary
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct DiscoverResultActionLabel: View {
+    let title: String
+    let systemImage: String
+    var isPrimary = false
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: 11, weight: .black))
+            .foregroundStyle(isPrimary ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .background(isPrimary ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay {
+                if !isPrimary {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                }
             }
-            .joined(separator: " · ")
-    }
-
-    private var displayOwner: LocalProfile {
-        group.places.first { visiblePlace in
-            visiblePlace.owner.displayName == matchedOwnerName
-                || visiblePlace.owner.handle == matchedOwnerName
-        }?.owner ?? visiblePlace.owner
-    }
-
-    private var displayOwnerColor: Color {
-        if displayOwner.id == currentUserID { return WanderTheme.terracotta.color }
-        return displayOwner.handle == "ryan" ? WanderTheme.avatarRyan.color : WanderTheme.pinSocial.color
     }
 }
 

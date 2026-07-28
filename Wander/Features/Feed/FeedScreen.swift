@@ -41,7 +41,7 @@ struct FeedScreen: View {
                 await refresh()
             }
             .fullScreenCover(isPresented: $isShowingSearch) {
-                DiscoverScreen()
+                DiscoverScreen(startsFocused: true)
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
@@ -939,21 +939,30 @@ private struct FeedFeaturedCard: View {
                     relationship: .follower
                 ))
             } label: {
-                Label(featuredReason, systemImage: "person.2.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.stateInfo.color)
-                    .lineLimit(1)
+                HStack(alignment: .top, spacing: WanderTheme.spacing1) {
+                    WanderAvatar(
+                        initials: featured.visiblePlace.owner.initials,
+                        avatarURL: featured.visiblePlace.owner.avatarURL,
+                        size: 20,
+                        color: featured.visiblePlace.owner.handle == "ryan"
+                            ? WanderTheme.avatarRyan.color
+                            : WanderTheme.pinSocial.color
+                    )
+
+                    Text("• \(featured.visiblePlace.owner.displayName) • \(featuredActivity)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(WanderTheme.stateInfo.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("\(featured.visiblePlace.owner.displayName), \(featuredActivity)")
 
             Spacer(minLength: 0)
         }
         .padding(WanderTheme.spacing3)
-        .frame(
-            width: FeedFeaturedLayout.cardWidth,
-            height: FeedFeaturedLayout.cardHeight,
-            alignment: .topLeading
-        )
+        .frame(width: FeedFeaturedLayout.cardWidth, alignment: .topLeading)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay {
@@ -962,9 +971,8 @@ private struct FeedFeaturedCard: View {
         }
     }
 
-    private var featuredReason: String {
-        let statusVerb = featured.visiblePlace.userPlace.status == .been ? "Checked in by" : "Wanna by"
-        return featured.reason.replacingOccurrences(of: "Saved by", with: statusVerb)
+    private var featuredActivity: String {
+        featured.visiblePlace.userPlace.status == .been ? "Checked in" : "Added to Wanna"
     }
 }
 
@@ -990,7 +998,6 @@ private struct FeedActivityList: View {
 
 private enum FeedFeaturedLayout {
     static let cardWidth: CGFloat = 184
-    static let cardHeight: CGFloat = 220
 }
 
 private enum FeedActivityLayout {
