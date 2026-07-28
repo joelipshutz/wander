@@ -922,6 +922,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(sharedVisitComponents.contains("They will get their own editable copy of this visit."))
     }
 
+    func testEveryMoreOptionsQuestionUsesTheStructuredTagShelfTileLanguage() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let questionOptions = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private struct MapSaveQuestionOptions: View")
+                .last?
+                .components(separatedBy: "private struct MapSaveUnifiedTagsSection: View")
+                .first
+        )
+
+        XCTAssertTrue(questionOptions.contains("LazyVGrid(columns: gridColumns"))
+        XCTAssertTrue(questionOptions.contains("dynamicTypeSize.isAccessibilitySize ? 1 : standardCount"))
+        XCTAssertTrue(questionOptions.contains("block.kind == .singleChoice && displayOptions.count == 3 ? 3 : 2"))
+        XCTAssertTrue(questionOptions.contains("minHeight: 52"))
+        XCTAssertTrue(questionOptions.contains("\"checkmark.circle.fill\""))
+        XCTAssertTrue(questionOptions.contains("\"plus.circle\" : \"circle\""))
+        XCTAssertTrue(questionOptions.contains("Text(\"add your own\")"))
+        XCTAssertTrue(questionOptions.contains("style: StrokeStyle(lineWidth: 1, dash: [5, 4])"))
+        XCTAssertFalse(questionOptions.contains("MapSaveWrappingChipLayout"))
+        XCTAssertFalse(questionOptions.contains("WanderChip"))
+        XCTAssertFalse(questionOptions.contains("Capsule()"))
+    }
+
     func testWannaGoDatePickerStaysEmptyUntilTheUserChoosesADate() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")

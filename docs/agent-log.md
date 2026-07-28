@@ -28073,3 +28073,79 @@ REC-168 same-date follow-up start — 2026-07-28 00:36 PDT:
   - `git diff --check`: passed.
 - Review: direct diff review against `origin/main` found no unrelated changes, schema/data/privacy impact, or generated project churn. The optional gstack review workflow could not run because its installed `checklist.md` and `greptile-triage.md` resources are missing, so equivalent manual review was completed and recorded here.
 - Handoff: PR #275 is ready for the user-authorized squash merge to `main`. This is merge-only work; no build-number bump, archive, TestFlight upload, or Slack release note is authorized.
+
+## 2026-07-27 23:51 PDT - Codex - REC-173 Unified More Options Styling
+
+Agent: Codex
+Branch: `codex/rec-173-more-options-shelf`
+Worktree: `/private/tmp/recme-rec173-more-options-shelf`
+Linear: `REC-173` (`In Progress`)
+
+Goal: extend REC-155's approved Option D Tag Shelf visual language to every
+option-based question inside Check-in and Wanna More Options, including price
+feel, best for/planning for, excitement, occasion, work setup, strenuousness,
+and taxonomy-specific multi-select questions, without changing selection
+semantics or the surrounding save page.
+
+Starting status and coordination:
+
+- Fetched `origin` and confirmed REC-155/PR #255 is already squash-merged as
+  `3485b3df5`; build 107 preparation is also on `origin/main`.
+- Created this clean isolated worktree from exact current `origin/main` at
+  `62b6babb7`. The earlier REC-155 worktree contains only regenerable untracked
+  DerivedData and will not be reused or modified.
+- Existing worktrees include ongoing unrelated efforts, but no uncommitted
+  overlapping `MapScreen.swift` work was found in this checkout. Any newly
+  discovered overlap will be logged and preserved.
+- Locked boundary: only More Options question rendering and its focused
+  contracts/tests may change. Single-select, multi-select, slider, persistence,
+  taxonomy refresh, the unified Tags shelf, and all surrounding Check-in/Wanna
+  content retain their existing behavior.
+- Expected files:
+  - `Wander/Features/Map/MapScreen.swift`
+  - focused tests under `WanderTests/`
+  - `docs/agent-log.md`
+  - `docs/decisions.md` only if a durable component contract needs expansion.
+
+### 2026-07-28 00:12 PDT - Implementation and validation checkpoint
+
+- Replaced `MapSaveQuestionOptions`' loose wrapping chips with structured
+  Tag-Shelf-style tiles. Three-value single-choice scales render as balanced
+  icon-over-label cards; multi-select questions render as a two-column
+  add/check grid with a full-width dashed custom-entry card. Accessibility
+  Dynamic Type collapses either layout to one column.
+- Preserved all `AddQuestionBlock` templates, keys, `valueType` values,
+  defaults, selection callbacks, custom-value normalization, and More Options
+  placement. No schema, RPC, persistence, taxonomy, or surrounding Check-in /
+  Wanna layout change was introduced.
+- Added a navigation source contract that prevents these questions from
+  regressing to `MapSaveWrappingChipLayout`, `WanderChip`, or capsule controls.
+- Focused regression passed 1/1 on iPhone 17 Pro / iOS 26.5.
+- Full suite passed 793/793 with zero failures on iPhone 17 Pro / iOS 26.5.
+  Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain unrelated and non-blocking.
+- Visual QA used a temporary DEBUG-only harness that rendered the actual
+  production question and unified Tags components, then was fully removed.
+  Reviewed Check-in and Wanna on iPhone 17 Pro plus Check-in on the narrower
+  iPhone 17e. The initial Wanna render exposed horizontal overflow in the
+  three-column scale; switching single-choice cards to a compact vertical
+  layout fixed it. Final renders had no clipping, overflow, or tap-target
+  issue. Temporary harness code, screenshots, and DerivedData were removed.
+- `git diff --check` passes. Next: commit, reconcile the append-only log with
+  latest `origin/main`, push, open a ready PR linked to REC-173, move Linear to
+  In Review, and open this worktree project in Xcode for local testing.
+
+### 2026-07-28 00:28 PDT - Ready-for-review handoff
+
+- Rebased the implementation onto current `origin/main` at `2621838b4`,
+  committed it as `35d4b3da3`, and pushed
+  `codex/rec-173-more-options-shelf`.
+- Opened ready PR #274:
+  <https://github.com/joelipshutz/wander/pull/274>.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser shows `codex/rec-173-more-options-shelf`; the prior REC-155
+  Xcode window was not switched or overwritten.
+- Validation remains: focused contract 1/1, full suite 793/793, final visual QA
+  on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
+- No TestFlight build or release was requested or performed. Next step is PR
+  review and merge after CI/reviewer approval.

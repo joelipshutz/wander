@@ -6485,26 +6485,32 @@ private struct MapSaveQuestionOptions: View {
     let block: AddQuestionBlock
     let selectedValues: Set<String>
     let onSelect: (String) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isAddingCustomTag = false
     @State private var customTagText = ""
     @FocusState private var isCustomTagFocused: Bool
 
     var body: some View {
-        MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
-            ForEach(displayOptions, id: \.self) { option in
-                Button {
-                    onSelect(option)
-                } label: {
-                    WanderChip(title: option, isSelected: selectedValues.contains(option))
-                        .fixedSize(horizontal: true, vertical: false)
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                ForEach(displayOptions, id: \.self) { option in
+                    optionButton(option)
                 }
-                .buttonStyle(.plain)
             }
 
             if block.kind == .multiTag {
                 customTagControl
             }
         }
+    }
+
+    private var gridColumns: [GridItem] {
+        let standardCount = block.kind == .singleChoice && displayOptions.count == 3 ? 3 : 2
+        let count = dynamicTypeSize.isAccessibilitySize ? 1 : standardCount
+        return Array(
+            repeating: GridItem(.flexible(), spacing: WanderTheme.spacing2, alignment: .topLeading),
+            count: count
+        )
     }
 
     private var displayOptions: [String] {
@@ -6517,35 +6523,111 @@ private struct MapSaveQuestionOptions: View {
         return block.options + customOptions
     }
 
+    private func optionButton(_ option: String) -> some View {
+        let isSelected = selectedValues.contains(option)
+
+        return Button {
+            onSelect(option)
+        } label: {
+            optionLabel(option, isSelected: isSelected)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .padding(.horizontal, block.kind == .singleChoice ? WanderTheme.spacing1 : WanderTheme.spacing2)
+            .background(isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(
+                        isSelected
+                            ? WanderTheme.terracotta.color.opacity(0.52)
+                            : WanderTheme.borderHairline.color,
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel(for: option, isSelected: isSelected))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func optionLabel(_ option: String, isSelected: Bool) -> some View {
+        if block.kind == .singleChoice {
+            VStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : unselectedIconName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                Text(option)
+                    .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(.vertical, WanderTheme.spacing1)
+        } else {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : unselectedIconName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                Text(option)
+                    .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.84)
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var unselectedIconName: String {
+        block.kind == .multiTag ? "plus.circle" : "circle"
+    }
+
+    private func accessibilityLabel(for option: String, isSelected: Bool) -> String {
+        if block.kind == .multiTag {
+            return "\(isSelected ? "Remove" : "Add") \(option)"
+        }
+        return isSelected ? "\(option), selected" : option
+    }
+
     @ViewBuilder
     private var customTagControl: some View {
         if isAddingCustomTag {
-            HStack(spacing: WanderTheme.spacing1) {
-                TextField("tag", text: $customTagText)
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "tag")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                TextField("Add your own", text: $customTagText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .tint(WanderTheme.terracotta.color)
-                    .frame(width: 86)
                     .submitLabel(.done)
                     .focused($isCustomTagFocused)
                     .onSubmit(addCustomTag)
 
                 Button(action: addCustomTag) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .black))
-                        .frame(width: 24, height: 24)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Add custom tag")
+                .accessibilityLabel("Save custom option")
             }
-            .frame(minHeight: WanderTheme.tapMinimum)
-            .padding(.horizontal, WanderTheme.spacing2)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing3)
             .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-            .fixedSize(horizontal: true, vertical: false)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(WanderTheme.terracotta.color, lineWidth: 1)
+            )
             .onAppear {
                 isCustomTagFocused = true
             }
@@ -6553,16 +6635,28 @@ private struct MapSaveQuestionOptions: View {
             Button {
                 isAddingCustomTag = true
             } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .black))
-                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .black))
+                    Text("add your own")
+                        .font(.system(size: 13, weight: .bold))
+                    Spacer()
+                }
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .stroke(
+                            WanderTheme.terracotta.color.opacity(0.5),
+                            style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                        )
+                )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add custom tag")
+            .accessibilityLabel("Add your own option")
         }
     }
 
