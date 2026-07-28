@@ -28459,14 +28459,41 @@ Starting status and coordination:
   AppKit. Preview overrides now require `RECME_ICON_PREVIEW=1`, an explicit
   non-canonical output path, finite bounded dimensions, and controlled errors.
   Hostile-input checks and the 2/2 focused icon tests pass.
-- Apple’s current SF Symbols guidance still states that symbols must not be used
-  in app icons or logos. Joe explicitly directed the team to ship the approved
-  `mappin.and.ellipse` treatment anyway and accepted Apple’s enforcement/review
-  risk. A temporary original locator alternative was rejected and fully removed;
-  the final tracked assets and loading screen remain the exact approved SF Symbol
-  option B.
+- Joe reconfirmed that the final tracked assets should remain the exact approved
+  `mappin.and.ellipse` option B. A temporary alternate-mark exploration was
+  fully removed and is not part of the implementation or release.
 - The external Codex CLI review passes could not run because the locally
   installed package points to a missing native executable. The main review,
   independent specialist passes, prior full-suite validation (794 unit/contract
   plus 1 UI test), generic Simulator build, Home Screen visual QA, and focused
   post-hardening checks provide the merge evidence.
+
+## 2026-07-28 05:35 PDT - Codex - TestFlight Build 108
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-108`
+Worktree: `/private/tmp/recme-testflight-build-108`
+Release issue: `REC-175` (`In Review`)
+
+Goal: package latest `main` into TestFlight build 108 and publish complete
+tester-facing notes in TestFlight and `#testflight-feedback`.
+
+Release audit:
+
+- Started from clean exact `origin/main` commit `8b075074` after PR #280 merged.
+- Build 107 is the last completed TestFlight release; no unfinished build bump,
+  archive, upload, or helper run exists between builds 107 and 108.
+- Included user-facing changes since build 107:
+  - PR #274 / REC-173: More Options questions now use the shared Tag Shelf tile
+    system, including compact single-choice cards and two-column multi-selects.
+  - PR #275 / REC-168: choosing a check-in date dismisses the date picker
+    immediately while preserving the selected date.
+  - PR #276 / REC-174: save-flow headers use clearer contextual titles with
+    full-sheet centering and aligned Back/Close controls.
+  - PR #280 / REC-175: the approved option B loading treatment is now the app
+    icon at every required size.
+- Docs-only merge records are excluded from tester-facing change scope.
+- Planned release steps: bump `CURRENT_PROJECT_VERSION` once to 108, regenerate
+  the Xcode project, run full tests and Simulator build, archive/export with
+  build-number management disabled, run the TestFlight helper with complete
+  What to Test copy, then post the matching Slack tester note.
