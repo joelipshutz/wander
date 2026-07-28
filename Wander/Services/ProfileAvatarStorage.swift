@@ -47,18 +47,60 @@ enum WanderImageProcessor {
             throw WanderImageProcessingError.invalidImageSize
         }
 
-        let outputSize = CGSize(width: pixelSize, height: pixelSize)
         let shortestSide = min(image.size.width, image.size.height)
-        let scale = pixelSize / shortestSide
-        let scaledSize = CGSize(
-            width: image.size.width * scale,
-            height: image.size.height * scale
+        let cropRect = CGRect(
+            x: (image.size.width - shortestSide) / 2,
+            y: (image.size.height - shortestSide) / 2,
+            width: shortestSide,
+            height: shortestSide
+        )
+
+        return try squareJPEGData(
+            from: image,
+            cropRect: cropRect,
+            pixelSize: pixelSize,
+            compressionQuality: compressionQuality
+        )
+    }
+
+    static func squareJPEGData(
+        from image: UIImage,
+        cropRect: CGRect,
+        pixelSize: CGFloat = 512,
+        compressionQuality: CGFloat = 0.85
+    ) throws -> Data {
+        guard image.size.width > 0,
+              image.size.height > 0,
+              pixelSize > 0,
+              cropRect.width > 0,
+              cropRect.height > 0,
+              cropRect.minX.isFinite,
+              cropRect.minY.isFinite,
+              cropRect.width.isFinite,
+              cropRect.height.isFinite
+        else {
+            throw WanderImageProcessingError.invalidImageSize
+        }
+
+        let imageBounds = CGRect(origin: .zero, size: image.size)
+        let resolvedCropRect = cropRect.intersection(imageBounds)
+        guard !resolvedCropRect.isNull,
+              resolvedCropRect.width > 0,
+              resolvedCropRect.height > 0
+        else {
+            throw WanderImageProcessingError.invalidImageSize
+        }
+
+        let outputSize = CGSize(width: pixelSize, height: pixelSize)
+        let scale = max(
+            pixelSize / resolvedCropRect.width,
+            pixelSize / resolvedCropRect.height
         )
         let drawRect = CGRect(
-            x: (pixelSize - scaledSize.width) / 2,
-            y: (pixelSize - scaledSize.height) / 2,
-            width: scaledSize.width,
-            height: scaledSize.height
+            x: -resolvedCropRect.minX * scale,
+            y: -resolvedCropRect.minY * scale,
+            width: image.size.width * scale,
+            height: image.size.height * scale
         )
 
         let format = UIGraphicsImageRendererFormat()

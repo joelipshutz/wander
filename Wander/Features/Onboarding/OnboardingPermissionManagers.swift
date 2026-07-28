@@ -2,6 +2,41 @@ import Contacts
 import CoreLocation
 import Foundation
 
+enum OnboardingLocationPermissionAction: Equatable {
+    case skip
+    case request
+    case openSettings
+    case continueWithoutAccess
+}
+
+enum OnboardingLocationPermissionPolicy {
+    static func action(for status: CLAuthorizationStatus) -> OnboardingLocationPermissionAction {
+        switch status {
+        case .authorizedAlways, .authorizedWhenInUse:
+            .skip
+        case .notDetermined:
+            .request
+        case .denied:
+            .openSettings
+        case .restricted:
+            .continueWithoutAccess
+        @unknown default:
+            .continueWithoutAccess
+        }
+    }
+
+    static func primaryTitle(for status: CLAuthorizationStatus) -> String {
+        switch action(for: status) {
+        case .skip, .request:
+            "Use my location"
+        case .openSettings:
+            "Open Settings"
+        case .continueWithoutAccess:
+            "Continue without location"
+        }
+    }
+}
+
 @MainActor
 final class OnboardingContactsPermissionManager: ObservableObject {
     @Published private(set) var authorizationStatus: CNAuthorizationStatus
@@ -64,6 +99,10 @@ final class OnboardingLocationPermissionManager: NSObject, ObservableObject, @pr
         @unknown default:
             return false
         }
+    }
+
+    func refreshAuthorizationStatus() {
+        authorizationStatus = manager.authorizationStatus
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
