@@ -3536,6 +3536,12 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: nil), .add)
         XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: wantPlace), .addVisit)
         XCTAssertEqual(wantContext.initialStatus, .been)
+        XCTAssertFalse(wantContext.hasPriorCheckIn)
+        XCTAssertEqual(wantContext.title, "Check in at Add Visit Defaults Cafe")
+        XCTAssertEqual(
+            wantContext.flowTitle(status: .been, isShowingDetails: true),
+            "Check in at Add Visit Defaults Cafe"
+        )
         XCTAssertNil(wantContext.initialRatingScore)
         XCTAssertEqual(wantContext.initialNote, "want because patio")
         XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
@@ -3559,6 +3565,12 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(visitContext.initialStatus, .been)
+        XCTAssertTrue(visitContext.hasPriorCheckIn)
+        XCTAssertEqual(visitContext.title, CheckInCopy.againAction)
+        XCTAssertEqual(
+            visitContext.flowTitle(status: .been, isShowingDetails: true),
+            CheckInCopy.againAction
+        )
         XCTAssertEqual(visitContext.initialRatingScore, 4.5)
         XCTAssertEqual(visitContext.initialNote, "")
         XCTAssertNil(visitContext.initialAnswers["coffee_tags"])
@@ -4274,6 +4286,22 @@ final class WanderStoreTests: XCTestCase {
         )
         XCTAssertTrue(context.requiresStatusConfirmation)
         XCTAssertFalse(context.startsOnDetails)
+        XCTAssertEqual(
+            context.flowTitle(status: .wannaGo, isShowingDetails: false),
+            "Wanna go"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .wannaGo, isShowingDetails: true),
+            "Wanna go"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .been, isShowingDetails: false),
+            "Check in or Wanna"
+        )
+        XCTAssertEqual(
+            context.flowTitle(status: .been, isShowingDetails: true),
+            "Check in at Compact Want Cafe"
+        )
         XCTAssertFalse(preselectedImport.requiresStatusConfirmation)
         XCTAssertTrue(preselectedImport.startsOnDetails)
         XCTAssertEqual(preselectedImport.initialStatus, .been)

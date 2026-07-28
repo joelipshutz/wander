@@ -27967,3 +27967,62 @@ Release metadata validation:
 Final status: rec.me 0.1 (107) is approved and available through the public
 TestFlight link. This completion record is docs-only and does not require
 another build-number increment.
+
+## 2026-07-28 00:00 PDT - Codex - REC-174 Save-Flow Header and Titles
+
+Agent: Codex
+Branch: `codex/rec-174-save-flow-header`
+Worktree: `/private/tmp/recme-rec174-save-header`
+Linear: `REC-174` (`In Progress`)
+
+Goal: place the save-flow dismiss control inline with its title, update a
+selected Wanna flow to say `Wanna go`, and reserve `Check in again` for places
+with an actual prior check-in.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from
+  `origin/main` at `62b6babb7`.
+- The primary checkout is on stale branch `codex/rec-142-widgets` with an
+  unrelated untracked `.pnpm-store/`; it remains untouched.
+- `Wander/Features/Map/MapScreen.swift` is a high-conflict file. No current
+  worktree/log entry declares overlapping REC-174 work, but active REC-173 may
+  touch nearby optional-question styling, so this change will stay narrowly
+  scoped to save-context title derivation and the sheet header.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this append-only log.
+- Planned validation: focused context/navigation regressions, full test suite,
+  generic Simulator build, `xcodegen generate`, diff review, and visual QA on
+  the current large and smaller iPhone simulator targets.
+
+Implementation and validation checkpoint:
+
+- Moved the save-flow close control into the same header row as the dynamic
+  title while retaining a 44-point tap target. The initial choice screen keeps
+  `Check in or Wanna`; explicitly selecting Wanna changes the title to
+  `Wanna go`.
+- Added explicit prior-check-in state to save contexts. A Wanna-only place now
+  uses `Check in at <place>` in the place profile action and save sheet;
+  `Check in again` is reserved for a current-user save with an actual prior
+  check-in.
+- Added context/title, presentation-copy, and source-contract regressions in
+  `WanderStoreTests`, `PlaceProfilePresentationTests`, and
+  `NavigationContractTests`.
+- `xcodegen generate` completed without project drift. The generic arm64/x86_64
+  iOS Simulator build passed with only existing actor-isolation, headermap, and
+  App Intents warnings.
+- Focused regressions passed, including the final two presentation/navigation
+  checks:
+  `/tmp/DerivedData-rec174-focused/Logs/Test/Test-Wander-2026.07.28_00-21-04--0700.xcresult`.
+- The complete suite passed before the final place-profile label wiring:
+  791 unit/contract tests and 1 onboarding UI test, zero failures:
+  `/tmp/DerivedData-rec174-focused/Logs/Test/Test-Wander-2026.07.28_00-17-41--0700.xcresult`.
+  A final complete rerun remains required after syncing with latest `main`.
+- Simulator visual QA passed on iPhone 17 Pro and smaller iPhone 17e. Reviewed
+  `/private/tmp/rec174-iphone17pro-wanna.png`,
+  `/private/tmp/rec174-iphone17e-initial.png`, and
+  `/private/tmp/rec174-iphone17e-wanna.png`; the close control is inline, the
+  dead header row is removed, and Wanna selection reads `Wanna go`. A final
+  live fixture check also showed `Check in at Elysian Picnic Steps` for the
+  current user's Wanna-only save.
