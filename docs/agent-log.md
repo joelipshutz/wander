@@ -28413,3 +28413,43 @@ Starting status and coordination:
 - Planned validation: focused onboarding contracts, full test suite, generic
   Simulator build, visual QA on a current large and small iPhone, and
   `git diff --check`. No TestFlight release is authorized in this task.
+
+### 2026-07-28 05:03 PDT - Implementation and validation complete
+
+- Replaced the generic location permission card with a native MapKit preview
+  containing rec.me-style social/current-user pins and a selected Circuit
+  Coffee place card. Approved copy is wired exactly, including the location
+  privacy reassurance.
+- Made location onboarding authorization-aware: already-authorized users skip
+  the step, first-time users receive the native permission request, denied
+  users get an actionable `Open Settings` path, and restricted users can
+  continue without location. Returning from Settings refreshes the state.
+- Prevented the prefilled/self username from triggering availability checks.
+  Checks now begin only after a valid edit and the Continue button waits for an
+  in-flight check instead of racing it.
+- Added a full-screen circular photo editor with pinch zoom, drag-to-position,
+  a zoom slider, and an explicit crop-to-512px JPEG output path.
+- Added deterministic tests for handle availability policy, location policy and
+  approved copy, explicit image crop output, and crop geometry/offset clamping.
+- Generated `Wander.xcodeproj` through XcodeGen after adding the new sources.
+- Validation:
+  - Generic Simulator build: passed (`BUILD SUCCEEDED`).
+  - Focused onboarding/photo regression run: 28 passed, 0 failed.
+  - Full `Wander` scheme: 808 passed, 0 failed, 0 skipped on iPhone 16 Plus,
+    iOS 18.6.
+  - Visual QA: approved location screen inspected on iPhone 16 Plus and iPhone
+    16e; the small-width social proof was tightened to avoid truncation.
+    Identity and crop-editor states were also inspected on iPhone 16 Plus.
+  - `git diff --check`: passed.
+- The first clean-cache full-test attempt stopped before tests because the Mac
+  had 145 MiB free and Xcode reported `No space left on device`. Removed only
+  this task's generated `/private/tmp/DerivedData-rec176` and
+  `/private/tmp/DerivedData-rec176-full` caches, then reran successfully using
+  the existing focused cache.
+- Simulator screenshots:
+  - `/private/tmp/rec176-location-large-final.png`
+  - `/private/tmp/rec176-location-small-final.png`
+  - `/private/tmp/rec176-identity-large.png`
+  - `/private/tmp/rec176-crop-large.png`
+- No build-number bump, archive, TestFlight upload, or Slack release note was
+  performed; no TestFlight release was requested.
