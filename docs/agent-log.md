@@ -28379,3 +28379,90 @@ Starting status and coordination:
 - Merge-only closeout: no build-number bump, archive, TestFlight upload, or
   Slack release note was requested. REC-174 can move to Done; the change will
   ride the next explicit TestFlight release batch.
+
+## 2026-07-28 04:32 PDT - Codex - REC-176 Onboarding Polish
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-176-onboarding-polish`
+Worktree: `/private/tmp/recme-rec176-onboarding-polish`
+Linear: `REC-176` (`In Progress`)
+Mission Control: `4d64fc67-adce-4200-b935-6e16f90fddaa` (`in_progress`)
+
+Goal: implement Joe's approved onboarding follow-up: replace the generic
+location permission splash with a real rec.me map-value preview, make location
+authorization state-aware, prevent premature username-taken feedback, and add
+an Instagram-style circular profile-photo crop/zoom step.
+
+Starting status and coordination:
+
+- Created a clean isolated worktree from exact `origin/main` commit `f17d97d`.
+  The primary checkout is 88 commits behind and contains unrelated untracked
+  `tmp/`, so it remains untouched.
+- No active log entry or worktree overlaps the onboarding source files. Existing
+  REC-132 worktrees are completed historical work and remain untouched.
+- The repo has no live-device StateServer/debug snapshot bridge. The approved
+  simulator screenshots and deterministic native regression tests are the
+  fallback pre-fix evidence; no unowned debug-server infrastructure will be
+  introduced for this UI/permission follow-up.
+- Approved location copy: `Find the good stuff nearby`; explain that friends'
+  recommendations and faster nearby saves are unlocked; reassure that location
+  is never shown to friends; primary `Use my location`; secondary `Not now`.
+- Expected edits: `Wander/Features/Onboarding/OnboardingFlowView.swift`,
+  `Wander/Features/Onboarding/OnboardingPermissionManagers.swift`, a focused
+  photo-crop component, matching onboarding tests, and this append-only log.
+- Planned validation: focused onboarding contracts, full test suite, generic
+  Simulator build, visual QA on a current large and small iPhone, and
+  `git diff --check`. No TestFlight release is authorized in this task.
+
+### 2026-07-28 05:03 PDT - Implementation and validation complete
+
+- Replaced the generic location permission card with a native MapKit preview
+  containing rec.me-style social/current-user pins and a selected Circuit
+  Coffee place card. Approved copy is wired exactly, including the location
+  privacy reassurance.
+- Made location onboarding authorization-aware: already-authorized users skip
+  the step, first-time users receive the native permission request, denied
+  users get an actionable `Open Settings` path, and restricted users can
+  continue without location. Returning from Settings refreshes the state.
+- Prevented the prefilled/self username from triggering availability checks.
+  Checks now begin only after a valid edit and the Continue button waits for an
+  in-flight check instead of racing it.
+- Added a full-screen circular photo editor with pinch zoom, drag-to-position,
+  a zoom slider, and an explicit crop-to-512px JPEG output path.
+- Added deterministic tests for handle availability policy, location policy and
+  approved copy, explicit image crop output, and crop geometry/offset clamping.
+- Generated `Wander.xcodeproj` through XcodeGen after adding the new sources.
+- Validation:
+  - Generic Simulator build: passed (`BUILD SUCCEEDED`).
+  - Focused onboarding/photo regression run: 28 passed, 0 failed.
+  - Full `Wander` scheme: 808 passed, 0 failed, 0 skipped on iPhone 16 Plus,
+    iOS 18.6.
+  - Visual QA: approved location screen inspected on iPhone 16 Plus and iPhone
+    16e; the small-width social proof was tightened to avoid truncation.
+    Identity and crop-editor states were also inspected on iPhone 16 Plus.
+  - `git diff --check`: passed.
+- The first clean-cache full-test attempt stopped before tests because the Mac
+  had 145 MiB free and Xcode reported `No space left on device`. Removed only
+  this task's generated `/private/tmp/DerivedData-rec176` and
+  `/private/tmp/DerivedData-rec176-full` caches, then reran successfully using
+  the existing focused cache.
+- Simulator screenshots:
+  - `/private/tmp/rec176-location-large-final.png`
+  - `/private/tmp/rec176-location-small-final.png`
+  - `/private/tmp/rec176-identity-large.png`
+  - `/private/tmp/rec176-crop-large.png`
+- No build-number bump, archive, TestFlight upload, or Slack release note was
+  performed; no TestFlight release was requested.
+
+### 2026-07-28 05:08 PDT - Ready PR handoff
+
+- Implementation commit: `e0cfdd5` (`fix: polish onboarding identity and
+  location`).
+- Pushed `codex/rec-176-onboarding-polish` and opened ready PR #279:
+  `https://github.com/joelipshutz/wander/pull/279`.
+- Branch was verified against latest `origin/main` immediately before push
+  (`0` behind, `2` ahead). Worktree was clean after the implementation commit.
+- Next step: review/merge PR #279. Release only through a later explicit
+  TestFlight request.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser value is `codex/rec-176-onboarding-polish`.

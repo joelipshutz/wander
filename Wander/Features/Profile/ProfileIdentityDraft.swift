@@ -47,6 +47,19 @@ enum ProfileIdentityValidationError: Error, Equatable {
     }
 }
 
+enum OnboardingHandleAvailabilityPolicy {
+    static func shouldCheck(
+        normalizedHandle: String,
+        originalNormalizedHandle: String,
+        hasUserEdited: Bool,
+        validationError: ProfileIdentityValidationError?
+    ) -> Bool {
+        hasUserEdited
+            && validationError != .invalidHandle
+            && normalizedHandle != originalNormalizedHandle
+    }
+}
+
 enum ProfileIdentitySubmissionError: Error, Equatable {
     case handleTaken
     case invalidIdentity
