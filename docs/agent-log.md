@@ -28036,3 +28036,40 @@ Handoff checkpoint — 2026-07-28 00:17 PDT:
 - No known code or test blocker remains. Ryan's requested final handoff is to
   test the expanded calendar visually in Xcode and confirm a tapped past date
   updates the field and collapses the calendar immediately.
+
+REC-168 same-date follow-up start — 2026-07-28 00:36 PDT:
+
+- Ryan's physical Xcode test confirmed the first fix handles a newly selected
+  date, but tapping the already-selected date leaves the calendar expanded.
+  REC-168 moved from `In Review` back to `In Progress`.
+- Root cause: SwiftUI's single-value graphical `DatePicker` does not write its
+  `Binding<Date>` when the tapped day equals the current value, so the binding
+  setter that owns collapse never runs.
+- The `ios-fix` HTTP snapshot endpoint is unavailable by the repo's documented
+  decision: this app intentionally has no DebugBridge/StateServer. Ryan's exact
+  physical reproduction is the pre-fix interaction evidence, and
+  `WanderTests/Fixtures/rec-168-check-in-date-reselection-pre.json` durably
+  records the state before Swift edits.
+- Planned fix: use a controlled single-selection `MultiDatePicker`. Its set
+  binding emits on both new-day selection and deselection of the current day;
+  interpret an empty set as explicit confirmation of the existing date, then
+  collapse in either case. Add behavior-level date-selection tests plus the
+  existing source contract.
+- Expected files remain `Wander/Features/Map/MapScreen.swift`,
+  date-selection/test coverage, the pre-fix fixture, and this log. After
+  focused and complete validation, update PR #275 and squash-merge it to
+  `main`. No TestFlight build, release bump, archive, upload, or Slack note is
+  authorized.
+### 2026-07-28 00:43 PDT — Codex — REC-168 same-date confirmation validation
+
+- Goal: ensure tapping the already-selected check-in date explicitly resolves to that date and closes the expanded picker.
+- Branch: `codex/rec-168-date-picker-dismiss`
+- Implementation: replaced the single-value graphical `DatePicker` with a controlled `MultiDatePicker`; an empty selection now means the current day was confirmed, while a different selected day replaces only the date components and preserves the original check-in time.
+- Regression fixture: `WanderTests/Fixtures/rec-168-check-in-date-reselection-pre.json`, based on Ryan's physical Xcode reproduction. This repository intentionally has no DebugBridge/StateServer snapshot endpoint, so no live HTTP state snapshot was available.
+- Validation:
+  - Focused REC-168 regression tests: 3 passed, 0 failed.
+  - Full test suite: 794 passed, 0 failed, 0 skipped.
+  - Result bundle: `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-40-25--0700.xcresult`.
+  - `git diff --check`: passed.
+- Review: direct diff review against `origin/main` found no unrelated changes, schema/data/privacy impact, or generated project churn. The optional gstack review workflow could not run because its installed `checklist.md` and `greptile-triage.md` resources are missing, so equivalent manual review was completed and recorded here.
+- Handoff: PR #275 is ready for the user-authorized squash merge to `main`. This is merge-only work; no build-number bump, archive, TestFlight upload, or Slack release note is authorized.

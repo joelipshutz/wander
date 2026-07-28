@@ -3852,6 +3852,48 @@ enum PlaceTypePickerMode {
     case cuisine
 }
 
+enum CheckInDatePickerSelection {
+    static func calendarSelection(
+        for date: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Set<DateComponents> {
+        WannaGoDate.calendarSelection(for: date, calendar: calendar)
+    }
+
+    static func resolvedDate(
+        from selection: Set<DateComponents>,
+        currentDate: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Date {
+        guard !selection.isEmpty else {
+            return currentDate
+        }
+
+        let currentDay = calendar.dateComponents([.year, .month, .day], from: currentDate)
+        let selectedDay = selection.first { components in
+            components.year != currentDay.year
+                || components.month != currentDay.month
+                || components.day != currentDay.day
+        } ?? selection.first
+        guard let selectedDay else {
+            return currentDate
+        }
+
+        var resolvedComponents = calendar.dateComponents(
+            [.era, .hour, .minute, .second, .nanosecond],
+            from: currentDate
+        )
+        resolvedComponents.calendar = calendar
+        resolvedComponents.timeZone = calendar.timeZone
+        resolvedComponents.era = selectedDay.era ?? resolvedComponents.era
+        resolvedComponents.year = selectedDay.year
+        resolvedComponents.month = selectedDay.month
+        resolvedComponents.day = selectedDay.day
+
+        return calendar.date(from: resolvedComponents) ?? currentDate
+    }
+}
+
 struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
@@ -4494,22 +4536,24 @@ struct MapPlaceSaveFlowSheet: View {
                 if isShowingCheckInDatePicker {
                     Divider().background(WanderTheme.borderHairline.color)
 
-                    DatePicker(
+                    MultiDatePicker(
                         "Check-in date",
                         selection: Binding(
-                            get: { visitedAt },
-                            set: { selectedDate in
-                                visitedAt = selectedDate
+                            get: {
+                                CheckInDatePickerSelection.calendarSelection(for: visitedAt)
+                            },
+                            set: { selection in
+                                visitedAt = CheckInDatePickerSelection.resolvedDate(
+                                    from: selection,
+                                    currentDate: visitedAt
+                                )
                                 withAnimation(.easeInOut(duration: 0.22)) {
                                     isShowingCheckInDatePicker = false
                                 }
                             }
                         ),
-                        in: ...Date.now,
-                        displayedComponents: [.date]
+                        in: ..<Date.now
                     )
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
                     .tint(WanderTheme.terracotta.color)
                     .padding(.horizontal, WanderTheme.spacing2)
                     .padding(.bottom, WanderTheme.spacing2)

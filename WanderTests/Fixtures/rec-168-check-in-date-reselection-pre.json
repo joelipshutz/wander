@@ -1,0 +1,12 @@
+{
+  "issue": "REC-168",
+  "captured_at": "2026-07-28T00:36:00-07:00",
+  "source": "Ryan physical Xcode test",
+  "pre_fix_control": "single-value graphical DatePicker",
+  "reproduction": [
+    "Open the check-in date calendar",
+    "Tap the date that is already selected"
+  ],
+  "observed": "The Date binding does not emit a setter call, so the calendar remains expanded.",
+  "expected": "Treat the tap as explicit confirmation of the selected date and collapse the calendar."
+}
