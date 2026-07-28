@@ -1,13 +1,14 @@
 {
-  "bug": "Feed search opens without focusing the query field and has no explicit return control",
+  "bug": "Feed search opens a generic Discover modal instead of the approved temporary search state",
   "pre_fix": {
-    "launcher": "opens Discover as a full-screen cover",
-    "focus": "requires a second tap before typing",
-    "dismissal": "relies on an undiscoverable interactive swipe"
+    "launcher": "shows the normal Places and People tabs inside a separate full-screen presentation",
+    "search": "uses the older live-query Discover screen instead of REC-150 submitted search",
+    "dismissal": "uses a toolbar chevron workaround rather than the search state's persistent Back behavior"
   },
   "expected": {
-    "launcher": "keeps the persistent Feed search affordance",
-    "focus": "opens the existing Discover place search with the keyboard ready",
-    "dismissal": "provides a native close control that returns to Feed"
+    "launcher": "opens directly into the REC-150 place-search state with the field focused",
+    "chrome": "pins Back and the search field at the top while hiding normal Discover tabs and body",
+    "clear": "clears results but remains in the teaching search state",
+    "dismissal": "Back cancels in-flight work and returns to the prior Feed state"
   }
 }

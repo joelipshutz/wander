@@ -1337,9 +1337,15 @@ struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
     }
 }
 
-struct RemoteDiscoverFilterParser: LLMFilterParser {
+@MainActor
+final class RemoteDiscoverFilterParser: LLMFilterParser {
+    private enum ParseError: Error {
+        case semanticEmpty
+    }
+
     private let repository: any DiscoverFilterParsingRepository
     private let fallback: any LLMFilterParser
+    private(set) var parseSource: DiscoverParseSource = .remote
 
     init(
         repository: any DiscoverFilterParsingRepository,
@@ -1351,9 +1357,18 @@ struct RemoteDiscoverFilterParser: LLMFilterParser {
 
     func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
         do {
-            return try await repository.parseFilters(query: query, schema: schema)
+            let remoteFilters = try await repository.parseFilters(query: query, schema: schema)
+            let filters = DiscoverSemanticNormalizer.normalized(remoteFilters, query: query)
+            guard query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || filters.hasRecognizedFacet else {
+                throw ParseError.semanticEmpty
+            }
+            parseSource = .remote
+            return filters
         } catch {
-            return try await fallback.parse(query: query, schema: schema)
+            let fallbackFilters = try await fallback.parse(query: query, schema: schema)
+            let filters = DiscoverSemanticNormalizer.normalized(fallbackFilters, query: query)
+            parseSource = .deterministicFallback
+            return filters
         }
     }
 }

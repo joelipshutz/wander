@@ -76,7 +76,108 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "joe")
         XCTAssertEqual(filters.area, "LA")
-        XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "check-in", "LA", "joe"])
+        XCTAssertEqual(filters.schemaVersion, 2)
+        XCTAssertEqual(filters.opinion, .favorite)
+        XCTAssertEqual(filters.sort, .ownerRatingDescending)
+        XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "check-in", "LA", "joe", "favorites"])
+    }
+
+    func testDeterministicParserFlagsUnsupportedConceptsInsteadOfPretendingToApplyThem() async throws {
+        let filters = try await DeterministicFilterParser().parse(
+            query: "cheap coffee open now near me",
+            schema: DiscoverFilterSchema()
+        )
+
+        XCTAssertEqual(filters.resolvedUnsupportedConcepts, [.nearMe, .openNow, .price])
+    }
+
+    func testUnsupportedConceptAloneIsNotAResultProducingFacet() async throws {
+        let filters = try await DeterministicFilterParser().parse(
+            query: "open now near me",
+            schema: DiscoverFilterSchema()
+        )
+
+        XCTAssertFalse(filters.hasRecognizedFacet)
+        XCTAssertEqual(filters.resolvedUnsupportedConcepts, [.nearMe, .openNow])
+    }
+
+    func testFavoriteSynonymsShareTheSameBeenOnlyInvariant() {
+        for synonym in ["favorite", "best", "loved", "highly rated"] {
+            let normalized = DiscoverSemanticNormalizer.normalized(
+                DiscoverFilters(
+                    query: "Ryan's \(synonym) coffee spots",
+                    categories: [WanderPlaceCategory.coffeeTeaSweets],
+                    statuses: [.wannaGo]
+                ),
+                query: "Ryan's \(synonym) coffee spots"
+            )
+
+            XCTAssertEqual(normalized.opinion, .favorite, synonym)
+            XCTAssertEqual(normalized.statuses, [.been], synonym)
+            XCTAssertEqual(normalized.sort, .ownerRatingDescending, synonym)
+        }
+    }
+
+    func testExplicitWantAndBeenPhrasesCannotRetainTheOppositeStatus() {
+        let want = DiscoverSemanticNormalizer.normalized(
+            DiscoverFilters(query: "coffee I want to try", statuses: [.been]),
+            query: "coffee I want to try"
+        )
+        let been = DiscoverSemanticNormalizer.normalized(
+            DiscoverFilters(query: "coffee I visited", statuses: [.wannaGo]),
+            query: "coffee I visited"
+        )
+
+        XCTAssertEqual(want.statuses, [.wannaGo])
+        XCTAssertEqual(been.statuses, [.been])
+    }
+
+    func testRelationshipPhrasesRepairModelOmissions() {
+        let friends = DiscoverSemanticNormalizer.normalized(
+            DiscoverFilters(query: "friends' sunset hikes"),
+            query: "friends' sunset hikes"
+        )
+        let following = DiscoverSemanticNormalizer.normalized(
+            DiscoverFilters(query: "coffee from people I follow"),
+            query: "coffee from people I follow"
+        )
+
+        XCTAssertEqual(friends.relationship, .mutual)
+        XCTAssertEqual(following.relationship, .follower)
+    }
+
+    func testApostrophelessFavoritePossessiveResolvesOwner() async throws {
+        let filters = try await DeterministicFilterParser().parse(
+            query: "Ryans favorite coffee spots",
+            schema: DiscoverFilterSchema()
+        )
+
+        XCTAssertEqual(filters.ownerQuery, "ryan")
+        XCTAssertEqual(filters.opinion, .favorite)
+        XCTAssertEqual(filters.statuses, [.been])
+    }
+
+    func testSchemaV2ClientDecodesPreviousEdgeResponse() throws {
+        let data = Data(
+            #"""
+            {
+              "query":"coffee",
+              "categories":["coffee_tea_sweets"],
+              "area":null,
+              "statuses":["been"],
+              "relationship":null,
+              "ownerQuery":null,
+              "tags":[]
+            }
+            """#.utf8
+        )
+
+        let filters = try JSONDecoder().decode(DiscoverFilters.self, from: data)
+
+        XCTAssertNil(filters.schemaVersion)
+        XCTAssertNil(filters.opinion)
+        XCTAssertNil(filters.sort)
+        XCTAssertTrue(filters.resolvedUnsupportedConcepts.isEmpty)
     }
 
     private func visiblePlace(id: String, savedAt: Date) -> VisiblePlace {

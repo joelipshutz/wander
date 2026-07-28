@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
-    func testFeedSearchOpensFocusedAndCanReturnToFeed() {
+    func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -18,23 +18,33 @@ final class OnboardingUITests: XCTestCase {
 
         let searchField = app.textFields["discover.placesSearchField"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 4))
+        let backButton = app.buttons["discover.searchBack"]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 2))
+        XCTAssertEqual(backButton.label, "Back to Feed")
+        XCTAssertTrue(app.staticTexts["Ask for a place the way you'd ask a friend"].exists)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
-        searchField.typeText("coffee")
-        XCTAssertEqual(searchField.value as? String, "coffee")
 
         let keyboardTutorialContinue = app.buttons["Continue"]
         if keyboardTutorialContinue.waitForExistence(timeout: 1) {
             keyboardTutorialContinue.tap()
         }
 
+        searchField.tap()
+        searchField.typeText("coffee")
+        XCTAssertEqual(searchField.value as? String, "coffee")
+
+        let clearButton = app.buttons["Clear search"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 2))
+        clearButton.tap()
+        XCTAssertTrue(app.staticTexts["Ask for a place the way you'd ask a friend"].exists)
+        XCTAssertTrue(backButton.exists)
+
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "Feed search active"
+        screenshot.name = "Feed dedicated search state"
         screenshot.lifetime = .keepAlways
         add(screenshot)
 
-        let closeButton = app.buttons["discover.close"]
-        XCTAssertTrue(closeButton.waitForExistence(timeout: 2))
-        closeButton.tap()
+        backButton.tap()
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
     }
 

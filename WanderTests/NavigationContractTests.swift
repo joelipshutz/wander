@@ -57,14 +57,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains(".accessibilityIdentifier(\"feed.searchLauncher\")"))
         XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
         XCTAssertTrue(feed.contains("DiscoverScreen("))
-        XCTAssertTrue(feed.contains("initialSearchFocus: true"))
-        XCTAssertTrue(feed.contains("onDismiss: { isShowingSearch = false }"))
+        XCTAssertTrue(feed.contains("startsInPlaceSearch: true"))
+        XCTAssertTrue(feed.contains("onClose: { isShowingSearch = false }"))
         let discover = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
         )
+        XCTAssertTrue(discover.contains("if selectedMode == .places, isPlaceSearchPresented"))
+        XCTAssertTrue(discover.contains("activePlaceSearchHeader"))
         XCTAssertTrue(discover.contains("searchFieldFocused = true"))
-        XCTAssertTrue(discover.contains("ToolbarItem(placement: .topBarLeading)"))
-        XCTAssertTrue(discover.contains(".accessibilityIdentifier(\"discover.close\")"))
+        XCTAssertTrue(discover.contains("onClose == nil ? \"Back to Discover\" : \"Back to Feed\""))
+        XCTAssertTrue(discover.contains(".accessibilityIdentifier(\"discover.searchBack\")"))
+        XCTAssertFalse(discover.contains(".accessibilityIdentifier(\"discover.close\")"))
         XCTAssertTrue(discover.contains(".accessibilityIdentifier(accessibilityIdentifier)"))
         XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
         XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
@@ -649,7 +652,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialSmallNamedContent").count - 1, 2)
         XCTAssertTrue(lists.contains("Text(\"save places into a plan you can actually use\")\n                    .font(.system(size: 14, weight: .semibold))"))
 
-        XCTAssertEqual(discover.components(separatedBy: "WanderTypography.editorialMasthead").count - 1, 1)
+        let discoverMastheadUses = discover.components(separatedBy: "WanderTypography.editorialMasthead").count - 1
+        XCTAssertEqual(discoverMastheadUses, 2)
+        XCTAssertTrue(discover.contains("Text(\"Ask for a place the way you'd ask a friend\")\n                    .font(WanderTypography.editorialMasthead)"))
         XCTAssertEqual(discover.components(separatedBy: "WanderTypography.editorialNamedContent").count - 1, 2)
         let discoverSearch = try XCTUnwrap(
             discover.components(separatedBy: "private struct DiscoverSearchField: View").last?
@@ -1862,7 +1867,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(recommendationCard.contains(".frame(minHeight: 264)"))
     }
 
-    func testDiscoverUnboundedRowsAreLazyAndSearchWorkIsCancellable() throws {
+    func testDiscoverUnboundedRowsAreLazyAndPlaceSearchIsSubmitDriven() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
         )
@@ -1886,10 +1891,37 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(friends.contains("LazyVStack"))
         XCTAssertTrue(memberResults.contains("LazyHStack"))
         XCTAssertFalse(source.contains("store.visiblePlaces(for: profile.id).count"))
-        XCTAssertTrue(source.contains(".task(id: placesQuery)"))
+        XCTAssertFalse(source.contains(".task(id: placesQuery)"))
         XCTAssertTrue(source.contains(".task(id: memberQuery)"))
-        XCTAssertFalse(source.contains(".onChange(of: placesQuery)"))
+        XCTAssertTrue(source.contains(".onChange(of: placesQuery)"))
+        XCTAssertTrue(source.contains(".onSubmit(onSubmit)"))
+        XCTAssertTrue(source.contains("private func submitPlaceSearch()"))
         XCTAssertFalse(source.contains(".onChange(of: memberQuery)"))
+    }
+
+    func testDiscoverPlaceSearchIsReversibleAndTeachesNaturalLanguageQueries() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let feedSource = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+
+        XCTAssertTrue(source.contains("activePlaceSearchHeader"))
+        XCTAssertTrue(source.contains("Back to Discover"))
+        XCTAssertTrue(source.contains("private func exitPlaceSearch()"))
+        XCTAssertTrue(source.contains("private func clearPlaceSearch()"))
+        XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
+        XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
+        XCTAssertTrue(source.contains("Ask for a place the way you'd ask a friend"))
+        XCTAssertTrue(source.contains("Ryan's favorite coffee spots"))
+        XCTAssertTrue(source.contains("quiet cafes for getting work done"))
+        XCTAssertTrue(source.contains("Understood as"))
+        XCTAssertTrue(source.contains("evidence.summary"))
+        XCTAssertTrue(source.contains("Search visited instead"))
+        XCTAssertTrue(source.contains("Nothing was broadened automatically"))
+        XCTAssertTrue(feedSource.contains("startsInPlaceSearch: true"))
+        XCTAssertTrue(feedSource.contains("onClose: { isShowingSearch = false }"))
     }
 
     func testDiscoverAuthAndVisibleDataRefreshesRerunActiveSearchesCancellably() throws {
@@ -1899,7 +1931,7 @@ final class NavigationContractTests: XCTestCase {
         let authRefresh = try sourceSection(
             source,
             after: ".task(id: auth.isSignedIn)",
-            before: ".task(id: placesQuery)"
+            before: ".task(id: memberQuery)"
         )
         let visibleDataRefresh = try sourceSection(
             source,
