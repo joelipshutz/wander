@@ -27853,3 +27853,29 @@ REC-155 integrated review checkpoint — 2026-07-27 13:15 PDT:
 - Next: commit the review fixes, run the exact integrated complete suite,
   generic Simulator build, and two-size visual QA, then push and squash-merge
   PR #255 if all gates remain green.
+
+REC-155 pre-landing validation completion — 2026-07-27 13:22 PDT:
+
+- The first exact integrated full-suite run executed 792 tests: 791 passed and
+  the sole failure was the build-number source contract still expecting 104
+  on build-106 `main`. No REC-155 behavior test failed.
+- Updated that stale contract to current build 106. Its focused rerun passed
+  1/1, then the complete suite passed 792/792 with zero failures on iPhone 17
+  Pro / iOS 26.5:
+  `/tmp/DerivedData-rec155-landing/Logs/Test/Test-Wander-2026.07.27_23-18-31--0700.xcresult`.
+- The generic arm64/x86_64 iOS Simulator build passed for the app and embedded
+  extensions with code signing disabled. Only existing Supabase formatter
+  actor-isolation and traditional-headermap warnings remain.
+- Prior production-component visual QA remains applicable because latest
+  `main` auto-merged the save surface without source conflict and the review
+  fixes are data-selection only. The retained iPhone 17e and iPhone 17 Pro Max
+  screenshots show the actual Tag Shelf without clipping or unrelated Check-in
+  layout drift.
+- Final gstack/manual diff review: two informational correctness/completeness
+  findings were fixed with focused regressions; zero unresolved critical or
+  informational findings remain. PR #255 has no human, Greptile, or hosted
+  check feedback to resolve.
+- `xcodegen generate` produced no project drift and `git diff --check` passed.
+  PR #255 is ready to push and squash-merge into current `main`, after which
+  the explicit release workflow will prepare build 107 from exact latest
+  `main`.
