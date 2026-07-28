@@ -24113,6 +24113,197 @@ Final outcome: the universal rec.me Share Extension is on `main`, fully
 validated in Simulator, and ready for physical-device testing once the
 documented Apple Developer provisioning is complete.
 
+## 2026-07-26 09:15 PDT - Codex - REC-155 Tags And Labels Design Exploration
+
+Agent: Codex using `design-shotgun`
+Branch: `codex/rec-155-tags-labels-redesign`
+Worktree: `/private/tmp/recme-rec155-tags-labels-mockups`
+Linear: `REC-155` (`In Progress`)
+
+Goal: create multiple reviewable iPhone mockup directions that make the
+difference between place tags and personal labels self-evident in rec.me's
+save/edit flow. This is design exploration only; production SwiftUI, schema,
+visibility, and TestFlight changes are not authorized.
+
+Starting status and coordination:
+
+- Ran `git fetch origin`, inspected the primary checkout, all worktrees, and
+  the latest agent-log entries before editing.
+- The primary checkout is on stale branch `codex/rec-142-widgets` with the
+  unrelated untracked `.pnpm-store/`; it remains untouched.
+- Created this clean isolated worktree from `origin/main` at `9d51b0ec3`.
+- Joe is concurrently working on REC-147 check-in cards. This exploration will
+  not edit production UI files, including the high-conflict `MapScreen.swift`.
+- Existing product contract: tags describe a place or why it fits, while
+  personal labels are user-owned memory/filter groupings. The current
+  side-by-side chip treatment and overlapping suggestions make that difference
+  unclear.
+- Design artifacts will live only in the gstack user-artifact directory, as
+  required by `design-shotgun`, not in the repository.
+
+Expected repository files:
+
+- `docs/agent-log.md`
+
+Expected external artifacts:
+
+- `~/.gstack/projects/<project>/designs/tags-labels-redesign-20260726/`
+  containing mockup variants, comparison board, and eventual feedback.
+
+Design checkpoint, 2026-07-26 09:28 PDT:
+
+- Created four distinct interactive iPhone HTML prototypes:
+  - A, `Describe it / Remember it`: two explicit tools with separate
+    structures for place description and personal organization.
+  - B, `One memory cloud`: one suggestion surface that routes selections into
+    `About Jitlada` and `For me`.
+  - C, `Place fingerprint / My shortcuts`: compact descriptive traits plus
+    larger personal destination tiles.
+  - D, `Save now, organize later`: descriptive traits in the main flow and
+    personal shortcuts as an optional post-save action.
+- Rendered and visually inspected all four at a 500x980 review viewport.
+  Tightened Variant C after its first render so both semantic halves are
+  visible above the anchored save action.
+- Built and rendered a responsive comparison board with 1-5 ratings,
+  preferred-direction selection, per-variant comments, remix controls, and a
+  local feedback endpoint. Local asset checks returned HTTP 200 for the board
+  and rendered images.
+- Persistent artifacts:
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/tags-labels-redesign-20260726/`.
+- The gstack image generator and bundled browse daemon were unavailable
+  because the design binary and Bun runtime are missing. Used self-contained
+  HTML/CSS/JS prototypes and installed headless Chrome rendering instead.
+- No production source, schema, project-generation, or TestFlight files were
+  changed. Awaiting Ryan's structured comparison-board feedback before
+  selecting or iterating a direction.
+
+Design revision, 2026-07-26 17:59 PDT:
+
+- Ryan replaced the two-field product model with one unified user-facing
+  **Tags** field. `Tags` is the clearer name because the values now cover both
+  place description and personal retrieval; `Labels` would imply personal
+  filing only.
+- Locked the suggestion contract for the later implementation:
+  - normalize and deduplicate one combined suggestion set;
+  - for Restaurants & Food, recompute from category + cuisine;
+  - for every other primary category, recompute from category + subcategory;
+  - remove incompatible taxonomy-specific suggestions in real time while
+    preserving still-valid selections and custom tags.
+- Replaced the earlier two-tool prototypes with four static, single-list
+  directions using the same fictional Mediterranean restaurant:
+  - A, `Tag Deck`: equal-height two-column selection cards.
+  - B, `Ranked Stack`: full-width suggestions with a concise relevance reason.
+  - C, `Flavor Board`: a symmetrical three-column tactile tile grid.
+  - D, `Tag Shelf`: selected tags above a compact faceted catalogue.
+- Each direction shows the same taxonomy context and a coherent, deduplicated
+  Mediterranean set. No variant includes the prior Asian-fusion mismatch,
+  separate personal-label pool, or loose asymmetrical bubble cloud.
+- Rendered and visually inspected all four at 500x980, refined Variant C's
+  custom-tag action to span the grid, then rendered a 1800x980 static
+  comparison image.
+- Final artifacts:
+  `/Users/ryanlieblein/.gstack/projects/joelipshutz-wander/designs/merged-tags-section-20260726/`.
+- Updated `docs/decisions.md` with the durable merged-field and taxonomy-aware
+  suggestion contract. No production SwiftUI, persistence, schema, tests,
+  build number, or TestFlight state changed.
+- Validation: all five PNGs rendered successfully and were visually inspected;
+  the persistent artifact directory contains the four source HTML files,
+  four individual PNGs, and one static comparison HTML/PNG pair.
+
+Final outcome: four reviewable static mockup directions now express one
+taxonomy-aware, deduplicated Tags field. REC-155 remains In Progress pending
+Ryan's visual-direction selection and a separately authorized implementation
+pass.
+
+Git handoff, 2026-07-26 18:04 PDT:
+
+- Committed the documentation record as `4c5c8eafc`, merged latest
+  `origin/main` at `759e7c9df` while preserving both append-only log histories,
+  and pushed `codex/rec-155-tags-labels-redesign`.
+- Opened conflict-free draft PR #255:
+  `https://github.com/joelipshutz/wander/pull/255`.
+- `git diff --check origin/main...HEAD` passed. The PR contains only
+  `docs/agent-log.md` and `docs/decisions.md`; static mockups remain outside
+  the repository in the recorded gstack artifact directory.
+
+Implementation restart, 2026-07-26 18:30 PDT:
+
+- Ryan selected Option D (`Tag Shelf`) and authorized production
+  implementation with a strict boundary: keep the unified Tags section inside
+  the existing More Options disclosure and do not redesign any other part of
+  the Check-in page.
+- Updated Linear REC-155 from design-only scope to implementation acceptance
+  criteria. The More Options summary must remove `labels`; its question blocks
+  must recompute from status plus category/cuisine or category/subcategory,
+  including Check-in price/questions and Wanna excitement, planning, and
+  why-save questions.
+- Fetched and merged current `origin/main` at `9f12a04ea`; the REC-160
+  Check-in Action Button landing auto-merged without save-flow conflicts.
+- Found concurrent uncommitted REC-162 work in `AddScreen.swift`,
+  `ProfileImportViews.swift`, `NavigationContractTests.swift`, and its agent
+  log. This task will not edit those overlapping production/test files.
+- Planned implementation files:
+  - `Wander/Features/Map/MapScreen.swift`
+  - `Wander/Features/Add/AddQuestionTemplates.swift`
+  - `Wander/Services/WanderPlaceCategory.swift`
+  - `WanderTests/WanderPlaceCategoryTests.swift`
+  - `WanderTests/WanderStoreTests.swift`
+  - `docs/agent-log.md`
+  - `docs/decisions.md`
+
+Implementation completion checkpoint, 2026-07-26 19:43 PDT:
+
+- Implemented Option D as one **Tags** shelf inside the existing More Options
+  disclosure. Selected tags sit above one uncategorized, equal-width suggestion
+  grid with an accessible custom-tag entry; the previous loose bubble layout and
+  separate personal-label block are gone.
+- The save sheet now reads legacy personal labels into the unified selection and
+  writes the edited result through the active `*_tags` attribute. Suggestions
+  are normalized and deduplicated case-insensitively.
+- Status or taxonomy changes now refresh every applicable More Options block,
+  not only tags. Check-in price feel and contextual questions, plus Wanna
+  excitement, `planning for?`, and `why save it?`, all follow the current
+  category plus cuisine/subcategory. Generated values that no longer apply are
+  removed while custom values survive.
+- Kept the implementation boundary to save-sheet state and More Options. The
+  Check-in disclosure summary is now `note, tags & privacy`; no rating, visit
+  date, photos, note, privacy, place header, or other Check-in surface changed.
+- Added regression coverage for unified suggestion deduplication, cuisine-aware
+  updates, Wanna restaurant/bar/park templates, stale generated-value pruning,
+  custom-value preservation, all optional-question refreshes, and the updated
+  navigation copy contract.
+- Focused tag/template/taxonomy tests passed 4/4 and the focused navigation
+  contract passed 1/1. The exact final source then passed the complete XCTest
+  suite: 760/760 with zero failures on iPhone 17e / iOS 26.5. Result bundle:
+  `/tmp/recme-rec155-tags-labels-mockups/DerivedData-rec155/Logs/Test/Test-Wander-2026.07.26_19-42-33--0700.xcresult`.
+- The repo-standard iPhone 16 Plus / iOS 18.6 destination was unavailable on
+  this host. Visually inspected the actual production component on iPhone 17e
+  and iPhone 17 Pro Max / iOS 26.5; final screenshots are
+  `tags-option-d-iphone-17e.png` and
+  `tags-option-d-iphone-17-pro-max.png` in the REC-155 Codex visualization
+  artifact folder. The temporary DEBUG-only screenshot harness was removed.
+- `git diff --check` passed and the tree contains no leftover mockup-harness
+  symbols. The only added `valueType:` use is the already-supported
+  `multi_tag`; no new cross-layer value type, Supabase migration, RPC, or hosted
+  smoke-test surface was introduced.
+- No build number, archive, upload, TestFlight group, or tester Slack state was
+  changed. Commit, push, PR readiness, and Linear handoff remain to be recorded.
+- Committed the implementation as `0b72b1098` and pushed it to
+  `codex/rec-155-tags-labels-redesign`; existing PR #255 now contains the exact
+  tested head and GitHub reports no base-branch conflicts.
+- After Ryan's explicit confirmation, updated PR #255's title and body to the
+  implementation scope and validation receipt, then moved it from Draft to
+  Ready for review. GitHub shows the PR Open, mergeable, and conflict-free.
+- Opened the isolated worktree's `Wander.xcodeproj` in its own Xcode window.
+  Xcode's visible Branch Chooser confirms
+  `codex/rec-155-tags-labels-redesign`; the previously active REC-162 Xcode
+  window and branch were not switched or overwritten.
+- Moved Linear REC-155 to In Review. The Linear safety guard rejected the
+  optional validation comment because it included internal implementation
+  metadata and a private PR link; it was not retried or routed around. The
+  issue's existing PR attachment reflects the updated title, and this log plus
+  PR #255 contain the complete validation receipt.
+
 ## 2026-07-26 09:05 PDT - Codex - Full-Screen Photo Zoom
 
 Agent: Codex
@@ -26818,6 +27009,38 @@ Next step: install a future signed build containing commit `6dd510581` on an
 Action Button iPhone, select **Settings → Action Button → Controls → rec.me →
 Check-in**, and verify locked, unlocked, cold-launch, and signed-out behavior.
 
+## 2026-07-27 13:08 PDT - Codex - REC-155 Landing and Build 107 Release Start
+
+Agent: Codex using `recme-pr-review-merge-release` and gstack `review`
+Branch: `codex/rec-155-tags-labels-redesign`
+Worktree: `/private/tmp/recme-rec155-tags-labels-mockups`
+Linear: `REC-155` (`In Review`)
+PR: `#255`
+
+Goal: fulfill Ryan's explicit TestFlight request by landing the remaining
+REC-155 unified Tags implementation, then package exact latest `main` as the
+next TestFlight build. The other named changes are already released:
+`977f7c654` / REC-159 in build 100, and REC-157 plus PR #249 / REC-160 in
+build 102.
+
+Starting status and coordination:
+
+- Fetched `origin`; current `main` is `822ba5273` and build 106 is the latest
+  completed, approved public TestFlight release.
+- REC-155 is the only requested code not already merged or released. Ready PR
+  #255 remains open at `16f368620` and is based on build-101-era `main`.
+- This dedicated worktree is clean except for the pre-existing untracked
+  `DerivedData-rec155/`, which is regenerable test output and will remain
+  untouched and uncommitted.
+- Expected feature-branch work is limited to latest-main reconciliation,
+  append-only release coordination, any verified review fix required for
+  compatibility, and validation. High-conflict source includes
+  `Wander/Features/Map/MapScreen.swift`.
+- If the exact integrated PR remains clean, squash-merge it, increment build
+  106 to 107 once on a separate release branch, validate exact latest `main`,
+  archive/upload without build-number drift, attach to `rec.me Alpha`, submit
+  external beta review, update Linear, and post the required
+  `#testflight-feedback` note.
 REC-157 final-main reconciliation — 2026-07-26 18:45 PDT:
 
 - `origin/main` advanced during REC-157 validation with REC-160's separate
@@ -27606,3 +27829,53 @@ approved and available through the public TestFlight link.
 - Existing Supabase formatter actor-isolation warnings remain unrelated and
   non-blocking. Next: push the reconciled PR, squash-merge it, then prepare and
   ship exact latest `main` as build 106.
+
+REC-155 integrated review checkpoint — 2026-07-27 13:15 PDT:
+
+- Merged exact current `origin/main` at `822ba5273` into PR #255. Product,
+  project, test, and decision files auto-merged cleanly; the only conflict was
+  this append-only log, where both histories were preserved.
+- Full-diff review found two related completeness bugs in the older branch:
+  locally learned tag suggestions were still allowed to cross restaurant
+  cuisines and sibling subcategories, and a selected legacy tag whose casing
+  differed from a canonical suggestion could be omitted from the saved draft.
+- Fixed local tag sources to require the selected primary category and
+  subcategory, plus exact cuisine for Restaurants & Food. Canonical suggestion
+  spelling now wins case-insensitively while custom tags remain preserved.
+- Added focused regressions for taxonomy matching and case-insensitive
+  canonicalization. The six targeted REC-155 taxonomy, synchronization,
+  persistence, and navigation tests passed 6/6 on iPhone 17 Pro / iOS 26.5:
+  `/tmp/DerivedData-rec155-landing/Logs/Test/Test-Wander-2026.07.27_23-11-15--0700.xcresult`.
+- Verified the hosted save contract replaces the prior place-attribute set
+  before inserting the new payload, so folding legacy `personal_labels` into
+  the active `*_tags` attribute does not leave duplicate remote rows. No new
+  attribute value type or schema migration is introduced.
+- Next: commit the review fixes, run the exact integrated complete suite,
+  generic Simulator build, and two-size visual QA, then push and squash-merge
+  PR #255 if all gates remain green.
+
+REC-155 pre-landing validation completion — 2026-07-27 13:22 PDT:
+
+- The first exact integrated full-suite run executed 792 tests: 791 passed and
+  the sole failure was the build-number source contract still expecting 104
+  on build-106 `main`. No REC-155 behavior test failed.
+- Updated that stale contract to current build 106. Its focused rerun passed
+  1/1, then the complete suite passed 792/792 with zero failures on iPhone 17
+  Pro / iOS 26.5:
+  `/tmp/DerivedData-rec155-landing/Logs/Test/Test-Wander-2026.07.27_23-18-31--0700.xcresult`.
+- The generic arm64/x86_64 iOS Simulator build passed for the app and embedded
+  extensions with code signing disabled. Only existing Supabase formatter
+  actor-isolation and traditional-headermap warnings remain.
+- Prior production-component visual QA remains applicable because latest
+  `main` auto-merged the save surface without source conflict and the review
+  fixes are data-selection only. The retained iPhone 17e and iPhone 17 Pro Max
+  screenshots show the actual Tag Shelf without clipping or unrelated Check-in
+  layout drift.
+- Final gstack/manual diff review: two informational correctness/completeness
+  findings were fixed with focused regressions; zero unresolved critical or
+  informational findings remain. PR #255 has no human, Greptile, or hosted
+  check feedback to resolve.
+- `xcodegen generate` produced no project drift and `git diff --check` passed.
+  PR #255 is ready to push and squash-merge into current `main`, after which
+  the explicit release workflow will prepare build 107 from exact latest
+  `main`.

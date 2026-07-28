@@ -3753,19 +3753,96 @@ enum MapPlaceSaveDetailsPolicy {
         existing: [String: Set<String>],
         blocks: [AddQuestionBlock],
         context: MapPlaceSaveContext,
-        status: PlaceStatus
+        status: PlaceStatus,
+        previousSuggestedOptions: [String: [String]] = [:]
     ) -> [String: Set<String>] {
         var selections = existing
+        let currentKeys = Set(blocks.map(\.key))
 
-        for block in blocks where selections[block.key] == nil {
-            selections[block.key] = suggestedSelections(
-                for: block,
-                context: context,
-                status: status
-            )
+        for key in previousSuggestedOptions.keys where !currentKeys.contains(key) {
+            selections.removeValue(forKey: key)
+        }
+
+        for block in blocks {
+            if let existingValues = selections[block.key],
+               let previousOptions = previousSuggestedOptions[block.key] {
+                let previousKeys = Set(previousOptions.map(WanderPlaceCategory.normalizedCategoryText))
+                let nextKeys = Set(block.options.map(WanderPlaceCategory.normalizedCategoryText))
+                selections[block.key] = existingValues.filter { value in
+                    let key = WanderPlaceCategory.normalizedCategoryText(value)
+                    return !previousKeys.contains(key) || nextKeys.contains(key)
+                }
+            } else if selections[block.key] == nil {
+                selections[block.key] = suggestedSelections(
+                    for: block,
+                    context: context,
+                    status: status
+                )
+            }
         }
 
         return selections
+    }
+
+    static func synchronizedUnifiedTagSelections(
+        existing: Set<String>,
+        previousSuggestedOptions: [String],
+        nextSuggestedOptions: [String]
+    ) -> Set<String> {
+        let previousKeys = Set(previousSuggestedOptions.map(WanderPlaceCategory.normalizedCategoryText))
+        let nextKeys = Set(nextSuggestedOptions.map(WanderPlaceCategory.normalizedCategoryText))
+
+        return existing.filter { value in
+            let key = WanderPlaceCategory.normalizedCategoryText(value)
+            return !previousKeys.contains(key) || nextKeys.contains(key)
+        }
+    }
+
+    static func matchesTagSuggestionTaxonomy(
+        sourcePrimaryCategory: String,
+        sourceSubcategory: String?,
+        sourceCuisine: String?,
+        selectedPrimaryCategory: String,
+        selectedSubcategory: String?,
+        selectedCuisine: String?
+    ) -> Bool {
+        guard WanderPlaceCategory.normalizedPrimaryCategory(sourcePrimaryCategory)
+                == WanderPlaceCategory.normalizedPrimaryCategory(selectedPrimaryCategory)
+        else {
+            return false
+        }
+
+        let selectedSubcategoryKey = WanderPlaceCategory.normalizedCategoryText(selectedSubcategory)
+        if !selectedSubcategoryKey.isEmpty,
+           WanderPlaceCategory.normalizedCategoryText(sourceSubcategory) != selectedSubcategoryKey {
+            return false
+        }
+
+        let selectedCuisineKey = WanderPlaceCategory.normalizedCategoryText(selectedCuisine)
+        if WanderPlaceCategory.normalizedPrimaryCategory(selectedPrimaryCategory)
+            == WanderPlaceCategory.restaurantsFood,
+           !selectedCuisineKey.isEmpty,
+           WanderPlaceCategory.normalizedCategoryText(sourceCuisine) != selectedCuisineKey {
+            return false
+        }
+
+        return true
+    }
+
+    static func orderedSelections(
+        values: Set<String>,
+        options: [String]
+    ) -> [String] {
+        let optionSelections = options.filter { option in
+            values.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
+        }
+        let customSelections = values
+            .filter { value in
+                !options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+
+        return optionSelections + customSelections
     }
 }
 
@@ -3789,7 +3866,9 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var selectedVisibility: PlaceVisibility
     @State private var selectedRatingScore: Double
     @State private var selectedAnswers: [String: Set<String>]
-    @State private var personalLabels: Set<String>
+    @State private var unifiedTags: Set<String>
+    @State private var lastUnifiedTagOptions: [String]
+    @State private var lastQuestionOptions: [String: [String]]
     @State private var selectedCuisine: String?
     @State private var isChoosingPlaceType = false
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
@@ -3821,9 +3900,33 @@ struct MapPlaceSaveFlowSheet: View {
         _selectedStatus = State(initialValue: context.initialStatus)
         _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
         _selectedRatingScore = State(initialValue: context.initialRatingScore ?? PlaceRating.defaultScore)
-        _selectedAnswers = State(initialValue: context.initialAnswers)
-        _personalLabels = State(initialValue: context.initialPersonalLabels)
-        _selectedCuisine = State(initialValue: Self.initialCuisine(for: context))
+        let initialCuisine = Self.initialCuisine(for: context)
+        let initialUnifiedTags = context.initialAnswers
+            .filter { Self.isUnifiedTagKey($0.key) }
+            .values
+            .reduce(into: context.initialPersonalLabels) { result, values in
+                result.formUnion(values)
+            }
+        let initialAnswers = context.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
+        let initialQuestionBlocks = AddQuestionTemplates.blocks(
+            primaryCategory: context.candidate.primaryCategory,
+            subcategory: context.candidate.subcategory,
+            cuisine: initialCuisine,
+            status: context.initialStatus
+        )
+        _selectedAnswers = State(initialValue: initialAnswers)
+        _unifiedTags = State(initialValue: initialUnifiedTags)
+        _lastUnifiedTagOptions = State(
+            initialValue: initialQuestionBlocks.first(where: { Self.isUnifiedTagKey($0.key) })?.options ?? []
+        )
+        _lastQuestionOptions = State(
+            initialValue: Dictionary(
+                uniqueKeysWithValues: initialQuestionBlocks
+                    .filter { !Self.isUnifiedTagKey($0.key) }
+                    .map { ($0.key, $0.options) }
+            )
+        )
+        _selectedCuisine = State(initialValue: initialCuisine)
         _note = State(initialValue: context.initialNote)
         _visitedAt = State(initialValue: context.editedVisit?.visitedAt ?? .now)
         let today = WannaGoDate.normalized(.now)
@@ -3857,30 +3960,8 @@ struct MapPlaceSaveFlowSheet: View {
         return selectedAssignment.withSource(.user, confidence: 1)
     }
 
-    private var personalLabelBlock: AddQuestionBlock {
-        AddQuestionBlock(
-            key: PlaceMemoryAttributeKeys.personalLabels,
-            title: "my labels",
-            tag: "labels",
-            kind: .multiTag,
-            valueType: "personal_label",
-            options: PlacePersonalLabelSuggestions.options(
-                category: selectedAssignment.primaryCategory,
-                subcategory: selectedAssignment.subcategory,
-                cuisine: selectedCuisine,
-                status: selectedStatus,
-                locality: context.candidate.locality,
-                localOptions: localCustomPersonalLabelOptions()
-            ),
-            defaultValues: PlacePersonalLabelSuggestions.defaultValues(
-                category: selectedAssignment.primaryCategory,
-                subcategory: selectedAssignment.subcategory,
-                cuisine: selectedCuisine,
-                status: selectedStatus,
-                locality: context.candidate.locality
-            ),
-            minimumOptionWidth: 104
-        )
+    private var unifiedTagBlock: AddQuestionBlock? {
+        questionBlocks.first { Self.isUnifiedTagKey($0.key) }
     }
 
     private var isRestaurantsFoodSelected: Bool {
@@ -4251,7 +4332,7 @@ struct MapPlaceSaveFlowSheet: View {
 
     @ViewBuilder
     private var questionAndLabelSections: some View {
-        ForEach(questionBlocks) { block in
+        ForEach(questionBlocks.filter { !Self.isUnifiedTagKey($0.key) }) { block in
             MapSaveQuestionBlock(title: block.title, tag: block.tag) {
                 MapSaveQuestionOptions(
                     block: block,
@@ -4262,12 +4343,12 @@ struct MapPlaceSaveFlowSheet: View {
             }
         }
 
-        MapSaveQuestionBlock(title: personalLabelBlock.title, tag: personalLabelBlock.tag) {
-            MapSaveQuestionOptions(
-                block: personalLabelBlock,
-                selectedValues: personalLabels
+        if let unifiedTagBlock {
+            MapSaveUnifiedTagsSection(
+                block: unifiedTagBlock,
+                selectedValues: unifiedTags
             ) { option in
-                togglePersonalLabel(option)
+                toggleAnswer(option, in: unifiedTagBlock)
             }
         }
     }
@@ -4353,7 +4434,7 @@ struct MapPlaceSaveFlowSheet: View {
         }
         return selectedStatus == .wannaGo
             ? "date, note, tags & privacy"
-            : "note, tags, labels & privacy"
+            : "note, tags & privacy"
     }
 
     private var removeSaveSection: some View {
@@ -4567,11 +4648,27 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func syncAnswersForCurrentQuestions() {
+        let currentQuestionBlocks = questionBlocks
+        let currentNonTagBlocks = currentQuestionBlocks.filter { !Self.isUnifiedTagKey($0.key) }
+        let nextUnifiedTagOptions = currentQuestionBlocks
+            .first(where: { Self.isUnifiedTagKey($0.key) })?
+            .options ?? []
+        unifiedTags = MapPlaceSaveDetailsPolicy.synchronizedUnifiedTagSelections(
+            existing: unifiedTags,
+            previousSuggestedOptions: lastUnifiedTagOptions,
+            nextSuggestedOptions: nextUnifiedTagOptions
+        )
+        lastUnifiedTagOptions = nextUnifiedTagOptions
         selectedAnswers = MapPlaceSaveDetailsPolicy.synchronizedSelections(
             existing: selectedAnswers,
-            blocks: questionBlocks,
+            blocks: currentNonTagBlocks,
             context: context,
-            status: selectedStatus
+            status: selectedStatus,
+            previousSuggestedOptions: lastQuestionOptions
+        )
+        lastQuestionOptions = Dictionary(
+            uniqueKeysWithValues: currentNonTagBlocks
+                .map { ($0.key, $0.options) }
         )
     }
 
@@ -4584,6 +4681,15 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
+        if Self.isUnifiedTagKey(block.key) {
+            if let existing = unifiedTags.first(where: { $0.caseInsensitiveCompare(option) == .orderedSame }) {
+                unifiedTags.remove(existing)
+            } else {
+                unifiedTags.insert(option)
+            }
+            return
+        }
+
         var values = selections(for: block)
 
         switch block.kind {
@@ -4601,19 +4707,15 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func selections(for block: AddQuestionBlock) -> Set<String> {
-        selectedAnswers[block.key] ?? MapPlaceSaveDetailsPolicy.suggestedSelections(
+        if Self.isUnifiedTagKey(block.key) {
+            return unifiedTags
+        }
+
+        return selectedAnswers[block.key] ?? MapPlaceSaveDetailsPolicy.suggestedSelections(
             for: block,
             context: context,
             status: selectedStatus
         )
-    }
-
-    private func togglePersonalLabel(_ option: String) {
-        if personalLabels.contains(option) {
-            personalLabels.remove(option)
-        } else {
-            personalLabels.insert(option)
-        }
     }
 
     private func attributeDrafts() -> [PlaceAttributeDraft] {
@@ -4628,28 +4730,6 @@ struct MapPlaceSaveFlowSheet: View {
                 return PlaceAttributeDraft(questionKey: block.key, valueType: block.valueType, stringValues: values)
             }
         }
-
-        let orderedPersonalLabels = orderedPersonalLabelSelections()
-        if !orderedPersonalLabels.isEmpty {
-            drafts.append(
-                PlaceAttributeDraft(
-                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
-                    valueType: "personal_label",
-                    stringValues: orderedPersonalLabels
-                )
-            )
-        }
-
-        let currentKeys = Set(questionBlocks.map(\.key))
-        let preservedTagDrafts = selectedAnswers
-            .filter { key, values in
-                !currentKeys.contains(key) && shouldPreserveHiddenTagAttribute(key) && !values.isEmpty
-            }
-            .sorted { $0.key < $1.key }
-            .map { key, values in
-                PlaceAttributeDraft(questionKey: key, valueType: "multi_tag", stringValues: values.sorted())
-            }
-        drafts.append(contentsOf: preservedTagDrafts)
 
         if selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.restaurantsFood,
            let selectedCuisine {
@@ -4666,25 +4746,16 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func orderedSelections(for block: AddQuestionBlock) -> [String] {
-        let values = selections(for: block)
-        let optionSelections = block.options.filter { values.contains($0) }
-        let customSelections = values
-            .filter { value in
-                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted()
-        return optionSelections + customSelections
+        MapPlaceSaveDetailsPolicy.orderedSelections(
+            values: selections(for: block),
+            options: block.options
+        )
     }
 
     private func localCustomTagOptions() -> [String] {
         localAttributeSuggestions { attribute in
-            attribute.valueType == "multi_tag" && shouldPreserveHiddenTagAttribute(attribute.questionKey)
-        }
-    }
-
-    private func localCustomPersonalLabelOptions() -> [String] {
-        localAttributeSuggestions { attribute in
-            attribute.questionKey == PlaceMemoryAttributeKeys.personalLabels
+            (attribute.valueType == "multi_tag" && Self.isUnifiedTagKey(attribute.questionKey))
+                || attribute.questionKey == PlaceMemoryAttributeKeys.personalLabels
         }
     }
 
@@ -4696,21 +4767,21 @@ struct MapPlaceSaveFlowSheet: View {
                currentPlace.userPlace.id == visiblePlace.userPlace.id {
                 return false
             }
-            return visiblePlace.effectiveCategory == selectedAssignment.primaryCategory
-        }
-        let exactSubcategory = selectedAssignment.subcategory.map { WanderPlaceCategory.normalizedCategoryText($0) }
-        let exactPlaces = visiblePlaces.filter { visiblePlace in
-            guard let exactSubcategory else { return true }
-            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) == exactSubcategory
-        }
-        let similarPlaces = visiblePlaces.filter { visiblePlace in
-            guard let exactSubcategory else { return false }
-            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) != exactSubcategory
-        }
-        let exactValues = attributeValues(from: exactPlaces, matching: predicate)
-        let similarValues = attributeValues(from: similarPlaces, matching: predicate)
 
-        return uniqueOptionValues(exactValues + similarValues, limit: 8)
+            return MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: visiblePlace.effectiveCategory,
+                sourceSubcategory: visiblePlace.effectiveSubcategory,
+                sourceCuisine: visiblePlace.restaurantCuisine,
+                selectedPrimaryCategory: selectedAssignment.primaryCategory,
+                selectedSubcategory: selectedAssignment.subcategory,
+                selectedCuisine: selectedCuisine
+            )
+        }
+
+        return uniqueOptionValues(
+            attributeValues(from: visiblePlaces, matching: predicate),
+            limit: 8
+        )
     }
 
     private func attributeValues(
@@ -4742,10 +4813,6 @@ struct MapPlaceSaveFlowSheet: View {
         return result
     }
 
-    private func shouldPreserveHiddenTagAttribute(_ key: String) -> Bool {
-        key.hasSuffix("_tags") || key == "best_for"
-    }
-
     private static func stringValues(from attribute: LocalPlaceAttribute) -> [String] {
         guard let data = attribute.valueJSON.data(using: .utf8) else { return [] }
         let decoder = JSONDecoder()
@@ -4758,15 +4825,8 @@ struct MapPlaceSaveFlowSheet: View {
         return []
     }
 
-    private func orderedPersonalLabelSelections() -> [String] {
-        let options = personalLabelBlock.options
-        let optionSelections = options.filter { personalLabels.contains($0) }
-        let customSelections = personalLabels
-            .filter { value in
-                !options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted()
-        return optionSelections + customSelections
+    private static func isUnifiedTagKey(_ key: String) -> Bool {
+        key.hasSuffix("_tags")
     }
 
     private func save() {
@@ -6429,6 +6489,267 @@ private struct MapSaveQuestionOptions: View {
 
         if let existing = displayOptions.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
             if !selectedValues.contains(existing) {
+                onSelect(existing)
+            }
+        } else {
+            onSelect(tag)
+        }
+
+        customTagText = ""
+        isAddingCustomTag = false
+    }
+}
+
+private struct MapSaveUnifiedTagsSection: View {
+    let block: AddQuestionBlock
+    let selectedValues: Set<String>
+    let onSelect: (String) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var isAddingCustomTag = false
+    @State private var customTagText = ""
+    @FocusState private var isCustomTagFocused: Bool
+
+    var body: some View {
+        MapSaveQuestionBlock(title: block.title, tag: "optional") {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                selectedShelf
+
+                if !suggestionOptions.isEmpty {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text("more suggestions")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                            ForEach(suggestionOptions, id: \.self) { option in
+                                suggestionButton(option)
+                            }
+                        }
+                    }
+                }
+
+                customTagControl
+            }
+        }
+    }
+
+    private var selectedShelf: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing2) {
+                Text("your tags")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+
+                if !selectedOptions.isEmpty {
+                    Text("\(selectedOptions.count)")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(minWidth: 22, minHeight: 22)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(Circle())
+                }
+            }
+
+            if selectedOptions.isEmpty {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+
+                    Text("Pick the details that make this place worth remembering.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            } else {
+                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                    ForEach(selectedOptions, id: \.self) { option in
+                        selectedButton(option)
+                    }
+                }
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(WanderTheme.terracotta.color.opacity(0.28), lineWidth: 1)
+        )
+    }
+
+    private var gridColumns: [GridItem] {
+        let count = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        return Array(
+            repeating: GridItem(.flexible(), spacing: WanderTheme.spacing2, alignment: .topLeading),
+            count: count
+        )
+    }
+
+    private var selectedOptions: [String] {
+        let suggestedSelections = block.options.filter { option in
+            selectedValues.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
+        }
+        let customSelections = selectedValues
+            .filter { value in
+                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+
+        return suggestedSelections + customSelections
+    }
+
+    private var suggestionOptions: [String] {
+        block.options.filter { option in
+            !selectedValues.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
+        }
+    }
+
+    private func selectedButton(_ option: String) -> some View {
+        Button {
+            onSelect(option)
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                Text(option)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .background(WanderTheme.terracottaTint.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(WanderTheme.terracotta.color.opacity(0.52), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Remove \(option) tag")
+        .accessibilityAddTraits(.isSelected)
+    }
+
+    private func suggestionButton(_ option: String) -> some View {
+        Button {
+            onSelect(option)
+        } label: {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                Text(option)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.leading)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add \(option) tag")
+    }
+
+    @ViewBuilder
+    private var customTagControl: some View {
+        if isAddingCustomTag {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "tag")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                TextField("Add your own tag", text: $customTagText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .tint(WanderTheme.terracotta.color)
+                    .submitLabel(.done)
+                    .focused($isCustomTagFocused)
+                    .onSubmit(addCustomTag)
+
+                Button(action: addCustomTag) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Save custom tag")
+            }
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(WanderTheme.terracotta.color, lineWidth: 1)
+            )
+            .onAppear {
+                isCustomTagFocused = true
+            }
+        } else {
+            Button {
+                isAddingCustomTag = true
+            } label: {
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .black))
+                    Text("add your own")
+                        .font(.system(size: 13, weight: .bold))
+                    Spacer()
+                }
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .stroke(
+                            WanderTheme.terracotta.color.opacity(0.5),
+                            style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add your own tag")
+        }
+    }
+
+    private func addCustomTag() {
+        let tag = customTagText
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        guard !tag.isEmpty else {
+            isAddingCustomTag = false
+            customTagText = ""
+            return
+        }
+
+        if let existing = (block.options + Array(selectedValues))
+            .first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) {
+            if !selectedValues.contains(where: { $0.caseInsensitiveCompare(existing) == .orderedSame }) {
                 onSelect(existing)
             }
         } else {

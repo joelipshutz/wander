@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -85,6 +85,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Screen titles | Locked | Main surfaces use plain titles like Discover and Settings; avoid oversized informal slogans as page titles. |
 | Discover hierarchy | Locked | People stay near the top under search; Places are the primary Discover content with a segmented `mine` / `friends` / `everyone` scope switch at the top of the Places section. |
 | Add question answers | Locked | M2 persists starter contextual answers into flexible `LocalPlaceAttribute` rows using `question_key`, `value_type`, and JSON values. Starter templates are category-aware: coffee = work setup/tags, hike = strenuousness/tags, restaurant = price/occasion/tags, plus a rating/excitement signal. Expanded place sheets read persisted attributes rather than inferred placeholder chips. Future user-created/custom questions should add question-definition metadata, not hardcode new answer columns. |
+| Unified save-place tags | Locked for REC-155 implementation | The save flow merges place tags and legacy `My Labels` into one user-facing field named **Tags**. It uses Option D's selected-tag shelf plus one uncategorized, symmetrical suggestion grid inside the existing More Options disclosure. Suggestions are normalized, deduplicated case-insensitively, and recomputed with every optional question when status or taxonomy changes: category + cuisine for Restaurants & Food, or category + subcategory otherwise. Incompatible generated values are removed while custom tags and answers survive; edited legacy labels are folded into the active tag attribute instead of writing a second user-facing field. The rest of the Check-in page remains unchanged. |
 | Place attribute value-type contract | Locked | iOS `PlaceAttributeDraft.valueType`, `question_definitions.value_type`, and `place_attributes.value_type` are one cross-layer contract. Semantic `personal_label` and `restaurant_cuisine` types are first-class alongside generic input types. Every new type must update both constraints and pass the authenticated hosted `public.save_own_place` smoke transaction before merge/release. |
 
 ## Reset Decisions
