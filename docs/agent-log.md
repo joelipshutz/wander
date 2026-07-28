@@ -28029,6 +28029,10 @@ Handoff checkpoint — 2026-07-28 00:17 PDT:
   https://github.com/joelipshutz/wander/pull/275
 - Linked PR #275 from REC-168, posted the implementation and 792-test
   validation summary, and moved the issue to `In Review`.
+- Opened `/private/tmp/recme-rec168-date-picker/Wander.xcodeproj` as its own
+  Xcode workspace window. Xcode's Branch Chooser explicitly shows
+  `codex/rec-168-date-picker-dismiss`, the active run destination is iPhone 17
+  Pro, and PR #275 is open, ready, and cleanly mergeable against `main`.
 - No known code or test blocker remains. Ryan's requested final handoff is to
   test the expanded calendar visually in Xcode and confirm a tapped past date
   updates the field and collapses the calendar immediately.
