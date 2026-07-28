@@ -28453,3 +28453,14 @@ Starting status and coordination:
   - `/private/tmp/rec176-crop-large.png`
 - No build-number bump, archive, TestFlight upload, or Slack release note was
   performed; no TestFlight release was requested.
+
+### 2026-07-28 05:08 PDT - Ready PR handoff
+
+- Implementation commit: `e0cfdd5` (`fix: polish onboarding identity and
+  location`).
+- Pushed `codex/rec-176-onboarding-polish` and opened ready PR #279:
+  `https://github.com/joelipshutz/wander/pull/279`.
+- Branch was verified against latest `origin/main` immediately before push
+  (`0` behind, `2` ahead). Worktree was clean after the implementation commit.
+- Next step: review/merge PR #279. Release only through a later explicit
+  TestFlight request.
