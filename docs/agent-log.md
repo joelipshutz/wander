@@ -28464,3 +28464,5 @@ Starting status and coordination:
   (`0` behind, `2` ahead). Worktree was clean after the implementation commit.
 - Next step: review/merge PR #279. Release only through a later explicit
   TestFlight request.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser value is `codex/rec-176-onboarding-polish`.
