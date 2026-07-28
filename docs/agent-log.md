@@ -28622,3 +28622,33 @@ Starting status and coordination:
   search/header presentation, focused tests, and simulator evidence files.
   `MapScreen.swift` is high-conflict; latest-main changes are already merged and
   will be preserved.
+
+### 2026-07-28 05:42 PDT - Feed-search fix and simulator validation
+
+- Clean reproduction on the latest-main merge showed that the persistent Feed
+  search launcher still rendered, but its full-screen Discover presentation did
+  not focus the query field and exposed no explicit way back to Feed. The search
+  implementation and result behavior themselves were still present.
+- Restored the intended interaction without changing Map search: tapping Feed
+  search now opens the existing Discover place search with the field focused and
+  keyboard ready, and a native leading chevron dismisses back to Feed. Added
+  stable accessibility identifiers for the launcher, both Discover fields, and
+  the close control.
+- Added a REC-166 pre-fix fixture, source-contract coverage, and an end-to-end UI
+  test that launches Feed, opens search, verifies immediate keyboard focus,
+  types `coffee`, captures the active state, closes, and verifies Feed returns.
+- Hosted read-only evidence found the July global Google place-photo request
+  counter at exactly `900/900` (last increment July 23), while Joe's daily count
+  was `33`. Joe confirmed this quota explanation was sufficient and asked to
+  leave it alone. No photo provider, fallback, quota, migration, hosted data, or
+  build-number change was made.
+- Visual QA passed on iPhone 16 Plus and the smaller iPhone 16e. Feed retained
+  its persistent launcher and populated capture photos; the active-search state
+  fit both devices with the field focused, keyboard visible, results updating,
+  and native close control accessible.
+- Validation passed: focused navigation contract 1/1; focused Feed-search UI
+  test 1/1 on iPhone 16 Plus and 1/1 on iPhone 16e; full suite 797/797
+  unit/contract tests and 2/2 UI tests; `git diff --check` clean. Full result:
+  `/tmp/DerivedData-rec166/Logs/Test/Test-Wander-2026.07.28_05-40-30--0700.xcresult`.
+- Next: commit and push the narrow Feed-search fix to PR #267, return REC-166
+  to In Review, and keep the photo-quota follow-up intentionally deferred.

@@ -1,0 +1,13 @@
+{
+  "bug": "Feed search opens without focusing the query field and has no explicit return control",
+  "pre_fix": {
+    "launcher": "opens Discover as a full-screen cover",
+    "focus": "requires a second tap before typing",
+    "dismissal": "relies on an undiscoverable interactive swipe"
+  },
+  "expected": {
+    "launcher": "keeps the persistent Feed search affordance",
+    "focus": "opens the existing Discover place search with the keyboard ready",
+    "dismissal": "provides a native close control that returns to Feed"
+  }
+}

@@ -41,7 +41,10 @@ struct FeedScreen: View {
                 await refresh()
             }
             .fullScreenCover(isPresented: $isShowingSearch) {
-                DiscoverScreen()
+                DiscoverScreen(
+                    initialSearchFocus: true,
+                    onDismiss: { isShowingSearch = false }
+                )
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
@@ -847,6 +850,7 @@ private struct FeedSearchLauncher: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search places and people")
+        .accessibilityIdentifier("feed.searchLauncher")
         .task {
             guard placeholders.count > 1 else { return }
             while !Task.isCancelled {

@@ -67,6 +67,7 @@
 		494E2C67824F5DC9AFBDC46C /* WanderFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00EA2E6F128127B2CED014D /* WanderFixtures.swift */; };
 		4A22B42F0D3DFB823F938E9D /* PlaceImportParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8DC0A8E7A20017527489A9 /* PlaceImportParser.swift */; };
 		4B1E69D54A34826BF104006B /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059173381275E3363050A4E1 /* OnboardingStateTests.swift */; };
+		4C5E13BFB09959A31A40295B /* rec-166-feed-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */; };
 		52B8AC44581CEA630201DEB3 /* SyncStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0925F17F5640CFD88F70EBA /* SyncStateMachine.swift */; };
 		52D02001E5ABD10E7917EFFF /* VisitPhotoLocalFileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */; };
 		53AA029A980413C3B4E3A372 /* OnboardingPermissionManagers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1202D211E41D76B3D0CB2D31 /* OnboardingPermissionManagers.swift */; };
@@ -313,6 +314,7 @@
 		8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitPhotoLocalFileStore.swift; sourceTree = "<group>"; };
 		8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfilePresentation.swift; sourceTree = "<group>"; };
 		8E8DC0A8E7A20017527489A9 /* PlaceImportParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceImportParser.swift; sourceTree = "<group>"; };
+		909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-166-feed-search-pre.json"; sourceTree = "<group>"; };
 		93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CountryCanonicalizer.swift; sourceTree = "<group>"; };
 		9C22D299879CD27950355753 /* MapKitPlaceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapKitPlaceResolver.swift; sourceTree = "<group>"; };
 		9E5C022AA603520F5AFAA348 /* OnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingState.swift; sourceTree = "<group>"; };
@@ -679,6 +681,7 @@
 				09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */,
 				7BC6927E9BEEEDBF4E9B5795 /* rec-161-photo-fallback-pre.json */,
 				AEA406C00A5D6B89E58C8ED5 /* rec-161-profile-ratings-pre.json */,
+				909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */,
 				1CEEF5EC131D187840F4751C /* rec-168-check-in-date-reselection-pre.json */,
 			);
 			path = Fixtures;
@@ -1011,6 +1014,7 @@
 				6DD4FB880BABD14154A14AC1 /* rec-106-manual-place-search-pre.json in Resources */,
 				3603D0B2DCB02699EDE126AF /* rec-161-photo-fallback-pre.json in Resources */,
 				3581910694825E93BDF73089 /* rec-161-profile-ratings-pre.json in Resources */,
+				4C5E13BFB09959A31A40295B /* rec-166-feed-search-pre.json in Resources */,
 				12E3D915545B913AF7F72F9E /* rec-168-check-in-date-reselection-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -26,9 +26,17 @@ struct DiscoverScreen: View {
     @State private var lastHandledVisiblePlaceSignature: [DiscoverVisiblePlaceSignature]?
     @FocusState private var searchFieldFocused: Bool
     @Binding private var requestedSection: DiscoverSection?
+    private let initialSearchFocus: Bool
+    private let onDismiss: (() -> Void)?
 
-    init(requestedSection: Binding<DiscoverSection?> = .constant(nil)) {
+    init(
+        requestedSection: Binding<DiscoverSection?> = .constant(nil),
+        initialSearchFocus: Bool = false,
+        onDismiss: (() -> Void)? = nil
+    ) {
         _requestedSection = requestedSection
+        self.initialSearchFocus = initialSearchFocus
+        self.onDismiss = onDismiss
     }
 
     private let tickerSuggestions = [
@@ -150,6 +158,11 @@ struct DiscoverScreen: View {
             .wanderScreen()
             .task {
                 applyRequestedSection()
+                if initialSearchFocus {
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    searchFieldFocused = true
+                }
                 activityLoadState = .loading
                 await refreshDiscoverDefaultContent()
                 lastHandledAuthState = auth.isSignedIn
@@ -226,6 +239,16 @@ struct DiscoverScreen: View {
                 Button("OK", role: .cancel) { savedMessage = nil }
             } message: {
                 Text(savedMessage ?? "")
+            }
+            .toolbar {
+                if let onDismiss {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button(action: onDismiss) {
+                            Label("Close search", systemImage: "chevron.down")
+                        }
+                        .accessibilityIdentifier("discover.close")
+                    }
+                }
             }
         }
     }
@@ -308,7 +331,8 @@ struct DiscoverScreen: View {
             text: $placesQuery,
             placeholders: tickerSuggestions,
             isTicker: true,
-            accessibilityLabel: "Search places"
+            accessibilityLabel: "Search places",
+            accessibilityIdentifier: "discover.placesSearchField"
         )
         .focused($searchFieldFocused)
     }
@@ -318,7 +342,8 @@ struct DiscoverScreen: View {
             text: $memberQuery,
             placeholders: ["Search name or @handle"],
             isTicker: false,
-            accessibilityLabel: "Search people"
+            accessibilityLabel: "Search people",
+            accessibilityIdentifier: "discover.peopleSearchField"
         )
         .focused($searchFieldFocused)
     }
@@ -1139,6 +1164,7 @@ private struct DiscoverSearchField: View {
     let placeholders: [String]
     let isTicker: Bool
     let accessibilityLabel: String
+    let accessibilityIdentifier: String
     @State private var placeholderIndex = 0
 
     private var placeholder: String {
@@ -1169,6 +1195,7 @@ private struct DiscoverSearchField: View {
                     .autocorrectionDisabled()
                     .submitLabel(.search)
                     .foregroundStyle(WanderTheme.textInk.color)
+                    .accessibilityIdentifier(accessibilityIdentifier)
             }
 
             if !text.isEmpty {

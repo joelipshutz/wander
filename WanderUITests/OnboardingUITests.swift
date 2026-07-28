@@ -2,6 +2,42 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testFeedSearchOpensFocusedAndCanReturnToFeed() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderInitialTab",
+            "discover"
+        ]
+        app.launch()
+
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 4))
+        launcher.tap()
+
+        let searchField = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
+        searchField.typeText("coffee")
+        XCTAssertEqual(searchField.value as? String, "coffee")
+
+        let keyboardTutorialContinue = app.buttons["Continue"]
+        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
+            keyboardTutorialContinue.tap()
+        }
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Feed search active"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let closeButton = app.buttons["discover.close"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 2))
+        closeButton.tap()
+        XCTAssertTrue(launcher.waitForExistence(timeout: 3))
+    }
+
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderOnboardingUITestSignedOut"]
