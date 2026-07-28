@@ -28149,3 +28149,21 @@ Starting status and coordination:
   on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
 - No TestFlight build or release was requested or performed. Next step is PR
   review and merge after CI/reviewer approval.
+
+### 2026-07-28 00:53 PDT - Merged to main
+
+- Reviewed PR #274 against current `origin/main`; no blocking correctness,
+  security, data-contract, or scope findings were found. GitHub had no review
+  comments or CI checks configured for the PR. The optional gstack review-log
+  helper could not record telemetry because `bun` is not installed; the manual
+  review and validation are recorded here.
+- Rebased onto `d56c734e8` after PR #275 advanced `main`; the only conflict was
+  the append-only `docs/agent-log.md`, resolved by preserving both entries.
+- Re-ran the focused combined-head navigation contract: 1/1 passed on iPhone
+  17 Pro / iOS 26.5. Prior branch validation remains full suite 793/793, visual
+  QA on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
+- Squash-merged ready PR #274 into `main` as `5f4b3308f`. Linear `REC-173` was
+  moved to Done with the merge and validation evidence.
+- Merge-only closeout: no build-number bump, archive, TestFlight upload, or
+  Slack release note was requested or performed. The change will ride the next
+  explicit TestFlight release batch.
