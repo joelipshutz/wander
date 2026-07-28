@@ -28367,3 +28367,16 @@ Starting status and coordination:
 - Prior branch validation remains 794/794 unit/contract tests, 1/1 UI test,
   generic Simulator build, and visual QA on iPhone 17e and iPhone 17 Pro.
   `git diff --check` passes.
+
+### 2026-07-28 01:39 PDT - Merged to main
+
+- Pushed centered-title commit `94aa1a577`, updated ready PR #276, and
+  rechecked it against latest `origin/main`. GitHub reported a clean merge
+  state, no required checks, no review blockers, and no Greptile comments.
+- Squash-merged PR #276 into `main` as `b7470f02f`.
+- `gh pr merge --delete-branch` returned a local checkout error because another
+  registered worktree owns `main`; the server-side merge completed
+  successfully and `origin/main` resolves to `b7470f02f`.
+- Merge-only closeout: no build-number bump, archive, TestFlight upload, or
+  Slack release note was requested. REC-174 can move to Done; the change will
+  ride the next explicit TestFlight release batch.
