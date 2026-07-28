@@ -422,10 +422,14 @@ App-code merges wait in `Next TestFlight` until that manual request arrives.
 
 ## TestFlight Release Notes
 
-Whenever an agent uploads a new TestFlight build, attaches it to the public group, or confirms it is available for testing, the agent must also post a short release note to the rec.me Slack feedback channel:
+Whenever an agent uploads a new TestFlight build, attaches it to the public
+group, or confirms it is available for testing, the agent must also post one
+top-level release announcement to the dedicated rec.me Slack release channel:
 
-- Slack channel: `#testflight-feedback`
-- Slack channel ID: `C0BAA7DG2AC`
+- Release channel: `#release-notes`
+- Release channel ID: `C0BM5CY0GQY`
+- Feedback channel: `#testflight-feedback`
+- Feedback channel ID: `C0BAA7DG2AC`
 - Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`
 
 The Slack note must include:
@@ -434,9 +438,14 @@ The Slack note must include:
 - What changed, written for testers rather than engineers.
 - What needs testing, as a concrete checklist.
 - Known issues or intentionally deferred areas.
-- A request to reply in-thread with device, account/email if relevant, screenshots, and exact repro steps.
+- A request to report problems in `#testflight-feedback` with device,
+  account/email if relevant, screenshots, and exact repro steps.
 
-For broad announcements only, `#all-recme` (`C0B9FU1QNG2`) exists, but TestFlight feedback prompts belong in `#testflight-feedback`.
+Keep `#release-notes` low-noise: one top-level announcement per build and no
+duplicate release post in `#testflight-feedback` unless Joe explicitly asks.
+Tester reports and ongoing discussion belong in `#testflight-feedback`.
+`#all-recme` (`C0B9FU1QNG2`) remains for broad announcements only when Joe
+explicitly requests one.
 
 ## TestFlight Helper
 

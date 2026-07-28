@@ -215,7 +215,9 @@ explicit release.
    copy in Slack.
 5. When upload/attachment is confirmed, create and push the immutable annotated
    tag `testflight/build-<n>` at the exact candidate. Never move or reuse it.
-6. Post the tester-facing note to `#testflight-feedback` (`C0BAA7DG2AC`).
+6. Post one top-level tester-facing announcement to `#release-notes`
+   (`C0BM5CY0GQY`). Do not duplicate it in `#testflight-feedback` unless Joe
+   explicitly asks.
 7. Add final evidence to `TestFlight build <n>`: candidate/tag, release PR,
    included payloads, tests, migrations/deploys, App Store Connect status,
    Slack link, known issues, and next action. Move it to `Done` only when the
@@ -238,12 +240,13 @@ The release note must include:
 - a concrete testing checklist;
 - known/deferred behavior;
 - public link `https://testflight.apple.com/join/knEhRa6t`; and
-- a request to reply in-thread with device, account/email if relevant,
-  screenshots, and exact repro steps.
+- a request to report problems in `#testflight-feedback` (`C0BAA7DG2AC`) with
+  device, account/email if relevant, screenshots, and exact repro steps.
 
-Do not post a "live" note before upload succeeds. TestFlight prompts belong in
-`#testflight-feedback`, not `#all-recme`, unless Joe explicitly requests a broad
-announcement.
+Do not post a "live" note before upload succeeds. Keep `#release-notes`
+low-noise with one top-level announcement per build. Tester reports and ongoing
+discussion belong in `#testflight-feedback`; `#all-recme` is only for a broad
+announcement Joe explicitly requests.
 
 ## Completion
 
