@@ -28318,3 +28318,18 @@ Starting status and coordination:
 - `git diff --check` passes. No schema, RPC, build-number, TestFlight, or Slack
   release action was required. Next: commit, push PR #276, return REC-174 to
   `In Review`, and leave this worktree's Xcode project on the branch for Ryan.
+
+### 2026-07-28 01:28 PDT - Ready-for-review handoff
+
+- Committed the follow-up as `ddb2844d8` and pushed
+  `codex/rec-174-save-flow-header`; ready PR #276 is open and GitHub reports a
+  clean merge state:
+  <https://github.com/joelipshutz/wander/pull/276>.
+- Updated REC-174 with the device validation evidence and returned it to
+  `In Review`.
+- Xcode remains open on this isolated worktree, with Branch Chooser on
+  `codex/rec-174-save-flow-header` and iPhone 17 Pro selected. The normal Run
+  scheme is restored with no enabled visual-QA launch arguments.
+- Final validation remains 3/3 focused regressions, 794/794 unit/contract
+  tests, 1/1 UI test, generic Simulator build, visual QA on iPhone 17e and
+  iPhone 17 Pro, and `git diff --check`.
