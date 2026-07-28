@@ -27919,3 +27919,51 @@ Release metadata validation:
   and this coordination record.
 - Next: commit/push a ready release-metadata PR, squash-merge it into current
   `main`, then validate/archive/upload that exact merged `main`.
+
+### 2026-07-28 00:00 PDT - Build 107 release completion
+
+- Ready release metadata PR #272 squash-merged to `main` as
+  `62b6babb7e150b155c029027f672ca21bc100ede`:
+  https://github.com/joelipshutz/wander/pull/272. This exact commit is the
+  archived release source.
+- Exact-main validation on iPhone 17 Pro / iOS 26.5 passed 792/792 tests with
+  zero failures:
+  `/tmp/DerivedData-build107-main/Logs/Test/Test-Wander-2026.07.27_23-42-23--0700.xcresult`.
+  One prior complete run passed 791 tests and hit only the unrelated,
+  non-reproducible onboarding carousel timing assertion; that test passed in a
+  clean focused rerun before the fully green aggregate run. The generic iOS
+  Simulator build also passed.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build107.xcarchive`. Archive metadata and all three
+  embedded extensions independently report rec.me `0.1 (107)`, and strict
+  deep code-signature verification passed.
+- Export options used automatic App Store distribution signing,
+  `destination=upload`, `uploadSymbols=true`, team `Y7TVK75RZ8`, and
+  `manageAppVersionAndBuildNumber=false`. The first account-session export
+  stopped before upload with `Failed to Use Accounts`; retrying the unchanged
+  archive with the configured Ryan-local App Store Connect API key succeeded.
+  Xcode reported `Uploaded Wander`, `Upload succeeded`, and
+  `EXPORT SUCCEEDED` without build-number drift.
+- App Store Connect build
+  `bd4de62b-e065-4594-bd5e-bff668f90690` is `VALID`, reports build 107, and
+  has `usesNonExemptEncryption=false`. The release helper published the
+  `en-US` What to Test copy, attached build 107 to public group
+  `rec.me Alpha`, submitted external beta review, and confirmed `APPROVED`.
+  Public link: https://testflight.apple.com/join/knEhRa6t.
+- REC-155 is `Done` in Linear with the implementation, validation, archive,
+  App Store Connect, and public TestFlight receipts. Requested commit
+  `977f7c654` / REC-159 and REC-157 plus PR #249 / REC-160 were already
+  present in public builds 100 and 102 respectively and remain included in
+  exact latest-main build 107.
+- Posted the required live/approved tester note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785222003542219.
+  It includes the public link, tester-facing unified Tags scope, focused
+  checklist, prior widget rechecks, known Clerk alpha branding issue, and
+  requested device/account/screenshot/repro details.
+- No Supabase schema/RPC/value-type contract changed, so the hosted Supabase
+  smoke suite was not applicable. Existing Supabase formatter actor-isolation
+  and traditional-headermap warnings remain non-blocking.
+
+Final status: rec.me 0.1 (107) is approved and available through the public
+TestFlight link. This completion record is docs-only and does not require
+another build-number increment.
