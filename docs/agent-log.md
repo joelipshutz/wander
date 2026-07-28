@@ -27967,3 +27967,55 @@ Release metadata validation:
 Final status: rec.me 0.1 (107) is approved and available through the public
 TestFlight link. This completion record is docs-only and does not require
 another build-number increment.
+
+## 2026-07-28 00:10 PDT - Codex - REC-168 Date Picker Dismissal
+
+Agent: Codex
+Branch: `codex/rec-168-date-picker-dismiss`
+Worktree: `/private/tmp/recme-rec168-date-picker`
+Linear: `REC-168` (`In Progress`)
+
+Goal: make the check-in date calendar apply a tapped date immediately and
+collapse without requiring a tap outside the calendar, then push a branch and
+open its isolated Xcode project for Ryan to test.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from exact
+  `origin/main` at `2621838b4b`.
+- The primary checkout is on unrelated `codex/rec-142-widgets` work and has an
+  untracked `.pnpm-store/`; neither will be touched.
+- No active worktree overlaps the expected source or test files.
+- Root cause: the check-in field uses SwiftUI's compact `DatePicker`, whose
+  system calendar presentation has no binding the app can use to dismiss
+  immediately after its date binding changes.
+- Planned fix: replace that opaque compact presentation with an app-controlled
+  expandable graphical calendar, close it from the selected-date binding, and
+  add a focused source contract that preserves immediate application,
+  dismissal, the no-future-date limit, and date-only behavior.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+
+Validation checkpoint — 2026-07-28 00:16 PDT:
+
+- Replaced the opaque compact picker popover with a controlled expandable
+  graphical calendar. The date binding assigns the tapped date and then
+  animates `isShowingCheckInDatePicker` to `false`, so the calendar collapses
+  in the same interaction. The field still limits selection through today and
+  exposes date-only accessibility text.
+- Added a focused navigation/source contract covering the graphical picker,
+  explicit selected-date assignment, immediate controlled collapse, removal of
+  the non-dismissible compact style, and the existing date-only behavior.
+- The initial sandboxed focused test could not access CoreSimulator or fetch
+  Swift packages. Per repository policy, it was rerun with approved simulator
+  access and passed 1/1:
+  `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-10-56--0700.xcresult`.
+- The complete simulator suite then passed 792/792 total tests: 791 unit and
+  integration tests plus the onboarding UI test, all with zero failures:
+  `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-15-55--0700.xcresult`.
+- `git diff --check` passed. Existing Supabase formatter actor-isolation
+  warnings remain unchanged and non-blocking. No schema, RPC, build number,
+  TestFlight, or release behavior changed.
+- Next: commit and push the branch, open a ready PR, attach it to REC-168,
+  move the issue to `In Review`, and open this isolated worktree's
+  `Wander.xcodeproj` in Xcode for Ryan's hands-on interaction and visual check.

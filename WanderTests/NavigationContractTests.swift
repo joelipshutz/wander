@@ -983,6 +983,12 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(checkInDateSection.contains("\"Check-in date\""))
         XCTAssertTrue(checkInDateSection.contains("displayedComponents: [.date]"))
+        XCTAssertTrue(checkInDateSection.contains(".datePickerStyle(.graphical)"))
+        XCTAssertTrue(checkInDateSection.contains("isShowingCheckInDatePicker.toggle()"))
+        XCTAssertTrue(checkInDateSection.contains("visitedAt = selectedDate"))
+        XCTAssertTrue(checkInDateSection.contains("isShowingCheckInDatePicker = false"))
+        XCTAssertTrue(mapScreen.contains("@State private var isShowingCheckInDatePicker = false"))
+        XCTAssertFalse(checkInDateSection.contains(".datePickerStyle(.compact)"))
         XCTAssertFalse(checkInDateSection.contains(".hourAndMinute"))
         XCTAssertFalse(checkInDateSection.contains("Defaults to now."))
         XCTAssertFalse(checkInDateSection.contains("Pick an earlier date for a past check-in."))

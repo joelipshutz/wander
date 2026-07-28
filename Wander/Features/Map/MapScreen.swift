@@ -3874,6 +3874,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
     @State private var visitedAt: Date
+    @State private var isShowingCheckInDatePicker = false
     @State private var plannedDate: Date?
     @State private var isShowingPlannedDatePicker = false
     @State private var isSaving = false
@@ -4458,16 +4459,63 @@ struct MapPlaceSaveFlowSheet: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            DatePicker(
-                "Check-in date",
-                selection: $visitedAt,
-                in: ...Date.now,
-                displayedComponents: [.date]
-            )
-            .datePickerStyle(.compact)
-            .font(.system(size: 14, weight: .bold))
-            .tint(WanderTheme.terracotta.color)
-            .padding(WanderTheme.spacing3)
+            VStack(spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isShowingCheckInDatePicker.toggle()
+                    }
+                } label: {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .frame(width: 38, height: 38)
+                            .background(WanderTheme.terracottaTint.color)
+                            .clipShape(Circle())
+
+                        Text(visitedAt.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .rotationEffect(.degrees(isShowingCheckInDatePicker ? 180 : 0))
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 58)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Check-in date")
+                .accessibilityValue(visitedAt.formatted(date: .long, time: .omitted))
+
+                if isShowingCheckInDatePicker {
+                    Divider().background(WanderTheme.borderHairline.color)
+
+                    DatePicker(
+                        "Check-in date",
+                        selection: Binding(
+                            get: { visitedAt },
+                            set: { selectedDate in
+                                visitedAt = selectedDate
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    isShowingCheckInDatePicker = false
+                                }
+                            }
+                        ),
+                        in: ...Date.now,
+                        displayedComponents: [.date]
+                    )
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .tint(WanderTheme.terracotta.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                    .padding(.bottom, WanderTheme.spacing2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
