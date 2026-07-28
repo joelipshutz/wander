@@ -4288,7 +4288,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(context.startsOnDetails)
         XCTAssertEqual(
             context.flowTitle(status: .wannaGo, isShowingDetails: false),
-            "Wanna go"
+            "Check in or Wanna"
         )
         XCTAssertEqual(
             context.flowTitle(status: .wannaGo, isShowingDetails: true),
@@ -4300,7 +4300,7 @@ final class WanderStoreTests: XCTestCase {
         )
         XCTAssertEqual(
             context.flowTitle(status: .been, isShowingDetails: true),
-            "Check in at Compact Want Cafe"
+            "Check in"
         )
         XCTAssertFalse(preselectedImport.requiresStatusConfirmation)
         XCTAssertTrue(preselectedImport.startsOnDetails)

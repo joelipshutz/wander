@@ -28285,3 +28285,36 @@ Starting status and coordination:
 - Planned validation: focused title/alignment regressions, full test suite,
   generic Simulator build, `git diff --check`, and visual QA on iPhone 17 Pro
   plus the smaller iPhone 17e.
+
+### 2026-07-28 01:27 PDT - Follow-up implementation and validation
+
+- Kept the choice-step title persistently `Check in or Wanna` for both status
+  selections. After Continue, confirmation-backed flows now show `Check in`
+  for Been and `Wanna go` for Wanna. Direct add-visit flows intentionally keep
+  their contextual titles, including `Check in at <place>` for a Wanna-only
+  save and `Check in again` after a prior visit.
+- Rebuilt the header row around one vertical centerline: back, title, and close
+  controls all use the shared 44-point minimum height. Added 4 points of top
+  spacing below the sheet grabber. Removed the now-unnecessary
+  `didSelectStatus` state.
+- Regenerated `Wander.xcodeproj` after merging current `main`; XcodeGen added
+  REC-168's already-merged JSON fixture to the Resources phase. No manual
+  project membership or signing change was introduced.
+- Focused regression validation passed 3/3 on iPhone 17 Pro / iOS 26.5. The
+  first focused run caught an overly broad test expectation for direct
+  add-visit flows; the production behavior and final assertions preserve their
+  contextual titles.
+- Full suite passed: 794 unit/contract tests and 1 UI test, zero failures.
+  Result bundle:
+  `/tmp/DerivedData-rec174-followup-full/Logs/Test/Test-Wander-2026.07.28_01-14-59--0700.xcresult`.
+- Generic iOS Simulator build passed after rerunning outside the sandbox, which
+  had blocked CoreSimulator and SwiftPM caches. Existing Supabase formatter
+  actor-isolation and traditional-headermap warnings remain unrelated.
+- Visual QA passed on iPhone 17e and iPhone 17 Pro. On both sizes, the choice
+  title stayed `Check in or Wanna` after selecting either option; the details
+  titles were `Check in` and `Wanna go`; and back/title/close shared the same
+  visual centerline without clipping or excess top space. Temporary launch
+  arguments were disabled and removed from the tracked scheme diff afterward.
+- `git diff --check` passes. No schema, RPC, build-number, TestFlight, or Slack
+  release action was required. Next: commit, push PR #276, return REC-174 to
+  `In Review`, and leave this worktree's Xcode project on the branch for Ryan.

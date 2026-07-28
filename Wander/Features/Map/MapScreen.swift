@@ -3168,23 +3168,15 @@ struct MapPlaceSaveContext: Identifiable {
     }
 
     func flowTitle(status: PlaceStatus, isShowingDetails: Bool) -> String {
-        if status == .wannaGo {
-            if case .editWant = mode {
-                return title
-            }
-            return "Wanna go"
-        }
-
         guard isShowingDetails else {
             return title
         }
 
-        switch mode {
-        case .add:
-            return "Check in at \(candidate.name)"
-        case .addVisit, .sharedVisit, .editVisit, .editWant:
-            return title
+        if requiresStatusConfirmation {
+            return status == .wannaGo ? "Wanna go" : "Check in"
         }
+
+        return title
     }
 
     var subtitle: String {
@@ -3970,7 +3962,6 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var sharedVisitInviteesError: String?
     @State private var errorMessage: String?
     @State private var isShowingOptionalDetails = false
-    @State private var didSelectStatus = false
 
     init(
         context: MapPlaceSaveContext,
@@ -4140,7 +4131,7 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing2) {
                 if step == .details && context.requiresStatusConfirmation {
                     Button {
                         errorMessage = nil
@@ -4149,6 +4140,7 @@ struct MapPlaceSaveFlowSheet: View {
                         Label("back", systemImage: "chevron.left")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(WanderTheme.terracotta.color)
+                            .frame(minHeight: WanderTheme.tapMinimum)
                     }
                     .buttonStyle(.plain)
                 }
@@ -4157,7 +4149,11 @@ struct MapPlaceSaveFlowSheet: View {
                     .font(.system(size: 28, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: WanderTheme.tapMinimum,
+                        alignment: .leading
+                    )
 
                 Button {
                     dismiss()
@@ -4182,13 +4178,10 @@ struct MapPlaceSaveFlowSheet: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
         }
+        .padding(.top, WanderTheme.spacing1)
     }
 
     private var flowTitle: String {
-        if step == .confirm && !didSelectStatus {
-            return context.title
-        }
-
         return context.flowTitle(
             status: selectedStatus,
             isShowingDetails: step == .details
@@ -4203,11 +4196,9 @@ struct MapPlaceSaveFlowSheet: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     MapSaveChoicePill(title: CheckInCopy.verb, isSelected: selectedStatus == .been) {
                         selectedStatus = .been
-                        didSelectStatus = true
                     }
                     MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
                         selectedStatus = .wannaGo
-                        didSelectStatus = true
                     }
                 }
             }
