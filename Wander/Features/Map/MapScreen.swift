@@ -3893,6 +3893,48 @@ enum PlaceTypePickerMode {
     case cuisine
 }
 
+enum CheckInDatePickerSelection {
+    static func calendarSelection(
+        for date: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Set<DateComponents> {
+        WannaGoDate.calendarSelection(for: date, calendar: calendar)
+    }
+
+    static func resolvedDate(
+        from selection: Set<DateComponents>,
+        currentDate: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> Date {
+        guard !selection.isEmpty else {
+            return currentDate
+        }
+
+        let currentDay = calendar.dateComponents([.year, .month, .day], from: currentDate)
+        let selectedDay = selection.first { components in
+            components.year != currentDay.year
+                || components.month != currentDay.month
+                || components.day != currentDay.day
+        } ?? selection.first
+        guard let selectedDay else {
+            return currentDate
+        }
+
+        var resolvedComponents = calendar.dateComponents(
+            [.era, .hour, .minute, .second, .nanosecond],
+            from: currentDate
+        )
+        resolvedComponents.calendar = calendar
+        resolvedComponents.timeZone = calendar.timeZone
+        resolvedComponents.era = selectedDay.era ?? resolvedComponents.era
+        resolvedComponents.year = selectedDay.year
+        resolvedComponents.month = selectedDay.month
+        resolvedComponents.day = selectedDay.day
+
+        return calendar.date(from: resolvedComponents) ?? currentDate
+    }
+}
+
 struct MapPlaceSaveFlowSheet: View {
     let context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
@@ -3915,6 +3957,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
     @State private var visitedAt: Date
+    @State private var isShowingCheckInDatePicker = false
     @State private var plannedDate: Date?
     @State private var isShowingPlannedDatePicker = false
     @State private var isSaving = false
@@ -4498,16 +4541,65 @@ struct MapPlaceSaveFlowSheet: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            DatePicker(
-                "Check-in date",
-                selection: $visitedAt,
-                in: ...Date.now,
-                displayedComponents: [.date]
-            )
-            .datePickerStyle(.compact)
-            .font(.system(size: 14, weight: .bold))
-            .tint(WanderTheme.terracotta.color)
-            .padding(WanderTheme.spacing3)
+            VStack(spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isShowingCheckInDatePicker.toggle()
+                    }
+                } label: {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .frame(width: 38, height: 38)
+                            .background(WanderTheme.terracottaTint.color)
+                            .clipShape(Circle())
+
+                        Text(visitedAt.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .rotationEffect(.degrees(isShowingCheckInDatePicker ? 180 : 0))
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 58)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Check-in date")
+                .accessibilityValue(visitedAt.formatted(date: .long, time: .omitted))
+
+                if isShowingCheckInDatePicker {
+                    Divider().background(WanderTheme.borderHairline.color)
+
+                    MultiDatePicker(
+                        "Check-in date",
+                        selection: Binding(
+                            get: {
+                                CheckInDatePickerSelection.calendarSelection(for: visitedAt)
+                            },
+                            set: { selection in
+                                visitedAt = CheckInDatePickerSelection.resolvedDate(
+                                    from: selection,
+                                    currentDate: visitedAt
+                                )
+                                withAnimation(.easeInOut(duration: 0.22)) {
+                                    isShowingCheckInDatePicker = false
+                                }
+                            }
+                        ),
+                        in: ..<Date.now
+                    )
+                    .tint(WanderTheme.terracotta.color)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                    .padding(.bottom, WanderTheme.spacing2)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
@@ -6433,26 +6525,32 @@ private struct MapSaveQuestionOptions: View {
     let block: AddQuestionBlock
     let selectedValues: Set<String>
     let onSelect: (String) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isAddingCustomTag = false
     @State private var customTagText = ""
     @FocusState private var isCustomTagFocused: Bool
 
     var body: some View {
-        MapSaveWrappingChipLayout(horizontalSpacing: WanderTheme.spacing2, verticalSpacing: WanderTheme.spacing2) {
-            ForEach(displayOptions, id: \.self) { option in
-                Button {
-                    onSelect(option)
-                } label: {
-                    WanderChip(title: option, isSelected: selectedValues.contains(option))
-                        .fixedSize(horizontal: true, vertical: false)
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                ForEach(displayOptions, id: \.self) { option in
+                    optionButton(option)
                 }
-                .buttonStyle(.plain)
             }
 
             if block.kind == .multiTag {
                 customTagControl
             }
         }
+    }
+
+    private var gridColumns: [GridItem] {
+        let standardCount = block.kind == .singleChoice && displayOptions.count == 3 ? 3 : 2
+        let count = dynamicTypeSize.isAccessibilitySize ? 1 : standardCount
+        return Array(
+            repeating: GridItem(.flexible(), spacing: WanderTheme.spacing2, alignment: .topLeading),
+            count: count
+        )
     }
 
     private var displayOptions: [String] {
@@ -6465,35 +6563,111 @@ private struct MapSaveQuestionOptions: View {
         return block.options + customOptions
     }
 
+    private func optionButton(_ option: String) -> some View {
+        let isSelected = selectedValues.contains(option)
+
+        return Button {
+            onSelect(option)
+        } label: {
+            optionLabel(option, isSelected: isSelected)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .padding(.horizontal, block.kind == .singleChoice ? WanderTheme.spacing1 : WanderTheme.spacing2)
+            .background(isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(
+                        isSelected
+                            ? WanderTheme.terracotta.color.opacity(0.52)
+                            : WanderTheme.borderHairline.color,
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel(for: option, isSelected: isSelected))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func optionLabel(_ option: String, isSelected: Bool) -> some View {
+        if block.kind == .singleChoice {
+            VStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : unselectedIconName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                Text(option)
+                    .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(.vertical, WanderTheme.spacing1)
+        } else {
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : unselectedIconName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                Text(option)
+                    .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.84)
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var unselectedIconName: String {
+        block.kind == .multiTag ? "plus.circle" : "circle"
+    }
+
+    private func accessibilityLabel(for option: String, isSelected: Bool) -> String {
+        if block.kind == .multiTag {
+            return "\(isSelected ? "Remove" : "Add") \(option)"
+        }
+        return isSelected ? "\(option), selected" : option
+    }
+
     @ViewBuilder
     private var customTagControl: some View {
         if isAddingCustomTag {
-            HStack(spacing: WanderTheme.spacing1) {
-                TextField("tag", text: $customTagText)
+            HStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: "tag")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+
+                TextField("Add your own", text: $customTagText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .tint(WanderTheme.terracotta.color)
-                    .frame(width: 86)
                     .submitLabel(.done)
                     .focused($isCustomTagFocused)
                     .onSubmit(addCustomTag)
 
                 Button(action: addCustomTag) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .black))
-                        .frame(width: 24, height: 24)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Add custom tag")
+                .accessibilityLabel("Save custom option")
             }
-            .frame(minHeight: WanderTheme.tapMinimum)
-            .padding(.horizontal, WanderTheme.spacing2)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .padding(.horizontal, WanderTheme.spacing3)
             .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-            .fixedSize(horizontal: true, vertical: false)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                    .stroke(WanderTheme.terracotta.color, lineWidth: 1)
+            )
             .onAppear {
                 isCustomTagFocused = true
             }
@@ -6501,16 +6675,28 @@ private struct MapSaveQuestionOptions: View {
             Button {
                 isAddingCustomTag = true
             } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .black))
-                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                HStack(spacing: WanderTheme.spacing2) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .black))
+                    Text("add your own")
+                        .font(.system(size: 13, weight: .bold))
+                    Spacer()
+                }
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                .padding(.horizontal, WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .overlay(
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
+                        .stroke(
+                            WanderTheme.terracotta.color.opacity(0.5),
+                            style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                        )
+                )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add custom tag")
+            .accessibilityLabel("Add your own option")
         }
     }
 

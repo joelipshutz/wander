@@ -28056,3 +28056,232 @@ Publication handoff:
   and moved the Linear issue from `In Progress` to `In Review`.
 - No known REC-174 functional issues remain. Next step: review and merge PR
   #276; no TestFlight release was requested or performed.
+
+## 2026-07-28 00:10 PDT - Codex - REC-168 Date Picker Dismissal
+
+Agent: Codex
+Branch: `codex/rec-168-date-picker-dismiss`
+Worktree: `/private/tmp/recme-rec168-date-picker`
+Linear: `REC-168` (`In Progress`)
+
+Goal: make the check-in date calendar apply a tapped date immediately and
+collapse without requiring a tap outside the calendar, then push a branch and
+open its isolated Xcode project for Ryan to test.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from exact
+  `origin/main` at `2621838b4b`.
+- The primary checkout is on unrelated `codex/rec-142-widgets` work and has an
+  untracked `.pnpm-store/`; neither will be touched.
+- No active worktree overlaps the expected source or test files.
+- Root cause: the check-in field uses SwiftUI's compact `DatePicker`, whose
+  system calendar presentation has no binding the app can use to dismiss
+  immediately after its date binding changes.
+- Planned fix: replace that opaque compact presentation with an app-controlled
+  expandable graphical calendar, close it from the selected-date binding, and
+  add a focused source contract that preserves immediate application,
+  dismissal, the no-future-date limit, and date-only behavior.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+
+Validation checkpoint — 2026-07-28 00:16 PDT:
+
+- Replaced the opaque compact picker popover with a controlled expandable
+  graphical calendar. The date binding assigns the tapped date and then
+  animates `isShowingCheckInDatePicker` to `false`, so the calendar collapses
+  in the same interaction. The field still limits selection through today and
+  exposes date-only accessibility text.
+- Added a focused navigation/source contract covering the graphical picker,
+  explicit selected-date assignment, immediate controlled collapse, removal of
+  the non-dismissible compact style, and the existing date-only behavior.
+- The initial sandboxed focused test could not access CoreSimulator or fetch
+  Swift packages. Per repository policy, it was rerun with approved simulator
+  access and passed 1/1:
+  `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-10-56--0700.xcresult`.
+- The complete simulator suite then passed 792/792 total tests: 791 unit and
+  integration tests plus the onboarding UI test, all with zero failures:
+  `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-15-55--0700.xcresult`.
+- `git diff --check` passed. Existing Supabase formatter actor-isolation
+  warnings remain unchanged and non-blocking. No schema, RPC, build number,
+  TestFlight, or release behavior changed.
+- Next: commit and push the branch, open a ready PR, attach it to REC-168,
+  move the issue to `In Review`, and open this isolated worktree's
+  `Wander.xcodeproj` in Xcode for Ryan's hands-on interaction and visual check.
+
+Handoff checkpoint — 2026-07-28 00:17 PDT:
+
+- Committed the implementation and validation record as `64858933d`
+  (`fix: dismiss check-in date picker on selection`) and pushed
+  `codex/rec-168-date-picker-dismiss`.
+- Opened ready PR #275 against `main`:
+  https://github.com/joelipshutz/wander/pull/275
+- Linked PR #275 from REC-168, posted the implementation and 792-test
+  validation summary, and moved the issue to `In Review`.
+- Opened `/private/tmp/recme-rec168-date-picker/Wander.xcodeproj` as its own
+  Xcode workspace window. Xcode's Branch Chooser explicitly shows
+  `codex/rec-168-date-picker-dismiss`, the active run destination is iPhone 17
+  Pro, and PR #275 is open, ready, and cleanly mergeable against `main`.
+- No known code or test blocker remains. Ryan's requested final handoff is to
+  test the expanded calendar visually in Xcode and confirm a tapped past date
+  updates the field and collapses the calendar immediately.
+
+REC-168 same-date follow-up start — 2026-07-28 00:36 PDT:
+
+- Ryan's physical Xcode test confirmed the first fix handles a newly selected
+  date, but tapping the already-selected date leaves the calendar expanded.
+  REC-168 moved from `In Review` back to `In Progress`.
+- Root cause: SwiftUI's single-value graphical `DatePicker` does not write its
+  `Binding<Date>` when the tapped day equals the current value, so the binding
+  setter that owns collapse never runs.
+- The `ios-fix` HTTP snapshot endpoint is unavailable by the repo's documented
+  decision: this app intentionally has no DebugBridge/StateServer. Ryan's exact
+  physical reproduction is the pre-fix interaction evidence, and
+  `WanderTests/Fixtures/rec-168-check-in-date-reselection-pre.json` durably
+  records the state before Swift edits.
+- Planned fix: use a controlled single-selection `MultiDatePicker`. Its set
+  binding emits on both new-day selection and deselection of the current day;
+  interpret an empty set as explicit confirmation of the existing date, then
+  collapse in either case. Add behavior-level date-selection tests plus the
+  existing source contract.
+- Expected files remain `Wander/Features/Map/MapScreen.swift`,
+  date-selection/test coverage, the pre-fix fixture, and this log. After
+  focused and complete validation, update PR #275 and squash-merge it to
+  `main`. No TestFlight build, release bump, archive, upload, or Slack note is
+  authorized.
+### 2026-07-28 00:43 PDT — Codex — REC-168 same-date confirmation validation
+
+- Goal: ensure tapping the already-selected check-in date explicitly resolves to that date and closes the expanded picker.
+- Branch: `codex/rec-168-date-picker-dismiss`
+- Implementation: replaced the single-value graphical `DatePicker` with a controlled `MultiDatePicker`; an empty selection now means the current day was confirmed, while a different selected day replaces only the date components and preserves the original check-in time.
+- Regression fixture: `WanderTests/Fixtures/rec-168-check-in-date-reselection-pre.json`, based on Ryan's physical Xcode reproduction. This repository intentionally has no DebugBridge/StateServer snapshot endpoint, so no live HTTP state snapshot was available.
+- Validation:
+  - Focused REC-168 regression tests: 3 passed, 0 failed.
+  - Full test suite: 794 passed, 0 failed, 0 skipped.
+  - Result bundle: `/private/tmp/DerivedData-rec168-focused/Logs/Test/Test-Wander-2026.07.28_00-40-25--0700.xcresult`.
+  - `git diff --check`: passed.
+- Review: direct diff review against `origin/main` found no unrelated changes, schema/data/privacy impact, or generated project churn. The optional gstack review workflow could not run because its installed `checklist.md` and `greptile-triage.md` resources are missing, so equivalent manual review was completed and recorded here.
+- Handoff: PR #275 is ready for the user-authorized squash merge to `main`. This is merge-only work; no build-number bump, archive, TestFlight upload, or Slack release note is authorized.
+
+## 2026-07-27 23:51 PDT - Codex - REC-173 Unified More Options Styling
+
+Agent: Codex
+Branch: `codex/rec-173-more-options-shelf`
+Worktree: `/private/tmp/recme-rec173-more-options-shelf`
+Linear: `REC-173` (`In Progress`)
+
+Goal: extend REC-155's approved Option D Tag Shelf visual language to every
+option-based question inside Check-in and Wanna More Options, including price
+feel, best for/planning for, excitement, occasion, work setup, strenuousness,
+and taxonomy-specific multi-select questions, without changing selection
+semantics or the surrounding save page.
+
+Starting status and coordination:
+
+- Fetched `origin` and confirmed REC-155/PR #255 is already squash-merged as
+  `3485b3df5`; build 107 preparation is also on `origin/main`.
+- Created this clean isolated worktree from exact current `origin/main` at
+  `62b6babb7`. The earlier REC-155 worktree contains only regenerable untracked
+  DerivedData and will not be reused or modified.
+- Existing worktrees include ongoing unrelated efforts, but no uncommitted
+  overlapping `MapScreen.swift` work was found in this checkout. Any newly
+  discovered overlap will be logged and preserved.
+- Locked boundary: only More Options question rendering and its focused
+  contracts/tests may change. Single-select, multi-select, slider, persistence,
+  taxonomy refresh, the unified Tags shelf, and all surrounding Check-in/Wanna
+  content retain their existing behavior.
+- Expected files:
+  - `Wander/Features/Map/MapScreen.swift`
+  - focused tests under `WanderTests/`
+  - `docs/agent-log.md`
+  - `docs/decisions.md` only if a durable component contract needs expansion.
+
+### 2026-07-28 00:12 PDT - Implementation and validation checkpoint
+
+- Replaced `MapSaveQuestionOptions`' loose wrapping chips with structured
+  Tag-Shelf-style tiles. Three-value single-choice scales render as balanced
+  icon-over-label cards; multi-select questions render as a two-column
+  add/check grid with a full-width dashed custom-entry card. Accessibility
+  Dynamic Type collapses either layout to one column.
+- Preserved all `AddQuestionBlock` templates, keys, `valueType` values,
+  defaults, selection callbacks, custom-value normalization, and More Options
+  placement. No schema, RPC, persistence, taxonomy, or surrounding Check-in /
+  Wanna layout change was introduced.
+- Added a navigation source contract that prevents these questions from
+  regressing to `MapSaveWrappingChipLayout`, `WanderChip`, or capsule controls.
+- Focused regression passed 1/1 on iPhone 17 Pro / iOS 26.5.
+- Full suite passed 793/793 with zero failures on iPhone 17 Pro / iOS 26.5.
+  Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain unrelated and non-blocking.
+- Visual QA used a temporary DEBUG-only harness that rendered the actual
+  production question and unified Tags components, then was fully removed.
+  Reviewed Check-in and Wanna on iPhone 17 Pro plus Check-in on the narrower
+  iPhone 17e. The initial Wanna render exposed horizontal overflow in the
+  three-column scale; switching single-choice cards to a compact vertical
+  layout fixed it. Final renders had no clipping, overflow, or tap-target
+  issue. Temporary harness code, screenshots, and DerivedData were removed.
+- `git diff --check` passes. Next: commit, reconcile the append-only log with
+  latest `origin/main`, push, open a ready PR linked to REC-173, move Linear to
+  In Review, and open this worktree project in Xcode for local testing.
+
+### 2026-07-28 00:28 PDT - Ready-for-review handoff
+
+- Rebased the implementation onto current `origin/main` at `2621838b4`,
+  committed it as `35d4b3da3`, and pushed
+  `codex/rec-173-more-options-shelf`.
+- Opened ready PR #274:
+  <https://github.com/joelipshutz/wander/pull/274>.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and verified the
+  Branch Chooser shows `codex/rec-173-more-options-shelf`; the prior REC-155
+  Xcode window was not switched or overwritten.
+- Validation remains: focused contract 1/1, full suite 793/793, final visual QA
+  on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
+- No TestFlight build or release was requested or performed. Next step is PR
+  review and merge after CI/reviewer approval.
+
+### 2026-07-28 00:53 PDT - Merged to main
+
+- Reviewed PR #274 against current `origin/main`; no blocking correctness,
+  security, data-contract, or scope findings were found. GitHub had no review
+  comments or CI checks configured for the PR. The optional gstack review-log
+  helper could not record telemetry because `bun` is not installed; the manual
+  review and validation are recorded here.
+- Rebased onto `d56c734e8` after PR #275 advanced `main`; the only conflict was
+  the append-only `docs/agent-log.md`, resolved by preserving both entries.
+- Re-ran the focused combined-head navigation contract: 1/1 passed on iPhone
+  17 Pro / iOS 26.5. Prior branch validation remains full suite 793/793, visual
+  QA on iPhone 17 Pro and iPhone 17e, and `git diff --check`.
+- Squash-merged ready PR #274 into `main` as `5f4b3308f`. Linear `REC-173` was
+  moved to Done with the merge and validation evidence.
+- Merge-only closeout: no build-number bump, archive, TestFlight upload, or
+  Slack release note was requested or performed. The change will ride the next
+  explicit TestFlight release batch.
+
+## 2026-07-28 00:54 PDT - Codex - REC-174 Device-Test Follow-up
+
+Agent: Codex
+Branch: `codex/rec-174-save-flow-header`
+Worktree: `/private/tmp/recme-rec174-save-header`
+Linear: `REC-174` (`In Progress`)
+PR: https://github.com/joelipshutz/wander/pull/276
+
+Goal: refine the save-flow title transitions after device testing and align
+the back, title, and close controls on a shared vertical center with slightly
+more space below the sheet grabber.
+
+Starting status and coordination:
+
+- The worktree was clean and matched the pushed PR branch. Fetched `origin`;
+  `main` had advanced by REC-168 and REC-173, both touching the save flow.
+- Merged current `origin/main` (`5f4b3308f`) before editing. The only conflict
+  was this append-only log; all entries were preserved. The merged Map screen
+  and navigation tests applied automatically.
+- Updated REC-174's acceptance criteria and returned it from `In Review` to
+  `In Progress`.
+- Expected edits remain narrowly scoped to
+  `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/WanderStoreTests.swift`,
+  `WanderTests/NavigationContractTests.swift`, and this log.
+- Planned validation: focused title/alignment regressions, full test suite,
+  generic Simulator build, `git diff --check`, and visual QA on iPhone 17 Pro
+  plus the smaller iPhone 17e.

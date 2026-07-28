@@ -930,6 +930,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(sharedVisitComponents.contains("They will get their own editable copy of this visit."))
     }
 
+    func testEveryMoreOptionsQuestionUsesTheStructuredTagShelfTileLanguage() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let questionOptions = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private struct MapSaveQuestionOptions: View")
+                .last?
+                .components(separatedBy: "private struct MapSaveUnifiedTagsSection: View")
+                .first
+        )
+
+        XCTAssertTrue(questionOptions.contains("LazyVGrid(columns: gridColumns"))
+        XCTAssertTrue(questionOptions.contains("dynamicTypeSize.isAccessibilitySize ? 1 : standardCount"))
+        XCTAssertTrue(questionOptions.contains("block.kind == .singleChoice && displayOptions.count == 3 ? 3 : 2"))
+        XCTAssertTrue(questionOptions.contains("minHeight: 52"))
+        XCTAssertTrue(questionOptions.contains("\"checkmark.circle.fill\""))
+        XCTAssertTrue(questionOptions.contains("\"plus.circle\" : \"circle\""))
+        XCTAssertTrue(questionOptions.contains("Text(\"add your own\")"))
+        XCTAssertTrue(questionOptions.contains("style: StrokeStyle(lineWidth: 1, dash: [5, 4])"))
+        XCTAssertFalse(questionOptions.contains("MapSaveWrappingChipLayout"))
+        XCTAssertFalse(questionOptions.contains("WanderChip"))
+        XCTAssertFalse(questionOptions.contains("Capsule()"))
+    }
+
     func testWannaGoDatePickerStaysEmptyUntilTheUserChoosesADate() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
@@ -981,6 +1006,14 @@ final class NavigationContractTests: XCTestCase {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
+        let fixtureData = try Data(
+            contentsOf: projectRoot.appendingPathComponent(
+                "WanderTests/Fixtures/rec-168-check-in-date-reselection-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
         let checkInDateSection = try XCTUnwrap(
             mapScreen
                 .components(separatedBy: "private var checkInDateSection: some View")
@@ -989,11 +1022,101 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
+        XCTAssertEqual(fixture["issue"] as? String, "REC-168")
+        XCTAssertEqual(
+            fixture["pre_fix_control"] as? String,
+            "single-value graphical DatePicker"
+        )
         XCTAssertTrue(checkInDateSection.contains("\"Check-in date\""))
-        XCTAssertTrue(checkInDateSection.contains("displayedComponents: [.date]"))
+        XCTAssertTrue(checkInDateSection.contains("MultiDatePicker("))
+        XCTAssertTrue(
+            checkInDateSection.contains(
+                "CheckInDatePickerSelection.calendarSelection(for: visitedAt)"
+            )
+        )
+        XCTAssertTrue(checkInDateSection.contains("CheckInDatePickerSelection.resolvedDate("))
+        XCTAssertTrue(checkInDateSection.contains("isShowingCheckInDatePicker.toggle()"))
+        XCTAssertTrue(checkInDateSection.contains("isShowingCheckInDatePicker = false"))
+        XCTAssertTrue(mapScreen.contains("@State private var isShowingCheckInDatePicker = false"))
+        XCTAssertFalse(checkInDateSection.contains(".datePickerStyle(.compact)"))
         XCTAssertFalse(checkInDateSection.contains(".hourAndMinute"))
         XCTAssertFalse(checkInDateSection.contains("Defaults to now."))
         XCTAssertFalse(checkInDateSection.contains("Pick an earlier date for a past check-in."))
+    }
+
+    func testCheckInDatePickerSelectionConfirmsTheCurrentDayWithoutChangingItsTimestamp() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let currentDate = try XCTUnwrap(
+            calendar.date(
+                from: DateComponents(
+                    year: 2026,
+                    month: 7,
+                    day: 28,
+                    hour: 17,
+                    minute: 42,
+                    second: 11
+                )
+            )
+        )
+
+        let confirmedDate = CheckInDatePickerSelection.resolvedDate(
+            from: [],
+            currentDate: currentDate,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(confirmedDate, currentDate)
+    }
+
+    func testCheckInDatePickerSelectionReplacesTheDayAndPreservesTheCheckInTime() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let currentDate = try XCTUnwrap(
+            calendar.date(
+                from: DateComponents(
+                    year: 2026,
+                    month: 7,
+                    day: 28,
+                    hour: 17,
+                    minute: 42,
+                    second: 11
+                )
+            )
+        )
+        let replacementDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 7, day: 20))
+        )
+        let selection = CheckInDatePickerSelection.calendarSelection(
+            for: currentDate,
+            calendar: calendar
+        ).union(
+            CheckInDatePickerSelection.calendarSelection(
+                for: replacementDate,
+                calendar: calendar
+            )
+        )
+
+        let resolvedDate = CheckInDatePickerSelection.resolvedDate(
+            from: selection,
+            currentDate: currentDate,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(
+            calendar.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: resolvedDate
+            ),
+            DateComponents(
+                year: 2026,
+                month: 7,
+                day: 20,
+                hour: 17,
+                minute: 42,
+                second: 11
+            )
+        )
     }
 
     func testMemberProfileBackAndActionPopoverStayAttachedToTheSharedHeader() throws {
