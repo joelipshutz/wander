@@ -1786,9 +1786,13 @@ final class NavigationContractTests: XCTestCase {
             before: "private struct DiscoverResultActionButton: View"
         )
         XCTAssertTrue(resultCard.contains("rec.me rating"))
-        XCTAssertTrue(resultCard.contains("title: isSavedByCurrentUser ? \"Add visit\" : \"Add\""))
+        XCTAssertTrue(resultCard.contains("title: \"Wanna go\""))
+        XCTAssertTrue(resultCard.contains("action: addToWanna"))
+        XCTAssertFalse(resultCard.contains("\"Add visit\""))
         XCTAssertTrue(resultCard.contains("title: \"Add to list\""))
         XCTAssertTrue(resultCard.contains("WanderShareButton(content: shareContent)"))
+        XCTAssertTrue(discoverScreen.contains("store.saveVisiblePlace("))
+        XCTAssertTrue(discoverScreen.contains("status: .wannaGo"))
         XCTAssertTrue(discoverScreen.contains("store.addVisiblePlace("))
     }
 

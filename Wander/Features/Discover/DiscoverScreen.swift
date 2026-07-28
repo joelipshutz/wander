@@ -74,16 +74,6 @@ struct DiscoverScreen: View {
         VisiblePlaceGrouping.groups(from: filteredPlaceResults, currentUserID: store.currentUser.id)
     }
 
-    private var currentUserSavedPlaceAliases: Set<String> {
-        Set(
-            VisiblePlaceGrouping.groups(
-                from: store.currentUserVisiblePlaces,
-                currentUserID: store.currentUser.id
-            )
-            .flatMap(\.aliases)
-        )
-    }
-
     private var addableLists: [LocalPlaceList] {
         store.visiblePlaceLists.filter { store.canAddPlaces(to: $0) }
     }
@@ -460,7 +450,6 @@ struct DiscoverScreen: View {
     private var placeResultsSection: some View {
         let groups = placeGroups
         let selectedOwner = selectedOwnerCandidate
-        let savedAliases = currentUserSavedPlaceAliases
         return LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(placeResultTitle)
@@ -479,15 +468,11 @@ struct DiscoverScreen: View {
                     let primary = group.primary
                     DiscoverPlaceResultCard(
                         group: group,
-                        isSavedByCurrentUser: primary.owner.id == store.currentUser.id
-                            || !group.aliases.isDisjoint(with: savedAliases),
                         matchedOwnerName: selectedOwner?.displayName ?? primary.owner.displayName
                     ) {
                         selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
-                    } save: {
-                        beginSaveDiscoverPlace(primary)
-                    } edit: {
-                        beginAddVisitDiscoverPlace(primary)
+                    } addToWanna: {
+                        addDiscoverPlaceToWanna(primary)
                     } addToList: {
                         listSelectionPlace = primary
                     }
@@ -673,6 +658,23 @@ struct DiscoverScreen: View {
                 defaultVisibility: store.effectiveDefaultVisibility,
                 attributes: attributes(for: visiblePlace)
             ))
+        }
+    }
+
+    private func addDiscoverPlaceToWanna(_ visiblePlace: VisiblePlace) {
+        auth.requireSignIn(for: .socialSave) {
+            Task { @MainActor in
+                let result = await store.saveVisiblePlace(
+                    visiblePlace,
+                    status: .wannaGo,
+                    backend: auth.isSignedIn ? backend : nil
+                )
+                await refreshPlaces(query: placesQuery)
+                await refreshMembers(query: memberQuery)
+                savedMessage = result.syncState == .synced
+                    ? "Added to Wanna Go."
+                    : "Added to Wanna Go locally. We'll retry sync."
+            }
         }
     }
 
@@ -1391,11 +1393,9 @@ private struct DiscoverSearchField: View {
 
 private struct DiscoverPlaceResultCard: View {
     let group: VisiblePlaceGroup
-    let isSavedByCurrentUser: Bool
     let matchedOwnerName: String
     let openPlace: () -> Void
-    let save: () -> Void
-    let edit: () -> Void
+    let addToWanna: () -> Void
     let addToList: () -> Void
 
     private var visiblePlace: VisiblePlace { group.primary }
@@ -1439,10 +1439,10 @@ private struct DiscoverPlaceResultCard: View {
 
             HStack(spacing: WanderTheme.spacing2) {
                 DiscoverResultActionButton(
-                    title: isSavedByCurrentUser ? "Add visit" : "Add",
-                    systemImage: "plus",
+                    title: "Wanna go",
+                    systemImage: "bookmark",
                     isPrimary: true,
-                    action: isSavedByCurrentUser ? edit : save
+                    action: addToWanna
                 )
 
                 DiscoverResultActionButton(
