@@ -5,24 +5,24 @@ create extension if not exists pgtap;
 select plan(44);
 
 select is(
-  (select prosecdef from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean,text,text)'::regprocedure),
+  (select prosecdef from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean,text,text,boolean)'::regprocedure),
   false,
   'profile updates run as the authenticated caller'
 );
 
 select ok(
   (select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
-   from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean,text,text)'::regprocedure),
+   from pg_proc where oid = 'app.update_own_profile(text,text,text,boolean,text,text,boolean)'::regprocedure),
   'profile updates pin search_path'
 );
 
 select ok(
-  has_function_privilege('authenticated', 'public.update_own_profile(text,text,text,boolean,text,text)', 'execute'),
+  has_function_privilege('authenticated', 'public.update_own_profile(text,text,text,boolean,text,text,boolean)', 'execute'),
   'authenticated can update their profile'
 );
 
 select ok(
-  not has_function_privilege('anon', 'public.update_own_profile(text,text,text,boolean,text,text)', 'execute'),
+  not has_function_privilege('anon', 'public.update_own_profile(text,text,text,boolean,text,text,boolean)', 'execute'),
   'anonymous callers cannot update profiles'
 );
 

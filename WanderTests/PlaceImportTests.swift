@@ -125,6 +125,26 @@ final class GoogleMapsSharedListImporterTests: XCTestCase {
 
 @MainActor
 final class PlaceImportStoreTests: XCTestCase {
+    func testUnifiedImportRoutesMixedSourcesWithoutSourceSelection() throws {
+        let store = PlaceImportStore(
+            persistence: InMemoryPlaceImportPersistence(),
+            resolver: FakePlaceImportResolver()
+        )
+
+        let batchIDs = try store.enqueueUnified(
+            text: """
+            https://maps.app.goo.gl/example
+            https://www.tiktok.com/@recme/video/123
+            https://www.instagram.com/reel/example/
+            Maru Coffee, Los Angeles
+            """
+        )
+
+        XCTAssertEqual(batchIDs.count, 4)
+        XCTAssertEqual(store.batches.map(\.source), [.googleMaps, .tiktok, .instagram, .textNotes])
+        XCTAssertEqual(store.items.map(\.source), [.googleMaps, .tiktok, .instagram, .textNotes])
+    }
+
     func testImportReviewIsPendingOnlyWhileItemsNeedProcessingOrReview() async throws {
         let store = PlaceImportStore(
             persistence: InMemoryPlaceImportPersistence(),

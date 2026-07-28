@@ -25078,6 +25078,525 @@ Final outcome: rec.me 0.1 (99) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with every item in
 Ryan's requested list proven present in the archived binary source.
 
+## 2026-07-26 10:27 PDT — Codex — REC-147 Direction A Map vertical slice
+
+Agent: Codex using the repo's native feature implementation workflow after
+rejecting `ios-fix` as bug-specific
+Branch: `codex/rec-147-direction-a-map`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-147-direction-a`
+Linear: `REC-147` (`In Progress`); typography follow-up `REC-148` remains in
+Backlog and is related to REC-147
+
+Goal: implement the locked Direction A Map vertical slice from the approved
+Refined Rings mock: circular category pins, ownership color, Checked in/Wanna
+line patterns, mixed/concentric states, selected halo, matching filter pills,
+current Check in terminology, and plus controls.
+
+Starting status and coordination:
+
+- Started clean from exact `origin/main` commit `db3397a` after fetching.
+- The root phone-build checkout is 47 commits behind with unrelated untracked
+  `tmp/` content and remains untouched.
+- Existing worktrees were inspected. None has uncommitted work in the intended
+  pin/filter renderer. `MapScreen.swift` is still a documented high-conflict
+  file, so edits remain narrow and isolated.
+- PR #224 is merged, so current Check in terminology and repeatable check-in
+  behavior are the implementation foundation.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused map/filter
+  tests in `WanderTests/`, and this coordination log. No schema, backend,
+  build-number, TestFlight, or typography migration is in scope.
+
+Implementation and visual checkpoint (11:12 PDT):
+
+- Implemented Direction A in the production Map renderer: 38 pt category
+  discs, 3 pt semantic rings, true dotted Wanna strokes, concentric You/Social
+  states, split mixed-social states, selected halo, and selected-last annotation
+  ordering.
+- Mirrored the exact ownership/status grammar in the You, Social, Check-ins,
+  and Wanna filter pills. The pills, map annotations, typeahead plus, and ticket
+  actions now expose at least 44 pt hit areas.
+- Reworked the selected-place preview into a restrained ticket card with one
+  notch, a semantic border, serif place title, current place metadata, rating,
+  social check-in signal, fit sentence, tags, and a plus action. No paperclip or
+  field-notes treatment was introduced.
+- Updated the touched Map and place-profile copy to Check in/Check-ins or
+  neutral “on your map” language. Persistence values and internal `.been` / save
+  contracts remain unchanged.
+- Focused `MapHitTestingTests`, `MapCoordinateCandidateTests`,
+  `MapFilterSelectionTests`, `MapPinOutlineBuilderTests`,
+  `PlaceProfilePresentationTests`, and `CheckInCopyTests` passed on iPhone 16
+  Plus, iOS 18.6. Existing unrelated Swift concurrency and headermap warnings
+  remain.
+- Visually inspected the deterministic seeded Map and Bar Nido ticket on iPhone
+  16 Plus and iPhone 16e. The final 16 Plus capture is
+  `/private/tmp/rec147-visuals/final-touch-map-iphone16plus.png`; the 16e capture
+  is `/private/tmp/rec147-visuals/final-map-iphone16e.png`. The review artifact
+  is `~/.gstack/projects/joelipshutz-wander/ios-design-review-2026-07-26.md`.
+- The visual review caught sub-44 pt controls and they were corrected. Remaining
+  non-blocking concern: dense same-coordinate MapKit annotations can still
+  overlap the selected pin center even though its halo and ticket remain clear.
+- A debug-only authentication bypass was used temporarily to render production
+  Map code with demo fixtures; it was removed after capture and is not part of
+  the branch diff.
+
+Final validation checkpoint (11:30 PDT):
+
+- Fetched and rebased onto exact current `origin/main` `b4d7c98`, preserving
+  the REC-153/build-99 release records and resolving the append-only log
+  conflict without dropping either side. Production source merged cleanly.
+- Completed the Map-surface terminology sweep after rebase: every touched
+  user-facing action, progress state, result, error, hint, accessibility label,
+  and social-proof line now uses Check in/Check-ins/Wanna or neutral “on your
+  map” copy. Internal `saved_` IDs, `.been`, and save repository contracts stay
+  stable.
+- The exact rebased branch passed 747/747 tests with zero failures on iPhone 16
+  Plus / iOS 18.6. Final result bundle:
+  `/private/tmp/DerivedData-rec147-direction-a/Logs/Test/Test-Wander-2026.07.26_11-28-26--0700.xcresult`.
+- `git diff --check` passes. The only build output is the repository's existing
+  traditional-headermap warning; the cold focused rebuild also repeated the
+  existing `WanderSupabaseClient` formatter actor-isolation warning.
+- A first post-clean test attempt was cancelled at link time by disk-full
+  `errno=28`. Cleaned only this branch's disposable DerivedData and removed the
+  recoverable debug app from the dedicated `rec.me Streak QA` simulator after
+  captures. The clean rebuild and final full suite then passed.
+- No schema, backend data, build-number, archive, upload, TestFlight, App Store
+  Connect, or Slack release action was performed. PR handoff is next.
+
+PR handoff (11:32 PDT):
+
+- Final implementation commit: `d31003b` (`feat: implement REC-147 Direction A
+  map tickets`).
+- Pushed `codex/rec-147-direction-a-map` and opened ready PR #241:
+  `https://github.com/joelipshutz/wander/pull/241`.
+- PR #241 links REC-147 and the related REC-148 typography exploration, records
+  the 747/747 result and two-size visual review, and calls out the remaining
+  dense same-coordinate MapKit collision follow-up. REC-147 should remain In
+  Review until the PR lands; no TestFlight release was requested.
+
+## 2026-07-26 12:03 PDT — Codex — REC-147 Feed and place-profile tickets
+
+Agent: Codex using the repo's native feature implementation workflow
+Branch: `codex/rec-147-feed-profile-tickets`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-147-feed-profile-tickets`
+Linear: `REC-147` (`In Progress`); typography follow-up `REC-148` remains
+separate and in Backlog
+
+Goal: build the second Direction A slice as a stacked PR on map-ticket PR #241:
+turn Feed check-in activity and place-profile check-in history into the same
+recognizable ticket family while preserving all existing content and actions.
+
+Starting status and coordination:
+
+- Started clean from exact PR #241 head `eb6f95b`; stacked base is
+  `origin/codex/rec-147-direction-a-map`, whose underlying `origin/main` is
+  `b4d7c98`.
+- Fetched origin, inspected all worktrees, and left the stale root checkout and
+  its unrelated untracked `tmp/` content untouched. The existing REC-152
+  profile-activity worktree is docs-only and does not overlap production source.
+- REC-147 was moved from In Review back to In Progress and annotated with this
+  slice's scope. Mission Control task
+  `fc5cf02a-cb70-457d-9f9c-08d07f5898a8` is In Progress.
+- Locked scope: full tickets only for Feed check-ins; lighter rows for non-place
+  events; the same ticket language for place-profile history; shared reusable
+  presentation; current person/place/time/rating/note/media/tag/action data and
+  repeated check-ins retained.
+- Global typography migration, backend/schema changes, build-number changes,
+  TestFlight, and unrelated Profile redesign remain out of scope. REC-148 starts
+  after the ticket layouts are visually approved so serif hierarchy can be
+  tuned against real Map, Feed, and place-profile screens.
+- Expected files: `Wander/Features/Feed/FeedScreen.swift`, the existing
+  place-profile activity presentation, a shared DesignSystem component or
+  narrowly shared primitives, focused tests, and this coordination log.
+
+Implementation and validation checkpoint (12:31 PDT):
+
+- Added `CheckInTicketSurface` as the shared Direction A surface and applied it
+  to the selected Map ticket, explicit Feed check-ins, and place-profile
+  check-in history so border, notch, surface, and shadow behavior do not drift.
+- Feed `.placeBeen` events now render full tickets with actor, relative time,
+  serif place name, metadata, rating, note, media, and 44 pt place action.
+  Wanna, list, and other activity remain lighter rows. Featured cards now say
+  `Checked in by` or `Wanna by`, including a compatibility rewrite for stale
+  remote `Saved by` reasons; user-facing Feed success copy uses Check-in/Wanna.
+- Place-profile `check-in history` now uses social-blue or current-user
+  terracotta tickets and keeps every existing person, handle/date, rating,
+  note, tag, companion, photo, edit/remove, and repeated-visit path. No
+  field-notes, paperclip, or scrapbook treatment was added.
+- Updated the streak reference ticket to say `CHECKED IN TODAY` or
+  `ADDED TO WANNA TODAY` and removed the visible Been/Save vocabulary from that
+  celebration. Internal `.been` and save repository/model contracts remain
+  unchanged.
+- Focused Feed/navigation/place-profile/copy validation passed 91/91 tests.
+  The exact final branch then passed 749/749 tests with zero failures on iPhone
+  16 Plus / iOS 18.6. Result bundle:
+  `/tmp/DerivedData-rec147-direction-a/Logs/Test/Test-Wander-2026.07.26_12-30-20--0700.xcresult`.
+  The generic arm64 iOS Simulator build also succeeded, and `git diff --check`
+  passes. Existing headermap and Supabase formatter actor-isolation warnings
+  remain unrelated.
+- Visually inspected production fixture data on iPhone 16 Plus and iPhone 16e.
+  Final captures are
+  `/private/tmp/rec147-feed-profile-visuals/feed-16-plus-clean.png`,
+  `/private/tmp/rec147-feed-profile-visuals/feed-16e.png`,
+  `/private/tmp/rec147-feed-profile-visuals/history-16-plus-clean.png`, and
+  `/private/tmp/rec147-feed-profile-visuals/history-16e.png`. A temporary
+  debug-only auth/history route used for deterministic capture was removed;
+  the temporary `rec.me REC-147 QA 16 Plus` simulator was also deleted after
+  validation and can be recreated from the standard iOS 18.6 runtime.
+- Typography remains REC-148 and intentionally starts after Joe visually
+  approves the Map, Feed, and history ticket layouts. No backend/schema,
+  build-number, archive, TestFlight, App Store Connect, or Slack release action
+  was performed. Stacked PR handoff is next.
+
+PR handoff (12:35 PDT):
+
+- Implementation commit: `963cfd3` (`feat: add REC-147 feed and profile
+  tickets`). Pushed `codex/rec-147-feed-profile-tickets` and opened ready
+  stacked PR #242 against `codex/rec-147-direction-a-map`:
+  `https://github.com/joelipshutz/wander/pull/242`.
+- PR #242 links REC-147 and records the 749/749 result, generic build, two-size
+  visual QA, preserved data contract, stack base #241, and explicit typography
+  exclusion. REC-147 is back in In Review with the PR attachment and validation
+  comment.
+- Mission Control task `fc5cf02a-cb70-457d-9f9c-08d07f5898a8` is in Review
+  with the same proof. No TestFlight release was requested; build 99 remains the
+  latest shipped tester build.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode for Joe's local
+  testing. Xcode's Branch Chooser explicitly reports
+  `codex/rec-147-feed-profile-tickets`.
+## 2026-07-26 14:06 PDT — Codex — REC-147 latest-main stack refresh
+
+Agent: Codex using the repo's native implementation and Linear workflow
+Branch target: `codex/rec-147-direction-a-map` (PR #241), followed by stacked
+`codex/rec-147-feed-profile-tickets` (PR #242)
+Worktrees: `/private/tmp/rec147-map-latest` and
+`/private/tmp/rec147-stack-latest`
+Linear: `REC-147` (`In Progress`)
+
+Goal: update the complete Direction A ticket stack from former base `b4d7c98`
+onto current `origin/main` `c98612e` before Joe tests on a connected phone.
+
+Starting status and coordination:
+
+- Refreshed origin and confirmed current main adds REC-159, the newer streak
+  celebration hierarchy from PR #217, its landing record, and build-100 prep.
+- Both existing REC-147 worktrees are clean. The root phone-build checkout is
+  still 54 commits behind with unrelated untracked `tmp/` data and remains
+  untouched.
+- Created clean detached temporary worktrees for conflict resolution because
+  the named PR branches remain open in Xcode and the root checkout is not safe
+  to reuse.
+- Expected overlap: append-only `docs/agent-log.md`, plus the stacked PR's
+  `SaveStreakCelebrationView.swift` terminology changes against PR #217's newer
+  visual hierarchy. Preserve both the newer hierarchy and REC-147's current
+  Check in/Wanna vocabulary.
+- Validation target: focused ticket/copy/streak contracts, full iOS suite,
+  generic simulator build, and refreshed iPhone 16 Plus/iPhone 16e visuals.
+  No backend/schema, build-number, archive, upload, TestFlight, or Slack action
+  is authorized.
+## 2026-07-26 12:53 PDT — Codex — REC-157 Lock Screen widget design exploration
+
+- Goal: create several visually distinct mockups for the small Lock Screen
+  quick-capture widget so both the `rec.me` brand and the “I’m here now” /
+  check-in action are recognizable at a glance.
+- Linear: REC-157 (`In Progress`), related to REC-142 and assigned to Ryan.
+- Branch: `codex/rec-157-lock-widget-mockups`. Clean isolated worktree:
+  `/private/tmp/recme-rec157-lock-widget-mockups`, based on current
+  `origin/main` `b4d7c98ce`.
+- The primary checkout was intentionally left untouched because it is on the
+  now-merged `codex/rec-142-widgets` branch and contains an unrelated untracked
+  `.pnpm-store/`.
+- Design-shotgun artifacts will be saved outside the repository under
+  `~/.gstack/projects/joelipshutz-wander/designs/`, per that workflow.
+- Expected repository files: this append-only coordination log only. Source
+  files under `WanderWidgets/`, widget deep-link contracts, and `DESIGN.md`
+  will be inspected but not changed until Ryan approves a mockup direction.
+- Next: audit the accessory widget implementation and Lock Screen constraints,
+  inspect prior design memory, propose distinct concepts, generate the approved
+  comparison set, and record the design feedback.
+
+REC-157 design-shotgun checkpoint — 2026-07-26 13:02 PDT:
+
+- Audited `WanderWidgets/WanderWidgets.swift`: the current
+  `.accessoryCircular` treatment is a generic `location.fill` plus `HERE`;
+  the deep link and accessibility label already route to the intended
+  “I’m here now” flow.
+- Reviewed `DESIGN.md` and the canonical rec.me app-icon contract/master. The
+  relevant recognizable grammar is the location pin, bookmark cutout, orbit,
+  and monochrome-safe silhouette.
+- The local gstack design binary and browser helper were unavailable, so
+  design-shotgun used its HTML/SVG fallback. Optional cross-machine artifact
+  sync was privacy-blocked and deliberately skipped; all artifacts remain
+  local.
+- Generated and XML-validated four 1200×900 SVG directions, each shown at
+  realistic accessory-circular scale plus magnified detail:
+  A App Badge, B rec·HERE, C Check-in Pulse, and D Radial Label.
+- Saved the local comparison board and PNG/SVG artifacts at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`
+  and opened `design-board.html` in the default browser.
+- No product source, project configuration, or tests changed. Awaiting Ryan’s
+  comparison-board feedback before locking a direction or implementing it.
+
+REC-157 implementation and validation — 2026-07-26 13:18 PDT:
+
+- Ryan selected the Check-in Pulse direction with a revised composition:
+  curved `rec.me` at the top, a centered plus sign, matching curved `CHECK-IN`
+  at the bottom, and the concentric pulse rings retained.
+- Created and visually inspected the revised C2 mockup at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/variant-C2.png`
+  (with an editable SVG beside it). The design artifacts remain local because
+  optional cross-machine artifact sync was privacy-blocked. Saved the confirmed
+  choice and Ryan's feedback in the adjacent `approved.json`; the optional
+  taste-profile updater could not run because its required `bun` runtime is not
+  installed on this machine.
+- Implemented the design in the `.accessoryCircular` quick-capture widget using
+  monochrome-safe SwiftUI shapes, SF Symbols, and per-character arc layout.
+  Added a dedicated accessory-circular Xcode preview.
+- Moved URL intake to `WanderAppEntryView` and added a one-shot deep-link inbox.
+  Widget URLs received while authentication/session restoration is unresolved
+  are retained, then handed to `WanderRootView` after validation. This makes the
+  quick-capture link reliably open the existing “I’m here now” flow after a
+  terminated/crashed-app launch as well as during warm launches.
+- Added regression coverage for deferred cold-start routing, invalid URL
+  rejection, latest-valid-request behavior, one-shot consumption, and the
+  revised widget source contract.
+- Regenerated the Xcode project with `xcodegen generate`; it produced no
+  `project.pbxproj` diff.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on the available iPhone 17 Pro /
+    iOS 26.5 simulator. The documented iPhone 16 Plus / iOS 18.6 runtime is not
+    installed on this machine.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - `git diff --check`: passed.
+- Existing warnings in `WanderSupabaseClient.swift` about actor-isolated date
+  formatters and Xcode's traditional headermap warning remain unchanged and are
+  outside REC-157.
+- Files changed: `Wander/App/WanderApp.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/App/WanderWidgetLaunchRequest.swift`,
+  `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, and this log.
+- Next: commit and push `codex/rec-157-lock-widget-mockups`, open a ready PR,
+  link it to REC-157, and move the issue to `In Review`. No TestFlight build
+  number change or release was requested.
+
+REC-157 handoff — 2026-07-26 13:20 PDT:
+
+- Implementation commit: `7dd6f652e` (`Redesign Lock Screen quick capture
+  widget`), pushed to `origin/codex/rec-157-lock-widget-mockups`.
+- Ready PR: https://github.com/joelipshutz/wander/pull/243
+- Linear REC-157 is now `In Review`, has PR #243 attached, and includes the
+  validation summary and simulator-runtime caveat.
+- No known REC-157 implementation blockers. Remaining work is PR review/merge
+  and optional hands-on Lock Screen visual confirmation on a signed device.
+- Opened `/private/tmp/recme-rec157-lock-widget-mockups/Wander.xcodeproj` as its
+  own Xcode project and verified Xcode's Branch Chooser displays
+  `codex/rec-157-lock-widget-mockups`.
+- No TestFlight build number was changed and no release was attempted because
+  the request did not include a TestFlight release.
+
+REC-157 typography revision start — 2026-07-26 13:38 PDT:
+
+- Ryan requested a tighter ring-band treatment: move curved `rec.me` down into
+  the band between the inner rings and enlarge both `rec.me` and `CHECK-IN` so
+  the letterforms better fill that space.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; PR #243 remains open.
+- Current checkout was clean. `git fetch origin` completed after rerunning with
+  the required worktree metadata permission.
+- No overlapping uncommitted work was found. Expected files:
+  `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 typography revision completion — 2026-07-26 13:43 PDT:
+
+- Moved both arc baselines from a 20-point radius to an 18-point radius so
+  `rec.me` sits lower and both labels are centered in the same inner ring band.
+- Increased `rec.me` from 5.5pt to 6.5pt and `CHECK-IN` from 4.5pt to 5.5pt.
+  Added source-contract assertions for the approved metrics.
+- Generated, XML-validated, and visually inspected the matching C3 mockup at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/variant-C3.png`
+  with editable SVG and updated the adjacent `approved.json`.
+- Ran `xcodegen generate`; no project file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing `WanderSupabaseClient.swift` actor-isolation warnings and Xcode's
+  traditional headermap warnings are unchanged and outside this visual tweak.
+- Next: commit and push the revision to PR #243, return REC-157 to `In Review`,
+  and leave Xcode on the existing REC-157 worktree for device testing.
+
+REC-157 typography revision handoff — 2026-07-26 13:43 PDT:
+
+- Commit `ab2049ff5` (`Refine Lock Screen widget ring typography`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated.
+- Linear REC-157 returned to `In Review` with the new metrics, commit, and
+  validation results recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number change or release was requested.
+
+REC-157 outer-ring alignment revision start — 2026-07-26 17:39 PDT:
+
+- Ryan clarified that curved `rec.me` and `CHECK-IN` should sit in the outer
+  band, exactly centered between the outermost and second stroked circles.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; ready PR #243 remains
+  open.
+- `git fetch origin`, `git status --short --branch`, and `git worktree list`
+  completed. No overlapping uncommitted work was found.
+- Implementation approach: derive the label-arc radius from the actual
+  WidgetKit geometry and the two ring insets, avoiding a fixed offset that can
+  drift with the accessory-circular container size.
+- Expected files: `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 outer-ring alignment revision completion — 2026-07-26 17:46 PDT:
+
+- Replaced the fixed 18-point label offsets with a geometry-derived outer-band
+  radius: half the accessory-circular canvas minus 7 points, the exact midpoint
+  between the 4-point and 10-point stroked-ring insets.
+- Both curved labels now receive the same derived radius; top/bottom placement
+  only changes the sign. Added source-contract coverage for the formula, both
+  label usages, and the symmetric offsets.
+- Generated, XML-validated, and visually inspected the matching C4 mockup.
+  Editable SVG, PNG, and updated approval metadata are stored at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing `WanderSupabaseClient.swift` actor-isolation warnings, simulator
+  keychain/app-group diagnostics under unsigned tests, and Xcode's traditional
+  headermap warnings remain unchanged and are outside this visual tweak.
+- Next: commit and push the revision to ready PR #243, return REC-157 to
+  `In Review`, and leave Xcode on the existing REC-157 worktree for testing.
+  No TestFlight build-number change or release was requested.
+
+REC-157 outer-ring alignment revision handoff — 2026-07-26 17:46 PDT:
+
+- Commit `fff2b87a4` (`Center Lock Screen labels in outer ring`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated:
+  https://github.com/joelipshutz/wander/pull/243
+- Linear REC-157 returned to `In Review` with the exact geometry formula,
+  validation results, and commit recorded in a comment.
+- The branch was clean after the implementation push. A follow-up GitHub API
+  read was unavailable in the sandbox, but the existing ready PR and successful
+  branch push are confirmed.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
+
+REC-157 two-ring legibility revision start — 2026-07-26 17:58 PDT:
+
+- Ryan requested removing the middle concentric ring and making `rec.me` and
+  `CHECK-IN` substantially larger while keeping both labels symmetrically
+  centered, with visible clearance, between the remaining outer and inner
+  rings.
+- Resuming `codex/rec-157-lock-widget-mockups` in the existing clean isolated
+  worktree. Linear REC-157 moved back to `In Progress`; ready PR #243 remains
+  open.
+- `git fetch origin`, `git status --short --branch`, and `git worktree list`
+  completed. No overlapping uncommitted work was found.
+- Expected files: `WanderWidgets/WanderWidgets.swift`,
+  `WanderTests/WanderWidgetIntegrationTests.swift`, this log, and the local
+  approved mockup artifacts outside the repository.
+
+REC-157 two-ring legibility revision completion — 2026-07-26 18:07 PDT:
+
+- Removed the middle 10-point-inset concentric stroke, leaving the outer
+  4-point-inset ring and inner 16-point-inset ring.
+- Recentered both labels at the exact midpoint of the remaining 12-point band:
+  half the accessory-circular canvas minus 10 points.
+- Increased `rec.me` from 6.5pt to 11pt and `CHECK-IN` from 5.5pt to 9.5pt.
+  Expanded their angular steps from 9.5/-8 degrees to 19/-14.5 degrees so the
+  larger letters remain readable instead of crowding.
+- Added source-contract assertions for the two-ring structure, midpoint
+  formula, enlarged type, and revised arc spacing.
+- Generated, XML-validated, and visually inspected the C5 two-ring mockup.
+  Editable SVG, PNG, and approval metadata are stored at
+  `~/.gstack/projects/joelipshutz-wander/designs/lock-screen-quick-capture-20260726/`.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing actor-isolation, unsigned simulator keychain/app-group, and
+  traditional headermap warnings remain unchanged and outside REC-157.
+- Next: commit and push to ready PR #243, return REC-157 to `In Review`, and
+  keep Xcode on this isolated branch. No TestFlight release was requested.
+
+REC-157 two-ring legibility revision handoff — 2026-07-26 18:07 PDT:
+
+- Commit `9479cbfad` (`Make Lock Screen widget labels readable`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated:
+  https://github.com/joelipshutz/wander/pull/243
+- Linear REC-157 returned to `In Review` with the final ring/type metrics,
+  validation results, and commit recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
+
+REC-157 sans-serif typography revision start — 2026-07-26 18:09 PDT:
+
+- Ryan requested standard sans-serif type for the curved `rec.me` and
+  `CHECK-IN` labels.
+- Resuming `codex/rec-157-lock-widget-mockups` in the clean isolated worktree.
+  Linear REC-157 moved back to `In Progress`; ready PR #243 remains open.
+- `git fetch origin`, `git status --short --branch`, and the relevant worktree
+  entries were checked. No overlapping uncommitted work was found.
+- Scope is limited to changing the curved labels from SwiftUI's rounded system
+  design to the standard system sans-serif design, preserving the approved
+  two-ring geometry, sizes, spacing, and cold-start route.
+
+REC-157 sans-serif typography revision completion — 2026-07-26 18:15 PDT:
+
+- Changed the curved-label font design from `.rounded` to `.default`, which
+  uses Apple's standard sans-serif system face while preserving the approved
+  11pt/9.5pt sizes, weight, arc spacing, and two-ring geometry.
+- Added source-contract coverage for the standard sans-serif font selection.
+- Generated, XML-validated, and visually inspected the C6 sans-serif mockup.
+  Editable SVG, PNG, and approval metadata are stored with the earlier variants
+  in the REC-157 design-artifact folder.
+- Regenerated with `xcodegen generate`; no project-file diff was produced.
+- Validation:
+  - Focused `WanderWidgetIntegrationTests`: 18 passed, 0 failed.
+  - Full `WanderTests`: 746 passed, 0 failed on iPhone 17 Pro / iOS 26.5.
+  - Unsigned generic iOS Simulator build: succeeded.
+  - SVG XML validation and `git diff --check`: passed.
+- Existing unrelated build/test warnings remain unchanged.
+- Next: commit and push to ready PR #243, return REC-157 to `In Review`, and
+  keep Xcode on this isolated branch. No TestFlight release was requested.
+
+REC-157 sans-serif typography revision handoff — 2026-07-26 18:15 PDT:
+
+- Commit `1f3ec4eef` (`Use sans serif Lock Screen widget labels`) pushed to
+  `origin/codex/rec-157-lock-widget-mockups`; ready PR #243 is updated.
+- Linear REC-157 returned to `In Review` with the typography decision,
+  validation results, and commit recorded in a comment.
+- Xcode remains open on the isolated REC-157 worktree/branch. No TestFlight
+  build number was changed and no release was attempted.
+
+REC-157 landing start — 2026-07-26 18:21 PDT:
+
+- Ryan approved the final two-ring, standard sans-serif Lock Screen widget and
+  requested that it be pushed to `main`.
+- Resuming ready PR #243 from the clean isolated
+  `codex/rec-157-lock-widget-mockups` worktree. Linear REC-157 remains `In
+  Review` while the final integration review runs.
+- Refreshed `origin`, checked branch/worktree state, read the latest
+  coordination log, and confirmed `origin/main` has advanced through
+  TestFlight build 101 since this branch split.
+- No unfinished explicit TestFlight release was found. This request is a
+  squash-merge only: no build-number change, archive, upload, or Slack release
+  note is authorized.
+- Next: merge current `origin/main` into the PR branch, review the exact
+  integrated diff, rerun relevant tests/build, squash-merge PR #243, mark
+  REC-157 Done, and record the landing on `main`.
 REC-152 implementation approval checkpoint — 2026-07-26 11:10 PDT:
 
 - Joe selected the middle mock's information pattern but rejected the wide,
@@ -25389,6 +25908,23 @@ Final outcome: REC-159 is implemented and merged on `main`; every Nearby widget
 place row now shows the requested plus icon while preserving its check-in deep
 link.
 
+## 2026-07-26 14:24 PDT — Codex — REC-147 phone feedback follow-up
+
+Joe's connected-phone review approved the Check-in direction but identified a
+follow-up before the stack is ready to merge: the ticket edge reads as a loose
+circle instead of a punch-out; the celebration feels slow; Feed tickets are too
+wide/tall; notes need quotation marks; and Wanna, list, and dropped-pin events
+need the same ticket family. Feed cards also need a small photo treatment and
+should not spend a full row on `View place`.
+
+Implementation stays on `codex/rec-147-feed-profile-tickets` / REC-147. The
+follow-up will convert the shared edge to a real clipped notch, speed up the
+celebration reveal, make every Feed event a compact semantic ticket, preserve
+all event data and destinations, lazy-render the Feed, and use event/provider
+photo imagery with an immediate category fallback. No typography migration,
+backend/schema change, build-number bump, TestFlight release, or merge is part
+of this pass.
+
 ## 2026-07-26 13:59 PDT - Codex - REC-160 Final Validation
 
 Agent: Codex
@@ -25462,6 +25998,594 @@ Release start:
   exact build-100 `main`, archive/upload, attach to `rec.me Alpha`, obtain the
   external beta-review state, post `#testflight-feedback`, and close REC-122.
 
+## 2026-07-26 14:59 PDT — Codex — REC-147 phone feedback implemented
+
+Completed the connected-phone refinement on
+`codex/rec-147-feed-profile-tickets`, stacked on the latest refreshed Direction
+A map branch and current `main` build 100.
+
+Outcome:
+
+- Replaced the loose circular overlay with one clipped, stroked ticket shape;
+  the right edge is now a true concave punch-out on both the streak celebration
+  and every shared ticket surface.
+- Shortened the streak ticket, count, and copy reveal timings while preserving
+  Reduce Motion behavior and the existing four-day celebration hierarchy.
+- Converted all five Feed event kinds into compact semantic tickets: Check-in,
+  Wanna, list created, added to list, and dropped pin. The cards retain actor,
+  timestamp, place/list title, category/location, destination list, rating,
+  note, and media data.
+- Reduced card width, padding, artwork size, and vertical density; quoted and
+  italicized notes; removed the redundant full-width `View place` / list CTA;
+  and kept the place/list destination on the card content itself.
+- Added a 72-point photo slot that prioritizes event media, then asynchronously
+  resolves the place provider photo, with an immediate category artwork
+  fallback. Feed rows now use `LazyVStack` so image work stays limited to
+  visible tickets.
+- Temporary visual-QA launch helpers were removed before the final test run.
+
+Validation:
+
+- `xcodegen generate`: passed with no generated project diff.
+- Focused XCTest: 91/91 passed (Feed models, navigation contracts, place
+  profile presentation, check-in copy, and save streak).
+- Full XCTest: 755/755 passed on iPhone 16 Plus, iOS 18.6.
+- `git diff --check`: passed.
+- Visual QA reviewed the streak punch-out plus the top and lower Feed states:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec147-feedback-qa/streak-cutout.png`,
+  `feed-top-reboot.png`, and `feed-bottom-states.png`.
+
+No build-number bump, TestFlight upload, merge, backend/schema change, or
+typography migration was performed. Next is Joe's connected-phone sign-off,
+then the remaining list/profile ticket expansion and the separate magazine
+typography exploration.
+
+## 2026-07-26 15:48 PDT — Codex — REC-147 second phone-feedback pass
+
+Agent: Codex
+Branch: `codex/rec-147-feed-profile-tickets`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-147-feed-profile-tickets`
+Linear: `REC-147` (`In Progress`)
+
+Joe's phone screenshots show mixed first-pass coverage: two Check-in events
+use the ticket while Wanna and later events remain legacy rows with visible
+`View place` / `View list` actions. Joe confirmed this was not simply an old
+build. Current PR #242 head `93a8dd5` already routes Check in, Wanna,
+list-created, list-item, and dropped-pin events through the same compact ticket
+renderer; this pass treats the screenshots as evidence of the earlier partial
+implementation and explicitly regression-tests the unified current branch.
+
+This follow-up will remove the colored map-preview `YOUR CHECK-IN / YOUR WANNA`
+eyebrow, make the Feed thumbnail route through the existing place/list
+destination, and harden the shared ticket surface with a directly tested
+concave punch-out while removing unnecessary offscreen compositing. The
+reported place-profile hang is a P2 regression candidate: current evidence does
+not tie it to REC-147 because this branch only changed place-profile ticket
+styling, but the shared compositing cost will be removed and the focused/full
+test suites plus exact-branch visual QA will be rerun.
+
+Engineering review gate: not needed for this pass. The thumbnail reuses the
+existing tested Feed destination and introduces no new route, persisted state,
+backend/schema contract, or cross-screen semantics. An exact deep link to one
+historical visit would require a separate `visit_id` Feed contract and is not
+being approximated here. Expected files: shared ticket surface, Feed, map place
+preview, navigation/design tests, and this log. No TestFlight release or merge
+is authorized.
+
+Checkpoint / correction:
+
+- Joe's second 15:51 screenshot established that the phone build was mixed,
+  not wholly old: two Check-in events used the first ticket pass while Wanna
+  and later events still used legacy rows. Current branch head already routes
+  all five event kinds through one `FeedActivityModule`; this pass retained and
+  regression-tested that single-renderer coverage.
+- The shared ticket is now one concave `InsettableShape`; there is no circle
+  overlay. A geometry test asserts that points inside the trailing and leading
+  center notches are outside the shape while adjacent ticket body points remain
+  inside.
+- Removed the map preview's colored `YOUR CHECK-IN / YOUR WANNA` eyebrow.
+- Feed photos/thumbnails now open the existing place destination, or the list
+  destination for list-only events. Notes stay quoted; there is no visible
+  `View place` CTA.
+- Removed the ticket surface's forced `.compositingGroup()` and kept its shadow
+  on the shape background, reducing per-row offscreen rendering work.
+- Reproduced a genuine selected-place hang under the deterministic 1,620-save /
+  900-place stress fixture. A process sample showed `MapScreen.body` repeatedly
+  rebuilding all `VisiblePlaceGrouping` groups from inside the annotation sort
+  and selected-marker checks, reaching 100% CPU and a 4.9 GB footprint. The map
+  now moves the already-grouped selected annotation to the end with one linear
+  pass and compares stable group keys inside marker rendering. A focused
+  regression test preserves ordering and group membership.
+- After that fix, the app-owned regrouping loop disappeared from the process
+  sample and memory dropped to about 439 MB. The 900-custom-annotation fixture
+  can still saturate MapKit itself; this is a separate extreme-scale map
+  rendering limit. Normal demo-data place profile presentation rendered fully
+  in under one second.
+
+Validation:
+
+- Focused XCTest: 98/98 passed, including ticket geometry, every Feed event
+  contract, thumbnail routing, place-profile presentation, map hit testing, and
+  selected annotation ordering.
+- Full XCTest: 757/757 passed on iPhone 16 Plus, iOS 18.6.
+- `xcodegen generate` and `git diff --check`: passed; no generated project diff.
+- Visual QA reviewed exact-branch Feed, Map ticket, and full place profile at:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/26/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec147-feedback-2/`.
+- Temporary fixture-auth bypass used only for simulator screenshots was removed
+  before the final focused and full suites.
+
+No build-number bump, TestFlight upload, merge, backend/schema change, or
+typography migration was performed. Outcome is ready for review on PR #242;
+Joe's connected-phone validation is the next gate.
+## 2026-07-26 16:26 PDT — Codex — REC-148 typography and brand exploration
+
+Agent: Codex
+Branch: `codex/rec-148-typography-exploration`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-148-typography-exploration`
+Linear: `REC-148` (`In Progress`)
+
+Joe approved the REC-147 simulator screenshots and asked to begin typography
+and branding. This is an exploration gate, not a global font migration. The
+branch starts from PR #242 commit `1eee30d` so all variants use the approved
+Direction A ticket, Feed, map, and place-profile state as their common base.
+
+The `design-shotgun` workflow is active. Prior design memory confirms that Joe
+selected `Streak Ticket Exact` for the ticket family. The next artifact will
+compare three deliberately distinct typography/brand systems across the Feed,
+place profile, streak bridge, and a utility-heavy search/filter surface. The
+comparison must preserve the existing ownership colors, dotted/solid status
+grammar, data density, 44-point controls, compact widths, and Dynamic Type
+intent. No app code, typography tokens, build number, TestFlight release, or
+merge will change until Joe approves a direction.
+
+Expected tracked file for this exploration phase: `docs/agent-log.md`. Visual
+variants and comparison boards must remain under the gstack design artifact
+directory, outside the repository, per the selected workflow.
+
+Checkpoint:
+
+- Generated and manually inspected three four-surface comparison boards:
+  `A · New York Newsstand`, `B · Sunroom Journal`, and
+  `C · Pocket Gazette`.
+- A uses an Apple-native serif/sans boundary and is the lowest-risk migration.
+  Its corrected board preserves the current five-tab shell and exact
+  Feed/Woodcat/check-in #4/map semantics.
+- B is the warmest and most ownable brand expression, extending the semantic
+  palette with moss and sun. Its board is directionally useful but retains
+  small image-model drift in some shell/data details, so it must not be treated
+  as an implementation spec.
+- C is the strongest structured magazine system and uses serif most broadly.
+  Its corrected board preserves the exact Feed tickets, Woodcat profile,
+  check-in #4, and ownership/status filter grammar, though its navigation shell
+  follows the older four-tab contract and is not a nav proposal.
+- All variants passed the prompt-aware visual quality check. Artifacts, role
+  definitions, licensing notes, and migration map live at:
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/rec148-typography-branding-20260726/`.
+- Comparison board:
+  `http://127.0.0.1:56158/boards/b-20260726-234451-e9fy4d/`.
+
+The workflow is paused for Joe to select or remix a direction. No font files,
+SwiftUI typography tokens, or app screens have been changed.
+
+Decision / handoff:
+
+- Joe approved a constrained version of A and explicitly authorized the next
+  step. The approved system uses Apple-native serif only inside editorial
+  content and native sans for navigation chrome, controls, body, and metadata.
+- Native header means native SwiftUI navigation components and placements, not
+  serif navigation titles. Use `NavigationStack`, native title behavior,
+  toolbars, back buttons, search, and segmented controls where they preserve
+  the existing information architecture.
+- Ticket geometry, layout, colors, density, photos, and actions are locked;
+  typography is the only allowed ticket change. The streak screen is entirely
+  locked, including its typography.
+- Saved the constrained approval and migration notes in the design artifact
+  directory. Created `REC-161` for implementation so `REC-148` remains the
+  exploration/decision record.
+
+Draft PR #254 contains the tracked exploration log. No production app code was
+changed under REC-148.
+## 2026-07-26 17:27 PDT — Codex — REC-161 native editorial typography
+
+Agent: Codex
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (`In Progress`)
+
+Goal: implement the constrained REC-148 direction after Joe's explicit `Go`.
+Add semantic, Dynamic-Type-aware Apple-native typography roles; use native
+navigation header components where they preserve the current information
+architecture; and migrate the approved initial surfaces carefully.
+
+Hard scope locks:
+
+- Native sans remains the font for navigation chrome, controls, body,
+  metadata, filters, tabs, and timestamps.
+- Native serif is limited to place names, ticket titles, and selected editorial
+  content headings.
+- Do not change ticket geometry, layout, colors, spacing, density, media, or
+  actions. Typography is the only permitted ticket change.
+- Do not change the streak screen, including typography.
+- Do not add custom fonts, palette extensions, or a new magazine grid.
+- Preserve the current five-tab information architecture; native header work is
+  component treatment, not navigation redesign.
+
+Expected files: `Wander/DesignSystem/WanderTheme.swift`, scoped Feed and place
+profile views, navigation/typography tests, and this log. Before editing, the
+new worktree is clean and starts from REC-148 commit `9922112`, itself stacked
+on REC-147 PR #242. No build-number bump, TestFlight release, merge, backend,
+or schema change is authorized.
+
+Checkpoint — 17:44 PDT:
+
+- Added semantic Dynamic-Type roles in `WanderTypography`: Apple-native serif
+  for editorial titles and default system sans for body, labels, metadata, and
+  controls.
+- Feed now uses a native inline navigation title, trailing search toolbar item,
+  and native segmented Places/People picker. The retired custom animated
+  search launcher was removed.
+- Place profile now uses native back, save/check-in, share, and inline title
+  toolbar chrome. The photo/map header no longer owns custom overlaid header
+  buttons.
+- Applied the editorial title role to Feed place/ticket titles, the map place
+  preview, the place profile heading, and place check-in history titles. Ticket
+  geometry and layout were not edited.
+- `SaveStreakCelebrationView.swift` remains unmodified. A regression contract
+  now asserts it does not reference the new typography system and retains its
+  existing ticket-title font declaration.
+- Validation: focused Navigation, Theme, Place Profile, and Save Streak suites
+  passed: 88 tests, 0 failures on iPhone 16 Plus / iOS 18.6.
+
+Next: capture and inspect implemented Feed and place-profile screenshots on
+iPhone 16 Plus and iPhone 16e before preparing the PR.
+
+Visual QA checkpoint — 17:54 PDT:
+
+- Captured and manually inspected the implemented Feed and Woodcat Coffee place
+  profile on iPhone 16 Plus and iPhone 16e, both on iOS 18.6.
+- The first map-profile capture exposed that the full-screen cover had no local
+  navigation container, so native toolbar items could not render. Wrapped the
+  map place-profile destination in `NavigationStack` and re-captured both phone
+  sizes; native back, inline title, check-in/add, and share chrome now render.
+- Feed uses native inline `Feed` title, toolbar search, and segmented
+  Places/People control. Ticket titles and editorial headings use the serif
+  role while author, status, metadata, controls, and navigation remain sans.
+- Added a compact semantic serif role for featured rail titles after the 16e
+  capture showed the regular card-title role truncating too aggressively.
+- Ticket cutout, color, spacing, media, and density remain the REC-147 design.
+  The streak source and shared ticket-shape source are unchanged from the
+  branch base.
+- Screenshot artifacts:
+  `/Users/joelipshutz/.codex/visualizations/rec161-native-editorial-type/`.
+- Temporary DEBUG fixture authentication used only to capture the screenshots
+  was removed from the worktree before final testing.
+
+Final validation — 18:02 PDT:
+
+- Focused regression suites: 88 tests, 0 failures (`NavigationContractTests`,
+  `ThemeTokenTests`, `PlaceProfilePresentationTests`, and `SaveStreakTests`).
+- Full suite: 758 tests, 0 failures on iPhone 16 Plus / iOS 18.6 using the
+  repository-standard `xcodebuild test` command and `DerivedData` path.
+- `git diff --check` passed. The final diff contains no changes to
+  `SaveStreakCelebrationView.swift` or `CheckInTicketSurface.swift` relative to
+  the REC-148 branch base.
+- Existing unrelated compiler warnings in `WanderSupabaseClient` remain; there
+  are no new warnings attributable to REC-161.
+- No build-number bump or TestFlight work was performed. Next step is Joe's
+  visual review of the stacked implementation PR.
+
+Handoff:
+
+- Draft PR: https://github.com/joelipshutz/wander/pull/256, stacked on REC-148
+  draft PR #254 and REC-147 ticket foundation PR #242.
+- Linear REC-161 moved to `In Review` with the PR, validation, scope locks, and
+  device-QA summary attached in a comment.
+- Mission Control task `bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` moved to review.
+- Branch is pushed as `codex/rec-161-native-editorial-type`. The PR remains
+  draft until Joe reviews the implemented screenshots.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode, raised its
+  project window, and verified the Xcode Branch Chooser reports
+  `codex/rec-161-native-editorial-type`.
+
+## 2026-07-26 18:27 PDT — Codex — REC-161 Feed search/header correction
+
+Agent: Codex using `ios-fix` and Linear workflows
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (currently `In Review`; implementation resumed from Joe's
+visual feedback)
+
+Goal: apply Joe's approved Feed-header correction on the existing REC-161
+implementation. Remove the redundant visible native `Feed` title and toolbar
+search, restore the exact pre-REC-161 persistent animated search launcher and
+its full-screen Discover behavior, and retain the native Places/People
+segmented picker.
+
+Scope locks:
+
+- Keep the approved typography roles and all place-profile native navigation.
+- Do not change ticket geometry, layout, media, colors, actions, or the shared
+  ticket-shape component.
+- Do not change the streak screen.
+- Preserve the existing search destination and behavior rather than replacing
+  it with a new searchable implementation.
+
+Expected files: `Wander/Features/Feed/FeedScreen.swift`,
+`WanderTests/NavigationContractTests.swift`, `docs/agent-log.md`, and PR/tracker
+metadata. The isolated worktree is clean at `fec1c30`; no overlapping worktree
+is editing these REC-161 files. `origin/main` advanced independently, but this
+PR remains intentionally stacked on REC-148/REC-147.
+
+Pre-fix evidence: Joe's simulator review and the existing REC-161 screenshots
+show the oversized visible `Feed` navigation row with a toolbar search icon,
+while the source diff confirms the prior persistent `FeedSearchLauncher` was
+removed. This repo intentionally has no DebugBridge/StateServer snapshot API,
+so the literal `ios-fix` HTTP snapshot is unavailable without adding unrelated
+debug infrastructure. The supplied visual state, exact base-branch source, and
+deterministic navigation-contract test will serve as the regression evidence.
+
+Coordination notes: the Linear connector is not exposed in this Codex session,
+so the existing REC-161 status cannot be moved back to `In Progress` before the
+edit; reconcile it and add validation when the connector is available. Mission
+Control at `localhost:4000` is also currently unreachable. Neither tracker
+outage changes implementation scope.
+
+Validation and visual-QA checkpoint — 18:39 PDT:
+
+- Restored `tickerSuggestions`, `FeedSearchLauncher`, its 2.6-second animated
+  placeholder rotation, accessibility label, `isShowingSearch` action, and the
+  existing full-screen `DiscoverScreen` destination exactly from the REC-148
+  base implementation.
+- Removed the REC-161-only `Feed` navigation title, visible navigation-bar
+  background, and toolbar search button. Kept the approved native segmented
+  Places/People picker and all typography roles.
+- The focused `NavigationContractTests` suite passed: 68 tests, 0 failures.
+  Regression assertions now lock the persistent launcher, Discover
+  presentation, absent redundant Feed title/toolbar search, native segmented
+  picker, place-profile native chrome, ticket cutout, and untouched streak.
+- Captured and manually inspected the Feed on iPhone 16 Plus and iPhone 16e,
+  both iOS 18.6. On both sizes, the segmented control is the first visible row,
+  the persistent search launcher sits immediately below it, and the recovered
+  vertical space improves access to featured places and tickets without
+  changing ticket geometry.
+- Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec161-feed-search/feed-iphone-16-plus.png`
+  and `feed-iphone-16e.png` in the same directory.
+- Temporary DEBUG fixture authentication and unconfigured-backend wiring were
+  used only to create deterministic simulator captures. The temporary source
+  change was removed before final testing and is not present in the commit.
+- Full suite passed: 758 tests, 0 failures on iPhone 16 Plus / iOS 18.6 using
+  the repository-standard `xcodebuild test` command.
+- `git diff --check` passed before the implementation checkpoint. Relative to
+  REC-148, `FeedScreen.swift` now differs only for the approved native
+  segmented control and typography roles; the search implementation is no
+  longer part of the REC-161 diff.
+- Host disk space initially blocked simulator installation. Removed only
+  recoverable generated artifacts: this worktree's ModuleCache, Index, and
+  SourcePackages caches plus the stale REC-132 Xcode DerivedData contents. The
+  full suite rebuilt the required current dependencies successfully. No source,
+  simulator app data, or personal files were removed.
+
+Next: push the checkpoint, update draft PR #256 to describe the restored
+persistent search/no Feed title direction, and reconcile REC-161/Mission
+Control when their connectors are reachable.
+
+Handoff — 18:41 PDT:
+
+- Pushed source checkpoint `e6abbdf` and validation checkpoint `0f24c82` to
+  `codex/rec-161-native-editorial-type`.
+- Updated draft PR #256 to remove the obsolete native Feed-title/toolbar-search
+  claim and document the final segmented-control + persistent-search direction:
+  https://github.com/joelipshutz/wander/pull/256
+- A later iPhone 16e capture showed the launcher text advanced from
+  `Maya's date night spots` to `quiet work cafes with wifi`, confirming the
+  restored animation continues to run. The capture is
+  `feed-iphone-16e-rotated.png` beside the other screenshots.
+- REC-161 remains `In Review`, which matches the completed draft-PR state. The
+  Linear connector is unavailable in this session, so the new validation could
+  not be added as an issue comment. Mission Control remains unreachable on
+  `localhost:4000`; its previously recorded review status is unchanged.
+- No merge, build-number bump, TestFlight build, release, or streak/ticket
+  source change was performed.
+## 2026-07-26 21:41 PDT — Codex — REC-161 photo regression follow-up
+
+Agent: Codex using `ios-fix`
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+Linear: `REC-161` (implementation resumed from Joe's simulator feedback)
+
+Goal: restore real place/check-in photos anywhere the current stacked design is
+showing fallback artwork, specifically the Feed featured horizontal rail and
+the selected-place ticket on Map. Preserve the approved ticket geometry,
+typography direction, search behavior, and streak screen.
+
+Starting state: worktree clean at `acde7e8`; `origin/main` is now `c020432`,
+with no newer photo-resolution change in the relevant Feed/Map files. The
+existing REC-161 worktree is the only worktree editing this branch. Linear is
+not callable from this Codex session, so REC-161 cannot be moved from
+`In Review` back to `In Progress` before the edit. Mission Control task
+`bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` will be reconciled if its local API is
+available.
+
+Expected files: `Wander/Features/Feed/FeedScreen.swift`,
+`Wander/Features/Map/PlaceProfileMapSurface.swift`, focused regression tests,
+and this log. No ticket-shape, streak, build-number, or release changes.
+
+Photo regression validation and handoff — 22:10 PDT:
+
+- Root cause: `FeedPlaceArtwork` never asked the backend for a place photo, so
+  the Featured horizontal rail could only render category artwork. The Map
+  preview's local-photo path also excluded the owner's own Friends/Self
+  check-ins and every owner photo while the profile was private. Feed activity
+  thumbnails did not recover from an invalid Google image with an available
+  visible check-in photo.
+- Added one shared Feed photo resolver. It preserves the existing authenticated
+  `placePhoto` request, retries a failed or absent Google photo through the
+  existing RLS-backed `visibleUserPlacePhoto` request, and leaves category
+  artwork as the final fallback. Both Featured cards and activity tickets use
+  that resolver; explicit activity media remains the top layer.
+- The selected Map ticket now permits the current user's own local photo at
+  every visibility level and on private profiles. Other users' photos still
+  come only through the remote, RLS-authoritative visible-photo path.
+- Added the pre-fix source fixture
+  `WanderTests/Fixtures/rec-161-photo-fallback-pre.json` plus source and behavior
+  coverage for the Featured rail, activity fallback, Map ticket, and owner
+  visibility cases. The source regression test failed before the production
+  change and passed afterward.
+- Focused `NavigationContractTests` and `PlaceProfilePresentationTests` passed.
+  Full repository suite passed on iPhone 16 Plus / iOS 18.6: 761 tests, 0
+  failures, 0 skips. Existing headermap and Supabase formatter concurrency
+  warnings remain; no new warnings were introduced.
+- Captured and manually inspected the production components at iPhone 16 Plus
+  and iPhone 16e sizes. Real photo collages render in both the Featured card and
+  selected Map ticket without changing ticket geometry. Screenshots:
+  `/Users/joelipshutz/.codex/visualizations/2026/07/25/019f9ac9-7ed6-7850-9c95-70735ca3f3d3/rec161-photo-fix-iphone16plus.png`
+  and `rec161-photo-fix-iphone16e.png` in the same directory.
+- The temporary DEBUG-only screenshot route and fake photo repository were
+  removed before final testing. `git diff --check` passed and the production
+  branch was clean afterward.
+- No schema, backend contract, data mutation, ticket geometry, typography,
+  search, streak, build-number, TestFlight, or release changes were made.
+- Linear and Mission Control were unavailable in this session; REC-161 and task
+  `bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` still need their validation comments
+  reconciled when those trackers are callable.
+
+Next: push these checkpoints to draft PR #256, add the validation summary to
+the PR, and reopen this isolated worktree in Xcode for Joe's next simulator or
+phone test.
+
+Final handoff — 22:15 PDT:
+
+- Pushed implementation checkpoints `2ba6210` and `59d71c0`, coordination
+  checkpoint `0f2bff2`, and validation-log checkpoint `13be04e` to
+  `codex/rec-161-native-editorial-type`.
+- Updated draft PR #256 with the photo-resolution behavior, corrected scope
+  locks, two-device visual QA, and 761-test result:
+  https://github.com/joelipshutz/wander/pull/256
+- Opened and verified Xcode is using the isolated project at
+  `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type/Wander.xcodeproj`;
+  that checkout is on `codex/rec-161-native-editorial-type` and matches origin.
+- Mission Control remained unreachable after a final update attempt. No Linear
+  tools were exposed in this session. Reconcile both trackers from the PR when
+  those services are available.
+- Handoff state: ready for Joe's simulator/phone test. No merge, TestFlight
+  build, or release was performed.
+
+## 2026-07-26 22:42 PDT — Codex — REC-161 direct iPhone install
+
+Agent: Codex using `ios-qa`
+Branch: `codex/rec-161-native-editorial-type`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-161-native-editorial-type`
+PR: https://github.com/joelipshutz/wander/pull/256
+
+Goal: build the current pushed PR branch for Joe's connected physical iPhone,
+install it directly, launch it, and leave the same isolated project open in
+Xcode. This is a local development install, not a TestFlight release.
+
+Outcome:
+
+- Detected paired device `iPhone (254)` on iOS 26.5.
+- The first signed Debug device build reached final dSYM generation, then
+  failed because the Mac volume had only 117 MB free. Removed only recoverable
+  simulator products/intermediates and the Xcode index from this worktree's
+  `DerivedData`, freeing about 840 MB. No source, packages, device data, or user
+  files were removed.
+- Rebuilt successfully for the physical device with
+  `DEBUG_INFORMATION_FORMAT=dwarf`, preserving the existing signing and app
+  configuration. Existing Supabase formatter-concurrency and headermap warnings
+  remain; no new build errors were introduced.
+- Installed `DerivedData/Build/Products/Debug-iphoneos/Wander.app` as bundle
+  `com.grayline.wander` and successfully launched it on the connected phone.
+- Opened and verified Xcode's active workspace is the same REC-161 isolated
+  worktree project.
+- The `ios-qa` artifact-sync preamble was intentionally skipped after the
+  execution policy rejected its unrelated private-repository push. This did not
+  affect building, installing, or launching the app.
+- No app source, project settings, build number, TestFlight state, or release
+  metadata changed.
+## 2026-07-26 23:00 PDT — Codex — REC-161 profile rating typography + TestFlight
+
+Agent: Codex using `ios-fix` and `recme-pr-review-merge-release`
+Branch: `codex/rec-161-profile-ratings`
+Worktree: `/private/tmp/recme-rec161-profile-ratings`
+Linear: `REC-161` (`In Progress`)
+Stack base: draft PR #256
+
+Goal: apply the approved native editorial serif only to the three overall
+place-profile rating values: Your rating, rec.me rating, and Fit Rating. Keep
+check-in, Feed, Discover, and rating-input typography unchanged. Then validate,
+land the full dependent stack in order, and release the resulting latest
+`main` to TestFlight as explicitly requested by Joe.
+
+Starting state: clean at `77b914a`, tracking the pushed #256 head. Joe's
+physical-device review is the reproducing visual evidence. This repo has no
+StateServer/DebugBridge snapshot API by documented design, so the source-state
+fixture `WanderTests/Fixtures/rec-161-profile-ratings-pre.json` records the
+pre-fix typography contract before Swift edits. The existing production source
+confirms `PlaceProfileRatingTile` uses fixed-size default-design black fonts for
+both numeric values and suffixes.
+
+Expected files: `Wander/DesignSystem/WanderTheme.swift`,
+`Wander/Features/Map/PlaceProfileMapSurface.swift`, focused typography contract
+coverage, this source-state fixture, and this log. No ticket geometry, check-in
+rating, streak, schema, backend, or data change.
+
+Coordination: REC-161 was moved from In Review back to In Progress and given a
+scope comment in Linear. Mission Control task
+`bebd7dcd-709a-4923-82ba-5b89d8bf2b7c` could not be updated because
+`localhost:4000` remains unavailable. The working checkout is isolated because
+Joe's root checkout contains unrelated `tmp/` files and is 63 commits behind
+`origin/main`.
+
+Implementation and validation checkpoint — 23:19 PDT:
+
+- Added `editorialRatingDisplay` and `editorialRatingSuffix` semantic tokens,
+  both native system serif with tabular/monospaced digits, and applied them only
+  to the numeric value and denominator inside `PlaceProfileRatingTile` when a
+  real rating suffix exists. Empty-state copy, the tile labels/subtitles,
+  check-in cards, Feed, Discover, the rating-input slider, and the streak screen
+  remain unchanged.
+- Added `testOverallPlaceProfileRatingsUseEditorialSerifWithoutChangingCheckInRatings`
+  and the pre-fix source-state fixture. The focused regression failed before the
+  production edit and passed after it.
+- Built successfully for the iPhone 16 Plus simulator. Existing Supabase
+  formatter-concurrency and traditional-headermap warnings remain; no new build
+  warnings or errors were introduced.
+- Visually verified the exact production rating tile at default Dynamic Type on
+  iPhone 16 Plus and iPhone 16e, then at accessibility sizes AX1 and AX3 on the
+  iPhone 16 Plus. All three ratings remain legible and fit their tiles. Evidence:
+  `rec161-profile-ratings-default-16plus.png`,
+  `rec161-profile-ratings-default-16e.png`,
+  `rec161-profile-ratings-ax1-16plus.png`, and
+  `rec161-profile-ratings-ax3-16plus.png` under the thread visualization folder.
+- Removed the temporary DEBUG-only visual harness before final validation and
+  restored both simulators to the default Dynamic Type size.
+- Full simulator suite passed: 762 tests, 0 failures. Result bundle:
+  `/private/tmp/DerivedData-rec161-ratings-visual/Logs/Test/Test-Wander-2026.07.26_23-17-24--0700.xcresult`.
+
+Next: complete the pre-merge diff review, push/open the stacked profile-rating
+PR, land the approved PR chain in dependency order, and release latest `main`
+as the next TestFlight build.
+
+Latest-main stack reconciliation checkpoint — 23:34 PDT:
+
+- Opened ready PR #260 and linked it to REC-161. Pre-landing review of the
+  profile-only delta found no critical or informational issues.
+- Reconciled PRs #241, #242, #254, #256, and #260 in dependency order onto
+  exact `origin/main` `c020432`. Production changes merged automatically; the
+  only textual conflicts were append-only `docs/agent-log.md` sections, and
+  both sides were preserved each time.
+- The first exact-stack compile exposed one integration-only duplicate:
+  `CheckInCopy.pluralTitle` had independently landed in both the Direction A
+  branch and newer `main`. Removed the duplicate declaration at the lowest
+  stack layer, propagated that fix through every dependent branch, and kept the
+  single shared value plus its existing copy test.
+- The corrected exact combined head passed 771/771 tests with zero failures on
+  iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec161-ratings-visual/Logs/Test/Test-Wander-2026.07.26_23-31-50--0700.xcresult`.
+- All five PR branches are pushed, clean, and contain current `main`. PRs #254
+  and #256 can now leave draft after the already-recorded design approval and
+  phone feedback; no unresolved reviews or hosted checks are present.
 ## 2026-07-26 14:05 PDT - Codex - REC-160 PR Reconciliation
 
 Agent: Codex
@@ -25763,6 +26887,87 @@ Final outcome: rec.me 0.1 (101) is uploaded, externally approved, attached to
 the public TestFlight group, and available to testers with REC-152 Profile
 Recent activity.
 
+## 2026-07-26 18:24 PDT - Codex - REC-162 Add Capture Unification
+
+Agent: Codex
+Branch: `codex/rec-162-add-unification`
+Worktree: `/private/tmp/recme-rec162-add-unification`
+Linear: `REC-162` (`In Progress`)
+
+Goal: simplify the Add surface around 5–7 nearby suggestions, the existing
+search behavior, a native camera/photo-library menu inside the search field,
+and one separated Import entry point that opens the supported source stack and
+links to public Import Help.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this isolated worktree from `origin/main` at
+  `759e7c9df`.
+- The primary checkout remains untouched on the removed
+  `codex/rec-142-widgets` branch; its untracked `.pnpm-store/` belongs to other
+  work.
+- REC-109 and REC-97 are completed predecessor issues. Created REC-162 for this
+  follow-up, assigned it to Ryan, related it to both predecessors, and moved it
+  to `In Progress`.
+- No active agent-log entry names the expected source files. The high-conflict
+  `docs/agent-log.md` is append-only; no other listed high-conflict file is in
+  scope.
+- Expected files are `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileImportViews.swift`, focused test files, and
+  this agent log. `project.yml` or generated project membership should not be
+  needed unless implementation scope changes.
+- The proposed Import Help destination follows the public marketing site convention:
+  `https://getrec.me/import-help`; the app will own a single URL constant and open
+  it with the native browser environment.
+
+Planned validation:
+
+- Add focused tests for the new suggestion limit, camera/import hierarchy, and
+  Import Help contract.
+- Run focused Add/import tests, then the full iPhone simulator suite and a clean
+  generic simulator build.
+- Capture and inspect Add/import screenshots on the current large iPhone
+  simulator and one smaller phone before opening a ready PR.
+
+REC-157 latest-main reconciliation — 2026-07-26 18:24 PDT:
+
+- GitHub reported PR #243 conflicting after later widget/Profile work and
+  TestFlight builds 100–101 landed. Merged current `origin/main` at
+  `759e7c9df` into `codex/rec-157-lock-widget-mockups`.
+- Product source auto-merged cleanly. The sole conflict was the append-only
+  `docs/agent-log.md`; preserved the complete REC-157 history and all incoming
+  REC-152, REC-159, streak, and build 100–101 records.
+- The resulting feature diff against current `origin/main` remains limited to
+  the Lock Screen quick-capture design, cold-start deep-link retention, widget
+  integration tests, and this log. No release metadata differs from `main`.
+- Next: commit the reconciliation, run the exact integrated pre-landing review
+  and validation, push the refreshed PR, then squash-merge if clean.
+
+REC-157 pre-landing validation — 2026-07-26 18:32 PDT:
+
+- Reviewed the complete PR #243 diff against current `origin/main`; scope is
+  limited to the approved Lock Screen quick-capture design, authenticated
+  cold-start deep-link retention, matching widget integration coverage, and
+  coordination records. Found no blocking, warning, or informational issues.
+- GitHub has no unresolved review threads, PR comments, check failures, or
+  Greptile findings on PR #243. `git diff --check` passed and `xcodegen
+  generate` produced no project-file drift.
+- Focused `WanderWidgetIntegrationTests` passed 18/18 on iPhone 17 Pro /
+  iOS 26.5, including both cold-start inbox regressions and the Lock Screen
+  widget source contract.
+- The complete `WanderTests` suite passed 755/755 with zero failures on iPhone
+  17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec157-landing/Logs/Test/Test-Wander-2026.07.26_18-28-54--0700.xcresult`.
+- The required generic iOS Simulator build passed with code signing disabled.
+  Only existing Swift concurrency and traditional-headermap warnings remain;
+  no new warning was attributed to the REC-157 diff.
+- No TestFlight build number was changed and no archive, upload, tester group,
+  or Slack release action was performed. This merge is queued for the next
+  explicitly requested TestFlight batch.
+
+Outcome: PR #243 is validated and ready for its authorized squash merge to
+`main`.
+
 ## 2026-07-26 18:25 PDT - Codex - REC-160 Landing Record
 
 Agent: Codex
@@ -25836,3 +27041,791 @@ Starting status and coordination:
   archive/upload without build-number drift, attach to `rec.me Alpha`, submit
   external beta review, update Linear, and post the required
   `#testflight-feedback` note.
+REC-157 final-main reconciliation — 2026-07-26 18:45 PDT:
+
+- `origin/main` advanced during REC-157 validation with REC-160's separate
+  **Check-in** Action Button control and its landing record. Merged current
+  `origin/main` at `9f12a04ea`; app/widget source auto-merged cleanly and the
+  only conflict was this append-only log, where both histories were retained.
+- Regenerated the Xcode project with no resulting diff and reconfirmed
+  `git diff --check`.
+- Reran the combined affected suites after the merge:
+  `WanderWidgetIntegrationTests` plus `WanderActionButtonControlTests` passed
+  22/22 with zero failures on iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec157-landing/Logs/Test/Test-Wander-2026.07.26_18-41-03--0700.xcresult`.
+- REC-157 remains ready for the authorized squash merge. The earlier 755/755
+  full-suite pass and generic Simulator build remain valid for the feature
+  diff; the newly landed REC-160 head independently passed 757/757 and a
+  generic Simulator build before its merge.
+
+## 2026-07-26 18:46 PDT - Codex - REC-157 Landing Record
+
+Agent: Codex
+Branch: `codex/rec-157-merge-record`
+Worktree: `/private/tmp/recme-rec157-lock-widget-mockups`
+Linear: `REC-157` (`Done`)
+PR: `#243` (merged)
+
+Final outcome:
+
+- Pushed the latest-main reconciled REC-157 feature head `c956e0279` and
+  confirmed PR #243 was clean and mergeable against `9f12a04ea`.
+- Squash-merged PR #243 to `main` as
+  `7894692e53091e792829549700f0336e375392b5`.
+- `origin/main` now contains the approved two-ring accessory-circular Lock
+  Screen design with curved sans-serif `rec.me` and `CHECK-IN` labels, the
+  central plus, and retained app-level deep-link handling so a cold or crashed
+  launch reaches **I'm here now** after authentication resolves.
+- Validation passed: focused widget suite 18/18; complete suite 755/755 on
+  iPhone 17 Pro / iOS 26.5; final reconciliation's combined widget and Action
+  Button suites 22/22; generic iOS Simulator build; `xcodegen generate`; and
+  `git diff --check`.
+- GitHub had no reviews, comments, Greptile findings, hosted check failures, or
+  unresolved threads on the reviewed head. Only existing Swift concurrency
+  and traditional-headermap warnings were observed.
+- Marked Linear REC-157 Done and attached the merge and validation receipt.
+- No build-number increment, archive, upload, TestFlight attachment, or Slack
+  release note was performed. The change will ship in the next explicitly
+  requested TestFlight batch.
+
+Next step: include `7894692e5` in the next requested TestFlight release and
+verify the accessory-circular Lock Screen widget on a signed physical device,
+including locked, unlocked, signed-out, cold-launch, and post-crash behavior.
+
+REC-162 implementation and validation checkpoint — 2026-07-26 19:42 PDT:
+
+- Reworked Add into the requested hierarchy: up to seven nearby suggestions,
+  the existing place search, a camera menu inside the search field, and one
+  separated Import entry point.
+- The camera menu uses native iOS presentation with **Take a Photo** and
+  **Photo Library**. Both routes reuse the existing OCR/location candidate and
+  unresolved-draft pipeline.
+- The Import entry opens one hub with Google Maps, Instagram Reels, TikToks,
+  and Texts & Notes, plus toolbar and inline help actions targeting
+  `https://getrec.me/import-help`.
+- Merged latest `origin/main` through `c0204328b`, preserving REC-157 and
+  REC-160 widget work. The only conflicts were append-only agent-log entries;
+  product source merged cleanly.
+- Focused Add/import navigation regressions passed 3/3 on iPhone 17 Pro /
+  iOS 26.5. The exact latest-main complete suite passed 759/759 with zero
+  failures. Result bundle:
+  `/tmp/DerivedData-rec162-build/Logs/Test/Test-Wander-2026.07.26_19-37-16--0700.xcresult`.
+- Simulator build passed with code signing disabled. `xcodegen generate`
+  produced no project drift, and `git diff --check` passed. Only existing Swift
+  concurrency, signed-XCTest-stripping, and traditional-headermap warnings
+  remained.
+- Visually inspected Add, the native camera menu, and the Import hub on iPhone
+  17 Pro, then inspected the denied-location fallback and Import hub on the
+  smaller iPhone 17e. Layout, safe areas, labels, and controls remained usable
+  on both sizes.
+- Used a temporary DEBUG-only local-auth launch switch solely for visual QA so
+  no personal account was used. Removed the switch before final diff review;
+  no auth bypass is present in the branch.
+- Direct verification found `https://getrec.me/import-help` responds HTTP 200
+  but currently renders Squarespace's generic **Coming Soon** page. The app URL
+  contract is wired; publishing the source-specific website instructions is an
+  external content follow-up.
+
+REC-162 handoff — 2026-07-26 19:43 PDT:
+
+- Pushed `codex/rec-162-add-unification` and opened ready PR #259:
+  `https://github.com/joelipshutz/wander/pull/259`.
+- Linked PR #259 to Linear REC-162, moved the issue to `In Review`, and posted
+  the 759/759 test, build, two-size visual-QA, and website-content follow-up
+  receipt.
+- The feature branch is intended for Ryan's local Xcode testing. Open
+  `/private/tmp/recme-rec162-add-unification/Wander.xcodeproj` without
+  switching or overwriting another active checkout.
+- No build-number change, archive, upload, TestFlight attachment, merge, or
+  Slack release action was performed.
+
+REC-162 Add layout refinement start — 2026-07-26 20:02 PDT:
+
+- Ryan requested a follow-up on PR #259: place search belongs inside
+  **Suggested** above nearby results; nearby results should be a bounded
+  vertical list with **Show more** at the bottom; **Import** must remain visible
+  before the fold; existing Add sheet detents must not grow.
+- Reused the clean isolated worktree and existing
+  `codex/rec-162-add-unification` branch. Fetched origin; the branch is five
+  commits ahead of and zero behind `origin/main`. No dirty or overlapping work
+  was present.
+- Moved Linear REC-162 from `In Review` back to `In Progress` and attached the
+  refinement scope.
+- Expected changes remain limited to `Wander/Features/Add/AddScreen.swift`,
+  focused navigation/layout contracts, and this append-only log.
+
+REC-162 Add layout refinement validation — 2026-07-26 20:14 PDT:
+
+- Moved place search directly beneath the **Suggested** header and changed
+  nearby suggestions from a horizontal rail to a bounded vertical list.
+- The initial list exposes three of at most seven suggestions. **Show more**
+  lives at the bottom of that list and reveals the remaining loaded rows
+  inside the same 156-point viewport, so expanding suggestions does not move
+  **Import** or increase the existing Add sheet detents.
+- Added layout-contract coverage for the section order, vertical scrolling,
+  **Show more**, the seven-place cap, and identical initial/expanded viewport
+  bounds.
+- Focused Add contracts passed 3/3. The complete suite passed 760/760 with zero
+  failures on iPhone 17 Pro / iOS 26.5. Result bundle:
+  `/tmp/DerivedData-rec162-build/Logs/Test/Test-Wander-2026.07.26_20-12-48--0700.xcresult`.
+- Visually verified the populated list on iPhone 17 Pro: scrolling reached
+  **Show more**, expansion stayed inside the list, and **Import** remained
+  visible. Verified the smaller iPhone 17e denied-location state separately:
+  search remained beneath **Suggested** and the complete **Import** section
+  stayed above the fold.
+- `xcodegen generate` produced no project drift and `git diff --check` passed.
+  The temporary DEBUG-only local-auth switch used for simulator inspection was
+  removed before final validation; no auth bypass remains in the branch.
+
+REC-162 Add layout refinement handoff — 2026-07-26 20:16 PDT:
+
+- Committed the refinement as `da06fab29` (**Refine suggested places layout**)
+  and pushed it to `codex/rec-162-add-unification`, updating ready PR #259.
+- Updated the PR description with the bounded vertical-list behavior and final
+  760/760 validation receipt.
+- Moved Linear REC-162 back to `In Review` and posted the implementation,
+  two-size visual-QA, test, commit, and PR receipt.
+- No build-number change, archive, upload, TestFlight attachment, merge, or
+  Slack release action was performed.
+## 2026-07-26 23:22 PDT - Codex - TestFlight Build 102
+
+Agent: Codex
+Branch: `codex/testflight-build-102`
+Worktree: `/private/tmp/recme-testflight-build-102`
+Goal: Ship the exact current `origin/main` (`c0204328b`) to TestFlight without
+triaging or including any unmerged work.
+Starting status: clean branch from `origin/main`; App Store build 101.
+Expected files: `project.yml`, generated Xcode project, build-number contract
+test, and this coordination log.
+
+Release scope is intentionally limited to changes already merged on `main`,
+including REC-160's Check-in Action Button control and REC-157's Lock Screen
+quick-capture widget. REC-132 onboarding and later forward fixes are excluded.
+
+Release preparation checkpoint:
+
+- Bumped `CURRENT_PROJECT_VERSION` from 101 to 102 and regenerated the Xcode
+  project so the app and all extensions share build 102.
+- Updated the build-number contract assertion and passed its focused simulator
+  test 1/1 on iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec132-release-gate/Logs/Test/Test-Wander-2026.07.26_23-23-04--0700.xcresult`.
+- `xcodegen generate` and `git diff --check` passed. No unmerged product work
+  was added to the release branch.
+
+## 2026-07-26 23:43 PDT — Codex — TestFlight build 103
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-103`
+Worktree: `/private/tmp/recme-testflight-build-103`
+Release scope: exact latest `origin/main` `4463bb1`
+
+Goal: ship the now-merged REC-147/REC-148/REC-161 ticket and editorial
+typography stack, including the profile-only overall rating treatment, together
+with all prior current-main changes.
+
+Release coordination:
+
+- Build 102 was prepared and uploaded concurrently at 23:34 PDT from an archive
+  created before PRs #241, #242, #254, #256, and #260 merged. Apple accepted
+  that binary, so its number is immutable and it does not contain this stack.
+- Starting a clean, isolated build 103 release from exact latest main instead
+  of reusing or mislabeling build 102.
+- Incrementing `CURRENT_PROJECT_VERSION` once from 102 to 103, regenerating the
+  Xcode project, and updating the shared build-number contract.
+- Intended tester scope: Direction A pins/filter pills; compact ticket family
+  across Map, Feed, and profile history; restored search and real photo paths;
+  native editorial place typography; and serif treatment only for the three
+  overall place-profile rating values. Check-in rating typography and the
+  streak screen remain unchanged by REC-161.
+- No backend, schema, data reset, marketing-version, or App Store production
+  submission is in scope.
+
+Release-prep validation checkpoint — 23:51 PDT:
+
+- `xcodegen generate` completed. In addition to the intentional 102 → 103
+  version update, regeneration added the two newly merged REC-161 JSON fixtures
+  to the test target resources, bringing the generated project back in sync
+  with `project.yml`.
+- Focused shared build-number contract passed 1/1. Result bundle:
+  `/private/tmp/DerivedData-recme-build103/Logs/Test/Test-Wander-2026.07.26_23-45-23--0700.xcresult`.
+- Full exact release-branch suite passed 771/771 tests with zero failures on
+  iPhone 16 Plus / iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-recme-build103/Logs/Test/Test-Wander-2026.07.26_23-50-31--0700.xcresult`.
+- `git diff --check` passes. Existing simulator-only app-group/keychain logs,
+  Supabase formatter actor-isolation warnings, and traditional-headermap
+  warnings remain non-blocking.
+- Removed only the obsolete 1.5 GB REC-161 simulator DerivedData cache after
+  validation to leave room for the signed build-103 archive. Source, fixtures,
+  screenshots, and test result records were not removed.
+- Mission Control remains unavailable at `localhost:4000`; the attempted task
+  update failed without changing external state.
+
+Release completion — 2026-07-27 00:13 PDT:
+
+- PR #262 was squash-merged to `main` as
+  `8d0e95176ea9dad10f02536736c1c10d533d46e8`. The merged tree exactly matched
+  the validated release branch (`b2323b74486cb42dc626a6f1899a700f1122ff96`).
+- A final generic iOS Simulator build from detached exact `main` passed. The
+  signed Release archive also succeeded from that same checkout:
+  `/private/tmp/Wander-0.1-build103.xcarchive`.
+- Archive inspection confirmed marketing version `0.1` and build `103` for the
+  app plus `WanderWidgets`, `WanderNearbyWidgets`, and `WanderShareExtension`.
+- Export used `manageAppVersionAndBuildNumber=false`; Xcode upload completed
+  successfully at 00:08 PDT. App Store Connect build id:
+  `826039f1-0844-4e35-9885-ca0206cb4940`.
+- The release helper confirmed processing state `VALID`, set
+  `usesNonExemptEncryption=false`, updated the `en-US` What to Test copy,
+  attached build 103 to `rec.me Alpha`, and returned external review state
+  `APPROVED`.
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785136313782839
+- Added the shipped build, test, PR, and tester-note receipts to Linear
+  REC-147, REC-148, and REC-161. All three issues are Done.
+- The final release preserves the clarified typography boundary: only the
+  three overall place-profile rating values receive the serif numeric style.
+  Individual check-in ratings and the streak screen are unchanged.
+- Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking. Clerk development branding/banner remains the
+  tester-facing known alpha issue.
+- After the archive succeeded, removed only
+  `/private/tmp/DerivedData-recme-build103` to recover local disk space for the
+  export. This deleted its disposable build products and ephemeral xcresult
+  bundles; the signed archive, uploaded binary, PR/Linear receipts, screenshots,
+  and test pass counts remain preserved elsewhere.
+
+Final status: rec.me 0.1 (103) is approved and available through the public
+TestFlight link: https://testflight.apple.com/join/knEhRa6t
+
+## 2026-07-27 00:17 PDT - Codex - REC-132 pre-merge validation repair
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/rec-132-onboarding`
+Worktree: `/private/tmp/recme-rec132-onboarding`
+Linear: `REC-132` (`In Review`)
+PR: `#182`
+
+- Replaced two stale current-main contract expectations: the app entry contract
+  now asserts the signed-out carousel and Clerk handoff, and a newly signed-in
+  account retains main's private/self-only defaults.
+- Made the carousel page indicator observable to UI automation and added a
+  DEBUG-only force-auto-advance switch so XCTest automation does not pause the
+  timer by presenting as an accessibility client. Production still pauses for
+  Reduce Motion and VoiceOver and still uses the required seven-second cadence.
+- Verified the live task from the simulator console advancing `0 -> 1 -> 2 ->
+  0` at the two-second test interval. Replaced the brittle exact-page sample
+  with an assertion that the page value changes.
+- Focused validation passed 3/3: the app-entry contract, account-isolation
+  contract, and logged-out carousel UI auto-advance/action visibility test.
+  Latest UI result bundle:
+  `/private/tmp/DerivedData-rec132-focused/Logs/Test/Test-Wander-2026.07.27_00-15-55--0700.xcresult`.
+- Build 103 was already being archived from current main by a separate active
+  release process, so REC-132 is intentionally targeting the next build after
+  landing. The completed build-103 archive was preserved; only its generated
+  3.7 GB DerivedData cache was removed after the archive process exited to make
+  room for REC-132 validation.
+
+Next: commit these repairs, merge latest `origin/main`, regenerate the project,
+resolve the known source/log conflicts, and run the full integrated gate.
+
+## 2026-07-27 00:27 PDT - Codex - TestFlight Build 104
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-104`
+Worktree: `/private/tmp/recme-testflight-build-103` (reused after the completed
+build-103 release because the environment blocked creating another worktree)
+Linear: `REC-132`
+PR: `#182` (squash-merged as `f69a8df`)
+
+Goal: ship the exact latest `origin/main` containing REC-132 onboarding as
+rec.me 0.1 (104). Scope is the signed-out three-slide carousel, Clerk signup
+and login handoff, required name/username, optional profile photo, and the
+phase-A location, contacts, friend suggestions, and notification steps.
+
+Pre-release validation already completed on the exact merged feature head:
+
+- Integrated focused gate passed 147/147 after reconciling build 103 main.
+- Complete gate passed 782 unit tests and 1 onboarding UI test with zero
+  failures. Result bundle:
+  `/private/tmp/DerivedData-rec132-focused/Logs/Test/Test-Wander-2026.07.27_00-23-16--0700.xcresult`.
+- Hosted onboarding migration `20260723043000_onboarding_phase_a.sql` is
+  applied. RPC security metadata, grants, authenticated ownership scoping, and
+  the existing-user completion backfill were directly verified. The broader
+  smoke script's only failure is the separately tracked, unrelated current-main
+  check-in delete trigger issue; per release direction it is not included here.
+
+Release preparation: increment build 103 -> 104, regenerate the Xcode project,
+validate the shared build-number contract, archive exact main, upload, attach
+to `rec.me Alpha`, and post the required tester note.
+
+### 2026-07-27 08:31 PDT - Release outcome
+
+- Build-number preparation PR `#264` was squash-merged as `5c12b4a`; the
+  release archive was created from that exact clean `origin/main` commit.
+- `CURRENT_PROJECT_VERSION` is `104` in `project.yml`, the generated Xcode
+  project, the main app, and all three extensions.
+- The shared app/extension build-number contract passed 1/1. The exact-main
+  generic iOS Simulator build also succeeded after regeneration.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build104.xcarchive`. The first account-session
+  export attempt failed before upload with `Failed to Use Accounts`; retrying
+  the unchanged archive with the configured App Store Connect API key
+  succeeded and reported `Uploaded Wander` / `EXPORT SUCCEEDED`.
+- App Store Connect build id:
+  `a9e9a81e-a0c6-47a5-9bf8-45d2fb62e4fd`. Build `0.1 (104)` is `VALID`,
+  has `usesNonExemptEncryption=false`, includes the onboarding What to Test
+  copy, is attached to `rec.me Alpha`, and external beta review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- The required Slack tester note could not be posted because the local Mac was
+  locked and the available Slack path requires the desktop UI; automatic
+  unlock failed. No direct Slack connector or local Slack token was available.
+- Linear REC-132 could not be updated because the Linear connector was not
+  available in this session. Mission Control at `localhost:4000` was also
+  unreachable. The shipped PR, test, archive, and App Store Connect receipts
+  are recorded here so those tracker updates can be patched forward.
+- Existing Supabase formatter actor-isolation warnings remain non-blocking.
+  Clerk development branding/banner remains the tester-facing known alpha
+  issue.
+- Removed only `/private/tmp/DerivedData-rec132-focused` after validation to
+  recover 3 GB for the archive. This was disposable generated build cache; the
+  signed archive and test pass counts remain preserved.
+
+Final status: rec.me 0.1 (104), including REC-132 onboarding, is approved and
+available through the public TestFlight link.
+
+## 2026-07-27 10:26 PDT - Codex - REC-162 unified Import refinement
+
+Agent: Codex
+Branch: `codex/rec-162-add-unification`
+Worktree: `/private/tmp/recme-rec162-add-unification`
+Linear: `REC-162` (`In Progress`)
+PR: `#259`
+
+Goal: simplify the dedicated Import page to one paste field with instructions
+at the top, preserve the current bounded Suggested scroll for now, and replace
+generic source symbols with a compact facepile of recognizable Google Maps,
+Instagram, and TikTok brand marks.
+
+Starting status:
+
+- Fetched origin and merged exact current `origin/main` into the isolated
+  branch as `8541285`. The only conflict was the append-only agent log; both
+  REC-162 history and newer main release/onboarding entries were preserved.
+- The original root checkout and every other worktree remain untouched.
+- Linear REC-162 moved from In Review back to In Progress. The follow-up
+  comment could not be posted because the connector rejected a payload that
+  included a local filesystem path; no workaround was attempted.
+- Mission Control remains unavailable at `localhost:4000`; task creation could
+  not change tracker state.
+- Expected files: `Wander/Features/Add/AddScreen.swift`,
+  `Wander/Features/Profile/ProfileImportViews.swift`, import store/parser and
+  focused tests if needed for mixed-source routing, brand assets, and this log.
+
+### 2026-07-27 10:54 PDT - Implementation and validation
+
+- Replaced the four source-specific Import choices and their separate entry
+  screens with one instructions-first text field. Users can paste Google Maps,
+  Instagram, and TikTok links together with manual place names, one per line.
+- Added mixed-source detection before enqueueing so the simplified UI preserves
+  the correct existing provider/resolver behavior instead of treating every
+  line as a text-note import. Added regression coverage for a four-source mixed
+  payload and for the one-field navigation contract.
+- Replaced the generic SF Symbols with round, facepiled Google Maps, Instagram,
+  and TikTok brand marks in the asset catalog. Text/notes remain represented by
+  the input itself rather than a fourth icon.
+- Left the bounded Suggested vertical scroll and its current behavior unchanged,
+  per product direction.
+- `xcodegen generate` succeeded with no generated-project drift. The focused
+  mixed-source and navigation regressions passed 2/2. The complete unit and
+  contract suite passed 784/784. The unrelated onboarding UI smoke test missed
+  a carousel headline during its first timing window, then passed 1/1 on an
+  immediate isolated rerun. Result bundles:
+  `/private/tmp/DerivedData-rec162-unified-import/Logs/Test/Test-Wander-2026.07.27_10-50-14--0700.xcresult`
+  and
+  `/private/tmp/DerivedData-rec162-unified-import/Logs/Test/Test-Wander-2026.07.27_10-51-38--0700.xcresult`.
+- Visually inspected the final Import page on iPhone 16 Plus and a temporary
+  iPhone 16e. Instructions, facepile, field, primary action, help action, safe
+  areas, and wrapping remained usable on both sizes. Screenshots:
+  `/private/tmp/rec162-import-unified-16plus.png` and
+  `/private/tmp/rec162-import-unified-16e.png`.
+- A temporary DEBUG-only direct-launch route was used solely for deterministic
+  visual QA and removed before final diff review. The temporary iPhone 16e
+  simulator was also deleted. `git diff --check` passes; no auth bypass, build
+  number, TestFlight, hosted data, or release action is included.
+
+### 2026-07-27 10:56 PDT - Handoff
+
+- Committed the unified Import refinement as `a09269e` (`feat: unify place
+  import entry`) and pushed `codex/rec-162-add-unification`, updating ready PR
+  #259 in place.
+- Updated PR #259's description with the one-field mixed-source behavior,
+  unchanged Suggested scroll, brand facepile, and current validation receipt.
+- Moved Linear REC-162 back to `In Review`. A detailed Linear validation comment
+  was rejected by the connector's external-data safety policy, so the receipt
+  remains in the PR and this log rather than attempting a workaround.
+- Ryan can review or continue from
+  `/private/tmp/recme-rec162-add-unification/Wander.xcodeproj`. The original root
+  checkout and all other worktrees remain untouched.
+- No build-number change, merge, archive, upload, TestFlight attachment, hosted
+  data mutation, or Slack action was performed.
+
+### 2026-07-27 11:06 PDT - Add entry facepile verification
+
+- Confirmed the main Add-screen `AddImportEntrySection` uses the same shared
+  Google Maps, Instagram, and TikTok brand facepile as the dedicated Import
+  page; no additional product-source change was required.
+- An initial simulator screenshot showed the superseded four-tile entry because
+  the full UI-test run had replaced the installed app with a stale cached build.
+  Created and installed a fresh build from this isolated worktree, then visually
+  verified the branded facepile on the actual Add entry row. Screenshot:
+  `/private/tmp/rec162-add-entry-icons-final.png`.
+
+### 2026-07-27 11:23 PDT - Fixed Import footer and non-scrolling preview
+
+- Product follow-up: the compact Add sheet should not scroll internally;
+  Import should stay fixed at the bottom; nearby suggestions should show only
+  the rows that fit; and **See more** should open the full-height nearby chooser.
+- Replaced the compact source-state `ScrollView` with a strict two-part vertical
+  layout: a flexible Suggested/search region and a fixed Import footer. Other
+  expanded search, nearby-results, confirm, and draft states retain their
+  existing full-height scrolling behavior.
+- Replaced the bounded nested suggestion scroll with a vertical `ViewThatFits`
+  over 3-, 2-, and 1-row previews. On both tested devices SwiftUI selected two
+  rows plus **See more**. **See more** now expands the sheet and reuses the
+  existing current-location candidate flow rather than revealing rows inside
+  the compact sheet.
+- Focused Add layout contracts passed 2/2. The complete unit and contract suite
+  passed 784/784. Result bundle:
+  `/private/tmp/DerivedData-rec162-entry-verify/Logs/Test/Test-Wander-2026.07.27_11-20-57--0700.xcresult`.
+- Visually verified the populated half sheet on iPhone 16 Plus and temporary
+  iPhone 16e; neither compact sheet scrolls, the fixed Import footer remains
+  visible at the bottom, and both show two rows plus **See more**. Also tapped
+  **See more** and verified the full-height nearby chooser and pinned Save
+  action. Screenshots:
+  `/private/tmp/rec162-add-fixed-footer-populated.png`,
+  `/private/tmp/rec162-add-fixed-footer-16e.png`, and
+  `/private/tmp/rec162-add-see-more-full-screen.png`.
+- Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
+  passes. No build-number, TestFlight, hosted data, or release action is in
+  scope.
+
+### 2026-07-27 11:24 PDT - Fixed-footer handoff
+
+- Committed the compact-sheet refinement as `edff977` (`fix: pin import footer
+  in Add sheet`) and pushed `codex/rec-162-add-unification`, updating ready PR
+  #259.
+- Updated the PR description to replace the superseded embedded-scroll behavior
+  with the final fixed Import footer, fitting preview, and full-height **See
+  more** destination. Moved Linear REC-162 back to `In Review`.
+- No merge, build-number change, archive, upload, TestFlight attachment, hosted
+  data mutation, or Slack action was performed.
+
+### 2026-07-27 11:57 PDT - Responsive preview and I'm here now destination
+
+- Product follow-up: show one additional nearby suggestion on large phones,
+  keep fewer rows on smaller phones, and make **See more** explicitly open the
+  full Add **I'm here now** page.
+- Added deterministic device-height breakpoints: screens at least 900 points
+  tall show three suggestions, screens from 800 points show two, and smaller
+  screens show one. The existing 44-point **See more** control still fits on
+  iPhone 16 Plus, so it did not need to be reduced below the minimum tap target.
+- The expanded current-location result state now titles itself **I'm here now**
+  with **choose the place you're at**, while preserving the existing full-height
+  candidate list and pinned Save action.
+- Focused responsive-preview/navigation contracts passed 2/2. The complete
+  unit and contract suite passed 784/784. Result bundle:
+  `/private/tmp/DerivedData-rec162-entry-verify/Logs/Test/Test-Wander-2026.07.27_11-55-48--0700.xcresult`.
+- Visually verified three suggestions plus **See more** and the pinned Import
+  footer on iPhone 16 Plus, two suggestions on temporary iPhone 16e, and the
+  explicit full-height **I'm here now** destination after tapping **See more**.
+  Screenshots: `/private/tmp/rec162-add-three-suggestions-large.png`,
+  `/private/tmp/rec162-add-two-suggestions-small.png`, and
+  `/private/tmp/rec162-im-here-now-full-page.png`.
+- Deleted the temporary iPhone 16e simulator after QA. `git diff --check`
+  passes. No release or hosted-data action is in scope.
+
+### 2026-07-27 11:59 PDT - Responsive-preview handoff
+
+- Committed the responsive preview and **I'm here now** destination refinement
+  as `162cbdd` (`fix: scale Add suggestions by screen height`) and pushed the
+  branch, updating ready PR #259.
+- Updated the PR description with the large-screen three-row behavior,
+  smaller-screen two-row behavior, and explicit full-height destination.
+- Linear REC-162 remains `In Review`. No merge, build-number change, archive,
+  upload, TestFlight attachment, hosted mutation, or Slack action was performed.
+## 2026-07-27 10:10 PDT - Codex - REC-164 Clerk Google sign-in dismissal
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher` and
+`plan-eng-review`
+Branch: `codex/rec-164-clerk-dismissal`
+Worktree: `/private/tmp/recme-rec164-clerk-dismissal`
+Linear: `REC-164` (`In Progress`)
+
+Goal: reproduce and fix the build-104 regression where, after an explicit
+sign-out, choosing Google from the Clerk screen dismisses the auth surface
+instead of completing sign-in or showing a recoverable error.
+
+Starting state:
+
+- Clean isolated worktree from exact `origin/main` commit `a1fe522`.
+- Existing stale REC-132 auth-hardening worktree is intentionally untouched;
+  this fix starts from shipped build-104 main.
+- Scope is the auth/onboarding presentation and session transition plus focused
+  regression coverage. Carousel screenshot replacement is separate follow-up
+  work.
+- Auth/session work requires the engineering-review gate before implementation.
+  Expected files are the current Clerk auth adapter, app entry/auth gate
+  presentation, focused auth/onboarding tests, and this coordination log.
+
+### Engineering review
+
+Confirmed the presentation race against the Clerk SDK source bundled with
+build 104. Clerk emits `sessionChanged` for nil-to-session, session-to-nil,
+different-session, and same-session updates. `ClerkAuthService` converts any
+event without an active session into `.signedOut`, while
+`AuthSessionStore.synchronizeState` currently dismisses native auth for every
+non-signed-in state. A transient pending/null state during Google handoff can
+therefore close Clerk's sheet before authentication completes.
+
+Scope challenge and decision:
+
+- Keep the existing `ClerkAuthService`, SwiftUI sheet, and root coordinator.
+- Add an explicit native-auth-attempt lifetime to `AuthSessionStore`; do not
+  infer sheet lifetime from authentication state alone.
+- Treat signed-in, unavailable, explicit sign-out, and user dismissal as
+  terminal. Keep the sheet presented for transient `.loading`/`.signedOut`
+  callbacks only while an explicit attempt is active.
+- Keep carousel screenshot replacement outside REC-164.
+
+Data flow after the fix:
+
+```text
+Clerk AuthView
+  -> Clerk auth event (including transient sessionChanged)
+  -> ClerkAuthService state
+  -> AuthSessionStore
+       active attempt + loading/signedOut -> keep sheet
+       signedIn/unavailable              -> close sheet
+       user dismiss                      -> end attempt, then refresh
+  -> signed-in coordinator / onboarding
+```
+
+Failure-mode coverage:
+
+- Transient loading or signed-out event dismisses Google auth: regression test
+  keeps presentation active.
+- Successful sign-in leaves Clerk visible: success test requires dismissal.
+- User cancellation is undone by a later provider event: dismissal test ends
+  the attempt before refresh/events.
+- Real provider logout leaves stale auth UI: existing logout test continues to
+  require presentation to close.
+
+No schema, API, data migration, or visual-design change is required. This is a
+small state-lifecycle repair, so the broader product-design prerequisite is not
+applicable. Implementation will be sequential across the auth store, app-entry
+sheet callback, and focused tests.
+
+### 2026-07-27 10:31 PDT - Implementation and validation checkpoint
+
+- Added an explicit native-auth-attempt lifetime to `AuthSessionStore`.
+  Transient Clerk `.loading` and `.signedOut` callbacks no longer dismiss an
+  auth sheet that the user explicitly opened. Signed-in, unavailable, explicit
+  sign-out/account deletion, and user sheet dismissal end the attempt.
+- Wired the SwiftUI sheet's `onDismiss` callback to end the attempt before the
+  authoritative session refresh and coordinator update.
+- Added regressions proving that a pending Google-style state sequence stays
+  presented until success and that a user dismissal cannot be undone by later
+  provider events. The existing provider-logout regression still requires the
+  auth surface to close.
+- Focused auth and navigation validation passed 91/91 tests with zero failures:
+  `AuthSessionTests` plus `NavigationContractTests`. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-29-13--0700.xcresult`.
+- Neighboring onboarding validation passed 5/5 `OnboardingStateTests` with zero
+  failures using the already-built products. Result bundle:
+  `/private/tmp/DerivedData-rec164-focused/Logs/Test/Test-Wander-2026.07.27_10-30-27--0700.xcresult`.
+- The first two cold-build attempts were cancelled before executing tests when
+  the machine ran out of disk space. To complete validation, removed only
+  disposable generated caches tied to the already-shipped build 104/REC-132
+  runs and the older REC-147 visual branch, plus the REC-164 module cache after
+  linking. Source worktrees, the active REC-165 cache, and TestFlight archives
+  were preserved. The subsequent compiled test run passed.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. No backend, schema, or production data changed.
+
+### 2026-07-27 10:32 PDT - Review handoff
+
+- Ready PR: https://github.com/joelipshutz/wander/pull/266
+- Branch pushed at `05d7a0a`; PR is based on current `origin/main` and its diff
+  contains only the auth lifecycle repair, regression tests, and this log.
+- Linear REC-164 moved to `In Review`, linked to PR #266, and received the test
+  results plus implementation summary.
+- Mission Control at `localhost:4000` remains unreachable, so no duplicate
+  local tracker task could be created. Linear and this coordination log are the
+  durable tracking surfaces.
+- This handoff does not merge or release a TestFlight build. Next step is PR
+  review, then a simulator/account validation of the remembered-Google path
+  before packaging the next explicit TestFlight release.
+## 2026-07-27 10:47 PDT - Codex - TestFlight Build 105
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-105`
+Worktree: `/private/tmp/recme-build105-main`
+Linear: `REC-164` (`In Review`)
+PR: `#266` (squash-merged as `035daff`)
+
+Goal: ship exact latest `origin/main` containing the Clerk Google sign-in
+presentation repair as rec.me 0.1 (105). Scope since completed build 104 is PR
+#266 only: keep the Clerk auth sheet open across transient loading/signed-out
+callbacks after an explicit sign-out, while still closing on success, user
+dismissal, unavailable auth, explicit sign-out, or account deletion.
+
+Pre-release gate:
+
+- PR #266 was current with main, mergeable, narrowly scoped, and had no
+  blocking auth lifecycle, SwiftUI presentation, persistence, backend,
+  signing/project, or scope findings.
+- Exact feature head validation passed 91/91 AuthSession plus navigation tests
+  and 5/5 onboarding state tests with zero failures.
+- Release starts from clean exact `origin/main` commit `035daff`; unrelated
+  root-checkout and active worktree changes remain untouched.
+
+Release preparation: increment build 104 -> 105, regenerate the Xcode project,
+validate, archive exact release main, upload, attach to `rec.me Alpha`, update
+Linear, and post the required tester-facing Slack note.
+
+Validation checkpoint, 2026-07-27 10:55 PDT:
+
+- `CURRENT_PROJECT_VERSION` is 105 in `project.yml` and the regenerated Xcode
+  project; app and extension targets continue to inherit the shared value.
+- Exact release-branch validation passed 110/110 tests with zero failures:
+  `AuthSessionTests`, `OnboardingStateTests`, `NavigationContractTests`, and
+  `BuildConfigurationTests`. Result bundle:
+  `/private/tmp/DerivedData-recme-build105/Logs/Test/Test-Wander-2026.07.27_10-47-58--0700.xcresult`.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. No new warning or failure was introduced by build 105.
+
+### 2026-07-27 11:10 PDT - Release outcome
+
+- Build-number PR #268 was squash-merged as `4b4fd1e`; the signed archive and
+  upload were created from that exact clean `origin/main` commit.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build105.xcarchive` and independently reports rec.me
+  `0.1 (105)`. Export used automatic App Store distribution signing with
+  `manageAppVersionAndBuildNumber=false`.
+- API-key-authenticated `xcodebuild -exportArchive` uploaded the unchanged
+  archive successfully; Xcode reported `Uploaded Wander`, `Upload succeeded`,
+  and `EXPORT SUCCEEDED` with no build-number drift.
+- App Store Connect build id is
+  `7daa6c22-d3c7-4c9b-afb5-90827aaf0670`. Build 105 is `VALID`, has
+  `usesNonExemptEncryption=false`, includes the build-105 en-US What to Test
+  copy, is attached to `rec.me Alpha`, and external beta review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785175750049249
+- Linear REC-164 is Done and has the PR, merge commits, validation, build,
+  TestFlight, and Slack receipts. Mission Control remained unavailable because
+  `localhost:4000` is not running.
+- Tester focus: sign out, open Get started or Log in, choose the remembered
+  Google `Last used` account, and confirm Clerk remains presented through the
+  handoff until authentication completes. Cancel once and verify the splash is
+  stable for a retry.
+- Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking. Clerk development-mode branding remains the
+  tester-facing known alpha issue.
+
+Final status: rec.me 0.1 (105), including the Google sign-in presentation fix,
+is approved and available through the public TestFlight link.
+
+## 2026-07-27 12:08 PDT - Codex - TestFlight Build 106
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-106`
+Worktree: `/private/tmp/recme-build106-main`
+Linear: `REC-162` (`In Review`; connector unavailable in this session)
+PR: `#259` (squash-merged as `f0bbbbb`)
+
+Goal: ship Joe's explicitly requested light-triage TestFlight release from
+exact latest `origin/main`, containing the REC-162 Add-flow refinement, as
+rec.me 0.1 (106).
+
+Pre-release gate:
+
+- Latest completed release is build 105; no unfinished explicit release was
+  found. Scope since build 105 is PR #259 only.
+- PR #259 was reconciled with latest main, lightly reviewed with no blocking
+  Add/import, navigation, persistence, asset, auth-integration, or project
+  finding, and squash-merged as `f0bbbbb`.
+- Post-reconciliation focused integration validation passed 141/141 tests with
+  zero failures. Result bundle:
+  `/private/tmp/DerivedData-rec162-release-gate/Logs/Test/Test-Wander-2026.07.27_12-00-09--0700.xcresult`.
+- Release starts from clean exact `origin/main` commit `f0bbbbb`. The root
+  checkout and other active worktrees remain untouched.
+- Linear tools are unavailable in this Codex session, so REC-162 cannot be
+  updated directly; this log and the GitHub/TestFlight receipts remain the
+  durable release record.
+
+Release preparation: increment build 105 -> 106, regenerate the Xcode project,
+validate the build contract, commit and merge the build-number PR, archive
+exact release main, upload with build-number management disabled, attach to
+`rec.me Alpha`, and post the required tester-facing Slack note if the Slack
+connector is available.
+
+Validation checkpoint, 2026-07-27 12:15 PDT:
+
+- `CURRENT_PROJECT_VERSION` is 106 in `project.yml` and the regenerated Xcode
+  project; app and extension targets continue to inherit the shared value.
+- Exact release-branch validation passed 120/120 tests with zero failures:
+  `BuildConfigurationTests`, `NavigationContractTests`, and
+  `PlaceImportStoreTests`. Result bundle:
+  `/private/tmp/DerivedData-recme-build106/Logs/Test/Test-Wander-2026.07.27_12-07-48--0700.xcresult`.
+- Existing Supabase formatter actor-isolation, simulator keychain, and
+  traditional-headermap warnings remain unrelated and non-blocking.
+
+### 2026-07-27 12:28 PDT - Release outcome
+
+- Build-number PR #270 was squash-merged as `fb40e3d`; the signed archive and
+  upload were created from that exact clean `origin/main` commit.
+- Signed archive succeeded at
+  `/private/tmp/Wander-0.1-build106.xcarchive` and independently reports rec.me
+  `0.1 (106)`. Export used automatic App Store distribution signing with
+  `manageAppVersionAndBuildNumber=false`.
+- API-key-authenticated `xcodebuild -exportArchive` uploaded the unchanged
+  archive successfully; Xcode reported `Uploaded Wander`, `Upload succeeded`,
+  and `EXPORT SUCCEEDED` with no build-number drift.
+- App Store Connect build id is
+  `652cd3eb-5c96-4d7d-960a-dc57545e612d`. Build 106 is `VALID`, has
+  `usesNonExemptEncryption=false`, includes the build-106 en-US What to Test
+  copy, is attached to `rec.me Alpha`, and external beta review is `APPROVED`.
+- Public TestFlight link: https://testflight.apple.com/join/knEhRa6t
+- Posted the required tester-facing release note in `#testflight-feedback`:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1785180462202599
+- Linear REC-162 remains `In Review` because this session did not expose the
+  Linear connector; the PR, tests, build, TestFlight, and Slack receipts are
+  recorded here for the next connected agent to move it to `Done`.
+- Tester focus: verify responsive nearby suggestions without nested scrolling,
+  the full **I'm here now** destination from **See more**, the pinned Import
+  entry, unified link/text intake, and the Google Maps/Instagram/TikTok icons.
+- Existing Supabase formatter actor-isolation and traditional-headermap
+  warnings remain non-blocking. Clerk development-mode branding remains the
+  tester-facing known alpha issue.
+
+Final status: rec.me 0.1 (106), including the REC-162 Add-flow refinement, is
+approved and available through the public TestFlight link.
+
+### 2026-07-27 12:06 PDT - REC-162 release reconciliation
+
+- Joe explicitly requested a light-triage TestFlight push for the Add-flow
+  refinement. Latest completed release is build 105; no unfinished release was
+  found, so the next release number is 106.
+- Light review found no blocking Add/import, navigation, persistence, asset,
+  auth-integration, or project-configuration issue. PR #259 had drifted behind
+  `main`; merging `origin/main` produced only an append-only conflict in this
+  coordination log. Both REC-162 and build-105/REC-164 histories were retained,
+  with all app and project changes from main accepted unchanged.
+- Post-reconciliation focused integration validation passed 141/141 tests with
+  zero failures: `PlaceImportStoreTests`, `GoogleMapsSharedListImporterTests`,
+  `NavigationContractTests`, `AuthSessionTests`, and `BuildConfigurationTests`.
+  Result bundle:
+  `/private/tmp/DerivedData-rec162-release-gate/Logs/Test/Test-Wander-2026.07.27_12-00-09--0700.xcresult`.
+- Existing Supabase formatter actor-isolation warnings remain unrelated and
+  non-blocking. Next: push the reconciled PR, squash-merge it, then prepare and
+  ship exact latest `main` as build 106.

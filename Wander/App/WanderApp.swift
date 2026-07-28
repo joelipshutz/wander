@@ -6,17 +6,32 @@ struct WanderApp: App {
     @UIApplicationDelegateAdaptor(WanderAppDelegate.self) private var appDelegate
     @StateObject private var auth: AuthSessionStore
     @StateObject private var backend: WanderBackend
+    @StateObject private var entryCoordinator: AppEntryCoordinator
     @StateObject private var pushNotifications = PushNotificationManager()
     private let analytics: AnalyticsClient
     private let discoverParser: any LLMFilterParser
 
     init() {
         let configuration = WanderBackendConfiguration.current()
-        analytics = PostHogAnalyticsClient(configuration: .current()) ?? NoopAnalyticsClient()
+        let analyticsClient: AnalyticsClient
+        if let postHog = PostHogAnalyticsClient(configuration: .current()) {
+            analyticsClient = postHog
+        } else {
+            analyticsClient = NoopAnalyticsClient()
+        }
+        analytics = analyticsClient
         let authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
         discoverParser = Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
         _auth = StateObject(wrappedValue: authStore)
-        _backend = StateObject(wrappedValue: WanderBackend(configuration: configuration, authSession: authStore))
+        _backend = StateObject(wrappedValue: backendStore)
+        _entryCoordinator = StateObject(
+            wrappedValue: AppEntryCoordinator(
+                auth: authStore,
+                backend: backendStore,
+                analytics: analyticsClient
+            )
+        )
     }
 
     var body: some Scene {
@@ -26,6 +41,10 @@ struct WanderApp: App {
                 SaveStreakMockupRoot(page: streakMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
+                LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
+                mapCaptureRoot
             } else if let profileMockupPage = ProfileRedesignMockupPage.resolved() {
                 ProfileRedesignMockupRoot(page: profileMockupPage)
             } else if let carouselMockupPage = PlacePhotoCarouselMockupPage.resolved() {
@@ -48,12 +67,22 @@ struct WanderApp: App {
     }
 
     private var appRoot: some View {
-        WanderAppEntryView(analytics: analytics, parser: discoverParser)
+        AppEntryView(coordinator: entryCoordinator, analytics: analytics, parser: discoverParser)
             .environmentObject(auth)
             .environmentObject(backend)
             .environmentObject(pushNotifications)
             .modelContainer(WanderModelContainer.preview)
     }
+
+    #if DEBUG
+    private var mapCaptureRoot: some View {
+        WanderRootView(analytics: NoopAnalyticsClient(), parser: DeterministicFilterParser())
+            .environmentObject(auth)
+            .environmentObject(backend)
+            .environmentObject(pushNotifications)
+            .modelContainer(WanderModelContainer.preview)
+    }
+    #endif
 
     private static func makeDiscoverParser(
         configuration: WanderBackendConfiguration,
@@ -87,6 +116,7 @@ struct WanderAppEntryView: View {
     @State private var hasResolvedSession = false
     @State private var sessionRefreshGeneration = 0
     @State private var authenticatedUserID: String?
+    @State private var deepLinkInbox = WanderDeepLinkInbox()
 
     init(analytics: AnalyticsClient, parser: any LLMFilterParser) {
         self.analytics = analytics
@@ -105,6 +135,12 @@ struct WanderAppEntryView: View {
                 WanderRootView(
                     initialSession: session,
                     isSessionValidated: destination == .authenticated,
+                    deepLinkLaunchRequest: deepLinkInbox.request(
+                        ifSessionValidated: destination == .authenticated
+                    ),
+                    onDeepLinkLaunchRequestHandled: { requestID in
+                        deepLinkInbox.consume(requestID)
+                    },
                     analytics: analytics,
                     parser: parser
                 )
@@ -117,6 +153,9 @@ struct WanderAppEntryView: View {
         }
         .task(id: sessionRefreshGeneration) {
             await resolveSession()
+        }
+        .onOpenURL { url in
+            deepLinkInbox.receive(url)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }

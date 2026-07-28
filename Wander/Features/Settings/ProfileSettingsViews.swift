@@ -169,12 +169,20 @@ struct ProfileSettingsHome: View {
     @MainActor
     private func deleteAccount() async {
         guard !isDeleting else { return }
+        let deletingUserID: String? = if case .signedIn(let session) = auth.state {
+            session.userID
+        } else {
+            nil
+        }
         isDeleting = true
         errorMessage = nil
         defer { isDeleting = false }
         do {
             await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
             try await auth.deleteAccount()
+            if let deletingUserID {
+                OnboardingCompletionStore().clear(for: deletingUserID)
+            }
             store.resetAfterAccountDeletion()
             dismiss()
         } catch {

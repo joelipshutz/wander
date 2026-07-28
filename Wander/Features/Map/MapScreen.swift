@@ -29,7 +29,7 @@ struct MapScreen: View {
     @State private var isSearchingMapKit = false
     @State private var mapSearchRevision: UInt64 = 0
     @State private var mapSearchTask: Task<Void, Never>?
-    @State private var selectedFilters: Set<MapFilter> = [.you, .social, .been, .wanna]
+    @State private var selectedFilters: Set<MapFilter>
     @State private var selectedSocialOwnerID: String?
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
@@ -70,6 +70,7 @@ struct MapScreen: View {
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
+        _selectedFilters = State(initialValue: Self.resolvedInitialMapFilters())
     }
 
     private var visiblePlaces: [VisiblePlace] {
@@ -165,12 +166,17 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        let annotationGroups = visiblePlaceGroups
+        let annotationGroups = Self.orderedAnnotationGroups(
+            visiblePlaceGroups,
+            selectedGroupKey: selectedPlaceGroupKey
+        )
         NavigationStack {
             ZStack(alignment: .bottom) {
                 MapReader { proxy in
                     Map(position: $position, selection: $selectedMapFeature) {
-                        UserAnnotation()
+                        if Self.canShowUserLocation {
+                            UserAnnotation()
+                        }
 
                         ForEach(annotationGroups) { group in
                             Annotation(
@@ -187,10 +193,12 @@ struct MapScreen: View {
                                         visiblePlace: group.primary,
                                         saves: saveSummaries(for: group),
                                         currentUserID: store.currentUser.id,
-                                        isSelected: isSelectedMapRepresentative(group.primary)
+                                        isSelected: group.key == selectedPlaceGroupKey
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
                             }
                         }
 
@@ -207,6 +215,7 @@ struct MapScreen: View {
                                         SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
                                     }
                                     .buttonStyle(.plain)
+                                    .frame(minWidth: 44, minHeight: 44)
                                 }
                             }
                         }
@@ -383,7 +392,9 @@ struct MapScreen: View {
                 .presentationDragIndicator(.visible)
             }
             .fullScreenCover(isPresented: placeProfileDestinationBinding) {
-                selectedPlaceProfileDestination
+                NavigationStack {
+                    selectedPlaceProfileDestination
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
         }
@@ -725,13 +736,21 @@ struct MapScreen: View {
         saveSummaries(for: selectedPlace).map(\.visiblePlace.owner)
     }
 
-    private func isSelectedMapRepresentative(_ visiblePlace: VisiblePlace) -> Bool {
-        guard let selectedPlaceGroupKey else { return false }
-        return VisiblePlaceGrouping.matchingGroup(
-            for: visiblePlace,
-            in: visiblePlaces,
-            currentUserID: store.currentUser.id
-        )?.key == selectedPlaceGroupKey
+    static func orderedAnnotationGroups(
+        _ groups: [VisiblePlaceGroup],
+        selectedGroupKey: String?
+    ) -> [VisiblePlaceGroup] {
+        guard let selectedGroupKey,
+              let selectedIndex = groups.firstIndex(where: { $0.key == selectedGroupKey }),
+              selectedIndex != groups.index(before: groups.endIndex)
+        else {
+            return groups
+        }
+
+        var orderedGroups = groups
+        let selectedGroup = orderedGroups.remove(at: selectedIndex)
+        orderedGroups.append(selectedGroup)
+        return orderedGroups
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
@@ -1018,7 +1037,7 @@ struct MapScreen: View {
             if let firstVisiblePlace = visiblePlaces.first {
                 selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
-                mapSearchMessage = mapSearchCandidates.isEmpty ? nil : "Also showing unsaved map results."
+                mapSearchMessage = mapSearchCandidates.isEmpty ? nil : "Also showing new map results."
             } else if let firstCandidate = mapSearchCandidates.first {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
@@ -1027,7 +1046,7 @@ struct MapScreen: View {
             } else {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
-                mapSearchMessage = "No saved places or map results found."
+                mapSearchMessage = "No places on your map or map results found."
             }
         } catch {
             guard Self.shouldApplyMapSearchCompletion(
@@ -1041,7 +1060,7 @@ struct MapScreen: View {
             }
             mapSearchCandidates = []
             mapSearchMessage = visiblePlaces.isEmpty
-                ? "No saved places match yet. Try a more specific search."
+                ? "No places on your map match yet. Try a more specific search."
                 : nil
         }
     }
@@ -1293,7 +1312,7 @@ struct MapScreen: View {
             selectSavedResult(result)
             showMapSaveFeedback(
                 SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
-                successMessage: scopedSaveMessage(for: submission.context)
+                successMessage: scopedSaveMessage(for: submission.context, status: submission.status)
             )
 
             if !auth.isSignedIn {
@@ -1305,14 +1324,14 @@ struct MapScreen: View {
         }
     }
 
-    private func scopedSaveMessage(for context: MapPlaceSaveContext) -> String {
+    private func scopedSaveMessage(for context: MapPlaceSaveContext, status: PlaceStatus) -> String {
         switch context.mode {
         case .add:
-            "Added to your map."
+            status == .been ? "Checked in." : "Added to Wanna."
         case .addVisit:
-            "Check-in saved."
+            "Checked in again."
         case .sharedVisit:
-            "Shared check-in saved to your map."
+            "Shared check-in is on your map."
         case .editVisit:
             "Check-in updated."
         case .editWant:
@@ -1331,7 +1350,7 @@ struct MapScreen: View {
         if store.pendingSharedVisitInvites.contains(where: {
             $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
         }) {
-            mapSearchMessage = "Check-in saved. Friend invites are queued and will retry automatically."
+            mapSearchMessage = "Checked in. Friend invites are queued and will retry automatically."
         }
     }
 
@@ -1454,13 +1473,13 @@ struct MapScreen: View {
                 }
             }
             if photoCopyFailed {
-                mapSearchMessage = "Check-in saved. One shared photo will retry when you reopen rec.me."
+                mapSearchMessage = "Checked in. One shared photo will retry when you reopen rec.me."
             }
             await store.refreshSharedVisitInbox(backend: backend)
             await store.refreshRemoteVisiblePlaces(backend: backend)
             return SaveResult(userPlaceID: result.userPlaceID, syncState: .synced)
         } catch {
-            mapSearchMessage = "That shared check-in changed before it could be saved. Open the invitation again."
+            mapSearchMessage = "That shared check-in changed before it reached your map. Open the invitation again."
             return nil
         }
     }
@@ -1778,6 +1797,14 @@ struct MapScreen: View {
         }
     }
 
+    /// Merely rendering `UserAnnotation` triggers the system location prompt.
+    /// Keep permission requests behind the onboarding upsell or the explicit
+    /// recenter action so "Not now" remains a real choice.
+    private static var canShowUserLocation: Bool {
+        let status = CLLocationManager().authorizationStatus
+        return status == .authorizedWhenInUse || status == .authorizedAlways
+    }
+
     private func currentUserCoordinate() async -> (latitude: Double, longitude: Double)? {
         do {
             let location = try await CoreLocationProvider().currentLocation()
@@ -1944,6 +1971,27 @@ struct MapScreen: View {
         arguments.contains("-WanderMapSheetExpanded")
     }
 
+    static func resolvedInitialMapFilters(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Set<MapFilter> {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapCaptureMode") else {
+            return [.you, .social, .been, .wanna]
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else {
+            return [.you, .social, .been, .wanna]
+        }
+
+        switch arguments[valueIndex] {
+        case "diary":
+            return [.you, .been]
+        case "friends":
+            return [.social, .been, .wanna]
+        case "trusted":
+            return [.social, .been]
+        default:
+            return [.you, .social, .been, .wanna]
+        }
+    }
+
     static func coordinateCandidate(at coordinate: CLLocationCoordinate2D) -> PlaceCandidate {
         let display = coordinateDisplay(for: coordinate)
         let latitude = Int((coordinate.latitude * 100_000).rounded())
@@ -2011,61 +2059,47 @@ enum MapFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .you: "you"
-        case .social: "social"
-        case .been: CheckInCopy.pluralNoun
-        case .wanna: "wanna"
+        case .you: "You"
+        case .social: "Social"
+        case .been: CheckInCopy.pluralTitle
+        case .wanna: "Wanna"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .you: "location.circle.fill"
+        case .you: "person.fill"
         case .social: "person.2.fill"
-        case .been: "checkmark.circle.fill"
-        case .wanna: "circle.dashed"
+        case .been: "circle.fill"
+        case .wanna: "circle.dotted"
         }
     }
 
     func trimColor(isSelected: Bool) -> Color {
-        guard isSelected else {
-            switch self {
-            case .social:
-                return WanderTheme.pinSocial.color.opacity(0.45)
-            case .been, .wanna:
-                return WanderTheme.textMuted.color.opacity(0.42)
-            case .you:
-                return WanderTheme.surfaceRaised.color.opacity(0.55)
-            }
-        }
-
-        switch self {
-        case .social:
-            return WanderTheme.pinSocial.color
-        case .been, .wanna:
-            return WanderTheme.textInk.color.opacity(0.82)
-        case .you:
-            return WanderTheme.terracotta.color
-        }
+        semanticColor.opacity(isSelected ? 1 : 0.42)
     }
 
     func iconColor(isSelected: Bool) -> Color {
-        switch self {
-        case .social:
-            return isSelected ? WanderTheme.pinSocial.color : WanderTheme.textInk.color
-        case .been, .wanna:
-            return trimColor(isSelected: isSelected)
-        case .you:
-            return isSelected ? WanderTheme.terracotta.color : WanderTheme.textInk.color
-        }
+        semanticColor.opacity(isSelected ? 1 : 0.58)
     }
 
     func trimStyle(isSelected: Bool) -> StrokeStyle {
         StrokeStyle(
-            lineWidth: isSelected ? 2 : 1,
+            lineWidth: isSelected ? 2 : 1.25,
             lineCap: .round,
-            dash: self == .wanna ? [1, 4] : []
+            dash: self == .wanna ? MapPinVisualMetrics.wannaDashPattern : []
         )
+    }
+
+    private var semanticColor: Color {
+        switch self {
+        case .you:
+            WanderTheme.pinYou.color
+        case .social:
+            WanderTheme.pinSocial.color
+        case .been, .wanna:
+            WanderTheme.textInk.color
+        }
     }
 }
 
@@ -2125,15 +2159,14 @@ private struct MapSearchSuggestion: Identifiable {
         saveCount: Int = 1,
         saveStates: [MapPinSaveState]
     ) -> MapSearchSuggestion {
-        let saveLabel: String
-        if saveCount > 1 {
-            saveLabel = "\(visiblePlace.owner.displayName) + \(saveCount - 1) \(saveCount == 2 ? "other" : "others") saved"
-        } else {
-            saveLabel = "\(visiblePlace.owner.displayName) saved it"
-        }
+        let statusLabel = statusLabel(
+            ownerName: visiblePlace.owner.displayName,
+            placeCount: saveCount,
+            saveStates: saveStates
+        )
 
         let subtitle = [
-            saveLabel,
+            statusLabel,
             visiblePlace.place.locality,
             visiblePlace.effectiveCategoryDisplay.compactTitle
         ]
@@ -2146,7 +2179,7 @@ private struct MapSearchSuggestion: Identifiable {
         return MapSearchSuggestion(
             id: "saved_\(visiblePlace.id)",
             title: visiblePlace.place.canonicalName,
-            subtitle: subtitle.isEmpty ? "saved on \(AppBrand.displayName)" : subtitle,
+            subtitle: subtitle.isEmpty ? "On \(AppBrand.displayName)" : subtitle,
             category: visiblePlace.effectiveCategory,
             source: .saved(visiblePlace, saveStates: saveStates)
         )
@@ -2156,10 +2189,27 @@ private struct MapSearchSuggestion: Identifiable {
         return MapSearchSuggestion(
             id: "mapkit_\(candidate.id)",
             title: candidate.name,
-            subtitle: candidate.previewSubtitle(trailingParts: ["not saved"]),
+            subtitle: candidate.previewSubtitle(trailingParts: ["new to your map"]),
             category: candidate.category,
             source: .mapKit(candidate)
         )
+    }
+
+    private static func statusLabel(
+        ownerName: String,
+        placeCount: Int,
+        saveStates: [MapPinSaveState]
+    ) -> String {
+        let ownerLabel = placeCount > 1
+            ? "\(ownerName) + \(placeCount - 1) \(placeCount == 2 ? "other" : "others")"
+            : ownerName
+        let hasCheckIn = saveStates.contains { $0.status == .been }
+        let hasWanna = saveStates.contains { $0.status == .wannaGo }
+
+        if hasCheckIn, hasWanna { return "\(ownerLabel) · check-in + Wanna" }
+        if hasCheckIn { return "\(ownerLabel) checked in" }
+        if hasWanna { return "\(ownerLabel) · Wanna" }
+        return "On \(AppBrand.displayName)"
     }
 }
 
@@ -2331,8 +2381,8 @@ private struct MapTypeaheadRow: View {
                     .foregroundStyle(WanderTheme.pinSocial.color)
             }
             .buttonStyle(.plain)
-            .frame(width: 32, height: 38)
-            .accessibilityLabel("Add \(suggestion.title)")
+            .frame(width: 44, height: 44)
+            .accessibilityLabel("Check in at \(suggestion.title)")
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
@@ -2345,7 +2395,7 @@ private struct MapTypeaheadRow: View {
         ForEach(Array(savedOutlines.indices), id: \.self) { index in
             MapPinOutlineStroke(
                 outline: savedOutlines[index],
-                lineWidth: savedOutlines.count > 1 ? 2.2 : 3
+                lineWidth: MapPinVisualMetrics.outlineWidth
             )
                 .padding(typeaheadOutlinePadding(for: index))
         }
@@ -2353,7 +2403,7 @@ private struct MapTypeaheadRow: View {
 
     private func typeaheadOutlinePadding(for index: Int) -> CGFloat {
         guard savedOutlines.count > 1 else { return 0 }
-        return index == 0 ? 1.5 : -2.5
+        return index == 0 ? 0 : MapPinVisualMetrics.secondaryOutlinePadding
     }
 
     private var isSavedSuggestion: Bool {
@@ -2424,8 +2474,8 @@ private struct MapFilterChip: View {
         }
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(height: 38)
-        .background(WanderTheme.surfaceSand.color)
+        .frame(height: 44)
+        .background(WanderTheme.surfaceRaised.color)
         .foregroundStyle(WanderTheme.textInk.color)
         .clipShape(Capsule())
         .overlay(
@@ -2436,6 +2486,9 @@ private struct MapFilterChip: View {
                 )
         )
         .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
+        .contentShape(Capsule())
+        .accessibilityLabel("\(filter.title) places filter")
+        .accessibilityValue(isSelected ? "On" : "Off")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -2480,7 +2533,7 @@ private struct MapSocialFilterMenu: View {
                 Image(systemName: "person.2.fill")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(MapFilter.social.iconColor(isSelected: isSelected))
-                Text(selectedOwner?.displayName ?? "social")
+                Text(selectedOwner?.displayName ?? MapFilter.social.title)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .black))
@@ -2488,23 +2541,23 @@ private struct MapSocialFilterMenu: View {
             }
             .font(.system(size: 12, weight: .bold))
             .padding(.horizontal, WanderTheme.spacing3)
-            .frame(height: 38)
-            .background(WanderTheme.surfaceSand.color)
+            .frame(height: 44)
+            .background(WanderTheme.surfaceRaised.color)
             .foregroundStyle(WanderTheme.textInk.color)
             .clipShape(Capsule())
             .overlay(
                 Capsule()
                     .stroke(
-                        selectedOwner == nil
-                            ? MapFilter.social.trimColor(isSelected: isSelected)
-                            : WanderTheme.textInk.color.opacity(0.82),
-                        lineWidth: selectedOwner == nil ? (isSelected ? 2 : 1) : 2
+                        MapFilter.social.trimColor(isSelected: isSelected),
+                        style: MapFilter.social.trimStyle(isSelected: isSelected)
                     )
             )
             .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
+            .contentShape(Capsule())
             .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
         .accessibilityLabel(selectedOwner.map { "Social places filtered to \($0.displayName)" } ?? "Social places filter")
+        .accessibilityValue(isSelected ? "On" : "Off")
     }
 }
 
@@ -2529,7 +2582,7 @@ private struct SearchResultMarker: View {
             .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: isSelected ? 9 : 6, x: 0, y: 2)
             .scaleEffect(isSelected ? 1.08 : 1)
             .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isSelected)
-            .accessibilityLabel("Unsaved map result, \(candidate.name)")
+            .accessibilityLabel("Map search result, \(candidate.name)")
     }
 
 }
@@ -2578,17 +2631,33 @@ private struct WanderMapPin: View {
 
     var body: some View {
         WanderCategoryEmoji(emoji: visiblePlace.categoryEmoji, size: 16)
-            .frame(width: 38, height: 38)
+            .frame(width: MapPinVisualMetrics.discDiameter, height: MapPinVisualMetrics.discDiameter)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
+            .background(selectionHalo)
             .overlay(outlineLayer)
-            .overlay(
-                Circle()
-                    .stroke(WanderTheme.textInk.color.opacity(isSelected ? 0.2 : 0), lineWidth: 1)
-                    .padding(-4)
-            )
             .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: isSelected ? 9 : 6, x: 0, y: 2)
-            .accessibilityLabel("\(accessibilityOwnershipLabel) \(visiblePlace.effectiveCategoryDisplay.compactTitle), \(visiblePlace.place.canonicalName)")
+            .accessibilityLabel(
+                MapPinAccessibility.label(
+                    outlines: outlines,
+                    category: visiblePlace.effectiveCategoryDisplay.compactTitle,
+                    placeName: visiblePlace.place.canonicalName
+                )
+            )
+    }
+
+    @ViewBuilder
+    private var selectionHalo: some View {
+        if isSelected {
+            ZStack {
+                Circle()
+                    .fill(WanderTheme.surfaceBone.color.opacity(0.96))
+                    .padding(MapPinVisualMetrics.selectionHaloPadding)
+                Circle()
+                    .stroke(WanderTheme.textInk.color.opacity(0.16), lineWidth: 1)
+                    .padding(MapPinVisualMetrics.selectionHaloPadding)
+            }
+        }
     }
 
     private var outlineLayer: some View {
@@ -2602,23 +2671,12 @@ private struct WanderMapPin: View {
     }
 
     private var outlineLineWidth: CGFloat {
-        outlines.count > 1 ? 2.5 : 3
+        MapPinVisualMetrics.outlineWidth
     }
 
     private func outlinePadding(for index: Int) -> CGFloat {
         guard outlines.count > 1 else { return 0 }
-        return index == 0 ? 0 : -5
-    }
-
-    private var accessibilityOwnershipLabel: String {
-        let hasCurrentUser = outlines.contains { $0.ownership == .currentUser }
-        let hasSocial = outlines.contains { $0.ownership == .social }
-
-        if hasCurrentUser && hasSocial {
-            return "Your and social saved place"
-        }
-
-        return hasCurrentUser ? "Your saved place" : "Social saved place"
+        return index == 0 ? 0 : MapPinVisualMetrics.secondaryOutlinePadding
     }
 }
 
@@ -2683,6 +2741,14 @@ struct MapPinSaveState: Equatable {
     let status: PlaceStatus
 }
 
+enum MapPinVisualMetrics {
+    static let discDiameter: CGFloat = 38
+    static let outlineWidth: CGFloat = 3
+    static let secondaryOutlinePadding: CGFloat = -6
+    static let selectionHaloPadding: CGFloat = -10
+    static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
+}
+
 struct MapPinOutline: Identifiable, Equatable {
     let ownership: MapPinSaveOwnership
     let status: PlaceStatus
@@ -2709,7 +2775,7 @@ struct MapPinOutline: Identifiable, Equatable {
     }
 
     var dashPattern: [CGFloat] {
-        status == .wannaGo ? [5, 4] : []
+        status == .wannaGo ? MapPinVisualMetrics.wannaDashPattern : []
     }
 
     var arcs: [MapPinOutlineArc] {
@@ -2720,7 +2786,7 @@ struct MapPinOutline: Identifiable, Equatable {
                     trimFrom: 0,
                     trimTo: 1,
                     rotationDegrees: 0,
-                    dashPattern: status == .wannaGo ? [5, 4] : []
+                    dashPattern: status == .wannaGo ? MapPinVisualMetrics.wannaDashPattern : []
                 )
             ]
         }
@@ -2738,7 +2804,7 @@ struct MapPinOutline: Identifiable, Equatable {
                 trimFrom: 0.528,
                 trimTo: 0.972,
                 rotationDegrees: -90,
-                dashPattern: [1.5, 3.5]
+                dashPattern: MapPinVisualMetrics.wannaDashPattern
             )
         ]
     }
@@ -2811,6 +2877,23 @@ enum MapPinOutlineBuilder {
     }
 }
 
+enum MapPinAccessibility {
+    static func label(outlines: [MapPinOutline], category: String, placeName: String) -> String {
+        let stateSummaries = outlines.map { outline in
+            let owner = outline.ownership == .currentUser ? "you" : "social"
+            let primaryStatus = outline.status == .been ? CheckInCopy.pastTense : "wanna"
+
+            if outline.secondaryStatus == .wannaGo {
+                return "\(owner) \(primaryStatus) and wanna"
+            }
+
+            return "\(owner) \(primaryStatus)"
+        }
+
+        return ([placeName, category] + stateSummaries).joined(separator: ", ")
+    }
+}
+
 enum PlaceSheetAction {
     case add
     case addVisit
@@ -2832,7 +2915,7 @@ enum PlaceSheetAction {
 
     var accessibilityLabel: String {
         switch self {
-        case .add: "Save to my map"
+        case .add: CheckInCopy.action
         case .addVisit: CheckInCopy.againAction
         case .choose: "Choose this place"
         case .none: ""
@@ -3058,22 +3141,22 @@ struct MapPlaceSaveContext: Identifiable {
     var title: String {
         switch mode {
         case .add:
-            "save this place"
+            "Check in or Wanna"
         case .addVisit:
-            "check in again"
+            CheckInCopy.againAction
         case .sharedVisit:
-            "save shared check-in"
+            "Check in from invite"
         case .editVisit:
-            "edit check-in"
+            CheckInCopy.editAction
         case .editWant:
-            "edit want"
+            "Edit Wanna"
         }
     }
 
     var subtitle: String {
         switch mode {
         case .add:
-            "choose whether to check in or save it for later."
+            "Choose whether to check in or mark it Wanna."
         case .addVisit:
             "capture what happened this time."
         case .sharedVisit(let invitation):
@@ -3088,15 +3171,15 @@ struct MapPlaceSaveContext: Identifiable {
     var saveTitle: String {
         switch mode {
         case .add:
-            "save to my map"
+            CheckInCopy.action
         case .addVisit:
-            "check in"
+            CheckInCopy.action
         case .sharedVisit:
-            "save my check-in"
+            CheckInCopy.action
         case .editVisit:
-            "update check-in"
+            "Update check-in"
         case .editWant:
-            "update want"
+            "Update Wanna"
         }
     }
 
@@ -3105,9 +3188,9 @@ struct MapPlaceSaveContext: Identifiable {
         case .editVisit:
             CheckInCopy.deleteAction
         case .editWant:
-            "Remove want"
+            "Remove from Wanna"
         case .add, .addVisit, .sharedVisit:
-            "Remove save"
+            "Remove place"
         }
     }
 
@@ -3116,9 +3199,9 @@ struct MapPlaceSaveContext: Identifiable {
         case .editVisit:
             "Delete check-in?"
         case .editWant:
-            "Remove want?"
+            "Remove from Wanna?"
         case .add, .addVisit, .sharedVisit:
-            "Remove save?"
+            "Remove place?"
         }
     }
 
@@ -3127,7 +3210,7 @@ struct MapPlaceSaveContext: Identifiable {
         case .editVisit:
             "This removes this check-in and its photos from your place history."
         case .editWant:
-            "This removes your want from this place."
+            "This removes this place from Wanna."
         case .add, .addVisit, .sharedVisit:
             "This removes the place from your map."
         }
@@ -3972,13 +4055,13 @@ struct MapPlaceSaveFlowSheet: View {
 
         switch context.mode {
         case .add:
-            return "check in at \(context.candidate.name)"
+            return "Check in at \(context.candidate.name)"
         case .addVisit:
-            return "check in again"
+            return CheckInCopy.againAction
         case .sharedVisit:
-            return "save shared check-in"
+            return "Check in from invite"
         case .editVisit:
-            return "edit check-in"
+            return CheckInCopy.editAction
         case .editWant:
             return context.title
         }
@@ -4050,7 +4133,7 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var saveFooter: some View {
         WanderPrimaryButton(
-            title: isSaving ? "saving..." : context.saveTitle,
+            title: isSaving ? progressActionTitle : primaryActionTitle,
             systemImage: selectedStatus == .been ? "ticket.fill" : "checkmark",
             isDisabled: isSaving || isRemoving
         ) {
@@ -4061,12 +4144,26 @@ struct MapPlaceSaveFlowSheet: View {
         .background(WanderTheme.canvasWarm.color)
     }
 
+    private var primaryActionTitle: String {
+        if selectedStatus == .wannaGo {
+            if case .editWant = context.mode {
+                return "Update Wanna"
+            }
+            return "Add to Wanna"
+        }
+        return context.saveTitle
+    }
+
+    private var progressActionTitle: String {
+        selectedStatus == .been ? "Checking in..." : "Adding to Wanna..."
+    }
+
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("a note for future you")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(WanderTheme.textMuted.color)
-            TextField("why you saved it, who told you...", text: $note, axis: .vertical)
+            TextField("what you'll want to remember, who told you...", text: $note, axis: .vertical)
                 .textFieldStyle(.plain)
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)
@@ -4271,7 +4368,7 @@ struct MapPlaceSaveFlowSheet: View {
             .buttonStyle(.plain)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
-            .accessibilityHint("Optional. Save without opening this section.")
+            .accessibilityHint("Optional. Continue without opening this section.")
 
             if isShowingOptionalDetails {
                 if selectedStatus == .wannaGo {
@@ -4466,7 +4563,7 @@ struct MapPlaceSaveFlowSheet: View {
             return inference.reason
         }
 
-        return "Already saved for this place"
+        return "Already on your map"
     }
 
     private var recentRestaurantCuisines: [String] {
@@ -4722,11 +4819,17 @@ struct MapPlaceSaveFlowSheet: View {
                 if result != nil {
                     dismiss()
                 } else if auth.isSignedIn {
-                    errorMessage = context.sharedVisitInvitation == nil
-                        ? "Could not save this place. Try again."
-                        : "Could not save this shared check-in. Open the invitation and try again."
+                    if context.sharedVisitInvitation != nil {
+                        errorMessage = "Could not add this shared check-in. Open the invitation and try again."
+                    } else {
+                        errorMessage = selectedStatus == .been
+                            ? "Could not check in. Try again."
+                            : "Could not add this to Wanna. Try again."
+                    }
                 } else {
-                    errorMessage = "Sign in to finish this save."
+                    errorMessage = selectedStatus == .been
+                        ? "Sign in to finish your check-in."
+                        : "Sign in to add this to Wanna."
                 }
             }
         }
@@ -4769,7 +4872,7 @@ struct MapPlaceSaveFlowSheet: View {
                 if removed {
                     dismiss()
                 } else {
-                    errorMessage = "Could not remove this save. Try again."
+                    errorMessage = "Could not remove this place from your map. Try again."
                 }
             }
         }
@@ -6299,7 +6402,7 @@ private struct MapSaveQuestionOptions: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Save custom tag")
+                .accessibilityLabel("Add custom tag")
             }
             .frame(minHeight: WanderTheme.tapMinimum)
             .padding(.horizontal, WanderTheme.spacing2)
@@ -7453,7 +7556,7 @@ struct PlaceActivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("latest activity")
+            Text("check-in history")
                 .font(.system(size: 12, weight: .black))
                 .textCase(.uppercase)
                 .foregroundStyle(WanderTheme.textMuted.color)
@@ -7654,7 +7757,7 @@ private struct PlaceActivityFilterControl: View {
                         .font(.system(size: 12, weight: .black))
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
-                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .foregroundStyle(selection == filter ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
                         .background(selection == filter ? WanderTheme.surfaceRaised.color : WanderTheme.surfaceSand.color)
                         .clipShape(Capsule())
@@ -7752,20 +7855,12 @@ private struct PlaceActivityCard: View {
         }
         .padding(WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(entry.isCurrentUser ? WanderTheme.surfaceSand.color : WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(entry.isCurrentUser ? WanderTheme.borderStrong.color.opacity(0.5) : WanderTheme.borderHairline.color, lineWidth: 1)
+        .checkInTicketSurface(
+            accent: ticketAccentColor,
+            surface: WanderTheme.surfaceRaised.color,
+            surroundingSurface: WanderTheme.surfaceBone.color,
+            notchEdges: .trailing
         )
-        .overlay(alignment: .leading) {
-            ticketNotch
-                .offset(x: -7)
-        }
-        .overlay(alignment: .trailing) {
-            ticketNotch
-                .offset(x: 7)
-        }
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
                 if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
@@ -7806,9 +7901,9 @@ private struct PlaceActivityCard: View {
             if entry.canEdit {
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
-                        .font(.system(size: 12, weight: .black))
-                        .frame(width: 32, height: 32)
-                        .background(WanderTheme.surfaceRaised.color)
+                        .font(.system(size: 14, weight: .black))
+                        .frame(width: 44, height: 44)
+                        .background(WanderTheme.surfaceSand.color)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
@@ -7820,12 +7915,8 @@ private struct PlaceActivityCard: View {
         }
     }
 
-    private var ticketNotch: some View {
-        Circle()
-            .fill(WanderTheme.canvasWarm.color)
-            .frame(width: 14, height: 14)
-            .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
-            .accessibilityHidden(true)
+    private var ticketAccentColor: Color {
+        entry.isCurrentUser ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color
     }
 
     @ViewBuilder
@@ -7833,7 +7924,7 @@ private struct PlaceActivityCard: View {
         if entry.isCurrentUser {
             activityIdentityLabel
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Your save")
+                .accessibilityLabel(entry.status == .been ? "Your check-in" : "Your Wanna")
         } else {
             Button {
                 selectedProfileID = entry.owner.id
@@ -7850,20 +7941,28 @@ private struct PlaceActivityCard: View {
             WanderAvatar(
                 initials: entry.owner.initials,
                 avatarURL: entry.owner.avatarURL,
-                size: 34,
+                size: 40,
                 color: entry.avatarColor
             )
             VStack(alignment: .leading, spacing: 2) {
+                Text(entry.status == .been ? "CHECKED IN" : "WANNA")
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .tracking(1.05)
+                    .foregroundStyle(ticketAccentColor)
+                    .lineLimit(1)
                 Text(entry.displayName)
-                    .font(.system(size: 15, weight: .black))
+                    .font(WanderTypography.editorialCardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text(entry.kind == .visit ? "CHECK-IN · \(entry.timestampText)" : "@\(entry.owner.handle) · \(entry.timestampText)")
+                    .lineLimit(1)
+                Text(entry.isCurrentUser ? entry.timestampText : "@\(entry.owner.handle) · \(entry.timestampText)")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
         }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
     }
 
     private var profileDestinationBinding: Binding<Bool> {
@@ -7901,7 +8000,7 @@ private struct PlaceActivityCard: View {
                     Label("Add photo", systemImage: "photo.badge.plus")
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(WanderTheme.pinSocial.color)
-                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .background(WanderTheme.skyTint.color)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                         .overlay(
@@ -8439,10 +8538,14 @@ private struct SocialProofRow: View {
     }
 
     private var proofText: String {
-        guard let first = savers.first else { return "saved on \(AppBrand.displayName)" }
+        guard let first = savers.first else { return "On \(AppBrand.displayName)" }
         let name = first.id == currentUserID ? "you" : first.displayName
-        guard savers.count > 1 else { return "\(name) saved it" }
-        return "\(name) +\(savers.count - 1) others saved it"
+        guard savers.count > 1 else {
+            return first.id == currentUserID
+                ? "you have this on your map"
+                : "\(name) has this on their map"
+        }
+        return "\(name) +\(savers.count - 1) others have this on their maps"
     }
 }
 

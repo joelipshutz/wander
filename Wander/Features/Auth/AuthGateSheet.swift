@@ -61,13 +61,16 @@ struct AuthGateSheet: View {
 
 struct ClerkNativeAuthView: View {
     var isDismissable = true
+    var mode: NativeAuthMode = .signInOrUp
 
     var body: some View {
         #if canImport(ClerkKitUI) && canImport(ClerkKit)
-        AuthView(isDismissable: isDismissable)
+        AuthView(mode: clerkMode, isDismissable: isDismissable)
             .environment(Clerk.shared)
+            .environment(\.clerkTheme, recmeClerkTheme)
+            .background(WanderTheme.surfaceBone.color.ignoresSafeArea())
         #elseif canImport(ClerkKitUI)
-        AuthView(isDismissable: isDismissable)
+        AuthView(mode: clerkMode, isDismissable: isDismissable)
         #else
         VStack(spacing: WanderTheme.spacing3) {
             Text("Sign in is not linked in this build.")
@@ -80,6 +83,30 @@ struct ClerkNativeAuthView: View {
         .wanderScreen()
         #endif
     }
+
+    #if canImport(ClerkKitUI)
+    private var clerkMode: AuthView.Mode {
+        switch mode {
+        case .signInOrUp: .signInOrUp
+        case .signIn: .signIn
+        case .signUp: .signUp
+        }
+    }
+
+    @MainActor
+    private var recmeClerkTheme: ClerkTheme {
+        ClerkTheme(
+            colors: .init(
+                primary: WanderTheme.terracotta.color,
+                danger: WanderTheme.stateError.color,
+                primaryForeground: WanderTheme.textOnAction.color,
+                neutral: WanderTheme.textInk.color,
+                muted: WanderTheme.textMuted.color
+            ),
+            design: .init(borderRadius: WanderTheme.radiusMedium)
+        )
+    }
+    #endif
 }
 
 struct ClerkAccountManagementView: View {

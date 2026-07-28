@@ -323,6 +323,32 @@ enum PlaceImportParser {
     }
 }
 
+enum PlaceImportSourceDetector {
+    static func source(for seed: PlaceImportSeed) -> PlaceImportSource {
+        guard let sourceURLString = seed.sourceURLString,
+              let url = URL(string: sourceURLString),
+              let host = url.host?.lowercased()
+        else {
+            return .textNotes
+        }
+
+        if host == "maps.app.goo.gl"
+            || host == "maps.google.com"
+            || (host.hasSuffix(".google.com") && url.path.lowercased().contains("/maps"))
+            || (host == "goo.gl" && url.path.lowercased().hasPrefix("/maps"))
+        {
+            return .googleMaps
+        }
+        if host == "instagram.com" || host.hasSuffix(".instagram.com") || host == "instagr.am" {
+            return .instagram
+        }
+        if host == "tiktok.com" || host.hasSuffix(".tiktok.com") {
+            return .tiktok
+        }
+        return .textNotes
+    }
+}
+
 private enum CSVDocument {
     static func parse(_ text: String) -> [[String]] {
         let characters = Array(text)

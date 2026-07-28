@@ -3,6 +3,7 @@ import XCTest
 
 final class WanderWidgetIntegrationTests: XCTestCase {
     func testLaunchRequestsAreOneShotAndNormalizeSearchQueries() {
+        let deepLinkID = UUID()
         let resetID = UUID()
         let addID = UUID()
         let searchID = UUID()
@@ -19,6 +20,20 @@ final class WanderWidgetIntegrationTests: XCTestCase {
             confidence: 0.9
         )
 
+        XCTAssertEqual(
+            WanderDeepLinkLaunchRequest(
+                id: deepLinkID,
+                route: .quickCapture
+            ),
+            WanderDeepLinkLaunchRequest(
+                id: deepLinkID,
+                route: .quickCapture
+            )
+        )
+        XCTAssertNotEqual(
+            WanderDeepLinkLaunchRequest(route: .quickCapture).id,
+            WanderDeepLinkLaunchRequest(route: .quickCapture).id
+        )
         XCTAssertEqual(
             WanderPresentationResetRequest(id: resetID),
             WanderPresentationResetRequest(id: resetID)
@@ -83,6 +98,37 @@ final class WanderWidgetIntegrationTests: XCTestCase {
             WanderProfileCalendarLaunchRequest().id,
             WanderProfileCalendarLaunchRequest().id
         )
+    }
+
+    func testColdStartDeepLinkInboxKeepsQuickCaptureUntilSessionValidation() throws {
+        var inbox = WanderDeepLinkInbox()
+
+        inbox.receive(WanderWidgetConstants.quickCaptureURL)
+
+        XCTAssertNil(inbox.request(ifSessionValidated: false))
+        let request = try XCTUnwrap(
+            inbox.request(ifSessionValidated: true)
+        )
+        XCTAssertEqual(request.route, .quickCapture)
+
+        inbox.consume(UUID())
+        XCTAssertEqual(inbox.pendingRequest, request)
+
+        inbox.consume(request.id)
+        XCTAssertNil(inbox.pendingRequest)
+    }
+
+    func testColdStartDeepLinkInboxIgnoresInvalidURLsAndLatestValidRequestWins() throws {
+        var inbox = WanderDeepLinkInbox()
+
+        inbox.receive(WanderWidgetConstants.quickCaptureURL)
+        let firstRequest = try XCTUnwrap(inbox.pendingRequest)
+        inbox.receive(try XCTUnwrap(URL(string: "https://example.com/not-recme")))
+        XCTAssertEqual(inbox.pendingRequest, firstRequest)
+
+        inbox.receive(WanderWidgetConstants.quickSearchURL)
+        XCTAssertEqual(inbox.pendingRequest?.route, .quickSearch(query: nil))
+        XCTAssertNotEqual(inbox.pendingRequest?.id, firstRequest.id)
     }
 
     func testDeepLinkHandoffWaitsForCurrentDismissalAndLatestRequestWins() {
@@ -320,13 +366,23 @@ final class WanderWidgetIntegrationTests: XCTestCase {
     }
 
     func testAppRoutesWidgetLaunchesIntoExistingAddAndMapFlows() throws {
+        let app = try source("Wander/App/WanderApp.swift")
         let root = try source("Wander/App/WanderRootView.swift")
+        let launchRequests = try source("Wander/App/WanderWidgetLaunchRequest.swift")
         let add = try source("Wander/Features/Add/AddScreen.swift")
         let map = try source("Wander/Features/Map/MapScreen.swift")
         let profileScreen = try source("Wander/Features/Profile/ProfileScreen.swift")
         let profileHome = try source("Wander/Features/Profile/ProfileOwnerHome.swift")
 
-        XCTAssertTrue(root.contains("WanderDeepLinkRoute.parse(url)"))
+        XCTAssertTrue(app.contains(".onOpenURL { url in"))
+        XCTAssertTrue(app.contains("deepLinkInbox.receive(url)"))
+        XCTAssertTrue(app.contains("ifSessionValidated: destination == .authenticated"))
+        XCTAssertTrue(app.contains("deepLinkInbox.consume(requestID)"))
+        XCTAssertTrue(launchRequests.contains("WanderDeepLinkRoute.parse(url)"))
+        XCTAssertTrue(launchRequests.contains("isSessionValidated ? pendingRequest : nil"))
+        XCTAssertTrue(root.contains("handleDeepLinkLaunchRequestIfReady(request)"))
+        XCTAssertTrue(root.contains("beginDeepLinkHandoff(to: request.route)"))
+        XCTAssertFalse(root.contains(".onOpenURL"))
         XCTAssertTrue(root.contains("WanderAddLaunchRequest(destination: .hereNow)"))
         XCTAssertTrue(root.contains("case .nearbyPlace(let candidateID):"))
         XCTAssertTrue(root.contains("WanderNearbyWidgetSnapshotStore()"))
@@ -536,6 +592,34 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains(".systemLarge"))
         XCTAssertTrue(widgetSource.contains(".accessoryCircular"))
         XCTAssertTrue(widgetSource.contains(".accessoryRectangular"))
+        XCTAssertTrue(widgetSource.contains("WanderCircularWidgetArcText("))
+        XCTAssertTrue(widgetSource.contains("text: \"rec.me\""))
+        XCTAssertTrue(widgetSource.contains("Image(systemName: \"plus\")"))
+        XCTAssertTrue(widgetSource.contains("text: \"CHECK-IN\""))
+        XCTAssertTrue(
+            widgetSource.contains(
+                "min(geometry.size.width, geometry.size.height) / 2 - 10"
+            )
+        )
+        XCTAssertEqual(
+            widgetSource.components(separatedBy: "radius: ringBandRadius").count - 1,
+            2
+        )
+        XCTAssertFalse(widgetSource.contains(".padding(10)"))
+        XCTAssertTrue(widgetSource.contains("case .top: -radius"))
+        XCTAssertTrue(widgetSource.contains("case .bottom: radius"))
+        XCTAssertTrue(widgetSource.contains("case .top: 19"))
+        XCTAssertTrue(widgetSource.contains("case .bottom: -14.5"))
+        XCTAssertTrue(widgetSource.contains("case .top: 11"))
+        XCTAssertTrue(widgetSource.contains("case .bottom: 9.5"))
+        XCTAssertTrue(
+            widgetSource.contains(
+                "size: placement.fontSize,\n" +
+                    "                            weight: .black,\n" +
+                    "                            design: .default"
+            )
+        )
+        XCTAssertTrue(widgetSource.contains("Quick capture — Lock Screen"))
         XCTAssertFalse(widgetSource.contains("TextField("))
         XCTAssertTrue(widgetSource.contains(".widgetURL("))
         XCTAssertTrue(widgetSource.contains("Link(destination: destination)"))
@@ -712,7 +796,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let declarations = project.components(separatedBy: "CURRENT_PROJECT_VERSION:").count - 1
 
         XCTAssertEqual(declarations, 1)
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"101\""))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"104\""))
         XCTAssertEqual(
             project.components(separatedBy: "CFBundleVersion: $(CURRENT_PROJECT_VERSION)").count - 1,
             4
