@@ -28599,3 +28599,26 @@ Starting status and coordination:
 - Merge-only closeout: no build-number bump, archive, TestFlight upload, or
   Slack release note was requested. REC-174 can move to Done; the change will
   ride the next explicit TestFlight release batch.
+
+### 2026-07-28 05:09 PDT - REC-166 simulator-first regression reopening
+
+- Agent: Codex using the `ios-fix` workflow with simulator-native capture and
+  verification because the repo's `ios-qa` bridge is device-only.
+- Goal: reproduce Joe's installed-branch report that photos and persistent
+  search are still wrong, audit the complete photo source/fallback system, fix
+  the root cause, and visually verify Map, Feed, Lists, and Place Profile in
+  Simulator before another phone handoff.
+- Branch/worktree: `codex/rec-165-typography-phase-2` at
+  `/private/tmp/recme-rec165-typography-phase2`.
+- Tracking: Linear REC-166 moved from In Review back to In Progress; Mission
+  Control task `8475791a-4c52-4ddb-b418-2310784a4b1f` is In Progress.
+- Starting status: worktree was clean. Fresh `origin/main` was eight commits
+  ahead, so merged it as `4493143` before reproduction. Conflicts were limited
+  to the shared build-number contract and append-only coordination/decision
+  docs; retained the branch's numeric single-source build assertion and both
+  histories. No photo/search source has been edited yet.
+- Expected inspection/edit surface: photo resolution and rendering in
+  `Wander/Features/{Discover,Feed,Map,Lists,Profile}`, shared fixtures/models,
+  search/header presentation, focused tests, and simulator evidence files.
+  `MapScreen.swift` is high-conflict; latest-main changes are already merged and
+  will be preserved.
