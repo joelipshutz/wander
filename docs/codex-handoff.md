@@ -182,11 +182,11 @@ Highest risk items right now:
 - `preview/follow-profile-settings-mocks/tokens.css` - canonical colors/tokens.
 - `docs/reviews/2026-06-01-plan-eng-review.md` - engineering review.
 - `docs/reviews/2026-06-01-plan-design-review.md` - design review.
-- `docs/agent-log.md` - coordination log for all agents.
+- `docs/agent-log.md` - frozen historical archive, not a current-state source.
 - `TODOS.md` - planning backlog.
 
 ## Bootstrap Prompt For A New Codex
 
 Use this when a new Codex or developer joins:
 
-> Read `AGENTS.md`, `README.md`, `docs/codex-handoff.md`, `docs/roadmap.md`, `docs/decisions.md`, `docs/open-questions.md`, `docs/setup.md`, `docs/agent-log.md`, and the current repo. Summarize the app, architecture, setup, current priorities, risks, and what to do next. Do not change files yet.
+> Read `AGENTS.md`, `README.md`, `docs/codex-handoff.md`, `docs/roadmap.md`, `docs/decisions.md`, `docs/open-questions.md`, `docs/setup.md`, the relevant Linear issues and linked PRs, and the current repo. Summarize the app, architecture, setup, current priorities, risks, and what to do next. Do not change files yet.

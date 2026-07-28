@@ -1,14 +1,15 @@
-# Agent Log
+# Agent Log (Historical Archive)
 
-This is the shared work log for all agents and developers working in this repo.
+> Frozen on 2026-07-28 by REC-177. The REC-177 transition entry at the end of
+> this file is the final entry. Do not append to this file or read it for current
+> work state.
 
-Rules:
-
-- Add an entry before non-trivial work starts.
-- Add checkpoints during long work or when direction changes.
-- Add a completion/handoff entry with tests, commits, known issues, and next steps.
-- Mention dirty worktree changes you did not make. Do not revert them without explicit instruction.
-- Keep entries concrete enough that another agent can resume without reading the whole chat.
+Historical entries are preserved for reference. Current coordination and
+handoff state belongs in Linear issues and pull requests; shipped code and
+release state belong in git history, immutable TestFlight tags, App Store
+Connect, and tester-facing Slack threads. Durable decisions still belong in
+`docs/decisions.md`, and unresolved decisions belong in
+`docs/open-questions.md`.
 
 ## 2026-06-01 - Codex - Morning Reset, M2 Local Loop, Handoff Docs
 
@@ -28467,7 +28468,6 @@ Starting status and coordination:
   independent specialist passes, prior full-suite validation (794 unit/contract
   plus 1 UI test), generic Simulator build, Home Screen visual QA, and focused
   post-hardening checks provide the merge evidence.
-
 ## 2026-07-28 05:35 PDT - Codex - TestFlight Build 108
 
 Agent: Codex using `recme-pr-review-merge-release`
@@ -28497,3 +28497,54 @@ Release audit:
   the Xcode project, run full tests and Simulator build, archive/export with
   build-number management disabled, run the TestFlight helper with complete
   What to Test copy, then post the matching Slack tester note.
+
+## 2026-07-28 04:57 PDT - Codex - REC-177 Release Workflow Simplification
+
+Agent: Codex using the rec.me feedback, evidence-triage, and PR/release skills
+Branch: `codex/rec-177-release-workflow`
+Worktree: `/private/tmp/recme-rec177-release-workflow`
+Linear: `REC-177` (`In Progress`)
+
+Goal: preserve manual, frequent batched TestFlight releases while removing
+repeat triage, release-scope reconstruction, the active agent-log protocol, and
+docs-only merge/release record PRs.
+
+Starting status and decisions:
+
+- Started clean from exact `origin/main` commit `f17d97d`; the primary checkout
+  is 88 commits behind with untracked `tmp/`, so this isolated worktree avoids
+  Joe's local phone-build state and all other active worktrees.
+- Joe approved one-time Linear triage, a rolling `Next TestFlight` Linear
+  manifest updated at merge, exact-`main` manual release candidates, and
+  freezing this file as historical rather than continuing it as a second task
+  database.
+- No release cadence is scheduled. Joe or Ryan still explicitly requests every
+  TestFlight build when enough features are grouped.
+- Expected files: `AGENTS.md`, the three repo-owned rec.me workflow skills,
+  supporting README/handoff/setup/decision docs, and this final log entry.
+- This is docs/process-only work with no runtime, schema, auth, signing, build
+  number, archive, upload, or TestFlight action. Validation will be reference
+  audits, skill-install verification, and diff review.
+
+Transition outcome:
+
+- Replaced repeated triage with explicit `Backlog`/`Todo` boundaries, made
+  merged-and-validated implementation the product-issue `Done` gate, and moved
+  TestFlight-specific integration QA to the release record.
+- Added the manual batched release contract: releasable `main`, one rolling
+  `Next TestFlight` manifest, a brief cutoff-to-candidate merge hold, validation
+  and archive of the exact candidate commit, and immutable
+  `testflight/build-<n>` tags after a successful release.
+- Created and backfilled `REC-178` (`Next TestFlight`) from completed build 107
+  with REC-168 / PR #275, REC-173 / PR #274, and REC-174 / PR #276. Docs-only
+  record commits were deliberately excluded.
+- Froze this 2.1 MB log as a historical archive. Linear/PRs now own active
+  coordination, so future agents should neither append here nor open record-only
+  docs PRs after merges or releases.
+- Updated the shared-skill installer to use the stable primary checkout and
+  safely repair stale worktree symlinks. All nine Codex, Claude, and OpenClaw
+  indexed links now resolve to the canonical repo skill directories.
+- Validation: `git diff --check`, Bash syntax validation, active-reference
+  audits, Linear issue/relation/comment verification, and
+  `scripts/install-agent-skills.sh --check` all passed. No `xcodebuild` run was
+  needed because the change does not touch app/runtime code.

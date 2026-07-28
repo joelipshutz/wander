@@ -456,7 +456,6 @@ docs/roadmap.md
 docs/decisions.md
 docs/open-questions.md
 docs/setup.md
-docs/agent-log.md
 docs/specs/wander-ios-product-spec.md
 docs/plans/2026-06-01-wander-ios-eng-plan.md
 DESIGN.md

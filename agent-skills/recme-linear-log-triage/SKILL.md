@@ -71,8 +71,7 @@ Do not assume these ids are stable without checking `public.profiles`.
 ## Privacy Rules
 
 - Never paste auth tokens, API keys, session JWTs, raw request headers, full
-  private payloads, emails, or precise coordinates into Linear, Slack, PRs, or
-  `docs/agent-log.md`.
+  private payloads, emails, or precise coordinates into Linear, Slack, or PRs.
 - Prefer internal user ids, event names, timestamps, build numbers, enum values,
   sync states, counts, RPC names, HTTP status codes, and coarse error kinds.
 - Place names can be mentioned only when the user already named the place in the
@@ -110,9 +109,9 @@ Do not assume these ids are stable without checking `public.profiles`.
    - For sensitive fixes, run a rollback-only smoke query when possible.
 6. Compare evidence to the user's report. Separate facts from inferences.
 7. Comment in Linear with the compact evidence report below.
-8. Record important commands/results in `docs/agent-log.md` if implementation or
-   release work follows. Do not log routine read-only checks unless they are
-   needed for handoff.
+8. If implementation follows, keep only the decision-relevant evidence and
+   reproducible commands in Linear and the PR. Do not duplicate routine
+   read-only checks in a repo-wide log.
 
 ## Useful Commands
 
