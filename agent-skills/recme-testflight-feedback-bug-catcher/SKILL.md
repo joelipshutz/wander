@@ -1,11 +1,9 @@
 ---
 name: recme-testflight-feedback-bug-catcher
 description: |
-  rec.me/Wander feedback-driven feature development and bug-fix workflow. Use
-  when checking TestFlight/Slack/Linear feedback issues, turning tester feedback
-  into a fix or feature PR, or creating PRs from rec.me/Wander tester reports.
-  This skill is the shared source of truth for the former TestFlight feedback
-  bug-catcher automation.
+  rec.me/Wander feedback triage and implementation workflow. Use when checking
+  TestFlight/Slack/Linear feedback, triaging a new report once, or turning an
+  accepted rec.me issue into a feature/fix PR. Linear is the source of truth.
 triggers:
   - testflight feedback
   - bug catcher
@@ -17,250 +15,190 @@ triggers:
 
 # rec.me Feedback Feature/Bug Workflow
 
-Use this skill for rec.me/Wander TestFlight feedback triage, feature development,
-and bug-fix implementation. It centralizes the issue-checker workflow that used
-to poll Slack directly. Linear is now the source of truth for task polling and
-status. Treat tester requests as product input that can become feature work, not
-only bug reports.
-
-Compatibility note: keep the skill slug and directory name
-`recme-testflight-feedback-bug-catcher` until all automations, symlinks, and
-external references have been migrated. The human-facing workflow name is
-"rec.me Feedback Feature/Bug Workflow."
+Use this skill for rec.me/Wander tester feedback, product requests, bug triage,
+and implementation. Keep the directory slug for compatibility with existing
+automations; the human-facing workflow is "rec.me Feedback Feature/Bug
+Workflow."
 
 ## Safety Boundary
 
-- Do not poll Slack as the task queue. Use Linear issues as the queue; Slack links
-  or message attachments on Linear issues are context only.
-- Do not reply in Slack or use Slack reactions from this workflow unless Joe explicitly asks otherwise.
-- Do not merge, upload TestFlight, or post Slack analysis from this workflow.
-- Do not move product/app issues to `Done`; the PR review/merge/explicit
-  TestFlight release workflow owns `Done` after merge completion, with
-  TestFlight as the gate only for issues explicitly scoped to release/QA
-  validation.
-- Treat Joe and Ryan's requested changes in Linear issues as approved by default only when the direction and implementation path are clear and safe.
-- Surface approval-needed instead of implementing when direction is ambiguous, the implementation plan is unclear, the fix requires a real product/design/engineering decision, or the issue is privacy/security-sensitive, backend/schema/migration-heavy, or likely to change auth/sync/visibility semantics in a non-obvious way.
-- Do not treat "came from Slack/TestFlight" as permission to skip planning. Many
-  feedback items are feature requests with architecture, product, design, data,
-  or rollout consequences.
+- Use Linear as the queue. Slack links/attachments are source context, not task
+  state. Do not poll or react in Slack unless Joe explicitly asks.
+- Triage each issue once. Do not reclassify accepted `Todo` work on every scan
+  or reconstruct decisions already recorded in Linear.
+- Do not merge, upload TestFlight, add build numbers, or post tester release
+  notes from this workflow. The PR/release workflow owns merge and the rolling
+  `Next TestFlight` manifest.
+- Treat clear, safe requests from Joe or Ryan as approved. Surface a decision
+  before implementation when direction is ambiguous, architecture is unclear,
+  or the work is privacy/security-sensitive, schema/migration-heavy, or likely
+  to change auth/sync/visibility semantics.
+- Feedback can be a feature request, not just a bug. "Came from TestFlight" is
+  not permission to skip product/design/engineering review.
+- `docs/agent-log.md` is frozen history. Put current state in Linear and the PR.
 
 ## Required Setup
 
-1. Use `/Users/joelipshutz/Developer/Wander (nametbd)` or an isolated worktree for implementation.
-2. Follow repo `AGENTS.md` before non-trivial work:
-   - `git fetch origin`
-   - `git status --short --branch`
-   - read recent `docs/agent-log.md`
-   - decide whether an isolated worktree is needed
-   - append/update `docs/agent-log.md`
-3. Use the Linear issue as the task record. Update its status and comments as work progresses.
-4. Use a `codex/<short-task>` branch/worktree from latest `origin/main`.
+1. Work in `/Users/joelipshutz/Developer/Wander (nametbd)` or an isolated
+   worktree.
+2. Follow `AGENTS.md`: fetch `origin`, inspect status/worktrees, read the Linear
+   issue and linked branch/PR, and protect unrelated local changes.
+3. Use the Linear issue as the task record. Keep status, assignee, branch,
+   decisions, validation, blockers, and exact restart steps current there.
+4. Implement on `codex/<short-task>` (or the active agent's matching prefix)
+   from latest `origin/main`.
 
-## Universal Linear Task Status Contract
+## Linear Status Contract
 
-Linear is the source of truth for rec.me task status. Slack messages may appear as
-attachments or context on Linear issues, but this workflow must not use Slack as
-the task queue.
+- `Backlog`: untriaged feedback, or triaged feedback waiting on a real decision.
+- `Todo`: triaged, accepted, and ready to implement. Do not triage it again.
+- `In Progress`: actively claimed or being implemented.
+- `In Review`: an implementation PR is open.
+- `Done`: implementation is merged to `main` and required merge validation
+  passed. Waiting for a later TestFlight batch does not keep it open.
+- `Canceled` / `Duplicate`: inactive.
 
-Use the `recme` team's existing statuses this way:
+TestFlight packaging and QA checklists live on the separate rolling
+`Next TestFlight` release record. If later tester QA finds a regression, reopen
+the implementation issue or create a focused bug with that build as evidence.
 
-- `Backlog`: captured or identified, but not yet accepted for implementation.
-- `Todo`: accepted and ready to build, but no active implementation owner yet.
-- `In Progress`: assigned or actively being built; a branch/worktree may exist.
-- `In Review`: implementation PR is open, the merge/review gate is actively in
-  progress, or the issue is explicitly TestFlight-gated and the requested build
-  has not yet reached TestFlight.
-- `Done`: implementation is merged to `main`, required validation passed, and no
-  further app change is required. For issues explicitly scoped to TestFlight QA,
-  release validation, or a user-requested TestFlight push, `Done` still requires
-  the relevant build to be uploaded/attached/approved or otherwise available in
-  TestFlight.
-- `Canceled` / `Duplicate`: inactive; skip unless Joe explicitly asks for cleanup.
+## Triage-Once Scan
 
-When production releases exist, update this contract so `Done` means shipped in a
-production App Store version and introduce or rename a separate TestFlight
-checkpoint if needed.
+Scan the `recme` team and relevant projects such as `mvp` in this order:
 
-## Linear Issue Scan
+1. `Backlog` issues that have not yet received a structured triage outcome.
+2. `Todo` issues ready to implement, using the accepted outcome already present.
+3. `In Progress` issues assigned to the active agent or needing a documented
+   resume/handoff.
 
-Poll Linear for actionable rec.me/Wander issues, not Slack. Check the `recme`
-team and relevant projects such as `mvp`, prioritizing issues in:
+Skip:
 
-- `Backlog` for newly captured feedback that needs triage.
-- `Todo` for accepted work ready to implement.
-- `In Progress` for work already assigned or started by an agent.
+- `Backlog` issues whose latest durable outcome is an unanswered comment headed
+  `Decision needed:`. Revisit only after a human answer or material new evidence.
+- `Todo` issues for re-triage; inspect only enough to implement the accepted
+  scope or detect genuinely contradictory new information.
+- `In Review`, unless Joe asks to inspect the PR or new evidence changes the fix.
+- `Done`, `Canceled`, and `Duplicate`.
 
-Skip `In Review` issues unless Joe explicitly asks the issue-checker to inspect
-them; PR/release handling owns that state. Skip `Done`, `Canceled`, and
-`Duplicate` issues.
+If an open PR already represents the issue, ensure it is `In Review` and leave
+landing to the PR/release workflow.
 
-Actionable feedback includes bug reports, broken flows, confusing UX, visual/layout issues, accessibility issues, performance problems, crashes, missing expected behavior, backend/sync/auth/privacy/data issues, or tester requests that imply product/engineering work.
-
-Use Slack attachments/permalinks on Linear issues only to understand original
-tester context. Do not use Slack `:white_check_mark:` as task state. If an issue
-is already represented by an open PR, ensure the Linear issue is `In Review` and
-leave the PR/release workflow to finish it unless a new detail changes severity
-or fix path.
-
-Interpretation rule: if Joe or Ryan says "my pin" or otherwise refers to their own location on the map, default to the live current-location indicator/dot first, not saved-place ownership pins, unless the thread clearly says saved places or multiple place markers.
+Interpretation rule: when Joe or Ryan says "my pin" or their own location on the
+map, default to the live current-location indicator first, not saved-place
+ownership pins, unless the report clearly names saved places or multiple markers.
 
 ## Triage Workflow
 
-For each actionable Linear issue:
+For each untriaged actionable issue:
 
-1. Read the Linear title, description, comments, labels, project, assignee,
-   attachments, and any Slack permalink attached to the issue.
-2. Triage in Codex first.
-3. Use `recme-linear-log-triage` only when logs or hosted data can materially
-   change the diagnosis, especially for auth, save/sync, Supabase/RLS/RPC,
-   backend data, social visibility, missing saved places, or timestamped
-   screenshot reports. Do not run log triage for every issue.
-4. Comment in Linear with the triage summary when the issue needs a durable
-   decision, implementation plan, or handoff.
-5. Classify the issue type first: `bug/regression`, `feature/enhancement`,
-   `design/UX`, `backend/data`, `release/process`, or `decision-only`.
-6. Classify severity (`P0`, `P1`, `P2`, `P3`), likely app area, likely cause, recommended fix path, test plan, and open questions with recommended answers.
-7. Run the Engineering Review Gate below before implementation when the issue
-   scope warrants it. Otherwise note why the gate was skipped.
-8. Apply plan-design-review lens for UX, visual hierarchy, copy, affordance, accessibility, screen composition, or interaction issues.
-9. Apply both lenses when cross-cutting.
-10. Respect Wander/rec.me rules:
-   - native iOS SwiftUI
-   - Swift 6
-   - iOS 17+
-   - four bottom tabs only: Map, Add, Discover, Profile
-   - map-first trusted place memory product
-   - not lists/feed/travel/check-in/live-location
-   - `DESIGN.md` governs UI
-   - backend visibility/RLS is authoritative; client visibility policy is UI-only
+1. Read title, description, comments, labels, project, assignee, attachments,
+   timestamps, and attached Slack context.
+2. Identify the exact user problem and whether remote evidence can change the
+   next action.
+3. Invoke `recme-linear-log-triage` only for useful auth, save/sync,
+   Supabase/RLS/RPC, backend-data, visibility, missing-place, or timestamped
+   reports. Do not pull logs for every issue.
+4. Classify type: `bug/regression`, `feature/enhancement`, `design/UX`,
+   `backend/data`, `release/process`, or `decision-only`.
+5. Classify severity and set Linear priority consistently:
+   - P0 -> Urgent
+   - P1 -> High
+   - P2 -> Medium
+   - P3 -> Low
+6. Record likely area/cause, smallest safe fix, test plan, evidence, and open
+   questions in one structured Linear comment.
+7. End triage in exactly one durable state:
+   - accepted and ready -> `Todo`;
+   - starting immediately -> assign/claim and `In Progress`;
+   - real decision required -> remain `Backlog` with a comment headed
+     `Decision needed:` and a recommendation/tradeoff;
+   - not actionable -> `Canceled` or `Duplicate` with rationale.
+8. Run the engineering/design review gates below before implementation when the
+   scope warrants them.
+
+Respect repo direction: native SwiftUI, Swift 6, iOS 17+, four tabs (Map, Add,
+Discover, Profile), map-first trusted place memory, `DESIGN.md` for UI, and
+Supabase RLS as authoritative for visibility.
 
 ## Engineering Review Gate
 
-This is an invocation gate, not a vibe check. For gate-required work, actually
-invoke the `plan-eng-review` skill before implementation. Do not merely say you
-used an "eng lens." Prefer the indexed `plan-eng-review` skill when available;
-if it is not indexed, read and follow
-`/Users/joelipshutz/.claude/skills/gstack/.agents/skills/gstack-plan-eng-review/SKILL.md`.
+Actually invoke `plan-eng-review` before implementation for:
 
-Run `plan-eng-review` for:
+- P0/P1 issues;
+- a new user-facing flow/surface, persisted state, search/filter semantics, or
+  cross-screen behavior;
+- auth, sync, backend, privacy, schema/RLS, data model, persistence, extraction,
+  visibility, security, or migration work;
+- changes to app-wide state, release flow, or a multi-feature contract;
+- changes to tester trust around identity, map pins, search, save state,
+  recommendations, or social visibility;
+- likely scope above eight files, more than two new classes/services, or a new
+  queue/cache/job/integration; or
+- unclear data flow, failure modes, test plan, or implementation boundary.
 
-- P0/P1 issues.
-- Any feature/enhancement that introduces a new user-facing flow, new surface,
-  new persisted state, new filtering/search semantics, or new cross-screen
-  behavior.
-- Auth, sync, backend, privacy, Supabase schema/RLS, data model, persistence,
-  extraction, visibility, security, or migration work.
-- Work that changes cross-screen app behavior, app-wide state, release flow, or
-  any contract used by more than one feature.
-- Work that changes how testers interpret trust, social visibility, map pins,
-  search, save state, recommendations, or user identity.
-- Plans likely to touch more than eight files, add more than two new
-  classes/services, or introduce a new queue/cache/job/integration.
-- Any issue where the test plan, failure modes, data flow, or implementation
-  boundary is unclear.
+It may be skipped for docs/process-only edits that do not alter runtime, isolated
+copy, obvious one-file UI polish, small template swaps, tests-only work, or a
+tiny affordance using an existing tested path. Record the specific skip reason
+in Linear and the PR/final report.
 
-Skipping `plan-eng-review` is acceptable for isolated copy changes, obvious
-one-file UI polish, small template swaps, docs/process-only edits, or tests that
-do not change runtime behavior. Also acceptable: tiny feature affordances that
-stay on one screen, introduce no shared state, and reuse an existing tested code
-path. Record the skip reason in `docs/agent-log.md`, the Linear comment, and the
-final Codex report when implementing.
+When invoked, produce before coding:
 
-When the gate runs, the agent must produce an engineering review packet before
-coding:
+- scope challenge and smallest complete version;
+- architecture/data-flow summary and ASCII diagram when non-trivial;
+- realistic failure modes and user recovery;
+- unit/integration/simulator/manual QA plan; and
+- every unresolved architecture/data/test/performance/scope/rollout decision,
+  with a recommendation and tradeoff.
 
-- Scope challenge: smallest complete version, existing code to reuse, and what
-  is explicitly not in scope.
-- Architecture/data-flow summary, including an ASCII diagram for non-trivial
-  data flow or state changes.
-- Failure modes: at least one realistic production failure per new code path and
-  how the user would recover.
-- Test plan: unit/integration/simulator coverage, edge cases, regressions, and
-  any manual QA needed.
-- Decision list: every unresolved architecture, data, test, performance, scope,
-  or rollout question, each with an opinionated recommendation and tradeoff.
+If the review exposes a material decision, stop before implementation. Ask in
+the current thread and add a `Decision needed:` Linear comment. Continue only
+after Joe/Ryan accepts a path. If implementation uncovers a new material choice,
+pause the same way; do not silently finish a patch that changes user behavior,
+data shape, trust semantics, or release risk.
 
-Decision handling:
+Apply `plan-design-review` for material hierarchy, copy, affordance,
+accessibility, composition, or interaction changes, and both lenses when the
+issue is cross-cutting.
 
-- If `plan-eng-review` identifies architecture, data, test, performance, scope,
-  or rollout decisions, stop before implementation.
-- Surface each key decision in the current Codex/automation thread with a
-  recommendation and tradeoff. If a native question tool is available, use it;
-  otherwise write the decision brief in chat and pause. Do not bury decisions
-  only in Linear, a PR body, or `docs/agent-log.md`.
-- Also leave a Linear comment summarizing the blocked decision and recommended
-  option so the issue record stays durable.
-- Do not silently choose a direction for product-sensitive, security-sensitive,
-  schema/data, sync, visibility, or release-risk decisions.
-- Once Joe explicitly accepts a path, update the Linear comment and
-  `docs/agent-log.md`, then proceed with implementation.
-- During implementation, if new architecture, data, test, performance, scope,
-  product, design, or rollout decisions appear that were not covered by the
-  accepted plan, stop coding and surface them the same way before continuing.
-  Do not "just finish the patch" when the discovered choice can change user
-  behavior, data shape, trust semantics, test scope, or release risk.
-- If the new decision is small and reversible, state that explicitly, recommend
-  the default, record it in `docs/agent-log.md`, and continue only when the
-  tradeoff is genuinely low risk. When in doubt, pause and ask.
-
-Decision brief format when no native question tool is available:
+Decision brief when no native question tool is available:
 
 ```markdown
 Decision needed: <short title>
-Recommendation: <recommended option> because <one concrete reason>.
+Recommendation: <option> because <concrete reason>.
 Options:
-- A) <recommended option> - upside, downside, expected effort.
-- B) <alternative> - upside, downside, expected effort.
+- A) <recommended option> — upside, downside, effort.
+- B) <alternative> — upside, downside, effort.
 What breaks if wrong: <user-visible or engineering consequence>.
 ```
 
-Record the `plan-eng-review` outcome in the final Codex report:
+## Implementation Path
 
-- `not needed` with skip reason
-- `clean` with the review summary
-- `blocked on decision` with the decision link/context
-- `converted to approval-needed` when the issue should not be auto-built
-
-## Implementation Path For Auto-Approved Fixes
-
-1. If the issue is in `Backlog` but the direction is clear and safe, move it to
-   `Todo` or directly to `In Progress` when starting work. If direction is not
-   clear or approval is needed, leave it in `Backlog` or `Todo` and comment with
-   the decision needed.
-2. Complete the Engineering Review Gate before claiming implementation. If the
-   gate is required and returns unresolved decisions, stop and flag them in the
-   current thread before executing.
-3. When starting implementation, assign/claim the Linear issue when possible,
+1. Start only from `Todo` or an explicitly approved `Backlog` issue. Claim it,
    move it to `In Progress`, and comment with branch/worktree.
-4. Create a `codex/<short-task>` branch/worktree from latest `origin/main`,
-   preferably using the Linear issue key in the branch name.
-5. Keep `docs/agent-log.md` current with goal, Linear issue, engineering review
-   gate outcome, status, files touched, commands, tests, and final outcome.
-6. Make the smallest safe fix that addresses the tester feedback.
-7. Re-check the Decision handling rules during implementation whenever the code
-   path, data shape, UI behavior, test scope, or release risk changes from the
-   reviewed plan.
-8. Run relevant tests/builds. For UI changes, run simulator/screenshot checks when feasible.
-9. Commit with a conventional commit message.
-10. Push the branch and open a PR to `main` with a concise description, Linear
-   issue link, source Slack link if applicable, test results, and known issues.
-11. Move the Linear issue to `In Review` and comment with the PR link, head SHA,
-   tests run, and known gaps.
-12. Do not merge, upload TestFlight, move issues to `Done`, or post Slack analysis
-   from this workflow.
+2. Complete required review gates and resolve decisions before coding.
+3. Create the isolated branch/worktree from latest `origin/main`.
+4. Make the smallest complete fix that satisfies the accepted outcome.
+5. Re-check the decision gate if scope, data, behavior, tests, or release risk
+   changes during implementation.
+6. Run proportionate tests/builds and simulator/screenshot QA for visual work.
+7. Commit conventionally, push, and open a PR linked to Linear and original
+   Slack context when applicable. Include tests and known gaps.
+8. Move the issue to `In Review` and comment with PR, head SHA, validation, and
+   exact remaining work.
+9. Stop. Do not merge or update `Next TestFlight`; the landing workflow does
+   both after the PR passes review.
 
 ## Completion
 
-- This workflow is complete when it has either produced an implementation PR and
-  moved the Linear issue to `In Review`, or it has left a clear approval-needed /
-  follow-up-needed Linear comment without pretending the issue is done.
-- Do not mark a Linear issue `Done`; `Done` requires merge to `main` plus any
-  issue-specific release gate, and is owned by the PR review/merge/explicit
-  TestFlight release skill.
-- If one Linear issue contains multiple actionable requests, move it to
-  `In Review` only after every in-scope request has an open implementation PR or
-  an explicit Joe-approved non-implementation outcome. Otherwise split the issue
-  or comment with completed and remaining subitems.
-- Output a concise Codex report with Linear issue link, source Slack link if
-  applicable, severity, likely area, engineering review gate outcome, decision,
-  PR link if created, recommended next action, tests run, and open questions.
+This workflow completes when it either:
+
+- produces an implementation PR and moves the issue to `In Review`; or
+- leaves a durable `Decision needed:`/follow-up outcome without pretending the
+  issue is ready.
+
+Do not move the issue to `Done`; the landing workflow does so after merge. If
+one issue contains multiple requests, split it or account for every in-scope
+item before `In Review`.
+
+Report: Linear link, source Slack link if any, severity/priority, area, evidence
+decision, review-gate outcome, PR, tests, next action, and open questions.

@@ -12,32 +12,32 @@ Current wedge: trusted people's place memories become a searchable map you can a
 
 Do not reframe this as a lists app, public feed, travel-only app, check-in game, restaurant-only ranking app, or live-location product.
 
-## Required Agent Work Log
+## Coordination And Durable Records
 
-All agents working in this repo must keep `docs/agent-log.md` current.
+`docs/agent-log.md` is a frozen historical archive. Do not read it for current
+state, append to it, or open a PR whose only purpose is recording work that is
+already represented in Linear, a PR, git history, App Store Connect, or Slack.
 
 Before non-trivial work:
 
-- Read the latest entries in `docs/agent-log.md`.
-- Check whether an isolated worktree is needed before editing. Use one when Joe,
-  Ryan, or another agent may be working locally, when the current checkout has
-  uncommitted/untracked changes, or when the task touches high-conflict files.
-- Append a new entry with date/time, agent/tool name, goal, branch, current git status, and files you expect to touch.
-- If another agent is already working on overlapping files, call that out before editing.
+- Find or create the required Linear issue and use it as the task record.
+- Run `git fetch origin`, `git status --short --branch`, and
+  `git worktree list` before editing.
+- Check the Linear assignee/status, linked branch or PR, and local worktrees for
+  overlapping work. Use an isolated worktree when the current checkout is dirty,
+  another agent may be active, or the task touches high-conflict files.
+- Treat uncommitted or untracked files you did not create as belonging to Joe,
+  Ryan, or another agent. Do not revert them.
 
-During work:
+During work and at handoff:
 
-- Append meaningful checkpoints for long tasks, roughly every 30 minutes or whenever the plan materially changes.
-- Log decisions, assumptions, commands run, test results, blockers, screenshots reviewed, and files changed.
-- If you discover dirty worktree changes you did not make, log them and do not revert them.
-
-At handoff or completion:
-
-- Append final outcome, commit hash or PR, tests run, known issues, and concrete next steps.
-- If work is incomplete, include exact restart instructions.
-- Do not leave important decisions only in chat. Durable project decisions belong in `docs/decisions.md` or `docs/open-questions.md` as appropriate.
-
-This log is coordination infrastructure. Treat it as part of the deliverable.
+- Put plans, decisions needed, validation, blockers, branch/worktree, and exact
+  restart steps in the Linear issue and PR. Do not duplicate routine progress in
+  a repo-wide diary.
+- Put durable product or engineering decisions in `docs/decisions.md` and real
+  unresolved decisions in `docs/open-questions.md`.
+- If local-only work is incomplete, leave a Linear comment naming the worktree,
+  branch, last verified commit, commands already run, and exact next action.
 
 ## Required Linear Tracking
 
@@ -51,16 +51,28 @@ Before starting implementation:
 - If the work starts in chat and no issue exists yet, create a Linear issue in
   the `recme` team that captures the user request, assign it to the active
   owner when clear, and move it to `In Progress` before editing code.
+- Triage feedback once. Keep untriaged work in `Backlog`; move accepted,
+  implementation-ready work to `Todo`. Do not re-triage `Todo` issues during
+  later scans or again when packaging a release.
+- If a real product or architecture choice blocks acceptance, leave the issue
+  in `Backlog` with an unanswered comment headed `Decision needed:`. Revisit it
+  only after a human answer or material new evidence.
 - Link the PR or branch back to the issue once one exists.
 
 During and after work:
 
 - Keep the Linear issue status aligned with reality: `In Progress` while
-  actively coding, `In Review` during PR/release validation, and `Done` only
-  after the requested work is actually shipped or otherwise complete.
+  actively implementing, `In Review` while its implementation PR is open, and
+  `Done` after the implementation is merged to `main` and required validation
+  passes. TestFlight packaging is tracked by the separate rolling
+  `Next TestFlight` issue, not by holding merged product issues in `In Review`.
 - Add a Linear comment with validation, TestFlight/build links, known follow-up,
   or blocker details when the work is meaningful enough that future agents
   would otherwise have to reconstruct it from chat.
+- For an app-code, UI, schema, testable-behavior, or QA-relevant merge, add the
+  merged issue and its release payload to the rolling `Next TestFlight` Linear
+  issue as part of merge completion. Docs/process-only work does not enter that
+  manifest.
 
 ## Collaboration And Git Workflow
 
@@ -74,13 +86,13 @@ Branch prefixes:
 - `claude/<short-task>` for Claude
 - `openclaw/<short-task>` for OpenClaw
 
-Prefer a separate worktree for agent implementation when Joe, Ryan, or another agent may also be working locally. Before deciding, inspect `git worktree list`, `git status --short --branch`, and recent `docs/agent-log.md` entries. If a worktree is needed, create it from latest `origin/main` and do the work there:
+Prefer a separate worktree for agent implementation when Joe, Ryan, or another agent may also be working locally. Before deciding, inspect `git worktree list`, `git status --short --branch`, and the Linear issue/linked PR. If a worktree is needed, create it from latest `origin/main` and do the work there:
 
 ```bash
 git worktree add ../Wander-worktrees/<short-task> -b codex/<short-task> origin/main
 ```
 
-Before editing, agents must run `git fetch origin`, check `git status --short --branch`, inspect existing worktrees with `git worktree list`, and read the latest `docs/agent-log.md` entries. If there are uncommitted or untracked files, assume they belong to Joe, Ryan, or another agent. Do not edit overlapping files without calling out the overlap first.
+Before editing, agents must run `git fetch origin`, check `git status --short --branch`, inspect existing worktrees with `git worktree list`, and inspect the Linear issue plus linked branch/PR. If there are uncommitted or untracked files, assume they belong to Joe, Ryan, or another agent. Do not edit overlapping files without calling out the overlap first.
 
 Avoid parallel edits to high-conflict files unless explicitly coordinated:
 
@@ -88,7 +100,6 @@ Avoid parallel edits to high-conflict files unless explicitly coordinated:
 - `project.yml`
 - `Wander/Features/Map/MapScreen.swift`
 - `Wander/Services/WanderLocalStore.swift`
-- `docs/agent-log.md`
 - Supabase migrations
 
 For non-trivial feature, fix, refactor, release, or docs/process changes, agents must end the session by either:
@@ -104,7 +115,7 @@ Xcode and verifies that Xcode's Branch Chooser shows the intended branch. Open
 the isolated worktree as its own Xcode project instead of switching or
 overwriting another active checkout.
 
-Before merging to `main`, update the branch from latest `origin/main`, resolve conflicts, inspect the PR diff for unrelated files or generated junk, run the relevant build/tests, and update `docs/agent-log.md` with outcome, tests, known issues, and next steps. Prefer squash merging PRs into `main`, then delete the branch.
+Before merging to `main`, update the branch from latest `origin/main`, resolve conflicts, inspect the PR diff for unrelated files or generated junk, run the relevant build/tests, and record outcome, tests, known issues, and next steps in the PR and Linear. Prefer squash merging PRs into `main`, then delete the branch.
 
 ## Shared Agent Skills
 
@@ -245,7 +256,7 @@ Rules:
 - If `supabase test db` or pgTAP cannot run because Docker or local tooling is
   unavailable, do not call that a pass. Record the blocker, run the strongest
   hosted metadata/smoke verification available, and leave the exact gap in the
-  PR, Linear issue, and `docs/agent-log.md`.
+  PR and Linear issue.
 - For data resets, backfills, or migrations that intentionally delete or rewrite
   tester data, document what persists, what is wiped, whether local app state can
   rehydrate stale rows, and the TestFlight/user-facing consequence.
@@ -300,9 +311,11 @@ Observability policy:
 - Before editing the app icon, read `docs/brand/recme-app-icon.md`.
 - The canonical icon master is
   `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
-- Do not add a folded corner, folded map sheet, pencil, road lines, text, or any
-  extra lower-right object. The lower-right area stays clear terracotta.
-- Regenerate all icon renditions with
+- The icon mirrors `OnboardingLaunchView`: warm canvas, terracotta
+  `mappin.and.ellipse`, and the black native-serif `rec.me` wordmark. Regenerate
+  the master with `scripts/generate-app-icon-master.swift`; do not substitute a
+  different pin, typeface, palette, or generated illustration.
+- Regenerate all platform renditions with
   `scripts/generate-app-icon-renditions.sh`, then retain the
   `BuildConfigurationTests` size, alpha, and discoverability coverage.
 
@@ -331,26 +344,81 @@ Observability policy:
 
 ## App Store Build Numbers
 
-Default assumption: merging to `main` does not automatically trigger TestFlight. Every app-code, UI, schema, testable behavior, or QA-relevant merge is a candidate for the next explicit TestFlight release, but agents must not increment the build number, archive, upload, attach, or post tester-facing Slack release notes unless Joe or Ryan explicitly asks for a TestFlight/TF build or release. Examples of explicit release language include "push the TestFlight build", "upload the TF build", "release this to TestFlight", and "go push in your build". A merge-only request means review/merge/update durable status, then stop.
+TestFlight releases are manual and intentionally batched, but not scheduled.
+Merging to `main` never triggers a build by itself. Joe or Ryan decides when
+enough finished work has accumulated and explicitly asks to push a TestFlight/TF
+build. Examples include "push the TestFlight build", "upload the TF build",
+"release this to TestFlight", and "go push in your build". A merge-only request
+means merge, update Linear and `Next TestFlight`, then stop.
 
-An explicit TestFlight release should package the latest `main`, not just the most recent PR. Before bumping, inspect merged app changes since the last completed TestFlight build, include them in the tester-facing notes, and increment the build number once for that release batch.
+`main` must remain releasable. If work should not appear in the next TestFlight,
+do not merge it or keep it behind a disabled feature flag. The rolling
+`Next TestFlight` Linear issue is a manifest of releasable changes already on
+`main`; it is not a second approval queue and cannot select a subset of compiled
+code from `main`.
+
+At merge time, add every app-code, UI, schema, testable-behavior, or QA-relevant
+change to the one open `Next TestFlight` issue with a structured comment:
+
+- linked Linear issue, PR, and merge SHA
+- tester-facing summary
+- concrete "what to test" item
+- release operation or migration, or `none`
+- validation already completed
+
+Capture this once while implementation context is fresh. Do not add docs-only,
+process-only, or backend-only changes that do not affect the iOS binary or its
+required release operations. Explain any non-obvious exclusion on the merged
+implementation issue.
 
 Any `main` update that is intended to ship to App Store Connect or TestFlight must increment the App Store build number before upload. Do not reuse a build number for the same marketing version; App Store Connect requires monotonically increasing build numbers.
 
 Required release workflow:
 
-- Start from latest `main` after the intended implementation PRs have merged.
+- Move the rolling `Next TestFlight` issue to `In Progress` and freeze the
+  intended `origin/main` cutoff SHA. Reconcile its manifest mechanically against
+  commits since the latest immutable `testflight/build-<n>` tag. Correct missing
+  or stale entries, but do not re-triage already accepted product work.
+- Rename it `TestFlight build <n>` and briefly hold other app-code merges while
+  the build-number PR lands. This cutoff-to-candidate hold prevents unmanifested
+  code from slipping into the build.
+- Start a short-lived release branch from that cutoff.
 - Increment `CURRENT_PROJECT_VERSION` in `project.yml`.
 - Run `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflects the new build number.
-- Commit and push both `project.yml` and `Wander.xcodeproj/project.pbxproj` to `main`.
-- Run the relevant `xcodebuild` build/test command after regenerating the project.
-- Archive and upload the binary with that incremented build number. The export options plist must set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently upload a different build number.
+- Commit both `project.yml` and `Wander.xcodeproj/project.pbxproj`, open the
+  release PR, and merge it through the normal gate.
+- Record the exact merged release-candidate commit, then immediately create the
+  fresh `Next TestFlight` issue with that candidate as its provisional baseline
+  and release the short merge hold. Later merges accumulate there and do not
+  enter the active build. Run the full relevant
+  `xcodebuild` test/build gate and archive that exact commit from an isolated or
+  detached worktree, even if `main` advances afterward.
+- Upload the binary with the incremented build number. The export options plist
+  must set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently
+  upload a different build number.
 - Set/confirm export compliance and attach the uploaded build to the public TestFlight group by running `node scripts/testflight-release.mjs --archive-path <archive>` after upload succeeds. Passing the archive path lets the helper detect and process the actual uploaded build number if App Store Connect reports a different one.
-- Update `docs/agent-log.md` with the build number, commit hash, tests run, archive path, upload status, TestFlight status, and known issues.
+- When the build is available, create and push the immutable annotated tag
+  `testflight/build-<n>` at the exact archived commit. Never move or reuse a
+  TestFlight tag.
+- Update `TestFlight build <n>` with the build/tag, tests,
+  upload/approval status, tester-note link, known issues, and final release
+  evidence, then move it to `Done`.
+- Replace the fresh `Next TestFlight` issue's provisional baseline with build
+  `<n>` and its immutable tag/commit. Do not open a follow-up repo PR just to
+  record the completed release.
 - Only after archive/upload has completed should an agent post a tester-facing Slack note. If the binary is still processing or not yet externally approved, the Slack note must say that plainly.
 - If the build is attached to TestFlight or confirmed available, follow the Slack release-note rules below and state the live/approved status.
 
-Docs-only or process-only commits to `main` do not need a build-number bump unless they are being packaged into a new TestFlight/App Store build. App-code merges also skip the bump until an explicit TestFlight release request arrives; note the skip in `docs/agent-log.md` when the merge workflow would previously have released automatically.
+If upload or App Store Connect processing is blocked after the build-number PR
+merges, keep the rolling release issue `In Progress` and put the exact candidate
+commit, build number, validation, blocker, and continuation commands there. Do
+not create the immutable release tag until the release completes. The fresh
+`Next TestFlight` issue may collect later merges, but its baseline stays clearly
+provisional until the blocked build completes.
+
+Docs-only or process-only commits to `main` do not need a build-number bump
+unless they happen to be present in a later explicitly requested app release.
+App-code merges wait in `Next TestFlight` until that manual request arrives.
 
 ## TestFlight Release Notes
 
@@ -399,5 +467,5 @@ The script reads App Store Connect credentials from env vars or `/Users/joelipsh
 - Engineering review: `docs/reviews/2026-06-01-plan-eng-review.md`
 - Handoff for new agents/developers: `docs/codex-handoff.md`
 - Setup commands: `docs/setup.md`
-- Agent coordination log: `docs/agent-log.md`
+- Historical agent log archive: `docs/agent-log.md` (frozen; do not use for current state)
 - App icon source of truth: `docs/brand/recme-app-icon.md`

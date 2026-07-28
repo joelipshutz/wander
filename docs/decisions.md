@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -64,8 +64,11 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 
 | Decision | Status | Notes |
 |---|---|---|
-| Explicit TestFlight releases | Locked | Merging app changes to `main` no longer automatically triggers a build-number bump, archive, upload, TestFlight attachment, or tester Slack note. App-code merges are candidates for the next explicit TestFlight release. Only push a TestFlight/TF build when Joe or Ryan explicitly asks, with wording such as "push the TestFlight build", "upload the TF build", "release this to TestFlight", or "go push in your build". The next explicit release packages latest `main`, includes all eligible app changes since the last completed TestFlight build, and bumps the build number once. |
-| Linear completion after merge | Locked | Ordinary product/app issues can move to `Done` once the implementation is merged to `main` and required validation passes. TestFlight remains the `Done` gate only when the issue or user request explicitly requires TestFlight QA, release validation, or a TestFlight push. |
+| Manual batched TestFlight releases | Locked | TestFlight remains frequent and manual, with no weekly or automatic cadence. Joe or Ryan explicitly triggers a release when enough finished features are grouped. The release packages an exact releasable `main` candidate and increments the build number once; merging alone never archives, uploads, attaches, or announces a build. |
+| Rolling `Next TestFlight` manifest | Locked | One open Linear issue titled `Next TestFlight` records each QA-relevant merge once, while implementation context is fresh: issue/PR/SHA, tester-facing summary, what to test, release operation or migration, and completed validation. It is a release manifest, not a second approval or product-triage queue. At release cutoff it becomes `TestFlight build <n>` and a fresh rolling issue opens for later merges. |
+| Releasable `main` and exact release candidates | Locked | Work merged to `main` is eligible for the next build unless disabled behind a feature flag. At an explicit release, mechanically reconcile the rolling manifest against the git range, land the build-number PR under a brief app-code merge hold, archive the exact candidate commit, and tag the completed build immutably as `testflight/build-<n>`. Do not re-triage accepted product work at release time. |
+| Linear completion after merge | Locked | Product issues move to `Done` once their implementation is merged to `main` and required validation passes. Waiting for a manual TestFlight batch does not keep them in `In Review`; TestFlight-specific integration QA lives on the release issue, and any discovered regression reopens or creates a focused bug. |
+| Agent work log retirement | Locked | `docs/agent-log.md` is frozen historical context. Linear and PRs own current coordination and handoff; git and immutable TestFlight tags identify shipped code; App Store Connect and Slack own release/tester state. Do not create docs-only PRs that merely restate a merge or release already represented in those systems. |
 
 ## Design Decisions
 
@@ -99,3 +102,4 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Run refreshed design review | 2026-06-01 | Completed clean; score 8/10 to 9/10. |
 | M2 local product loop pushed | 2026-06-01 | Commit `962efce`, 18 tests passing, visual QA still pending. |
 | Add agent work log protocol | 2026-06-01 | All agents must update `docs/agent-log.md` before, during, and after non-trivial work. |
+| Retire agent work log protocol | 2026-07-28 | REC-177 supersedes the active diary requirement. The file is frozen as history; Linear and PRs are the current coordination surface. |

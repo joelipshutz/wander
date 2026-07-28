@@ -796,14 +796,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let declarations = project.components(separatedBy: "CURRENT_PROJECT_VERSION:").count - 1
 
         XCTAssertEqual(declarations, 1)
-        let buildNumberLine = try XCTUnwrap(
-            project.split(separator: "\n").first { $0.contains("CURRENT_PROJECT_VERSION:") }
-        )
-        let buildNumber = buildNumberLine
-            .replacingOccurrences(of: "CURRENT_PROJECT_VERSION:", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-        XCTAssertNotNil(Int(buildNumber))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"108\""))
         XCTAssertEqual(
             project.components(separatedBy: "CFBundleVersion: $(CURRENT_PROJECT_VERSION)").count - 1,
             4
