@@ -27829,3 +27829,27 @@ approved and available through the public TestFlight link.
 - Existing Supabase formatter actor-isolation warnings remain unrelated and
   non-blocking. Next: push the reconciled PR, squash-merge it, then prepare and
   ship exact latest `main` as build 106.
+
+REC-155 integrated review checkpoint — 2026-07-27 13:15 PDT:
+
+- Merged exact current `origin/main` at `822ba5273` into PR #255. Product,
+  project, test, and decision files auto-merged cleanly; the only conflict was
+  this append-only log, where both histories were preserved.
+- Full-diff review found two related completeness bugs in the older branch:
+  locally learned tag suggestions were still allowed to cross restaurant
+  cuisines and sibling subcategories, and a selected legacy tag whose casing
+  differed from a canonical suggestion could be omitted from the saved draft.
+- Fixed local tag sources to require the selected primary category and
+  subcategory, plus exact cuisine for Restaurants & Food. Canonical suggestion
+  spelling now wins case-insensitively while custom tags remain preserved.
+- Added focused regressions for taxonomy matching and case-insensitive
+  canonicalization. The six targeted REC-155 taxonomy, synchronization,
+  persistence, and navigation tests passed 6/6 on iPhone 17 Pro / iOS 26.5:
+  `/tmp/DerivedData-rec155-landing/Logs/Test/Test-Wander-2026.07.27_23-11-15--0700.xcresult`.
+- Verified the hosted save contract replaces the prior place-attribute set
+  before inserting the new payload, so folding legacy `personal_labels` into
+  the active `*_tags` attribute does not leave duplicate remote rows. No new
+  attribute value type or schema migration is introduced.
+- Next: commit the review fixes, run the exact integrated complete suite,
+  generic Simulator build, and two-size visual QA, then push and squash-merge
+  PR #255 if all gates remain green.

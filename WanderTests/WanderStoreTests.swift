@@ -4335,6 +4335,49 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(synchronized, ["date night", "Joe's pick"])
     }
 
+    func testLocalTagSuggestionsRequireMatchingSubcategoryAndRestaurantCuisine() {
+        XCTAssertTrue(
+            MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                sourceSubcategory: "Restaurant",
+                sourceCuisine: "Mediterranean",
+                selectedPrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                selectedSubcategory: "Restaurant",
+                selectedCuisine: "Mediterranean"
+            )
+        )
+        XCTAssertFalse(
+            MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                sourceSubcategory: "Restaurant",
+                sourceCuisine: "Thai",
+                selectedPrimaryCategory: WanderPlaceCategory.restaurantsFood,
+                selectedSubcategory: "Restaurant",
+                selectedCuisine: "Mediterranean"
+            )
+        )
+        XCTAssertFalse(
+            MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: WanderPlaceCategory.outdoorsNature,
+                sourceSubcategory: "National Park",
+                sourceCuisine: nil,
+                selectedPrimaryCategory: WanderPlaceCategory.outdoorsNature,
+                selectedSubcategory: "Playground",
+                selectedCuisine: nil
+            )
+        )
+    }
+
+    func testUnifiedTagOrderingCanonicalizesSuggestedCaseAndKeepsCustomTags() {
+        XCTAssertEqual(
+            MapPlaceSaveDetailsPolicy.orderedSelections(
+                values: ["Date Night", "Joe's Pick"],
+                options: ["date night", "group"]
+            ),
+            ["date night", "Joe's Pick"]
+        )
+    }
+
     func testChangingTaxonomyRefreshesEveryOptionalQuestionBlock() {
         let candidate = PlaceCandidate(
             id: "mapkit_reactive_questions",

@@ -3797,6 +3797,53 @@ enum MapPlaceSaveDetailsPolicy {
             return !previousKeys.contains(key) || nextKeys.contains(key)
         }
     }
+
+    static func matchesTagSuggestionTaxonomy(
+        sourcePrimaryCategory: String,
+        sourceSubcategory: String?,
+        sourceCuisine: String?,
+        selectedPrimaryCategory: String,
+        selectedSubcategory: String?,
+        selectedCuisine: String?
+    ) -> Bool {
+        guard WanderPlaceCategory.normalizedPrimaryCategory(sourcePrimaryCategory)
+                == WanderPlaceCategory.normalizedPrimaryCategory(selectedPrimaryCategory)
+        else {
+            return false
+        }
+
+        let selectedSubcategoryKey = WanderPlaceCategory.normalizedCategoryText(selectedSubcategory)
+        if !selectedSubcategoryKey.isEmpty,
+           WanderPlaceCategory.normalizedCategoryText(sourceSubcategory) != selectedSubcategoryKey {
+            return false
+        }
+
+        let selectedCuisineKey = WanderPlaceCategory.normalizedCategoryText(selectedCuisine)
+        if WanderPlaceCategory.normalizedPrimaryCategory(selectedPrimaryCategory)
+            == WanderPlaceCategory.restaurantsFood,
+           !selectedCuisineKey.isEmpty,
+           WanderPlaceCategory.normalizedCategoryText(sourceCuisine) != selectedCuisineKey {
+            return false
+        }
+
+        return true
+    }
+
+    static func orderedSelections(
+        values: Set<String>,
+        options: [String]
+    ) -> [String] {
+        let optionSelections = options.filter { option in
+            values.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
+        }
+        let customSelections = values
+            .filter { value in
+                !options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
+            }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+
+        return optionSelections + customSelections
+    }
 }
 
 enum PlaceTypePickerMode {
@@ -4699,14 +4746,10 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func orderedSelections(for block: AddQuestionBlock) -> [String] {
-        let values = selections(for: block)
-        let optionSelections = block.options.filter { values.contains($0) }
-        let customSelections = values
-            .filter { value in
-                !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
-            }
-            .sorted()
-        return optionSelections + customSelections
+        MapPlaceSaveDetailsPolicy.orderedSelections(
+            values: selections(for: block),
+            options: block.options
+        )
     }
 
     private func localCustomTagOptions() -> [String] {
@@ -4724,21 +4767,21 @@ struct MapPlaceSaveFlowSheet: View {
                currentPlace.userPlace.id == visiblePlace.userPlace.id {
                 return false
             }
-            return visiblePlace.effectiveCategory == selectedAssignment.primaryCategory
-        }
-        let exactSubcategory = selectedAssignment.subcategory.map { WanderPlaceCategory.normalizedCategoryText($0) }
-        let exactPlaces = visiblePlaces.filter { visiblePlace in
-            guard let exactSubcategory else { return true }
-            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) == exactSubcategory
-        }
-        let similarPlaces = visiblePlaces.filter { visiblePlace in
-            guard let exactSubcategory else { return false }
-            return WanderPlaceCategory.normalizedCategoryText(visiblePlace.effectiveSubcategory) != exactSubcategory
-        }
-        let exactValues = attributeValues(from: exactPlaces, matching: predicate)
-        let similarValues = attributeValues(from: similarPlaces, matching: predicate)
 
-        return uniqueOptionValues(exactValues + similarValues, limit: 8)
+            return MapPlaceSaveDetailsPolicy.matchesTagSuggestionTaxonomy(
+                sourcePrimaryCategory: visiblePlace.effectiveCategory,
+                sourceSubcategory: visiblePlace.effectiveSubcategory,
+                sourceCuisine: visiblePlace.restaurantCuisine,
+                selectedPrimaryCategory: selectedAssignment.primaryCategory,
+                selectedSubcategory: selectedAssignment.subcategory,
+                selectedCuisine: selectedCuisine
+            )
+        }
+
+        return uniqueOptionValues(
+            attributeValues(from: visiblePlaces, matching: predicate),
+            limit: 8
+        )
     }
 
     private func attributeValues(
