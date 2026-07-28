@@ -28436,3 +28436,13 @@ Starting status and coordination:
 - This is an app-code/QA-relevant PR but not an explicit TestFlight request, so
   the build number was not incremented and no archive, upload, or Slack release
   note was performed.
+
+### 2026-07-28 05:07 PDT - Ready-for-review handoff
+
+- Committed the implementation as `260ac70` and pushed
+  `codex/rec-175-loading-icon`.
+- Opened ready PR #280 and linked it to REC-175:
+  <https://github.com/joelipshutz/wander/pull/280>.
+- Moved REC-175 and Mission Control to review with the validation evidence.
+- The worktree is clean except for intentionally untracked local preview/QA
+  files under `tmp/`; those files are excluded from the PR.
