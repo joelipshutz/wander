@@ -23,6 +23,8 @@ small-icon legibility:
 - native SF Symbol `mappin.and.ellipse`, bold, in terracotta `#D46F4D`;
 - lowercase wordmark `rec.me`, verbatim, in the native system serif at black
   weight and solid black;
+- approved option B uses a slight `-2.5` optical kern at the 1024 px master;
+  this is an app-icon wordmark exception to the UI's no-negative-tracking rule;
 - icon above wordmark in one centered vertical lockup;
 - generous negative space, with no shadows, gradients, borders, textures, or
   additional objects.

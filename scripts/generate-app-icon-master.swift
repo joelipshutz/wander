@@ -67,6 +67,7 @@ enum LoadingMarkIcon {
                 attributes: [
                     .font: editorialFont(size: sizing.wordmarkPointSize),
                     .foregroundColor: ink,
+                    // Approved icon-only optical tightening; app UI typography stays untracked.
                     .kern: -2.5
                 ]
             )
@@ -146,7 +147,8 @@ let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
 let defaultOutput = repoRoot
     .appendingPathComponent("Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png")
-let outputURL = CommandLine.arguments.dropFirst().first.map {
+let previewOutputPath = CommandLine.arguments.dropFirst().first
+let outputURL = previewOutputPath.map {
     URL(fileURLWithPath: $0, relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         .standardizedFileURL
 } ?? defaultOutput
@@ -154,14 +156,19 @@ let outputURL = CommandLine.arguments.dropFirst().first.map {
 let environment = ProcessInfo.processInfo.environment
 let canonicalSizing = LoadingMarkIcon.Sizing.canonical
 func dimension(_ key: String, fallback: CGFloat) -> CGFloat {
-    guard let rawValue = environment[key], let value = Double(rawValue) else { return fallback }
+    guard previewOutputPath != nil,
+          let rawValue = environment[key],
+          let value = Double(rawValue)
+    else {
+        return fallback
+    }
     return CGFloat(value)
 }
 let sizing = LoadingMarkIcon.Sizing(
     symbolHeight: dimension("RECME_ICON_SYMBOL_HEIGHT", fallback: canonicalSizing.symbolHeight),
     wordmarkPointSize: dimension("RECME_ICON_WORDMARK_SIZE", fallback: canonicalSizing.wordmarkPointSize),
     markSpacing: dimension("RECME_ICON_SPACING", fallback: canonicalSizing.markSpacing),
-    showsSymbol: environment["RECME_ICON_WORDMARK_ONLY"] != "1"
+    showsSymbol: previewOutputPath == nil || environment["RECME_ICON_WORDMARK_ONLY"] != "1"
 )
 
 try LoadingMarkIcon.render(to: outputURL, sizing: sizing)
