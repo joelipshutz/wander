@@ -50,10 +50,6 @@ struct PlaceRatingLiquidState: Equatable {
         Color(red: red, green: green, blue: blue)
     }
 
-    var activity: Double {
-        0.45 + (progress * 1.55)
-    }
-
     static func resolve(_ score: Double) -> PlaceRatingLiquidState {
         let candidate = score.isFinite ? score : PlaceRating.defaultScore
         let normalized = min(
@@ -312,7 +308,7 @@ struct PlaceRatingSlider: View {
     private func scaleLabelColor(for value: Int) -> Color {
         let isSelected = abs(Double(value) - reaction.score) < 0.001
         if liquidState.progress >= 0.7 {
-            return Color.white.opacity(isSelected ? 1 : 0.76)
+            return Color.white.opacity(isSelected ? 1 : 0.92)
         }
         return isSelected ? liquidState.color : WanderTheme.textMuted.color
     }
@@ -363,7 +359,7 @@ private struct BoilingRatingLiquid: View {
                     : context.date.timeIntervalSinceReferenceDate
                 let liquidPath = liquidPath(
                     in: CGRect(origin: .zero, size: size),
-                    phase: time * state.activity
+                    phase: time
                 )
 
                 graphics.fill(
@@ -423,7 +419,7 @@ private struct BoilingRatingLiquid: View {
     ) {
         for index in 0..<min(state.bubbleCount, horizontalPositions.count) {
             let speed = 0.13 + (Double(index % 4) * 0.025)
-            let rawCycle = (time * speed * state.activity) + startingOffsets[index]
+            let rawCycle = (time * speed) + startingOffsets[index]
             let cycle = rawCycle - floor(rawCycle)
             let diameter = CGFloat(4 + Double((index * 3) % 8))
             let drift = CGFloat(sin((time * 0.9) + Double(index)) * 5)

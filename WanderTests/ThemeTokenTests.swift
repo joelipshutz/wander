@@ -90,8 +90,6 @@ final class PlaceRatingReactionTests: XCTestCase {
         XCTAssertEqual(cool.bubbleCount, 3)
         XCTAssertEqual(middle.bubbleCount, 8)
         XCTAssertEqual(hot.bubbleCount, 12)
-        XCTAssertLessThan(cool.activity, middle.activity)
-        XCTAssertLessThan(middle.activity, hot.activity)
     }
 
     func testLiquidToneMovesFromBlueThroughAmberToDarkRed() {
