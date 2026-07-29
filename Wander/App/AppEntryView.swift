@@ -1,4 +1,21 @@
+import Foundation
 import SwiftUI
+
+struct AppEntryForegroundRefreshPolicy {
+    static let graceInterval: TimeInterval = 30
+
+    private var backgroundedAtUptime: TimeInterval?
+
+    mutating func didEnterBackground(atUptime uptime: TimeInterval) {
+        backgroundedAtUptime = uptime
+    }
+
+    mutating func shouldRefreshSession(atUptime uptime: TimeInterval) -> Bool {
+        guard let backgroundedAtUptime else { return true }
+        self.backgroundedAtUptime = nil
+        return uptime - backgroundedAtUptime >= Self.graceInterval
+    }
+}
 
 @MainActor
 struct AppEntryView: View {
@@ -13,6 +30,7 @@ struct AppEntryView: View {
 
     @State private var didFinishInitialResolution = false
     @State private var deepLinkInbox = WanderDeepLinkInbox()
+    @State private var foregroundRefreshPolicy = AppEntryForegroundRefreshPolicy()
 
     var body: some View {
         Group {
@@ -92,9 +110,28 @@ struct AppEntryView: View {
             coordinator.authStateChanged(state)
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active, didFinishInitialResolution else { return }
-            auth.beginSessionValidation()
-            Task { await coordinator.start() }
+            switch phase {
+            case .background:
+                foregroundRefreshPolicy.didEnterBackground(
+                    atUptime: ProcessInfo.processInfo.systemUptime
+                )
+            case .active:
+                guard didFinishInitialResolution else { return }
+                let shouldRefreshSession = foregroundRefreshPolicy.shouldRefreshSession(
+                    atUptime: ProcessInfo.processInfo.systemUptime
+                )
+                if !shouldRefreshSession,
+                   auth.isSessionValidated,
+                   case .ready = coordinator.state {
+                    return
+                }
+                auth.beginSessionValidation()
+                Task { await coordinator.start() }
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
         }
         .onOpenURL { url in
             if WanderRootView.sharedProfileRoute(for: url) != nil {

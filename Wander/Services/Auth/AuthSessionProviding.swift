@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 enum AuthState: Equatable {
     case signedOut
@@ -169,7 +168,6 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     private let provider: AuthSessionProviding
     private var sessionObservationTask: Task<Void, Never>?
-    private var foregroundObservationTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var isNativeAuthAttemptActive = false
 
@@ -183,19 +181,10 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
                 self?.synchronizeState(state)
             }
         }
-        foregroundObservationTask = Task { @MainActor [weak self] in
-            for await _ in NotificationCenter.default.notifications(
-                named: UIApplication.willEnterForegroundNotification
-            ) {
-                guard !Task.isCancelled else { return }
-                self?.beginSessionValidation()
-            }
-        }
     }
 
     deinit {
         sessionObservationTask?.cancel()
-        foregroundObservationTask?.cancel()
     }
 
     var isSignedIn: Bool {
