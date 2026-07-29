@@ -145,7 +145,55 @@ struct ProfileSettingsHome: View {
                 Text("\(store.pendingSyncCount) pending")
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
+
+            settingsLink(
+                "import help",
+                icon: "square.and.arrow.down",
+                destination: ImportHelpDestination.url
+            )
+            settingsLink(
+                "help and support",
+                icon: "questionmark.circle",
+                destination: RecmeSettingsWebDestination.support
+            )
+            settingsLink(
+                "privacy policy",
+                icon: "hand.raised",
+                destination: RecmeSettingsWebDestination.privacy
+            )
+            settingsLink(
+                "terms of use",
+                icon: "doc.text",
+                destination: RecmeSettingsWebDestination.terms
+            )
+            settingsLink(
+                "community guidelines",
+                icon: "person.3",
+                destination: RecmeSettingsWebDestination.community
+            )
+            settingsLink(
+                "privacy choices",
+                icon: "slider.horizontal.3",
+                destination: RecmeSettingsWebDestination.privacyChoices
+            )
         }
+    }
+
+    private func settingsLink(
+        _ title: String,
+        icon: String,
+        destination: URL
+    ) -> some View {
+        Link(destination: destination) {
+            HStack {
+                Label(title, systemImage: icon)
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .foregroundStyle(WanderTheme.textInk.color)
     }
 
     private func accountRow(_ title: String, value: String?, icon: String) -> some View {
@@ -189,6 +237,14 @@ struct ProfileSettingsHome: View {
             errorMessage = "Your account could not be deleted. Nothing was removed. Please try again."
         }
     }
+}
+
+private enum RecmeSettingsWebDestination {
+    static let support = URL(string: "https://getrec.me/support")!
+    static let privacy = URL(string: "https://getrec.me/privacy")!
+    static let terms = URL(string: "https://getrec.me/terms")!
+    static let community = URL(string: "https://getrec.me/community")!
+    static let privacyChoices = URL(string: "https://getrec.me/privacy-choices")!
 }
 
 private struct ProfileSettingsIdentityRow: View {

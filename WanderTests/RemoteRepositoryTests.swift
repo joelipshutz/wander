@@ -1059,6 +1059,49 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(rpc.calls[0].body["owner_scope"] as Any?)
     }
 
+    func testSharedPlaceLinkResolvesPublicVenueFacts() async throws {
+        let rpc = RecordingRPC()
+        let placeID = "7bdfb34e-521e-4bc8-8466-0315adf12a5a"
+        rpc.responses["public_web_preview"] = """
+        {
+          "kind": "place",
+          "is_available": true,
+          "place_id": "\(placeID)",
+          "title": "Preview Coffee",
+          "category": "coffee_tea_sweets",
+          "primary_category": "coffee_tea_sweets",
+          "subcategory": "coffee_shop",
+          "category_source": "provider",
+          "category_confidence": 0.98,
+          "raw_provider_type": "cafe",
+          "address": "123 Preview Street",
+          "locality": "Los Angeles",
+          "region": "CA",
+          "country": "US",
+          "latitude": 34.05,
+          "longitude": -118.24,
+          "source_provider": "google_places",
+          "source_provider_place_id": "preview-coffee",
+          "confidence": 0.97
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlaceRepository(rpc: rpc)
+
+        let resolvedPlace = try await repository.sharedPlace(id: placeID)
+        let place = try XCTUnwrap(resolvedPlace)
+
+        XCTAssertEqual(place.id, placeID)
+        XCTAssertEqual(place.name, "Preview Coffee")
+        XCTAssertEqual(place.primaryCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(place.sourceProvider, "google_places")
+        XCTAssertEqual(place.sourceProviderPlaceID, "preview-coffee")
+        XCTAssertEqual(place.latitude, 34.05)
+        XCTAssertEqual(place.longitude, -118.24)
+        XCTAssertEqual(rpc.calls.map(\.name), ["public_web_preview"])
+        XCTAssertEqual(rpc.calls[0].body["input_kind"] as? String, "place")
+        XCTAssertEqual(rpc.calls[0].body["input_identifier"] as? String, placeID)
+    }
+
     func testSocialGraphRepositoriesCallExpectedRPCs() async throws {
         let rpc = RecordingRPC()
         let graphJSON = """
@@ -1714,6 +1757,63 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[4].body["input_list_id"] as? String, listID)
     }
 
+    func testPlaceListRepositoryUsesConsentBasedInviteRPCs() async throws {
+        let rpc = RecordingRPC()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let token = String(repeating: "ab", count: 24)
+        rpc.responses["create_place_list_invite"] = """
+        {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "list_id": "\(listID)",
+          "token": "\(token)",
+          "expires_at": "2026-08-05T19:30:00Z"
+        }
+        """.data(using: .utf8)
+        rpc.responses["resolve_place_list_invite"] = """
+        {
+          "status": "active",
+          "can_accept": true,
+          "list_id": "\(listID)",
+          "list_name": "Saturday plan",
+          "list_description": "A shared shortlist",
+          "owner_user_id": "user_joe",
+          "owner_handle": "joe",
+          "owner_display_name": "Joe",
+          "item_count": 4,
+          "expires_at": "2026-08-05T19:30:00Z",
+          "viewer_is_owner": false,
+          "viewer_is_collaborator": false
+        }
+        """.data(using: .utf8)
+        rpc.responses["accept_place_list_invite"] = "\"\(listID)\"".data(using: .utf8)
+        let repository = SupabasePlaceListRepository(rpc: rpc)
+
+        let creation = try await repository.createInvite(listID: listID)
+        let resolution = try await repository.resolveInvite(token: token)
+        let acceptedListID = try await repository.acceptInvite(token: token)
+        try await repository.revokeInvite(token: token)
+
+        XCTAssertEqual(creation.listID, listID)
+        XCTAssertEqual(creation.token, token)
+        XCTAssertEqual(resolution.status, .active)
+        XCTAssertTrue(resolution.canAccept)
+        XCTAssertEqual(resolution.listName, "Saturday plan")
+        XCTAssertEqual(acceptedListID, listID)
+        XCTAssertEqual(
+            rpc.calls.map(\.name),
+            [
+                "create_place_list_invite",
+                "resolve_place_list_invite",
+                "accept_place_list_invite",
+                "revoke_place_list_invite"
+            ]
+        )
+        XCTAssertEqual(rpc.calls[0].body["input_list_id"] as? String, listID)
+        XCTAssertEqual(rpc.calls[1].body["input_token"] as? String, token)
+        XCTAssertEqual(rpc.calls[2].body["input_token"] as? String, token)
+        XCTAssertEqual(rpc.calls[3].body["input_token"] as? String, token)
+    }
+
     func testDiscoverFilterParserInvokesEdgeFunctionWithRawQueryAndSchema() async throws {
         let rpc = RecordingRPC()
         rpc.responses["function:parse-discover-query"] = """
@@ -2361,12 +2461,16 @@ final class RemoteRepositoryTests: XCTestCase {
             .people(.friends)
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "recme://lists/44000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://getrec.me/lists/44000000-0000-0000-0000-000000000001")!),
             .list(id: "44000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "recme://places/40000000-0000-0000-0000-000000000001")!),
+            PushNotificationManager.destination(from: URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000001")!),
             .place(id: "40000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: URL(string: "https://getrec.me/invites/abcdef")!),
+            .listInvite(token: "abcdef")
         )
         XCTAssertEqual(
             PushNotificationManager.destination(

@@ -134,16 +134,20 @@ struct AppEntryView: View {
             }
         }
         .onOpenURL { url in
-            if WanderRootView.sharedProfileRoute(for: url) != nil {
-                if case .ready = coordinator.state {
-                    deepLinkInbox.receive(url)
-                } else {
-                    coordinator.capturePendingURL(url)
-                }
-                return
-            }
-            deepLinkInbox.receive(url)
+            receiveIncomingURL(url)
         }
+    }
+
+    private func receiveIncomingURL(_ url: URL) {
+        if WanderRootView.sharedProfileRoute(for: url) != nil {
+            if case .ready = coordinator.state {
+                deepLinkInbox.receive(url)
+            } else {
+                coordinator.capturePendingURL(url)
+            }
+            return
+        }
+        deepLinkInbox.receive(url)
     }
 }
 

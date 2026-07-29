@@ -836,7 +836,7 @@ struct WanderRootView: View {
     static func notificationTab(for destination: NotificationDestination) -> WanderTab {
         switch destination {
         case .people, .drafts: .profile
-        case .list: .lists
+        case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
         case .discover: .discover
         }
@@ -1051,6 +1051,15 @@ struct WanderRootView: View {
             )
         case .sharedProfile(let profileID):
             sharedProfile = SharedProfileRoute(profileID: profileID)
+        case .sharedPlace(let placeID):
+            selectedTab = .map
+            pushNotifications.route(to: .place(id: placeID))
+        case .sharedList(let listID):
+            selectedTab = .lists
+            pushNotifications.route(to: .list(id: listID))
+        case .listInvite(let token):
+            selectedTab = .lists
+            pushNotifications.route(to: .listInvite(token: token))
         }
     }
 

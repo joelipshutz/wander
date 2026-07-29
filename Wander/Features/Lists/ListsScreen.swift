@@ -17,6 +17,8 @@ struct ListsScreen: View {
     @State private var collaboratorList: PlaceListMock?
     @State private var mapList: PlaceListMock?
     @State private var selectedProfileID: String?
+    @State private var pendingListInvite: PlaceListInvitePrompt?
+    @State private var listInviteErrorMessage: String?
     @State private var deletedListIDs = Set<String>()
 
     init(scenario: ListsScreenScenario = .resolved()) {
@@ -82,6 +84,13 @@ struct ListsScreen: View {
                     .presentationDetents([.medium, .large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
+            .sheet(item: $pendingListInvite) { prompt in
+                PlaceListInviteSheet(prompt: prompt) {
+                    await acceptListInvite(prompt)
+                }
+                    .presentationDetents([.medium])
+                    .presentationBackground(WanderTheme.canvasWarm.color)
+            }
             .fullScreenCover(item: $mapList) { list in
                 ListMapFullScreen(
                     list: list,
@@ -105,11 +114,27 @@ struct ListsScreen: View {
                 await handleNotificationRoute(request)
             }
         }
+        .alert("Couldn’t open invitation", isPresented: listInviteErrorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(listInviteErrorMessage ?? "This invitation is no longer available.")
+        }
     }
 
     private func handleNotificationRoute(_ request: NotificationNavigationRequest?) async {
-        guard let request, case .list(let listID) = request.destination else { return }
+        guard let request else { return }
 
+        switch request.destination {
+        case .list(let listID):
+            await openList(listID: listID, requestID: request.id)
+        case .listInvite(let token):
+            await resolveListInvite(token: token, requestID: request.id)
+        default:
+            return
+        }
+    }
+
+    private func openList(listID: String, requestID: UUID? = nil) async {
         await store.refreshRemotePlaceLists(backend: backend)
         guard let list = store.visiblePlaceLists.first(where: {
             $0.id == listID || $0.localID == listID || $0.serverID == listID
@@ -119,7 +144,53 @@ struct ListsScreen: View {
         selectedScopeID = list.ownerUserID == store.currentUser.id
             ? ListsScope.mine.rawValue
             : ListsScope.collabs.rawValue
-        pushNotifications.consumeNavigationRequest(id: request.id)
+        if let requestID {
+            pushNotifications.consumeNavigationRequest(id: requestID)
+        }
+    }
+
+    private func resolveListInvite(token: String, requestID: UUID) async {
+        do {
+            let resolution = try await backend.resolvePlaceListInvite(token: token)
+            pushNotifications.consumeNavigationRequest(id: requestID)
+
+            if resolution.viewerIsCollaborator == true,
+               let listID = resolution.listID {
+                await openList(listID: listID)
+                return
+            }
+
+            guard resolution.status == .active, resolution.canAccept else {
+                listInviteErrorMessage = resolution.unavailableMessage
+                return
+            }
+
+            pendingListInvite = PlaceListInvitePrompt(
+                token: token,
+                resolution: resolution
+            )
+        } catch {
+            pushNotifications.consumeNavigationRequest(id: requestID)
+            listInviteErrorMessage = "This invitation could not be checked. Try opening the link again."
+        }
+    }
+
+    private func acceptListInvite(_ prompt: PlaceListInvitePrompt) async -> Bool {
+        do {
+            let listID = try await backend.acceptPlaceListInvite(token: prompt.token)
+            await store.refreshRemotePlaceLists(backend: backend)
+            await openList(listID: listID)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private var listInviteErrorBinding: Binding<Bool> {
+        Binding(
+            get: { listInviteErrorMessage != nil },
+            set: { if !$0 { listInviteErrorMessage = nil } }
+        )
     }
 
     private func detailScreen(for list: PlaceListMock, initialSelectedPlace: ListPlaceMock? = nil) -> some View {
@@ -763,6 +834,18 @@ private struct ListDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                if let listShareContent {
+                    WanderShareButton(content: listShareContent) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 14, weight: .black))
+                            .frame(width: 34, height: 34)
+                            .background(WanderTheme.surfaceSand.color)
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .clipShape(Circle())
+                    }
+                    .accessibilityLabel("Share list")
+                }
+
                 if canAddPlaces {
                     Button {
                         isAddingPlaces = true
@@ -1043,6 +1126,13 @@ private struct ListDetailScreen: View {
 
     private var canAddPlaces: Bool {
         sourceList.map(store.canAddPlaces(to:)) ?? list.canAddPlaces
+    }
+
+    private var listShareContent: WanderShareContent? {
+        WanderShareContent.list(
+            serverID: sourceList?.serverID ?? list.sourceListID,
+            name: displayList.name
+        )
     }
 
     @MainActor
@@ -1911,12 +2001,139 @@ private struct ListPlaceRow: View {
     }
 }
 
+private struct PlaceListInvitePrompt: Identifiable {
+    let token: String
+    let resolution: PlaceListInviteResolution
+
+    var id: String { token }
+}
+
+private extension PlaceListInviteResolution {
+    var unavailableMessage: String {
+        switch status {
+        case .expired:
+            "This invitation has expired. Ask the list owner for a new link."
+        case .revoked:
+            "The list owner revoked this invitation."
+        case .accepted:
+            "This single-use invitation has already been accepted."
+        case .unavailable:
+            "This list is no longer available for collaboration."
+        case .invalid:
+            "This invitation link is invalid."
+        case .active:
+            viewerIsOwner == true
+                ? "You already own this list."
+                : "This invitation cannot be accepted by this account."
+        }
+    }
+}
+
+private struct PlaceListInviteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let prompt: PlaceListInvitePrompt
+    let onAccept: @MainActor () async -> Bool
+    @State private var isAccepting = false
+    @State private var acceptanceErrorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                Image(systemName: "person.2.badge.plus")
+                    .font(.system(size: 24, weight: .black))
+                    .frame(width: 52, height: 52)
+                    .background(WanderTheme.terracottaTint.color)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text("build this list together")
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                    Text(prompt.resolution.listName ?? "Shared list")
+                        .font(WanderTypography.editorialTitle)
+                    if let owner = prompt.resolution.ownerDisplayName {
+                        Text("Invited by \(owner)")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                    if let description = prompt.resolution.listDescription,
+                       !description.isEmpty {
+                        Text(description)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                }
+
+                Button {
+                    isAccepting = true
+                    Task {
+                        if await onAccept() {
+                            dismiss()
+                        } else {
+                            acceptanceErrorMessage = "The invitation could not be accepted. It may have expired, been revoked, or already been used."
+                        }
+                        isAccepting = false
+                    }
+                } label: {
+                    HStack {
+                        if isAccepting {
+                            ProgressView()
+                                .tint(WanderTheme.textOnAction.color)
+                        }
+                        Text(isAccepting ? "joining..." : "accept invitation")
+                            .font(.system(size: 15, weight: .black))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(WanderTheme.terracotta.color)
+                .disabled(isAccepting)
+
+                Text("You’ll become a collaborator only after accepting. The link is single-use and can expire or be revoked.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Spacer()
+            }
+            .padding(WanderTheme.spacing4)
+            .wanderScreen()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("not now") { dismiss() }
+                        .font(.system(size: 14, weight: .black))
+                }
+            }
+            .alert("Couldn’t join list", isPresented: acceptanceErrorBinding) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(acceptanceErrorMessage ?? "Try opening the invitation again.")
+            }
+        }
+    }
+
+    private var acceptanceErrorBinding: Binding<Bool> {
+        Binding(
+            get: { acceptanceErrorMessage != nil },
+            set: { if !$0 { acceptanceErrorMessage = nil } }
+        )
+    }
+}
+
+private struct ListSharePresentation: Identifiable {
+    let id = UUID()
+    let content: WanderShareContent
+}
+
 private struct CollaboratorInviteSheet: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var backend: WanderBackend
     @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
     let onSave: ([ListCollaboratorMock]) -> Void
     @State private var selectedCollaborators: [ListCollaboratorMock]
+    @State private var sharePresentation: ListSharePresentation?
+    @State private var isCreatingInviteLink = false
+    @State private var inviteLinkErrorMessage: String?
 
     init(list: PlaceListMock, onSave: @escaping ([ListCollaboratorMock]) -> Void = { _ in }) {
         self.list = list
@@ -1947,6 +2164,7 @@ private struct CollaboratorInviteSheet: View {
                         )
                     } else {
                         FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
+                        inviteByLinkSection
                     }
                 }
                 .padding(WanderTheme.spacing4)
@@ -1963,11 +2181,98 @@ private struct CollaboratorInviteSheet: View {
                     .foregroundStyle(WanderTheme.terracotta.color)
                 }
             }
+            .sheet(item: $sharePresentation) { presentation in
+                WanderShareSheet(content: presentation.content)
+            }
+            .alert("Couldn’t create invitation", isPresented: inviteLinkErrorBinding) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(inviteLinkErrorMessage ?? "Try again in a moment.")
+            }
         }
     }
 
     private var canInviteWhilePrivate: Bool {
         list.isOwnedByCurrentUser && list.isCollaborative
+    }
+
+    private var canCreateInviteLink: Bool {
+        guard list.isOwnedByCurrentUser,
+              !store.isPrivateProfile,
+              let listID = list.sourceListID
+        else { return false }
+        return UUID(uuidString: listID) != nil
+    }
+
+    private var inviteByLinkSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("invite by link")
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            Button {
+                createInviteLink()
+            } label: {
+                HStack(spacing: WanderTheme.spacing3) {
+                    Image(systemName: "link")
+                        .font(.system(size: 17, weight: .black))
+                        .frame(width: 42, height: 42)
+                        .background(WanderTheme.terracottaTint.color)
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isCreatingInviteLink ? "creating link..." : "share collaborator invite")
+                            .font(.system(size: 15, weight: .black))
+                        Text("Single-use · expires in 7 days")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                    Spacer()
+                    if isCreatingInviteLink {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceBone.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canCreateInviteLink || isCreatingInviteLink)
+            .opacity(canCreateInviteLink ? 1 : 0.48)
+        }
+    }
+
+    private func createInviteLink() {
+        guard let listID = list.sourceListID, canCreateInviteLink else { return }
+        isCreatingInviteLink = true
+        inviteLinkErrorMessage = nil
+
+        Task {
+            defer { isCreatingInviteLink = false }
+            do {
+                let invite = try await backend.createPlaceListInvite(listID: listID)
+                guard let content = WanderShareContent.listInvite(
+                    token: invite.token,
+                    name: list.name
+                ) else {
+                    inviteLinkErrorMessage = "The invitation was created, but its share link was invalid."
+                    return
+                }
+                sharePresentation = ListSharePresentation(content: content)
+            } catch {
+                inviteLinkErrorMessage = "The invitation link could not be created. Check your connection and try again."
+            }
+        }
+    }
+
+    private var inviteLinkErrorBinding: Binding<Bool> {
+        Binding(
+            get: { inviteLinkErrorMessage != nil },
+            set: { if !$0 { inviteLinkErrorMessage = nil } }
+        )
     }
 }
 

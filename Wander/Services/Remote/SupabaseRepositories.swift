@@ -291,6 +291,105 @@ struct SupabasePlaceRepository: PlaceRepository {
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("remote manual place resolution")
     }
+
+    func sharedPlace(id: String) async throws -> PlaceCandidate? {
+        guard UUID(uuidString: id) != nil else { return nil }
+        let preview: PublicSharedPlacePreview = try await rpc.call(
+            "public_web_preview",
+            params: PublicWebPreviewParams(
+                inputKind: "place",
+                inputIdentifier: id
+            )
+        )
+        return preview.placeCandidate()
+    }
+}
+
+private struct PublicWebPreviewParams: Encodable {
+    let inputKind: String
+    let inputIdentifier: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputKind = "input_kind"
+        case inputIdentifier = "input_identifier"
+    }
+}
+
+private struct PublicSharedPlacePreview: Decodable {
+    let isAvailable: Bool
+    let placeID: String?
+    let title: String?
+    let category: String?
+    let primaryCategory: String?
+    let subcategory: String?
+    let categorySource: String?
+    let categoryConfidence: Double?
+    let rawProviderType: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let latitude: Double?
+    let longitude: Double?
+    let sourceProvider: String?
+    let sourceProviderPlaceID: String?
+    let confidence: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case isAvailable = "is_available"
+        case placeID = "place_id"
+        case title
+        case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case categorySource = "category_source"
+        case categoryConfidence = "category_confidence"
+        case rawProviderType = "raw_provider_type"
+        case address
+        case locality
+        case region
+        case country
+        case latitude
+        case longitude
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case confidence
+    }
+
+    func placeCandidate() -> PlaceCandidate? {
+        guard isAvailable,
+              let placeID,
+              let title,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let latitude,
+              (-90...90).contains(latitude),
+              let longitude,
+              (-180...180).contains(longitude)
+        else {
+            return nil
+        }
+
+        let resolvedCategory = primaryCategory ?? category ?? "place"
+        return PlaceCandidate(
+            id: placeID,
+            name: title,
+            category: resolvedCategory,
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            categorySource: categorySource ?? PlaceCategorySource.legacy.rawValue,
+            categoryConfidence: categoryConfidence,
+            rawProviderType: rawProviderType,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider ?? "recme",
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            confidence: confidence ?? 1
+        )
+    }
 }
 
 struct SupabaseFeedRepository: FeedRepository {
@@ -1318,6 +1417,34 @@ struct SupabasePlaceListRepository: PlaceListRepository {
             params: RemovePlaceListItemParams(inputListID: listID, inputItemID: itemID)
         )
     }
+
+    func createInvite(listID: String) async throws -> PlaceListInviteCreation {
+        try await rpc.call(
+            "create_place_list_invite",
+            params: PlaceListIDParams(inputListID: listID)
+        )
+    }
+
+    func resolveInvite(token: String) async throws -> PlaceListInviteResolution {
+        try await rpc.call(
+            "resolve_place_list_invite",
+            params: PlaceListInviteTokenParams(inputToken: token)
+        )
+    }
+
+    func acceptInvite(token: String) async throws -> String {
+        try await rpc.call(
+            "accept_place_list_invite",
+            params: PlaceListInviteTokenParams(inputToken: token)
+        )
+    }
+
+    func revokeInvite(token: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "revoke_place_list_invite",
+            params: PlaceListInviteTokenParams(inputToken: token)
+        )
+    }
 }
 
 struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
@@ -1882,6 +2009,14 @@ private struct PlaceListIDParams: Encodable {
 
     enum CodingKeys: String, CodingKey {
         case inputListID = "input_list_id"
+    }
+}
+
+private struct PlaceListInviteTokenParams: Encodable {
+    let inputToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputToken = "input_token"
     }
 }
 

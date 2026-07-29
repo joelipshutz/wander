@@ -6,6 +6,7 @@
 	<string>$(APS_ENVIRONMENT)</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:getrec.me</string>
 		<string>webcredentials:growing-pheasant-22.clerk.accounts.dev</string>
 	</array>
 	<key>com.apple.security.application-groups</key>

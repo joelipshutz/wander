@@ -73,6 +73,9 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     case profileCalendar
     case profileCalendarDate(WanderCalendarDate)
     case sharedProfile(profileID: String)
+    case sharedPlace(placeID: String)
+    case sharedList(listID: String)
+    case listInvite(token: String)
 
     var url: URL? {
         switch self {
@@ -89,14 +92,18 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         case .profileCalendarDate(let date):
             Self.profileCalendarDateURL(date)
         case .sharedProfile(let profileID):
-            Self.sharedProfileURL(profileID: profileID)
+            Self.sharedEntityURL(root: "profiles", identifier: profileID)
+        case .sharedPlace(let placeID):
+            Self.sharedEntityURL(root: "places", identifier: placeID)
+        case .sharedList(let listID):
+            Self.sharedEntityURL(root: "lists", identifier: listID)
+        case .listInvite(let token):
+            Self.sharedEntityURL(root: "invites", identifier: token)
         }
     }
 
     static func parse(_ url: URL) -> Self? {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              components.scheme?.lowercased() == "recme",
-              let host = components.host?.lowercased(),
               components.user == nil,
               components.password == nil,
               components.port == nil,
@@ -105,6 +112,22 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             return nil
         }
 
+        switch components.scheme?.lowercased() {
+        case "recme":
+            guard let host = components.host?.lowercased() else { return nil }
+            return parseAppURL(host: host, components: components)
+        case "https":
+            guard components.host?.lowercased() == "getrec.me" else { return nil }
+            return parseUniversalLink(components: components)
+        default:
+            return nil
+        }
+    }
+
+    private static func parseAppURL(
+        host: String,
+        components: URLComponents
+    ) -> Self? {
         let pathSegments = Self.pathSegments(from: components)
 
         switch (host, pathSegments) {
@@ -147,13 +170,85 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         case ("profiles", let segments):
             guard segments.count == 1,
                   let profileID = segments.first,
-                  hasNoQuery(in: components),
-                  !profileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                  isValidSharedIdentifier(
+                    profileID,
+                    root: "profiles",
+                    components: components
+                  )
             else {
                 return nil
             }
             return .sharedProfile(profileID: profileID)
 
+        case ("places", let segments):
+            guard segments.count == 1,
+                  let placeID = segments.first,
+                  isValidSharedIdentifier(
+                    placeID,
+                    root: "places",
+                    components: components
+                  )
+            else {
+                return nil
+            }
+            return .sharedPlace(placeID: placeID)
+
+        case ("lists", let segments):
+            guard segments.count == 1,
+                  let listID = segments.first,
+                  isValidSharedIdentifier(
+                    listID,
+                    root: "lists",
+                    components: components
+                  )
+            else {
+                return nil
+            }
+            return .sharedList(listID: listID)
+
+        case ("invites", let segments):
+            guard segments.count == 1,
+                  let token = segments.first,
+                  isValidSharedIdentifier(
+                    token,
+                    root: "invites",
+                    components: components
+                  )
+            else {
+                return nil
+            }
+            return .listInvite(token: token)
+
+        default:
+            return nil
+        }
+    }
+
+    private static func parseUniversalLink(
+        components: URLComponents
+    ) -> Self? {
+        let segments = pathSegments(from: components)
+        guard segments.count == 2,
+              let root = segments.first,
+              let identifier = segments.last,
+              isValidSharedIdentifier(
+                identifier,
+                root: root,
+                components: components
+              )
+        else {
+            return nil
+        }
+
+        switch root {
+        case "profiles":
+            return .sharedProfile(profileID: identifier)
+        case "places":
+            return .sharedPlace(placeID: identifier)
+        case "lists":
+            return .sharedList(listID: identifier)
+        case "invites":
+            return .listInvite(token: identifier)
         default:
             return nil
         }
@@ -191,15 +286,20 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         return components.url
     }
 
-    private static func sharedProfileURL(profileID: String) -> URL? {
-        guard !profileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              let encodedID = profileID.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed)
+    private static func sharedEntityURL(
+        root: String,
+        identifier: String
+    ) -> URL? {
+        guard isValidSharedIdentifier(identifier, root: root),
+              let encodedID = identifier.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed)
         else {
             return nil
         }
 
-        var components = baseComponents(host: "profiles", path: "")
-        components.percentEncodedPath = "/\(encodedID)"
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "getrec.me"
+        components.percentEncodedPath = "/\(root)/\(encodedID)"
         return components.url
     }
 
@@ -238,6 +338,33 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
 
     private static func hasNoQuery(in components: URLComponents) -> Bool {
         components.percentEncodedQuery == nil
+    }
+
+    private static func isValidSharedIdentifier(
+        _ identifier: String,
+        root: String,
+        components: URLComponents? = nil
+    ) -> Bool {
+        guard components.map({ hasNoQuery(in: $0) }) ?? true,
+              !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              identifier.utf8.count <= 256
+        else {
+            return false
+        }
+
+        switch root {
+        case "profiles":
+            return true
+        case "places", "lists":
+            return UUID(uuidString: identifier) != nil
+        case "invites":
+            return identifier.range(
+                of: "^[a-fA-F0-9]{48}$",
+                options: .regularExpression
+            ) != nil
+        default:
+            return false
+        }
     }
 
     private static func searchQuery(in components: URLComponents) -> String?? {
