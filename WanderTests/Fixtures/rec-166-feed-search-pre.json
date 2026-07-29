@@ -1,0 +1,15 @@
+{
+  "bug": "Build 109 Feed search stacks a centered Discover header above a shifted, clipped search field",
+  "pre_fix": {
+    "feed": "the resting Feed correctly shows Places and People above its persistent search launcher",
+    "search": "opening search adds a second Discover header and pushes the focused field underneath it",
+    "dismissal": "the shifted search surface does not expose the approved single-toolbar Back-to-Feed behavior"
+  },
+  "expected": {
+    "feed": "the resting Feed keeps build 109's Places and People header and persistent search launcher",
+    "chrome": "active search replaces that header with one pinned Back and focused Search toolbar and no Discover title",
+    "results": "submitted search preserves REC-150 semantics and REC-169 result actions under the same pinned toolbar",
+    "clear": "Clear removes the query but keeps the focused suggested-search state open",
+    "dismissal": "Back cancels in-flight work and restores the prior Feed tab and scroll context"
+  }
+}
