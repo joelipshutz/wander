@@ -28581,3 +28581,41 @@ Starting status and coordination:
   `Wander/Services/Auth/AuthSessionProviding.swift`,
   `WanderTests/AuthSessionTests.swift`, and this log. No build-number bump,
   TestFlight release, or Linear record is requested.
+
+Implementation and validation:
+
+- Added `AppEntryForegroundRefreshPolicy` with a 30-second monotonic
+  `systemUptime` grace. A validated `.ready` app now remains mounted when it
+  returns inside that interval; activation at or after 30 seconds still runs
+  the authoritative coordinator/session refresh.
+- Removed the duplicate `UIApplication.willEnterForegroundNotification`
+  invalidation from `AuthSessionStore`. `AppEntryView` now owns the foreground
+  policy, while the provider's continuous `sessionChanges()` observation still
+  handles explicit Clerk logout/session events immediately.
+- Added boundary, timestamp-consumption, and source-contract regression
+  coverage. The first focused run failed before implementation because
+  `AppEntryForegroundRefreshPolicy` did not exist, confirming the red test.
+- Ran `xcodegen generate`; it produced no project-file diff.
+- Passed focused warm-start policy tests: 3 tests, 0 failures.
+- Passed `AuthSessionTests` plus `OnboardingStateTests`: 28 tests, 0 failures.
+- The first full run passed 821 of 822 unit tests and all 3 UI tests; the only
+  failure was the expected stale source-contract assertion for the old
+  foreground guard. Updated that contract to cover the new background/active
+  policy and absence of the duplicate notification observer.
+- Passed the complete suite after that update: 822 unit tests and 3 UI tests,
+  0 failures.
+- Passed the generic iOS Simulator build with `CODE_SIGNING_ALLOWED=NO`.
+- Rebasing onto latest `origin/main` commit `c12b00f9b` overlapped in
+  `AppEntryView.swift`; preserved both the newly landed widget deep-link inbox
+  and the warm-start policy. Post-rebase focused validation passed all 7
+  warm-start, navigation-contract, and widget deep-link tests.
+
+Outcome:
+
+- Implementation commit after rebase: `05cbff489`.
+- Branch is ready for push and local Xcode/device testing. Manual verification
+  should leave the app on a non-default screen or open presentation, background
+  it for a few seconds, and confirm that reopening resumes in place; after 30
+  seconds, the existing fail-closed session refresh remains intentional.
+- No known implementation blockers. No build-number bump, TestFlight release,
+  Linear record, or tester-facing release note was created.
