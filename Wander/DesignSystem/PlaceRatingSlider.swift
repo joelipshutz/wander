@@ -55,7 +55,11 @@ struct PlaceRatingLiquidState: Equatable {
     }
 
     static func resolve(_ score: Double) -> PlaceRatingLiquidState {
-        let normalized = PlaceRating.normalized(score) ?? PlaceRating.defaultScore
+        let candidate = score.isFinite ? score : PlaceRating.defaultScore
+        let normalized = min(
+            max(candidate, PlaceRating.minimumScore),
+            PlaceRating.maximumScore
+        )
         let span = PlaceRating.maximumScore - PlaceRating.minimumScore
         let progress = span > 0 ? (normalized - PlaceRating.minimumScore) / span : 1
         let tone: (red: Double, green: Double, blue: Double)
@@ -105,6 +109,7 @@ struct PlaceRatingSlider: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @State private var interactionScore: Double?
     @State private var selectionFeedbackTrigger = 0
 
     private var reaction: PlaceRatingReaction {
@@ -112,7 +117,7 @@ struct PlaceRatingSlider: View {
     }
 
     private var liquidState: PlaceRatingLiquidState {
-        PlaceRatingLiquidState.resolve(score)
+        PlaceRatingLiquidState.resolve(interactionScore ?? reaction.score)
     }
 
     var body: some View {
@@ -186,7 +191,10 @@ struct PlaceRatingSlider: View {
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(liquidState.color.opacity(0.34), lineWidth: 1)
         }
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: liquidState)
+        .animation(
+            reduceMotion || interactionScore != nil ? nil : .easeInOut(duration: 0.3),
+            value: liquidState
+        )
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("place-rating-slider")
         .accessibilityLabel("Rating")
@@ -261,20 +269,44 @@ struct PlaceRatingSlider: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        updateScore(for: value.location.x, inset: inset, trackWidth: trackWidth)
+                        updateInteraction(
+                            for: value.location.x,
+                            inset: inset,
+                            trackWidth: trackWidth
+                        )
                     }
                     .onEnded { value in
-                        updateScore(for: value.location.x, inset: inset, trackWidth: trackWidth)
+                        finishInteraction(
+                            at: value.location.x,
+                            inset: inset,
+                            trackWidth: trackWidth
+                        )
                     }
             )
         }
         .frame(height: 52)
     }
 
-    private func updateScore(for locationX: CGFloat, inset: CGFloat, trackWidth: CGFloat) {
+    private func candidateScore(for locationX: CGFloat, inset: CGFloat, trackWidth: CGFloat) -> Double {
         let progress = min(max((locationX - inset) / trackWidth, 0), 1)
         let span = PlaceRating.maximumScore - PlaceRating.minimumScore
-        setScore(PlaceRating.minimumScore + (Double(progress) * span))
+        return PlaceRating.minimumScore + (Double(progress) * span)
+    }
+
+    private func updateInteraction(for locationX: CGFloat, inset: CGFloat, trackWidth: CGFloat) {
+        let candidate = candidateScore(for: locationX, inset: inset, trackWidth: trackWidth)
+        interactionScore = candidate
+        setScore(candidate)
+    }
+
+    private func finishInteraction(at locationX: CGFloat, inset: CGFloat, trackWidth: CGFloat) {
+        let candidate = candidateScore(for: locationX, inset: inset, trackWidth: trackWidth)
+        interactionScore = candidate
+        setScore(candidate)
+
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) {
+            interactionScore = nil
+        }
     }
 
     private func scaleLabelColor(for value: Int) -> Color {

@@ -106,4 +106,16 @@ final class PlaceRatingReactionTests: XCTestCase {
         XCTAssertLessThan(hot.green, 0.1)
         XCTAssertLessThan(hot.blue, 0.1)
     }
+
+    func testLiquidVisualStateInterpolatesBetweenHalfPointRatings() {
+        let lowerStep = PlaceRatingLiquidState.resolve(3)
+        let liveDrag = PlaceRatingLiquidState.resolve(3.25)
+        let upperStep = PlaceRatingLiquidState.resolve(3.5)
+
+        XCTAssertEqual(liveDrag.score, 3.25, accuracy: 0.001)
+        XCTAssertGreaterThan(liveDrag.progress, lowerStep.progress)
+        XCTAssertLessThan(liveDrag.progress, upperStep.progress)
+        XCTAssertGreaterThan(liveDrag.level, lowerStep.level)
+        XCTAssertLessThan(liveDrag.level, upperStep.level)
+    }
 }
