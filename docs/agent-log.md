@@ -28613,7 +28613,8 @@ Implementation and validation:
 Outcome:
 
 - Implementation commit after rebase: `05cbff489`.
-- Branch is ready for push and local Xcode/device testing. Manual verification
+- Ready PR: `#292` (`https://github.com/joelipshutz/wander/pull/292`).
+- Branch is pushed and ready for local Xcode/device testing. Manual verification
   should leave the app on a non-default screen or open presentation, background
   it for a few seconds, and confirm that reopening resumes in place; after 30
   seconds, the existing fail-closed session refresh remains intentional.
