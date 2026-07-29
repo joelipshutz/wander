@@ -3936,18 +3936,6 @@ final class WanderStore: ObservableObject {
             }
 
             if previousStatus == .been, status == .wannaGo {
-                preserveHistoricalWant(
-                    for: existing,
-                    note: note,
-                    attributes: attributes ?? previousAttributeDrafts,
-                    wantedAt: .now
-                )
-                existing.visibilityRaw = resolvedVisibility.rawValue
-                existing.updatedAt = .now
-                existing.localUpdatedAt = .now
-                existing.syncStateRaw = SyncState.pendingUpdate.rawValue
-                objectWillChange.send()
-                persist()
                 return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
             }
 
@@ -4086,6 +4074,14 @@ final class WanderStore: ObservableObject {
         #if DEBUG
         WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
         #endif
+
+        if status == .wannaGo,
+           currentUserPlace(matching: localResult.userPlaceID)?.status == .been {
+            #if DEBUG
+            WanderDebugLog.sync.debug("direct save skipped remote reason=already_checked_in user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
+            #endif
+            return localResult
+        }
 
         guard let backend else {
             #if DEBUG

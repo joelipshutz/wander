@@ -2738,7 +2738,7 @@ private struct SavedPlacesListScreen: View {
     }
 
     private func beginAddVisitSelectedPlace(_ visiblePlace: VisiblePlace) {
-        let context = MapPlaceSaveContext.addVisitVisiblePlace(
+        let context = MapPlaceSaveContext.existingCurrentUserSave(
             visiblePlace,
             attributes: store.attributes(for: visiblePlace.userPlace.id),
             latestVisit: store.visits(for: visiblePlace.userPlace.id).first

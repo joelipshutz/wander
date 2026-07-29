@@ -164,7 +164,7 @@ struct AddScreen: View {
                     candidates = [candidate]
                     selectedCandidateID = candidate.id
                     pendingVisitPhotoAttachments = []
-                    addSaveFlow = MapPlaceSaveContext.addCandidate(
+                    addSaveFlow = addCandidateContext(
                         candidate,
                         sourceType: .currentLocation,
                         defaultVisibility: store.effectiveDefaultVisibility
@@ -577,11 +577,33 @@ struct AddScreen: View {
     private func openSharedSaveFlow() {
         guard let selectedCandidate else { return }
 
-        addSaveFlow = MapPlaceSaveContext.addCandidate(
+        addSaveFlow = addCandidateContext(
             selectedCandidate,
             sourceType: selectedSource,
             defaultVisibility: store.effectiveDefaultVisibility,
             initialPhotoAttachments: pendingVisitPhotoAttachments
+        )
+    }
+
+    private func addCandidateContext(
+        _ candidate: PlaceCandidate,
+        sourceType: AddSourceType,
+        defaultVisibility: PlaceVisibility,
+        initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
+    ) -> MapPlaceSaveContext {
+        let currentUserSave = MapPlaceSaveContext.currentUserSave(
+            matching: candidate,
+            in: store.currentUserVisiblePlaces
+        )
+        return MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: sourceType,
+            defaultVisibility: defaultVisibility,
+            initialPhotoAttachments: initialPhotoAttachments,
+            currentUserSave: currentUserSave,
+            latestVisit: currentUserSave.flatMap {
+                store.visits(for: $0.userPlace.id).first
+            }
         )
     }
 

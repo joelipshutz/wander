@@ -820,12 +820,11 @@ struct MapScreen: View {
                 saves: saveSummaries(for: selectedSearchCandidate),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
-                action: .add,
+                action: action(for: selectedSearchCandidate),
                 onOpen: openSelectedPlaceProfile
             ) {
-                mapSaveFlow = MapPlaceSaveContext.addCandidate(
-                    selectedSearchCandidate,
-                    sourceType: .manual,
+                performAction(
+                    for: selectedSearchCandidate,
                     defaultVisibility: store.effectiveDefaultVisibility
                 )
             }
@@ -853,15 +852,14 @@ struct MapScreen: View {
                 saves: saveSummaries(for: selectedSearchCandidate),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
-                action: .add,
+                action: action(for: selectedSearchCandidate),
                 onBack: {
                     isPlaceProfilePresented = false
                 },
                 onAction: {
                     dismissPlaceProfileThen {
-                        mapSaveFlow = MapPlaceSaveContext.addCandidate(
-                            selectedSearchCandidate,
-                            sourceType: .manual,
+                        performAction(
+                            for: selectedSearchCandidate,
                             defaultVisibility: store.defaultVisibility
                         )
                     }
@@ -1219,6 +1217,10 @@ struct MapScreen: View {
         PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: visiblePlace))
     }
 
+    private func action(for candidate: PlaceCandidate) -> PlaceSheetAction {
+        PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: candidate))
+    }
+
     private func performAction(for visiblePlace: VisiblePlace) {
         switch action(for: visiblePlace) {
         case .add:
@@ -1234,9 +1236,31 @@ struct MapScreen: View {
                 attributes: store.attributes(for: placeToEdit.userPlace.id),
                 latestVisit: store.visits(for: placeToEdit.userPlace.id).first
             )
+        case .editWant:
+            guard let placeToEdit = currentUserSave(matching: visiblePlace) else { return }
+            mapSaveFlow = MapPlaceSaveContext.editWant(
+                placeToEdit,
+                attributes: store.attributes(for: placeToEdit.userPlace.id)
+            )
         case .choose, .none:
             break
         }
+    }
+
+    private func performAction(
+        for candidate: PlaceCandidate,
+        defaultVisibility: PlaceVisibility
+    ) {
+        if let currentUserSave = currentUserSave(matching: candidate) {
+            performAction(for: currentUserSave)
+            return
+        }
+
+        mapSaveFlow = addCandidateContext(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: defaultVisibility
+        )
     }
 
     private func isSavedByCurrentUser(_ visiblePlace: VisiblePlace) -> Bool {
@@ -1247,6 +1271,32 @@ struct MapScreen: View {
         return store.currentUserVisiblePlaces.first { mine in
             VisiblePlaceGrouping.matches(mine, visiblePlace)
         }
+    }
+
+    private func currentUserSave(matching candidate: PlaceCandidate) -> VisiblePlace? {
+        MapPlaceSaveContext.currentUserSave(
+            matching: candidate,
+            in: store.currentUserVisiblePlaces
+        )
+    }
+
+    private func addCandidateContext(
+        _ candidate: PlaceCandidate,
+        sourceType: AddSourceType,
+        defaultVisibility: PlaceVisibility,
+        initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
+    ) -> MapPlaceSaveContext {
+        let currentUserSave = currentUserSave(matching: candidate)
+        return MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: sourceType,
+            defaultVisibility: defaultVisibility,
+            initialPhotoAttachments: initialPhotoAttachments,
+            currentUserSave: currentUserSave,
+            latestVisit: currentUserSave.flatMap {
+                store.visits(for: $0.userPlace.id).first
+            }
+        )
     }
 
     @MainActor
@@ -1715,17 +1765,13 @@ struct MapScreen: View {
             selectedSearchCandidateID = nil
             mapSearchCandidates = []
             center(on: visiblePlace)
-            mapSaveFlow = MapPlaceSaveContext.addVisiblePlace(
-                visiblePlace,
-                defaultVisibility: store.effectiveDefaultVisibility,
-                attributes: store.attributes(for: visiblePlace.userPlace.id)
-            )
+            performAction(for: visiblePlace)
         case .mapKit(let candidate):
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
-            mapSaveFlow = MapPlaceSaveContext.addCandidate(
+            mapSaveFlow = addCandidateContext(
                 candidate,
                 sourceType: .manual,
                 defaultVisibility: store.effectiveDefaultVisibility
@@ -2897,17 +2943,20 @@ enum MapPinAccessibility {
 enum PlaceSheetAction {
     case add
     case addVisit
+    case editWant
     case choose
     case none
 
     static func topLevelAction(currentUserSave: VisiblePlace?) -> PlaceSheetAction {
-        currentUserSave == nil ? .add : .addVisit
+        guard let currentUserSave else { return .add }
+        return currentUserSave.userPlace.status == .wannaGo ? .editWant : .addVisit
     }
 
     var systemImage: String {
         switch self {
         case .add: "plus"
         case .addVisit: "plus"
+        case .editWant: "pencil"
         case .choose: "checkmark"
         case .none: ""
         }
@@ -2917,6 +2966,7 @@ enum PlaceSheetAction {
         switch self {
         case .add: CheckInCopy.action
         case .addVisit: CheckInCopy.againAction
+        case .editWant: "Edit Wanna"
         case .choose: "Choose this place"
         case .none: ""
         }
@@ -2932,14 +2982,14 @@ enum PlaceSheetAction {
             return hasPriorCheckIn
                 ? CheckInCopy.againAction
                 : "Check in at \(placeName)"
-        case .add, .choose, .none:
+        case .add, .editWant, .choose, .none:
             return displayTitle
         }
     }
 
     var isPrimaryAction: Bool {
         switch self {
-        case .add, .addVisit, .choose:
+        case .add, .addVisit, .editWant, .choose:
             true
         case .none:
             false
@@ -3086,6 +3136,42 @@ struct MapPlaceSaveContext: Identifiable {
     let initialPersonalLabels: Set<String>
     let initialCuisine: String?
     let initialPhotoAttachments: [MapPlaceSavePhotoAttachment]
+    let existingCurrentUserSave: VisiblePlace?
+    let existingLatestVisit: LocalPlaceVisit?
+
+    init(
+        candidate: PlaceCandidate,
+        mode: MapPlaceSaveMode,
+        requiresStatusConfirmation: Bool,
+        hasPriorCheckIn: Bool,
+        initialStatus: PlaceStatus,
+        initialVisibility: PlaceVisibility,
+        initialRatingScore: Double?,
+        initialNote: String,
+        initialPlannedDate: Date?,
+        initialAnswers: [String: Set<String>],
+        initialPersonalLabels: Set<String>,
+        initialCuisine: String?,
+        initialPhotoAttachments: [MapPlaceSavePhotoAttachment],
+        existingCurrentUserSave: VisiblePlace? = nil,
+        existingLatestVisit: LocalPlaceVisit? = nil
+    ) {
+        self.candidate = candidate
+        self.mode = mode
+        self.requiresStatusConfirmation = requiresStatusConfirmation
+        self.hasPriorCheckIn = hasPriorCheckIn
+        self.initialStatus = initialStatus
+        self.initialVisibility = initialVisibility
+        self.initialRatingScore = initialRatingScore
+        self.initialNote = initialNote
+        self.initialPlannedDate = initialPlannedDate
+        self.initialAnswers = initialAnswers
+        self.initialPersonalLabels = initialPersonalLabels
+        self.initialCuisine = initialCuisine
+        self.initialPhotoAttachments = initialPhotoAttachments
+        self.existingCurrentUserSave = existingCurrentUserSave
+        self.existingLatestVisit = existingLatestVisit
+    }
 
     var isEditing: Bool {
         switch mode {
@@ -3105,6 +3191,10 @@ struct MapPlaceSaveContext: Identifiable {
 
     var startsOnDetails: Bool {
         !requiresStatusConfirmation
+    }
+
+    var allowsWannaGoSelection: Bool {
+        existingCurrentUserSave?.userPlace.status != .been
     }
 
     var allowsPhotoAttachments: Bool {
@@ -3246,22 +3336,26 @@ struct MapPlaceSaveContext: Identifiable {
         _ candidate: PlaceCandidate,
         sourceType: AddSourceType,
         defaultVisibility: PlaceVisibility,
-        initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
+        initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = [],
+        currentUserSave: VisiblePlace? = nil,
+        latestVisit: LocalPlaceVisit? = nil
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
             mode: .add(sourceType),
             requiresStatusConfirmation: true,
-            hasPriorCheckIn: false,
-            initialStatus: .wannaGo,
-            initialVisibility: defaultVisibility,
+            hasPriorCheckIn: currentUserSave?.userPlace.status == .been,
+            initialStatus: currentUserSave?.userPlace.status ?? .wannaGo,
+            initialVisibility: currentUserSave?.userPlace.visibility ?? defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
             initialPlannedDate: nil,
             initialAnswers: [:],
             initialPersonalLabels: [],
             initialCuisine: nil,
-            initialPhotoAttachments: initialPhotoAttachments
+            initialPhotoAttachments: initialPhotoAttachments,
+            existingCurrentUserSave: currentUserSave,
+            existingLatestVisit: latestVisit
         )
     }
 
@@ -3313,7 +3407,8 @@ struct MapPlaceSaveContext: Identifiable {
     static func addVisitVisiblePlace(
         _ visiblePlace: VisiblePlace,
         attributes: [LocalPlaceAttribute],
-        latestVisit: LocalPlaceVisit?
+        latestVisit: LocalPlaceVisit?,
+        initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     ) -> MapPlaceSaveContext {
         let defaultAttributes = latestVisit.map { VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: $0.attributeAnswersJSON) }
             ?? attributes.map { PlaceAttributeDraft(questionKey: $0.questionKey, valueType: $0.valueType, valueJSON: $0.valueJSON) }
@@ -3331,8 +3426,61 @@ struct MapPlaceSaveContext: Identifiable {
             initialAnswers: initialNewSaveAnswers(from: defaultAttributes),
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: defaultAttributes),
-            initialPhotoAttachments: []
+            initialPhotoAttachments: initialPhotoAttachments
         )
+    }
+
+    func resolvingExistingSave(selection: PlaceStatus) -> MapPlaceSaveContext {
+        guard case .add = mode,
+              let existingCurrentUserSave
+        else { return self }
+
+        return .existingCurrentUserSave(
+            existingCurrentUserSave,
+            selectedStatus: selection,
+            attributes: existingCurrentUserSave.attributes,
+            latestVisit: existingLatestVisit,
+            initialPhotoAttachments: initialPhotoAttachments
+        )
+    }
+
+    static func existingCurrentUserSave(
+        _ visiblePlace: VisiblePlace,
+        selectedStatus: PlaceStatus? = nil,
+        attributes: [LocalPlaceAttribute],
+        latestVisit: LocalPlaceVisit?,
+        initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
+    ) -> MapPlaceSaveContext {
+        let resolvedStatus = visiblePlace.userPlace.status == .been
+            ? PlaceStatus.been
+            : selectedStatus ?? visiblePlace.userPlace.status
+
+        if resolvedStatus == .wannaGo {
+            return .editWant(visiblePlace, attributes: attributes)
+        }
+
+        return .addVisitVisiblePlace(
+            visiblePlace,
+            attributes: attributes,
+            latestVisit: latestVisit,
+            initialPhotoAttachments: initialPhotoAttachments
+        )
+    }
+
+    static func currentUserSave(
+        matching candidate: PlaceCandidate,
+        in currentUserPlaces: [VisiblePlace]
+    ) -> VisiblePlace? {
+        currentUserPlaces.first { visiblePlace in
+            let providerIDsMatch = candidate.sourceProviderPlaceID.map { candidateProviderID in
+                visiblePlace.place.sourceProviderPlaceID == candidateProviderID
+            } ?? false
+            let placeIDsMatch = visiblePlace.place.id == candidate.id
+                || visiblePlace.place.localID == candidate.id
+                || visiblePlace.place.serverID == candidate.id
+            let namesMatch = visiblePlace.place.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
+            return providerIDsMatch || placeIDsMatch || namesMatch
+        }
     }
 
     static func sharedVisit(
@@ -3928,7 +4076,7 @@ enum CheckInDatePickerSelection {
 }
 
 struct MapPlaceSaveFlowSheet: View {
-    let context: MapPlaceSaveContext
+    @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     @Environment(\.dismiss) private var dismiss
@@ -3968,7 +4116,7 @@ struct MapPlaceSaveFlowSheet: View {
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
     ) {
-        self.context = context
+        _context = State(initialValue: context)
         self.onSave = onSave
         self.onRemove = onRemove
         _step = State(initialValue: context.startsOnDetails ? .details : .confirm)
@@ -4202,8 +4350,10 @@ struct MapPlaceSaveFlowSheet: View {
                     MapSaveChoicePill(title: CheckInCopy.verb, isSelected: selectedStatus == .been) {
                         selectedStatus = .been
                     }
-                    MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
-                        selectedStatus = .wannaGo
+                    if context.allowsWannaGoSelection {
+                        MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
+                            selectedStatus = .wannaGo
+                        }
                     }
                 }
             }
@@ -4770,9 +4920,56 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private func prepareDetails() {
+        let resolvedContext = context.resolvingExistingSave(selection: selectedStatus)
+        if resolvedContext.id != context.id {
+            applyDefaults(from: resolvedContext)
+        }
         syncAnswersForCurrentQuestions()
         errorMessage = nil
         step = .details
+    }
+
+    private func applyDefaults(from nextContext: MapPlaceSaveContext) {
+        context = nextContext
+        selectedAssignment = nextContext.candidate.categoryAssignment
+        selectedStatus = nextContext.initialStatus
+        selectedVisibility = nextContext.initialVisibility.normalizedForStealthMode
+        selectedRatingScore = nextContext.initialRatingScore ?? PlaceRating.defaultScore
+
+        let initialCuisine = Self.initialCuisine(for: nextContext)
+        selectedCuisine = initialCuisine
+        let initialQuestionBlocks = AddQuestionTemplates.blocks(
+            primaryCategory: nextContext.candidate.primaryCategory,
+            subcategory: nextContext.candidate.subcategory,
+            cuisine: initialCuisine,
+            status: nextContext.initialStatus
+        )
+        selectedAnswers = nextContext.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
+        unifiedTags = nextContext.initialAnswers
+            .filter { Self.isUnifiedTagKey($0.key) }
+            .values
+            .reduce(into: nextContext.initialPersonalLabels) { result, values in
+                result.formUnion(values)
+            }
+        lastUnifiedTagOptions = initialQuestionBlocks
+            .first(where: { Self.isUnifiedTagKey($0.key) })?
+            .options ?? []
+        lastQuestionOptions = Dictionary(
+            uniqueKeysWithValues: initialQuestionBlocks
+                .filter { !Self.isUnifiedTagKey($0.key) }
+                .map { ($0.key, $0.options) }
+        )
+
+        note = nextContext.initialNote
+        visitedAt = nextContext.editedVisit?.visitedAt ?? .now
+        let today = WannaGoDate.normalized(.now)
+        plannedDate = nextContext.initialPlannedDate
+            .map { WannaGoDate.normalized($0) }
+            .flatMap { $0 >= today ? $0 : nil }
+        visitPhotoAttachments = nextContext.initialPhotoAttachments
+        selectedInviteeUserIDs = []
+        didLoadSharedVisitInvitees = false
+        sharedVisitInviteesError = nil
     }
 
     private func syncAnswersForCurrentQuestions() {

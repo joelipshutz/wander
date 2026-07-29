@@ -2124,9 +2124,12 @@ final class WanderStoreTests: XCTestCase {
         })
     }
 
-    func testSavingSamePlaceMergesIntoExistingUserPlace() {
+    func testSavingWannaForExistingBeenPlaceKeepsExistingSaveUnchanged() {
         let store = makeStore()
         let originalCount = store.currentUserVisiblePlaces.count
+        let original = store.currentUserVisiblePlaces.first {
+            $0.place.canonicalName == "Woodcat Coffee"
+        }?.userPlace
 
         let candidate = PlaceCandidate(
             id: "place_woodcat",
@@ -2142,9 +2145,10 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.currentUserVisiblePlaces.count, originalCount)
         let woodcat = store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Woodcat Coffee" }
         XCTAssertEqual(woodcat?.userPlace.status, .been)
-        XCTAssertEqual(woodcat?.userPlace.visibility, .selfOnly)
-        XCTAssertEqual(woodcat?.userPlace.historicalWantNote, "updated")
-        XCTAssertNotNil(woodcat?.userPlace.historicalWantedAt)
+        XCTAssertEqual(woodcat?.userPlace.visibility, original?.visibility)
+        XCTAssertEqual(woodcat?.userPlace.note, original?.note)
+        XCTAssertEqual(woodcat?.userPlace.historicalWantNote, original?.historicalWantNote)
+        XCTAssertEqual(woodcat?.userPlace.historicalWantedAt, original?.historicalWantedAt)
     }
 
     func testRemoveSaveDeletesOwnSavedMetadataLocally() {
@@ -2398,7 +2402,8 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.place.phoneNumber, "+1 (213) 555-0100")
         XCTAssertEqual(saved?.place.timeZoneIdentifier, "America/Los_Angeles")
         XCTAssertEqual(saved?.userPlace.status, .been)
-        XCTAssertEqual(saved?.userPlace.historicalWantNote, "still has actions")
+        XCTAssertNil(saved?.userPlace.historicalWantNote)
+        XCTAssertNil(saved?.userPlace.historicalWantedAt)
     }
 
     func testCurrentLocationCandidatesUseInjectedResolver() async throws {
@@ -2967,7 +2972,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.recommendedCount, 3)
     }
 
-    func testSavingWantAfterBeenKeepsVisitsAndAddsHistoricalWant() {
+    func testSavingWantAfterBeenIsANoOp() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let candidate = PlaceCandidate(
@@ -2987,6 +2992,9 @@ final class WanderStoreTests: XCTestCase {
             ratingScore: 4
         )
         XCTAssertEqual(store.visits(for: result.userPlaceID).count, 1)
+        let before = store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace
+        let originalUpdatedAt = before?.updatedAt
+        let originalLocalUpdatedAt = before?.localUpdatedAt
 
         let updated = store.saveCandidate(
             candidate,
@@ -3002,9 +3010,52 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(saved?.userPlace.ratingScore, 4)
         XCTAssertEqual(saved?.userPlace.recommendedScore, 4)
         XCTAssertEqual(saved?.userPlace.recommendedCount, 1)
-        XCTAssertEqual(saved?.userPlace.historicalWantNote, "want later")
-        XCTAssertNotNil(saved?.userPlace.historicalWantedAt)
+        XCTAssertEqual(saved?.userPlace.note, "been here")
+        XCTAssertEqual(saved?.userPlace.visibility, before?.visibility)
+        XCTAssertNil(saved?.userPlace.historicalWantNote)
+        XCTAssertNil(saved?.userPlace.historicalWantedAt)
+        XCTAssertEqual(saved?.userPlace.updatedAt, originalUpdatedAt)
+        XCTAssertEqual(saved?.userPlace.localUpdatedAt, originalLocalUpdatedAt)
         XCTAssertEqual(store.visits(for: updated.userPlaceID).count, 1)
+    }
+
+    func testSavingWantAfterBeenDoesNotCallRemoteRepository() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_remote_status_visit",
+            name: "Remote Status Visit Cafe",
+            category: "coffee",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.92
+        )
+        let original = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "already visited",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let repository = FakeUserPlaceRepository()
+        let backend = WanderBackend(userPlaceRepository: repository)
+
+        let result = await store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: "should not save",
+            sourceType: .manual,
+            backend: backend
+        )
+
+        XCTAssertEqual(result.userPlaceID, original.userPlaceID)
+        XCTAssertTrue(repository.savedDrafts.isEmpty)
+        let saved = store.currentUserVisiblePlaces.first { $0.userPlace.id == original.userPlaceID }
+        XCTAssertEqual(saved?.userPlace.status, .been)
+        XCTAssertEqual(saved?.userPlace.note, "already visited")
+        XCTAssertNil(saved?.userPlace.historicalWantNote)
     }
 
     func testSavingBeenWithoutRatingUsesDefaultRating() {
@@ -3534,7 +3585,7 @@ final class WanderStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: nil), .add)
-        XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: wantPlace), .addVisit)
+        XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: wantPlace), .editWant)
         XCTAssertEqual(wantContext.initialStatus, .been)
         XCTAssertFalse(wantContext.hasPriorCheckIn)
         XCTAssertEqual(wantContext.title, "Check in at Add Visit Defaults Cafe")
@@ -3546,6 +3597,29 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(wantContext.initialNote, "want because patio")
         XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
         XCTAssertTrue(wantContext.initialPersonalLabels.isEmpty)
+
+        let reselectedWantContext = MapPlaceSaveContext.addCandidate(
+            wantContext.candidate,
+            sourceType: .currentLocation,
+            defaultVisibility: .followers,
+            currentUserSave: wantPlace,
+            latestVisit: nil
+        )
+        XCTAssertTrue(reselectedWantContext.allowsWannaGoSelection)
+        if case .editWant(let editedPlace) = reselectedWantContext
+            .resolvingExistingSave(selection: .wannaGo)
+            .mode {
+            XCTAssertEqual(editedPlace.userPlace.id, wantPlace.userPlace.id)
+        } else {
+            XCTFail("Selecting Wanna again should open the existing Wanna editor")
+        }
+        if case .addVisit(let checkedInPlace) = reselectedWantContext
+            .resolvingExistingSave(selection: .been)
+            .mode {
+            XCTAssertEqual(checkedInPlace.userPlace.id, wantPlace.userPlace.id)
+        } else {
+            XCTFail("Selecting Check in should convert the existing Wanna through add-visit")
+        }
 
         let latestVisit = try XCTUnwrap(store.createVisit(
             userPlaceID: result.userPlaceID,
@@ -3575,6 +3649,23 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visitContext.initialNote, "")
         XCTAssertNil(visitContext.initialAnswers["coffee_tags"])
         XCTAssertTrue(visitContext.initialPersonalLabels.isEmpty)
+
+        let reselectedBeenContext = MapPlaceSaveContext.addCandidate(
+            visitContext.candidate,
+            sourceType: .currentLocation,
+            defaultVisibility: .followers,
+            currentUserSave: beenPlace,
+            latestVisit: latestVisit
+        )
+        XCTAssertFalse(reselectedBeenContext.allowsWannaGoSelection)
+        XCTAssertEqual(reselectedBeenContext.initialStatus, .been)
+        if case .addVisit(let checkedInPlace) = reselectedBeenContext
+            .resolvingExistingSave(selection: .wannaGo)
+            .mode {
+            XCTAssertEqual(checkedInPlace.userPlace.id, beenPlace.userPlace.id)
+        } else {
+            XCTFail("A checked-in place must stay on the check-in path")
+        }
     }
 
     func testOldSnapshotWithoutVisitsBackfillsExistingBeenSaves() throws {
