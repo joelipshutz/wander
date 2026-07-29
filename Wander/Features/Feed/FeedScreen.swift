@@ -12,6 +12,11 @@ struct FeedScreen: View {
     @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
     @State private var selectedSurface: FeedSurface = .places
+    private let onAdd: () -> Void
+
+    init(onAdd: @escaping () -> Void = {}) {
+        self.onAdd = onAdd
+    }
 
     private let tickerSuggestions = [
         "Joe's favorite coffee shops in LA",
@@ -25,9 +30,23 @@ struct FeedScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                FeedSurfaceTabs(selectedSurface: $selectedSurface)
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing2)
+                VStack(spacing: WanderTheme.spacing2) {
+                    WanderGlassHeader(
+                        title: "feed",
+                        subtitle: "places and people from people you trust"
+                    ) {
+                        WanderGlassActionButton(
+                            systemImage: "plus",
+                            accessibilityLabel: "Add a place",
+                            accessibilityIdentifier: "feed.headerAdd",
+                            action: onAdd
+                        )
+                    }
+
+                    FeedSurfaceTabs(selectedSurface: $selectedSurface)
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
 
                 switch selectedSurface {
                 case .places:
@@ -373,14 +392,16 @@ private struct FeedSurfaceTabs: View {
     @Binding var selectedSurface: FeedSurface
 
     var body: some View {
-        Picker("Feed section", selection: $selectedSurface) {
-            ForEach(FeedSurface.allCases) { surface in
-                Text(surface.title)
-                    .tag(surface)
-            }
-        }
-        .pickerStyle(.segmented)
-        .frame(minHeight: WanderTheme.tapMinimum)
+        WanderGlassSegmentedSwitch(
+            options: FeedSurface.allCases.map {
+                WanderSegmentOption(id: $0.rawValue, title: $0.title)
+            },
+            selection: Binding(
+                get: { selectedSurface.rawValue },
+                set: { selectedSurface = FeedSurface(rawValue: $0) ?? .places }
+            )
+        )
+        .accessibilityLabel("Feed section")
     }
 }
 

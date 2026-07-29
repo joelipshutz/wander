@@ -42,8 +42,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("guard isSessionValidated,"))
     }
 
-    func testBottomNavigationUsesRequestedFiveItemOrder() {
+    func testNavigationModelRetainsAddRouteWhileHeaderExperimentOwnsVisibleEntryPoint() throws {
         XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
+
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        XCTAssertFalse(root.contains("Label(WanderTab.add.title"))
+        XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
     func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {
@@ -54,7 +60,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
 
-        XCTAssertTrue(root.contains("FeedScreen()"))
+        XCTAssertTrue(root.contains("FeedScreen(onAdd: presentAddSheet)"))
         XCTAssertTrue(root.contains("case .discover: \"Feed\""))
         XCTAssertTrue(root.contains("case .discover: \"newspaper\""))
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
@@ -89,6 +95,45 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("PeopleRecommendationShelf("))
         XCTAssertTrue(feed.contains("store.discoverMembers(query: query, backend: backend)"))
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
+    }
+
+    func testPrimarySurfacesShareLiquidGlassHeaderNavigationWithoutLosingFilterState() throws {
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+
+        XCTAssertTrue(theme.contains("if #available(iOS 26.0, *)"))
+        XCTAssertTrue(theme.contains(".glassEffect("))
+        XCTAssertTrue(theme.contains(".background(.ultraThinMaterial"))
+        XCTAssertTrue(theme.contains("struct WanderGlassHeader<Accessory: View>"))
+        XCTAssertTrue(theme.contains("struct WanderGlassSegmentedSwitch"))
+
+        XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
+        XCTAssertTrue(root.contains("private func presentAddSheet()"))
+        XCTAssertFalse(root.contains("Label(WanderTab.add.title"))
+        XCTAssertTrue(map.contains("accessibilityIdentifier: \"map.headerAdd\""))
+        XCTAssertTrue(map.contains("tone: isSelected ? .selected : .neutral"))
+        XCTAssertTrue(map.contains("filter.trimColor(isSelected: isSelected)"))
+
+        XCTAssertTrue(feed.contains("WanderGlassHeader("))
+        XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))
+        XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
+
+        XCTAssertTrue(lists.contains("WanderGlassHeader("))
+        XCTAssertTrue(lists.contains("accessibilityIdentifier: \"lists.headerAdd\""))
+        XCTAssertTrue(lists.contains("WanderGlassSegmentedSwitch("))
     }
 
     func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndMakesEveryActivityACompactTicket() throws {
@@ -620,8 +665,8 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher(placeholders: tickerSuggestions)"))
-        XCTAssertTrue(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
-        XCTAssertTrue(feed.contains(".pickerStyle(.segmented)"))
+        XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
+        XCTAssertFalse(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
 
         XCTAssertTrue(placeProfile.contains(".navigationTitle(place.name)"))
         XCTAssertTrue(placeProfile.contains("ToolbarItem(placement: .topBarLeading)"))
@@ -669,10 +714,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("editorialSmallNamedContent = Font.system(.subheadline, design: .serif, weight: .bold)"))
         XCTAssertTrue(typography.contains("editorialMajorSectionTitle = Font.system(.title2, design: .serif, weight: .semibold)"))
 
-        XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialMasthead").count - 1, 2)
+        XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialMasthead").count - 1, 1)
         XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialNamedContent").count - 1, 4)
         XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialSmallNamedContent").count - 1, 2)
-        XCTAssertTrue(lists.contains("Text(\"save places into a plan you can actually use\")\n                    .font(.system(size: 14, weight: .semibold))"))
+        XCTAssertTrue(lists.contains("subtitle: \"save places into a plan you can actually use\""))
+        XCTAssertTrue(lists.contains("WanderGlassHeader("))
 
         let discoverMastheadUses = discover.components(separatedBy: "WanderTypography.editorialMasthead").count - 1
         XCTAssertEqual(discoverMastheadUses, 1)
