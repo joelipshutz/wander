@@ -15,6 +15,11 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
+        let authStore = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Services/Auth/AuthSessionProviding.swift"
+            )
+        )
 
         XCTAssertTrue(app.contains("AppEntryView(coordinator: entryCoordinator, analytics: analytics, parser: discoverParser)"))
         XCTAssertTrue(entry.contains("case .signedOut:"))
@@ -26,7 +31,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(entry.contains("isSessionValidated: auth.isSessionValidated"))
         XCTAssertTrue(entry.contains(".sheet(isPresented: $auth.isPresentingNativeAuth"))
         XCTAssertTrue(entry.contains("ClerkNativeAuthView(mode: auth.activeNativeAuthMode)"))
-        XCTAssertTrue(entry.contains("guard phase == .active, didFinishInitialResolution else { return }"))
+        XCTAssertTrue(entry.contains("case .background:"))
+        XCTAssertTrue(entry.contains("foregroundRefreshPolicy.didEnterBackground("))
+        XCTAssertTrue(entry.contains("case .active:"))
+        XCTAssertTrue(entry.contains("foregroundRefreshPolicy.shouldRefreshSession("))
+        XCTAssertFalse(authStore.contains("willEnterForegroundNotification"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
         XCTAssertTrue(root.contains(".task(id: isSessionValidated)"))
         XCTAssertTrue(root.contains("guard phase == .active, isSessionValidated else { return }"))

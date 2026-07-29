@@ -375,6 +375,31 @@ final class AuthSessionTests: XCTestCase {
         )
     }
 
+    func testWarmStartPolicySkipsValidationInsideThirtySecondGrace() {
+        var policy = AppEntryForegroundRefreshPolicy()
+        policy.didEnterBackground(atUptime: 100)
+
+        XCTAssertFalse(policy.shouldRefreshSession(atUptime: 129.999))
+    }
+
+    func testWarmStartPolicyRefreshesAtGraceBoundaryAndWithoutBackgroundTimestamp() {
+        var boundaryPolicy = AppEntryForegroundRefreshPolicy()
+        boundaryPolicy.didEnterBackground(atUptime: 100)
+
+        XCTAssertTrue(boundaryPolicy.shouldRefreshSession(atUptime: 130))
+
+        var unknownBackgroundPolicy = AppEntryForegroundRefreshPolicy()
+        XCTAssertTrue(unknownBackgroundPolicy.shouldRefreshSession(atUptime: 130))
+    }
+
+    func testWarmStartPolicyConsumesBackgroundTimestampAfterActivation() {
+        var policy = AppEntryForegroundRefreshPolicy()
+        policy.didEnterBackground(atUptime: 100)
+
+        XCTAssertFalse(policy.shouldRefreshSession(atUptime: 110))
+        XCTAssertTrue(policy.shouldRefreshSession(atUptime: 111))
+    }
+
     func testAppSessionDestinationNeverShowsAppWithoutSignedInSession() {
         XCTAssertEqual(
             WanderAppEntryView.destination(for: .signedOut, hasResolvedSession: true),

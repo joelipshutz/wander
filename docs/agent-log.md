@@ -28548,3 +28548,36 @@ Transition outcome:
   audits, Linear issue/relation/comment verification, and
   `scripts/install-agent-skills.sh --check` all passed. No `xcodebuild` run was
   needed because the change does not touch app/runtime code.
+
+## 2026-07-28 22:05 PDT - Codex - Warm-start session grace
+
+Agent: Codex using the `investigate` workflow
+Branch: `codex/warm-start-grace`
+Worktree: `/private/tmp/recme-warm-start-grace`
+Linear: intentionally omitted at Ryan's explicit request
+
+Goal: keep a briefly backgrounded signed-in app on its existing screen and
+presentation state, while retaining authoritative session revalidation after a
+longer background interval.
+
+Starting status and coordination:
+
+- Fetched `origin` and created a clean isolated worktree from exact
+  `origin/main` commit `87416cf7a87e`. The primary checkout remains untouched
+  because it contains user-owned untracked `.pnpm-store/` content.
+- No active agent-log entry overlaps the app-entry/auth lifecycle files.
+- Investigation traced the restart to `AppEntryView`: every `.active`
+  transition calls `AppEntryCoordinator.start()`, which immediately changes the
+  entry state to `.launching` and replaces `WanderRootView`, even after only a
+  few seconds in the background. `AuthSessionStore` independently invalidates
+  the session on every `willEnterForeground`, so both paths must share the same
+  grace behavior.
+- Planned behavior: a monotonic 30-second background grace preserves the
+  mounted app and skips redundant session validation; activation at or after
+  the boundary keeps the existing fail-closed refresh. Clerk auth events remain
+  observed continuously, so an explicit logout/session event still removes the
+  authenticated UI immediately.
+- Expected files: `Wander/App/AppEntryView.swift`,
+  `Wander/Services/Auth/AuthSessionProviding.swift`,
+  `WanderTests/AuthSessionTests.swift`, and this log. No build-number bump,
+  TestFlight release, or Linear record is requested.
