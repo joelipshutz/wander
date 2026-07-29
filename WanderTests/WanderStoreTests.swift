@@ -3058,6 +3058,69 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(saved?.userPlace.historicalWantNote)
     }
 
+    func testSavingSameNamedPlaceAtAnotherLocationCreatesDistinctWanna() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let firstLocation = PlaceCandidate(
+            id: "mapkit_chain-first",
+            name: "Same Name Coffee",
+            category: "coffee",
+            address: "100 First Street",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            sourceProviderPlaceID: "mapkit_chain-first",
+            confidence: 0.92
+        )
+        let secondLocation = PlaceCandidate(
+            id: "mapkit_chain_first",
+            name: "Same Name Coffee",
+            category: "coffee",
+            address: "900 Second Street",
+            latitude: 35.0407,
+            longitude: -117.2354,
+            sourceProviderPlaceID: "mapkit_chain_first",
+            confidence: 0.92
+        )
+
+        let checkedIn = store.saveCandidate(
+            firstLocation,
+            status: .been,
+            visibility: .followers,
+            note: "first branch",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let wanna = store.saveCandidate(
+            secondLocation,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: "second branch",
+            sourceType: .manual
+        )
+
+        XCTAssertNotEqual(checkedIn.userPlaceID, wanna.userPlaceID)
+        let matchingPlaces = store.currentUserVisiblePlaces.filter {
+            $0.place.canonicalName == "Same Name Coffee"
+        }
+        XCTAssertEqual(matchingPlaces.count, 2)
+        XCTAssertEqual(Set(matchingPlaces.map(\.userPlace.status)), [.been, .wannaGo])
+        XCTAssertEqual(Set(matchingPlaces.compactMap(\.place.address)), ["100 First Street", "900 Second Street"])
+
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "Second branch",
+                description: "location identity regression",
+                visibility: .followers
+            )
+        )
+        let listResult = await store.addCandidate(secondLocation, to: list, backend: nil)
+
+        XCTAssertEqual(listResult.outcome, .added)
+        XCTAssertTrue(store.hasCandidate(secondLocation, in: list))
+        XCTAssertFalse(store.hasCandidate(firstLocation, in: list))
+        XCTAssertEqual(store.visiblePlaces(in: list).map(\.place.address), ["900 Second Street"])
+    }
+
     func testSavingBeenWithoutRatingUsesDefaultRating() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -3586,6 +3649,10 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: nil), .add)
         XCTAssertEqual(PlaceSheetAction.topLevelAction(currentUserSave: wantPlace), .editWant)
+        XCTAssertEqual(PlaceSheetAction.mapTopLevelAction(currentUserSave: nil), .add)
+        XCTAssertEqual(PlaceSheetAction.mapTopLevelAction(currentUserSave: wantPlace), .reselectWant)
+        XCTAssertEqual(PlaceSheetAction.reselectWant.systemImage, "plus")
+        XCTAssertEqual(PlaceSheetAction.reselectWant.accessibilityLabel, "Check in or Wanna")
         XCTAssertEqual(wantContext.initialStatus, .been)
         XCTAssertFalse(wantContext.hasPriorCheckIn)
         XCTAssertEqual(wantContext.title, "Check in at Add Visit Defaults Cafe")
@@ -3598,14 +3665,44 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(wantContext.initialAnswers["coffee_tags"])
         XCTAssertTrue(wantContext.initialPersonalLabels.isEmpty)
 
-        let reselectedWantContext = MapPlaceSaveContext.addCandidate(
-            wantContext.candidate,
-            sourceType: .currentLocation,
+        let reselectedWantContext = MapPlaceSaveContext.reselectCurrentUserSave(
+            wantPlace,
             defaultVisibility: .followers,
-            currentUserSave: wantPlace,
+            attributes: store.attributes(for: wantPlace.userPlace.id),
             latestVisit: nil
         )
+        if case .add(let sourceType) = reselectedWantContext.mode {
+            XCTAssertEqual(sourceType, .manual)
+        } else {
+            XCTFail("Tapping the map plus should open the status chooser")
+        }
+        XCTAssertTrue(reselectedWantContext.requiresStatusConfirmation)
         XCTAssertTrue(reselectedWantContext.allowsWannaGoSelection)
+        XCTAssertEqual(
+            MapPlaceSaveContext.currentUserSave(
+                matching: reselectedWantContext.candidate,
+                in: [wantPlace]
+            )?.userPlace.id,
+            wantPlace.userPlace.id
+        )
+        let sameNameDifferentPlace = PlaceCandidate(
+            id: "mapkit_other_add_visit_defaults_cafe",
+            name: reselectedWantContext.candidate.name,
+            category: reselectedWantContext.candidate.category,
+            address: "999 Different Street",
+            latitude: 35.001,
+            longitude: -117.001,
+            sourceProvider: reselectedWantContext.candidate.sourceProvider,
+            sourceProviderPlaceID: "mapkit_other_add_visit_defaults_cafe",
+            confidence: reselectedWantContext.candidate.confidence
+        )
+        XCTAssertNil(
+            MapPlaceSaveContext.currentUserSave(
+                matching: sameNameDifferentPlace,
+                in: [wantPlace]
+            ),
+            "A same-named place at another location must not open this Wanna record"
+        )
         if case .editWant(let editedPlace) = reselectedWantContext
             .resolvingExistingSave(selection: .wannaGo)
             .mode {
@@ -3659,6 +3756,7 @@ final class WanderStoreTests: XCTestCase {
         )
         XCTAssertFalse(reselectedBeenContext.allowsWannaGoSelection)
         XCTAssertEqual(reselectedBeenContext.initialStatus, .been)
+        XCTAssertEqual(PlaceSheetAction.mapTopLevelAction(currentUserSave: beenPlace), .addVisit)
         if case .addVisit(let checkedInPlace) = reselectedBeenContext
             .resolvingExistingSave(selection: .wannaGo)
             .mode {
@@ -5892,6 +5990,52 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(result, SaveResult(userPlaceID: "up_remote_saved", syncState: .synced))
         XCTAssertEqual(socialSaveRepository.requests, [FakeSocialPlaceSaveRepository.Request(placeID: placeID, sourceUserPlaceID: sourceUserPlaceID)])
         XCTAssertTrue(store.currentUserVisiblePlaces.contains { $0.userPlace.serverID == "up_remote_saved" && $0.userPlace.syncState == .synced })
+    }
+
+    func testRemoteSocialWannaSaveDoesNotReplaceAnExistingCheckIn() async {
+        let store = makeStore()
+        let socialSaveRepository = FakeSocialPlaceSaveRepository(result: SaveResult(userPlaceID: "up_remote_saved", syncState: .synced))
+        let backend = WanderBackend(socialPlaceSaveRepository: socialSaveRepository)
+        let placeID = "11111111-1111-4111-8111-111111111111"
+        let sourceUserPlaceID = "22222222-2222-4222-8222-222222222222"
+        let socialPlace = VisiblePlace(
+            id: sourceUserPlaceID,
+            place: LocalPlace(
+                localID: "remote_place_checked_in",
+                serverID: placeID,
+                canonicalName: "Already Checked In",
+                category: "coffee",
+                latitude: 34.119,
+                longitude: -118.300,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "already-checked-in",
+                syncState: .synced
+            ),
+            userPlace: LocalUserPlace(
+                localID: "remote_up_friend_checked_in",
+                serverID: sourceUserPlaceID,
+                userID: "user_maya",
+                placeID: placeID,
+                status: .been,
+                visibility: .followers,
+                sourceType: "manual",
+                syncState: .synced
+            ),
+            owner: LocalProfile(
+                localID: "remote_profile_maya",
+                serverID: "user_maya",
+                handle: "maya",
+                displayName: "Maya",
+                syncState: .synced
+            )
+        )
+
+        let checkedIn = store.saveVisiblePlace(socialPlace, status: .been)
+        let result = await store.saveVisiblePlace(socialPlace, status: .wannaGo, backend: backend)
+
+        XCTAssertEqual(result.userPlaceID, checkedIn.userPlaceID)
+        XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.userPlace.id == checkedIn.userPlaceID }?.userPlace.status, .been)
+        XCTAssertTrue(socialSaveRepository.requests.isEmpty)
     }
 
     func testSocialSaveDoesNotCallRemoteForFixtureIDs() async {

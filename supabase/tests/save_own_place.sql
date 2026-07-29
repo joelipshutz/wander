@@ -206,8 +206,7 @@ select throws_ok(
 
 select isnt_empty(
   $$
-    select *
-    from app.save_own_place(
+    select public.save_own_place(
       '{
         "canonical_name": "Save RPC Test Updated",
         "category": "coffee",
@@ -222,25 +221,44 @@ select isnt_empty(
         "visibility": "mutuals",
         "nearby_confirmed": false,
         "source_type": "manual",
-        "rating_score": 5
+        "rating_score": 5,
+        "planned_date": "2099-08-15"
       }'::jsonb,
       '[]'::jsonb
     )
   $$,
-  'save_own_place can upsert an existing canonical place through the RPC'
+  'save_own_place accepts a stale Wanna Go request for an existing check-in as a no-op'
 );
 
-select is_empty(
-  $$
-    select 1
+select is(
+  (
+    select jsonb_build_object(
+      'status', up.status,
+      'note', up.note,
+      'visibility', up.visibility,
+      'rating_score', up.rating_score,
+      'planned_date', up.planned_date,
+      'attribute_count', (
+        select count(*)
+        from public.place_attributes pa
+        where pa.user_place_id = up.id
+      )
+    )
     from public.user_places up
     join public.places p on p.id = up.place_id
     where up.user_id = 'user_save_owner'
       and p.source_provider = 'mapkit'
       and p.source_provider_place_id = 'save-rpc-test'
-      and up.rating_score is not null
-  $$,
-  'save_own_place clears rating score for wanna go places'
+  ),
+  '{
+    "status": "been",
+    "note": null,
+    "visibility": "followers",
+    "rating_score": 4.5,
+    "planned_date": null,
+    "attribute_count": 1
+  }'::jsonb,
+  'save_own_place preserves the complete existing check-in when Wanna Go is stale'
 );
 
 select * from finish();

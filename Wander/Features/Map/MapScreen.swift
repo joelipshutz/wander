@@ -1214,16 +1214,25 @@ struct MapScreen: View {
     }
 
     private func action(for visiblePlace: VisiblePlace) -> PlaceSheetAction {
-        PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: visiblePlace))
+        PlaceSheetAction.mapTopLevelAction(currentUserSave: currentUserSave(matching: visiblePlace))
     }
 
     private func action(for candidate: PlaceCandidate) -> PlaceSheetAction {
-        PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave(matching: candidate))
+        PlaceSheetAction.mapTopLevelAction(currentUserSave: currentUserSave(matching: candidate))
     }
 
     private func performAction(for visiblePlace: VisiblePlace) {
         switch action(for: visiblePlace) {
-        case .add:
+        case .add, .reselectWant:
+            if let currentUserSave = currentUserSave(matching: visiblePlace) {
+                mapSaveFlow = MapPlaceSaveContext.reselectCurrentUserSave(
+                    currentUserSave,
+                    defaultVisibility: store.effectiveDefaultVisibility,
+                    attributes: store.attributes(for: currentUserSave.userPlace.id),
+                    latestVisit: store.visits(for: currentUserSave.userPlace.id).first
+                )
+                return
+            }
             mapSaveFlow = MapPlaceSaveContext.addVisiblePlace(
                 visiblePlace,
                 defaultVisibility: store.effectiveDefaultVisibility,
@@ -2942,6 +2951,7 @@ enum MapPinAccessibility {
 
 enum PlaceSheetAction {
     case add
+    case reselectWant
     case addVisit
     case editWant
     case choose
@@ -2952,9 +2962,15 @@ enum PlaceSheetAction {
         return currentUserSave.userPlace.status == .wannaGo ? .editWant : .addVisit
     }
 
+    static func mapTopLevelAction(currentUserSave: VisiblePlace?) -> PlaceSheetAction {
+        guard let currentUserSave else { return .add }
+        return currentUserSave.userPlace.status == .been ? .addVisit : .reselectWant
+    }
+
     var systemImage: String {
         switch self {
         case .add: "plus"
+        case .reselectWant: "plus"
         case .addVisit: "plus"
         case .editWant: "pencil"
         case .choose: "checkmark"
@@ -2965,6 +2981,7 @@ enum PlaceSheetAction {
     var accessibilityLabel: String {
         switch self {
         case .add: CheckInCopy.action
+        case .reselectWant: "Check in or Wanna"
         case .addVisit: CheckInCopy.againAction
         case .editWant: "Edit Wanna"
         case .choose: "Choose this place"
@@ -2982,14 +2999,14 @@ enum PlaceSheetAction {
             return hasPriorCheckIn
                 ? CheckInCopy.againAction
                 : "Check in at \(placeName)"
-        case .add, .editWant, .choose, .none:
+        case .add, .reselectWant, .editWant, .choose, .none:
             return displayTitle
         }
     }
 
     var isPrimaryAction: Bool {
         switch self {
-        case .add, .addVisit, .editWant, .choose:
+        case .add, .reselectWant, .addVisit, .editWant, .choose:
             true
         case .none:
             false
@@ -3430,6 +3447,23 @@ struct MapPlaceSaveContext: Identifiable {
         )
     }
 
+    static func reselectCurrentUserSave(
+        _ visiblePlace: VisiblePlace,
+        defaultVisibility: PlaceVisibility,
+        attributes: [LocalPlaceAttribute],
+        latestVisit: LocalPlaceVisit?
+    ) -> MapPlaceSaveContext {
+        var currentUserSave = visiblePlace
+        currentUserSave.attributes = attributes
+        return addCandidate(
+            candidate(from: currentUserSave),
+            sourceType: .manual,
+            defaultVisibility: defaultVisibility,
+            currentUserSave: currentUserSave,
+            latestVisit: latestVisit
+        )
+    }
+
     func resolvingExistingSave(selection: PlaceStatus) -> MapPlaceSaveContext {
         guard case .add = mode,
               let existingCurrentUserSave
@@ -3471,15 +3505,8 @@ struct MapPlaceSaveContext: Identifiable {
         matching candidate: PlaceCandidate,
         in currentUserPlaces: [VisiblePlace]
     ) -> VisiblePlace? {
-        currentUserPlaces.first { visiblePlace in
-            let providerIDsMatch = candidate.sourceProviderPlaceID.map { candidateProviderID in
-                visiblePlace.place.sourceProviderPlaceID == candidateProviderID
-            } ?? false
-            let placeIDsMatch = visiblePlace.place.id == candidate.id
-                || visiblePlace.place.localID == candidate.id
-                || visiblePlace.place.serverID == candidate.id
-            let namesMatch = visiblePlace.place.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
-            return providerIDsMatch || placeIDsMatch || namesMatch
+        currentUserPlaces.first {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
         }
     }
 

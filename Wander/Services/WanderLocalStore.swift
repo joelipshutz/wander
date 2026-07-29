@@ -2312,17 +2312,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func candidateMatches(_ candidate: PlaceCandidate, place: LocalPlace) -> Bool {
-        if place.id == candidate.id || place.localID == candidate.id || place.serverID == candidate.id {
-            return true
-        }
-
-        if let candidateProviderPlaceID = candidate.sourceProviderPlaceID,
-           place.sourceProvider == candidate.sourceProvider,
-           place.sourceProviderPlaceID == candidateProviderPlaceID {
-            return true
-        }
-
-        return normalizedPlaceLookupKey(place.canonicalName) == normalizedPlaceLookupKey(candidate.name)
+        VisiblePlaceGrouping.matches(place, candidate: candidate)
     }
 
     private func visiblePlaceForCurrentUser(userPlaceID: String) -> VisiblePlace? {
@@ -2337,14 +2327,6 @@ final class WanderStore: ObservableObject {
         else { return nil }
 
         return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: currentUser)
-    }
-
-    private func normalizedPlaceLookupKey(_ value: String) -> String {
-        value
-            .lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
     }
 
     private func fallbackVisiblePlace(for item: LocalPlaceListItem) -> VisiblePlace? {
@@ -3924,6 +3906,16 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
+        if status == .wannaGo,
+           let existingPlace = place(matching: candidate),
+           let existingUserPlace = currentUserPlace(for: existingPlace),
+           existingUserPlace.status == .been {
+            return SaveResult(
+                userPlaceID: existingUserPlace.id,
+                syncState: existingUserPlace.syncState
+            )
+        }
+
         let place = upsertPlace(from: candidate, sourceType: sourceType)
         let savedRatingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
         let categoryOverride = categoryOverrideAssignment(from: candidate)
@@ -3990,7 +3982,7 @@ final class WanderStore: ObservableObject {
         let savedAt = Date.now
         let wasTodayCovered = saveStreakSummary.isTodayCovered
         let userPlace = LocalUserPlace(
-            localID: "local_up_\(currentUser.handle)_\(slug(place.canonicalName))",
+            localID: "local_up_\(currentUser.handle)_\(slug(place.localID))",
             userID: currentUser.id,
             placeID: place.id,
             status: status,
@@ -4751,6 +4743,11 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo, backend: WanderBackend?) async -> SaveResult {
         let localResult = saveVisiblePlace(visiblePlace, status: status)
+
+        if status == .wannaGo,
+           currentUserPlace(matching: localResult.userPlaceID)?.status == .been {
+            return localResult
+        }
 
         guard let backend else {
             return localResult
@@ -6192,6 +6189,16 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    private func currentUserPlace(for place: LocalPlace) -> LocalUserPlace? {
+        userPlaces.first { userPlace in
+            userPlace.userID == currentUser.id
+                && userPlace.deletedAt == nil
+                && (userPlace.placeID == place.id
+                    || userPlace.placeID == place.localID
+                    || userPlace.placeID == place.serverID)
+        }
+    }
+
     private func currentUserVisit(matching visitID: String) -> LocalPlaceVisit? {
         guard let visit = placeVisits.first(where: { visit in
             visit.deletedAt == nil
@@ -7530,18 +7537,15 @@ final class WanderStore: ObservableObject {
 
     private func upsertPlace(from candidate: PlaceCandidate, sourceType: AddSourceType) -> LocalPlace {
         let providerPlaceID = candidate.sourceProviderPlaceID ?? candidate.id
+        let localIdentityHash = stableHash("\(candidate.sourceProvider)|\(providerPlaceID)")
         let sharedAssignment = sharedPlaceAssignment(from: candidate)
-        if let existing = places.first(where: {
-            $0.id == candidate.id
-                || ($0.sourceProvider == candidate.sourceProvider && $0.sourceProviderPlaceID == providerPlaceID)
-                || $0.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
-        }) {
+        if let existing = place(matching: candidate) {
             mergeBusinessMetadata(from: candidate, sharedAssignment: sharedAssignment, into: existing)
             return existing
         }
 
         let place = LocalPlace(
-            localID: "local_place_\(slug(candidate.name))",
+            localID: "local_place_\(slug(candidate.name))_\(localIdentityHash)",
             canonicalName: candidate.name,
             category: sharedAssignment.legacyCategory,
             primaryCategory: sharedAssignment.primaryCategory,
@@ -7566,6 +7570,12 @@ final class WanderStore: ObservableObject {
         )
         places.append(place)
         return place
+    }
+
+    private func place(matching candidate: PlaceCandidate) -> LocalPlace? {
+        places.first {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
+        }
     }
 
     private func mergeBusinessMetadata(from candidate: PlaceCandidate, sharedAssignment: PlaceCategoryAssignment, into place: LocalPlace) {
