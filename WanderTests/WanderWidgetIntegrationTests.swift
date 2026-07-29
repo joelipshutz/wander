@@ -131,6 +131,35 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertNotEqual(inbox.pendingRequest?.id, firstRequest.id)
     }
 
+    func testColdStartDeepLinkInboxRetainsEveryWidgetRouteUntilSessionValidation() throws {
+        let routes: [WanderDeepLinkRoute] = [
+            .quickCapture,
+            .map,
+            .quickSearch(query: nil),
+            .quickSearch(query: "coffee"),
+            .nearbyPlace(candidateID: "mapkit_ggiata"),
+            .profileCalendar,
+            .profileCalendarDate(
+                try XCTUnwrap(WanderCalendarDate(year: 2026, month: 7, day: 28))
+            ),
+        ]
+
+        for route in routes {
+            var inbox = WanderDeepLinkInbox()
+            inbox.receive(try XCTUnwrap(route.url))
+
+            XCTAssertNil(
+                inbox.request(ifSessionValidated: false),
+                "\(route) must wait for session validation"
+            )
+            XCTAssertEqual(
+                inbox.request(ifSessionValidated: true)?.route,
+                route,
+                "\(route) must survive a cold launch"
+            )
+        }
+    }
+
     func testDeepLinkHandoffWaitsForCurrentDismissalAndLatestRequestWins() {
         let staleRequestID = UUID()
         let latestRequestID = UUID()
@@ -367,6 +396,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
 
     func testAppRoutesWidgetLaunchesIntoExistingAddAndMapFlows() throws {
         let app = try source("Wander/App/WanderApp.swift")
+        let appEntry = try source("Wander/App/AppEntryView.swift")
         let root = try source("Wander/App/WanderRootView.swift")
         let launchRequests = try source("Wander/App/WanderWidgetLaunchRequest.swift")
         let add = try source("Wander/Features/Add/AddScreen.swift")
@@ -374,10 +404,14 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let profileScreen = try source("Wander/Features/Profile/ProfileScreen.swift")
         let profileHome = try source("Wander/Features/Profile/ProfileOwnerHome.swift")
 
-        XCTAssertTrue(app.contains(".onOpenURL { url in"))
-        XCTAssertTrue(app.contains("deepLinkInbox.receive(url)"))
-        XCTAssertTrue(app.contains("ifSessionValidated: destination == .authenticated"))
-        XCTAssertTrue(app.contains("deepLinkInbox.consume(requestID)"))
+        XCTAssertTrue(app.contains("AppEntryView(coordinator: entryCoordinator"))
+        XCTAssertTrue(appEntry.contains("@State private var deepLinkInbox = WanderDeepLinkInbox()"))
+        XCTAssertTrue(appEntry.contains(".onOpenURL { url in"))
+        XCTAssertTrue(appEntry.contains("deepLinkInbox.receive(url)"))
+        XCTAssertTrue(appEntry.contains("ifSessionValidated: auth.isSessionValidated"))
+        XCTAssertTrue(appEntry.contains("deepLinkInbox.consume(requestID)"))
+        XCTAssertTrue(appEntry.contains("deepLinkLaunchRequest: deepLinkInbox.request("))
+        XCTAssertTrue(appEntry.contains("onDeepLinkLaunchRequestHandled: { requestID in"))
         XCTAssertTrue(launchRequests.contains("WanderDeepLinkRoute.parse(url)"))
         XCTAssertTrue(launchRequests.contains("isSessionValidated ? pendingRequest : nil"))
         XCTAssertTrue(root.contains("handleDeepLinkLaunchRequestIfReady(request)"))
