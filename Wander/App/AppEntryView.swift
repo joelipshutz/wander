@@ -12,6 +12,7 @@ struct AppEntryView: View {
     let parser: any LLMFilterParser
 
     @State private var didFinishInitialResolution = false
+    @State private var deepLinkInbox = WanderDeepLinkInbox()
 
     var body: some View {
         Group {
@@ -37,6 +38,12 @@ struct AppEntryView: View {
                     initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
                     initialSession: session,
                     isSessionValidated: auth.isSessionValidated,
+                    deepLinkLaunchRequest: deepLinkInbox.request(
+                        ifSessionValidated: auth.isSessionValidated
+                    ),
+                    onDeepLinkLaunchRequestHandled: { requestID in
+                        deepLinkInbox.consume(requestID)
+                    },
                     analytics: analytics,
                     parser: parser
                 )
@@ -90,10 +97,15 @@ struct AppEntryView: View {
             Task { await coordinator.start() }
         }
         .onOpenURL { url in
-            if case .ready = coordinator.state {
+            if WanderRootView.sharedProfileRoute(for: url) != nil {
+                if case .ready = coordinator.state {
+                    deepLinkInbox.receive(url)
+                } else {
+                    coordinator.capturePendingURL(url)
+                }
                 return
             }
-            coordinator.capturePendingURL(url)
+            deepLinkInbox.receive(url)
         }
     }
 }
