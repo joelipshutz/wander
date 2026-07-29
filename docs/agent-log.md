@@ -28614,9 +28614,12 @@ Outcome:
 
 - Implementation commit after rebase: `05cbff489`.
 - Ready PR: `#292` (`https://github.com/joelipshutz/wander/pull/292`).
-- Branch is pushed and ready for local Xcode/device testing. Manual verification
-  should leave the app on a non-default screen or open presentation, background
-  it for a few seconds, and confirm that reopening resumes in place; after 30
-  seconds, the existing fail-closed session refresh remains intentional.
+- Branch is pushed and the isolated worktree's `Wander.xcodeproj` is open in
+  Xcode. Xcode's Branch Chooser was visually verified to show
+  `codex/warm-start-grace`.
+- Manual device verification should leave the app on a non-default screen or
+  open presentation, background it for a few seconds, and confirm that
+  reopening resumes in place; after 30 seconds, the existing fail-closed
+  session refresh remains intentional.
 - No known implementation blockers. No build-number bump, TestFlight release,
   Linear record, or tester-facing release note was created.
