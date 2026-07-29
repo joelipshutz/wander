@@ -310,7 +310,7 @@ private struct BoilingRatingLiquid: View {
     let reduceMotion: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion)) { context in
+        TimelineView(.animation(paused: reduceMotion)) { context in
             GeometryReader { geometry in
                 let time = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
                 let phase = time * state.activity
@@ -367,7 +367,7 @@ private struct RatingLiquidShape: Shape {
     func path(in rect: CGRect) -> Path {
         let clampedLevel = min(max(level, 0), 1)
         let topY = rect.maxY - (rect.height * CGFloat(clampedLevel))
-        let sampleCount = 24
+        let sampleCount = max(48, Int(ceil(rect.width / 6)))
 
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
