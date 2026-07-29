@@ -202,6 +202,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
+    private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
     var defaultVisibility: PlaceVisibility {
         willSet {
@@ -351,7 +352,14 @@ final class WanderStore: ObservableObject {
     private(set) var visiblePlaceProjectionBuildCount = 0
     private(set) var visiblePlaceOwnerCountBuildCount = 0
     #endif
-    private var discoverParseCache: [String: DiscoverFilters] = [:]
+    private struct CachedDiscoverParse {
+        let filters: DiscoverFilters
+        let source: DiscoverParseSource
+    }
+
+    private var discoverParseCache: [String: CachedDiscoverParse] = [:]
+    private var discoverParseCacheOrder: [String] = []
+    private static let discoverParseCacheCapacity = 50
     private(set) var providerCategoryEnrichmentAttemptedAtByKey: [String: Date] = [:]
     private static let defaultRemoteViewport = MapViewport(
         minLatitude: 33.95,
@@ -1141,7 +1149,9 @@ final class WanderStore: ObservableObject {
         lastFeedRefreshAt = nil
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
+        lastDiscoverParseSource = .deterministic
         discoverParseCache.removeAll()
+        discoverParseCacheOrder.removeAll()
         defaultVisibility = .followers
         isPrivateProfile = false
         autoSaveListAddsToWant = true
@@ -3712,35 +3722,53 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func trackDiscoverSearchEvent(_ name: String, properties: [String: String]) {
+        analytics.track(AnalyticsEvent(name: name, properties: properties))
+    }
+
     func parseDiscover(query: String) async -> DiscoverFilters {
-        let cacheKey = normalizedParseCacheKey(query)
+        let schema = DiscoverFilterSchema()
+        let cacheKey = normalizedParseCacheKey(query, schema: schema)
         if let cached = discoverParseCache[cacheKey] {
-            guard !Task.isCancelled else { return cached }
-            if lastDiscoverFilters != cached {
-                lastDiscoverFilters = cached
+            guard !Task.isCancelled else { return cached.filters }
+            touchDiscoverParseCacheKey(cacheKey)
+            if lastDiscoverFilters != cached.filters {
+                lastDiscoverFilters = cached.filters
             }
+            lastDiscoverParseSource = .cache
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverQueryParsed,
-                    properties: ["source": "cache", "chip_count": "\(cached.chips.count)"]
+                    properties: [
+                        "source": "cache",
+                        "facet_count": "\(cached.filters.recognizedFacetCount)",
+                        "opinion": cached.filters.opinion?.rawValue ?? "none",
+                        "unsupported_count": "\(cached.filters.resolvedUnsupportedConcepts.count)"
+                    ]
                 )
             )
-            return cached
+            return cached.filters
         }
 
-        let schema = DiscoverFilterSchema()
-
         do {
-            let filters = try await parser.parse(query: query, schema: schema)
+            let parsedFilters = try await parser.parse(query: query, schema: schema)
             try Task.checkCancellation()
-            discoverParseCache[cacheKey] = filters
+            let filters = DiscoverSemanticNormalizer.normalized(parsedFilters, query: query)
+            let source = parser.parseSource
+            cacheDiscoverParse(filters, source: source, key: cacheKey)
             if lastDiscoverFilters != filters {
                 lastDiscoverFilters = filters
             }
+            lastDiscoverParseSource = source
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverQueryParsed,
-                    properties: ["source": "parser", "chip_count": "\(filters.chips.count)"]
+                    properties: [
+                        "source": source.rawValue,
+                        "facet_count": "\(filters.recognizedFacetCount)",
+                        "opinion": filters.opinion?.rawValue ?? "none",
+                        "unsupported_count": "\(filters.resolvedUnsupportedConcepts.count)"
+                    ]
                 )
             )
             return filters
@@ -3751,6 +3779,7 @@ final class WanderStore: ObservableObject {
             if lastDiscoverFilters != fallback {
                 lastDiscoverFilters = fallback
             }
+            lastDiscoverParseSource = .deterministicFallback
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverParseFailed,
@@ -3764,7 +3793,12 @@ final class WanderStore: ObservableObject {
     func discover(query: String, scope: DiscoverPlaceScope = .everyone, backend: WanderBackend? = nil) async -> DiscoverResults {
         let filters = await parseDiscover(query: query)
         guard !Task.isCancelled else {
-            return DiscoverResults(places: [], profiles: [])
+            return DiscoverResults(
+                places: [],
+                profiles: [],
+                filters: filters,
+                parseSource: lastDiscoverParseSource
+            )
         }
         var placeFilters = PlaceFilters()
         placeFilters.statuses = filters.statuses
@@ -3784,12 +3818,35 @@ final class WanderStore: ObservableObject {
             }
         }
 
-        let places = visiblePlaces(filters: placeFilters)
+        let hasSearchText = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        var places = (hasSearchText && !filters.hasRecognizedFacet ? [] : visiblePlaces(filters: placeFilters))
             .filter { visiblePlace in
                 matchesArea(filters.area, visiblePlace: visiblePlace)
                     && matchesOwner(filters.ownerQuery, visiblePlace: visiblePlace)
                     && matchesTags(filters.tags, visiblePlace: visiblePlace)
+                    && matchesOpinion(filters.opinion, visiblePlace: visiblePlace)
             }
+
+        if filters.sort == .ownerRatingDescending {
+            places.sort { lhs, rhs in
+                let lhsScore = lhs.userPlace.ratingScore ?? -.infinity
+                let rhsScore = rhs.userPlace.ratingScore ?? -.infinity
+                if lhsScore != rhsScore { return lhsScore > rhsScore }
+                if lhs.userPlace.savedAt != rhs.userPlace.savedAt {
+                    return lhs.userPlace.savedAt > rhs.userPlace.savedAt
+                }
+                return lhs.userPlace.id < rhs.userPlace.id
+            }
+        }
+
+        let evidenceByUserPlaceID = Dictionary(
+            uniqueKeysWithValues: places.map { visiblePlace in
+                (
+                    visiblePlace.userPlace.id,
+                    discoverMatchEvidence(for: visiblePlace, filters: filters)
+                )
+            }
+        )
         var profiles = searchProfiles(handleQuery: query)
         let normalizedProfileQuery = normalizedHandleQuery(query)
 
@@ -3801,13 +3858,25 @@ final class WanderStore: ObservableObject {
                 profiles = mergeProfileShells(profiles + remoteProfiles)
                 lastRemoteError = nil
             } catch is CancellationError {
-                return DiscoverResults(places: places, profiles: profiles)
+                return DiscoverResults(
+                    places: places,
+                    profiles: profiles,
+                    filters: filters,
+                    parseSource: lastDiscoverParseSource,
+                    evidenceByUserPlaceID: evidenceByUserPlaceID
+                )
             } catch {
                 lastRemoteError = remoteErrorMessage(error)
             }
         }
 
-        return DiscoverResults(places: places, profiles: profiles)
+        return DiscoverResults(
+            places: places,
+            profiles: profiles,
+            filters: filters,
+            parseSource: lastDiscoverParseSource,
+            evidenceByUserPlaceID: evidenceByUserPlaceID
+        )
     }
 
     func currentLocationCandidates() async throws -> [PlaceCandidate] {
@@ -7894,11 +7963,38 @@ final class WanderStore: ObservableObject {
             .joined(separator: "_")
     }
 
-    private func normalizedParseCacheKey(_ query: String) -> String {
-        query
+    private func normalizedParseCacheKey(_ query: String, schema: DiscoverFilterSchema) -> String {
+        let normalizedQuery = query
             .lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let schemaFingerprint = [
+            schema.allowedCategories.sorted().joined(separator: ","),
+            schema.allowedStatuses.map(\.rawValue).sorted().joined(separator: ","),
+            schema.allowedRelationships.map(\.rawValue).sorted().joined(separator: ","),
+            schema.allowedTags.sorted().joined(separator: ",")
+        ].joined(separator: "|")
+        return "v2|\(stableHash(schemaFingerprint))|\(normalizedQuery)"
+    }
+
+    private func cacheDiscoverParse(
+        _ filters: DiscoverFilters,
+        source: DiscoverParseSource,
+        key: String
+    ) {
+        if discoverParseCache[key] == nil,
+           discoverParseCache.count >= Self.discoverParseCacheCapacity,
+           let oldestKey = discoverParseCacheOrder.first {
+            discoverParseCache.removeValue(forKey: oldestKey)
+            discoverParseCacheOrder.removeFirst()
+        }
+        discoverParseCache[key] = CachedDiscoverParse(filters: filters, source: source)
+        touchDiscoverParseCacheKey(key)
+    }
+
+    private func touchDiscoverParseCacheKey(_ key: String) {
+        discoverParseCacheOrder.removeAll { $0 == key }
+        discoverParseCacheOrder.append(key)
     }
 
     private func normalizedSourceInput(originalInput: String?, localAssetRef: String?) -> String {
@@ -7922,7 +8018,8 @@ final class WanderStore: ObservableObject {
     }
 
     private func matchesArea(_ area: String?, visiblePlace: VisiblePlace) -> Bool {
-        guard let area, !area.isEmpty, area != "LA" else { return true }
+        let area = normalizedDiscoverText(area)
+        guard !area.isEmpty else { return true }
         let haystack = [
             visiblePlace.place.address,
             visiblePlace.place.locality,
@@ -7931,9 +8028,18 @@ final class WanderStore: ObservableObject {
         ]
             .compactMap { $0 }
             .joined(separator: " ")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .lowercased()
 
-        return haystack.contains(area.lowercased())
+        if area == "la" {
+            let tokens = Set(
+                haystack
+                    .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                    .map(String.init)
+            )
+            return haystack.contains("los angeles") || tokens.contains("la")
+        }
+        return haystack.contains(area)
     }
 
     private func matchesOwner(_ ownerQuery: String?, visiblePlace: VisiblePlace) -> Bool {
@@ -7946,8 +8052,19 @@ final class WanderStore: ObservableObject {
             return true
         }
 
-        return visiblePlace.owner.handle.lowercased().contains(ownerQuery)
-            || visiblePlace.owner.displayName.lowercased().contains(ownerQuery)
+        let normalizedOwnerQuery = normalizedDiscoverText(ownerQuery)
+        let normalizedHandle = normalizedDiscoverText(visiblePlace.owner.handle)
+        let normalizedName = normalizedDiscoverText(visiblePlace.owner.displayName)
+        if normalizedHandle == normalizedOwnerQuery || normalizedName == normalizedOwnerQuery {
+            return true
+        }
+
+        guard !ownerQuery.contains("@"),
+              !normalizedOwnerQuery.contains(" "),
+              normalizedOwnerQuery.hasSuffix("s")
+        else { return false }
+        let possessiveBase = String(normalizedOwnerQuery.dropLast())
+        return normalizedHandle == possessiveBase || normalizedName == possessiveBase
     }
 
     private func matchesTags(_ tags: Set<String>, visiblePlace: VisiblePlace) -> Bool {
@@ -7956,8 +8073,6 @@ final class WanderStore: ObservableObject {
             .map(\.valueJSON)
             .joined(separator: " ")
         let haystack = [
-            visiblePlace.place.canonicalName,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
             visiblePlace.userPlace.note,
             attributeText
         ]
@@ -7965,9 +8080,166 @@ final class WanderStore: ObservableObject {
             .joined(separator: " ")
             .lowercased()
 
-        return tags.contains { tag in
+        return tags.allSatisfy { tag in
             haystack.contains(tag.lowercased())
         }
+    }
+
+    private func matchesOpinion(_ opinion: DiscoverOpinion?, visiblePlace: VisiblePlace) -> Bool {
+        guard opinion == .favorite else { return true }
+        guard visiblePlace.userPlace.status == .been else { return false }
+
+        if let ratingScore = visiblePlace.userPlace.ratingScore, ratingScore >= 4 {
+            return true
+        }
+
+        return hasFavoriteLabel(visiblePlace)
+    }
+
+    private func hasFavoriteLabel(_ visiblePlace: VisiblePlace) -> Bool {
+        attributes(for: visiblePlace.userPlace.id)
+            .filter { $0.questionKey == PlaceMemoryAttributeKeys.personalLabels }
+            .flatMap { PlaceAttributeValuePresentation.strings(from: $0.valueJSON) }
+            .contains { label in
+                normalizedDiscoverWords(label).contains("favorite")
+            }
+    }
+
+    private func discoverMatchEvidence(
+        for visiblePlace: VisiblePlace,
+        filters: DiscoverFilters
+    ) -> DiscoverMatchEvidence {
+        var items: [DiscoverEvidenceItem] = []
+
+        if filters.ownerQuery != nil {
+            items.append(
+                DiscoverEvidenceItem(
+                    kind: .owner,
+                    displayValue: "\(visiblePlace.owner.displayName)'s save",
+                    sourceOwnerID: visiblePlace.owner.id
+                )
+            )
+        } else {
+            items.append(
+                DiscoverEvidenceItem(
+                    kind: .owner,
+                    displayValue: visiblePlace.owner.displayName,
+                    sourceOwnerID: visiblePlace.owner.id
+                )
+            )
+        }
+
+        if filters.opinion == .favorite {
+            items.append(
+                DiscoverEvidenceItem(
+                    kind: .opinion,
+                    displayValue: "favorite",
+                    sourceOwnerID: visiblePlace.owner.id
+                )
+            )
+            if let ratingScore = visiblePlace.userPlace.ratingScore, ratingScore >= 4 {
+                items.append(
+                    DiscoverEvidenceItem(
+                        kind: .rating,
+                        displayValue: "\(PlaceRating.averageDisplay(ratingScore))/5",
+                        sourceOwnerID: visiblePlace.owner.id
+                    )
+                )
+            } else if hasFavoriteLabel(visiblePlace) {
+                items.append(
+                    DiscoverEvidenceItem(
+                        kind: .personalLabel,
+                        displayValue: "favorite label",
+                        sourceOwnerID: visiblePlace.owner.id
+                    )
+                )
+            }
+        }
+
+        items.append(contentsOf: filters.tags.sorted().map { tag in
+            DiscoverEvidenceItem(kind: .tag, displayValue: tag, sourceOwnerID: visiblePlace.owner.id)
+        })
+
+        if !filters.categories.isEmpty {
+            items.append(
+                DiscoverEvidenceItem(
+                    kind: .category,
+                    displayValue: visiblePlace.effectiveCategoryDisplay.compactTitle,
+                    sourceOwnerID: visiblePlace.owner.id
+                )
+            )
+        }
+
+        if filters.area != nil,
+           let locality = visiblePlace.place.locality?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !locality.isEmpty {
+            items.append(
+                DiscoverEvidenceItem(
+                    kind: .area,
+                    displayValue: locality,
+                    sourceOwnerID: visiblePlace.owner.id
+                )
+            )
+        }
+
+        if filters.opinion == nil, filters.statuses.contains(visiblePlace.userPlace.status) {
+            items.append(
+                DiscoverEvidenceItem(
+                    kind: .status,
+                    displayValue: visiblePlace.userPlace.status.displayTitle,
+                    sourceOwnerID: visiblePlace.owner.id
+                )
+            )
+        }
+
+        if let relationship = filters.relationship {
+            let title: String
+            switch relationship {
+            case .owner: title = "mine"
+            case .mutual: title = "friend"
+            case .follower: title = "following"
+            case .nonFollower: title = "other person"
+            }
+            items.append(
+                DiscoverEvidenceItem(
+                    kind: .relationship,
+                    displayValue: title,
+                    sourceOwnerID: visiblePlace.owner.id
+                )
+            )
+        }
+
+        return DiscoverMatchEvidence(
+            userPlaceID: visiblePlace.userPlace.id,
+            ownerID: visiblePlace.owner.id,
+            ownerName: visiblePlace.owner.displayName,
+            note: visiblePlace.userPlace.note,
+            ratingScore: visiblePlace.userPlace.ratingScore,
+            items: items
+        )
+    }
+
+    private func normalizedDiscoverText(_ value: String?) -> String {
+        let normalized = (value ?? "")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: "@", with: "")
+            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.replacingOccurrences(
+            of: #"\s+s$"#,
+            with: "",
+            options: .regularExpression
+        )
+    }
+
+    private func normalizedDiscoverWords(_ value: String) -> Set<String> {
+        Set(
+            normalizedDiscoverText(value)
+                .split(separator: " ")
+                .map(String.init)
+        )
     }
 }
 

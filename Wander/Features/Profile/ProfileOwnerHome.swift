@@ -317,7 +317,7 @@ struct ProfileOwnerHome: View {
                     }
 
                     Text(profile.displayName)
-                        .font(.system(size: 30, weight: .black))
+                        .font(WanderTypography.editorialDisplay)
                         .lineLimit(2)
                         .minimumScaleFactor(0.75)
 
@@ -748,7 +748,7 @@ private struct ProfileRecentActivitySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("Recent activity")
-                .font(.system(size: 23, weight: .black))
+                .font(WanderTypography.editorialMajorSectionTitle)
                 .accessibilityAddTraits(.isHeader)
 
             ProfileActivityFilterControl(
@@ -1051,7 +1051,7 @@ private struct ProfileCalendarSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) calendar")
-                        .font(.system(size: 23, weight: .black))
+                        .font(WanderTypography.editorialMajorSectionTitle)
                     Text(monthTitle)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
@@ -1307,7 +1307,7 @@ private struct ProfileMapSection: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing2) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) map")
-                        .font(.system(size: 23, weight: .black))
+                        .font(WanderTypography.editorialMajorSectionTitle)
                     Text(mapCountSummary)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)

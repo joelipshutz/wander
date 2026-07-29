@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+#if DEBUG
+import UIKit
+#endif
 
 @main
 struct WanderApp: App {
@@ -8,6 +11,9 @@ struct WanderApp: App {
     @StateObject private var backend: WanderBackend
     @StateObject private var entryCoordinator: AppEntryCoordinator
     @StateObject private var pushNotifications = PushNotificationManager()
+    #if DEBUG
+    @StateObject private var mapCaptureBackend: WanderBackend
+    #endif
     private let analytics: AnalyticsClient
     private let discoverParser: any LLMFilterParser
 
@@ -32,6 +38,9 @@ struct WanderApp: App {
                 analytics: analyticsClient
             )
         )
+        #if DEBUG
+        _mapCaptureBackend = StateObject(wrappedValue: Self.makeMapCaptureBackend())
+        #endif
     }
 
     var body: some Scene {
@@ -78,9 +87,14 @@ struct WanderApp: App {
     private var mapCaptureRoot: some View {
         WanderRootView(analytics: NoopAnalyticsClient(), parser: DeterministicFilterParser())
             .environmentObject(auth)
-            .environmentObject(backend)
+            .environmentObject(mapCaptureBackend)
             .environmentObject(pushNotifications)
             .modelContainer(WanderModelContainer.preview)
+    }
+
+    @MainActor
+    static func makeMapCaptureBackend() -> WanderBackend {
+        WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())
     }
     #endif
 
@@ -98,6 +112,134 @@ struct WanderApp: App {
         )
     }
 }
+
+#if DEBUG
+/// Keeps deterministic design and screenshot captures photo-first without
+/// weakening the authenticated production `place-photo` boundary.
+@MainActor
+struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
+    private static let assetName = "PlaceCarouselPhotos"
+    private static let tileCount = 4
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        if request.skipsGooglePlacesLookup {
+            return try await visibleUserPhoto(for: request)
+        }
+        return photo(
+            provider: "google_places",
+            providerPlaceID: "capture-google-\(Self.tileIndex(for: request.lookupKey))",
+            request: request
+        )
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        photo(
+            provider: "visit_photo",
+            providerPlaceID: "capture-visit-\(Self.tileIndex(for: request.lookupKey))",
+            request: request
+        )
+    }
+
+    func visiblePhotoGalleryPage(
+        placeID: String,
+        after cursor: PlacePhotoGalleryCursor?,
+        limit: Int
+    ) async throws -> PlacePhotoGalleryPage {
+        PlacePhotoGalleryPage(items: [], nextCursor: nil, hasMore: false)
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        let tileIndex = Self.tileIndex(from: photo.providerPlaceID)
+        guard let image = Self.croppedAssetImage(tileIndex: tileIndex),
+              let data = image.pngData()
+        else {
+            throw WanderRemoteError.invalidResponse("Map capture photo asset is unavailable")
+        }
+        return data
+    }
+
+    static func tileIndex(for key: String) -> Int {
+        var hash: UInt64 = 1_469_598_103_934_665_603
+        for byte in key.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % UInt64(tileCount))
+    }
+
+    private func photo(
+        provider: String,
+        providerPlaceID: String,
+        request: PlacePhotoRequest
+    ) -> PlacePhoto {
+        let tileIndex = Self.tileIndex(from: providerPlaceID)
+        let tileSize = Self.croppedAssetImage(tileIndex: tileIndex)?.size
+        return PlacePhoto(
+            provider: provider,
+            providerPlaceID: providerPlaceID,
+            providerPrimaryType: "restaurant",
+            providerTypes: ["restaurant", "food", "point_of_interest"],
+            photoURLString: "capture://place-carousel/\(tileIndex)",
+            width: tileSize.map { Int($0.width) },
+            height: tileSize.map { Int($0.height) },
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: provider == "google_places"
+                ? Self.googleMapsSourceURLString(for: request.name)
+                : nil,
+            flagContentURLString: nil,
+            storageBucket: nil,
+            storagePath: nil,
+            localAssetRef: nil
+        )
+    }
+
+    private static func tileIndex(from providerPlaceID: String) -> Int {
+        guard let suffix = providerPlaceID.split(separator: "-").last,
+              let index = Int(suffix)
+        else {
+            return 0
+        }
+        return max(0, min(index, tileCount - 1))
+    }
+
+    private static func croppedAssetImage(tileIndex: Int) -> UIImage? {
+        guard let sourceImage = UIImage(named: assetName),
+              let sourceCGImage = sourceImage.cgImage
+        else {
+            return nil
+        }
+
+        let normalizedIndex = max(0, min(tileIndex, tileCount - 1))
+        let tileWidth = sourceCGImage.width / 2
+        let tileHeight = sourceCGImage.height / 2
+        let cropRect = CGRect(
+            x: (normalizedIndex % 2) * tileWidth,
+            y: (normalizedIndex / 2) * tileHeight,
+            width: tileWidth,
+            height: tileHeight
+        )
+        guard let croppedCGImage = sourceCGImage.cropping(to: cropRect) else {
+            return nil
+        }
+        return UIImage(
+            cgImage: croppedCGImage,
+            scale: sourceImage.scale,
+            orientation: sourceImage.imageOrientation
+        )
+    }
+
+    private static func googleMapsSourceURLString(for placeName: String) -> String? {
+        var components = URLComponents(string: "https://www.google.com/maps/search/")
+        components?.queryItems = [
+            URLQueryItem(name: "api", value: "1"),
+            URLQueryItem(name: "query", value: placeName)
+        ]
+        return components?.url?.absoluteString
+    }
+}
+#endif
 
 enum WanderAppSessionDestination: Equatable {
     case loading

@@ -94,8 +94,13 @@ enum WanderTheme {
 
 /// Semantic, Dynamic-Type-aware typography roles for the approved native
 /// editorial system. Navigation chrome and utility copy stay in the default
-/// system design; serif is reserved for authored place content.
+/// system design; serif is reserved for named content, editorial headings,
+/// and eligible custom content mastheads.
 enum WanderTypography {
+    static let editorialMasthead = Font.system(.title, design: .serif, weight: .bold)
+    static let editorialNamedContent = Font.system(.headline, design: .serif, weight: .bold)
+    static let editorialSmallNamedContent = Font.system(.subheadline, design: .serif, weight: .bold)
+    static let editorialMajorSectionTitle = Font.system(.title2, design: .serif, weight: .semibold)
     static let editorialDisplay = Font.system(.largeTitle, design: .serif, weight: .bold)
     static let editorialTitle = Font.system(.title2, design: .serif, weight: .bold)
     static let editorialCardTitle = Font.system(.title3, design: .serif, weight: .bold)

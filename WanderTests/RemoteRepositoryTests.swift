@@ -2452,6 +2452,9 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(filters.categories, [WanderPlaceCategory.coffeeTeaSweets])
         XCTAssertEqual(filters.statuses, [.been])
         XCTAssertEqual(filters.ownerQuery, "joe")
+        XCTAssertEqual(filters.opinion, .favorite)
+        XCTAssertEqual(filters.sort, .ownerRatingDescending)
+        XCTAssertEqual(parser.parseSource, .deterministicFallback)
     }
 }
 
