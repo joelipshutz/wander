@@ -256,7 +256,8 @@ create temporary table web_link_tap_invites (
   token text not null,
   list_id uuid not null
 ) on commit drop;
-grant select, insert, update on table web_link_tap_invites to authenticated;
+grant select on table web_link_tap_invites to anon, authenticated;
+grant insert, update on table web_link_tap_invites to authenticated;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'user_web_link_owner', true);
@@ -277,6 +278,7 @@ select is(
   'created invitation tokens have 192 bits of entropy'
 );
 
+reset role;
 select ok(
   (
     select invite.token_hash <> tap.token
