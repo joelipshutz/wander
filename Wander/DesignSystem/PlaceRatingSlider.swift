@@ -341,65 +341,64 @@ private struct BoilingRatingLiquid: View {
     let state: PlaceRatingLiquidState
     let reduceMotion: Bool
 
+    private let horizontalPositions: [Double] = [
+        0.08, 0.17, 0.28, 0.39, 0.52, 0.63,
+        0.74, 0.86, 0.94, 0.33, 0.58, 0.79
+    ]
+
+    private let startingOffsets: [Double] = [
+        0.12, 0.65, 0.36, 0.84, 0.48, 0.04,
+        0.72, 0.27, 0.91, 0.56, 0.18, 0.77
+    ]
+
     var body: some View {
         TimelineView(.animation(paused: reduceMotion)) { context in
-            GeometryReader { geometry in
-                let time = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate
-                let phase = time * state.activity
-                let liquidShape = RatingLiquidShape(
-                    level: state.level,
-                    phase: phase,
-                    waveStrength: 2.5 + (state.progress * 3)
+            Canvas(
+                opaque: false,
+                colorMode: .nonLinear,
+                rendersAsynchronously: false
+            ) { graphics, size in
+                let time = reduceMotion
+                    ? 0
+                    : context.date.timeIntervalSinceReferenceDate
+                let liquidPath = liquidPath(
+                    in: CGRect(origin: .zero, size: size),
+                    phase: time * state.activity
                 )
 
-                ZStack {
-                    liquidShape
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    state.color.opacity(0.34),
-                                    state.color.opacity(0.68)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-
-                    RatingBubbleField(
-                        state: state,
-                        time: time,
-                        containerSize: geometry.size
+                graphics.fill(
+                    liquidPath,
+                    with: .linearGradient(
+                        Gradient(colors: [
+                            state.color.opacity(0.34),
+                            state.color.opacity(0.68)
+                        ]),
+                        startPoint: CGPoint(x: size.width / 2, y: 0),
+                        endPoint: CGPoint(x: size.width / 2, y: size.height)
                     )
-                    .mask(liquidShape)
+                )
 
-                    liquidShape
-                        .stroke(state.color.opacity(0.58), lineWidth: 1.5)
+                graphics.drawLayer { bubbleGraphics in
+                    bubbleGraphics.clip(to: liquidPath)
+                    drawBubbles(in: &bubbleGraphics, size: size, time: time)
                 }
+
+                graphics.stroke(
+                    liquidPath,
+                    with: .color(state.color.opacity(0.58)),
+                    lineWidth: 1.5
+                )
             }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
-}
 
-private struct RatingLiquidShape: Shape {
-    var level: Double
-    var phase: Double
-    var waveStrength: Double
-
-    var animatableData: AnimatablePair<Double, AnimatablePair<Double, Double>> {
-        get { AnimatablePair(level, AnimatablePair(phase, waveStrength)) }
-        set {
-            level = newValue.first
-            phase = newValue.second.first
-            waveStrength = newValue.second.second
-        }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        let clampedLevel = min(max(level, 0), 1)
+    private func liquidPath(in rect: CGRect, phase: Double) -> Path {
+        let clampedLevel = min(max(state.level, 0), 1)
         let topY = rect.maxY - (rect.height * CGFloat(clampedLevel))
         let sampleCount = max(48, Int(ceil(rect.width / 6)))
+        let waveStrength = 2.5 + (state.progress * 3)
 
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
@@ -416,45 +415,36 @@ private struct RatingLiquidShape: Shape {
         path.closeSubpath()
         return path
     }
-}
 
-private struct RatingBubbleField: View {
-    let state: PlaceRatingLiquidState
-    let time: Double
-    let containerSize: CGSize
+    private func drawBubbles(
+        in graphics: inout GraphicsContext,
+        size: CGSize,
+        time: Double
+    ) {
+        for index in 0..<min(state.bubbleCount, horizontalPositions.count) {
+            let speed = 0.13 + (Double(index % 4) * 0.025)
+            let rawCycle = (time * speed * state.activity) + startingOffsets[index]
+            let cycle = rawCycle - floor(rawCycle)
+            let diameter = CGFloat(4 + Double((index * 3) % 8))
+            let drift = CGFloat(sin((time * 0.9) + Double(index)) * 5)
+            let center = CGPoint(
+                x: (size.width * CGFloat(horizontalPositions[index])) + drift,
+                y: size.height + diameter - (size.height * CGFloat(cycle) * 1.12)
+            )
+            let bubbleRect = CGRect(
+                x: center.x - (diameter / 2),
+                y: center.y - (diameter / 2),
+                width: diameter,
+                height: diameter
+            )
+            let bubblePath = Path(ellipseIn: bubbleRect)
 
-    private let horizontalPositions: [Double] = [
-        0.08, 0.17, 0.28, 0.39, 0.52, 0.63,
-        0.74, 0.86, 0.94, 0.33, 0.58, 0.79
-    ]
-
-    private let startingOffsets: [Double] = [
-        0.12, 0.65, 0.36, 0.84, 0.48, 0.04,
-        0.72, 0.27, 0.91, 0.56, 0.18, 0.77
-    ]
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<horizontalPositions.count, id: \.self) { index in
-                let speed = 0.13 + (Double(index % 4) * 0.025)
-                let rawCycle = (time * speed * state.activity) + startingOffsets[index]
-                let cycle = rawCycle - floor(rawCycle)
-                let size = CGFloat(4 + Double((index * 3) % 8))
-                let drift = CGFloat(sin((time * 0.9) + Double(index)) * 5)
-
-                Circle()
-                    .fill(Color.white.opacity(0.08))
-                    .overlay {
-                        Circle()
-                            .stroke(Color.white.opacity(0.58), lineWidth: 1)
-                    }
-                    .frame(width: size, height: size)
-                    .position(
-                        x: (containerSize.width * CGFloat(horizontalPositions[index])) + drift,
-                        y: containerSize.height + size - (containerSize.height * CGFloat(cycle) * 1.12)
-                    )
-                    .opacity(index < state.bubbleCount ? 1 : 0)
-            }
+            graphics.fill(bubblePath, with: .color(Color.white.opacity(0.08)))
+            graphics.stroke(
+                bubblePath,
+                with: .color(Color.white.opacity(0.58)),
+                lineWidth: 1
+            )
         }
     }
 }
