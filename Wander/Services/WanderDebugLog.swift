@@ -6,6 +6,30 @@ enum WanderDebugLog {
     static let remote = Logger(subsystem: "com.grayline.wander", category: "WanderRemote")
     static let performance = Logger(subsystem: "com.grayline.wander", category: "WanderPerformance")
     static let imports = Logger(subsystem: "com.grayline.wander", category: "WanderImports")
+    static let pointsOfInterest = OSLog(
+        subsystem: "com.grayline.wander",
+        category: .pointsOfInterest
+    )
+
+    static func beginPerformanceInterval(_ name: StaticString) -> OSSignpostID {
+        let signpostID = OSSignpostID(log: pointsOfInterest)
+        os_signpost(
+            .begin,
+            log: pointsOfInterest,
+            name: name,
+            signpostID: signpostID
+        )
+        return signpostID
+    }
+
+    static func endPerformanceInterval(_ name: StaticString, id: OSSignpostID) {
+        os_signpost(
+            .end,
+            log: pointsOfInterest,
+            name: name,
+            signpostID: id
+        )
+    }
 
     static func shortID(_ value: String?) -> String {
         guard let value, !value.isEmpty else { return "nil" }

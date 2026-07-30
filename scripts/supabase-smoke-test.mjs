@@ -80,8 +80,14 @@ async function main() {
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
+        await runSurfaceSnapshotSmokeChecks(
+          client,
+          smokeUserID,
+          collaboratorUserID,
+          strangerUserID,
+        );
         await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
-        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, lists, photo visibility, and Discover profile recommendations are valid.");
+        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, batched surface snapshots, lists, photo visibility, and Discover profile recommendations are valid.");
       }
     } finally {
       await client.query("rollback");
@@ -2751,6 +2757,130 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [],
     /permission denied/,
   );
+}
+
+async function runSurfaceSnapshotSmokeChecks(
+  client,
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+) {
+  await expectQuery(
+    client,
+    "surface snapshot RPC metadata",
+    `
+      select
+        bool_and(not procedure.prosecdef) as security_invoker,
+        bool_and(
+          'search_path=public, app' = any(coalesce(procedure.proconfig, array[]::text[]))
+        ) as pinned_search_path,
+        bool_and(
+          has_function_privilege('authenticated', procedure.oid, 'execute')
+        ) as authenticated_execute,
+        bool_and(
+          not has_function_privilege('anon', procedure.oid, 'execute')
+        ) as anon_denied
+      from pg_proc procedure
+      where procedure.oid = any(array[
+        'public.current_user_calendar_snapshot()'::regprocedure,
+        'public.visible_place_lists_snapshot()'::regprocedure,
+        'public.social_surface_snapshot(double precision,double precision,double precision,double precision)'::regprocedure
+      ])
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner calendar snapshot batches owner places and visits",
+    "select public.current_user_calendar_snapshot() as snapshot",
+    [],
+    (result) => {
+      const snapshot = result.rows[0]?.snapshot;
+      return Array.isArray(snapshot?.places)
+        && snapshot.places.length > 0
+        && snapshot.places.every((place) => place.owner_user_id === smokeUserID)
+        && Array.isArray(snapshot?.visits)
+        && snapshot.visits.every((visit) => (
+          snapshot.places.some((place) => place.user_place_id === visit.user_place_id)
+        ));
+    },
+  );
+
+  await expectQuery(
+    client,
+    "visible list snapshot batches summaries details and owner places",
+    "select public.visible_place_lists_snapshot() as snapshot",
+    [],
+    (result) => {
+      const snapshot = result.rows[0]?.snapshot;
+      const summaryIDs = new Set((snapshot?.summaries ?? []).map((summary) => summary.id));
+      const detailIDs = new Set(
+        (snapshot?.details ?? []).map((detail) => detail?.list?.id).filter(Boolean),
+      );
+      return summaryIDs.size > 0
+        && [...summaryIDs].every((id) => detailIDs.has(id))
+        && Array.isArray(snapshot?.owner_places)
+        && Array.isArray(snapshot?.relationships);
+    },
+  );
+
+  await expectQuery(
+    client,
+    "social snapshot batches graph viewport plans and followed places",
+    `
+      select public.social_surface_snapshot(
+        33.5::double precision,
+        -119::double precision,
+        35::double precision,
+        -117::double precision
+      ) as snapshot
+    `,
+    [],
+    (result) => {
+      const snapshot = result.rows[0]?.snapshot;
+      return Array.isArray(snapshot?.following)
+        && snapshot.following.some((profile) => profile.id === collaboratorUserID)
+        && Array.isArray(snapshot?.followers)
+        && Array.isArray(snapshot?.viewport_places)
+        && Array.isArray(snapshot?.wanna_go_plans)
+        && Array.isArray(snapshot?.followed_places)
+        && snapshot.followed_places.some(
+          (place) => place.owner_user_id === collaboratorUserID,
+        )
+        && Array.isArray(snapshot?.relationships);
+    },
+  );
+
+  await setAuthenticatedUser(client, strangerUserID);
+  await expectQuery(
+    client,
+    "calendar snapshot remains owner-scoped for another authenticated caller",
+    "select public.current_user_calendar_snapshot() as snapshot",
+    [],
+    (result) => (result.rows[0]?.snapshot?.places ?? [])
+      .every((place) => place.owner_user_id === strangerUserID),
+  );
+
+  await client.query("set local role anon");
+  for (const [label, query] of [
+    ["calendar", "select public.current_user_calendar_snapshot()"],
+    ["lists", "select public.visible_place_lists_snapshot()"],
+    [
+      "social",
+      "select public.social_surface_snapshot(33.5::double precision, -119::double precision, 35::double precision, -117::double precision)",
+    ],
+  ]) {
+    await expectQueryFailure(
+      client,
+      `anonymous role cannot call ${label} snapshot RPC`,
+      query,
+      [],
+      /permission denied/,
+    );
+  }
 }
 
 async function runFirstVisiblePlacePhotoChecks(

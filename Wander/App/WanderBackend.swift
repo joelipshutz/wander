@@ -15,6 +15,7 @@ final class WanderBackend: ObservableObject {
     let visitRepository: (any VisitRepository)?
     let extractionRepository: (any ExtractionRepository)?
     let placeListRepository: (any PlaceListRepository)?
+    let surfaceSnapshotRepository: (any SurfaceSnapshotRepository)?
     let listSuggestionRepository: (any ListSuggestionRepository)?
     let placePhotoRepository: (any PlacePhotoRepository)?
     let notificationRepository: (any NotificationRepository)?
@@ -47,6 +48,7 @@ final class WanderBackend: ObservableObject {
             self.visitRepository = SupabaseVisitRepository(table: client, storage: client)
             self.extractionRepository = SupabaseExtractionRepository(rpc: client, functions: client)
             self.placeListRepository = SupabasePlaceListRepository(rpc: client)
+            self.surfaceSnapshotRepository = SupabaseSurfaceSnapshotRepository(rpc: client)
             self.listSuggestionRepository = SupabaseListSuggestionRepository(functions: client)
             self.placePhotoRepository = SupabasePlacePhotoRepository(rpc: client, functions: client, storage: client)
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
@@ -64,6 +66,7 @@ final class WanderBackend: ObservableObject {
             self.visitRepository = nil
             self.extractionRepository = nil
             self.placeListRepository = nil
+            self.surfaceSnapshotRepository = nil
             self.listSuggestionRepository = nil
             self.placePhotoRepository = nil
             self.notificationRepository = nil
@@ -90,6 +93,7 @@ final class WanderBackend: ObservableObject {
         visitRepository: (any VisitRepository)? = nil,
         extractionRepository: (any ExtractionRepository)? = nil,
         placeListRepository: (any PlaceListRepository)? = nil,
+        surfaceSnapshotRepository: (any SurfaceSnapshotRepository)? = nil,
         listSuggestionRepository: (any ListSuggestionRepository)? = nil,
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
         notificationRepository: (any NotificationRepository)? = nil,
@@ -108,6 +112,7 @@ final class WanderBackend: ObservableObject {
         self.visitRepository = visitRepository
         self.extractionRepository = extractionRepository
         self.placeListRepository = placeListRepository
+        self.surfaceSnapshotRepository = surfaceSnapshotRepository
         self.listSuggestionRepository = listSuggestionRepository
         self.placePhotoRepository = placePhotoRepository
         self.notificationRepository = notificationRepository
@@ -127,6 +132,7 @@ final class WanderBackend: ObservableObject {
             || visitRepository != nil
             || extractionRepository != nil
             || placeListRepository != nil
+            || surfaceSnapshotRepository != nil
             || listSuggestionRepository != nil
             || placePhotoRepository != nil
             || notificationRepository != nil
@@ -563,6 +569,27 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await placeListRepository.detail(listID: listID)
+    }
+
+    func currentUserCalendarSnapshot() async throws -> CurrentUserCalendarRemoteSnapshot {
+        guard let surfaceSnapshotRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await surfaceSnapshotRepository.currentUserCalendarSnapshot()
+    }
+
+    func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot {
+        guard let surfaceSnapshotRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await surfaceSnapshotRepository.placeListsSnapshot()
+    }
+
+    func socialSurfaceSnapshot(in viewport: MapViewport) async throws -> SocialSurfaceRemoteSnapshot {
+        guard let surfaceSnapshotRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await surfaceSnapshotRepository.socialSurfaceSnapshot(in: viewport)
     }
 
     func upsertPlaceList(_ draft: PlaceListUpsertDraft) async throws -> String {
