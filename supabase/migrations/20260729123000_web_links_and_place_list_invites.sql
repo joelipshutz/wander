@@ -453,4 +453,3 @@ comment on function public.public_web_preview(text, text) is
   'Privacy-filtered metadata for getrec.me entity previews; never returns user place content.';
 
 commit;
-;

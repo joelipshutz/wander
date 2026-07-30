@@ -11,7 +11,9 @@ struct WanderShareContent: Equatable {
     var items: [URL] { [item] + additionalItems }
 
     static func profile(serverID: String?, displayName: String, handle: String) -> WanderShareContent? {
-        guard let item = appURL(host: "profiles", pathComponent: serverID) else { return nil }
+        guard let serverID,
+              let item = WanderDeepLinkRoute.sharedProfile(profileID: serverID).url
+        else { return nil }
         return WanderShareContent(
             item: item,
             subject: displayName,
@@ -27,7 +29,9 @@ struct WanderShareContent: Equatable {
         filterTitle: String? = nil
     ) -> WanderShareContent? {
         guard imageFileURL.isFileURL, imageFileURL.pathExtension.lowercased() == "png" else { return nil }
-        guard let item = appURL(host: "profiles", pathComponent: serverID) else { return nil }
+        guard let serverID,
+              let item = WanderDeepLinkRoute.sharedProfile(profileID: serverID).url
+        else { return nil }
         let trimmedFilterTitle = filterTitle?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedFilterTitle = trimmedFilterTitle?.isEmpty == false ? trimmedFilterTitle : nil
@@ -44,6 +48,35 @@ struct WanderShareContent: Equatable {
         WanderShareContent(item: item, subject: name, message: message)
     }
 
+    static func place(serverID: String?, name: String, message: String) -> WanderShareContent? {
+        guard let serverID,
+              UUID(uuidString: serverID) != nil,
+              let item = WanderDeepLinkRoute.sharedPlace(placeID: serverID).url
+        else { return nil }
+        return WanderShareContent(item: item, subject: name, message: message)
+    }
+
+    static func list(serverID: String?, name: String) -> WanderShareContent? {
+        guard let serverID,
+              UUID(uuidString: serverID) != nil,
+              let item = WanderDeepLinkRoute.sharedList(listID: serverID).url
+        else { return nil }
+        return WanderShareContent(
+            item: item,
+            subject: name,
+            message: "See \(name) on rec.me"
+        )
+    }
+
+    static func listInvite(token: String, name: String) -> WanderShareContent? {
+        guard let item = WanderDeepLinkRoute.listInvite(token: token).url else { return nil }
+        return WanderShareContent(
+            item: item,
+            subject: "Join \(name)",
+            message: "You’re invited to build \(name) together on rec.me"
+        )
+    }
+
     private init(item: URL, additionalItems: [URL] = [], subject: String, message: String) {
         self.item = item
         self.additionalItems = additionalItems
@@ -51,17 +84,6 @@ struct WanderShareContent: Equatable {
         self.message = message
     }
 
-    private static func appURL(host: String, pathComponent: String?) -> URL? {
-        guard let pathComponent,
-              !pathComponent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return nil }
-
-        var components = URLComponents()
-        components.scheme = "recme"
-        components.host = host
-        components.path = "/\(pathComponent)"
-        return components.url
-    }
 }
 
 struct WanderShareSheet: UIViewControllerRepresentable {

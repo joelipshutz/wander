@@ -2535,7 +2535,59 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     () => true,
   );
 
+  const inviteListID = await createSmokeList(client, "Codex smoke invitation check");
+  const inviteResult = await expectQuery(
+    client,
+    "owner creates an expiring list invitation",
+    "select public.create_place_list_invite($1::uuid) as invite",
+    [inviteListID],
+    (result) => result.rows[0]?.invite?.list_id === inviteListID
+      && typeof result.rows[0]?.invite?.token === "string"
+      && result.rows[0].invite.token.length === 48,
+  );
+  const inviteToken = inviteResult.rows[0].invite.token;
+
   await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "collaborator resolves the active list invitation",
+    "select public.resolve_place_list_invite($1) as invite",
+    [inviteToken],
+    (result) => result.rows[0]?.invite?.status === "active"
+      && result.rows[0]?.invite?.can_accept === true
+      && result.rows[0]?.invite?.list_id === inviteListID,
+  );
+  await expectQuery(
+    client,
+    "collaborator explicitly accepts the list invitation",
+    "select public.accept_place_list_invite($1)::text as list_id",
+    [inviteToken],
+    (result) => result.rows[0]?.list_id === inviteListID,
+  );
+  await expectQuery(
+    client,
+    "accepted invitation grants list detail access",
+    "select public.place_list_detail($1::uuid) as detail",
+    [inviteListID],
+    (result) => result.rows[0]?.detail?.list?.id === inviteListID,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  const replacementInviteResult = await expectQuery(
+    client,
+    "owner creates a replacement invitation after the first is accepted",
+    "select public.create_place_list_invite($1::uuid) as invite",
+    [inviteListID],
+    (result) => result.rows[0]?.invite?.list_id === inviteListID
+      && typeof result.rows[0]?.invite?.token === "string",
+  );
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQueryFailure(
+    client,
+    "an existing collaborator cannot consume a fresh single-use invitation",
+    "select public.accept_place_list_invite($1)",
+    [replacementInviteResult.rows[0].invite.token],
+    /place_list_invite_unavailable/,
+  );
   await expectQuery(
     client,
     "collaborator can see shared list",
@@ -2673,6 +2725,25 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
   );
 
   await client.query("set local role anon");
+  await expectQuery(
+    client,
+    "anonymous web preview returns venue facts without a user save",
+    "select public.public_web_preview('place', $1) as preview",
+    [smokePlaceID],
+    (result) => result.rows[0]?.preview?.kind === "place"
+      && result.rows[0]?.preview?.is_available === true
+      && result.rows[0]?.preview?.place_id === smokePlaceID
+      && typeof result.rows[0]?.preview?.latitude === "number"
+      && typeof result.rows[0]?.preview?.longitude === "number"
+      && !("note" in result.rows[0].preview),
+  );
+  await expectQuery(
+    client,
+    "accepted invitation no longer previews on the public web",
+    "select public.public_web_preview('invite', $1) as preview",
+    [inviteToken],
+    (result) => result.rows[0]?.preview?.is_available === false,
+  );
   await expectQueryFailure(
     client,
     "anonymous role cannot call list RPCs",
@@ -3119,6 +3190,12 @@ async function assertPlaceListRPCMetadata(client) {
     "public.add_place_list_item(uuid,uuid,uuid,uuid)",
     "public.remove_place_list_item(uuid,uuid)",
   ];
+  const inviteSignatures = [
+    "public.create_place_list_invite(uuid)",
+    "public.resolve_place_list_invite(text)",
+    "public.accept_place_list_invite(text)",
+    "public.revoke_place_list_invite(text)",
+  ];
   await expectQuery(
     client,
     "authenticated role has every public list RPC grant",
@@ -3126,7 +3203,7 @@ async function assertPlaceListRPCMetadata(client) {
       select bool_and(has_function_privilege('authenticated', signature, 'execute')) as valid
       from unnest($1::text[]) as signature
     `,
-    [publicSignatures],
+    [[...publicSignatures, ...inviteSignatures]],
     (result) => result.rows[0]?.valid === true,
   );
 
@@ -3148,8 +3225,28 @@ async function assertPlaceListRPCMetadata(client) {
       select bool_and(not has_function_privilege('anon', signature, 'execute')) as valid
       from unnest($1::text[]) as signature
     `,
-    [publicSignatures],
+    [[...publicSignatures, ...inviteSignatures]],
     (result) => result.rows[0]?.valid === true,
+  );
+  await expectQuery(
+    client,
+    "public web preview is the only anonymous list-adjacent boundary",
+    `
+      select
+        has_function_privilege(
+          'anon',
+          'public.public_web_preview(text,text)',
+          'execute'
+        ) as anon_execute,
+        has_function_privilege(
+          'authenticated',
+          'public.public_web_preview(text,text)',
+          'execute'
+        ) as authenticated_execute
+    `,
+    [],
+    (result) => result.rows[0]?.anon_execute === true
+      && result.rows[0]?.authenticated_execute === true,
   );
 
   const securityDefinerFunctions = [
@@ -3176,6 +3273,27 @@ async function assertPlaceListRPCMetadata(client) {
     `,
     [securityDefinerFunctions],
     (result) => result.rows[0]?.count === securityDefinerFunctions.length,
+  );
+  await expectQuery(
+    client,
+    "list invitation and web-preview security definers pin search_path",
+    `
+      select count(*)::integer as count
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = any($1::text[])
+        and p.prosecdef
+        and 'search_path=public, app, extensions' = any(p.proconfig)
+    `,
+    [[
+      "create_place_list_invite",
+      "resolve_place_list_invite",
+      "accept_place_list_invite",
+      "revoke_place_list_invite",
+      "public_web_preview",
+    ]],
+    (result) => result.rows[0]?.count === 5,
   );
 }
 

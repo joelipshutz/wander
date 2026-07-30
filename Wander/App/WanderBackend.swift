@@ -296,6 +296,14 @@ final class WanderBackend: ObservableObject {
         return try await placeRepository.places(in: viewport)
     }
 
+    func sharedPlace(id: String) async throws -> PlaceCandidate? {
+        guard let placeRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeRepository.sharedPlace(id: id)
+    }
+
     func userPlaces(for userID: String, filters: PlaceFilters = PlaceFilters()) async throws -> [VisiblePlace] {
         guard let userPlaceRepository else {
             throw WanderRemoteError.notConfigured
@@ -595,6 +603,38 @@ final class WanderBackend: ObservableObject {
         }
 
         try await placeListRepository.removeItem(listID: listID, itemID: itemID)
+    }
+
+    func createPlaceListInvite(listID: String) async throws -> PlaceListInviteCreation {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeListRepository.createInvite(listID: listID)
+    }
+
+    func resolvePlaceListInvite(token: String) async throws -> PlaceListInviteResolution {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeListRepository.resolveInvite(token: token)
+    }
+
+    func acceptPlaceListInvite(token: String) async throws -> String {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeListRepository.acceptInvite(token: token)
+    }
+
+    func revokePlaceListInvite(token: String) async throws {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await placeListRepository.revokeInvite(token: token)
     }
 
     func listSuggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse {

@@ -69,6 +69,25 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(schemes.contains("recme"))
     }
 
+    func testAppEntitlementsRegisterGetRecMeUniversalLinks() throws {
+        let entitlementsData = try Data(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Resources/Wander.entitlements"
+            )
+        )
+        let entitlements = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: entitlementsData,
+                format: nil
+            ) as? [String: Any]
+        )
+        let associatedDomains = try XCTUnwrap(
+            entitlements["com.apple.developer.associated-domains"] as? [String]
+        )
+
+        XCTAssertTrue(associatedDomains.contains("applinks:getrec.me"))
+    }
+
     func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(

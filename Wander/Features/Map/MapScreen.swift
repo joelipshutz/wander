@@ -520,30 +520,57 @@ struct MapScreen: View {
             maxLongitude: 180
         )
         await store.refreshRemoteSocialSurfaces(in: notificationLookupViewport, backend: backend)
-        guard let visiblePlace = store.visiblePlaces().first(where: {
+        if let visiblePlace = store.visiblePlaces().first(where: {
             $0.place.id == placeID || $0.place.localID == placeID || $0.place.serverID == placeID
-        }) else {
-            mapSearchMessage = "That place is not available on your map."
+        }) {
+            selectedFilters = [.you, .social, .been, .wanna]
+            selectedSocialOwnerID = nil
+            mapQuery = ""
+            selectVisiblePlace(visiblePlace)
+            isPlaceProfilePresented = false
+            didResolveInitialCamera = true
+            centerMap(
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude
+            )
             pushNotifications.consumeNavigationRequest(id: requestID)
             return
         }
 
-        selectedFilters = [.you, .social, .been, .wanna]
-        selectedSocialOwnerID = nil
-        mapQuery = ""
-        selectVisiblePlace(visiblePlace)
-        isPlaceProfilePresented = false
-        didResolveInitialCamera = true
-        let notificationRegion = MKCoordinateRegion(
+        do {
+            guard let candidate = try await backend.sharedPlace(id: placeID),
+                  let latitude = candidate.latitude,
+                  let longitude = candidate.longitude
+            else {
+                mapSearchMessage = "That shared place is no longer available."
+                pushNotifications.consumeNavigationRequest(id: requestID)
+                return
+            }
+
+            mapQuery = ""
+            mapSearchCandidates = [candidate]
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = candidate.id
+            isPlaceProfilePresented = false
+            didResolveInitialCamera = true
+            centerMap(latitude: latitude, longitude: longitude)
+            mapSearchMessage = "Shared place. Add it to keep it on your map."
+        } catch {
+            mapSearchMessage = "That shared place could not be opened. Try the link again."
+        }
+        pushNotifications.consumeNavigationRequest(id: requestID)
+    }
+
+    private func centerMap(latitude: Double, longitude: Double) {
+        let region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(
-                latitude: visiblePlace.place.latitude,
-                longitude: visiblePlace.place.longitude
+                latitude: latitude,
+                longitude: longitude
             ),
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         )
-        position = .region(notificationRegion)
-        currentSearchRegion = notificationRegion
-        pushNotifications.consumeNavigationRequest(id: requestID)
+        position = .region(region)
+        currentSearchRegion = region
     }
 
     private func toggle(_ filter: MapFilter) {
@@ -7624,11 +7651,8 @@ struct PlaceSheet: View {
     }
 
     private var shareURL: URL? {
-        PlaceExternalLinks.googleMapsSearchURL(
-            placeName: place.name,
-            address: place.address,
-            locality: place.locality
-        )
+        guard UUID(uuidString: place.id) != nil else { return nil }
+        return WanderDeepLinkRoute.sharedPlace(placeID: place.id).url
     }
 
     private var shareText: String {
