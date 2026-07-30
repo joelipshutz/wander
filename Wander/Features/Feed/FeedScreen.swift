@@ -11,11 +11,12 @@ struct FeedScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
-    @State private var selectedSurface: FeedSurface = .places
+    @State private var selectedSurface: FeedSurface
     private let onAdd: () -> Void
 
     init(onAdd: @escaping () -> Void = {}) {
         self.onAdd = onAdd
+        _selectedSurface = State(initialValue: FeedSurface.resolvedInitialSurface())
     }
 
     private let tickerSuggestions = [
@@ -386,6 +387,17 @@ private enum FeedSurface: String, CaseIterable, Identifiable {
         case .people: "person.2"
         }
     }
+
+    static func resolvedInitialSurface(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> FeedSurface {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderFeedSurface") else {
+            return .places
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return .places }
+        return FeedSurface(rawValue: arguments[valueIndex]) ?? .places
+    }
 }
 
 private struct FeedSurfaceTabs: View {
@@ -641,12 +653,8 @@ private struct FeedPeopleSearchField: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        }
+        .contentShape(Capsule())
+        .wanderGlassCapsule()
         .accessibilityLabel("Search people")
     }
 }
@@ -862,12 +870,8 @@ private struct FeedSearchLauncher: View {
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 44)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            }
+            .contentShape(Capsule())
+            .wanderGlassCapsule()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search places and people")

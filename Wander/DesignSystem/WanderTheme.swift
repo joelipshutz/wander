@@ -323,16 +323,16 @@ enum WanderGlassTone: Equatable {
         case .selected:
             WanderTheme.terracotta.color.opacity(0.18)
         case .accent:
-            WanderTheme.terracotta.color
+            WanderTheme.terracotta.color.opacity(0.28)
         }
     }
 
     var foregroundStyle: Color {
         switch self {
-        case .neutral, .selected:
+        case .neutral:
             WanderTheme.textInk.color
-        case .accent:
-            WanderTheme.textOnAction.color
+        case .selected, .accent:
+            WanderTheme.terracottaDark.color
         }
     }
 
@@ -343,7 +343,7 @@ enum WanderGlassTone: Equatable {
         case .selected:
             WanderTheme.terracottaTint.color.opacity(0.72)
         case .accent:
-            WanderTheme.terracotta.color.opacity(0.92)
+            WanderTheme.terracottaTint.color.opacity(0.78)
         }
     }
 
@@ -434,6 +434,19 @@ private struct WanderGlassPanelModifier: ViewModifier {
                     x: 0,
                     y: 7
                 )
+        }
+    }
+}
+
+private struct WanderSelectedGlassModifier: ViewModifier {
+    let isSelected: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isSelected {
+            content.wanderGlassCapsule(tone: .selected)
+        } else {
+            content
         }
     }
 }
@@ -538,25 +551,13 @@ struct WanderGlassSegmentedSwitch: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
                         .frame(maxWidth: .infinity, minHeight: 36)
-                        .background(
-                            isSelected
-                                ? WanderTheme.terracottaTint.color.opacity(0.82)
-                                : Color.clear,
-                            in: Capsule()
-                        )
                         .foregroundStyle(
                             isSelected
                                 ? WanderTheme.terracottaDark.color
                                 : WanderTheme.textMuted.color
                         )
                         .contentShape(Capsule())
-                        .overlay {
-                            Capsule()
-                                .stroke(
-                                    isSelected ? WanderTheme.terracotta.color : Color.clear,
-                                    lineWidth: isSelected ? 2 : 0
-                                )
-                        }
+                        .modifier(WanderSelectedGlassModifier(isSelected: isSelected))
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])

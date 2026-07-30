@@ -18,7 +18,7 @@ struct MapScreen: View {
     @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var isPlaceProfilePresented: Bool
-    @State private var mapQuery = ""
+    @State private var mapQuery: String
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
     @State private var mapFeatureResolutionTask: Task<Void, Never>?
@@ -36,6 +36,7 @@ struct MapScreen: View {
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
     @State private var didResolveInitialCamera = false
+    @State private var didResolveInitialSearch = false
     @State private var handlingNotificationRequestID: UUID?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var mapSearchFocusRequestID: UUID?
@@ -73,6 +74,7 @@ struct MapScreen: View {
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
         self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
+        _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
         _selectedFilters = State(initialValue: Self.resolvedInitialMapFilters())
     }
 
@@ -343,6 +345,7 @@ struct MapScreen: View {
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
                 resolveInitialSelection()
+                resolveInitialSearchIfNeeded()
             }
             .task {
                 await centerMapOnCurrentCityIfNeeded()
@@ -1608,6 +1611,14 @@ struct MapScreen: View {
         scheduleTypeahead(for: mapQuery)
     }
 
+    private func resolveInitialSearchIfNeeded() {
+        guard !didResolveInitialSearch else { return }
+        didResolveInitialSearch = true
+        guard !Self.normalized(mapQuery).isEmpty else { return }
+        isMapSearchFocused = true
+        handleMapQueryChange()
+    }
+
     private func scheduleTypeahead(for query: String) {
         typeaheadTask?.cancel()
         let normalized = Self.normalized(query)
@@ -1978,6 +1989,17 @@ struct MapScreen: View {
             return nil
         }
 
+        return arguments[valueIndex]
+    }
+
+    static func resolvedInitialMapSearchQuery(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapSearchQuery") else {
+            return ""
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return "" }
         return arguments[valueIndex]
     }
 

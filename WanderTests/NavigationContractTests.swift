@@ -130,10 +130,37 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("WanderGlassHeader("))
         XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))
         XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
+        XCTAssertTrue(feed.contains("-WanderFeedSurface"))
+        let feedSearch = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedSearchLauncher: View").last?
+                .components(separatedBy: "private struct FeedSectionHeading: View").first
+        )
+        XCTAssertTrue(feedSearch.contains(".wanderGlassCapsule()"))
+        XCTAssertFalse(feedSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
+        let peopleSearch = try XCTUnwrap(
+            feed.components(separatedBy: "private struct FeedPeopleSearchField: View").last?
+                .components(separatedBy: "private struct FeedPeopleValueNote: View").first
+        )
+        XCTAssertTrue(peopleSearch.contains(".wanderGlassCapsule()"))
+        XCTAssertFalse(peopleSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
         XCTAssertTrue(lists.contains("WanderGlassHeader("))
         XCTAssertTrue(lists.contains("accessibilityIdentifier: \"lists.headerAdd\""))
         XCTAssertTrue(lists.contains("WanderGlassSegmentedSwitch("))
+    }
+
+    @MainActor
+    func testLiquidGlassVisualQAStatesResolveDeterministically() {
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapSearchQuery(
+                from: ["Wander", "-WanderMapSearchQuery", "coffee"]
+            ),
+            "coffee"
+        )
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapSearchQuery(from: ["Wander"]),
+            ""
+        )
     }
 
     func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndMakesEveryActivityACompactTicket() throws {
@@ -730,6 +757,8 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(discoverSearch.contains("TextField(\"\", text: $text)\n                    .font(.system(size: 15, weight: .bold))"))
         XCTAssertFalse(discoverSearch.contains("WanderTypography.editorial"))
+        XCTAssertTrue(discoverSearch.contains(".wanderGlassCapsule()"))
+        XCTAssertFalse(discoverSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
         XCTAssertTrue(profile.contains("Text(profile.displayName)\n                        .font(WanderTypography.editorialDisplay)"))
         XCTAssertEqual(profile.components(separatedBy: "WanderTypography.editorialMajorSectionTitle").count - 1, 3)
