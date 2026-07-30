@@ -2453,6 +2453,8 @@ final class RemoteRepositoryTests: XCTestCase {
     }
 
     func testNotificationDeeplinksMapToConcreteAppDestinations() {
+        let inviteToken = String(repeating: "ab", count: 24)
+
         XCTAssertEqual(
             PushNotificationManager.destination(
                 from: URL(string: "recme://profiles/user_joe")!,
@@ -2469,8 +2471,8 @@ final class RemoteRepositoryTests: XCTestCase {
             .place(id: "40000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
-            PushNotificationManager.destination(from: URL(string: "https://getrec.me/invites/abcdef")!),
-            .listInvite(token: "abcdef")
+            PushNotificationManager.destination(from: URL(string: "https://getrec.me/invites/\(inviteToken)")!),
+            .listInvite(token: inviteToken)
         )
         XCTAssertEqual(
             PushNotificationManager.destination(

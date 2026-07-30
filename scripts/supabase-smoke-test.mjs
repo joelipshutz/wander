@@ -76,7 +76,7 @@ async function main() {
         console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
-        await runOwnPlaceSmokeChecks(client, smokeUserID);
+        await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
@@ -1350,7 +1350,7 @@ set
 `;
 }
 
-async function runOwnPlaceSmokeChecks(client, smokeUserID) {
+async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
   await assertOwnPlaceRPCMetadata(client);
   await setAuthenticatedUser(client, smokeUserID);
 
@@ -1437,6 +1437,141 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID) {
         && cuisine?.value_type === "restaurant_cuisine"
         && cuisine.value === "Thai";
     },
+  );
+
+  await expectQuery(
+    client,
+    "stale Wanna payload for an existing check-in resolves as a no-op",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify({
+        ...place,
+        canonical_name: "Mutated by stale device",
+        latitude: 35,
+        longitude: -119,
+      }),
+      JSON.stringify({
+        status: "wanna_go",
+        visibility: "self",
+        nearby_confirmed: false,
+        source_type: "manual",
+        planned_date: "2099-08-15",
+      }),
+    ],
+    (result) => result.rows[0]?.saved?.user_place_id === savedUserPlaceID,
+  );
+
+  await expectQuery(
+    client,
+    "stale Wanna payload preserves the canonical place, check-in, plan, and attributes",
+    `
+      select
+        p.canonical_name,
+        p.latitude,
+        up.status,
+        up.visibility,
+        up.rating_score::double precision as rating_score,
+        up.planned_date,
+        count(pa.id)::integer as attribute_count
+      from public.user_places up
+      join public.places p on p.id = up.place_id
+      left join public.place_attributes pa on pa.user_place_id = up.id
+      where up.id = $1::uuid
+      group by p.canonical_name, p.latitude, up.status, up.visibility, up.rating_score, up.planned_date
+    `,
+    [savedUserPlaceID],
+    (result) => result.rows.length === 1
+      && result.rows[0].canonical_name === place.canonical_name
+      && result.rows[0].latitude === place.latitude
+      && result.rows[0].status === "been"
+      && result.rows[0].visibility === "followers"
+      && result.rows[0].rating_score === 3
+      && result.rows[0].planned_date === null
+      && result.rows[0].attribute_count === 2,
+  );
+
+  await expectQuery(
+    client,
+    "smoke owner follows the source account for social-save visibility",
+    "select public.follow_user($1, 'profile')",
+    [collaboratorUserID],
+    (result) => result.rows.length === 1,
+  );
+
+  const socialFixture = await expectQuery(
+    client,
+    "load the production-shaped social-save fixture",
+    `
+      select p.id as place_id, source.id as source_user_place_id
+      from public.places p
+      join public.user_places source
+        on source.place_id = p.id
+       and source.user_id = $1
+       and source.deleted_at is null
+      where p.source_provider = 'codex_smoke'
+        and p.source_provider_place_id = 'place-list-rpc-smoke'
+    `,
+    [collaboratorUserID],
+    (result) => result.rows.length === 1,
+  );
+  const socialPlaceID = socialFixture.rows[0].place_id;
+  const sourceUserPlaceID = socialFixture.rows[0].source_user_place_id;
+  const socialPlace = {
+    canonical_name: "Codex Smoke Coffee",
+    category: "coffee_tea_sweets",
+    primary_category: "coffee_tea_sweets",
+    subcategory: "Coffee shop",
+    category_source: "deterministic",
+    raw_provider_type: "coffee shop",
+    latitude: 34.052235,
+    longitude: -118.243683,
+    source_provider: "codex_smoke",
+    source_provider_place_id: "place-list-rpc-smoke",
+    confidence: 1,
+  };
+
+  const socialCheckIn = await expectQuery(
+    client,
+    "create an authoritative check-in before a stale social save",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(socialPlace),
+      JSON.stringify({
+        status: "been",
+        visibility: "followers",
+        note: "owner check-in",
+        nearby_confirmed: false,
+        source_type: "manual",
+        rating_score: 4,
+      }),
+    ],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id),
+  );
+  const socialCheckInID = socialCheckIn.rows[0].saved.user_place_id;
+
+  await expectQuery(
+    client,
+    "stale social Wanna save returns the authoritative check-in",
+    "select public.save_visible_place($1::uuid, $2::uuid) as saved",
+    [socialPlaceID, sourceUserPlaceID],
+    (result) => result.rows.length === 1
+      && result.rows[0]?.saved?.user_place_id === socialCheckInID,
+  );
+
+  await expectQuery(
+    client,
+    "stale social Wanna save preserves check-in metadata",
+    `
+      select status, note, rating_score::double precision as rating_score, source_type
+      from public.user_places
+      where id = $1::uuid
+    `,
+    [socialCheckInID],
+    (result) => result.rows.length === 1
+      && result.rows[0].status === "been"
+      && result.rows[0].note === "owner check-in"
+      && result.rows[0].rating_score === 4
+      && result.rows[0].source_type === "manual",
   );
 
   const plannedPlace = {
@@ -2973,11 +3108,47 @@ async function assertOwnPlaceRPCMetadata(client) {
     "app.save_own_place keeps its security-definer search path",
     `
       select p.prosecdef, 'search_path=public, app' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path
+        , pg_get_functiondef(p.oid) like '%pg_advisory_xact_lock%recme:user-place:%' as serialized_user_place
       from pg_proc p
       where p.oid = 'app.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
     `,
     [],
-    (result) => result.rows[0]?.prosecdef === true && result.rows[0]?.pinned_search_path === true,
+    (result) => result.rows[0]?.prosecdef === true
+      && result.rows[0]?.pinned_search_path === true
+      && result.rows[0]?.serialized_user_place === true,
+  );
+
+  await expectQuery(
+    client,
+    "app.save_visible_place keeps invoker security, its pinned path, and authenticated-only grants",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=public, app' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path,
+        pg_get_functiondef(p.oid) like '%pg_advisory_xact_lock%recme:user-place:%' as serialized_user_place,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      where p.oid = 'app.save_visible_place(uuid,uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await expectQuery(
+    client,
+    "public.save_visible_place keeps the production invoker wrapper and authenticated-only grants",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=app, public' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      where p.oid = 'public.save_visible_place(uuid,uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
   );
 
   await expectQuery(
