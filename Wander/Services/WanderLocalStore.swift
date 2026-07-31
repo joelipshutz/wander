@@ -463,6 +463,13 @@ final class WanderStore: ObservableObject {
     }
 
     private func persist() {
+        let persistenceSignpostID = WanderDebugLog.beginPerformanceInterval("Store Persistence")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "Store Persistence",
+                id: persistenceSignpostID
+            )
+        }
         reconcileCurrentUserCalendarLocalFingerprint()
         invalidatePresentationCaches()
         guard let persistence else { return }
@@ -472,7 +479,10 @@ final class WanderStore: ObservableObject {
             return
         }
 
-        persistence.save(WanderStoreSnapshot(store: self))
+        let snapshotSignpostID = WanderDebugLog.beginPerformanceInterval("Snapshot Build")
+        let snapshot = WanderStoreSnapshot(store: self)
+        WanderDebugLog.endPerformanceInterval("Snapshot Build", id: snapshotSignpostID)
+        persistence.save(snapshot)
     }
 
     private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
@@ -5014,8 +5024,45 @@ final class WanderStore: ObservableObject {
         guard let backend else {
             return
         }
+        let refreshSignpostID = WanderDebugLog.beginPerformanceInterval("List Refresh Total")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "List Refresh Total",
+                id: refreshSignpostID
+            )
+        }
 
         do {
+            if backend.surfaceSnapshotRepository != nil {
+                let snapshot = try await backend.placeListsSnapshot()
+                let applySignpostID = WanderDebugLog.beginPerformanceInterval("List Apply")
+                withDeferredPersistence {
+                    reconcileMissingRemotePlaceLists(with: snapshot.summaries)
+                    upsertRemotePlaceListSummaries(snapshot.summaries)
+                    for ownerID in snapshot.visiblePlacesByOwnerID.keys.sorted() {
+                        guard let visiblePlaces = snapshot.visiblePlacesByOwnerID[ownerID] else {
+                            continue
+                        }
+                        applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: ownerID)
+                    }
+                    for ownerID in snapshot.relationshipsByOwnerID.keys.sorted() {
+                        guard ownerID != currentUser.id,
+                              let relationship = snapshot.relationshipsByOwnerID[ownerID]
+                        else {
+                            continue
+                        }
+                        applyRemoteRelationship(profileID: ownerID, relationship: relationship)
+                    }
+                    for detail in snapshot.details {
+                        upsertRemotePlaceListDetail(detail)
+                    }
+                    lastRemoteError = nil
+                    persist()
+                }
+                WanderDebugLog.endPerformanceInterval("List Apply", id: applySignpostID)
+                return
+            }
+
             let summaries = try await backend.visiblePlaceLists()
             let ownerIDs = Set(summaries.map { $0.list.ownerUserID })
             var visiblePlacesByOwnerID: [String: [VisiblePlace]] = [:]
@@ -5123,8 +5170,55 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async -> Bool {
         guard let backend else { return false }
+        let refreshSignpostID = WanderDebugLog.beginPerformanceInterval("Social Refresh Total")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "Social Refresh Total",
+                id: refreshSignpostID
+            )
+        }
         let requestUserID = currentUser.id
         guard !Task.isCancelled else { return false }
+
+        if backend.surfaceSnapshotRepository != nil {
+            do {
+                let snapshot = try await backend.socialSurfaceSnapshot(in: viewport)
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
+                let followedProfileIDs = snapshot.following
+                    .map(\.id)
+                    .filter { $0 != requestUserID }
+                    .sorted()
+                let applySignpostID = WanderDebugLog.beginPerformanceInterval("Social Apply")
+                withDeferredPersistence {
+                    upsertRemoteSocialGraph(
+                        userID: requestUserID,
+                        following: snapshot.following,
+                        followers: snapshot.followers
+                    )
+                    replaceRemoteViewportVisiblePlaces(snapshot.viewportPlaces)
+                    applyRemoteWannaGoPlans(snapshot.ownWannaGoPlans)
+                    for profileID in followedProfileIDs {
+                        if let visiblePlaces = snapshot.visiblePlacesByOwnerID[profileID] {
+                            applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: profileID)
+                        }
+                        if let relationship = snapshot.relationshipsByOwnerID[profileID] {
+                            applyRemoteRelationship(
+                                profileID: profileID,
+                                relationship: relationship
+                            )
+                        }
+                    }
+                    lastRemoteError = nil
+                    persist()
+                }
+                WanderDebugLog.endPerformanceInterval("Social Apply", id: applySignpostID)
+                return true
+            } catch {
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
+                lastRemoteError = remoteErrorMessage(error)
+                return false
+            }
+        }
 
         let locallyFollowedProfileIDs = Set(following(of: requestUserID).map(\.id))
         var remoteFollowing: [ProfileShell]?
@@ -5264,7 +5358,9 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func refreshRemoteCurrentUserCalendarData(backend: WanderBackend?) async -> Bool {
-        guard let backend, backend.userPlaceRepository != nil else { return true }
+        guard let backend,
+              backend.surfaceSnapshotRepository != nil || backend.userPlaceRepository != nil
+        else { return true }
         let requestUserID = currentUser.id
         let taskID: UUID
         let task: Task<Bool, Never>
@@ -5311,8 +5407,24 @@ final class WanderStore: ObservableObject {
         expectedLocalMutationRevision: UInt64,
         backend: WanderBackend
     ) async -> Bool {
+        let refreshSignpostID = WanderDebugLog.beginPerformanceInterval("Calendar Refresh Total")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "Calendar Refresh Total",
+                id: refreshSignpostID
+            )
+        }
         do {
-            let fetchedPlaces = try await backend.userPlaces(for: userID)
+            let fetchedPlaces: [VisiblePlace]
+            let fetchedVisits: [PlaceVisitResult]?
+            if backend.surfaceSnapshotRepository != nil {
+                let snapshot = try await backend.currentUserCalendarSnapshot()
+                fetchedPlaces = snapshot.visiblePlaces
+                fetchedVisits = snapshot.visits
+            } else {
+                fetchedPlaces = try await backend.userPlaces(for: userID)
+                fetchedVisits = nil
+            }
             guard currentUser.id == userID,
                   !Task.isCancelled,
                   currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
@@ -5334,7 +5446,27 @@ final class WanderStore: ObservableObject {
             }
 
             var visitsByUserPlaceID: [String: [PlaceVisitResult]]?
-            if backend.visitRepository != nil {
+            if let fetchedVisits {
+                var stagedVisits = Dictionary(
+                    uniqueKeysWithValues: userPlaceIDs.map { ($0, [PlaceVisitResult]()) }
+                )
+                let validUserPlaceIDs = Set(userPlaceIDs)
+                var seenVisitIDs = Set<String>()
+                for visit in fetchedVisits {
+                    guard validUserPlaceIDs.contains(visit.userPlaceID) else {
+                        throw WanderRemoteError.invalidResponse(
+                            "Current-user calendar visit response had the wrong parent"
+                        )
+                    }
+                    guard seenVisitIDs.insert(visit.visitID).inserted else {
+                        throw WanderRemoteError.invalidResponse(
+                            "Current-user calendar response contained duplicate visits"
+                        )
+                    }
+                    stagedVisits[visit.userPlaceID, default: []].append(visit)
+                }
+                visitsByUserPlaceID = stagedVisits
+            } else if backend.visitRepository != nil {
                 var stagedVisits: [String: [PlaceVisitResult]] = [:]
                 var seenVisitIDs = Set<String>()
                 for userPlaceID in userPlaceIDs.sorted() {
@@ -5366,6 +5498,7 @@ final class WanderStore: ObservableObject {
                   !Task.isCancelled,
                   currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
             else { return false }
+            let applySignpostID = WanderDebugLog.beginPerformanceInterval("Calendar Apply")
             applyStagedCurrentUserCalendarData(
                 StagedCurrentUserCalendarData(
                     visiblePlaces: visiblePlaces,
@@ -5373,6 +5506,7 @@ final class WanderStore: ObservableObject {
                 ),
                 userID: userID
             )
+            WanderDebugLog.endPerformanceInterval("Calendar Apply", id: applySignpostID)
             return true
         } catch is CancellationError {
             return false

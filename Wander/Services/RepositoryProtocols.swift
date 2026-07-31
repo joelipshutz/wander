@@ -1682,6 +1682,34 @@ extension PlaceListRepository {
     }
 }
 
+struct CurrentUserCalendarRemoteSnapshot {
+    let visiblePlaces: [VisiblePlace]
+    let visits: [PlaceVisitResult]
+}
+
+struct PlaceListsRemoteSnapshot {
+    let summaries: [RemotePlaceListSummary]
+    let details: [RemotePlaceListDetail]
+    let visiblePlacesByOwnerID: [String: [VisiblePlace]]
+    let relationshipsByOwnerID: [String: ViewerRelationship]
+}
+
+struct SocialSurfaceRemoteSnapshot {
+    let following: [ProfileShell]
+    let followers: [ProfileShell]
+    let viewportPlaces: [VisiblePlace]
+    let ownWannaGoPlans: [OwnWannaGoPlan]
+    let visiblePlacesByOwnerID: [String: [VisiblePlace]]
+    let relationshipsByOwnerID: [String: ViewerRelationship]
+}
+
+@MainActor
+protocol SurfaceSnapshotRepository {
+    func currentUserCalendarSnapshot() async throws -> CurrentUserCalendarRemoteSnapshot
+    func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot
+    func socialSurfaceSnapshot(in viewport: MapViewport) async throws -> SocialSurfaceRemoteSnapshot
+}
+
 @MainActor
 protocol DiscoverRepository {
     func parseFilters(query: String) async throws -> DiscoverFilters

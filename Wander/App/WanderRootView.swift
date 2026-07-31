@@ -1235,6 +1235,15 @@ struct WanderRootView: View {
         signedInMaintenanceRunID = runID
         signedInMaintenanceUserID = session.userID
         signedInMaintenanceTask = Task { @MainActor in
+            let maintenanceSignpostID = WanderDebugLog.beginPerformanceInterval(
+                "Signed-In Maintenance"
+            )
+            defer {
+                WanderDebugLog.endPerformanceInterval(
+                    "Signed-In Maintenance",
+                    id: maintenanceSignpostID
+                )
+            }
             #if DEBUG
             if case .signedIn(let session) = state {
                 WanderDebugLog.sync.debug("signed-in maintenance started user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")

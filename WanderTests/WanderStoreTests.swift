@@ -409,6 +409,27 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.placeVisits.first { $0.id == "visit_current" }?.visitedAt, visitedAt)
     }
 
+    func testBatchSurfaceSnapshotRepositoryDrivesCalendarListAndSocialRefreshes() async {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_current", displayName: "Current", handle: "current")
+            )
+        )
+        let repository = FakeSurfaceSnapshotRepository()
+        let backend = WanderBackend(surfaceSnapshotRepository: repository)
+
+        let calendarHydrated = await store.refreshRemoteCurrentUserCalendarData(backend: backend)
+        await store.refreshRemotePlaceLists(backend: backend)
+        let socialHydrated = await store.refreshRemoteSocialSurfaces(backend: backend)
+
+        XCTAssertTrue(calendarHydrated)
+        XCTAssertTrue(socialHydrated)
+        XCTAssertEqual(repository.calendarRequestCount, 1)
+        XCTAssertEqual(repository.listRequestCount, 1)
+        XCTAssertEqual(repository.socialViewports.count, 1)
+    }
+
     func testViewportRefreshPreservesFullyHydratedOwnerCalendarAcrossRegions() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let userID = "user_current"
@@ -8791,6 +8812,40 @@ private final class FakePlaceListRepository: PlaceListRepository {
 
     func removeItem(listID: String, itemID: String) async throws {
         removedItems.append((listID: listID, itemID: itemID))
+    }
+}
+
+@MainActor
+private final class FakeSurfaceSnapshotRepository: SurfaceSnapshotRepository {
+    private(set) var calendarRequestCount = 0
+    private(set) var listRequestCount = 0
+    private(set) var socialViewports: [MapViewport] = []
+
+    func currentUserCalendarSnapshot() async throws -> CurrentUserCalendarRemoteSnapshot {
+        calendarRequestCount += 1
+        return CurrentUserCalendarRemoteSnapshot(visiblePlaces: [], visits: [])
+    }
+
+    func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot {
+        listRequestCount += 1
+        return PlaceListsRemoteSnapshot(
+            summaries: [],
+            details: [],
+            visiblePlacesByOwnerID: [:],
+            relationshipsByOwnerID: [:]
+        )
+    }
+
+    func socialSurfaceSnapshot(in viewport: MapViewport) async throws -> SocialSurfaceRemoteSnapshot {
+        socialViewports.append(viewport)
+        return SocialSurfaceRemoteSnapshot(
+            following: [],
+            followers: [],
+            viewportPlaces: [],
+            ownWannaGoPlans: [],
+            visiblePlacesByOwnerID: [:],
+            relationshipsByOwnerID: [:]
+        )
     }
 }
 
