@@ -662,7 +662,12 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("if model.needsRefresh"))
         XCTAssertFalse(widgetSource.contains("?? snapshot.currentMonth"))
         XCTAssertTrue(widgetSource.contains("WanderCalendarTimelineSchedule.make("))
-        XCTAssertTrue(widgetSource.contains("See your been activity for the current month."))
+        XCTAssertTrue(widgetSource.contains("See your check-in activity for the current month."))
+        XCTAssertTrue(widgetSource.contains("title: \"check-in\""))
+        XCTAssertTrue(widgetSource.contains("filled dates have check-ins"))
+        XCTAssertTrue(widgetSource.contains("Check-ins:"))
+        XCTAssertFalse(widgetSource.contains("See your been activity"))
+        XCTAssertFalse(widgetSource.contains("title: \"been\""))
         XCTAssertFalse(widgetSource.contains("model.wannaCount"))
         XCTAssertFalse(widgetSource.contains("Wanna:"))
     }

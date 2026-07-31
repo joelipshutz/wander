@@ -121,7 +121,7 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["onboarding.getStarted"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
-        XCTAssertTrue(app.staticTexts["Keep track of everywhere you’ve been"].exists)
+        XCTAssertTrue(app.staticTexts["Keep track of every place you check in"].exists)
         XCTAssertFalse(app.staticTexts["a map made personal"].exists)
         XCTAssertFalse(app.staticTexts["REAL APP VIEW · MAP DATA © APPLE"].exists)
         let carouselPage = app.descendants(matching: .any)["onboarding.carouselPage"]
