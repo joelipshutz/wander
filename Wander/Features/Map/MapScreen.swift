@@ -8090,7 +8090,10 @@ struct PlaceActivitySection: View {
             if filteredEntries.isEmpty {
                 PlaceActivityEmptyState(text: emptyStateText)
             } else {
-                LazyVStack(spacing: WanderTheme.spacing2) {
+                // The parent place profile already owns the vertical ScrollView.
+                // Keeping this finite history eager prevents variable-height
+                // ticket cards from being evicted and rebuilt mid-scroll.
+                VStack(spacing: WanderTheme.spacing2) {
                     ForEach(filteredEntries) { entry in
                         PlaceActivityCard(
                             entry: entry,

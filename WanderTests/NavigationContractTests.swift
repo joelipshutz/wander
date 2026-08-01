@@ -564,6 +564,23 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activityCard.contains(".disabled(entry.isCurrentUser)"))
     }
 
+    func testPlaceHistoryKeepsVariableHeightCardsMountedDuringScroll() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let activitySection = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "struct PlaceActivitySection: View")
+                .last?
+                .components(separatedBy: "private struct PlaceActivityFilterControl: View")
+                .first
+        )
+
+        XCTAssertTrue(activitySection.contains("VStack(spacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(activitySection.contains("ForEach(filteredEntries)"))
+        XCTAssertFalse(activitySection.contains("LazyVStack"))
+    }
+
     func testMapFeedAndPlaceHistoryShareTheDirectionATicketSurface() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
