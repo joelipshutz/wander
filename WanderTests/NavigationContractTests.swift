@@ -358,6 +358,10 @@ final class NavigationContractTests: XCTestCase {
             WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://profiles/user%20joe"))),
             SharedProfileRoute(profileID: "user joe")
         )
+        XCTAssertEqual(
+            WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "https://getrec.me/profiles/user_joe"))),
+            SharedProfileRoute(profileID: "user_joe")
+        )
         XCTAssertNil(WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "https://rec.me/profiles/user_joe"))))
         XCTAssertNil(WanderRootView.sharedProfileRoute(for: try XCTUnwrap(URL(string: "recme://places/place_1"))))
     }
@@ -368,13 +372,50 @@ final class NavigationContractTests: XCTestCase {
             WanderShareContent.profile(serverID: "user joe", displayName: "Joe Example", handle: "joe")
         )
 
-        XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20joe")
+        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20joe")
         XCTAssertEqual(content.items, [content.item])
         XCTAssertEqual(content.subject, "Joe Example")
         XCTAssertEqual(content.message, "See @joe on rec.me")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
         XCTAssertNil(WanderShareContent.profile(serverID: nil, displayName: "Guest", handle: "you"))
         XCTAssertNil(WanderShareContent.profile(serverID: "   ", displayName: "Guest", handle: "you"))
+    }
+
+    @MainActor
+    func testPlaceListAndInviteSharesUseCanonicalGetRecMeURLs() throws {
+        let placeID = "40000000-0000-0000-0000-000000000001"
+        let listID = "44000000-0000-0000-0000-000000000001"
+        let inviteToken = String(repeating: "ab", count: 24)
+
+        XCTAssertEqual(
+            WanderShareContent.place(
+                serverID: placeID,
+                name: "Ggiata",
+                message: "Worth remembering"
+            )?.item.absoluteString,
+            "https://getrec.me/places/\(placeID)"
+        )
+        XCTAssertEqual(
+            WanderShareContent.list(
+                serverID: listID,
+                name: "Saturday plan"
+            )?.item.absoluteString,
+            "https://getrec.me/lists/\(listID)"
+        )
+        XCTAssertEqual(
+            WanderShareContent.listInvite(
+                token: inviteToken,
+                name: "Saturday plan"
+            )?.item.absoluteString,
+            "https://getrec.me/invites/\(inviteToken)"
+        )
+        XCTAssertNil(
+            WanderShareContent.place(
+                serverID: "local-place",
+                name: "Unsynced",
+                message: "Not shareable yet"
+            )
+        )
     }
 
     @MainActor
@@ -389,7 +430,7 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(content.item.absoluteString, "recme://profiles/user%20maya")
+        XCTAssertEqual(content.item.absoluteString, "https://getrec.me/profiles/user%20maya")
         XCTAssertEqual(content.items, [content.item, imageFileURL])
         XCTAssertEqual(content.subject, "Maya Chen's map")
         XCTAssertEqual(content.message, "Explore @maya's saved places on rec.me")
@@ -449,7 +490,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertEqual(content.items, [
-            URL(string: "recme://profiles/user_maya")!,
+            URL(string: "https://getrec.me/profiles/user_maya")!,
             imageFileURL
         ])
         XCTAssertEqual(content.subject, "Maya Chen's Santa Monica map")
@@ -904,6 +945,35 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("\"choose the place you're at\""))
         XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
+    }
+
+    func testSuccessfulMapSaveWaitsForSheetDismissalBeforeSelectingSavedPlace() throws {
+        let result = SaveResult(userPlaceID: "saved-place", syncState: .synced)
+        var coordinator = MapSaveFlowSelectionCoordinator()
+
+        XCTAssertNil(coordinator.saveFlowDidDismiss())
+
+        coordinator.saveDidSucceed(result)
+
+        XCTAssertEqual(coordinator.saveFlowDidDismiss(), result)
+        XCTAssertNil(coordinator.saveFlowDidDismiss())
+
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let saveSubmission = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private func saveMapFlowSubmission")
+                .last?
+                .components(separatedBy: "private func scopedSaveMessage")
+                .first
+        )
+        XCTAssertEqual(
+            saveSubmission.components(separatedBy: "mapSaveFlowSelection.saveDidSucceed(result)").count - 1,
+            2
+        )
+        XCTAssertFalse(saveSubmission.contains("selectSavedResult(result)"))
+        XCTAssertTrue(mapScreen.contains("if let result = mapSaveFlowSelection.saveFlowDidDismiss()"))
     }
 
     func testAddSuggestedPlacesScalePreviewCountByScreenHeight() {
@@ -1461,6 +1531,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)
+        XCTAssertEqual(WanderRootView.notificationTab(for: .listInvite(token: "invite-1")), .lists)
         XCTAssertEqual(WanderRootView.notificationTab(for: .place(id: "place-1")), .map)
         XCTAssertEqual(
             WanderRootView.notificationTab(for: .sharedVisit(participantID: "participant-1", generation: 2)),
@@ -1975,6 +2046,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(resultCard.contains("\"Add visit\""))
         XCTAssertTrue(resultCard.contains("title: \"Add to list\""))
         XCTAssertTrue(resultCard.contains("WanderShareButton(content: shareContent)"))
+        XCTAssertTrue(resultCard.contains("serverID: place.id"))
+        XCTAssertFalse(resultCard.contains("googleMapsSearchURL"))
         XCTAssertTrue(discoverScreen.contains("guard currentUserSave(matching: visiblePlace) == nil"))
         XCTAssertTrue(discoverScreen.contains("store.saveVisiblePlace("))
         XCTAssertTrue(discoverScreen.contains("status: .wannaGo"))

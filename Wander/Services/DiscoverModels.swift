@@ -729,6 +729,60 @@ enum VisiblePlaceGrouping {
         !Set(keys(for: lhs)).isDisjoint(with: Set(keys(for: rhs)))
     }
 
+    static func matches(_ visiblePlace: VisiblePlace, candidate: PlaceCandidate) -> Bool {
+        matches(visiblePlace.place, candidate: candidate)
+    }
+
+    static func matches(_ place: LocalPlace, candidate: PlaceCandidate) -> Bool {
+        let candidateID = normalizedIdentifier(candidate.id)
+        let placeIDs = [place.id, place.localID, place.serverID]
+            .map(normalizedIdentifier)
+            .filter { !$0.isEmpty }
+        if placeIDs.contains(candidateID) {
+            return true
+        }
+
+        let placeProvider = normalizedIdentifier(place.sourceProvider)
+        let candidateProvider = normalizedIdentifier(candidate.sourceProvider)
+        let placeProviderID = normalizedIdentifier(place.sourceProviderPlaceID)
+        let candidateProviderID = normalizedIdentifier(
+            candidate.sourceProviderPlaceID ?? candidate.id
+        )
+        if !placeProvider.isEmpty,
+           placeProvider == candidateProvider,
+           !placeProviderID.isEmpty,
+           !candidateProviderID.isEmpty {
+            return placeProviderID == candidateProviderID
+        }
+
+        let name = normalizedText(place.canonicalName)
+        guard !name.isEmpty, name == normalizedText(candidate.name) else {
+            return false
+        }
+
+        let placeAddress = addressKey(
+            address: place.address,
+            locality: place.locality,
+            region: place.region,
+            country: place.country
+        )
+        let candidateAddress = addressKey(
+            address: candidate.address,
+            locality: candidate.locality,
+            region: candidate.region,
+            country: candidate.country
+        )
+        if !placeAddress.isEmpty, placeAddress == candidateAddress {
+            return true
+        }
+
+        guard let latitude = candidate.latitude,
+              let longitude = candidate.longitude
+        else { return false }
+        return coordinateBucket(latitude: place.latitude, longitude: place.longitude)
+            == coordinateBucket(latitude: latitude, longitude: longitude)
+    }
+
     private static func keys(for visiblePlace: VisiblePlace) -> [String] {
         let place = visiblePlace.place
         var keys: [String] = []
@@ -774,9 +828,29 @@ enum VisiblePlaceGrouping {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static func addressKey(
+        address: String?,
+        locality: String?,
+        region: String?,
+        country: String?
+    ) -> String {
+        let normalizedAddress = normalizedText(address)
+        guard !normalizedAddress.isEmpty else { return "" }
+        return [
+            normalizedAddress,
+            normalizedText(locality),
+            normalizedText(region),
+            normalizedText(country)
+        ].joined(separator: "|")
+    }
+
     private static func coordinateBucket(for place: LocalPlace) -> String {
-        let roundedLatitude = (place.latitude * 1_000).rounded() / 1_000
-        let roundedLongitude = (place.longitude * 1_000).rounded() / 1_000
+        coordinateBucket(latitude: place.latitude, longitude: place.longitude)
+    }
+
+    private static func coordinateBucket(latitude: Double, longitude: Double) -> String {
+        let roundedLatitude = (latitude * 1_000).rounded() / 1_000
+        let roundedLongitude = (longitude * 1_000).rounded() / 1_000
         return "\(roundedLatitude)|\(roundedLongitude)"
     }
 }

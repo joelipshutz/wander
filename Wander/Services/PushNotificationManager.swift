@@ -236,6 +236,7 @@ enum NotificationPeopleMode: String, Equatable {
 enum NotificationDestination: Equatable {
     case people(NotificationPeopleMode)
     case list(id: String)
+    case listInvite(token: String)
     case place(id: String)
     case sharedVisit(participantID: String, generation: Int)
     case drafts(extractionJobID: String?)
@@ -535,6 +536,21 @@ final class PushNotificationManager: ObservableObject {
         from url: URL,
         notificationType: String? = nil
     ) -> NotificationDestination? {
+        if let route = WanderDeepLinkRoute.parse(url) {
+            switch route {
+            case .sharedProfile:
+                return .people(notificationType == "mutual_follow" ? .friends : .followers)
+            case .sharedPlace(let placeID):
+                return .place(id: placeID)
+            case .sharedList(let listID):
+                return .list(id: listID)
+            case .listInvite(let token):
+                return .listInvite(token: token)
+            default:
+                break
+            }
+        }
+
         let components = [url.host].compactMap { $0 } + url.pathComponents.filter { $0 != "/" }
         guard let root = components.first else { return nil }
         let identifier = components.dropFirst().first

@@ -1052,6 +1052,59 @@ struct RemotePlaceListDetail: Equatable {
     let items: [LocalPlaceListItem]
 }
 
+struct PlaceListInviteCreation: Codable, Equatable {
+    let id: String
+    let listID: String
+    let token: String
+    let expiresAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case listID = "list_id"
+        case token
+        case expiresAt = "expires_at"
+    }
+}
+
+enum PlaceListInviteStatus: String, Codable, Equatable {
+    case active
+    case accepted
+    case expired
+    case revoked
+    case unavailable
+    case invalid
+}
+
+struct PlaceListInviteResolution: Codable, Equatable {
+    let status: PlaceListInviteStatus
+    let canAccept: Bool
+    let listID: String?
+    let listName: String?
+    let listDescription: String?
+    let ownerUserID: String?
+    let ownerHandle: String?
+    let ownerDisplayName: String?
+    let itemCount: Int?
+    let expiresAt: Date?
+    let viewerIsOwner: Bool?
+    let viewerIsCollaborator: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case canAccept = "can_accept"
+        case listID = "list_id"
+        case listName = "list_name"
+        case listDescription = "list_description"
+        case ownerUserID = "owner_user_id"
+        case ownerHandle = "owner_handle"
+        case ownerDisplayName = "owner_display_name"
+        case itemCount = "item_count"
+        case expiresAt = "expires_at"
+        case viewerIsOwner = "viewer_is_owner"
+        case viewerIsCollaborator = "viewer_is_collaborator"
+    }
+}
+
 struct PlaceListUpsertDraft: Equatable {
     let id: String?
     let name: String
@@ -1516,6 +1569,13 @@ protocol PlaceRepository {
     func places(in viewport: MapViewport) async throws -> [VisiblePlace]
     func resolveCurrentLocation() async throws -> [PlaceCandidate]
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
+    func sharedPlace(id: String) async throws -> PlaceCandidate?
+}
+
+extension PlaceRepository {
+    func sharedPlace(id: String) async throws -> PlaceCandidate? {
+        throw WanderRemoteError.notImplemented("shared place resolution")
+    }
 }
 
 @MainActor
@@ -1598,6 +1658,56 @@ protocol PlaceListRepository {
     func setCollaborators(listID: String, userIDs: [String]) async throws
     func addItem(_ draft: PlaceListItemDraft) async throws -> String
     func removeItem(listID: String, itemID: String) async throws
+    func createInvite(listID: String) async throws -> PlaceListInviteCreation
+    func resolveInvite(token: String) async throws -> PlaceListInviteResolution
+    func acceptInvite(token: String) async throws -> String
+    func revokeInvite(token: String) async throws
+}
+
+extension PlaceListRepository {
+    func createInvite(listID: String) async throws -> PlaceListInviteCreation {
+        throw WanderRemoteError.notConfigured
+    }
+
+    func resolveInvite(token: String) async throws -> PlaceListInviteResolution {
+        throw WanderRemoteError.notConfigured
+    }
+
+    func acceptInvite(token: String) async throws -> String {
+        throw WanderRemoteError.notConfigured
+    }
+
+    func revokeInvite(token: String) async throws {
+        throw WanderRemoteError.notConfigured
+    }
+}
+
+struct CurrentUserCalendarRemoteSnapshot {
+    let visiblePlaces: [VisiblePlace]
+    let visits: [PlaceVisitResult]
+}
+
+struct PlaceListsRemoteSnapshot {
+    let summaries: [RemotePlaceListSummary]
+    let details: [RemotePlaceListDetail]
+    let visiblePlacesByOwnerID: [String: [VisiblePlace]]
+    let relationshipsByOwnerID: [String: ViewerRelationship]
+}
+
+struct SocialSurfaceRemoteSnapshot {
+    let following: [ProfileShell]
+    let followers: [ProfileShell]
+    let viewportPlaces: [VisiblePlace]
+    let ownWannaGoPlans: [OwnWannaGoPlan]
+    let visiblePlacesByOwnerID: [String: [VisiblePlace]]
+    let relationshipsByOwnerID: [String: ViewerRelationship]
+}
+
+@MainActor
+protocol SurfaceSnapshotRepository {
+    func currentUserCalendarSnapshot() async throws -> CurrentUserCalendarRemoteSnapshot
+    func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot
+    func socialSurfaceSnapshot(in viewport: MapViewport) async throws -> SocialSurfaceRemoteSnapshot
 }
 
 @MainActor

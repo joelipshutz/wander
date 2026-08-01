@@ -463,6 +463,13 @@ final class WanderStore: ObservableObject {
     }
 
     private func persist() {
+        let persistenceSignpostID = WanderDebugLog.beginPerformanceInterval("Store Persistence")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "Store Persistence",
+                id: persistenceSignpostID
+            )
+        }
         reconcileCurrentUserCalendarLocalFingerprint()
         invalidatePresentationCaches()
         guard let persistence else { return }
@@ -472,7 +479,10 @@ final class WanderStore: ObservableObject {
             return
         }
 
-        persistence.save(WanderStoreSnapshot(store: self))
+        let snapshotSignpostID = WanderDebugLog.beginPerformanceInterval("Snapshot Build")
+        let snapshot = WanderStoreSnapshot(store: self)
+        WanderDebugLog.endPerformanceInterval("Snapshot Build", id: snapshotSignpostID)
+        persistence.save(snapshot)
     }
 
     private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
@@ -2312,17 +2322,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func candidateMatches(_ candidate: PlaceCandidate, place: LocalPlace) -> Bool {
-        if place.id == candidate.id || place.localID == candidate.id || place.serverID == candidate.id {
-            return true
-        }
-
-        if let candidateProviderPlaceID = candidate.sourceProviderPlaceID,
-           place.sourceProvider == candidate.sourceProvider,
-           place.sourceProviderPlaceID == candidateProviderPlaceID {
-            return true
-        }
-
-        return normalizedPlaceLookupKey(place.canonicalName) == normalizedPlaceLookupKey(candidate.name)
+        VisiblePlaceGrouping.matches(place, candidate: candidate)
     }
 
     private func visiblePlaceForCurrentUser(userPlaceID: String) -> VisiblePlace? {
@@ -2337,14 +2337,6 @@ final class WanderStore: ObservableObject {
         else { return nil }
 
         return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: currentUser)
-    }
-
-    private func normalizedPlaceLookupKey(_ value: String) -> String {
-        value
-            .lowercased()
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
     }
 
     private func fallbackVisiblePlace(for item: LocalPlaceListItem) -> VisiblePlace? {
@@ -3924,6 +3916,16 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft]? = nil
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
+        if status == .wannaGo,
+           let existingPlace = place(matching: candidate),
+           let existingUserPlace = currentUserPlace(for: existingPlace),
+           existingUserPlace.status == .been {
+            return SaveResult(
+                userPlaceID: existingUserPlace.id,
+                syncState: existingUserPlace.syncState
+            )
+        }
+
         let place = upsertPlace(from: candidate, sourceType: sourceType)
         let savedRatingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
         let categoryOverride = categoryOverrideAssignment(from: candidate)
@@ -3936,18 +3938,6 @@ final class WanderStore: ObservableObject {
             }
 
             if previousStatus == .been, status == .wannaGo {
-                preserveHistoricalWant(
-                    for: existing,
-                    note: note,
-                    attributes: attributes ?? previousAttributeDrafts,
-                    wantedAt: .now
-                )
-                existing.visibilityRaw = resolvedVisibility.rawValue
-                existing.updatedAt = .now
-                existing.localUpdatedAt = .now
-                existing.syncStateRaw = SyncState.pendingUpdate.rawValue
-                objectWillChange.send()
-                persist()
                 return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
             }
 
@@ -4002,7 +3992,7 @@ final class WanderStore: ObservableObject {
         let savedAt = Date.now
         let wasTodayCovered = saveStreakSummary.isTodayCovered
         let userPlace = LocalUserPlace(
-            localID: "local_up_\(currentUser.handle)_\(slug(place.canonicalName))",
+            localID: "local_up_\(currentUser.handle)_\(slug(place.localID))",
             userID: currentUser.id,
             placeID: place.id,
             status: status,
@@ -4086,6 +4076,14 @@ final class WanderStore: ObservableObject {
         #if DEBUG
         WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
         #endif
+
+        if status == .wannaGo,
+           currentUserPlace(matching: localResult.userPlaceID)?.status == .been {
+            #if DEBUG
+            WanderDebugLog.sync.debug("direct save skipped remote reason=already_checked_in user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public)")
+            #endif
+            return localResult
+        }
 
         guard let backend else {
             #if DEBUG
@@ -4756,6 +4754,11 @@ final class WanderStore: ObservableObject {
     func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo, backend: WanderBackend?) async -> SaveResult {
         let localResult = saveVisiblePlace(visiblePlace, status: status)
 
+        if status == .wannaGo,
+           currentUserPlace(matching: localResult.userPlaceID)?.status == .been {
+            return localResult
+        }
+
         guard let backend else {
             return localResult
         }
@@ -5021,8 +5024,45 @@ final class WanderStore: ObservableObject {
         guard let backend else {
             return
         }
+        let refreshSignpostID = WanderDebugLog.beginPerformanceInterval("List Refresh Total")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "List Refresh Total",
+                id: refreshSignpostID
+            )
+        }
 
         do {
+            if backend.surfaceSnapshotRepository != nil {
+                let snapshot = try await backend.placeListsSnapshot()
+                let applySignpostID = WanderDebugLog.beginPerformanceInterval("List Apply")
+                withDeferredPersistence {
+                    reconcileMissingRemotePlaceLists(with: snapshot.summaries)
+                    upsertRemotePlaceListSummaries(snapshot.summaries)
+                    for ownerID in snapshot.visiblePlacesByOwnerID.keys.sorted() {
+                        guard let visiblePlaces = snapshot.visiblePlacesByOwnerID[ownerID] else {
+                            continue
+                        }
+                        applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: ownerID)
+                    }
+                    for ownerID in snapshot.relationshipsByOwnerID.keys.sorted() {
+                        guard ownerID != currentUser.id,
+                              let relationship = snapshot.relationshipsByOwnerID[ownerID]
+                        else {
+                            continue
+                        }
+                        applyRemoteRelationship(profileID: ownerID, relationship: relationship)
+                    }
+                    for detail in snapshot.details {
+                        upsertRemotePlaceListDetail(detail)
+                    }
+                    lastRemoteError = nil
+                    persist()
+                }
+                WanderDebugLog.endPerformanceInterval("List Apply", id: applySignpostID)
+                return
+            }
+
             let summaries = try await backend.visiblePlaceLists()
             let ownerIDs = Set(summaries.map { $0.list.ownerUserID })
             var visiblePlacesByOwnerID: [String: [VisiblePlace]] = [:]
@@ -5130,8 +5170,55 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func refreshRemoteSocialSurfaces(in viewport: MapViewport, backend: WanderBackend?) async -> Bool {
         guard let backend else { return false }
+        let refreshSignpostID = WanderDebugLog.beginPerformanceInterval("Social Refresh Total")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "Social Refresh Total",
+                id: refreshSignpostID
+            )
+        }
         let requestUserID = currentUser.id
         guard !Task.isCancelled else { return false }
+
+        if backend.surfaceSnapshotRepository != nil {
+            do {
+                let snapshot = try await backend.socialSurfaceSnapshot(in: viewport)
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
+                let followedProfileIDs = snapshot.following
+                    .map(\.id)
+                    .filter { $0 != requestUserID }
+                    .sorted()
+                let applySignpostID = WanderDebugLog.beginPerformanceInterval("Social Apply")
+                withDeferredPersistence {
+                    upsertRemoteSocialGraph(
+                        userID: requestUserID,
+                        following: snapshot.following,
+                        followers: snapshot.followers
+                    )
+                    replaceRemoteViewportVisiblePlaces(snapshot.viewportPlaces)
+                    applyRemoteWannaGoPlans(snapshot.ownWannaGoPlans)
+                    for profileID in followedProfileIDs {
+                        if let visiblePlaces = snapshot.visiblePlacesByOwnerID[profileID] {
+                            applyRemoteProfileVisiblePlaces(visiblePlaces, profileID: profileID)
+                        }
+                        if let relationship = snapshot.relationshipsByOwnerID[profileID] {
+                            applyRemoteRelationship(
+                                profileID: profileID,
+                                relationship: relationship
+                            )
+                        }
+                    }
+                    lastRemoteError = nil
+                    persist()
+                }
+                WanderDebugLog.endPerformanceInterval("Social Apply", id: applySignpostID)
+                return true
+            } catch {
+                guard currentUser.id == requestUserID, !Task.isCancelled else { return false }
+                lastRemoteError = remoteErrorMessage(error)
+                return false
+            }
+        }
 
         let locallyFollowedProfileIDs = Set(following(of: requestUserID).map(\.id))
         var remoteFollowing: [ProfileShell]?
@@ -5271,7 +5358,9 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func refreshRemoteCurrentUserCalendarData(backend: WanderBackend?) async -> Bool {
-        guard let backend, backend.userPlaceRepository != nil else { return true }
+        guard let backend,
+              backend.surfaceSnapshotRepository != nil || backend.userPlaceRepository != nil
+        else { return true }
         let requestUserID = currentUser.id
         let taskID: UUID
         let task: Task<Bool, Never>
@@ -5318,8 +5407,24 @@ final class WanderStore: ObservableObject {
         expectedLocalMutationRevision: UInt64,
         backend: WanderBackend
     ) async -> Bool {
+        let refreshSignpostID = WanderDebugLog.beginPerformanceInterval("Calendar Refresh Total")
+        defer {
+            WanderDebugLog.endPerformanceInterval(
+                "Calendar Refresh Total",
+                id: refreshSignpostID
+            )
+        }
         do {
-            let fetchedPlaces = try await backend.userPlaces(for: userID)
+            let fetchedPlaces: [VisiblePlace]
+            let fetchedVisits: [PlaceVisitResult]?
+            if backend.surfaceSnapshotRepository != nil {
+                let snapshot = try await backend.currentUserCalendarSnapshot()
+                fetchedPlaces = snapshot.visiblePlaces
+                fetchedVisits = snapshot.visits
+            } else {
+                fetchedPlaces = try await backend.userPlaces(for: userID)
+                fetchedVisits = nil
+            }
             guard currentUser.id == userID,
                   !Task.isCancelled,
                   currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
@@ -5341,7 +5446,27 @@ final class WanderStore: ObservableObject {
             }
 
             var visitsByUserPlaceID: [String: [PlaceVisitResult]]?
-            if backend.visitRepository != nil {
+            if let fetchedVisits {
+                var stagedVisits = Dictionary(
+                    uniqueKeysWithValues: userPlaceIDs.map { ($0, [PlaceVisitResult]()) }
+                )
+                let validUserPlaceIDs = Set(userPlaceIDs)
+                var seenVisitIDs = Set<String>()
+                for visit in fetchedVisits {
+                    guard validUserPlaceIDs.contains(visit.userPlaceID) else {
+                        throw WanderRemoteError.invalidResponse(
+                            "Current-user calendar visit response had the wrong parent"
+                        )
+                    }
+                    guard seenVisitIDs.insert(visit.visitID).inserted else {
+                        throw WanderRemoteError.invalidResponse(
+                            "Current-user calendar response contained duplicate visits"
+                        )
+                    }
+                    stagedVisits[visit.userPlaceID, default: []].append(visit)
+                }
+                visitsByUserPlaceID = stagedVisits
+            } else if backend.visitRepository != nil {
                 var stagedVisits: [String: [PlaceVisitResult]] = [:]
                 var seenVisitIDs = Set<String>()
                 for userPlaceID in userPlaceIDs.sorted() {
@@ -5373,6 +5498,7 @@ final class WanderStore: ObservableObject {
                   !Task.isCancelled,
                   currentUserCalendarLocalMutationRevision == expectedLocalMutationRevision
             else { return false }
+            let applySignpostID = WanderDebugLog.beginPerformanceInterval("Calendar Apply")
             applyStagedCurrentUserCalendarData(
                 StagedCurrentUserCalendarData(
                     visiblePlaces: visiblePlaces,
@@ -5380,6 +5506,7 @@ final class WanderStore: ObservableObject {
                 ),
                 userID: userID
             )
+            WanderDebugLog.endPerformanceInterval("Calendar Apply", id: applySignpostID)
             return true
         } catch is CancellationError {
             return false
@@ -6193,6 +6320,16 @@ final class WanderStore: ObservableObject {
                 && (userPlace.id == userPlaceID
                     || userPlace.localID == userPlaceID
                     || userPlace.serverID == userPlaceID)
+        }
+    }
+
+    private func currentUserPlace(for place: LocalPlace) -> LocalUserPlace? {
+        userPlaces.first { userPlace in
+            userPlace.userID == currentUser.id
+                && userPlace.deletedAt == nil
+                && (userPlace.placeID == place.id
+                    || userPlace.placeID == place.localID
+                    || userPlace.placeID == place.serverID)
         }
     }
 
@@ -7534,18 +7671,15 @@ final class WanderStore: ObservableObject {
 
     private func upsertPlace(from candidate: PlaceCandidate, sourceType: AddSourceType) -> LocalPlace {
         let providerPlaceID = candidate.sourceProviderPlaceID ?? candidate.id
+        let localIdentityHash = stableHash("\(candidate.sourceProvider)|\(providerPlaceID)")
         let sharedAssignment = sharedPlaceAssignment(from: candidate)
-        if let existing = places.first(where: {
-            $0.id == candidate.id
-                || ($0.sourceProvider == candidate.sourceProvider && $0.sourceProviderPlaceID == providerPlaceID)
-                || $0.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
-        }) {
+        if let existing = place(matching: candidate) {
             mergeBusinessMetadata(from: candidate, sharedAssignment: sharedAssignment, into: existing)
             return existing
         }
 
         let place = LocalPlace(
-            localID: "local_place_\(slug(candidate.name))",
+            localID: "local_place_\(slug(candidate.name))_\(localIdentityHash)",
             canonicalName: candidate.name,
             category: sharedAssignment.legacyCategory,
             primaryCategory: sharedAssignment.primaryCategory,
@@ -7570,6 +7704,12 @@ final class WanderStore: ObservableObject {
         )
         places.append(place)
         return place
+    }
+
+    private func place(matching candidate: PlaceCandidate) -> LocalPlace? {
+        places.first {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
+        }
     }
 
     private func mergeBusinessMetadata(from candidate: PlaceCandidate, sharedAssignment: PlaceCategoryAssignment, into place: LocalPlace) {

@@ -26,8 +26,10 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceSheetAction.choose.accessibilityLabel, "Choose this place")
         XCTAssertEqual(PlaceSheetAction.add.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
+        XCTAssertEqual(PlaceSheetAction.editWant.systemImage, "pencil")
         XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check in")
         XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in again")
+        XCTAssertEqual(PlaceSheetAction.editWant.displayTitle, "Edit Wanna")
         XCTAssertEqual(
             PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: false),
             "Check in at Maru Coffee"
@@ -38,6 +40,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
         XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
+        XCTAssertTrue(PlaceSheetAction.editWant.isPrimaryAction)
     }
 
     #if DEBUG

@@ -144,10 +144,37 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
 
         XCTAssertEqual(
             url.absoluteString,
-            "recme://profiles/user%2F%E6%9D%B1%E4%BA%AC"
+            "https://getrec.me/profiles/user%2F%E6%9D%B1%E4%BA%AC"
         )
         XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
         XCTAssertNil(WanderDeepLinkRoute.sharedProfile(profileID: " \n ").url)
+    }
+
+    func testSharedEntityUniversalLinksRoundTripEveryPublicRoute() throws {
+        let routes: [(WanderDeepLinkRoute, String)] = [
+            (
+                .sharedProfile(profileID: "user_joe"),
+                "https://getrec.me/profiles/user_joe"
+            ),
+            (
+                .sharedPlace(placeID: "40000000-0000-0000-0000-000000000001"),
+                "https://getrec.me/places/40000000-0000-0000-0000-000000000001"
+            ),
+            (
+                .sharedList(listID: "44000000-0000-0000-0000-000000000001"),
+                "https://getrec.me/lists/44000000-0000-0000-0000-000000000001"
+            ),
+            (
+                .listInvite(token: String(repeating: "ab", count: 24)),
+                "https://getrec.me/invites/\(String(repeating: "ab", count: 24))"
+            )
+        ]
+
+        for (route, expectedURL) in routes {
+            let url = try XCTUnwrap(route.url)
+            XCTAssertEqual(url.absoluteString, expectedURL)
+            XCTAssertEqual(WanderDeepLinkRoute.parse(url), route)
+        }
     }
 
     func testParserRejectsLookalikesExtraComponentsAndAmbiguousQueries() throws {
@@ -170,7 +197,14 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             "recme://profile/calendar/2026-07-25#today",
             "recme://profiles",
             "recme://profiles/%20%0A",
-            "recme://profiles/user/extra"
+            "recme://profiles/user/extra",
+            "http://getrec.me/profiles/user",
+            "https://www.getrec.me/profiles/user",
+            "https://getrec.me/profiles/user/extra",
+            "https://getrec.me/profiles/user?q=private",
+            "https://getrec.me/places/not-a-uuid",
+            "https://getrec.me/lists/not-a-uuid",
+            "https://getrec.me/invites/too-short"
         ]
 
         for rawURL in rejected {

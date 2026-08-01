@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 #if canImport(Supabase)
 import Supabase
 #endif
@@ -330,6 +331,25 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         params: Params,
         decoder: JSONDecoder = RemoteDecoding.decoder
     ) async throws -> Value {
+        let rpcSignpostID = OSSignpostID(log: WanderDebugLog.pointsOfInterest)
+        os_signpost(
+            .begin,
+            log: WanderDebugLog.pointsOfInterest,
+            name: "Remote RPC",
+            signpostID: rpcSignpostID,
+            "name=%{public}@",
+            name as NSString
+        )
+        defer {
+            os_signpost(
+                .end,
+                log: WanderDebugLog.pointsOfInterest,
+                name: "Remote RPC",
+                signpostID: rpcSignpostID,
+                "name=%{public}@",
+                name as NSString
+            )
+        }
         let expectedUserID = try configuredAuthenticatedUserID()
         let initialResponse = try await rpcResponse(
             name,
@@ -451,6 +471,27 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         name: String,
         decoder: JSONDecoder
     ) throws -> Value {
+        let decodeSignpostID = OSSignpostID(log: WanderDebugLog.pointsOfInterest)
+        os_signpost(
+            .begin,
+            log: WanderDebugLog.pointsOfInterest,
+            name: "RPC Decode",
+            signpostID: decodeSignpostID,
+            "name=%{public}@ bytes=%{public}d",
+            name as NSString,
+            data.count
+        )
+        defer {
+            os_signpost(
+                .end,
+                log: WanderDebugLog.pointsOfInterest,
+                name: "RPC Decode",
+                signpostID: decodeSignpostID,
+                "name=%{public}@ bytes=%{public}d",
+                name as NSString,
+                data.count
+            )
+        }
         guard (200..<300).contains(response.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "unreadable response"
             #if DEBUG

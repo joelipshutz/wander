@@ -1093,7 +1093,7 @@ struct DiscoverScreen: View {
             return
         }
 
-        presentPlaceSaveFlow(MapPlaceSaveContext.addVisitVisiblePlace(
+        presentPlaceSaveFlow(MapPlaceSaveContext.existingCurrentUserSave(
             currentUserSave,
             attributes: store.attributes(for: currentUserSave.userPlace.id),
             latestVisit: store.visits(for: currentUserSave.userPlace.id).first
@@ -1889,15 +1889,8 @@ private struct DiscoverPlaceResultCard: View {
 
     private var shareContent: WanderShareContent? {
         let place = PlaceSheetPlace(visiblePlace: visiblePlace)
-        guard let url = PlaceExternalLinks.googleMapsSearchURL(
-            placeName: place.name,
-            address: place.address,
-            locality: place.locality
-        ) else {
-            return nil
-        }
         return .place(
-            item: url,
+            serverID: place.id,
             name: place.name,
             message: PlaceExternalLinks.shareSummary(
                 placeName: place.name,

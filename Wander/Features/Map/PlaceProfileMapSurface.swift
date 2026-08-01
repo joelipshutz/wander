@@ -2212,11 +2212,8 @@ private enum PlaceProfileCopy {
     }
 
     static func shareURL(for place: PlaceSheetPlace) -> URL? {
-        PlaceExternalLinks.googleMapsSearchURL(
-            placeName: place.name,
-            address: place.address,
-            locality: place.locality
-        )
+        guard UUID(uuidString: place.id) != nil else { return nil }
+        return WanderDeepLinkRoute.sharedPlace(placeID: place.id).url
     }
 
     static func shareText(for place: PlaceSheetPlace) -> String {

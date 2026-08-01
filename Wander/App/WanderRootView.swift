@@ -837,7 +837,7 @@ struct WanderRootView: View {
     static func notificationTab(for destination: NotificationDestination) -> WanderTab {
         switch destination {
         case .people, .drafts: .profile
-        case .list: .lists
+        case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
         case .discover: .discover
         }
@@ -1052,6 +1052,15 @@ struct WanderRootView: View {
             )
         case .sharedProfile(let profileID):
             sharedProfile = SharedProfileRoute(profileID: profileID)
+        case .sharedPlace(let placeID):
+            selectedTab = .map
+            pushNotifications.route(to: .place(id: placeID))
+        case .sharedList(let listID):
+            selectedTab = .lists
+            pushNotifications.route(to: .list(id: listID))
+        case .listInvite(let token):
+            selectedTab = .lists
+            pushNotifications.route(to: .listInvite(token: token))
         }
     }
 
@@ -1227,6 +1236,15 @@ struct WanderRootView: View {
         signedInMaintenanceRunID = runID
         signedInMaintenanceUserID = session.userID
         signedInMaintenanceTask = Task { @MainActor in
+            let maintenanceSignpostID = WanderDebugLog.beginPerformanceInterval(
+                "Signed-In Maintenance"
+            )
+            defer {
+                WanderDebugLog.endPerformanceInterval(
+                    "Signed-In Maintenance",
+                    id: maintenanceSignpostID
+                )
+            }
             #if DEBUG
             if case .signedIn(let session) = state {
                 WanderDebugLog.sync.debug("signed-in maintenance started user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")

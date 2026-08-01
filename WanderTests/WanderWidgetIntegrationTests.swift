@@ -828,9 +828,16 @@ final class WanderWidgetIntegrationTests: XCTestCase {
     func testAppAndExtensionShareOneBuildNumberSource() throws {
         let project = try source("project.yml")
         let declarations = project.components(separatedBy: "CURRENT_PROJECT_VERSION:").count - 1
+        let configuredBuildNumber = project
+            .components(separatedBy: "CURRENT_PROJECT_VERSION:")
+            .dropFirst()
+            .first?
+            .split(separator: "\n", maxSplits: 1)
+            .first?
+            .trimmingCharacters(in: CharacterSet(charactersIn: " \t\""))
 
         XCTAssertEqual(declarations, 1)
-        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION: \"113\""))
+        XCTAssertNotNil(Int(configuredBuildNumber ?? ""))
         XCTAssertEqual(
             project.components(separatedBy: "CFBundleVersion: $(CURRENT_PROJECT_VERSION)").count - 1,
             4

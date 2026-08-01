@@ -207,7 +207,7 @@ struct FeedScreen: View {
             return
         }
 
-        presentPlaceSaveFlow(MapPlaceSaveContext.addVisitVisiblePlace(
+        presentPlaceSaveFlow(MapPlaceSaveContext.existingCurrentUserSave(
             currentUserSave,
             attributes: store.attributes(for: currentUserSave.userPlace.id),
             latestVisit: store.visits(for: currentUserSave.userPlace.id).first

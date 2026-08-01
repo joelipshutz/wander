@@ -76,12 +76,18 @@ async function main() {
         console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
-        await runOwnPlaceSmokeChecks(client, smokeUserID);
+        await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, strangerUserID);
+        await runSurfaceSnapshotSmokeChecks(
+          client,
+          smokeUserID,
+          collaboratorUserID,
+          strangerUserID,
+        );
         await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
-        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, lists, photo visibility, and Discover profile recommendations are valid.");
+        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, batched surface snapshots, lists, photo visibility, and Discover profile recommendations are valid.");
       }
     } finally {
       await client.query("rollback");
@@ -1350,7 +1356,7 @@ set
 `;
 }
 
-async function runOwnPlaceSmokeChecks(client, smokeUserID) {
+async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
   await assertOwnPlaceRPCMetadata(client);
   await setAuthenticatedUser(client, smokeUserID);
 
@@ -1437,6 +1443,141 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID) {
         && cuisine?.value_type === "restaurant_cuisine"
         && cuisine.value === "Thai";
     },
+  );
+
+  await expectQuery(
+    client,
+    "stale Wanna payload for an existing check-in resolves as a no-op",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify({
+        ...place,
+        canonical_name: "Mutated by stale device",
+        latitude: 35,
+        longitude: -119,
+      }),
+      JSON.stringify({
+        status: "wanna_go",
+        visibility: "self",
+        nearby_confirmed: false,
+        source_type: "manual",
+        planned_date: "2099-08-15",
+      }),
+    ],
+    (result) => result.rows[0]?.saved?.user_place_id === savedUserPlaceID,
+  );
+
+  await expectQuery(
+    client,
+    "stale Wanna payload preserves the canonical place, check-in, plan, and attributes",
+    `
+      select
+        p.canonical_name,
+        p.latitude,
+        up.status,
+        up.visibility,
+        up.rating_score::double precision as rating_score,
+        up.planned_date,
+        count(pa.id)::integer as attribute_count
+      from public.user_places up
+      join public.places p on p.id = up.place_id
+      left join public.place_attributes pa on pa.user_place_id = up.id
+      where up.id = $1::uuid
+      group by p.canonical_name, p.latitude, up.status, up.visibility, up.rating_score, up.planned_date
+    `,
+    [savedUserPlaceID],
+    (result) => result.rows.length === 1
+      && result.rows[0].canonical_name === place.canonical_name
+      && result.rows[0].latitude === place.latitude
+      && result.rows[0].status === "been"
+      && result.rows[0].visibility === "followers"
+      && result.rows[0].rating_score === 3
+      && result.rows[0].planned_date === null
+      && result.rows[0].attribute_count === 2,
+  );
+
+  await expectQuery(
+    client,
+    "smoke owner follows the source account for social-save visibility",
+    "select public.follow_user($1, 'profile')",
+    [collaboratorUserID],
+    (result) => result.rows.length === 1,
+  );
+
+  const socialFixture = await expectQuery(
+    client,
+    "load the production-shaped social-save fixture",
+    `
+      select p.id as place_id, source.id as source_user_place_id
+      from public.places p
+      join public.user_places source
+        on source.place_id = p.id
+       and source.user_id = $1
+       and source.deleted_at is null
+      where p.source_provider = 'codex_smoke'
+        and p.source_provider_place_id = 'place-list-rpc-smoke'
+    `,
+    [collaboratorUserID],
+    (result) => result.rows.length === 1,
+  );
+  const socialPlaceID = socialFixture.rows[0].place_id;
+  const sourceUserPlaceID = socialFixture.rows[0].source_user_place_id;
+  const socialPlace = {
+    canonical_name: "Codex Smoke Coffee",
+    category: "coffee_tea_sweets",
+    primary_category: "coffee_tea_sweets",
+    subcategory: "Coffee shop",
+    category_source: "deterministic",
+    raw_provider_type: "coffee shop",
+    latitude: 34.052235,
+    longitude: -118.243683,
+    source_provider: "codex_smoke",
+    source_provider_place_id: "place-list-rpc-smoke",
+    confidence: 1,
+  };
+
+  const socialCheckIn = await expectQuery(
+    client,
+    "create an authoritative check-in before a stale social save",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(socialPlace),
+      JSON.stringify({
+        status: "been",
+        visibility: "followers",
+        note: "owner check-in",
+        nearby_confirmed: false,
+        source_type: "manual",
+        rating_score: 4,
+      }),
+    ],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id),
+  );
+  const socialCheckInID = socialCheckIn.rows[0].saved.user_place_id;
+
+  await expectQuery(
+    client,
+    "stale social Wanna save returns the authoritative check-in",
+    "select public.save_visible_place($1::uuid, $2::uuid) as saved",
+    [socialPlaceID, sourceUserPlaceID],
+    (result) => result.rows.length === 1
+      && result.rows[0]?.saved?.user_place_id === socialCheckInID,
+  );
+
+  await expectQuery(
+    client,
+    "stale social Wanna save preserves check-in metadata",
+    `
+      select status, note, rating_score::double precision as rating_score, source_type
+      from public.user_places
+      where id = $1::uuid
+    `,
+    [socialCheckInID],
+    (result) => result.rows.length === 1
+      && result.rows[0].status === "been"
+      && result.rows[0].note === "owner check-in"
+      && result.rows[0].rating_score === 4
+      && result.rows[0].source_type === "manual",
   );
 
   const plannedPlace = {
@@ -2400,7 +2541,59 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     () => true,
   );
 
+  const inviteListID = await createSmokeList(client, "Codex smoke invitation check");
+  const inviteResult = await expectQuery(
+    client,
+    "owner creates an expiring list invitation",
+    "select public.create_place_list_invite($1::uuid) as invite",
+    [inviteListID],
+    (result) => result.rows[0]?.invite?.list_id === inviteListID
+      && typeof result.rows[0]?.invite?.token === "string"
+      && result.rows[0].invite.token.length === 48,
+  );
+  const inviteToken = inviteResult.rows[0].invite.token;
+
   await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQuery(
+    client,
+    "collaborator resolves the active list invitation",
+    "select public.resolve_place_list_invite($1) as invite",
+    [inviteToken],
+    (result) => result.rows[0]?.invite?.status === "active"
+      && result.rows[0]?.invite?.can_accept === true
+      && result.rows[0]?.invite?.list_id === inviteListID,
+  );
+  await expectQuery(
+    client,
+    "collaborator explicitly accepts the list invitation",
+    "select public.accept_place_list_invite($1)::text as list_id",
+    [inviteToken],
+    (result) => result.rows[0]?.list_id === inviteListID,
+  );
+  await expectQuery(
+    client,
+    "accepted invitation grants list detail access",
+    "select public.place_list_detail($1::uuid) as detail",
+    [inviteListID],
+    (result) => result.rows[0]?.detail?.list?.id === inviteListID,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  const replacementInviteResult = await expectQuery(
+    client,
+    "owner creates a replacement invitation after the first is accepted",
+    "select public.create_place_list_invite($1::uuid) as invite",
+    [inviteListID],
+    (result) => result.rows[0]?.invite?.list_id === inviteListID
+      && typeof result.rows[0]?.invite?.token === "string",
+  );
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQueryFailure(
+    client,
+    "an existing collaborator cannot consume a fresh single-use invitation",
+    "select public.accept_place_list_invite($1)",
+    [replacementInviteResult.rows[0].invite.token],
+    /place_list_invite_unavailable/,
+  );
   await expectQuery(
     client,
     "collaborator can see shared list",
@@ -2538,6 +2731,25 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
   );
 
   await client.query("set local role anon");
+  await expectQuery(
+    client,
+    "anonymous web preview returns venue facts without a user save",
+    "select public.public_web_preview('place', $1) as preview",
+    [smokePlaceID],
+    (result) => result.rows[0]?.preview?.kind === "place"
+      && result.rows[0]?.preview?.is_available === true
+      && result.rows[0]?.preview?.place_id === smokePlaceID
+      && typeof result.rows[0]?.preview?.latitude === "number"
+      && typeof result.rows[0]?.preview?.longitude === "number"
+      && !("note" in result.rows[0].preview),
+  );
+  await expectQuery(
+    client,
+    "accepted invitation no longer previews on the public web",
+    "select public.public_web_preview('invite', $1) as preview",
+    [inviteToken],
+    (result) => result.rows[0]?.preview?.is_available === false,
+  );
   await expectQueryFailure(
     client,
     "anonymous role cannot call list RPCs",
@@ -2545,6 +2757,130 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [],
     /permission denied/,
   );
+}
+
+async function runSurfaceSnapshotSmokeChecks(
+  client,
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+) {
+  await expectQuery(
+    client,
+    "surface snapshot RPC metadata",
+    `
+      select
+        bool_and(not procedure.prosecdef) as security_invoker,
+        bool_and(
+          'search_path=public, app' = any(coalesce(procedure.proconfig, array[]::text[]))
+        ) as pinned_search_path,
+        bool_and(
+          has_function_privilege('authenticated', procedure.oid, 'execute')
+        ) as authenticated_execute,
+        bool_and(
+          not has_function_privilege('anon', procedure.oid, 'execute')
+        ) as anon_denied
+      from pg_proc procedure
+      where procedure.oid = any(array[
+        'public.current_user_calendar_snapshot()'::regprocedure,
+        'public.visible_place_lists_snapshot()'::regprocedure,
+        'public.social_surface_snapshot(double precision,double precision,double precision,double precision)'::regprocedure
+      ])
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner calendar snapshot batches owner places and visits",
+    "select public.current_user_calendar_snapshot() as snapshot",
+    [],
+    (result) => {
+      const snapshot = result.rows[0]?.snapshot;
+      return Array.isArray(snapshot?.places)
+        && snapshot.places.length > 0
+        && snapshot.places.every((place) => place.owner_user_id === smokeUserID)
+        && Array.isArray(snapshot?.visits)
+        && snapshot.visits.every((visit) => (
+          snapshot.places.some((place) => place.user_place_id === visit.user_place_id)
+        ));
+    },
+  );
+
+  await expectQuery(
+    client,
+    "visible list snapshot batches summaries details and owner places",
+    "select public.visible_place_lists_snapshot() as snapshot",
+    [],
+    (result) => {
+      const snapshot = result.rows[0]?.snapshot;
+      const summaryIDs = new Set((snapshot?.summaries ?? []).map((summary) => summary.id));
+      const detailIDs = new Set(
+        (snapshot?.details ?? []).map((detail) => detail?.list?.id).filter(Boolean),
+      );
+      return summaryIDs.size > 0
+        && [...summaryIDs].every((id) => detailIDs.has(id))
+        && Array.isArray(snapshot?.owner_places)
+        && Array.isArray(snapshot?.relationships);
+    },
+  );
+
+  await expectQuery(
+    client,
+    "social snapshot batches graph viewport plans and followed places",
+    `
+      select public.social_surface_snapshot(
+        33.5::double precision,
+        -119::double precision,
+        35::double precision,
+        -117::double precision
+      ) as snapshot
+    `,
+    [],
+    (result) => {
+      const snapshot = result.rows[0]?.snapshot;
+      return Array.isArray(snapshot?.following)
+        && snapshot.following.some((profile) => profile.id === collaboratorUserID)
+        && Array.isArray(snapshot?.followers)
+        && Array.isArray(snapshot?.viewport_places)
+        && Array.isArray(snapshot?.wanna_go_plans)
+        && Array.isArray(snapshot?.followed_places)
+        && snapshot.followed_places.some(
+          (place) => place.owner_user_id === collaboratorUserID,
+        )
+        && Array.isArray(snapshot?.relationships);
+    },
+  );
+
+  await setAuthenticatedUser(client, strangerUserID);
+  await expectQuery(
+    client,
+    "calendar snapshot remains owner-scoped for another authenticated caller",
+    "select public.current_user_calendar_snapshot() as snapshot",
+    [],
+    (result) => (result.rows[0]?.snapshot?.places ?? [])
+      .every((place) => place.owner_user_id === strangerUserID),
+  );
+
+  await client.query("set local role anon");
+  for (const [label, query] of [
+    ["calendar", "select public.current_user_calendar_snapshot()"],
+    ["lists", "select public.visible_place_lists_snapshot()"],
+    [
+      "social",
+      "select public.social_surface_snapshot(33.5::double precision, -119::double precision, 35::double precision, -117::double precision)",
+    ],
+  ]) {
+    await expectQueryFailure(
+      client,
+      `anonymous role cannot call ${label} snapshot RPC`,
+      query,
+      [],
+      /permission denied/,
+    );
+  }
 }
 
 async function runFirstVisiblePlacePhotoChecks(
@@ -2902,11 +3238,47 @@ async function assertOwnPlaceRPCMetadata(client) {
     "app.save_own_place keeps its security-definer search path",
     `
       select p.prosecdef, 'search_path=public, app' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path
+        , pg_get_functiondef(p.oid) like '%pg_advisory_xact_lock%recme:user-place:%' as serialized_user_place
       from pg_proc p
       where p.oid = 'app.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
     `,
     [],
-    (result) => result.rows[0]?.prosecdef === true && result.rows[0]?.pinned_search_path === true,
+    (result) => result.rows[0]?.prosecdef === true
+      && result.rows[0]?.pinned_search_path === true
+      && result.rows[0]?.serialized_user_place === true,
+  );
+
+  await expectQuery(
+    client,
+    "app.save_visible_place keeps invoker security, its pinned path, and authenticated-only grants",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=public, app' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path,
+        pg_get_functiondef(p.oid) like '%pg_advisory_xact_lock%recme:user-place:%' as serialized_user_place,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      where p.oid = 'app.save_visible_place(uuid,uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await expectQuery(
+    client,
+    "public.save_visible_place keeps the production invoker wrapper and authenticated-only grants",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=app, public' = any(coalesce(p.proconfig, array[]::text[])) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      where p.oid = 'public.save_visible_place(uuid,uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
   );
 
   await expectQuery(
@@ -2948,6 +3320,12 @@ async function assertPlaceListRPCMetadata(client) {
     "public.add_place_list_item(uuid,uuid,uuid,uuid)",
     "public.remove_place_list_item(uuid,uuid)",
   ];
+  const inviteSignatures = [
+    "public.create_place_list_invite(uuid)",
+    "public.resolve_place_list_invite(text)",
+    "public.accept_place_list_invite(text)",
+    "public.revoke_place_list_invite(text)",
+  ];
   await expectQuery(
     client,
     "authenticated role has every public list RPC grant",
@@ -2955,7 +3333,7 @@ async function assertPlaceListRPCMetadata(client) {
       select bool_and(has_function_privilege('authenticated', signature, 'execute')) as valid
       from unnest($1::text[]) as signature
     `,
-    [publicSignatures],
+    [[...publicSignatures, ...inviteSignatures]],
     (result) => result.rows[0]?.valid === true,
   );
 
@@ -2977,8 +3355,28 @@ async function assertPlaceListRPCMetadata(client) {
       select bool_and(not has_function_privilege('anon', signature, 'execute')) as valid
       from unnest($1::text[]) as signature
     `,
-    [publicSignatures],
+    [[...publicSignatures, ...inviteSignatures]],
     (result) => result.rows[0]?.valid === true,
+  );
+  await expectQuery(
+    client,
+    "public web preview is the only anonymous list-adjacent boundary",
+    `
+      select
+        has_function_privilege(
+          'anon',
+          'public.public_web_preview(text,text)',
+          'execute'
+        ) as anon_execute,
+        has_function_privilege(
+          'authenticated',
+          'public.public_web_preview(text,text)',
+          'execute'
+        ) as authenticated_execute
+    `,
+    [],
+    (result) => result.rows[0]?.anon_execute === true
+      && result.rows[0]?.authenticated_execute === true,
   );
 
   const securityDefinerFunctions = [
@@ -3005,6 +3403,27 @@ async function assertPlaceListRPCMetadata(client) {
     `,
     [securityDefinerFunctions],
     (result) => result.rows[0]?.count === securityDefinerFunctions.length,
+  );
+  await expectQuery(
+    client,
+    "list invitation and web-preview security definers pin search_path",
+    `
+      select count(*)::integer as count
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = any($1::text[])
+        and p.prosecdef
+        and 'search_path=public, app, extensions' = any(p.proconfig)
+    `,
+    [[
+      "create_place_list_invite",
+      "resolve_place_list_invite",
+      "accept_place_list_invite",
+      "revoke_place_list_invite",
+      "public_web_preview",
+    ]],
+    (result) => result.rows[0]?.count === 5,
   );
 }
 

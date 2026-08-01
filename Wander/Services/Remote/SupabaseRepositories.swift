@@ -291,6 +291,105 @@ struct SupabasePlaceRepository: PlaceRepository {
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("remote manual place resolution")
     }
+
+    func sharedPlace(id: String) async throws -> PlaceCandidate? {
+        guard UUID(uuidString: id) != nil else { return nil }
+        let preview: PublicSharedPlacePreview = try await rpc.call(
+            "public_web_preview",
+            params: PublicWebPreviewParams(
+                inputKind: "place",
+                inputIdentifier: id
+            )
+        )
+        return preview.placeCandidate()
+    }
+}
+
+private struct PublicWebPreviewParams: Encodable {
+    let inputKind: String
+    let inputIdentifier: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputKind = "input_kind"
+        case inputIdentifier = "input_identifier"
+    }
+}
+
+private struct PublicSharedPlacePreview: Decodable {
+    let isAvailable: Bool
+    let placeID: String?
+    let title: String?
+    let category: String?
+    let primaryCategory: String?
+    let subcategory: String?
+    let categorySource: String?
+    let categoryConfidence: Double?
+    let rawProviderType: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let latitude: Double?
+    let longitude: Double?
+    let sourceProvider: String?
+    let sourceProviderPlaceID: String?
+    let confidence: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case isAvailable = "is_available"
+        case placeID = "place_id"
+        case title
+        case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case categorySource = "category_source"
+        case categoryConfidence = "category_confidence"
+        case rawProviderType = "raw_provider_type"
+        case address
+        case locality
+        case region
+        case country
+        case latitude
+        case longitude
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case confidence
+    }
+
+    func placeCandidate() -> PlaceCandidate? {
+        guard isAvailable,
+              let placeID,
+              let title,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let latitude,
+              (-90...90).contains(latitude),
+              let longitude,
+              (-180...180).contains(longitude)
+        else {
+            return nil
+        }
+
+        let resolvedCategory = primaryCategory ?? category ?? "place"
+        return PlaceCandidate(
+            id: placeID,
+            name: title,
+            category: resolvedCategory,
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            categorySource: categorySource ?? PlaceCategorySource.legacy.rawValue,
+            categoryConfidence: categoryConfidence,
+            rawProviderType: rawProviderType,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider ?? "recme",
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            confidence: confidence ?? 1
+        )
+    }
 }
 
 struct SupabaseFeedRepository: FeedRepository {
@@ -335,16 +434,7 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
             "own_wanna_go_plans",
             params: EmptyParams()
         )
-        return try rows.map { row in
-            guard let plannedDate = WannaGoDate.date(fromStorageString: row.plannedDate) else {
-                throw WanderRemoteError.invalidResponse("Invalid Wanna planned date: \(row.plannedDate)")
-            }
-            return OwnWannaGoPlan(
-                userPlaceID: row.userPlaceID,
-                placeID: row.placeID,
-                plannedDate: plannedDate
-            )
-        }
+        return try rows.map { try $0.plan() }
     }
 
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
@@ -1318,6 +1408,168 @@ struct SupabasePlaceListRepository: PlaceListRepository {
             params: RemovePlaceListItemParams(inputListID: listID, inputItemID: itemID)
         )
     }
+
+    func createInvite(listID: String) async throws -> PlaceListInviteCreation {
+        try await rpc.call(
+            "create_place_list_invite",
+            params: PlaceListIDParams(inputListID: listID)
+        )
+    }
+
+    func resolveInvite(token: String) async throws -> PlaceListInviteResolution {
+        try await rpc.call(
+            "resolve_place_list_invite",
+            params: PlaceListInviteTokenParams(inputToken: token)
+        )
+    }
+
+    func acceptInvite(token: String) async throws -> String {
+        try await rpc.call(
+            "accept_place_list_invite",
+            params: PlaceListInviteTokenParams(inputToken: token)
+        )
+    }
+
+    func revokeInvite(token: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "revoke_place_list_invite",
+            params: PlaceListInviteTokenParams(inputToken: token)
+        )
+    }
+}
+
+private struct RemoteProfileRelationshipDTO: Decodable {
+    let profileID: String
+    let relationship: String
+
+    enum CodingKeys: String, CodingKey {
+        case profileID = "profile_id"
+        case relationship
+    }
+
+    func pair() throws -> (String, ViewerRelationship) {
+        guard let value = ViewerRelationship(rawValue: relationship) else {
+            throw WanderRemoteError.invalidResponse("Unknown profile relationship: \(relationship)")
+        }
+        return (profileID, value)
+    }
+}
+
+private struct RemoteCurrentUserCalendarSnapshotDTO: Decodable {
+    let places: [RemoteVisiblePlaceDTO]
+    let visits: [PlaceVisitRow]
+}
+
+private struct RemotePlaceListsSnapshotDTO: Decodable {
+    let summaries: [RemotePlaceListSummaryDTO]
+    let details: [RemotePlaceListDetailDTO]
+    let ownerPlaces: [RemoteVisiblePlaceDTO]
+    let relationships: [RemoteProfileRelationshipDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case summaries
+        case details
+        case ownerPlaces = "owner_places"
+        case relationships
+    }
+}
+
+private struct RemoteSocialSurfaceSnapshotDTO: Decodable {
+    let following: [RemoteProfileShellDTO]
+    let followers: [RemoteProfileShellDTO]
+    let viewportPlaces: [RemoteVisiblePlaceDTO]
+    let wannaGoPlans: [RemoteOwnWannaGoPlanDTO]
+    let followedPlaces: [RemoteVisiblePlaceDTO]
+    let relationships: [RemoteProfileRelationshipDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case following
+        case followers
+        case viewportPlaces = "viewport_places"
+        case wannaGoPlans = "wanna_go_plans"
+        case followedPlaces = "followed_places"
+        case relationships
+    }
+}
+
+struct SupabaseSurfaceSnapshotRepository: SurfaceSnapshotRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func currentUserCalendarSnapshot() async throws -> CurrentUserCalendarRemoteSnapshot {
+        let response: RemoteCurrentUserCalendarSnapshotDTO = try await rpc.call(
+            "current_user_calendar_snapshot",
+            params: EmptyParams()
+        )
+        return CurrentUserCalendarRemoteSnapshot(
+            visiblePlaces: try response.places.map { try $0.visiblePlace() },
+            visits: response.visits.map(\.result)
+        )
+    }
+
+    func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot {
+        let response: RemotePlaceListsSnapshotDTO = try await rpc.call(
+            "visible_place_lists_snapshot",
+            params: EmptyParams()
+        )
+        let ownerPlaces = try response.ownerPlaces.map { try $0.visiblePlace() }
+        var visiblePlacesByOwnerID = Dictionary(
+            uniqueKeysWithValues: Set(response.summaries.map(\.ownerUserID)).map {
+                ($0, [VisiblePlace]())
+            }
+        )
+        for place in ownerPlaces {
+            visiblePlacesByOwnerID[place.owner.id, default: []].append(place)
+        }
+        return PlaceListsRemoteSnapshot(
+            summaries: response.summaries.map { $0.summary() },
+            details: response.details.map { $0.detail() },
+            visiblePlacesByOwnerID: visiblePlacesByOwnerID,
+            relationshipsByOwnerID: try Self.relationships(response.relationships)
+        )
+    }
+
+    func socialSurfaceSnapshot(in viewport: MapViewport) async throws -> SocialSurfaceRemoteSnapshot {
+        let response: RemoteSocialSurfaceSnapshotDTO = try await rpc.call(
+            "social_surface_snapshot",
+            params: SocialSurfaceSnapshotParams(viewport: viewport)
+        )
+        let followedPlaces = try response.followedPlaces.map { try $0.visiblePlace() }
+        var visiblePlacesByOwnerID = Dictionary(
+            uniqueKeysWithValues: Set(response.following.map(\.id)).map {
+                ($0, [VisiblePlace]())
+            }
+        )
+        for place in followedPlaces {
+            visiblePlacesByOwnerID[place.owner.id, default: []].append(place)
+        }
+        return SocialSurfaceRemoteSnapshot(
+            following: response.following.map { $0.profileShell() },
+            followers: response.followers.map { $0.profileShell() },
+            viewportPlaces: try response.viewportPlaces.map { try $0.visiblePlace() },
+            ownWannaGoPlans: try response.wannaGoPlans.map { try $0.plan() },
+            visiblePlacesByOwnerID: visiblePlacesByOwnerID,
+            relationshipsByOwnerID: try Self.relationships(response.relationships)
+        )
+    }
+
+    private static func relationships(
+        _ rows: [RemoteProfileRelationshipDTO]
+    ) throws -> [String: ViewerRelationship] {
+        var result: [String: ViewerRelationship] = [:]
+        for row in rows {
+            let (profileID, relationship) = try row.pair()
+            guard result.updateValue(relationship, forKey: profileID) == nil else {
+                throw WanderRemoteError.invalidResponse(
+                    "Surface snapshot contained duplicate relationship: \(profileID)"
+                )
+            }
+        }
+        return result
+    }
 }
 
 struct SupabaseDiscoverFilterRepository: DiscoverFilterParsingRepository {
@@ -1885,6 +2137,14 @@ private struct PlaceListIDParams: Encodable {
     }
 }
 
+private struct PlaceListInviteTokenParams: Encodable {
+    let inputToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputToken = "input_token"
+    }
+}
+
 private struct UpsertPlaceListParams: Encodable {
     let inputList: UpsertPlaceListBody
 
@@ -2029,6 +2289,27 @@ private struct VisiblePlacesParams: Encodable {
         case statusFilter = "status_filter"
         case categoryFilter = "category_filter"
         case ownerScope = "owner_scope"
+    }
+}
+
+private struct SocialSurfaceSnapshotParams: Encodable {
+    let minLat: Double
+    let minLng: Double
+    let maxLat: Double
+    let maxLng: Double
+
+    init(viewport: MapViewport) {
+        minLat = viewport.minLatitude
+        minLng = viewport.minLongitude
+        maxLat = viewport.maxLatitude
+        maxLng = viewport.maxLongitude
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case minLat = "min_lat"
+        case minLng = "min_lng"
+        case maxLat = "max_lat"
+        case maxLng = "max_lng"
     }
 }
 
@@ -2542,6 +2823,17 @@ private struct RemoteOwnWannaGoPlanDTO: Decodable {
         case userPlaceID = "user_place_id"
         case placeID = "place_id"
         case plannedDate = "planned_date"
+    }
+
+    func plan() throws -> OwnWannaGoPlan {
+        guard let plannedDate = WannaGoDate.date(fromStorageString: plannedDate) else {
+            throw WanderRemoteError.invalidResponse("Invalid Wanna planned date: \(plannedDate)")
+        }
+        return OwnWannaGoPlan(
+            userPlaceID: userPlaceID,
+            placeID: placeID,
+            plannedDate: plannedDate
+        )
     }
 }
 
