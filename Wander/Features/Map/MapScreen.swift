@@ -1636,18 +1636,25 @@ struct MapScreen: View {
     }
 
     private func visiblePlace(matching candidate: PlaceCandidate) -> VisiblePlace? {
-        guard let match = baseVisiblePlaces.first(where: { visiblePlace in
-            visiblePlace.place.sourceProviderPlaceID == candidate.sourceProviderPlaceID
-                || visiblePlace.place.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
-        }) else {
-            return nil
-        }
+        guard let match = Self.matchingVisiblePlace(
+            for: candidate,
+            in: baseVisiblePlaces
+        ) else { return nil }
 
         return VisiblePlaceGrouping.matchingGroup(
             for: match,
             in: baseVisiblePlaces,
             currentUserID: store.currentUser.id
         )?.primary ?? match
+    }
+
+    static func matchingVisiblePlace(
+        for candidate: PlaceCandidate,
+        in visiblePlaces: [VisiblePlace]
+    ) -> VisiblePlace? {
+        visiblePlaces.first {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
+        }
     }
 
     private func upsertMapSearchCandidate(_ candidate: PlaceCandidate) {
