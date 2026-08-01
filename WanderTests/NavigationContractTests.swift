@@ -872,6 +872,35 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
+    func testSuccessfulMapSaveWaitsForSheetDismissalBeforeSelectingSavedPlace() throws {
+        let result = SaveResult(userPlaceID: "saved-place", syncState: .synced)
+        var coordinator = MapSaveFlowSelectionCoordinator()
+
+        XCTAssertNil(coordinator.saveFlowDidDismiss())
+
+        coordinator.saveDidSucceed(result)
+
+        XCTAssertEqual(coordinator.saveFlowDidDismiss(), result)
+        XCTAssertNil(coordinator.saveFlowDidDismiss())
+
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let saveSubmission = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "private func saveMapFlowSubmission")
+                .last?
+                .components(separatedBy: "private func scopedSaveMessage")
+                .first
+        )
+        XCTAssertEqual(
+            saveSubmission.components(separatedBy: "mapSaveFlowSelection.saveDidSucceed(result)").count - 1,
+            2
+        )
+        XCTAssertFalse(saveSubmission.contains("selectSavedResult(result)"))
+        XCTAssertTrue(mapScreen.contains("if let result = mapSaveFlowSelection.saveFlowDidDismiss()"))
+    }
+
     func testAddSuggestedPlacesScalePreviewCountByScreenHeight() {
         let candidates = (0..<8).map { index in
             PlaceCandidate(

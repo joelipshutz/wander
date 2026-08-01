@@ -3,6 +3,19 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+struct MapSaveFlowSelectionCoordinator {
+    private var pendingResult: SaveResult?
+
+    mutating func saveDidSucceed(_ result: SaveResult) {
+        pendingResult = result
+    }
+
+    mutating func saveFlowDidDismiss() -> SaveResult? {
+        defer { pendingResult = nil }
+        return pendingResult
+    }
+}
+
 struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: WanderStore
@@ -17,6 +30,7 @@ struct MapScreen: View {
     @State private var lastMapPressPoint: CGPoint?
     @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
+    @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var mapQuery = ""
     @State private var mapSearchMessage: String?
@@ -382,6 +396,9 @@ struct MapScreen: View {
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
+                if let result = mapSaveFlowSelection.saveFlowDidDismiss() {
+                    selectSavedResult(result)
+                }
             }) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveMapFlowSubmission(submission)
@@ -1354,7 +1371,7 @@ struct MapScreen: View {
             let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
-            selectSavedResult(result)
+            mapSaveFlowSelection.saveDidSucceed(result)
             mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
             showMapSaveFeedback(
                 SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
@@ -1395,7 +1412,7 @@ struct MapScreen: View {
                 )
             }
             selectedSearchCandidateID = nil
-            selectSavedResult(result)
+            mapSaveFlowSelection.saveDidSucceed(result)
             showMapSaveFeedback(
                 SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
                 successMessage: scopedSaveMessage(for: submission.context, status: submission.status)
