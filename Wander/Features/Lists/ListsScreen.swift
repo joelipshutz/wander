@@ -338,34 +338,22 @@ struct ListsScreen: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("lists")
-                    .font(WanderTypography.editorialMasthead)
-                Text("save places into a plan you can actually use")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-
-            Spacer()
-
-            Button {
+        WanderGlassHeader(
+            title: "lists",
+            subtitle: "save places into a plan you can actually use"
+        ) {
+            WanderGlassActionButton(
+                systemImage: "plus",
+                accessibilityLabel: "New list",
+                accessibilityIdentifier: "lists.headerAdd"
+            ) {
                 editorPresentation = .create
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .black))
-                    .frame(width: 56, height: 56)
-                    .background(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(Circle())
-                    .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 6)
             }
-            .accessibilityLabel("New list")
         }
     }
 
     private var scopeSwitch: some View {
-        WanderSegmentedSwitch(
+        WanderGlassSegmentedSwitch(
             options: ListsScope.allCases.map { WanderSegmentOption(id: $0.rawValue, title: $0.title) },
             selection: $selectedScopeID
         )

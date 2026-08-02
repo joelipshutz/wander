@@ -11,7 +11,13 @@ struct FeedScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
-    @State private var selectedSurface: FeedSurface = .places
+    @State private var selectedSurface: FeedSurface
+    private let onAdd: () -> Void
+
+    init(onAdd: @escaping () -> Void = {}) {
+        self.onAdd = onAdd
+        _selectedSurface = State(initialValue: FeedSurface.resolvedInitialSurface())
+    }
 
     private let tickerSuggestions = [
         "Joe's favorite coffee shops in LA",
@@ -25,9 +31,18 @@ struct FeedScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                FeedSurfaceTabs(selectedSurface: $selectedSurface)
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing2)
+                HStack(spacing: WanderTheme.spacing2) {
+                    FeedSurfaceTabs(selectedSurface: $selectedSurface)
+
+                    WanderGlassActionButton(
+                        systemImage: "plus",
+                        accessibilityLabel: "Add a place",
+                        accessibilityIdentifier: "feed.headerAdd",
+                        action: onAdd
+                    )
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
 
                 switch selectedSurface {
                 case .places:
@@ -367,20 +382,33 @@ private enum FeedSurface: String, CaseIterable, Identifiable {
         case .people: "person.2"
         }
     }
+
+    static func resolvedInitialSurface(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> FeedSurface {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderFeedSurface") else {
+            return .places
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return .places }
+        return FeedSurface(rawValue: arguments[valueIndex]) ?? .places
+    }
 }
 
 private struct FeedSurfaceTabs: View {
     @Binding var selectedSurface: FeedSurface
 
     var body: some View {
-        Picker("Feed section", selection: $selectedSurface) {
-            ForEach(FeedSurface.allCases) { surface in
-                Text(surface.title)
-                    .tag(surface)
-            }
-        }
-        .pickerStyle(.segmented)
-        .frame(minHeight: WanderTheme.tapMinimum)
+        WanderGlassSegmentedSwitch(
+            options: FeedSurface.allCases.map {
+                WanderSegmentOption(id: $0.rawValue, title: $0.title)
+            },
+            selection: Binding(
+                get: { selectedSurface.rawValue },
+                set: { selectedSurface = FeedSurface(rawValue: $0) ?? .places }
+            )
+        )
+        .accessibilityLabel("Feed section")
     }
 }
 
@@ -620,12 +648,8 @@ private struct FeedPeopleSearchField: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        }
+        .contentShape(Capsule())
+        .wanderGlassCapsule()
         .accessibilityLabel("Search people")
     }
 }
@@ -841,12 +865,8 @@ private struct FeedSearchLauncher: View {
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 44)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            }
+            .contentShape(Capsule())
+            .wanderGlassCapsule()
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search places and people")
@@ -934,26 +954,19 @@ private struct FeedFeaturedCard: View {
             .accessibilityLabel("Open \(featured.visiblePlace.place.canonicalName)")
 
             Button {
-                openProfile(ProfileShell(
-                    id: featured.visiblePlace.owner.id,
-                    handle: featured.visiblePlace.owner.handle,
-                    displayName: featured.visiblePlace.owner.displayName,
-                    avatarURL: featured.visiblePlace.owner.avatarURL,
-                    bio: featured.visiblePlace.owner.bio,
-                    relationship: .follower
-                ))
+                openProfile(featured.actor)
             } label: {
                 HStack(alignment: .top, spacing: WanderTheme.spacing1) {
                     WanderAvatar(
-                        initials: featured.visiblePlace.owner.initials,
-                        avatarURL: featured.visiblePlace.owner.avatarURL,
+                        initials: initials(for: featured.actor.displayName),
+                        avatarURL: featured.actor.avatarURL,
                         size: 20,
-                        color: featured.visiblePlace.owner.handle == "ryan"
+                        color: featured.actor.handle == "ryan"
                             ? WanderTheme.avatarRyan.color
                             : WanderTheme.pinSocial.color
                     )
 
-                    Text("• \(featured.visiblePlace.owner.displayName) • \(featuredActivity)")
+                    Text("• \(featured.actor.displayName) • \(featuredActivity)")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(WanderTheme.stateInfo.color)
                         .fixedSize(horizontal: false, vertical: true)
@@ -961,7 +974,7 @@ private struct FeedFeaturedCard: View {
                 .accessibilityElement(children: .combine)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(featured.visiblePlace.owner.displayName), \(featuredActivity)")
+            .accessibilityLabel("\(featured.actor.displayName), \(featuredActivity)")
 
             Spacer(minLength: 0)
         }

@@ -1,0 +1,14 @@
+{
+  "bug": "focused Map search shifts its header behind the status bar and lets the typeahead menu consume the map",
+  "pre_fix": {
+    "safe_area": "the clock and status icons overlap the search controls after the keyboard opens",
+    "action": "the add-place plus remains beside an active text field instead of becoming a search dismissal control",
+    "menu": "six full-height opaque rows push the filter chips down and obscure most of the usable map"
+  },
+  "expected": {
+    "safe_area": "the focused search row stays pinned below the device top safe area while the keyboard is visible",
+    "action": "Cancel replaces the add-place plus only while the search field is focused",
+    "menu": "typeahead uses the shared glass panel and exposes at most four suggestions",
+    "filters": "filter chips return unchanged when focused search is dismissed"
+  }
+}

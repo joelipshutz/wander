@@ -394,6 +394,7 @@ final class WanderStore: ObservableObject {
             self.places = restored.places
             self.userPlaces = restored.userPlaces
             self.placeAttributes = restored.placeAttributes
+            self.remoteVisiblePlaceCache = restored.cachedCurrentUserVisiblePlaces
             self.placeVisits = restored.placeVisits
             self.visitPhotos = restored.visitPhotos
             self.sharedVisitInvitations = restored.sharedVisitInvitations
@@ -856,7 +857,7 @@ final class WanderStore: ObservableObject {
 
     func apply(authState: AuthState) {
         switch authState {
-        case .signedIn(let session):
+        case .signedIn(let session), .offline(let session, _):
             let previousUserID = currentUser.id
             if previousUserID != session.userID {
                 analytics.resetIdentity()
@@ -868,7 +869,7 @@ final class WanderStore: ObservableObject {
             }
             analytics.identify(userID: session.userID)
             #if DEBUG
-            WanderDebugLog.sync.debug("store auth signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
+            WanderDebugLog.sync.debug("store auth identified user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
             #endif
         case .signedOut, .unavailable:
             clearSessionScopedRemoteState()
