@@ -11,8 +11,11 @@
   },
   "observed_delete_error": {
     "postgres_code": "23514",
-    "category": "shared visit owner participant constraint",
-    "detail": "Hard-deleting a source visit invoked ON DELETE SET NULL on its owner participant before the shared-visit group cascade completed."
+    "categories": [
+      "shared visit owner participant constraint",
+      "feed event subject constraint"
+    ],
+    "detail": "Hard deletes invoked ON DELETE SET NULL on still-required Shared Visit and Feed subject references."
   },
   "observed_check_in_count_sequence": [27, 22, 21, 26, 21],
   "reproduction": [

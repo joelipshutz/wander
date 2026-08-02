@@ -322,6 +322,12 @@ create temporary table smoke_shared_source_delete_result (
 ) on commit drop;
 grant select, insert on smoke_shared_source_delete_result to authenticated;
 
+create temporary table smoke_user_place_delete_result (
+  user_place_id uuid primary key,
+  result jsonb not null
+) on commit drop;
+grant select, insert, update on smoke_user_place_delete_result to authenticated;
+
 insert into public.follows (follower_user_id, followed_user_id, source)
 values
   (${collaboratorUser}, ${smokeUser}, 'profile'),
@@ -782,6 +788,7 @@ begin
 
   select locality into visible_city
   from public.profile_visible_places(${smokeUser}, null, null)
+  where canonical_name = 'Codex Smoke Coffee'
   limit 1;
   if visible_city is distinct from 'Los Angeles' then
     raise exception 'profile geography payload failed';
@@ -1197,6 +1204,83 @@ begin
   end if;
 end
 $shared_source_delete$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('app.explicit_check_in', 'off', true);
+insert into smoke_user_place_delete_result(user_place_id, result)
+with saved as (
+  select public.save_own_place(
+    '{
+      "canonical_name":"Codex Smoke Delete Wanna",
+      "category":"coffee_tea_sweets",
+      "primary_category":"coffee_tea_sweets",
+      "subcategory":"Cafe",
+      "category_source":"deterministic",
+      "category_confidence":1,
+      "raw_provider_type":"cafe",
+      "latitude":34.0524,
+      "longitude":-118.2438,
+      "source_provider":"codex_smoke",
+      "source_provider_place_id":"delete-wanna-feed-subject",
+      "confidence":1
+    }'::jsonb,
+    '{"status":"wanna_go","visibility":"followers","nearby_confirmed":false,"source_type":"manual"}'::jsonb,
+    '[]'::jsonb
+  ) as result
+)
+select
+  (saved.result->>'user_place_id')::uuid,
+  '{}'::jsonb
+from saved;
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${strangerUser}, true);
+do $stranger_user_place_delete$
+begin
+  perform public.delete_own_user_place(
+    (select deletion.user_place_id from smoke_user_place_delete_result deletion)
+  );
+  raise exception 'stranger unexpectedly deleted another user save';
+exception when others then
+  if sqlerrm not like '%not_owner%' then
+    raise;
+  end if;
+end
+$stranger_user_place_delete$;
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+update smoke_user_place_delete_result deletion
+set result = public.delete_own_user_place(deletion.user_place_id);
+reset role;
+do $user_place_soft_delete$
+declare
+  deleted_user_place_id uuid;
+  delete_result jsonb;
+  parent_deleted_at timestamptz;
+  feed_event_count integer;
+begin
+  select deletion.user_place_id, deletion.result
+  into deleted_user_place_id, delete_result
+  from smoke_user_place_delete_result deletion;
+  select user_place.deleted_at into parent_deleted_at
+  from public.user_places user_place
+  where user_place.id = deleted_user_place_id;
+  select count(*)::integer into feed_event_count
+  from public.feed_events event
+  where event.user_place_id = deleted_user_place_id;
+
+  if delete_result->>'transition' is distinct from 'removed'
+     or parent_deleted_at is null
+     or feed_event_count < 1 then
+    raise exception 'Wanna save soft deletion failed transition=% parent_deleted=% feed_events=%',
+      delete_result->>'transition',
+      parent_deleted_at is not null,
+      feed_event_count;
+  end if;
+end
+$user_place_soft_delete$;
 
 ${migrationPreviewTestSQL}
 

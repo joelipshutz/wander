@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(23);
+select plan(30);
 
 create temporary table check_in_tap_results(message text) on commit drop;
 
@@ -157,6 +157,76 @@ insert into check_in_tap_results select ok(
     'execute'
   ),
   'only authenticated can call the check-in delete boundary'
+);
+insert into check_in_tap_results select has_function(
+  'app',
+  'delete_own_user_place',
+  array['uuid']
+);
+insert into check_in_tap_results select has_function(
+  'public',
+  'delete_own_user_place',
+  array['uuid']
+);
+insert into check_in_tap_results select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'app.delete_own_user_place(uuid)'::regprocedure
+  ),
+  true,
+  'internal save delete is security definer'
+);
+insert into check_in_tap_results select ok(
+  (
+    select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
+    from pg_proc
+    where oid = 'app.delete_own_user_place(uuid)'::regprocedure
+  ),
+  'internal save delete pins search_path'
+);
+insert into check_in_tap_results select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.delete_own_user_place(uuid)'::regprocedure
+  ),
+  false,
+  'public save delete is security invoker'
+);
+insert into check_in_tap_results select ok(
+  (
+    select
+      position(
+        'update public.place_visits'
+        in lower(pg_get_functiondef(oid))
+      ) > 0
+      and position(
+        'update public.user_places'
+        in lower(pg_get_functiondef(oid))
+      ) > 0
+    from pg_proc
+    where oid = 'app.delete_own_user_place(uuid)'::regprocedure
+  ),
+  'save deletion soft-deletes its parent and active check-in tickets'
+);
+insert into check_in_tap_results select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.delete_own_user_place(uuid)',
+    'execute'
+  )
+  and has_function_privilege(
+    'authenticated',
+    'app.delete_own_user_place(uuid)',
+    'execute'
+  )
+  and not has_function_privilege(
+    'anon',
+    'public.delete_own_user_place(uuid)',
+    'execute'
+  ),
+  'only authenticated can call the save delete boundary'
 );
 insert into check_in_tap_results select has_trigger(
   'public',
