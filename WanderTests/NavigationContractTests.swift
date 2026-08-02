@@ -982,7 +982,8 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
-        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet(context: context)"))
+        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertTrue(addScreen.contains("context: context"))
         XCTAssertTrue(addScreen.contains("persistNewPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))

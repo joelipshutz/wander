@@ -95,4 +95,87 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(OnboardingStep.friends.next, .notifications)
         XCTAssertNil(OnboardingStep.notifications.next)
     }
+
+    func testForegroundSessionRefreshKeepsReadyRootMounted() async throws {
+        let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
+        let provider = SuspendedRefreshAuthProvider(state: .signedIn(session))
+        let auth = AuthSessionStore(provider: provider)
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        completionStore.markComplete(for: session.userID, needsServerCompletion: false)
+        let coordinator = AppEntryCoordinator(
+            auth: auth,
+            backend: WanderBackend(),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        XCTAssertEqual(coordinator.state, .ready(session: session))
+
+        auth.beginSessionValidation()
+        provider.shouldSuspendRefresh = true
+        let refreshTask = Task {
+            await coordinator.start(preservingReadyState: true)
+        }
+        for _ in 0..<100 where !provider.isRefreshSuspended {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(provider.isRefreshSuspended)
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session),
+            "Foreground validation must not replace WanderRootView with the launch screen."
+        )
+
+        provider.resumeRefresh()
+        await refreshTask.value
+        XCTAssertEqual(coordinator.state, .ready(session: session))
+    }
+}
+
+@MainActor
+private final class SuspendedRefreshAuthProvider: AuthSessionProviding {
+    private(set) var state: AuthState
+    var shouldSuspendRefresh = false
+    private(set) var isRefreshSuspended = false
+    private var refreshContinuation: CheckedContinuation<Void, Never>?
+    private let changes: AsyncStream<AuthState>
+
+    init(state: AuthState) {
+        self.state = state
+        changes = AsyncStream { _ in }
+    }
+
+    var canPresentNativeAuth: Bool { false }
+
+    func sessionChanges() -> AsyncStream<AuthState> { changes }
+
+    func refreshSession() async {
+        guard shouldSuspendRefresh else { return }
+        isRefreshSuspended = true
+        await withCheckedContinuation { continuation in
+            refreshContinuation = continuation
+        }
+        isRefreshSuspended = false
+    }
+
+    func resumeRefresh() {
+        refreshContinuation?.resume()
+        refreshContinuation = nil
+    }
+
+    func signOut() async throws {
+        state = .signedOut
+    }
+
+    func deleteAccount() async throws {
+        state = .signedOut
+    }
+
+    func supabaseAccessToken() async throws -> String {
+        throw AuthSessionError.tokenUnavailable
+    }
 }
