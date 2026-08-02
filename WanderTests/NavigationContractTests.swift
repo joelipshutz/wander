@@ -53,6 +53,7 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testPrimaryTabsUseOutlinedSymbolsAtRestAndFilledSymbolsWhenSelected() throws {
+        XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
         XCTAssertEqual(WanderTab.map.selectedSystemImage, "map.fill")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
@@ -70,12 +71,12 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
-        XCTAssertEqual(root.components(separatedBy: ".toolbar(.hidden, for: .tabBar)").count - 1, 5)
-        XCTAssertTrue(root.contains("WanderPrimaryTabBar(selection: tabSelection)"))
-        XCTAssertTrue(root.contains("private let tabs: [WanderTab] = [.map, .discover, .lists, .profile]"))
-        XCTAssertTrue(root.contains("Image(systemName: tab.systemImage(isSelected: isSelected))"))
-        XCTAssertTrue(root.contains(".symbolVariant(.none)"))
-        XCTAssertTrue(root.contains(".accessibilityAddTraits(isSelected ? .isSelected : [])"))
+        XCTAssertFalse(root.contains(".toolbar(.hidden, for: .tabBar)"))
+        XCTAssertFalse(root.contains("WanderPrimaryTabBar"))
+        XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
+        XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
+        XCTAssertTrue(root.contains("Image(uiImage: tab.tabBarImage(isSelected: selectedTab == tab))"))
+        XCTAssertTrue(root.contains(".withRenderingMode(.alwaysTemplate)"))
     }
 
     func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {

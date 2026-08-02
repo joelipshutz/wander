@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case add
@@ -377,18 +378,15 @@ struct WanderRootView: View {
                 onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
                 onAdd: presentAddSheet
             )
-                .toolbar(.hidden, for: .tabBar)
-                .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
+                .tabItem { tabItemLabel(for: .map) }
                 .tag(WanderTab.map)
 
             FeedScreen(onAdd: presentAddSheet)
-                .toolbar(.hidden, for: .tabBar)
-                .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
+                .tabItem { tabItemLabel(for: .discover) }
                 .tag(WanderTab.discover)
 
             ListsScreen()
-                .toolbar(.hidden, for: .tabBar)
-                .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
+                .tabItem { tabItemLabel(for: .lists) }
                 .tag(WanderTab.lists)
 
             ProfileScreen(
@@ -399,13 +397,8 @@ struct WanderRootView: View {
             ) {
                 selectedTab = .discover
             }
-                .toolbar(.hidden, for: .tabBar)
-                .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
+                .tabItem { tabItemLabel(for: .profile) }
                 .tag(WanderTab.profile)
-        }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            WanderPrimaryTabBar(selection: tabSelection)
         }
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
@@ -442,6 +435,14 @@ struct WanderRootView: View {
                 .transition(.opacity)
                 .zIndex(100)
             }
+        }
+    }
+
+    private func tabItemLabel(for tab: WanderTab) -> some View {
+        Label {
+            Text(tab.title)
+        } icon: {
+            Image(uiImage: tab.tabBarImage(isSelected: selectedTab == tab))
         }
     }
 
@@ -1481,6 +1482,8 @@ enum WanderTab: String, CaseIterable, Hashable {
     case lists
     case profile
 
+    static let primaryTabs: [WanderTab] = [.map, .discover, .lists, .profile]
+
     var title: String {
         switch self {
         case .map: "Map"
@@ -1514,53 +1517,26 @@ enum WanderTab: String, CaseIterable, Hashable {
     func systemImage(isSelected: Bool) -> String {
         isSelected ? selectedSystemImage : systemImage
     }
-}
 
-private struct WanderPrimaryTabBar: View {
-    @Binding var selection: WanderTab
-
-    private let tabs: [WanderTab] = [.map, .discover, .lists, .profile]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-                .overlay(WanderTheme.textInk.color.opacity(0.12))
-
-            HStack(spacing: 0) {
-                ForEach(tabs, id: \.self) { tab in
-                    tabButton(tab)
-                }
-            }
-            .frame(height: 56)
+    @MainActor
+    func tabBarImage(isSelected: Bool) -> UIImage {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+        let name = systemImage(isSelected: isSelected)
+        guard let symbol = UIImage(systemName: name, withConfiguration: configuration) else {
+            return UIImage()
         }
-        .background(Color(uiColor: .systemBackground).ignoresSafeArea(edges: .bottom))
-    }
 
-    private func tabButton(_ tab: WanderTab) -> some View {
-        let isSelected = selection == tab
+        // SwiftUI automatically applies the fill symbol variant inside native tab items.
+        // Flatten the chosen variant first so the standard tab bar only tints the image.
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = symbol.scale
 
-        return Button {
-            selection = tab
-        } label: {
-            VStack(spacing: 2) {
-                Image(systemName: tab.systemImage(isSelected: isSelected))
-                    .symbolVariant(.none)
-                    .font(.system(size: 24, weight: .regular))
-                    .frame(height: 27)
-
-                Text(tab.title)
-                    .font(.system(size: 12, weight: .medium))
+        let template = symbol.withTintColor(.white, renderingMode: .alwaysOriginal)
+        return UIGraphicsImageRenderer(size: symbol.size, format: format)
+            .image { _ in
+                template.draw(in: CGRect(origin: .zero, size: symbol.size))
             }
-            .foregroundStyle(
-                isSelected
-                    ? WanderTheme.terracotta.color
-                    : WanderTheme.textMuted.color.opacity(0.72)
-            )
-            .frame(maxWidth: .infinity, minHeight: 56)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(tab.title)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .withRenderingMode(.alwaysTemplate)
     }
 }
