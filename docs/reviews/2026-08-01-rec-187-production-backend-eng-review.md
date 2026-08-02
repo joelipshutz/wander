@@ -98,6 +98,10 @@ Recommendation: harden and promote the existing Supabase project instead of crea
 
 Before cutover, Joe must explicitly choose how to handle the 11 Clerk-development profiles and their user-owned rows. Production Clerk identities will not automatically equal development identity IDs. The safe default is: export/verify a recoverable backup, preserve global place catalog data, and perform a reviewed cleanup/migration of development user-owned data during a scheduled cutover. No deletion or credential flip is part of this change.
 
+### 2026-08-01 decision update
+
+Joe subsequently chose full blue/green cutover safety: retain the current project as the rollback source, create and verify a complete private backup, restore/clone into a separate production project, validate the complete application surface, and prepare an explicit undo procedure before switching traffic. The operational source of truth is `docs/backend/recme-production-blue-green-cutover.md`. This decision supersedes the recommendation above to promote the existing project, but it does not authorize a blind copy of Clerk development identities, a project purchase without reviewing the displayed cost, or a traffic switch before the documented gates pass.
+
 ## Validation plan
 
 - Hosted migration ledger parity before changes.
