@@ -52,6 +52,30 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
+    func testPrimaryTabsUseOutlinedSymbolsAtRestAndFilledSymbolsWhenSelected() throws {
+        XCTAssertEqual(WanderTab.map.systemImage, "map")
+        XCTAssertEqual(WanderTab.map.selectedSystemImage, "map.fill")
+        XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
+        XCTAssertEqual(WanderTab.discover.selectedSystemImage, "newspaper.fill")
+        XCTAssertEqual(WanderTab.lists.systemImage, "bookmark.square")
+        XCTAssertEqual(WanderTab.lists.selectedSystemImage, "bookmark.square.fill")
+        XCTAssertEqual(WanderTab.profile.systemImage, "person.crop.circle")
+        XCTAssertEqual(WanderTab.profile.selectedSystemImage, "person.crop.circle.fill")
+
+        for tab in [WanderTab.map, .discover, .lists, .profile] {
+            XCTAssertEqual(tab.systemImage(isSelected: false), tab.systemImage)
+            XCTAssertEqual(tab.systemImage(isSelected: true), tab.selectedSystemImage)
+        }
+
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        XCTAssertTrue(root.contains("systemImage: WanderTab.map.systemImage(isSelected: selectedTab == .map)"))
+        XCTAssertTrue(root.contains("systemImage: WanderTab.discover.systemImage(isSelected: selectedTab == .discover)"))
+        XCTAssertTrue(root.contains("systemImage: WanderTab.lists.systemImage(isSelected: selectedTab == .lists)"))
+        XCTAssertTrue(root.contains("systemImage: WanderTab.profile.systemImage(isSelected: selectedTab == .profile)"))
+    }
+
     func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")

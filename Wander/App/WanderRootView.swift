@@ -377,15 +377,30 @@ struct WanderRootView: View {
                 onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
                 onAdd: presentAddSheet
             )
-                .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
+                .tabItem {
+                    Label(
+                        WanderTab.map.title,
+                        systemImage: WanderTab.map.systemImage(isSelected: selectedTab == .map)
+                    )
+                }
                 .tag(WanderTab.map)
 
             FeedScreen(onAdd: presentAddSheet)
-                .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
+                .tabItem {
+                    Label(
+                        WanderTab.discover.title,
+                        systemImage: WanderTab.discover.systemImage(isSelected: selectedTab == .discover)
+                    )
+                }
                 .tag(WanderTab.discover)
 
             ListsScreen()
-                .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
+                .tabItem {
+                    Label(
+                        WanderTab.lists.title,
+                        systemImage: WanderTab.lists.systemImage(isSelected: selectedTab == .lists)
+                    )
+                }
                 .tag(WanderTab.lists)
 
             ProfileScreen(
@@ -396,7 +411,12 @@ struct WanderRootView: View {
             ) {
                 selectedTab = .discover
             }
-                .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
+                .tabItem {
+                    Label(
+                        WanderTab.profile.title,
+                        systemImage: WanderTab.profile.systemImage(isSelected: selectedTab == .profile)
+                    )
+                }
                 .tag(WanderTab.profile)
         }
         .tint(WanderTheme.terracotta.color)
@@ -1491,5 +1511,19 @@ enum WanderTab: String, CaseIterable, Hashable {
         case .lists: "bookmark.square"
         case .profile: "person.crop.circle"
         }
+    }
+
+    var selectedSystemImage: String {
+        switch self {
+        case .map: "map.fill"
+        case .discover: "newspaper.fill"
+        case .add: "plus"
+        case .lists: "bookmark.square.fill"
+        case .profile: "person.crop.circle.fill"
+        }
+    }
+
+    func systemImage(isSelected: Bool) -> String {
+        isSelected ? selectedSystemImage : systemImage
     }
 }
