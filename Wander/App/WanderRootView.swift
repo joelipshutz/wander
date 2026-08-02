@@ -5,6 +5,7 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case authGate
     case nativeAuth
     case initialPresentation
+    case profileSettings
     case sharedProfile
 }
 
@@ -252,7 +253,7 @@ struct WanderDeepLinkPresentationRegistry {
     }
 }
 
-private struct WanderRootPresentationLifecycle<Content: View>: View {
+struct WanderRootPresentationLifecycle<Content: View>: View {
     let surface: WanderDeepLinkPresentationSurface
     let onPresent: (WanderDeepLinkPresentationToken) -> Void
     let onDismiss: (WanderDeepLinkPresentationToken) -> Void
@@ -398,7 +399,12 @@ struct WanderRootView: View {
                 visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
                 presentationResetRequest: presentationResetRequest,
                 calendarLaunchRequest: profileCalendarLaunchRequest,
-                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest
+                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
+                onSettingsPresentation: handleDeepLinkPresentation,
+                onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
+                onSettingsDidDismiss: {
+                    handleDeepLinkPresentationDismissal(of: .profileSettings)
+                }
             ) {
                 selectedTab = .discover
             }

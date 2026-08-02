@@ -34,6 +34,9 @@ struct ProfileScreen: View {
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let calendarLaunchRequest: WanderProfileCalendarLaunchRequest?
     private let onCalendarLaunchRequestHandled: (UUID) -> Void
+    private let onSettingsPresentation: (WanderDeepLinkPresentationToken) -> Void
+    private let onSettingsWillDismiss: (WanderDeepLinkPresentationToken) -> Void
+    private let onSettingsDidDismiss: () -> Void
     let onFindFriends: () -> Void
 
     private let profilePhotoMenuWidth: CGFloat = 232
@@ -45,12 +48,18 @@ struct ProfileScreen: View {
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         calendarLaunchRequest: WanderProfileCalendarLaunchRequest? = nil,
         onCalendarLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
+        onSettingsPresentation: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onSettingsWillDismiss: @escaping (WanderDeepLinkPresentationToken) -> Void = { _ in },
+        onSettingsDidDismiss: @escaping () -> Void = {},
         onFindFriends: @escaping () -> Void = {}
     ) {
         _visitInvitationInboxRequestID = visitInvitationInboxRequestID
         self.presentationResetRequest = presentationResetRequest
         self.calendarLaunchRequest = calendarLaunchRequest
         self.onCalendarLaunchRequestHandled = onCalendarLaunchRequestHandled
+        self.onSettingsPresentation = onSettingsPresentation
+        self.onSettingsWillDismiss = onSettingsWillDismiss
+        self.onSettingsDidDismiss = onSettingsDidDismiss
         self.onFindFriends = onFindFriends
     }
 
@@ -95,12 +104,21 @@ struct ProfileScreen: View {
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest
             )
-                .sheet(isPresented: $showsSettings) {
-                    SettingsScreen()
-                        .environmentObject(store)
-                        .environmentObject(auth)
-                        .environmentObject(backend)
-                        .environmentObject(pushNotifications)
+                .sheet(
+                    isPresented: $showsSettings,
+                    onDismiss: onSettingsDidDismiss
+                ) {
+                    WanderRootPresentationLifecycle(
+                        surface: .profileSettings,
+                        onPresent: onSettingsPresentation,
+                        onDismiss: onSettingsWillDismiss
+                    ) {
+                        SettingsScreen()
+                            .environmentObject(store)
+                            .environmentObject(auth)
+                            .environmentObject(backend)
+                            .environmentObject(pushNotifications)
+                    }
                 }
                 .sheet(isPresented: $showsProfileCamera) {
                     ProfileCameraPicker { image in
