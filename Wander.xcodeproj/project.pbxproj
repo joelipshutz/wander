@@ -59,6 +59,7 @@
 		3AF80074E8D094F572E97DB2 /* WannaGoReminderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D64500CA1377F2C798EB38 /* WannaGoReminderTests.swift */; };
 		3CF5CCC68B3176026CC6C517 /* WanderTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B3AB5F19E8F9650C9E32C1B /* WanderTheme.swift */; };
 		3DA817E338E98E7ED70B1A67 /* ClerkKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F81D752928A4F01332482548 /* ClerkKitUI */; };
+		4056AC46D01697D51C1D24A0 /* rec-206-profile-activity-count-instability-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = FC7A37127E589B3983B23875 /* rec-206-profile-activity-count-instability-pre.json */; };
 		448B652BEB843822DC3B2FEA /* WannaGoReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159326A07925C1A61C5DEB5F /* WannaGoReminder.swift */; };
 		465D9A85D1A855682F9C99CD /* WanderActionButtonControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3483D9CDDB48DA65E279CFF8 /* WanderActionButtonControlTests.swift */; };
 		4852690B9E162276A1564F4A /* NavigationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15482C29796B02CF92D9B5AD /* NavigationContractTests.swift */; };
@@ -156,6 +157,7 @@
 		DC93B6D45F927B63B3DD012D /* SaveStreak.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */; };
 		DF7751B0E499B150900F2027 /* ClerkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8988486B1914A6E2FBB405A6 /* ClerkKit */; };
 		E4B474B631166BEA26F3C833 /* SupabaseDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21979B6601194E839F12552D /* SupabaseDTOs.swift */; };
+		E4FD872A229A8C85B3F63CEF /* rec-196-offline-map-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */; };
 		E675767BE5C249B99B816B74 /* WanderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0078639327C81EA5F98400B4 /* WanderApp.swift */; };
 		E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E1982754D8F9C0128D97CB /* AppEntryView.swift */; };
 		EF1D7162C9D93C6958A30166 /* WanderWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */; };
@@ -329,6 +331,7 @@
 		A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceCategoryTests.swift; sourceTree = "<group>"; };
 		A71C4596873A503C9978BFC8 /* PlaceProfileMapSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfileMapSurface.swift; sourceTree = "<group>"; };
 		A89D9500AD233DA43B3ACEF7 /* WanderWidgetSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetSnapshotTests.swift; sourceTree = "<group>"; };
+		A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-196-offline-map-pre.json"; sourceTree = "<group>"; };
 		AB7720F9AA05786E6D66C6D1 /* AddScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddScreen.swift; sourceTree = "<group>"; };
 		AB9594757EC47ACFBA784AE6 /* Auth.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Auth.xcconfig; sourceTree = "<group>"; };
 		AC764E60C8E6359B120367C6 /* WanderWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WanderWidgets.entitlements; sourceTree = "<group>"; };
@@ -383,6 +386,7 @@
 		F75A03C0B92270278A60AE58 /* ListPlacePhotoResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListPlacePhotoResolver.swift; sourceTree = "<group>"; };
 		F99048FDB3AD3D79FB6B853D /* LocalListModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalListModels.swift; sourceTree = "<group>"; };
 		FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreak.swift; sourceTree = "<group>"; };
+		FC7A37127E589B3983B23875 /* rec-206-profile-activity-count-instability-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-206-profile-activity-count-instability-pre.json"; sourceTree = "<group>"; };
 		FF974E1185955511D9799445 /* ListMapPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListMapPresentationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -686,6 +690,8 @@
 				909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */,
 				1CEEF5EC131D187840F4751C /* rec-168-check-in-date-reselection-pre.json */,
 				0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */,
+				A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */,
+				FC7A37127E589B3983B23875 /* rec-206-profile-activity-count-instability-pre.json */,
 			);
 			path = Fixtures;
 			sourceTree = "<group>";
@@ -1020,6 +1026,8 @@
 				4C5E13BFB09959A31A40295B /* rec-166-feed-search-pre.json in Resources */,
 				12E3D915545B913AF7F72F9E /* rec-168-check-in-date-reselection-pre.json in Resources */,
 				5A2EA828AD976F076EAD53E5 /* rec-191-map-search-menu-pre.json in Resources */,
+				E4FD872A229A8C85B3F63CEF /* rec-196-offline-map-pre.json in Resources */,
+				4056AC46D01697D51C1D24A0 /* rec-206-profile-activity-count-instability-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

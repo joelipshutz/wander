@@ -423,6 +423,7 @@ final class WanderStoreTests: XCTestCase {
         await store.refreshRemotePlaceLists(backend: backend)
         let socialHydrated = await store.refreshRemoteSocialSurfaces(backend: backend)
 
+        // Empty batch snapshots must not fabricate owner activity.
         XCTAssertTrue(calendarHydrated)
         XCTAssertTrue(socialHydrated)
         XCTAssertEqual(repository.calendarRequestCount, 1)
@@ -545,6 +546,41 @@ final class WanderStoreTests: XCTestCase {
             ),
             [visitedUserPlace.id, wannaUserPlace.id]
         )
+        XCTAssertEqual(store.stats.checkIns, 1)
+        XCTAssertEqual(store.stats.wanna, 1)
+
+        XCTAssertTrue(store.deleteVisit(visitID: "visit_west"))
+        XCTAssertEqual(
+            Set(
+                store.currentUserCalendarProjection.userPlaces.map(\.id)
+            ),
+            [wannaUserPlace.id]
+        )
+        XCTAssertEqual(store.stats.checkIns, 0)
+        XCTAssertEqual(store.stats.wanna, 1)
+
+        // A viewport request can finish after the delete RPC. Its stale,
+        // partial owner row must not repopulate the canonical Profile slice.
+        await store.refreshRemoteVisiblePlaces(
+            in: MapViewport(
+                minLatitude: 33.9,
+                minLongitude: -118.6,
+                maxLatitude: 34.1,
+                maxLongitude: -118.4
+            ),
+            backend: WanderBackend(
+                placeRepository: FakePlaceRepository(places: [westside])
+            )
+        )
+
+        XCTAssertEqual(
+            Set(
+                store.currentUserCalendarProjection.userPlaces.map(\.id)
+            ),
+            [wannaUserPlace.id]
+        )
+        XCTAssertEqual(store.stats.checkIns, 0)
+        XCTAssertEqual(store.stats.wanna, 1)
 
         let snapshotURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("wander-widget-regions-\(UUID().uuidString).json")
@@ -558,7 +594,7 @@ final class WanderStoreTests: XCTestCase {
         )
 
         let snapshot = try XCTUnwrap(snapshotStore.load())
-        XCTAssertEqual(snapshot.currentMonth.beenCount, 1)
+        XCTAssertEqual(snapshot.currentMonth.beenCount, 0)
         XCTAssertEqual(snapshot.currentMonth.wannaCount, 0)
     }
 

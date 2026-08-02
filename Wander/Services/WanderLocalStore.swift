@@ -82,6 +82,38 @@ struct CurrentUserCalendarProjection {
     var attributes: [LocalPlaceAttribute] {
         visiblePlaces.flatMap(\.attributes)
     }
+
+    func profileStats(currentUserID: String, friends: Int) -> ProfileStats {
+        let representativePlaces = VisiblePlaceGrouping.representativePlaces(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        )
+        let checkedInPlaces = representativePlaces.filter {
+            $0.userPlace.status == .been && $0.userPlace.deletedAt == nil
+        }
+        let checkInCount = checkedInPlaces.reduce(into: 0) { count, visiblePlace in
+            let referenceIDs = Set(
+                [
+                    visiblePlace.userPlace.id,
+                    visiblePlace.userPlace.localID,
+                    visiblePlace.userPlace.serverID
+                ].compactMap { $0 }
+            )
+            let matchingVisitCount = visits.filter {
+                $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
+            }.count
+            count += max(matchingVisitCount, 1)
+        }
+
+        return ProfileStats(
+            been: checkedInPlaces.count,
+            checkIns: checkInCount,
+            wanna: representativePlaces.filter {
+                $0.userPlace.status == .wannaGo && $0.userPlace.deletedAt == nil
+            }.count,
+            friends: friends
+        )
+    }
 }
 
 struct SmartFilter: Identifiable, Equatable {
@@ -928,20 +960,8 @@ final class WanderStore: ObservableObject {
     }
 
     var stats: ProfileStats {
-        let mine = userPlaces.filter { $0.userID == currentUser.id && $0.deletedAt == nil }
-        let uniqueCheckedInPlaces = mine.filter { $0.status == .been }.count
-        let checkedInPlaceIDs = Set(
-            mine
-                .filter { $0.status == .been }
-                .flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0 } }
-        )
-        let checkInCount = placeVisits.filter {
-            $0.deletedAt == nil && checkedInPlaceIDs.contains($0.userPlaceID)
-        }.count
-        return ProfileStats(
-            been: uniqueCheckedInPlaces,
-            checkIns: max(checkInCount, uniqueCheckedInPlaces),
-            wanna: mine.filter { $0.status == .wannaGo }.count,
+        currentUserCalendarProjection.profileStats(
+            currentUserID: currentUser.id,
             friends: profiles.filter { relationship(to: $0.id) == .mutual }.count
         )
     }
@@ -7304,16 +7324,18 @@ final class WanderStore: ObservableObject {
         let retainedOwnerPlaces = remoteVisiblePlaceCache.filter {
             $0.owner.id == currentUser.id
         }
-        var mergedPlaces = visiblePlaces
-
-        for retainedPlace in retainedOwnerPlaces where !mergedPlaces.contains(where: {
-            $0.owner.id == currentUser.id
-                && VisiblePlaceGrouping.matches($0, retainedPlace)
-        }) {
-            mergedPlaces.append(retainedPlace)
+        let incomingNonOwnerPlaces = visiblePlaces.filter {
+            $0.owner.id != currentUser.id
         }
+        let ownerPlaces = authoritativeCalendarUserID == currentUser.id
+            ? retainedOwnerPlaces
+            : mergeCalendarVisiblePlaces(
+                retainedOwnerPlaces + visiblePlaces.filter {
+                    $0.owner.id == currentUser.id
+                }
+            )
 
-        remoteVisiblePlaceCache = mergeVisiblePlaces(mergedPlaces)
+        remoteVisiblePlaceCache = mergeVisiblePlaces(incomingNonOwnerPlaces + ownerPlaces)
         hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
     }
 

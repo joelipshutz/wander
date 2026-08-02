@@ -1,0 +1,21 @@
+{
+  "issue": "REC-206",
+  "captured_at": "2026-08-01T21:00:00-07:00",
+  "source": "Ryan physical Xcode test",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "authoritative_hosted_state_after_report": {
+    "active_check_ins": 28,
+    "active_checked_in_places": 25,
+    "active_wanna_places": 22,
+    "westside_barber_active": false
+  },
+  "observed_check_in_count_sequence": [27, 22, 21, 26, 21],
+  "reproduction": [
+    "Open the owner Profile after launch",
+    "Switch among All, Check-ins, and Wanna",
+    "Navigate away from Profile and return",
+    "Force-quit, relaunch, and select Check-ins"
+  ],
+  "observed": "Check-in and Wanna totals change without a save or deletion. A deleted remote-backed place can remain visible until more Profile navigation, while dropped-pin deletions disappear immediately.",
+  "expected": "Profile rows and totals use one owner-calendar snapshot, stay unchanged during filter/navigation actions, and change immediately only when a place or check-in is added or deleted."
+}
