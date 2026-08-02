@@ -601,6 +601,81 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
     }
 
+    func testFollowedFeedFeaturedPlacesKeepTheActivityActorAvatar() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = """
+        {
+          "activity": [
+            {
+              "id": "event_1",
+              "event_type": "place_want_to_go",
+              "occurred_at": "2026-07-21T20:00:00Z",
+              "actor": {
+                "id": "user_ryan",
+                "handle": "ryan",
+                "display_name": "Ryan",
+                "avatar_url": "https://example.com/ryan.jpg",
+                "relationship": "follower"
+              },
+              "place": {
+                "user_place_id": "up_1",
+                "place_id": "place_1",
+                "owner_user_id": "user_ryan",
+                "owner_handle": "ryan",
+                "owner_display_name": "Ryan",
+                "owner_avatar_url": null,
+                "canonical_name": "Fern Coffee",
+                "category": "coffee",
+                "latitude": 34.0,
+                "longitude": -118.0,
+                "status": "wanna_go",
+                "visibility": "followers",
+                "saved_at": "2026-07-21T20:00:00Z",
+                "created_at": "2026-07-21T20:00:00Z",
+                "updated_at": "2026-07-21T20:00:00Z",
+                "source_type": "manual",
+                "attributes": []
+              },
+              "media": []
+            }
+          ],
+          "featured_places": [
+            {
+              "reason": "Wanna by Ryan",
+              "place": {
+                "user_place_id": "up_1",
+                "place_id": "place_1",
+                "owner_user_id": "user_ryan",
+                "owner_handle": "ryan",
+                "owner_display_name": "Ryan",
+                "owner_avatar_url": null,
+                "canonical_name": "Fern Coffee",
+                "category": "coffee",
+                "latitude": 34.0,
+                "longitude": -118.0,
+                "status": "wanna_go",
+                "visibility": "followers",
+                "saved_at": "2026-07-21T20:00:00Z",
+                "created_at": "2026-07-21T20:00:00Z",
+                "updated_at": "2026-07-21T20:00:00Z",
+                "source_type": "manual",
+                "attributes": []
+              }
+            }
+          ],
+          "next_cursor": null,
+          "fetched_at": "2026-07-21T21:10:46Z"
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc)
+
+        let page = try await repository.followedFeed(before: nil, limit: 25)
+
+        XCTAssertNil(page.featuredPlaces.first?.visiblePlace.owner.avatarURL)
+        XCTAssertEqual(page.featuredPlaces.first?.actor.avatarURL, "https://example.com/ryan.jpg")
+        XCTAssertEqual(page.featuredPlaces.first?.actor.id, page.activity.first?.actor.id)
+    }
+
     func testDiscoverPeopleRecommendationsCallsExpectedRPCAndMapsReasons() async throws {
         let rpc = RecordingRPC()
         rpc.responses["discover_profile_recommendations"] = """

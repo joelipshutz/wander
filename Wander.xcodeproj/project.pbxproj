@@ -74,6 +74,7 @@
 		540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */; };
 		585EF6A4AC3B56563BD53412 /* MapHitTestingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */; };
 		58986486438F908962A1B26E /* WanderWidgetConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */; };
+		5A2EA828AD976F076EAD53E5 /* rec-191-map-search-menu-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */; };
 		5E4B71CB254F3580D462444C /* WanderStorePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8930E1796F6C94740DFFF448 /* WanderStorePersistence.swift */; };
 		608BB46CD2A6B2D1CA394015 /* WanderWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F1EB6D9E784DEB05C9AC510B /* WanderWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		624B7434FC70AF6F3EE1EB94 /* ProfileAvatarStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3993D0CE7A907E02E0B1A590 /* ProfileAvatarStorage.swift */; };
@@ -232,6 +233,7 @@
 		0757A5692D997B5355944002 /* SharedPlaceImportInboxDrainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInboxDrainer.swift; sourceTree = "<group>"; };
 		09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-106-manual-place-search-pre.json"; sourceTree = "<group>"; };
 		0A294B4D596A37D263243FAF /* SharedPlaceImportInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInbox.swift; sourceTree = "<group>"; };
+		0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-191-map-search-menu-pre.json"; sourceTree = "<group>"; };
 		0DA94EC62E68038D903E3501 /* ListsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListsScreen.swift; sourceTree = "<group>"; };
 		0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryProtocols.swift; sourceTree = "<group>"; };
 		10F65E6837895B0A19DDFAB2 /* SupabaseRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseRepositories.swift; sourceTree = "<group>"; };
@@ -683,6 +685,7 @@
 				AEA406C00A5D6B89E58C8ED5 /* rec-161-profile-ratings-pre.json */,
 				909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */,
 				1CEEF5EC131D187840F4751C /* rec-168-check-in-date-reselection-pre.json */,
+				0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */,
 			);
 			path = Fixtures;
 			sourceTree = "<group>";
@@ -1016,6 +1019,7 @@
 				3581910694825E93BDF73089 /* rec-161-profile-ratings-pre.json in Resources */,
 				4C5E13BFB09959A31A40295B /* rec-166-feed-search-pre.json in Resources */,
 				12E3D915545B913AF7F72F9E /* rec-168-check-in-date-reselection-pre.json in Resources */,
+				5A2EA828AD976F076EAD53E5 /* rec-191-map-search-menu-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

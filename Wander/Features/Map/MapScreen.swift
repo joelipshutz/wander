@@ -288,12 +288,16 @@ struct MapScreen: View {
                                 onSubmit: submitMapSearch
                             )
 
-                            WanderGlassActionButton(
-                                systemImage: "plus",
-                                accessibilityLabel: "Add a place",
-                                accessibilityIdentifier: "map.headerAdd",
-                                action: onAdd
-                            )
+                            if isMapSearchFocused {
+                                MapSearchCancelButton(action: cancelMapSearch)
+                            } else {
+                                WanderGlassActionButton(
+                                    systemImage: "plus",
+                                    accessibilityLabel: "Add a place",
+                                    accessibilityIdentifier: "map.headerAdd",
+                                    action: onAdd
+                                )
+                            }
                         }
                         .padding(.horizontal, WanderTheme.spacing3)
 
@@ -309,32 +313,34 @@ struct MapScreen: View {
                             MapSearchMessage(text: mapSearchMessage)
                                 .padding(.horizontal, WanderTheme.spacing3)
                         }
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: WanderTheme.spacing1) {
-                                ForEach(MapFilter.allCases) { filter in
-                                    if filter == .social {
-                                        MapSocialFilterMenu(
-                                            isSelected: selectedFilters.contains(.social),
-                                            selectedOwner: selectedSocialOwner,
-                                            ownerOptions: socialOwnerOptions,
-                                            showAll: showAllSocialPlaces,
-                                            hideSocial: hideSocialPlaces,
-                                            selectOwner: showSocialPlaces
-                                        )
-                                    } else {
-                                        Button {
-                                            toggle(filter)
-                                        } label: {
-                                            MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                        if !isMapSearchFocused {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: WanderTheme.spacing1) {
+                                    ForEach(MapFilter.allCases) { filter in
+                                        if filter == .social {
+                                            MapSocialFilterMenu(
+                                                isSelected: selectedFilters.contains(.social),
+                                                selectedOwner: selectedSocialOwner,
+                                                ownerOptions: socialOwnerOptions,
+                                                showAll: showAllSocialPlaces,
+                                                hideSocial: hideSocialPlaces,
+                                                selectOwner: showSocialPlaces
+                                            )
+                                        } else {
+                                            Button {
+                                                toggle(filter)
+                                            } label: {
+                                                MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                        .buttonStyle(.plain)
                                     }
                                 }
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .padding(.vertical, WanderTheme.spacing1)
                             }
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .padding(.vertical, WanderTheme.spacing1)
+                            .frame(height: 48)
                         }
-                        .frame(height: 48)
 
                     }
 
@@ -353,6 +359,7 @@ struct MapScreen: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .safeAreaPadding(.top, WanderTheme.spacing2)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
                 selectedPlaceProfileSurface
             }
@@ -977,6 +984,16 @@ struct MapScreen: View {
                 mapSearchTask = nil
             }
         }
+    }
+
+    private func cancelMapSearch() {
+        typeaheadTask?.cancel()
+        typeaheadSuggestions = []
+        isLoadingTypeahead = false
+        mapSearchMessage = nil
+        isMapSearchFocused = false
+        mapQuery = ""
+        dismissKeyboard()
     }
 
     @MainActor
@@ -2372,6 +2389,7 @@ private struct SearchBar: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
             TextField("search your map or people...", text: $query)
                 .focused(isFocused)
+                .accessibilityIdentifier("map.searchField")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)
@@ -2424,6 +2442,23 @@ private struct SearchBar: View {
     }
 }
 
+private struct MapSearchCancelButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("Cancel")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(minWidth: 64, minHeight: 44)
+                .contentShape(Capsule())
+                .wanderGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("map.searchCancel")
+    }
+}
+
 private struct MapTypeaheadList: View {
     let suggestions: [MapSearchSuggestion]
     let isLoading: Bool
@@ -2431,8 +2466,10 @@ private struct MapTypeaheadList: View {
     let onAdd: (MapSearchSuggestion) -> Void
 
     var body: some View {
+        let visibleSuggestions = Array(suggestions.prefix(4))
+
         VStack(spacing: 0) {
-            ForEach(suggestions) { suggestion in
+            ForEach(visibleSuggestions) { suggestion in
                 MapTypeaheadRow(
                     suggestion: suggestion,
                     onSelect: {
@@ -2443,7 +2480,7 @@ private struct MapTypeaheadList: View {
                     }
                 )
 
-                if suggestion.id != suggestions.last?.id {
+                if suggestion.id != visibleSuggestions.last?.id {
                     Divider()
                         .overlay(WanderTheme.borderHairline.color)
                         .padding(.leading, 52)
@@ -2465,13 +2502,9 @@ private struct MapTypeaheadList: View {
                 .accessibilityLabel("Looking for nearby places")
             }
         }
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        )
-        .shadow(color: WanderTheme.textInk.color.opacity(0.1), radius: 12, x: 0, y: 6)
+        .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("map.typeaheadPanel")
     }
 }
 

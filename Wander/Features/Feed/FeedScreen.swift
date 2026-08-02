@@ -31,20 +31,15 @@ struct FeedScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                VStack(spacing: WanderTheme.spacing2) {
-                    WanderGlassHeader(
-                        title: "feed",
-                        subtitle: "places and people from people you trust"
-                    ) {
-                        WanderGlassActionButton(
-                            systemImage: "plus",
-                            accessibilityLabel: "Add a place",
-                            accessibilityIdentifier: "feed.headerAdd",
-                            action: onAdd
-                        )
-                    }
-
+                HStack(spacing: WanderTheme.spacing2) {
                     FeedSurfaceTabs(selectedSurface: $selectedSurface)
+
+                    WanderGlassActionButton(
+                        systemImage: "plus",
+                        accessibilityLabel: "Add a place",
+                        accessibilityIdentifier: "feed.headerAdd",
+                        action: onAdd
+                    )
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.top, WanderTheme.spacing2)
@@ -959,26 +954,19 @@ private struct FeedFeaturedCard: View {
             .accessibilityLabel("Open \(featured.visiblePlace.place.canonicalName)")
 
             Button {
-                openProfile(ProfileShell(
-                    id: featured.visiblePlace.owner.id,
-                    handle: featured.visiblePlace.owner.handle,
-                    displayName: featured.visiblePlace.owner.displayName,
-                    avatarURL: featured.visiblePlace.owner.avatarURL,
-                    bio: featured.visiblePlace.owner.bio,
-                    relationship: .follower
-                ))
+                openProfile(featured.actor)
             } label: {
                 HStack(alignment: .top, spacing: WanderTheme.spacing1) {
                     WanderAvatar(
-                        initials: featured.visiblePlace.owner.initials,
-                        avatarURL: featured.visiblePlace.owner.avatarURL,
+                        initials: initials(for: featured.actor.displayName),
+                        avatarURL: featured.actor.avatarURL,
                         size: 20,
-                        color: featured.visiblePlace.owner.handle == "ryan"
+                        color: featured.actor.handle == "ryan"
                             ? WanderTheme.avatarRyan.color
                             : WanderTheme.pinSocial.color
                     )
 
-                    Text("• \(featured.visiblePlace.owner.displayName) • \(featuredActivity)")
+                    Text("• \(featured.actor.displayName) • \(featuredActivity)")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(WanderTheme.stateInfo.color)
                         .fixedSize(horizontal: false, vertical: true)
@@ -986,7 +974,7 @@ private struct FeedFeaturedCard: View {
                 .accessibilityElement(children: .combine)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(featured.visiblePlace.owner.displayName), \(featuredActivity)")
+            .accessibilityLabel("\(featured.actor.displayName), \(featuredActivity)")
 
             Spacer(minLength: 0)
         }

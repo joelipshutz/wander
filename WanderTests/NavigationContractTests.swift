@@ -127,10 +127,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(map.contains("tone: isSelected ? .selected : .neutral"))
         XCTAssertTrue(map.contains("filter.trimColor(isSelected: isSelected)"))
 
-        XCTAssertTrue(feed.contains("WanderGlassHeader("))
+        XCTAssertFalse(feed.contains("WanderGlassHeader("))
         XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))
         XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
         XCTAssertTrue(feed.contains("-WanderFeedSurface"))
+        let feedControlRow = try XCTUnwrap(
+            feed.components(separatedBy: "NavigationStack {").last?
+                .components(separatedBy: "switch selectedSurface").first
+        )
+        XCTAssertTrue(feedControlRow.contains("HStack(spacing: WanderTheme.spacing2) {"))
+        XCTAssertTrue(feedControlRow.contains("FeedSurfaceTabs(selectedSurface: $selectedSurface)"))
+        XCTAssertTrue(feedControlRow.contains("WanderGlassActionButton("))
         let feedSearch = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedSearchLauncher: View").last?
                 .components(separatedBy: "private struct FeedSectionHeading: View").first
@@ -161,6 +168,35 @@ final class NavigationContractTests: XCTestCase {
             MapScreen.resolvedInitialMapSearchQuery(from: ["Wander"]),
             ""
         )
+    }
+
+    func testFocusedMapSearchKeepsSafeChromeAndUsesABoundedGlassMenu() throws {
+        let fixtureURL = projectRoot.appendingPathComponent(
+            "WanderTests/Fixtures/rec-191-map-search-menu-pre.json"
+        )
+        let fixtureData = try Data(contentsOf: fixtureURL)
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
+        XCTAssertEqual(
+            fixture["bug"] as? String,
+            "focused Map search shifts its header behind the status bar and lets the typeahead menu consume the map"
+        )
+
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertTrue(map.contains("if isMapSearchFocused {\n                                MapSearchCancelButton(action: cancelMapSearch)"))
+        XCTAssertTrue(map.contains(".accessibilityIdentifier(\"map.searchCancel\")"))
+        XCTAssertTrue(map.contains("if !isMapSearchFocused {\n                            ScrollView(.horizontal"))
+        XCTAssertTrue(map.contains(".ignoresSafeArea(.keyboard, edges: .bottom)"))
+        let typeahead = try XCTUnwrap(
+            map.components(separatedBy: "private struct MapTypeaheadList: View").last?
+                .components(separatedBy: "private struct MapTypeaheadRow: View").first
+        )
+        XCTAssertTrue(typeahead.contains("let visibleSuggestions = Array(suggestions.prefix(4))"))
+        XCTAssertTrue(typeahead.contains(".wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)"))
+        XCTAssertFalse(typeahead.contains(".background(WanderTheme.surfaceRaised.color)"))
     }
 
     func testFeedSaveUsesTheCanonicalPlaceSaveFlowAndMakesEveryActivityACompactTicket() throws {
@@ -216,7 +252,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(featuredCard.contains("width: FeedFeaturedLayout.cardWidth"))
         XCTAssertTrue(featuredCard.contains("private var featuredActivity: String"))
         XCTAssertTrue(featuredCard.contains("WanderAvatar("))
-        XCTAssertTrue(featuredCard.contains("• \\(featured.visiblePlace.owner.displayName) • \\(featuredActivity)"))
+        XCTAssertTrue(featuredCard.contains("openProfile(featured.actor)"))
+        XCTAssertTrue(featuredCard.contains("avatarURL: featured.actor.avatarURL"))
+        XCTAssertTrue(featuredCard.contains("• \\(featured.actor.displayName) • \\(featuredActivity)"))
+        XCTAssertFalse(featuredCard.contains("avatarURL: featured.visiblePlace.owner.avatarURL"))
         XCTAssertTrue(featuredCard.contains(".fixedSize(horizontal: false, vertical: true)"))
         XCTAssertFalse(featuredCard.contains("Label(\"View place\""))
     }

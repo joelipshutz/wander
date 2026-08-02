@@ -2,6 +2,42 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testFocusedMapSearchStaysWithinTheUsableViewport() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderMapSearchQuery",
+            "coffee"
+        ]
+        app.launch()
+
+        let searchField = app.textFields["map.searchField"]
+        let cancelButton = app.buttons["map.searchCancel"]
+        let typeaheadPanel = app.otherElements["map.typeaheadPanel"]
+        let keyboard = app.keyboards.firstMatch
+
+        XCTAssertTrue(searchField.waitForExistence(timeout: 4))
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 2))
+        XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 4))
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 2))
+
+        let keyboardTutorialContinue = app.buttons["Continue"]
+        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
+            keyboardTutorialContinue.tap()
+        }
+
+        XCTAssertGreaterThan(searchField.frame.minY, 44)
+        XCTAssertGreaterThanOrEqual(typeaheadPanel.frame.minY, searchField.frame.maxY)
+        XCTAssertLessThan(typeaheadPanel.frame.maxY, keyboard.frame.minY)
+        XCTAssertFalse(app.buttons["map.headerAdd"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-191 focused Map search post-fix"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testRatingSliderRespondsThroughoutContinuousDrag() {
         let app = XCUIApplication()
         app.launchArguments = [
