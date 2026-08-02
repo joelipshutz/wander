@@ -69,6 +69,14 @@ private final class AuthenticatedNotificationGate: @unchecked Sendable {
         defer { lock.unlock() }
         switch state {
         case .authenticated:
+            guard let authenticatedUserID else { return nil }
+            pendingResponses.append(
+                PendingResponse(
+                    userInfo: userInfo,
+                    expectedUserID: authenticatedUserID,
+                    validationGeneration: validationGeneration
+                )
+            )
             return authenticatedUserID
         case .unknown:
             guard let expectedUserID else { return nil }
@@ -213,15 +221,30 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let boxedUserInfo = NotificationUserInfoBox(response.notification.request.content.userInfo)
+        #if DEBUG
+        WanderDebugLog.remote.debug("notification response received action=\(response.actionIdentifier, privacy: .public)")
+        #endif
         if let receivingUserID = Self.receiveAuthenticatedNotificationUserInfo(boxedUserInfo.value) {
             Task { @MainActor in
-                guard Self.shouldAcceptAuthenticatedNotification(for: receivingUserID) else { return }
+                guard Self.shouldAcceptAuthenticatedNotification(for: receivingUserID) else {
+                    #if DEBUG
+                    WanderDebugLog.remote.debug("notification response dropped after auth gate")
+                    #endif
+                    return
+                }
+                #if DEBUG
+                WanderDebugLog.remote.debug("notification response posting to app")
+                #endif
                 NotificationCenter.default.post(
                     name: Self.didReceiveNotificationResponse,
                     object: nil,
                     userInfo: [Self.userInfoKey: boxedUserInfo.value]
                 )
             }
+        } else {
+            #if DEBUG
+            WanderDebugLog.remote.debug("notification response buffered or dropped by auth gate")
+            #endif
         }
         completionHandler()
     }
@@ -477,7 +500,12 @@ final class PushNotificationManager: ObservableObject {
         if let eventID, handledEventIDs.contains(eventID) {
             return false
         }
-        guard let destination = Self.destination(from: userInfo) else { return false }
+        guard let destination = Self.destination(from: userInfo) else {
+            #if DEBUG
+            WanderDebugLog.remote.debug("notification response has no routable destination")
+            #endif
+            return false
+        }
         if let eventID {
             handledEventIDs.append(eventID)
             if handledEventIDs.count > 100 {
@@ -485,6 +513,9 @@ final class PushNotificationManager: ObservableObject {
             }
         }
         navigationRequest = NotificationNavigationRequest(destination: destination)
+        #if DEBUG
+        WanderDebugLog.remote.debug("notification navigation request created destination=\(String(describing: destination), privacy: .public)")
+        #endif
         return true
     }
 
