@@ -28608,3 +28608,32 @@ Outcome and validation:
   worktree and its Branch Chooser showed `codex/rec-206-delete-refresh`.
   Automatic PR creation was blocked by a stale local `gh` token and GitHub App
   PR-write 403; use the branch's GitHub compare/new-PR URL after reauthentication.
+
+### 2026-08-01 21:36 PDT follow-up - unstable Profile totals
+
+- Ryan's physical-device retest reported Check-in totals changing
+  `27 → 22 → 21`, then `26 → 21` after relaunch/filtering, with Wanna totals
+  also changing without mutations. Westside Barber Co reappeared temporarily
+  after deletion, while two dropped pins disappeared immediately.
+- Read-only hosted Supabase evidence showed one stable complete owner snapshot:
+  28 active visits, 25 active checked-in places, and 22 active Wanna places.
+  Westside Barber Co was inactive with no active visits, confirming its delete
+  succeeded server-side. PostHog was not pulled because the report had no exact
+  build/timestamp and the hosted state plus deterministic cache reproduction
+  already identified the next action.
+- Root cause: owner Profile counts mixed the calendar projection's user-place
+  rows with the global visit cache, while partial viewport responses could
+  overwrite or resurrect current-user rows in the authoritative calendar cache.
+- Fix commit `0afc93320` makes owner Profile totals derive entirely from the same
+  deduplicated calendar projection as Recent activity and prevents partial
+  Map/Discover viewport responses from modifying the authoritative owner slice.
+- Added a pre-fix reproduction fixture and extended the viewport regression to
+  prove a stale response cannot re-add a just-deleted remote-backed check-in;
+  counts remain `1/1` before deletion and `0/1` afterward.
+- Validation: XcodeGen generation and `git diff --check` passed; four focused
+  check-in/Wanna deletion, relaunch/retry, and stale-cache tests passed; final
+  full `xcodebuild test` passed on iPhone 17 Pro / iOS 26.5 with 849 unit tests
+  and 4 UI tests, zero failures. The documented iPhone 16 Plus / iOS 18.6
+  destination was unavailable on this Mac.
+- No migration, data mutation, build-number bump, archive, upload, or TestFlight
+  release was performed.
