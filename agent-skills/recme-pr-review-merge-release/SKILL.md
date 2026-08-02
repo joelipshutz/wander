@@ -31,6 +31,9 @@ Joe or Ryan decides the batch is worth testing.
 - Merge/land/review-and-merge language is not release authorization. Explicit
   release language includes "push the TestFlight build", "upload the TF build",
   "release this to TestFlight", and "go push in your build".
+- Updating the rolling Linear ticket's `## TestFlight note` is mandatory release
+  bookkeeping for every eligible `main` landing. It is not release
+  authorization and does not itself bump, archive, upload, or announce a build.
 - Skip draft/WIP/hold/do-not-merge PRs, conflicts, failing required checks, or a
   head SHA already reviewed by this workflow unless new commits were pushed.
 - Do not submit an App Store production release, change the marketing version,
@@ -71,13 +74,15 @@ creates a focused bug; it does not keep every merged issue in `In Review`.
 ## Rolling `Next TestFlight` Contract
 
 There must be exactly one open Linear issue in the `recme` team and `mvp`
-project whose exact title is `Next TestFlight` whenever no release cutoff is in
-the brief build-number merge window. It normally stays in `Todo`.
+project whose exact title is `Next TestFlight`. It normally stays in `Todo` and
+is reused across releases.
 
-The issue is an append-only release manifest, not an approval queue. Its
-description records the last completed TestFlight build and immutable
-`testflight/build-<n>` baseline tag/commit. Each eligible merge adds the
-implementation issue as related and posts one comment:
+The issue is the mutable release queue, not an approval queue. Its description
+records the last completed TestFlight build and immutable
+`testflight/build-<n>` baseline tag/commit plus exactly one active section named
+`## TestFlight note`. Each eligible merge adds the implementation issue as
+related and appends one entry to that section while also posting the same
+payload as an immutable history comment:
 
 ```markdown
 Release payload — REC-<id> / PR #<n> / <merge-sha>
@@ -88,14 +93,18 @@ Release payload — REC-<id> / PR #<n> / <merge-sha>
 - Validation: <tests/build/visual or hosted verification already passed>
 ```
 
+The `## TestFlight note` section is the source for the next build's tester copy.
+Preserve all other description content. Never create a second note heading;
+append, correct, or deduplicate entries within the existing section.
+
 At merge time:
 
 1. Decide whether the diff affects app code, UI, schema/contracts required by
    the app, testable behavior, user-facing copy/assets, or release QA.
 2. For eligible work, find the single open `Next TestFlight` issue. If none
-   exists outside the documented cutoff window, create it. If multiple exist,
-   stop and reconcile them before writing.
-3. Relate the implementation issue and post the payload while context is fresh.
+   exists, create it. If multiple exist, stop and reconcile them before writing.
+3. Relate the implementation issue, update the `## TestFlight note` section,
+   and post the matching payload comment while context is fresh.
 4. Move the implementation issue to `Done` after merge validation. Do not wait
    for TestFlight.
 5. Exclude docs/process-only and truly backend-only work. Explain any non-obvious
@@ -157,8 +166,10 @@ Merge only when:
 
 If clean, squash-merge and safely delete the branch. Then complete both durable
 updates in the same workflow: the implementation issue becomes `Done`, and any
-eligible release payload is appended to `Next TestFlight`. No TestFlight build
-or build-number change follows unless separately requested.
+eligible release payload is appended to the `Next TestFlight` issue's
+`## TestFlight note` and comment history. No TestFlight build or build-number
+change follows unless separately requested. A landing is incomplete until this
+note update succeeds or the diff is explicitly classified as release-excluded.
 
 ## Manual Batched TestFlight Release
 
@@ -175,9 +186,10 @@ explicit release.
    current `origin/main`. This is a mechanical completeness check, not product
    re-triage. Correct missing/stale payloads and identify required migrations,
    deploys, flags, or manual QA.
-3. Choose the next monotonically increasing build number. Rename the rolling
-   issue to `TestFlight build <n>`, move it to `In Progress`, and record the
-   intended pre-bump cutoff SHA.
+3. Choose the next monotonically increasing build number. Snapshot the current
+   `## TestFlight note` into a new `TestFlight build <n>` Linear release issue,
+   move that release issue to `In Progress`, and record the intended pre-bump
+   cutoff SHA. Keep the rolling `Next TestFlight` issue open.
 4. Briefly hold other app-code merges until the build-number PR lands and the
    exact candidate commit is captured. This prevents unmanifested code from
    entering the candidate. Docs-only work may continue if it cannot affect the
@@ -193,10 +205,10 @@ explicit release.
 4. Open and merge the metadata-only release PR through the normal gate. The
    complete integration suite runs on the exact merged candidate rather than
    re-running every individual product review on this metadata PR.
-5. Record the exact merged commit as the release candidate. Immediately create
-   the fresh `Next TestFlight` issue in `Todo` with that pending build/candidate
-   as its provisional baseline, then release the short merge hold. New merges
-   now append to the fresh issue and are not included in the active build.
+5. Record the exact merged commit as the release candidate, then release the
+   short merge hold. New merges continue appending to `Next TestFlight`, but
+   their merge SHAs place them after the recorded cutoff and outside the active
+   build.
 
 ### 3. Validate, upload, and finalize
 
@@ -222,14 +234,20 @@ explicit release.
    included payloads, tests, migrations/deploys, App Store Connect status,
    Slack link, known issues, and next action. Move it to `Done` only when the
    requested TestFlight release is actually available/complete.
-8. Replace the provisional baseline on the fresh `Next TestFlight` issue with
-   the completed build tag/commit. Do not create a release-record docs PR.
+8. Only after the build is `VALID`, its What to Test copy is published, and it
+   is attached to the public TestFlight group, clear the shipped entries from
+   `Next TestFlight`'s `## TestFlight note`. Preserve entries whose merge SHA is
+   after the candidate or whose work did not ship. Update the baseline to the
+   completed build tag/commit. The note should say `No pending changes.` when
+   nothing remains. Do not clear it on upload, processing, copy, or attachment
+   failure. Do not create a release-record docs PR.
 
 If upload/signing/App Store Connect blocks completion, keep the active release
 issue `In Progress` and comment with build number, exact candidate, validation,
-blocker, and continuation commands. Do not tag the build or claim it is live.
-The fresh `Next TestFlight` issue may continue collecting later merges, but its
-baseline remains explicitly provisional until the blocked build completes.
+blocker, and continuation commands. Do not tag the build, clear the captured
+entries from `Next TestFlight`, or claim it is live. The rolling issue may keep
+collecting later merges; merge-SHA cutoff keeps those entries out of the blocked
+build.
 
 ## Tester Slack Note
 
@@ -251,9 +269,10 @@ announcement Joe explicitly requests.
 ## Completion
 
 - Merge-only completion: PR merged, implementation issue `Done`, eligible
-  payload appended to `Next TestFlight`, no build or tester announcement.
+  payload appended to the `Next TestFlight` note and history, no build or tester
+  announcement.
 - Release completion: exact candidate validated/uploaded, immutable tag pushed,
-  release issue `Done`, fresh `Next TestFlight` baseline finalized, and tester
-  note posted.
+  release issue `Done`, shipped entries cleared from `Next TestFlight`, baseline
+  finalized, and tester note posted.
 - Blocked completion: durable Linear/PR handoff contains exact state and restart
   commands. No repo diary or record-only PR is required.
