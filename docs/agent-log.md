@@ -28635,5 +28635,8 @@ Outcome and validation:
   full `xcodebuild test` passed on iPhone 17 Pro / iOS 26.5 with 849 unit tests
   and 4 UI tests, zero failures. The documented iPhone 16 Plus / iOS 18.6
   destination was unavailable on this Mac.
+- Integrated latest `origin/main` commit `ba0e6770d` after it landed during
+  validation; its deleted-visit-photo changes merged cleanly, and all four
+  focused REC-206 tests passed again afterward.
 - No migration, data mutation, build-number bump, archive, upload, or TestFlight
   release was performed.
