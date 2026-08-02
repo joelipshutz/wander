@@ -27,7 +27,7 @@ struct SettingsScreen: View {
             SettingsSectionTitle("account")
 
             switch auth.state {
-            case .signedIn(let session):
+            case .signedIn(let session), .offline(let session, _):
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     WanderAvatar(
                         initials: initials(for: session),

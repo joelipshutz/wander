@@ -53,6 +53,41 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testCompletedUserRoutesToCachedMapWhenSessionValidationIsOffline() {
+        let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
+        let local = OnboardingLocalState(
+            nextStep: .notifications,
+            isComplete: true,
+            needsServerCompletion: false
+        )
+
+        XCTAssertEqual(
+            AppEntryStateResolver.offlineState(
+                session: session,
+                localState: local,
+                message: "Saved map available offline"
+            ),
+            .ready(session: session)
+        )
+    }
+
+    func testIncompleteUserKeepsOfflineRecoveryInsteadOfBypassingOnboarding() {
+        let session = AuthSession(userID: "user", displayName: nil, handle: nil)
+
+        XCTAssertEqual(
+            AppEntryStateResolver.offlineState(
+                session: session,
+                localState: .fresh,
+                message: "Saved map available offline"
+            ),
+            .recoverableFailure(
+                session: session,
+                message: "Saved map available offline",
+                canContinueOffline: false
+            )
+        )
+    }
+
     func testOptionalStepOrderIsStableForPhaseBReuse() {
         XCTAssertEqual(OnboardingStep.identity.next, .location)
         XCTAssertEqual(OnboardingStep.location.next, .contacts)

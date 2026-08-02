@@ -4,11 +4,25 @@ enum AuthState: Equatable {
     case signedOut
     case loading
     case signedIn(AuthSession)
+    case offline(AuthSession, message: String)
     case unavailable(String)
 
     var isSignedIn: Bool {
-        if case .signedIn = self { return true }
-        return false
+        switch self {
+        case .signedIn, .offline:
+            return true
+        case .signedOut, .loading, .unavailable:
+            return false
+        }
+    }
+
+    var session: AuthSession? {
+        switch self {
+        case .signedIn(let session), .offline(let session, _):
+            return session
+        case .signedOut, .loading, .unavailable:
+            return nil
+        }
     }
 }
 
@@ -22,6 +36,8 @@ extension AuthState {
             return "loading"
         case .signedIn(let session):
             return "signed_in:\(WanderDebugLog.shortID(session.userID))"
+        case .offline(let session, _):
+            return "offline:\(WanderDebugLog.shortID(session.userID))"
         case .unavailable:
             return "unavailable"
         }
@@ -29,7 +45,7 @@ extension AuthState {
 }
 #endif
 
-struct AuthSession: Equatable, Identifiable {
+struct AuthSession: Codable, Equatable, Identifiable {
     let userID: String
     let displayName: String?
     let handle: String?
@@ -50,6 +66,60 @@ struct AuthSession: Equatable, Identifiable {
         self.handle = handle
         self.email = email
         self.phoneNumber = phoneNumber
+    }
+}
+
+@MainActor
+struct AuthSessionCache {
+    let load: () -> AuthSession?
+    let save: (AuthSession?) -> Void
+
+    static let disabled = AuthSessionCache(load: { nil }, save: { _ in })
+
+    static let live = file(
+        url: FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Wander", isDirectory: true)
+            .appendingPathComponent("last-auth-session-v1.json")
+    )
+
+    static func file(url: URL) -> AuthSessionCache {
+        AuthSessionCache(
+            load: {
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? JSONDecoder().decode(AuthSession.self, from: data)
+            },
+            save: { session in
+                guard let session else {
+                    try? FileManager.default.removeItem(at: url)
+                    return
+                }
+
+                do {
+                    try FileManager.default.createDirectory(
+                        at: url.deletingLastPathComponent(),
+                        withIntermediateDirectories: true,
+                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+                    )
+                    let cachedSession = AuthSession(
+                        userID: session.userID,
+                        displayName: session.displayName,
+                        handle: session.handle
+                    )
+                    let data = try JSONEncoder().encode(cachedSession)
+                    try data.write(
+                        to: url,
+                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                    )
+                } catch {
+                    #if DEBUG
+                    WanderDebugLog.remote.error(
+                        "auth session cache write failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+                    )
+                    #endif
+                }
+            }
+        )
     }
 }
 
@@ -321,11 +391,15 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     private func synchronizeState(_ state: AuthState) {
         self.state = state
-        isSessionValidated = state.isSignedIn
+        if case .signedIn = state {
+            isSessionValidated = true
+        } else {
+            isSessionValidated = false
+        }
         switch state {
         case .signedIn:
             nativeAuthDidDismiss()
-        case .unavailable:
+        case .offline, .unavailable:
             activeGate = nil
             nativeAuthDidDismiss()
         case .loading, .signedOut:

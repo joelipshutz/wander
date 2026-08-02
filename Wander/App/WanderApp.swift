@@ -273,12 +273,12 @@ struct WanderAppEntryView: View {
         )
 
         ZStack {
-            if case .signedIn(let session) = auth.state {
+            if let session = auth.state.session {
                 WanderRootView(
                     initialSession: session,
-                    isSessionValidated: destination == .authenticated,
+                    isSessionValidated: auth.isSessionValidated,
                     deepLinkLaunchRequest: deepLinkInbox.request(
-                        ifSessionValidated: destination == .authenticated
+                        ifSessionValidated: auth.isSessionValidated
                     ),
                     onDeepLinkLaunchRequestHandled: { requestID in
                         deepLinkInbox.consume(requestID)
@@ -307,11 +307,7 @@ struct WanderAppEntryView: View {
         }
         .onChange(of: auth.state, initial: true) { _, state in
             let newUserID: String?
-            if case .signedIn(let session) = state {
-                newUserID = session.userID
-            } else {
-                newUserID = nil
-            }
+            newUserID = state.session?.userID
             if authenticatedUserID != newUserID {
                 if authenticatedUserID != nil {
                     WanderWidgetSnapshotPublisher.clear()
@@ -329,7 +325,7 @@ struct WanderAppEntryView: View {
         .onChange(of: destination, initial: true) { _, destination in
             switch destination {
             case .authenticated:
-                if case .signedIn(let session) = auth.state {
+                if auth.isSessionValidated, case .signedIn(let session) = auth.state {
                     WanderAppDelegate.setAuthenticatedSessionActive(userID: session.userID)
                 }
             case .signIn, .unavailable:
@@ -408,6 +404,8 @@ struct WanderAppEntryView: View {
             return .signIn
         case .signedIn:
             return isSessionValidated ? .authenticated : .loading
+        case .offline:
+            return .authenticated
         case .unavailable(let message):
             return .unavailable(message)
         }
