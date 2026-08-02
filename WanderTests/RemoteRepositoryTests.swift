@@ -2568,6 +2568,43 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testAuthenticatedNotificationResponseSurvivesSameAccountRevalidation() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = ["recme": ["event_id": "event_a"]]
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo),
+            "user_a"
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"] as? [String: String],
+            ["event_id": "event_a"]
+        )
+    }
+
+    func testAuthenticatedNotificationResponseIsDroppedWhenAccountChanges() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = ["recme": ["event_id": "event_a"]]
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo),
+            "user_a"
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_b")
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_b")
+
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_b"))
+    }
+
     func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
         let manager = PushNotificationManager()
         let userInfo: [AnyHashable: Any] = [

@@ -104,6 +104,7 @@ struct AppEntryView: View {
             #endif
             await coordinator.start()
             didFinishInitialResolution = true
+            receivePendingControlLaunch()
         }
         .onChange(of: auth.state) { _, state in
             guard didFinishInitialResolution else { return }
@@ -117,6 +118,7 @@ struct AppEntryView: View {
                 )
             case .active:
                 guard didFinishInitialResolution else { return }
+                receivePendingControlLaunch()
                 let shouldRefreshSession = foregroundRefreshPolicy.shouldRefreshSession(
                     atUptime: ProcessInfo.processInfo.systemUptime
                 )
@@ -126,7 +128,7 @@ struct AppEntryView: View {
                     return
                 }
                 auth.beginSessionValidation()
-                Task { await coordinator.start() }
+                Task { await coordinator.refreshSessionPreservingReadyState() }
             case .inactive:
                 break
             @unknown default:
@@ -148,6 +150,15 @@ struct AppEntryView: View {
             return
         }
         deepLinkInbox.receive(url)
+    }
+
+    private func receivePendingControlLaunch() {
+        guard let request = WanderControlLaunchRequestStore().takePendingRequest() else {
+            return
+        }
+        deepLinkInbox.receive(
+            WanderDeepLinkLaunchRequest(id: request.id, route: request.route)
+        )
     }
 }
 

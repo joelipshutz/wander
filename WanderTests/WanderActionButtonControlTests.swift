@@ -2,37 +2,22 @@ import XCTest
 @testable import Wander
 
 final class WanderActionButtonControlTests: XCTestCase {
-    @MainActor
-    func testNavigationCenterRetainsLatestRequestUntilMatchingConsumption() throws {
-        let center = WanderControlNavigationCenter()
+    func testControlLaunchStoreMovesQuickCaptureAcrossProcessesExactlyOnce() throws {
+        let suiteName = "WanderActionButtonControlTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = WanderControlLaunchRequestStore(defaults: defaults)
+        let requestID = UUID()
 
-        center.request(.map)
-        let staleRequest = try XCTUnwrap(center.pendingRequest)
-
-        center.request(.quickCapture)
-        let latestRequest = try XCTUnwrap(center.pendingRequest)
-
-        XCTAssertNotEqual(staleRequest.id, latestRequest.id)
-        XCTAssertEqual(latestRequest.route, .quickCapture)
-
-        center.consume(staleRequest.id)
-        XCTAssertEqual(center.pendingRequest, latestRequest)
-
-        center.consume(latestRequest.id)
-        XCTAssertNil(center.pendingRequest)
-    }
-
-    @available(iOS 18.0, *)
-    @MainActor
-    func testControlDestinationRoutesToExistingQuickCaptureFlow() {
         XCTAssertEqual(
-            WanderControlDestination.checkInHere.route,
-            .quickCapture
+            store.request(.checkInHere, id: requestID),
+            WanderControlNavigationRequest(id: requestID, route: .quickCapture)
         )
         XCTAssertEqual(
-            WanderOpenCheckInControlIntent().target,
-            .checkInHere
+            store.takePendingRequest(),
+            WanderControlNavigationRequest(id: requestID, route: .quickCapture)
         )
+        XCTAssertNil(store.takePendingRequest())
     }
 
     func testControlIsRegisteredSeparatelyWithoutChangingAccessoryWidgetContract() throws {
@@ -53,10 +38,11 @@ final class WanderActionButtonControlTests: XCTestCase {
         XCTAssertFalse(control.contains("systemImage: \"location.fill\""))
         XCTAssertTrue(control.contains(".controlWidgetActionHint(\"Start a check-in\")"))
 
+        XCTAssertTrue(control.contains("action: WanderOpenCheckInControlIntent(target: .checkInHere)"))
         XCTAssertTrue(sharedIntent.contains("struct WanderOpenCheckInControlIntent: OpenIntent"))
-        XCTAssertTrue(sharedIntent.contains("static let title: LocalizedStringResource = \"Check-in\""))
-        XCTAssertTrue(sharedIntent.contains("WanderControlNavigationCenter.shared.request(target.route)"))
-        XCTAssertTrue(sharedIntent.contains("static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication"))
+        XCTAssertTrue(sharedIntent.contains("WanderControlLaunchRequestStore().request(target)"))
+        XCTAssertTrue(sharedIntent.contains("suiteName: WanderWidgetConstants.appGroupIdentifier"))
+        XCTAssertFalse(sharedIntent.contains("WanderControlNavigationCenter"))
 
         XCTAssertEqual(
             project.components(separatedBy: "- WanderControlShared").count - 1,
@@ -70,14 +56,15 @@ final class WanderActionButtonControlTests: XCTestCase {
         XCTAssertFalse(control.contains(".widgetURL("))
     }
 
-    func testRootDefersControlRequestUntilSessionValidationAndUsesExistingHandoff() throws {
+    func testAppDrainsDurableControlLaunchIntoExistingDeepLinkInbox() throws {
+        let appEntry = try source("Wander/App/AppEntryView.swift")
         let root = try source("Wander/App/WanderRootView.swift")
 
-        XCTAssertTrue(root.contains("@StateObject private var controlNavigationCenter"))
-        XCTAssertTrue(root.contains("of: controlNavigationCenter.pendingRequest"))
-        XCTAssertTrue(root.contains("guard isSessionValidated, let request else { return }"))
-        XCTAssertTrue(root.contains("beginDeepLinkHandoff(to: request.route)"))
-        XCTAssertTrue(root.contains("controlNavigationCenter.consume(request.id)"))
+        XCTAssertTrue(appEntry.contains("WanderControlLaunchRequestStore().takePendingRequest()"))
+        XCTAssertTrue(appEntry.contains("WanderDeepLinkLaunchRequest(id: request.id, route: request.route)"))
+        XCTAssertTrue(appEntry.contains("receivePendingControlLaunch()"))
+        XCTAssertTrue(root.contains("beginDeepLinkHandoff(requestID: request.id, route: request.route)"))
+        XCTAssertFalse(root.contains("WanderControlNavigationCenter"))
     }
 
     private func source(_ relativePath: String) throws -> String {

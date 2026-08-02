@@ -95,4 +95,29 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(OnboardingStep.friends.next, .notifications)
         XCTAssertNil(OnboardingStep.notifications.next)
     }
+
+    func testForegroundSessionRefreshPreservesReadyRootForSameAccount() async throws {
+        let suiteName = "OnboardingStateTests.refresh.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
+        let provider = PreviewAuthSessionProvider(state: .signedIn(session), token: "token")
+        let auth = AuthSessionStore(provider: provider)
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        completionStore.markComplete(for: session.userID, needsServerCompletion: false)
+        let coordinator = AppEntryCoordinator(
+            auth: auth,
+            backend: WanderBackend(),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        XCTAssertEqual(coordinator.state, .ready(session: session))
+
+        auth.beginSessionValidation()
+        await coordinator.refreshSessionPreservingReadyState()
+
+        XCTAssertEqual(coordinator.state, .ready(session: session))
+        XCTAssertTrue(auth.isSessionValidated)
+    }
 }

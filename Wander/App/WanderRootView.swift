@@ -87,6 +87,11 @@ private struct SharedPlaceImportAlertModifier: ViewModifier {
     }
 }
 
+struct WanderReadyDeepLinkHandoff: Equatable {
+    let requestID: UUID
+    let route: WanderDeepLinkRoute
+}
+
 struct WanderDeepLinkHandoffCoordinator {
     private struct PendingHandoff {
         let requestID: UUID
@@ -126,7 +131,7 @@ struct WanderDeepLinkHandoffCoordinator {
 
     mutating func acknowledgeDismissal(
         _ token: WanderDeepLinkPresentationToken
-    ) -> WanderDeepLinkRoute? {
+    ) -> WanderReadyDeepLinkHandoff? {
         guard var handoff = pendingHandoff,
               handoff.awaitingDismissals.remove(token) != nil
         else {
@@ -135,10 +140,10 @@ struct WanderDeepLinkHandoffCoordinator {
 
         let requestID = handoff.requestID
         pendingHandoff = handoff
-        return takeReadyRoute(requestID: requestID)
+        return takeReadyHandoff(requestID: requestID)
     }
 
-    mutating func takeReadyRoute(requestID: UUID) -> WanderDeepLinkRoute? {
+    mutating func takeReadyHandoff(requestID: UUID) -> WanderReadyDeepLinkHandoff? {
         guard let handoff = pendingHandoff,
               handoff.requestID == requestID,
               handoff.awaitingDismissals.isEmpty
@@ -147,7 +152,10 @@ struct WanderDeepLinkHandoffCoordinator {
         }
 
         pendingHandoff = nil
-        return handoff.route
+        return WanderReadyDeepLinkHandoff(
+            requestID: handoff.requestID,
+            route: handoff.route
+        )
     }
 
     mutating func cancel() {
@@ -319,7 +327,6 @@ struct WanderRootView: View {
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
-    @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
@@ -576,7 +583,7 @@ struct WanderRootView: View {
 
     private var authObservedRoot: some View {
         lifecycleRoot
-        .onChange(of: pushNotifications.navigationRequest) { _, request in
+        .onChange(of: pushNotifications.navigationRequest, initial: true) { _, request in
             guard isSessionValidated, let request else { return }
             routeNotification(request)
         }
@@ -638,12 +645,6 @@ struct WanderRootView: View {
         .onChange(of: deepLinkLaunchRequest, initial: true) { _, request in
             handleDeepLinkLaunchRequestIfReady(request)
         }
-        .onChange(
-            of: controlNavigationCenter.pendingRequest,
-            initial: true
-        ) { _, request in
-            handleControlNavigationRequestIfReady(request)
-        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, isSessionValidated else { return }
             drainSharedPlaceImports()
@@ -661,11 +662,7 @@ struct WanderRootView: View {
             )
         )
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
-            if isValidated {
-                handleControlNavigationRequestIfReady(
-                    controlNavigationCenter.pendingRequest
-                )
-            } else {
+            if !isValidated {
                 cancelSignedInMaintenance()
             }
         }
@@ -855,31 +852,24 @@ struct WanderRootView: View {
     ) {
         guard isSessionValidated,
               let request,
-              handledDeepLinkLaunchRequestID != request.id
+              handledDeepLinkLaunchRequestID != request.id,
+              deepLinkHandoff.pendingRequestID != request.id
         else {
             return
         }
 
-        handledDeepLinkLaunchRequestID = request.id
-        beginDeepLinkHandoff(to: request.route)
-        onDeepLinkLaunchRequestHandled(request.id)
+        beginDeepLinkHandoff(requestID: request.id, route: request.route)
     }
 
-    private func handleControlNavigationRequestIfReady(
-        _ request: WanderControlNavigationRequest?
+    private func beginDeepLinkHandoff(
+        requestID: UUID,
+        route: WanderDeepLinkRoute
     ) {
-        guard isSessionValidated, let request else { return }
-
-        beginDeepLinkHandoff(to: request.route)
-        controlNavigationCenter.consume(request.id)
-    }
-
-    private func beginDeepLinkHandoff(to route: WanderDeepLinkRoute) {
         deepLinkHandoffTask?.cancel()
 
-        let resetRequest = WanderPresentationResetRequest()
+        let resetRequest = WanderPresentationResetRequest(id: requestID)
         deepLinkHandoff.begin(
-            requestID: resetRequest.id,
+            requestID: requestID,
             route: route,
             awaitingDismissals: deepLinkPresentationTokensAwaitingDismissal()
         )
@@ -956,13 +946,13 @@ struct WanderRootView: View {
             addSheetDetent = addSheetRestingDetent
         }
 
-        guard let route = deepLinkHandoff.acknowledgeDismissal(token) else {
+        guard let readyHandoff = deepLinkHandoff.acknowledgeDismissal(token) else {
             return
         }
 
         deepLinkHandoffTask?.cancel()
         deepLinkHandoffTask = nil
-        activateDeepLink(route)
+        activateDeepLinkHandoff(readyHandoff)
     }
 
     private func deepLinkPresentationTokensAwaitingDismissal()
@@ -983,13 +973,19 @@ struct WanderRootView: View {
 
     private func activateReadyDeepLink(requestID: UUID) {
         guard presentationResetRequest?.id == requestID,
-              let route = deepLinkHandoff.takeReadyRoute(requestID: requestID)
+              let readyHandoff = deepLinkHandoff.takeReadyHandoff(requestID: requestID)
         else {
             return
         }
 
         deepLinkHandoffTask = nil
-        activateDeepLink(route)
+        activateDeepLinkHandoff(readyHandoff)
+    }
+
+    private func activateDeepLinkHandoff(_ handoff: WanderReadyDeepLinkHandoff) {
+        activateDeepLink(handoff.route)
+        handledDeepLinkLaunchRequestID = handoff.requestID
+        onDeepLinkLaunchRequestHandled(handoff.requestID)
     }
 
     private func resetRootPresentationsForDeepLink() {

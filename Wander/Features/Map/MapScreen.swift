@@ -45,8 +45,8 @@ struct MapScreen: View {
     @State private var mapSearchTask: Task<Void, Never>?
     @State private var selectedFilters: Set<MapFilter>
     @State private var selectedSocialOwnerID: String?
-    @State private var currentSearchRegion = Self.defaultRegion
-    @State private var position: MapCameraPosition = .region(Self.defaultRegion)
+    @State private var currentSearchRegion = Self.defaultSearchRegion
+    @State private var position: MapCameraPosition
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
     @State private var didResolveInitialCamera = false
@@ -56,7 +56,7 @@ struct MapScreen: View {
     @State private var mapSearchFocusRequestID: UUID?
     @FocusState private var isMapSearchFocused: Bool
 
-    private static let defaultRegion = MKCoordinateRegion(
+    private static let defaultSearchRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
         span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.14)
     )
@@ -90,6 +90,11 @@ struct MapScreen: View {
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
         _selectedFilters = State(initialValue: Self.resolvedInitialMapFilters())
+        _position = State(
+            initialValue: Self.canShowUserLocation
+                ? .userLocation(followsHeading: false, fallback: .automatic)
+                : .automatic
+        )
     }
 
     private var visiblePlaces: [VisiblePlace] {
@@ -174,7 +179,7 @@ struct MapScreen: View {
     }
 
     private var currentViewport: MapViewport {
-        MapViewport(minLatitude: 33.95, minLongitude: -118.45, maxLatitude: 34.2, maxLongitude: -118.12)
+        Self.viewport(for: currentSearchRegion)
     }
 
     private var shouldShowTypeahead: Bool {
@@ -368,9 +373,6 @@ struct MapScreen: View {
                 resolveInitialSelection()
                 resolveInitialSearchIfNeeded()
             }
-            .task {
-                await centerMapOnCurrentCityIfNeeded()
-            }
             .task(id: presentationResetRequest?.id) {
                 handlePresentationResetRequest(presentationResetRequest)
             }
@@ -378,6 +380,7 @@ struct MapScreen: View {
                 await handleMapSearchLaunchRequest(searchLaunchRequest)
             }
             .task {
+                await centerMapOnCurrentCityIfNeeded()
                 await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
                 if auth.isSignedIn {
                     await store.refreshSharedVisitInbox(backend: backend)
@@ -778,13 +781,15 @@ struct MapScreen: View {
 
     private func centerMapOnCurrentCityIfNeeded() async {
         guard !didResolveInitialCamera,
-              initialPlaceQuery == nil
+              initialPlaceQuery == nil,
+              pushNotifications.navigationRequest == nil
         else { return }
 
         let coordinate = await currentUserCoordinate()
         guard !Task.isCancelled,
               !didResolveInitialCamera,
-              initialPlaceQuery == nil
+              initialPlaceQuery == nil,
+              pushNotifications.navigationRequest == nil
         else { return }
 
         didResolveInitialCamera = true
@@ -1944,13 +1949,7 @@ struct MapScreen: View {
                             longitudinalMeters: Self.recenterCameraDistance * 2
                         )
                     } else {
-                        position = .region(
-                            MKCoordinateRegion(
-                                center: Self.defaultRegion.center,
-                                latitudinalMeters: Self.recenterCameraDistance * 2,
-                                longitudinalMeters: Self.recenterCameraDistance * 2
-                            )
-                        )
+                        position = .automatic
                     }
                 }
             }
@@ -1993,7 +1992,18 @@ struct MapScreen: View {
     }
 
     static func initialCityRegion(center: CLLocationCoordinate2D) -> MKCoordinateRegion {
-        MKCoordinateRegion(center: center, span: defaultRegion.span)
+        MKCoordinateRegion(center: center, span: defaultSearchRegion.span)
+    }
+
+    static func viewport(for region: MKCoordinateRegion) -> MapViewport {
+        let latitudeRadius = region.span.latitudeDelta / 2
+        let longitudeRadius = region.span.longitudeDelta / 2
+        return MapViewport(
+            minLatitude: max(-90, region.center.latitude - latitudeRadius),
+            minLongitude: max(-180, region.center.longitude - longitudeRadius),
+            maxLatitude: min(90, region.center.latitude + latitudeRadius),
+            maxLongitude: min(180, region.center.longitude + longitudeRadius)
+        )
     }
 
     private func mapSearchRankingScore(for item: MKMapItem, query: String?, origin: CLLocation) -> Double {

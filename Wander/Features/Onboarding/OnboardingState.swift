@@ -154,6 +154,21 @@ final class AppEntryCoordinator: ObservableObject {
         await resolve(auth.state, forceRemote: false)
     }
 
+    func refreshSessionPreservingReadyState() async {
+        let stateBeforeRefresh = state
+        await auth.refreshSession()
+
+        guard case .ready(let readySession) = stateBeforeRefresh,
+              case .signedIn(let refreshedSession) = auth.state,
+              readySession.userID == refreshedSession.userID
+        else {
+            await resolve(auth.state, forceRemote: false)
+            return
+        }
+
+        state = .ready(session: refreshedSession)
+    }
+
     func authStateChanged(_ authState: AuthState) {
         resolutionTask?.cancel()
         resolutionTask = Task { [weak self] in
