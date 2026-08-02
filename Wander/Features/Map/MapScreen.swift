@@ -32,7 +32,7 @@ struct MapScreen: View {
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
-    @State private var mapQuery = ""
+    @State private var mapQuery: String
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
     @State private var mapFeatureResolutionTask: Task<Void, Never>?
@@ -50,6 +50,7 @@ struct MapScreen: View {
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
     @State private var didResolveInitialCamera = false
+    @State private var didResolveInitialSearch = false
     @State private var handlingNotificationRequestID: UUID?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var mapSearchFocusRequestID: UUID?
@@ -66,6 +67,7 @@ struct MapScreen: View {
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let searchLaunchRequest: WanderMapSearchLaunchRequest?
     private let onSearchLaunchRequestHandled: (UUID) -> Void
+    private let onAdd: () -> Void
 
     private var baseVisiblePlaces: [VisiblePlace] {
         guard let mapPlaceFilters else { return [] }
@@ -77,13 +79,16 @@ struct MapScreen: View {
         startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation(),
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         searchLaunchRequest: WanderMapSearchLaunchRequest? = nil,
-        onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in }
+        onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
+        onAdd: @escaping () -> Void = {}
     ) {
         self.initialPlaceQuery = initialPlaceQuery
         self.presentationResetRequest = presentationResetRequest
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
+        self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
+        _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
         _selectedFilters = State(initialValue: Self.resolvedInitialMapFilters())
     }
 
@@ -271,16 +276,31 @@ struct MapScreen: View {
 
                 VStack(spacing: 0) {
                     VStack(spacing: WanderTheme.spacing2) {
-                        SearchBar(
-                            query: $mapQuery,
-                            isFocused: $isMapSearchFocused,
-                            focusRequestID: mapSearchFocusRequestID,
-                            onFocusRequestHandled: { requestID in
-                                guard mapSearchFocusRequestID == requestID else { return }
-                                mapSearchFocusRequestID = nil
-                            },
-                            onSubmit: submitMapSearch
-                        )
+                        HStack(spacing: WanderTheme.spacing2) {
+                            SearchBar(
+                                query: $mapQuery,
+                                isFocused: $isMapSearchFocused,
+                                focusRequestID: mapSearchFocusRequestID,
+                                onFocusRequestHandled: { requestID in
+                                    guard mapSearchFocusRequestID == requestID else { return }
+                                    mapSearchFocusRequestID = nil
+                                },
+                                onSubmit: submitMapSearch
+                            )
+
+                            if isMapSearchFocused {
+                                MapSearchCancelButton(action: cancelMapSearch)
+                            } else {
+                                WanderGlassActionButton(
+                                    systemImage: "plus",
+                                    accessibilityLabel: "Add a place",
+                                    accessibilityIdentifier: "map.headerAdd",
+                                    action: onAdd
+                                )
+                            }
+                        }
+                        .padding(.horizontal, WanderTheme.spacing3)
+
                         if shouldShowTypeahead {
                             MapTypeaheadList(
                                 suggestions: typeaheadSuggestions,
@@ -293,32 +313,34 @@ struct MapScreen: View {
                             MapSearchMessage(text: mapSearchMessage)
                                 .padding(.horizontal, WanderTheme.spacing3)
                         }
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: WanderTheme.spacing1) {
-                                ForEach(MapFilter.allCases) { filter in
-                                    if filter == .social {
-                                        MapSocialFilterMenu(
-                                            isSelected: selectedFilters.contains(.social),
-                                            selectedOwner: selectedSocialOwner,
-                                            ownerOptions: socialOwnerOptions,
-                                            showAll: showAllSocialPlaces,
-                                            hideSocial: hideSocialPlaces,
-                                            selectOwner: showSocialPlaces
-                                        )
-                                    } else {
-                                        Button {
-                                            toggle(filter)
-                                        } label: {
-                                            MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                        if !isMapSearchFocused {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: WanderTheme.spacing1) {
+                                    ForEach(MapFilter.allCases) { filter in
+                                        if filter == .social {
+                                            MapSocialFilterMenu(
+                                                isSelected: selectedFilters.contains(.social),
+                                                selectedOwner: selectedSocialOwner,
+                                                ownerOptions: socialOwnerOptions,
+                                                showAll: showAllSocialPlaces,
+                                                hideSocial: hideSocialPlaces,
+                                                selectOwner: showSocialPlaces
+                                            )
+                                        } else {
+                                            Button {
+                                                toggle(filter)
+                                            } label: {
+                                                MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                        .buttonStyle(.plain)
                                     }
                                 }
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .padding(.vertical, WanderTheme.spacing1)
                             }
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .padding(.vertical, WanderTheme.spacing1)
+                            .frame(height: 48)
                         }
-                        .frame(height: 48)
 
                     }
 
@@ -337,12 +359,14 @@ struct MapScreen: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .safeAreaPadding(.top, WanderTheme.spacing2)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
                 selectedPlaceProfileSurface
             }
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
                 resolveInitialSelection()
+                resolveInitialSearchIfNeeded()
             }
             .task {
                 await centerMapOnCurrentCityIfNeeded()
@@ -960,6 +984,16 @@ struct MapScreen: View {
                 mapSearchTask = nil
             }
         }
+    }
+
+    private func cancelMapSearch() {
+        typeaheadTask?.cancel()
+        typeaheadSuggestions = []
+        isLoadingTypeahead = false
+        mapSearchMessage = nil
+        isMapSearchFocused = false
+        mapQuery = ""
+        dismissKeyboard()
     }
 
     @MainActor
@@ -1697,6 +1731,14 @@ struct MapScreen: View {
         scheduleTypeahead(for: mapQuery)
     }
 
+    private func resolveInitialSearchIfNeeded() {
+        guard !didResolveInitialSearch else { return }
+        didResolveInitialSearch = true
+        guard !Self.normalized(mapQuery).isEmpty else { return }
+        isMapSearchFocused = true
+        handleMapQueryChange()
+    }
+
     private func scheduleTypeahead(for query: String) {
         typeaheadTask?.cancel()
         let normalized = Self.normalized(query)
@@ -2066,6 +2108,17 @@ struct MapScreen: View {
         return arguments[valueIndex]
     }
 
+    static func resolvedInitialMapSearchQuery(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapSearchQuery") else {
+            return ""
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return "" }
+        return arguments[valueIndex]
+    }
+
     static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         arguments.contains("-WanderMapSheetExpanded")
     }
@@ -2336,6 +2389,7 @@ private struct SearchBar: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
             TextField("search your map or people...", text: $query)
                 .focused(isFocused)
+                .accessibilityIdentifier("map.searchField")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)
@@ -2365,12 +2419,9 @@ private struct SearchBar: View {
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(height: 46)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 10, x: 0, y: 5)
-        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .contentShape(Capsule())
+        .wanderGlassCapsule()
     }
 
     @MainActor
@@ -2391,6 +2442,23 @@ private struct SearchBar: View {
     }
 }
 
+private struct MapSearchCancelButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("Cancel")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(minWidth: 64, minHeight: 44)
+                .contentShape(Capsule())
+                .wanderGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("map.searchCancel")
+    }
+}
+
 private struct MapTypeaheadList: View {
     let suggestions: [MapSearchSuggestion]
     let isLoading: Bool
@@ -2398,8 +2466,10 @@ private struct MapTypeaheadList: View {
     let onAdd: (MapSearchSuggestion) -> Void
 
     var body: some View {
+        let visibleSuggestions = Array(suggestions.prefix(4))
+
         VStack(spacing: 0) {
-            ForEach(suggestions) { suggestion in
+            ForEach(visibleSuggestions) { suggestion in
                 MapTypeaheadRow(
                     suggestion: suggestion,
                     onSelect: {
@@ -2410,7 +2480,7 @@ private struct MapTypeaheadList: View {
                     }
                 )
 
-                if suggestion.id != suggestions.last?.id {
+                if suggestion.id != visibleSuggestions.last?.id {
                     Divider()
                         .overlay(WanderTheme.borderHairline.color)
                         .padding(.leading, 52)
@@ -2432,13 +2502,9 @@ private struct MapTypeaheadList: View {
                 .accessibilityLabel("Looking for nearby places")
             }
         }
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        )
-        .shadow(color: WanderTheme.textInk.color.opacity(0.1), radius: 12, x: 0, y: 6)
+        .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("map.typeaheadPanel")
     }
 }
 
@@ -2574,9 +2640,12 @@ private struct MapFilterChip: View {
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(height: 44)
-        .background(WanderTheme.surfaceRaised.color)
         .foregroundStyle(WanderTheme.textInk.color)
-        .clipShape(Capsule())
+        .contentShape(Capsule())
+        .wanderGlassCapsule(
+            tone: isSelected ? .selected : .neutral,
+            showsBorder: false
+        )
         .overlay(
             Capsule()
                 .stroke(
@@ -2584,8 +2653,6 @@ private struct MapFilterChip: View {
                     style: filter.trimStyle(isSelected: isSelected)
                 )
         )
-        .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
-        .contentShape(Capsule())
         .accessibilityLabel("\(filter.title) places filter")
         .accessibilityValue(isSelected ? "On" : "Off")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -2641,9 +2708,12 @@ private struct MapSocialFilterMenu: View {
             .font(.system(size: 12, weight: .bold))
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(height: 44)
-            .background(WanderTheme.surfaceRaised.color)
             .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Capsule())
+            .contentShape(Capsule())
+            .wanderGlassCapsule(
+                tone: isSelected ? .selected : .neutral,
+                showsBorder: false
+            )
             .overlay(
                 Capsule()
                     .stroke(
@@ -2651,8 +2721,6 @@ private struct MapSocialFilterMenu: View {
                         style: MapFilter.social.trimStyle(isSelected: isSelected)
                     )
             )
-            .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
-            .contentShape(Capsule())
             .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
         .accessibilityLabel(selectedOwner.map { "Social places filtered to \($0.displayName)" } ?? "Social places filter")

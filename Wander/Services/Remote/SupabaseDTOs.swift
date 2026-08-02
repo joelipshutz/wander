@@ -407,8 +407,20 @@ struct RemoteFeedFeaturedPlaceDTO: Codable, Equatable {
     let place: RemoteVisiblePlaceDTO
     let reason: String
 
-    func featuredPlace() throws -> FeedFeaturedPlace {
-        FeedFeaturedPlace(visiblePlace: try place.visiblePlace(), reason: reason)
+    func featuredPlace(actor activityActor: ProfileShell? = nil) throws -> FeedFeaturedPlace {
+        let visiblePlace = try place.visiblePlace()
+        let actor = ProfileShell(
+            id: activityActor?.id ?? visiblePlace.owner.id,
+            handle: activityActor?.handle ?? visiblePlace.owner.handle,
+            displayName: activityActor?.displayName ?? visiblePlace.owner.displayName,
+            avatarURL: activityActor?.avatarURL ?? visiblePlace.owner.avatarURL,
+            bio: activityActor?.bio ?? visiblePlace.owner.bio,
+            homeArea: activityActor?.homeArea ?? visiblePlace.owner.homeArea,
+            isPrivateProfile: activityActor?.isPrivateProfile ?? visiblePlace.owner.isPrivateProfile,
+            createdAt: activityActor?.createdAt ?? visiblePlace.owner.createdAt,
+            relationship: activityActor?.relationship ?? .follower
+        )
+        return FeedFeaturedPlace(visiblePlace: visiblePlace, actor: actor, reason: reason)
     }
 }
 
@@ -426,9 +438,17 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
     }
 
     func followedFeedPage() throws -> FollowedFeedPage {
-        FollowedFeedPage(
-            activity: try activity.map { try $0.activity() },
-            featuredPlaces: try featuredPlaces.map { try $0.featuredPlace() },
+        let renderedActivity = try activity.map { try $0.activity() }
+        let actorsByID = Dictionary(
+            renderedActivity.map { ($0.actor.id, $0.actor) },
+            uniquingKeysWith: { current, _ in current }
+        )
+
+        return FollowedFeedPage(
+            activity: renderedActivity,
+            featuredPlaces: try featuredPlaces.map {
+                try $0.featuredPlace(actor: actorsByID[$0.place.ownerUserID])
+            },
             nextCursor: nextCursor,
             fetchedAt: fetchedAt
         )
