@@ -34,6 +34,20 @@ final class PlacePhotoGalleryTests: XCTestCase {
         XCTAssertTrue(items.isEmpty)
     }
 
+    func testPresenterExcludesLocallyDeletedUserPhotosFromStaleRemotePage() {
+        let google = photo(provider: "google_places", id: "google")
+        let deleted = userItem(id: "deleted-photo", userID: "viewer", handle: "viewer")
+        let remaining = userItem(id: "remaining-photo", userID: "maya", handle: "mayap")
+
+        let items = PlacePhotoGalleryPresenter.items(
+            providerPhoto: google,
+            userPhotos: [deleted, remaining],
+            excludingUserPhotoIDs: ["deleted-photo"]
+        )
+
+        XCTAssertEqual(items.map(\.photo.providerPlaceID), ["google", "remaining-photo"])
+    }
+
     func testPresenterMergesPagesWithoutRepeatingRows() {
         let first = userItem(id: "one", userID: "maya", handle: "mayap")
         let duplicate = userItem(id: "one", userID: "maya", handle: "mayap")

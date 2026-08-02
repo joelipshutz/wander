@@ -552,7 +552,8 @@ private struct PlaceProfileFullView: View {
     private var galleryItems: [PlacePhotoGalleryItem] {
         PlacePhotoGalleryPresenter.items(
             providerPhoto: providerPhoto,
-            userPhotos: userPhotos
+            userPhotos: userPhotos,
+            excludingUserPhotoIDs: store.deletedVisitPhotoReferenceIDs
         )
     }
 
