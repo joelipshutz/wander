@@ -377,30 +377,18 @@ struct WanderRootView: View {
                 onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
                 onAdd: presentAddSheet
             )
-                .tabItem {
-                    Label(
-                        WanderTab.map.title,
-                        systemImage: WanderTab.map.systemImage(isSelected: selectedTab == .map)
-                    )
-                }
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
                 .tag(WanderTab.map)
 
             FeedScreen(onAdd: presentAddSheet)
-                .tabItem {
-                    Label(
-                        WanderTab.discover.title,
-                        systemImage: WanderTab.discover.systemImage(isSelected: selectedTab == .discover)
-                    )
-                }
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
                 .tag(WanderTab.discover)
 
             ListsScreen()
-                .tabItem {
-                    Label(
-                        WanderTab.lists.title,
-                        systemImage: WanderTab.lists.systemImage(isSelected: selectedTab == .lists)
-                    )
-                }
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
                 .tag(WanderTab.lists)
 
             ProfileScreen(
@@ -411,13 +399,13 @@ struct WanderRootView: View {
             ) {
                 selectedTab = .discover
             }
-                .tabItem {
-                    Label(
-                        WanderTab.profile.title,
-                        systemImage: WanderTab.profile.systemImage(isSelected: selectedTab == .profile)
-                    )
-                }
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
                 .tag(WanderTab.profile)
+        }
+        .toolbar(.hidden, for: .tabBar)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            WanderPrimaryTabBar(selection: tabSelection)
         }
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
@@ -1525,5 +1513,54 @@ enum WanderTab: String, CaseIterable, Hashable {
 
     func systemImage(isSelected: Bool) -> String {
         isSelected ? selectedSystemImage : systemImage
+    }
+}
+
+private struct WanderPrimaryTabBar: View {
+    @Binding var selection: WanderTab
+
+    private let tabs: [WanderTab] = [.map, .discover, .lists, .profile]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .overlay(WanderTheme.textInk.color.opacity(0.12))
+
+            HStack(spacing: 0) {
+                ForEach(tabs, id: \.self) { tab in
+                    tabButton(tab)
+                }
+            }
+            .frame(height: 56)
+        }
+        .background(Color(uiColor: .systemBackground).ignoresSafeArea(edges: .bottom))
+    }
+
+    private func tabButton(_ tab: WanderTab) -> some View {
+        let isSelected = selection == tab
+
+        return Button {
+            selection = tab
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: tab.systemImage(isSelected: isSelected))
+                    .symbolVariant(.none)
+                    .font(.system(size: 24, weight: .regular))
+                    .frame(height: 27)
+
+                Text(tab.title)
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(
+                isSelected
+                    ? WanderTheme.terracotta.color
+                    : WanderTheme.textMuted.color.opacity(0.72)
+            )
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

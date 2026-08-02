@@ -70,10 +70,12 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
-        XCTAssertTrue(root.contains("systemImage: WanderTab.map.systemImage(isSelected: selectedTab == .map)"))
-        XCTAssertTrue(root.contains("systemImage: WanderTab.discover.systemImage(isSelected: selectedTab == .discover)"))
-        XCTAssertTrue(root.contains("systemImage: WanderTab.lists.systemImage(isSelected: selectedTab == .lists)"))
-        XCTAssertTrue(root.contains("systemImage: WanderTab.profile.systemImage(isSelected: selectedTab == .profile)"))
+        XCTAssertEqual(root.components(separatedBy: ".toolbar(.hidden, for: .tabBar)").count - 1, 5)
+        XCTAssertTrue(root.contains("WanderPrimaryTabBar(selection: tabSelection)"))
+        XCTAssertTrue(root.contains("private let tabs: [WanderTab] = [.map, .discover, .lists, .profile]"))
+        XCTAssertTrue(root.contains("Image(systemName: tab.systemImage(isSelected: isSelected))"))
+        XCTAssertTrue(root.contains(".symbolVariant(.none)"))
+        XCTAssertTrue(root.contains(".accessibilityAddTraits(isSelected ? .isSelected : [])"))
     }
 
     func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {
