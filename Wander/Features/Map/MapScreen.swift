@@ -3919,6 +3919,31 @@ struct MapPlaceSavePhotoAttachment: Identifiable {
         VisitPhotoLocalFileStore.data(from: localAssetRef)
     }
 
+    var draftPhoto: PlaceSaveDraftPhoto? {
+        guard let localAssetRef else { return nil }
+        return PlaceSaveDraftPhoto(
+            id: id,
+            contentType: contentType,
+            localAssetRef: localAssetRef,
+            sourcePhotoID: sourcePhotoID,
+            byteSize: byteSize
+        )
+    }
+
+    static func restore(from draft: PlaceSaveDraftPhoto) -> MapPlaceSavePhotoAttachment? {
+        guard let image = VisitPhotoLocalFileStore.image(from: draft.localAssetRef) else {
+            return nil
+        }
+        return MapPlaceSavePhotoAttachment(
+            id: draft.id,
+            image: thumbnail(from: image),
+            contentType: draft.contentType,
+            localAssetRef: draft.localAssetRef,
+            sourcePhotoID: draft.sourcePhotoID,
+            byteSize: draft.byteSize
+        )
+    }
+
     private static func thumbnail(from image: UIImage) -> UIImage {
         let maximumDimension: CGFloat = 320
         let scale = min(1, maximumDimension / max(image.size.width, image.size.height))
@@ -3927,6 +3952,58 @@ struct MapPlaceSavePhotoAttachment: Identifiable {
         return UIGraphicsImageRenderer(size: size).image { _ in
             image.draw(in: CGRect(origin: .zero, size: size))
         }
+    }
+}
+
+extension PlaceSaveDraft {
+    static func addFlow(
+        ownerUserID: String,
+        context: MapPlaceSaveContext,
+        now: Date = .now
+    ) -> PlaceSaveDraft? {
+        guard case .add(let sourceType) = context.mode else { return nil }
+
+        let initialCuisine = context.candidate.primaryCategory == WanderPlaceCategory.restaurantsFood
+            ? context.initialCuisine
+                ?? WanderPlaceCategory.restaurantCuisineInference(for: context.candidate)?.cuisine
+            : nil
+        let selectedAnswers = context.initialAnswers.filter { !$0.key.hasSuffix("_tags") }
+        let unifiedTags = context.initialAnswers
+            .filter { $0.key.hasSuffix("_tags") }
+            .values
+            .reduce(into: context.initialPersonalLabels) { result, values in
+                result.formUnion(values)
+            }
+        let today = WannaGoDate.normalized(now)
+        let plannedDate = context.initialPlannedDate
+            .map { WannaGoDate.normalized($0) }
+            .flatMap { $0 >= today ? $0 : nil }
+
+        return PlaceSaveDraft(
+            ownerUserID: ownerUserID,
+            createdAt: now,
+            updatedAt: now,
+            sourceType: sourceType,
+            candidate: context.candidate,
+            baselineUserPlaceLocalID: context.existingCurrentUserSave?.userPlace.localID,
+            baselineVisitLocalID: context.existingLatestVisit?.localID,
+            form: PlaceSaveDraftForm(
+                step: context.startsOnDetails ? .details : .confirm,
+                selectedAssignment: context.candidate.categoryAssignment,
+                selectedStatus: context.initialStatus,
+                selectedVisibility: context.initialVisibility.normalizedForStealthMode,
+                selectedRatingScore: context.initialRatingScore ?? PlaceRating.defaultScore,
+                selectedAnswers: selectedAnswers,
+                unifiedTags: unifiedTags,
+                selectedCuisine: initialCuisine,
+                note: context.initialNote,
+                visitedAt: context.editedVisit?.visitedAt ?? now,
+                plannedDate: plannedDate,
+                photoAttachments: context.initialPhotoAttachments.compactMap(\.draftPhoto),
+                selectedInviteeUserIDs: [],
+                isShowingOptionalDetails: false
+            )
+        )
     }
 }
 
@@ -4237,6 +4314,8 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let draftID: UUID?
+    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -4268,34 +4347,51 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var sharedVisitInviteesError: String?
     @State private var errorMessage: String?
     @State private var isShowingOptionalDetails = false
+    @State private var saveAttemptedAt: Date?
 
     init(
         context: MapPlaceSaveContext,
+        draft: PlaceSaveDraft? = nil,
+        onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
     ) {
         _context = State(initialValue: context)
+        draftID = draft?.id
+        self.onDraftChange = onDraftChange
         self.onSave = onSave
         self.onRemove = onRemove
-        _step = State(initialValue: context.startsOnDetails ? .details : .confirm)
-        _selectedAssignment = State(initialValue: context.candidate.categoryAssignment)
-        _selectedStatus = State(initialValue: context.initialStatus)
-        _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
-        _selectedRatingScore = State(initialValue: context.initialRatingScore ?? PlaceRating.defaultScore)
-        let initialCuisine = Self.initialCuisine(for: context)
-        let initialUnifiedTags = context.initialAnswers
+        let restoredForm = draft?.form
+        let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
+            ? .details
+            : (context.startsOnDetails ? .details : .confirm)
+        let initialAssignment = restoredForm?.selectedAssignment ?? context.candidate.categoryAssignment
+        let initialStatus = restoredForm?.selectedStatus ?? context.initialStatus
+        let initialVisibility = restoredForm?.selectedVisibility
+            ?? context.initialVisibility.normalizedForStealthMode
+        let initialRatingScore = restoredForm?.selectedRatingScore
+            ?? context.initialRatingScore
+            ?? PlaceRating.defaultScore
+        let initialCuisine = restoredForm?.selectedCuisine ?? Self.initialCuisine(for: context)
+        let initialUnifiedTags = restoredForm?.unifiedTags ?? context.initialAnswers
             .filter { Self.isUnifiedTagKey($0.key) }
             .values
             .reduce(into: context.initialPersonalLabels) { result, values in
                 result.formUnion(values)
             }
-        let initialAnswers = context.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
+        let initialAnswers = restoredForm?.selectedAnswers
+            ?? context.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
         let initialQuestionBlocks = AddQuestionTemplates.blocks(
-            primaryCategory: context.candidate.primaryCategory,
-            subcategory: context.candidate.subcategory,
+            primaryCategory: initialAssignment.primaryCategory,
+            subcategory: initialAssignment.subcategory,
             cuisine: initialCuisine,
-            status: context.initialStatus
+            status: initialStatus
         )
+        _step = State(initialValue: initialStep)
+        _selectedAssignment = State(initialValue: initialAssignment)
+        _selectedStatus = State(initialValue: initialStatus)
+        _selectedVisibility = State(initialValue: initialVisibility)
+        _selectedRatingScore = State(initialValue: initialRatingScore)
         _selectedAnswers = State(initialValue: initialAnswers)
         _unifiedTags = State(initialValue: initialUnifiedTags)
         _lastUnifiedTagOptions = State(
@@ -4309,14 +4405,49 @@ struct MapPlaceSaveFlowSheet: View {
             )
         )
         _selectedCuisine = State(initialValue: initialCuisine)
-        _note = State(initialValue: context.initialNote)
-        _visitedAt = State(initialValue: context.editedVisit?.visitedAt ?? .now)
+        _note = State(initialValue: restoredForm?.note ?? context.initialNote)
+        _visitedAt = State(initialValue: restoredForm?.visitedAt ?? context.editedVisit?.visitedAt ?? .now)
         let today = WannaGoDate.normalized(.now)
-        let initialPlannedDate = context.initialPlannedDate
+        let initialPlannedDate = (restoredForm?.plannedDate ?? context.initialPlannedDate)
             .map { WannaGoDate.normalized($0) }
             .flatMap { $0 >= today ? $0 : nil }
         _plannedDate = State(initialValue: initialPlannedDate)
-        _visitPhotoAttachments = State(initialValue: context.initialPhotoAttachments)
+        let restoredAttachments = restoredForm?.photoAttachments.compactMap(MapPlaceSavePhotoAttachment.restore)
+        _visitPhotoAttachments = State(
+            initialValue: restoredAttachments ?? context.initialPhotoAttachments
+        )
+        _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
+        _isShowingOptionalDetails = State(initialValue: restoredForm?.isShowingOptionalDetails ?? false)
+        let hasMissingRestoredPhotos = restoredForm.map {
+            $0.photoAttachments.count != (restoredAttachments?.count ?? 0)
+        } ?? false
+        _errorMessage = State(
+            initialValue: draft?.recoveryNotice
+                ?? (hasMissingRestoredPhotos ? "One photo could not be restored. You can add it again." : nil)
+        )
+        _saveAttemptedAt = State(initialValue: nil)
+    }
+
+    private var draftUpdate: PlaceSaveDraftUpdate {
+        PlaceSaveDraftUpdate(
+            form: PlaceSaveDraftForm(
+                step: step == .details ? .details : .confirm,
+                selectedAssignment: selectedAssignment,
+                selectedStatus: selectedStatus,
+                selectedVisibility: selectedVisibility,
+                selectedRatingScore: selectedRatingScore,
+                selectedAnswers: selectedAnswers,
+                unifiedTags: unifiedTags,
+                selectedCuisine: selectedCuisine,
+                note: note,
+                visitedAt: visitedAt,
+                plannedDate: plannedDate,
+                photoAttachments: visitPhotoAttachments.compactMap(\.draftPhoto),
+                selectedInviteeUserIDs: selectedInviteeUserIDs,
+                isShowingOptionalDetails: isShowingOptionalDetails
+            ),
+            submittedAt: saveAttemptedAt
+        )
     }
 
     private var questionBlocks: [AddQuestionBlock] {
@@ -4423,6 +4554,10 @@ struct MapPlaceSaveFlowSheet: View {
                 if !canInvite {
                     selectedInviteeUserIDs = []
                 }
+            }
+            .onChange(of: draftUpdate, initial: true) { _, update in
+                guard let draftID else { return }
+                onDraftChange(draftID, update.form, update.submittedAt)
             }
             .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
                 Button(context.removeTitle, role: .destructive) {
@@ -5318,6 +5453,11 @@ struct MapPlaceSaveFlowSheet: View {
             errorMessage = "A check-in date can’t be in the future."
             return
         }
+        let attemptedAt = Date.now
+        saveAttemptedAt = attemptedAt
+        if let draftID {
+            onDraftChange(draftID, draftUpdate.form, attemptedAt)
+        }
         isSaving = true
         errorMessage = nil
 
@@ -5345,6 +5485,7 @@ struct MapPlaceSaveFlowSheet: View {
                 if result != nil {
                     dismiss()
                 } else if auth.isSignedIn {
+                    saveAttemptedAt = nil
                     if context.sharedVisitInvitation != nil {
                         errorMessage = "Could not add this shared check-in. Open the invitation and try again."
                     } else {
@@ -5353,6 +5494,7 @@ struct MapPlaceSaveFlowSheet: View {
                             : "Could not add this to Wanna. Try again."
                     }
                 } else {
+                    saveAttemptedAt = nil
                     errorMessage = selectedStatus == .been
                         ? "Sign in to finish your check-in."
                         : "Sign in to add this to Wanna."

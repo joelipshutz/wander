@@ -83,6 +83,11 @@ enum AppEntryState: Equatable {
     case ready(session: AuthSession)
     case recoverableFailure(session: AuthSession, message: String, canContinueOffline: Bool)
     case unavailable(String)
+
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
 }
 
 enum AppEntryStateResolver {
@@ -148,8 +153,10 @@ final class AppEntryCoordinator: ObservableObject {
         self.analytics = analytics
     }
 
-    func start() async {
-        state = .launching
+    func start(preservingReadyState: Bool = false) async {
+        if !preservingReadyState || !state.isReady {
+            state = .launching
+        }
         await auth.refreshSession()
         await resolve(auth.state, forceRemote: false)
     }

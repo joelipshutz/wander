@@ -317,8 +317,11 @@ struct WanderRootView: View {
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
+    @State private var restoredPlaceSaveDraftOwnerID: String?
+    @State private var interruptedSaveRecoveryMessage: String?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
+    @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
@@ -358,6 +361,7 @@ struct WanderRootView: View {
         )
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
+        _placeSaveDraftStore = StateObject(wrappedValue: PlaceSaveDraftStore())
         _addSheetDetent = State(
             initialValue: AddSheetLayout.restingDetent(
                 hasPendingImports: importStore.summary.hasPendingImports
@@ -447,6 +451,7 @@ struct WanderRootView: View {
             ) {
                 AddScreen(
                     importStore: importStore,
+                    placeSaveDraftStore: placeSaveDraftStore,
                     resetToken: addTabResetToken,
                     selectedDetent: $addSheetDetent,
                     launchRequest: addLaunchRequest,
@@ -528,6 +533,7 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            restorePlaceSaveDraftIfNeeded()
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
             drainSharedPlaceImports()
@@ -581,6 +587,10 @@ struct WanderRootView: View {
             routeNotification(request)
         }
         .onChange(of: auth.state) { _, state in
+            if !state.isSignedIn {
+                placeSaveDraftStore.clear()
+                restoredPlaceSaveDraftOwnerID = nil
+            }
             applyAuthStateIfNeeded(state)
             publishWidgetSnapshot()
             Task {
@@ -645,6 +655,9 @@ struct WanderRootView: View {
             handleControlNavigationRequestIfReady(request)
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                placeSaveDraftStore.flush()
+            }
             guard phase == .active, isSessionValidated else { return }
             drainSharedPlaceImports()
             scheduleSignedInMaintenance(for: auth.state)
@@ -660,6 +673,19 @@ struct WanderRootView: View {
                 onReview: presentSharedPlaceImportReview
             )
         )
+        .alert(
+            "Saved to your map",
+            isPresented: Binding(
+                get: { interruptedSaveRecoveryMessage != nil },
+                set: { if !$0 { interruptedSaveRecoveryMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                interruptedSaveRecoveryMessage = nil
+            }
+        } message: {
+            Text(interruptedSaveRecoveryMessage ?? "")
+        }
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
                 handleControlNavigationRequestIfReady(
@@ -685,10 +711,60 @@ struct WanderRootView: View {
     }
 
     private func presentAddSheet() {
+        placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
         addLaunchRequest = nil
         addSheetDetent = addSheetRestingDetent
+        isPresentingAdd = true
+    }
+
+    private func restorePlaceSaveDraftIfNeeded() {
+        let ownerUserID = store.currentUser.id
+        guard restoredPlaceSaveDraftOwnerID != ownerUserID else { return }
+        restoredPlaceSaveDraftOwnerID = ownerUserID
+
+        guard case .restored(let draft) = placeSaveDraftStore.restore(
+            ownerUserID: ownerUserID
+        ) else { return }
+
+        let currentSave = MapPlaceSaveContext.currentUserSave(
+            matching: draft.candidate,
+            in: store.currentUserVisiblePlaces
+        )
+        let latestVisit = currentSave.flatMap {
+            store.visits(for: $0.userPlace.id).first
+        }
+        let evidence = currentSave.map {
+            PlaceSaveDraftCommitEvidence(
+                userPlaceLocalID: $0.userPlace.localID,
+                userPlaceUpdatedAt: $0.userPlace.localUpdatedAt,
+                status: $0.userPlace.status,
+                latestVisitLocalID: latestVisit?.localID,
+                latestVisitCreatedAt: latestVisit?.createdAt
+            )
+        }
+
+        switch PlaceSaveDraftRecoveryPolicy.outcome(for: draft, evidence: evidence) {
+        case .committed:
+            placeSaveDraftStore.clear()
+            interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
+                ? "Your check-in finished while rec.me was in the background."
+                : "This place was added to Wanna while rec.me was in the background."
+        case .retry:
+            placeSaveDraftStore.prepareRetry(
+                message: "Save was interrupted before rec.me could confirm it. Review your details and try again."
+            )
+            presentRestoredAddSheet()
+        case .editing:
+            presentRestoredAddSheet()
+        }
+    }
+
+    private func presentRestoredAddSheet() {
+        store.saveFlowDidPresent(.addSheet)
+        addLaunchRequest = nil
+        addSheetDetent = .large
         isPresentingAdd = true
     }
 
@@ -817,6 +893,7 @@ struct WanderRootView: View {
         saveStreakCelebrationTask?.cancel()
 
         guard !auth.state.isSignedIn, fixtureMode == .empty else { return }
+        placeSaveDraftStore.clear()
         WanderWidgetSnapshotPublisher.clear()
         store.apply(authState: auth.state)
         Task {
@@ -920,6 +997,7 @@ struct WanderRootView: View {
     }
 
     private func handleAddSheetDismissal() {
+        placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
     }
 
