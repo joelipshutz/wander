@@ -59,7 +59,8 @@ struct PlacePhotoGalleryPage: Equatable {
 enum PlacePhotoGalleryPresenter {
     static func items(
         providerPhoto: PlacePhoto?,
-        userPhotos: [PlacePhotoGalleryItem]
+        userPhotos: [PlacePhotoGalleryItem],
+        excludingUserPhotoIDs: Set<String> = []
     ) -> [PlacePhotoGalleryItem] {
         var seen = Set<String>()
         var result: [PlacePhotoGalleryItem] = []
@@ -70,7 +71,9 @@ enum PlacePhotoGalleryPresenter {
             result.append(item)
         }
 
-        for item in userPhotos where item.contributor != nil {
+        for item in userPhotos
+        where item.contributor != nil
+            && !excludingUserPhotoIDs.contains(item.photo.providerPlaceID) {
             guard !seen.contains(item.id) else { continue }
             seen.insert(item.id)
             result.append(item)

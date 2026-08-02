@@ -3955,11 +3955,20 @@ final class WanderStoreTests: XCTestCase {
             ratingScore: 4
         )
         let visit = store.visits(for: result.userPlaceID).first
+        let photo = store.createVisitPhoto(
+            visitID: visit?.id ?? "",
+            localAssetRef: "saba-cafe-and-surf.jpg"
+        )
+        photo?.serverID = "photo_saba_cafe_and_surf"
 
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.status, .been)
         XCTAssertTrue(store.deleteVisit(visitID: visit?.id ?? ""))
 
         XCTAssertTrue(store.visits(for: result.userPlaceID).isEmpty)
+        XCTAssertEqual(
+            store.deletedVisitPhotoReferenceIDs,
+            Set([photo?.localID, photo?.serverID].compactMap { $0 })
+        )
         XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
     }
 
