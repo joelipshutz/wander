@@ -2019,6 +2019,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(initialSelection.contains("let initialPlaceQuery"))
         XCTAssertFalse(initialSelection.contains("firstVisiblePlace"))
         XCTAssertFalse(source.contains("centerMapOnInitialPlacesIfNeeded"))
+        XCTAssertTrue(source.contains(".userLocation(followsHeading: false, fallback: .automatic)"))
+        XCTAssertFalse(source.contains("MapCameraPosition = .region(Self.defaultSearchRegion)"))
+
+        let viewport = MapScreen.viewport(for: region)
+        XCTAssertEqual(viewport.minLatitude, 37.7149, accuracy: 0.000_001)
+        XCTAssertEqual(viewport.maxLatitude, 37.8349, accuracy: 0.000_001)
+        XCTAssertEqual(viewport.minLongitude, -122.4894, accuracy: 0.000_001)
+        XCTAssertEqual(viewport.maxLongitude, -122.3494, accuracy: 0.000_001)
     }
 
     func testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush() throws {

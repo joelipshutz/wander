@@ -21,6 +21,10 @@ struct WanderDeepLinkLaunchRequest: Equatable, Identifiable {
 struct WanderDeepLinkInbox: Equatable {
     private(set) var pendingRequest: WanderDeepLinkLaunchRequest?
 
+    mutating func receive(_ request: WanderDeepLinkLaunchRequest) {
+        pendingRequest = request
+    }
+
     mutating func receive(_ url: URL) {
         guard let request = WanderDeepLinkLaunchRequest(url: url) else {
             return

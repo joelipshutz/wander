@@ -36,11 +36,25 @@ private final class AuthenticatedNotificationGate: @unchecked Sendable {
         if state == .unknown, self.expectedUserID == expectedUserID {
             return
         }
+
+        let shouldPreserveResponses = expectedUserID != nil
+            && self.expectedUserID == expectedUserID
         state = .unknown
         authenticatedUserID = nil
         self.expectedUserID = expectedUserID
         validationGeneration &+= 1
-        pendingResponses.removeAll()
+        if shouldPreserveResponses, let expectedUserID {
+            pendingResponses = pendingResponses.compactMap { response in
+                guard response.expectedUserID == expectedUserID else { return nil }
+                return PendingResponse(
+                    userInfo: response.userInfo,
+                    expectedUserID: expectedUserID,
+                    validationGeneration: validationGeneration
+                )
+            }
+        } else {
+            pendingResponses.removeAll()
+        }
     }
 
     func authenticate(userID: String) {
@@ -69,6 +83,14 @@ private final class AuthenticatedNotificationGate: @unchecked Sendable {
         defer { lock.unlock() }
         switch state {
         case .authenticated:
+            guard let authenticatedUserID else { return nil }
+            pendingResponses.append(
+                PendingResponse(
+                    userInfo: userInfo,
+                    expectedUserID: authenticatedUserID,
+                    validationGeneration: validationGeneration
+                )
+            )
             return authenticatedUserID
         case .unknown:
             guard let expectedUserID else { return nil }

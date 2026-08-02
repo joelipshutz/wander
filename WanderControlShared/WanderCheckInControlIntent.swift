@@ -1,39 +1,58 @@
 import AppIntents
-import Combine
 import Foundation
 
 struct WanderControlNavigationRequest: Equatable, Identifiable {
     let id: UUID
     let route: WanderDeepLinkRoute
+}
 
-    init(id: UUID = UUID(), route: WanderDeepLinkRoute) {
-        self.id = id
-        self.route = route
+struct WanderControlLaunchRequestStore {
+    private struct Payload: Codable {
+        let id: UUID
+        let destination: WanderControlDestination
+    }
+
+    private static let pendingRequestKey = "wander.control.pendingLaunchRequest"
+    private let defaults: UserDefaults?
+
+    init(
+        defaults: UserDefaults? = UserDefaults(
+            suiteName: WanderWidgetConstants.appGroupIdentifier
+        )
+    ) {
+        self.defaults = defaults
+    }
+
+    @discardableResult
+    func request(
+        _ destination: WanderControlDestination,
+        id: UUID = UUID()
+    ) -> WanderControlNavigationRequest? {
+        let payload = Payload(id: id, destination: destination)
+        guard let defaults,
+              let data = try? JSONEncoder().encode(payload)
+        else { return nil }
+        defaults.set(data, forKey: Self.pendingRequestKey)
+        return WanderControlNavigationRequest(id: id, route: destination.route)
+    }
+
+    func takePendingRequest() -> WanderControlNavigationRequest? {
+        guard let defaults,
+              let data = defaults.data(forKey: Self.pendingRequestKey)
+        else { return nil }
+
+        defaults.removeObject(forKey: Self.pendingRequestKey)
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            return nil
+        }
+        return WanderControlNavigationRequest(
+            id: payload.id,
+            route: payload.destination.route
+        )
     }
 }
 
-@MainActor
-final class WanderControlNavigationCenter: ObservableObject {
-    static let shared = WanderControlNavigationCenter()
-
-    @Published private(set) var pendingRequest: WanderControlNavigationRequest?
-
-    init(pendingRequest: WanderControlNavigationRequest? = nil) {
-        self.pendingRequest = pendingRequest
-    }
-
-    func request(_ route: WanderDeepLinkRoute) {
-        pendingRequest = WanderControlNavigationRequest(route: route)
-    }
-
-    func consume(_ requestID: UUID) {
-        guard pendingRequest?.id == requestID else { return }
-        pendingRequest = nil
-    }
-}
-
-@available(iOS 18.0, *)
-enum WanderControlDestination: String, AppEnum {
+enum WanderControlDestination: String, AppEnum, Codable {
     case checkInHere
 
     static let typeDisplayRepresentation = TypeDisplayRepresentation(
@@ -74,9 +93,8 @@ struct WanderOpenCheckInControlIntent: OpenIntent {
         self.target = target
     }
 
-    @MainActor
     func perform() async throws -> some IntentResult {
-        WanderControlNavigationCenter.shared.request(target.route)
+        WanderControlLaunchRequestStore().request(target)
         return .result()
     }
 }

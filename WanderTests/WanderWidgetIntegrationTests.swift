@@ -184,7 +184,10 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertEqual(handoff.awaitingDismissals, [presentedAdd])
         XCTAssertEqual(
             handoff.acknowledgeDismissal(presentedAdd),
-            .quickSearch(query: "coffee")
+            WanderReadyDeepLinkHandoff(
+                requestID: latestRequestID,
+                route: .quickSearch(query: "coffee")
+            )
         )
         XCTAssertNil(handoff.acknowledgeDismissal(presentedAdd))
     }
@@ -237,10 +240,44 @@ final class WanderWidgetIntegrationTests: XCTestCase {
 
         XCTAssertEqual(
             handoff.acknowledgeDismissal(newerAdd),
-            .profileCalendar
+            WanderReadyDeepLinkHandoff(
+                requestID: latestRequestID,
+                route: .profileCalendar
+            )
         )
         XCTAssertNil(handoff.acknowledgeDismissal(newerAdd))
-        XCTAssertNil(handoff.takeReadyRoute(requestID: latestRequestID))
+        XCTAssertNil(handoff.takeReadyHandoff(requestID: latestRequestID))
+    }
+
+    func testDeepLinkInboxSurvivesRootHandoffCancellationUntilActivation() throws {
+        var inbox = WanderDeepLinkInbox()
+        inbox.receive(WanderWidgetConstants.profileCalendarURL)
+        let request = try XCTUnwrap(inbox.request(ifSessionValidated: true))
+
+        var disappearingRoot = WanderDeepLinkHandoffCoordinator()
+        disappearingRoot.begin(
+            requestID: request.id,
+            route: request.route,
+            awaitingDismissals: []
+        )
+        disappearingRoot.cancel()
+
+        XCTAssertEqual(inbox.pendingRequest, request)
+
+        var replacementRoot = WanderDeepLinkHandoffCoordinator()
+        replacementRoot.begin(
+            requestID: request.id,
+            route: request.route,
+            awaitingDismissals: []
+        )
+        let readyHandoff = try XCTUnwrap(
+            replacementRoot.takeReadyHandoff(requestID: request.id)
+        )
+
+        XCTAssertEqual(readyHandoff.requestID, request.id)
+        XCTAssertEqual(readyHandoff.route, .profileCalendar)
+        inbox.consume(readyHandoff.requestID)
+        XCTAssertNil(inbox.pendingRequest)
     }
 
     @MainActor
@@ -415,7 +452,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(launchRequests.contains("WanderDeepLinkRoute.parse(url)"))
         XCTAssertTrue(launchRequests.contains("isSessionValidated ? pendingRequest : nil"))
         XCTAssertTrue(root.contains("handleDeepLinkLaunchRequestIfReady(request)"))
-        XCTAssertTrue(root.contains("beginDeepLinkHandoff(to: request.route)"))
+        XCTAssertTrue(root.contains("beginDeepLinkHandoff(requestID: request.id, route: request.route)"))
         XCTAssertFalse(root.contains(".onOpenURL"))
         XCTAssertTrue(root.contains("WanderAddLaunchRequest(destination: .hereNow)"))
         XCTAssertTrue(root.contains("case .nearbyPlace(let candidateID):"))
@@ -428,7 +465,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(root.contains("destination: .day"))
         XCTAssertTrue(root.contains("presentationResetRequest: presentationResetRequest"))
         XCTAssertTrue(root.contains("deepLinkHandoffTask?.cancel()"))
-        XCTAssertTrue(root.contains("let resetRequest = WanderPresentationResetRequest()"))
+        XCTAssertTrue(root.contains("let resetRequest = WanderPresentationResetRequest(id: requestID)"))
         XCTAssertTrue(root.contains("WanderDeepLinkPresentationToken"))
         XCTAssertTrue(
             root.contains(
@@ -464,7 +501,8 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(root.contains("acknowledgeDismissal(token)"))
         XCTAssertTrue(root.contains("presentationResetRequest?.id == requestID"))
         XCTAssertTrue(root.contains("guard !Task.isCancelled"))
-        XCTAssertTrue(root.contains("activateDeepLink(route)"))
+        XCTAssertTrue(root.contains("activateDeepLink(handoff.route)"))
+        XCTAssertTrue(root.contains("onDeepLinkLaunchRequestHandled(handoff.requestID)"))
         XCTAssertTrue(root.contains("addLaunchRequest = nil"))
         XCTAssertTrue(root.contains("mapSearchLaunchRequest = nil"))
         XCTAssertTrue(root.contains("profileCalendarLaunchRequest = nil"))
@@ -476,7 +514,28 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(root.contains("auth.isPresentingNativeAuth = false"))
         XCTAssertLessThan(
             try XCTUnwrap(root.range(of: "resetRootPresentationsForDeepLink()")).lowerBound,
-            try XCTUnwrap(root.range(of: "activateDeepLink(route)")).lowerBound
+            try XCTUnwrap(root.range(of: "activateDeepLink(handoff.route)")).lowerBound
+        )
+
+        let requestHandler = try XCTUnwrap(
+            root
+                .components(separatedBy: "private func handleDeepLinkLaunchRequestIfReady(")
+                .last?
+                .components(separatedBy: "private func beginDeepLinkHandoff(")
+                .first
+        )
+        XCTAssertFalse(requestHandler.contains("onDeepLinkLaunchRequestHandled"))
+
+        let activationHandler = try XCTUnwrap(
+            root
+                .components(separatedBy: "private func activateDeepLinkHandoff(")
+                .last?
+                .components(separatedBy: "private func resetRootPresentationsForDeepLink()")
+                .first
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(activationHandler.range(of: "activateDeepLink(handoff.route)")).lowerBound,
+            try XCTUnwrap(activationHandler.range(of: "onDeepLinkLaunchRequestHandled(handoff.requestID)")).lowerBound
         )
 
         XCTAssertTrue(add.contains(".task(id: launchRequest?.id)"))
