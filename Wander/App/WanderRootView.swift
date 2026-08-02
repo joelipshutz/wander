@@ -1072,7 +1072,7 @@ struct WanderRootView: View {
         }
 
         switch state {
-        case .signedIn(let session):
+        case .signedIn(let session), .offline(let session, _):
             if widgetCalendarIdentityUserID != session.userID {
                 WanderWidgetSnapshotPublisher.clear()
                 widgetCalendarIdentityUserID = session.userID

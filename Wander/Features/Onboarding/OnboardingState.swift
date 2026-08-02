@@ -96,6 +96,32 @@ enum AppEntryStateResolver {
         }
         return .onboarding(session: session, step: localState.nextStep)
     }
+
+    static func offlineState(
+        session: AuthSession,
+        localState: OnboardingLocalState,
+        message: String
+    ) -> AppEntryState {
+        if localState.isComplete {
+            return .ready(session: session)
+        }
+        return .recoverableFailure(
+            session: session,
+            message: message,
+            canContinueOffline: canContinueOffline(session: session, localState: localState)
+        )
+    }
+
+    private static func canContinueOffline(
+        session: AuthSession,
+        localState: OnboardingLocalState
+    ) -> Bool {
+        localState.nextStep != .identity
+            || ProfileIdentityDraft(
+                displayName: session.displayName ?? "",
+                handle: session.handle ?? ""
+            ).isValid
+    }
 }
 
 @MainActor
@@ -137,11 +163,12 @@ final class AppEntryCoordinator: ObservableObject {
 
     func retry() {
         switch state {
-        case .recoverableFailure(let session, _, _):
+        case .recoverableFailure:
             state = .launching
             resolutionTask?.cancel()
             resolutionTask = Task { [weak self] in
-                await self?.resolve(.signedIn(session), forceRemote: true)
+                guard let self else { return }
+                await self.start()
             }
         case .unavailable:
             state = .launching
@@ -190,6 +217,14 @@ final class AppEntryCoordinator: ObservableObject {
             state = .signedOut
         case .unavailable(let message):
             state = .unavailable(message)
+        case .offline(let session, let message):
+            let local = completionStore.state(for: session.userID)
+            resolvedUserID = session.userID
+            state = AppEntryStateResolver.offlineState(
+                session: session,
+                localState: local,
+                message: message
+            )
         case .signedIn(let session):
             guard auth.isSessionValidated else {
                 state = .launching
