@@ -121,13 +121,16 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
     #endif
 
-    func testRatingExplanationCopyDescribesDistinctSignals() {
-        XCTAssertEqual(PlaceRatingExplanation.ratings.title, "Ratings")
+    func testFitScoreExplanationCopyDescribesPersonalizationWithoutFallbackBehavior() {
+        XCTAssertEqual(PlaceRatingExplanation.fitScore.title, "Fit score")
         XCTAssertEqual(
-            PlaceRatingExplanation.ratings.message,
-            "Friends rating averages ratings from people you follow who checked in here. If none have rated it, rec.me rating shows the broader community average. Fit score is personalized from your ratings, categories, tags, and people you follow."
+            PlaceRatingExplanation.fitScore.message,
+            "Fit score predicts how well this place matches your taste. It uses your ratings, the categories and tags you like, and places saved by trusted people."
         )
-        XCTAssertEqual(PlaceRatingExplanation.ratings.accessibilityLabel, "About the Ratings")
+        XCTAssertEqual(PlaceRatingExplanation.fitScore.accessibilityLabel, "About Fit score")
+        XCTAssertFalse(PlaceRatingExplanation.fitScore.message.contains("If none"))
+        XCTAssertFalse(PlaceRatingExplanation.fitScore.message.contains("rec.me rating"))
+        XCTAssertFalse(PlaceRatingExplanation.fitScore.message.contains("Friends rating"))
     }
 
     func testPlacePhotoDecodesProviderTypesForCategoryEnrichment() throws {
