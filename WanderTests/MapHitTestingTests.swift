@@ -248,6 +248,41 @@ final class MapPinOutlineBuilderTests: XCTestCase {
 }
 
 final class VisiblePlaceGroupingTests: XCTestCase {
+    @MainActor
+    func testDroppedPinPresentationDoesNotReuseSameNamedPinAtAnotherCoordinate() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let northernPin = visiblePlace(
+            owner: currentUser,
+            name: "Dropped pin",
+            category: "other",
+            address: "40.71280, -124.21400",
+            latitude: 40.7128,
+            longitude: -124.2140,
+            sourceProvider: "coordinate",
+            providerID: "coordinate_4071280_-12421400",
+            status: .been
+        )
+        let southernCandidate = MapScreen.coordinateCandidate(
+            at: CLLocationCoordinate2D(latitude: 32.7157, longitude: -117.1611)
+        )
+
+        XCTAssertNil(
+            MapScreen.matchingVisiblePlace(
+                for: southernCandidate,
+                in: [northernPin]
+            )
+        )
+        XCTAssertEqual(
+            MapScreen.matchingVisiblePlace(
+                for: MapScreen.coordinateCandidate(
+                    at: CLLocationCoordinate2D(latitude: 40.7128, longitude: -124.2140)
+                ),
+                in: [northernPin]
+            )?.id,
+            northernPin.id
+        )
+    }
+
     func testOutlineCatalogCarriesRyanJoeMayaTopologyToEveryGroupedSaveID() throws {
         let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
         let joe = profile(id: "user_joe", handle: "joe", displayName: "Joe")
@@ -506,6 +541,7 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         address: String? = nil,
         latitude: Double,
         longitude: Double,
+        sourceProvider: String = "mapkit",
         providerID: String,
         status: PlaceStatus,
         ratingScore: Double? = nil,
@@ -519,7 +555,7 @@ final class VisiblePlaceGroupingTests: XCTestCase {
             address: address,
             latitude: latitude,
             longitude: longitude,
-            sourceProvider: "mapkit",
+            sourceProvider: sourceProvider,
             sourceProviderPlaceID: providerID,
             syncState: .synced
         )
