@@ -374,18 +374,15 @@ struct WanderRootView: View {
             MapScreen(
                 presentationResetRequest: presentationResetRequest,
                 searchLaunchRequest: mapSearchLaunchRequest,
-                onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest
+                onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
+                onAdd: presentAddSheet
             )
                 .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
                 .tag(WanderTab.map)
 
-            FeedScreen()
+            FeedScreen(onAdd: presentAddSheet)
                 .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
                 .tag(WanderTab.discover)
-
-            Color.clear
-                .tabItem { Label(WanderTab.add.title, systemImage: WanderTab.add.systemImage) }
-                .tag(WanderTab.add)
 
             ListsScreen()
                 .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
@@ -680,15 +677,19 @@ struct WanderRootView: View {
             selectedTab
         } set: { newTab in
             if newTab == .add {
-                store.saveFlowDidPresent(.addSheet)
-                addTabResetToken = UUID()
-                addLaunchRequest = nil
-                addSheetDetent = addSheetRestingDetent
-                isPresentingAdd = true
+                presentAddSheet()
             } else {
                 selectedTab = newTab
             }
         }
+    }
+
+    private func presentAddSheet() {
+        store.saveFlowDidPresent(.addSheet)
+        addTabResetToken = UUID()
+        addLaunchRequest = nil
+        addSheetDetent = addSheetRestingDetent
+        isPresentingAdd = true
     }
 
     private var addSheetRestingDetent: PresentationDetent {
@@ -1072,7 +1073,7 @@ struct WanderRootView: View {
         }
 
         switch state {
-        case .signedIn(let session):
+        case .signedIn(let session), .offline(let session, _):
             if widgetCalendarIdentityUserID != session.userID {
                 WanderWidgetSnapshotPublisher.clear()
                 widgetCalendarIdentityUserID = session.userID

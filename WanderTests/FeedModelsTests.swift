@@ -70,6 +70,29 @@ final class FeedModelsTests: XCTestCase {
         XCTAssertEqual(activity.resolvedTicketKind, .saved)
     }
 
+    func testFeaturedPlacesKeepTheActorProfilePhotoWhenThePlaceProjectionLacksIt() throws {
+        let actorWithPhoto = ProfileShell(
+            id: actor.id,
+            handle: actor.handle,
+            displayName: actor.displayName,
+            avatarURL: "https://example.com/maya.jpg",
+            bio: actor.bio,
+            relationship: actor.relationship
+        )
+        let activity = socialSaveActivity(status: .wannaGo, actor: actorWithPhoto)
+
+        let featured = try XCTUnwrap(
+            FeedPresentation.featuredPlaces(
+                from: [activity],
+                currentUserPlaceIDs: []
+            ).first
+        )
+
+        XCTAssertNil(featured.visiblePlace.owner.avatarURL)
+        XCTAssertEqual(featured.actor, actorWithPhoto)
+        XCTAssertEqual(featured.actor.avatarURL, "https://example.com/maya.jpg")
+    }
+
     private var actor: ProfileShell {
         ProfileShell(
             id: "user_maya",
@@ -91,6 +114,10 @@ final class FeedModelsTests: XCTestCase {
     }
 
     private func socialSaveActivity(status: PlaceStatus) -> FeedActivity {
+        socialSaveActivity(status: status, actor: actor)
+    }
+
+    private func socialSaveActivity(status: PlaceStatus, actor: ProfileShell) -> FeedActivity {
         let place = LocalPlace(
             localID: "local_place",
             serverID: "place",

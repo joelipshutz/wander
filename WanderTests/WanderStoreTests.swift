@@ -992,6 +992,75 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
+    func testCurrentUserRemoteMapCacheSurvivesOfflineRelaunchAndClearsOnSignOut() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(
+            userID: "user_offline_cache",
+            displayName: "Offline User",
+            handle: "offline_user"
+        )
+        let savedAt = Date(timeIntervalSince1970: 1_753_100_000)
+
+        do {
+            let store = WanderStore(
+                fixtures: WanderFixtures.empty(),
+                persistence: fixture.persistence
+            )
+            store.apply(authState: .signedIn(session))
+            let cachedPlace = makeRemoteCalendarVisiblePlace(
+                owner: store.currentUser,
+                userPlaceID: "up_offline_cache",
+                placeID: "place_offline_cache",
+                name: "Cached Offline Cafe",
+                status: .been,
+                visibility: .selfOnly,
+                savedAt: savedAt,
+                visitedAt: savedAt
+            )
+            let hydrated = await store.refreshRemoteCurrentUserCalendarData(
+                backend: WanderBackend(
+                    userPlaceRepository: FakeUserPlaceRepository(
+                        userPlacesByUserID: [session.userID: [cachedPlace]]
+                    )
+                )
+            )
+
+            XCTAssertTrue(hydrated)
+            XCTAssertEqual(store.remoteVisiblePlaceCache.map(\.place.canonicalName), ["Cached Offline Cafe"])
+        }
+
+        do {
+            let relaunchedStore = WanderStore(
+                fixtures: WanderFixtures.empty(),
+                persistence: fixture.persistence
+            )
+            relaunchedStore.apply(
+                authState: .offline(session, message: "Saved map available offline")
+            )
+
+            XCTAssertEqual(relaunchedStore.currentUser.id, session.userID)
+            XCTAssertEqual(
+                relaunchedStore.currentUserVisiblePlaces.map(\.place.canonicalName),
+                ["Cached Offline Cafe"]
+            )
+            XCTAssertEqual(relaunchedStore.remoteVisiblePlaceCache.count, 1)
+
+            relaunchedStore.apply(authState: .signedOut)
+        }
+
+        let signedOutRelaunch = WanderStore(
+            fixtures: WanderFixtures.empty(),
+            persistence: fixture.persistence
+        )
+        XCTAssertTrue(signedOutRelaunch.remoteVisiblePlaceCache.isEmpty)
+        XCTAssertFalse(
+            signedOutRelaunch.visiblePlaces().contains {
+                $0.place.canonicalName == "Cached Offline Cafe"
+            }
+        )
+    }
+
     func testCalendarRemoteStateClearsOnDirectAccountSwitch() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         let userA = "user_direct_a"
