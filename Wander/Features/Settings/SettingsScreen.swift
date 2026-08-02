@@ -438,6 +438,30 @@ struct NotificationSettingsSheet: View {
                             systemImage: "calendar.badge.exclamationmark",
                             binding: preferenceBinding(\.wannaGoRemindersEnabled) { NotificationPreferencesUpdate(wannaGoRemindersEnabled: $0) }
                         )
+                        notificationToggle(
+                            title: "Save streak reminders",
+                            systemImage: "flame",
+                            binding: saveStreakReminderBinding
+                        )
+                        #if DEBUG
+                        Button {
+                            Task {
+                                errorMessage = nil
+                                if await pushNotifications.scheduleDebugSaveStreakReminder(store.saveStreakSummary) {
+                                    errorMessage = "Test reminder scheduled. Background rec.me for five seconds."
+                                } else {
+                                    errorMessage = pushNotifications.lastErrorMessage
+                                }
+                            }
+                        } label: {
+                            Label("send test streak reminder", systemImage: "bell.badge")
+                                .font(.system(size: 14, weight: .bold))
+                                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!notificationsEnabled || !pushNotifications.saveStreakRemindersEnabled)
+                        .accessibilityIdentifier("settings.notifications.testSaveStreakReminder")
+                        #endif
                     }
                     .padding(WanderTheme.spacing3)
                     .background(WanderTheme.surfaceBone.color)
@@ -594,6 +618,20 @@ struct NotificationSettingsSheet: View {
         }
     }
 
+    private var saveStreakReminderBinding: Binding<Bool> {
+        Binding {
+            pushNotifications.saveStreakRemindersEnabled
+        } set: { isEnabled in
+            pushNotifications.setSaveStreakRemindersEnabled(
+                isEnabled,
+                for: store.currentUser.id
+            )
+            Task {
+                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            }
+        }
+    }
+
     private func load() async {
         await pushNotifications.refreshAuthorizationStatus()
         guard auth.isSignedIn, backend.canRegisterPushNotifications else {
@@ -610,7 +648,9 @@ struct NotificationSettingsSheet: View {
                 ? loadedPreferences
                 : .allDisabled
             pushNotifications.applyNotificationPreferences(preferences)
+            pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
             await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
         } catch {
             errorMessage = "Could not load notification settings."
         }
@@ -647,7 +687,9 @@ struct NotificationSettingsSheet: View {
             return
         }
         preferences = enabledPreferences
+        pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
         await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
     }
 
     private func disableNotifications() async {
@@ -678,6 +720,7 @@ struct NotificationSettingsSheet: View {
             preferences = try await backend.updateNotificationPreferences(update)
             pushNotifications.applyNotificationPreferences(preferences)
             await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
         } catch {
             errorMessage = "Could not save notification settings."
         }

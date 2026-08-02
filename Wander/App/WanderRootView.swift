@@ -327,6 +327,7 @@ struct WanderRootView: View {
     private let isSessionValidated: Bool
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
+    private let analytics: AnalyticsClient
 
     init(
         initialTab: WanderTab? = nil,
@@ -344,6 +345,7 @@ struct WanderRootView: View {
         self.isSessionValidated = isSessionValidated
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
+        self.analytics = analytics
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
@@ -614,6 +616,9 @@ struct WanderRootView: View {
         .onChange(of: store.saveStreakCelebration) { _, celebration in
             guard isSessionValidated else { return }
             queueSaveStreakCelebration(celebration)
+            Task {
+                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            }
         }
         .onChange(of: store.presentationRevision) { _, _ in
             guard isSessionValidated else { return }
@@ -860,6 +865,9 @@ struct WanderRootView: View {
         widgetCalendarHydratedUserID = session.userID
         widgetCalendarLastHydratedAt = .now
         publishWidgetSnapshot(allowFreshnessAdvance: true)
+        Task {
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+        }
     }
 
     static func calendarRefreshDidFinish(
@@ -902,6 +910,18 @@ struct WanderRootView: View {
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
+        if request.destination == .quickCapture {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.saveStreakReminderOpened,
+                    properties: [:]
+                )
+            )
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .quickCapture)
+            return
+        }
+
         isPresentingAdd = false
         initialPresentation = nil
 
@@ -913,6 +933,7 @@ struct WanderRootView: View {
 
     static func notificationTab(for destination: NotificationDestination) -> WanderTab {
         switch destination {
+        case .quickCapture: .map
         case .people, .drafts: .profile
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
@@ -1426,6 +1447,7 @@ struct WanderRootView: View {
         guard case .signedIn = state else {
             pushNotifications.applyNotificationPreferences(.allDisabled)
             await pushNotifications.cancelAllWannaGoReminders()
+            await pushNotifications.cancelAllSaveStreakReminders()
             return
         }
         guard isSessionValidated || fixtureMode != .empty else { return }
@@ -1435,10 +1457,13 @@ struct WanderRootView: View {
             guard auth.state == state, !Task.isCancelled else { return }
             pushNotifications.applyNotificationPreferences(preferences)
         }
+        pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
         guard auth.state == state, !Task.isCancelled else { return }
         await store.refreshRemoteWannaGoPlans(backend: backend)
         guard auth.state == state, !Task.isCancelled else { return }
         await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+        guard auth.state == state, !Task.isCancelled else { return }
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
     }
 
     static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {

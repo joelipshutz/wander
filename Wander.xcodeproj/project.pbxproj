@@ -10,6 +10,7 @@
 		001422F87FC100BC18C54CAA /* AppBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1E08A489F203F67F25F17 /* AppBrand.swift */; };
 		00921780015C7C463869A1E9 /* CountryCanonicalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */; };
 		01193A5EFB4DEB5B4F0BB8A4 /* WanderWidgetIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3179057CF009DF47A424566 /* WanderWidgetIntegrationTests.swift */; };
+		03435FEBB745514BF4E77424 /* SaveStreakReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA3EDD3FA845221CF23EBFCA /* SaveStreakReminder.swift */; };
 		03461155119042D6739D7619 /* WanderEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038D4985674B1D969110954F /* WanderEnums.swift */; };
 		05524137CF3C88B0327AFB9F /* PlacePhotoCarouselMockupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 249D58D889C2DFE7795EB7C6 /* PlacePhotoCarouselMockupTests.swift */; };
 		05CD519FB3F114E951C4D2DE /* LinkPlaceParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86041408E563554B57347025 /* LinkPlaceParser.swift */; };
@@ -388,6 +389,7 @@
 		F7550C652E50A85ADBBDDCFC /* SaveStreakTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreakTests.swift; sourceTree = "<group>"; };
 		F75A03C0B92270278A60AE58 /* ListPlacePhotoResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListPlacePhotoResolver.swift; sourceTree = "<group>"; };
 		F99048FDB3AD3D79FB6B853D /* LocalListModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalListModels.swift; sourceTree = "<group>"; };
+		FA3EDD3FA845221CF23EBFCA /* SaveStreakReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreakReminder.swift; sourceTree = "<group>"; };
 		FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveStreak.swift; sourceTree = "<group>"; };
 		FF974E1185955511D9799445 /* ListMapPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListMapPresentationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -814,6 +816,7 @@
 				3993D0CE7A907E02E0B1A590 /* ProfileAvatarStorage.swift */,
 				3A8893E8CF16E21653DE03BA /* PushNotificationManager.swift */,
 				0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */,
+				FA3EDD3FA845221CF23EBFCA /* SaveStreakReminder.swift */,
 				0757A5692D997B5355944002 /* SharedPlaceImportInboxDrainer.swift */,
 				1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */,
 				C0925F17F5640CFD88F70EBA /* SyncStateMachine.swift */,
@@ -1102,6 +1105,7 @@
 				A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */,
 				DC93B6D45F927B63B3DD012D /* SaveStreak.swift in Sources */,
 				FC37BACBA2619692E8814305 /* SaveStreakCelebrationView.swift in Sources */,
+				03435FEBB745514BF4E77424 /* SaveStreakReminder.swift in Sources */,
 				13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */,
 				18622774B25BD7DAE231ADE4 /* SharedPlaceImportInbox.swift in Sources */,
 				F4FB6BEEE27D8866E2FA6187 /* SharedPlaceImportInboxDrainer.swift in Sources */,

@@ -1590,6 +1590,7 @@ final class NavigationContractTests: XCTestCase {
 
     @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
+        XCTAssertEqual(WanderRootView.notificationTab(for: .quickCapture), .map)
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)

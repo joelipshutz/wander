@@ -39,6 +39,7 @@ enum WanderAnalyticsEvents {
     static let checkInSyncRetried = "check_in_sync_retried"
     static let saveStreakAdvanced = "save_streak_advanced"
     static let saveStreakSameDaySave = "save_streak_same_day_save"
+    static let saveStreakReminderOpened = "save_streak_reminder_opened"
     static let visibilityChanged = "visibility_changed"
     static let followCreated = "follow_created"
     static let followRemoved = "follow_removed"
