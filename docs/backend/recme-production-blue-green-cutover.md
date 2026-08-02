@@ -29,6 +29,7 @@ The backup is complete only when all of these exist and validate:
 - `config/hosted-functions.json`: deployed function inventory.
 - `config/hosted-secret-digests.json`: hosted secret names/digests. Supabase does not return secret values after creation.
 - `secrets/recme-operational.env`: private local copy of the rec.me values available in the approved local key store; mode `0600`.
+- `secrets/database-vault-decrypted.base64.env`: owner-only, one-line base64 export of the source database Vault values, including the scheduled-worker secret. Decode values only into a private shell/process when restoring.
 - `manifests/source-inventory.txt`: exact source counts/config/security metadata.
 - `manifests/SHA256SUMS`: checksum of every backup artifact except the checksum file itself.
 - `manifests/verification.txt`: dump parse, file count, permissions, and checksum verification results.
@@ -36,6 +37,8 @@ The backup is complete only when all of these exist and validate:
 Do not put the private backup or secret file in Git, Slack, Linear, a PR, or a shared cloud folder.
 
 The logical dump contains encrypted Vault rows, but Supabase owns the encryption root key. Prefer the native physical restore-to-new-project path because it transfers that root key. Do not claim a manual logical restore can decrypt Vault secrets unless that is explicitly proven on the target.
+
+Hosted Edge Function secret values cannot be read back after creation. The approved local key store plus the Vault export cover the recoverable app/provider and worker values. The APNs values (`APNS_KEY_ID`, `APNS_PRIVATE_KEY`, `APNS_TEAM_ID`, and `APNS_TOPIC`) are not present in that local store; obtain the authoritative Apple key material or rotate to a new APNs key before target validation. Until that succeeds, the source project is the only verified running copy of those Edge secrets and must remain untouched.
 
 ## Create and verify the source backup
 
