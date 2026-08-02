@@ -28548,3 +28548,58 @@ Transition outcome:
   audits, Linear issue/relation/comment verification, and
   `scripts/install-agent-skills.sh --check` all passed. No `xcodebuild` run was
   needed because the change does not touch app/runtime code.
+
+## 2026-07-31 23:27 PDT - Codex - REC-206 Check-in/Wanna deletion and Profile cache
+
+Agent: Codex
+Branch: `codex/rec-206-delete-refresh`
+Worktree: `/private/tmp/recme-rec206-delete-refresh`
+Linear: `REC-206` (`In Progress`)
+
+Goal: find and fix the intermittent Check-in/Wanna removal error and the stale
+Profile Recent activity/count state reported with July 31 screenshots, then
+push a testable branch, open a ready PR, and open this worktree in Xcode.
+
+Starting status and coordination:
+
+- Fetched `origin`; the worktree starts clean at `origin/main`
+  `3a15c710e`. The primary checkout is on stale branch
+  `codex/rec-142-widgets` with unrelated untracked `.pnpm-store/`, so this task
+  uses an isolated worktree and leaves that checkout untouched.
+- REC-206 was created, assigned to Ryan, moved to `In Progress`, and related
+  to REC-163. REC-163 covers the database trigger projection after ticket
+  deletion; REC-206 covers the user-facing deletion error and stale Profile
+  activity/cache behavior.
+- The supplied screenshots show Profile Recent activity/counts and the saved
+  place editor error “Could not remove this place from your map. Try again.”
+  No private notes, coordinates, account email, or auth material will be logged.
+- Engineering review is required because the path crosses persistence, sync,
+  repository, and Profile hydration/cache state. No implementation edit will
+  be made before root-cause evidence and the review gate.
+- Expected files are in `Wander/Features/Profile/`, the saved-place edit flow,
+  `Wander/Services/`, focused `WanderTests/`, and this coordination entry.
+  Exact scope will be narrowed after tracing the deletion data flow.
+
+Outcome and validation:
+
+- Confirmed the hosted `delete_own_check_in` RPC grant/security posture and its
+  enabled post-delete user-place synchronization trigger. No database migration
+  was needed.
+- Fixed backend-hydrated Profile check-ins being rejected by the local ownership
+  guard, made a persisted local deletion the UI success boundary, and refreshes
+  owner calendar state after confirmed deletes.
+- Added durable retry handling for failed Wanna/user-place deletions, including
+  remote-only cached saves that previously had no persisted tombstone.
+- Prevented the last deleted check-in from reappearing through the cached parent
+  row and Profile's legacy activity fallback.
+- Added three regression tests covering cached remote check-ins, offline/relaunch
+  check-in retry, and offline/relaunch remote-only Wanna retry.
+- Rebased twice as `origin/main` advanced during validation; the final rebase is
+  on `c95c510e0` and the last two incoming commits did not overlap REC-206 files.
+- Validation: XcodeGen generation and `git diff --check` passed. The three
+  focused REC-206 tests passed before and after the first rebase. The full suite
+  passed before rebasing; after rebasing, all unit tests passed and one unrelated
+  onboarding UI timing test failed once, then passed when rerun alone on the same
+  iPhone 17 Pro / iOS 26.5 simulator.
+- Known issues: existing Swift 6 formatter-isolation and legacy headermap build
+  warnings remain unchanged. No TestFlight build or release was requested.

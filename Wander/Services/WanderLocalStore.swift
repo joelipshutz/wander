@@ -3423,6 +3423,9 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func deleteVisit(visitID: String) -> Bool {
         guard let visit = currentUserVisit(matching: visitID) else { return false }
+        let remoteOwnerPlace = remoteCurrentUserVisiblePlace(
+            matching: visit.userPlaceID
+        )
 
         let now = Date.now
         let visitIDs = matchingVisitIDs(visit.id)
@@ -3439,6 +3442,25 @@ final class WanderStore: ObservableObject {
                 }
             } else {
                 refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+            }
+        } else if let remoteOwnerPlace {
+            let userPlaceReferenceIDs = Self.referenceIDs(
+                for: remoteOwnerPlace.userPlace
+            )
+            let remainingVisits = placeVisits.filter {
+                $0.deletedAt == nil
+                    && userPlaceReferenceIDs.contains($0.userPlaceID)
+            }
+            if remainingVisits.isEmpty {
+                if !restoreHistoricalWantAfterLastVisit(
+                    remoteOwnerPlace.userPlace,
+                    at: now
+                ) {
+                    remoteVisiblePlaceCache.removeAll {
+                        $0.owner.id == currentUser.id
+                            && VisiblePlaceGrouping.matches($0, remoteOwnerPlace)
+                    }
+                }
             }
         }
         analytics.track(
@@ -4194,6 +4216,7 @@ final class WanderStore: ObservableObject {
             }
             lastRemoteError = nil
             await refreshRemoteVisiblePlaces(backend: backend)
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .tombstoned)
         } catch {
             let message = remoteErrorMessage(error)
@@ -4309,6 +4332,7 @@ final class WanderStore: ObservableObject {
             return 0
         }
 
+        let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
         let retryableIDs = syncableOwnPlaceIDs { syncState in
             syncState == .failed
         }
@@ -4317,7 +4341,7 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
         _ = await syncPendingVisits(backend: backend)
-        return syncedCount
+        return syncedCount + deletedCount
     }
 
     @discardableResult
@@ -4330,6 +4354,7 @@ final class WanderStore: ObservableObject {
             return 0
         }
 
+        let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
         let syncableIDs = syncableOwnPlaceIDs { syncState in
             syncState != .synced
                 && syncState != .pendingDelete
@@ -4341,6 +4366,49 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
         _ = await syncPendingVisits(backend: backend)
+        return syncedCount + deletedCount
+    }
+
+    @discardableResult
+    func retryPendingUserPlaceDeletes(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+        let pendingRows = userPlaces.filter {
+            $0.userID == currentUser.id
+                && $0.deletedAt != nil
+                && $0.serverID != nil
+                && ($0.syncState == .pendingDelete || $0.syncState == .failed)
+        }
+        let rowsByRemoteID = Dictionary(
+            grouping: pendingRows,
+            by: { $0.serverID ?? $0.id }
+        )
+
+        var syncedCount = 0
+        for remoteUserPlaceID in rowsByRemoteID.keys.sorted() {
+            let rows = rowsByRemoteID[remoteUserPlaceID] ?? []
+            do {
+                try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
+                for row in rows {
+                    markUserPlace(localOrServerID: row.id, syncState: .tombstoned)
+                }
+                lastRemoteError = nil
+                syncedCount += 1
+            } catch {
+                let message = remoteErrorMessage(error)
+                for row in rows {
+                    markUserPlace(
+                        localOrServerID: row.id,
+                        syncState: .failed,
+                        error: message
+                    )
+                }
+                lastRemoteError = message
+            }
+        }
+
+        if syncedCount > 0 {
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
+        }
         return syncedCount
     }
 
@@ -4485,12 +4553,16 @@ final class WanderStore: ObservableObject {
             do {
                 _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
                 markPlaceVisit(localOrServerID: visit.id, syncState: .tombstoned)
+                lastRemoteError = nil
                 syncedCount += 1
             } catch {
                 let message = remoteErrorMessage(error)
                 markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
                 lastRemoteError = message
             }
+        }
+        if syncedCount > 0 {
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
         }
         return syncedCount
     }
@@ -4575,12 +4647,13 @@ final class WanderStore: ObservableObject {
             _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
             markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
             lastRemoteError = nil
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
             return true
         } catch {
             let message = remoteErrorMessage(error)
             markPlaceVisit(localOrServerID: visitID, syncState: .failed, error: message)
             lastRemoteError = message
-            return false
+            return true
         }
     }
 
@@ -6342,7 +6415,23 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
-        return currentUserPlace(matching: visit.userPlaceID) == nil ? nil : visit
+        let isOwnedLocally = currentUserPlace(matching: visit.userPlaceID) != nil
+        let isOwnedRemotely = remoteCurrentUserVisiblePlace(
+            matching: visit.userPlaceID
+        ) != nil
+        return isOwnedLocally || isOwnedRemotely ? visit : nil
+    }
+
+    private func remoteCurrentUserVisiblePlace(
+        matching userPlaceID: String
+    ) -> VisiblePlace? {
+        remoteVisiblePlaceCache.first { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && visiblePlace.userPlace.userID == currentUser.id
+                && visiblePlace.userPlace.deletedAt == nil
+                && Self.referenceIDs(for: visiblePlace.userPlace)
+                    .contains(userPlaceID)
+        }
     }
 
     private func currentUserPhoto(matching photoID: String) -> LocalVisitPhoto? {
@@ -6910,9 +6999,26 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
+        let now = Date.now
         var removedUserPlaceIDs = Set<String>()
         var remoteUserPlaceIDs = Set<String>()
         for visiblePlace in matchingVisiblePlaces {
+            if !places.contains(where: {
+                $0.id == visiblePlace.place.id
+                    || $0.localID == visiblePlace.place.localID
+                    || ($0.serverID != nil
+                        && $0.serverID == visiblePlace.place.serverID)
+            }) {
+                places.append(visiblePlace.place)
+            }
+            if !userPlaces.contains(where: {
+                !Self.referenceIDs(for: $0).isDisjoint(
+                    with: Self.referenceIDs(for: visiblePlace.userPlace)
+                )
+            }) {
+                userPlaces.append(visiblePlace.userPlace)
+            }
+            deleteUserPlaceAfterLastVisit(visiblePlace.userPlace, at: now)
             removedUserPlaceIDs.insert(visiblePlace.userPlace.id)
             removedUserPlaceIDs.insert(visiblePlace.userPlace.localID)
             if let serverID = visiblePlace.userPlace.serverID {
