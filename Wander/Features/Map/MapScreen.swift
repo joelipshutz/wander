@@ -828,7 +828,11 @@ struct MapScreen: View {
             currentUserID: store.currentUser.id
         ) else {
             return [
-                PlaceSaveSummary(visiblePlace: selectedPlace, attributes: selectedPlace.attributes)
+                PlaceSaveSummary(
+                    visiblePlace: selectedPlace,
+                    attributes: selectedPlace.attributes,
+                    viewerFollowsOwner: store.viewerFollows(selectedPlace.owner.id)
+                )
             ]
         }
         return saveSummaries(for: group)
@@ -836,7 +840,11 @@ struct MapScreen: View {
 
     private func saveSummaries(for group: VisiblePlaceGroup) -> [PlaceSaveSummary] {
         group.places.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: visiblePlace.attributes)
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: visiblePlace.attributes,
+                viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
+            )
         }
     }
 
@@ -847,7 +855,11 @@ struct MapScreen: View {
 
     private var tasteSummaries: [PlaceSaveSummary] {
         store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
+            )
         }
     }
 
@@ -7853,127 +7865,10 @@ private struct PlaceProfileRatingStrip: View {
     let compact: Bool
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            PlaceProfileMetricCard(
-                title: "Your rating",
-                value: presentation.ownRating?.displayScore ?? "No check-ins yet",
-                suffix: presentation.ownRating == nil ? nil : "/5",
-                subtitle: presentation.ownRating?.subtitle ?? "0 check-ins",
-                systemImage: "star.fill",
-                tint: WanderTheme.stateWarning.color,
-                explanation: nil,
-                compact: compact
-            )
-
-            PlaceProfileMetricCard(
-                title: "rec.me rating",
-                value: presentation.overallRating?.displayScore ?? "No ratings yet",
-                suffix: presentation.overallRating == nil ? nil : "/5",
-                subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
-                systemImage: "person.2.fill",
-                tint: WanderTheme.pinSocial.color,
-                explanation: .recMe,
-                compact: compact
-            )
-
-            PlaceProfileMetricCard(
-                title: "Fit Rating",
-                value: presentation.fitRating?.displayScore ?? "Not enough yet",
-                suffix: presentation.fitRating == nil ? nil : "/10",
-                subtitle: presentation.fitRating == nil ? "keep saving" : (compact ? "for you" : "compared to places you like"),
-                systemImage: "sparkles",
-                tint: WanderTheme.terracotta.color,
-                explanation: .fit,
-                compact: compact
-            )
-        }
-    }
-}
-
-private struct PlaceProfileMetricCard: View {
-    let title: String
-    let value: String
-    let suffix: String?
-    let subtitle: String
-    let systemImage: String
-    let tint: Color
-    let explanation: PlaceRatingExplanation?
-    let compact: Bool
-
-    var body: some View {
-        VStack(alignment: .center, spacing: compact ? 4 : WanderTheme.spacing1) {
-            Image(systemName: systemImage)
-                .font(.system(size: compact ? 12 : 15, weight: .black))
-                .foregroundStyle(tint)
-                .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
-                .background(tint.opacity(0.12))
-                .clipShape(Circle())
-                .offset(x: ratingHeaderHorizontalOffset)
-
-            Text(title)
-                .font(.system(size: compact ? 11 : 13, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .textCase(.uppercase)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.68)
-                .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
-                .offset(x: ratingHeaderHorizontalOffset)
-
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(.system(size: valueFontSize, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(suffix == nil ? 2 : 1)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.62)
-                if let suffix {
-                    Text(suffix)
-                        .font(.system(size: compact ? 11 : 12, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: compact ? 25 : 30, alignment: .center)
-
-            Text(subtitle)
-                .font(.system(size: compact ? 9.5 : 11, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.78)
-                .frame(maxWidth: .infinity, minHeight: compact ? 16 : 24, alignment: .center)
-        }
-        .padding(.horizontal, compact ? 6 : WanderTheme.spacing2)
-        .padding(.vertical, compact ? 7 : WanderTheme.spacing2)
-        .frame(maxWidth: .infinity, minHeight: compact ? 118 : 136, alignment: .center)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        PlaceProfileRatingsRail(
+            presentation: presentation,
+            compact: compact
         )
-        .overlay(alignment: .topTrailing) {
-            if let explanation {
-                PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: infoButtonHorizontalOffset, y: compact ? -1 : 1)
-            }
-        }
-    }
-
-    private var ratingHeaderHorizontalOffset: CGFloat {
-        explanation == nil ? -5 : -10
-    }
-
-    private var infoButtonHorizontalOffset: CGFloat {
-        explanation == .recMe ? 9 : 6
-    }
-
-    private var valueFontSize: CGFloat {
-        if suffix != nil {
-            return compact ? 20 : 24
-        }
-
-        return compact ? 11 : 13
     }
 }
 

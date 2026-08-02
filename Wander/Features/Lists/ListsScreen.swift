@@ -4038,7 +4038,8 @@ private extension PlaceListMock {
             let saves = context.savesByVisiblePlaceID[visiblePlace.id] ?? [
                 PlaceSaveSummary(
                     visiblePlace: visiblePlace,
-                    attributes: visiblePlace.attributes
+                    attributes: visiblePlace.attributes,
+                    viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
                 )
             ]
             let preferredUserPhoto = context.firstVisitPhotoByPlaceID[visiblePlace.place.id]
@@ -4074,7 +4075,11 @@ private struct ListPlaceProjectionContext {
     init(store: WanderStore) {
         currentUserID = store.currentUser.id
         tasteSaves = store.currentUserVisiblePlaces.map {
-            PlaceSaveSummary(visiblePlace: $0, attributes: $0.attributes)
+            PlaceSaveSummary(
+                visiblePlace: $0,
+                attributes: $0.attributes,
+                viewerFollowsOwner: false
+            )
         }
         firstVisitPhotoByPlaceID = store.firstVisitPhotosByPlaceID()
 
@@ -4086,7 +4091,11 @@ private struct ListPlaceProjectionContext {
         summariesByVisiblePlaceID.reserveCapacity(groups.reduce(0) { $0 + $1.places.count })
         for group in groups {
             let summaries = group.places.map {
-                PlaceSaveSummary(visiblePlace: $0, attributes: $0.attributes)
+                PlaceSaveSummary(
+                    visiblePlace: $0,
+                    attributes: $0.attributes,
+                    viewerFollowsOwner: store.viewerFollows($0.owner.id)
+                )
             }
             for visiblePlace in group.places {
                 summariesByVisiblePlaceID[visiblePlace.id] = summaries
