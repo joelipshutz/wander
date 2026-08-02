@@ -727,37 +727,7 @@ private struct PlaceProfileFullView: View {
     @ViewBuilder
     private var ratingSection: some View {
         if hasRatingSection {
-            HStack(spacing: WanderTheme.spacing2) {
-                PlaceProfileRatingTile(
-                    value: presentation.ownRating?.displayScore ?? "No check-ins yet",
-                    suffix: presentation.ownRating == nil ? nil : "/5",
-                    title: "Your rating",
-                    subtitle: presentation.ownRating?.subtitle ?? "0 check-ins",
-                    systemImage: "star.fill",
-                    tint: WanderTheme.stateWarning.color,
-                    explanation: nil
-                )
-
-                PlaceProfileRatingTile(
-                    value: presentation.overallRating?.displayScore ?? "No ratings yet",
-                    suffix: presentation.overallRating == nil ? nil : "/5",
-                    title: "rec.me rating",
-                    subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
-                    systemImage: "person.2.fill",
-                    tint: WanderTheme.pinSocial.color,
-                    explanation: .recMe
-                )
-
-                PlaceProfileRatingTile(
-                    value: presentation.fitRating?.displayScore ?? "Not enough yet",
-                    suffix: presentation.fitRating == nil ? nil : "/10",
-                    title: "Fit Rating",
-                    subtitle: presentation.fitRating == nil ? "keep saving" : "based on places you like",
-                    systemImage: "sparkles",
-                    tint: WanderTheme.terracotta.color,
-                    explanation: .fit
-                )
-            }
+            PlaceProfileRatingsRail(presentation: presentation)
         } else {
             PlaceProfileSubtleCard(
                 text: "Add your rating and tags when this place belongs on your map."
@@ -923,7 +893,9 @@ private struct PlaceProfileFullView: View {
     }
 
     private var trustedSaves: [PlaceSaveSummary] {
-        saves.filter { $0.visiblePlace.owner.id != currentUserID }
+        saves.filter {
+            $0.visiblePlace.owner.id != currentUserID && $0.viewerFollowsOwner
+        }
     }
 
     private var displayRating: PlaceActualRating? {
@@ -1713,80 +1685,6 @@ private struct PlaceProfileCategoryThumb: View {
             }
         }
     }
-}
-
-private struct PlaceProfileRatingTile: View {
-    let value: String
-    let suffix: String?
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let tint: Color
-    let explanation: PlaceRatingExplanation?
-
-    var body: some View {
-        VStack(alignment: .center, spacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing1) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .black))
-                Text(title)
-                    .font(.system(size: 13, weight: .black))
-                    .textCase(.uppercase)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.68)
-            }
-            .foregroundStyle(WanderTheme.textMuted.color)
-            .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
-            .offset(x: ratingHeaderHorizontalOffset)
-
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(suffix == nil ? WanderTypography.label : WanderTypography.editorialRatingDisplay)
-                    .foregroundStyle(tint)
-                    .lineLimit(suffix == nil ? 2 : 1)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.78)
-                if let suffix {
-                    Text(suffix)
-                        .font(WanderTypography.editorialRatingSuffix)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 30, alignment: .center)
-
-            Text(subtitle)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.82)
-                .frame(maxWidth: .infinity, minHeight: 30, alignment: .center)
-        }
-        .padding(WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .center)
-        .background(WanderTheme.surfaceSand.color)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        )
-        .overlay(alignment: .topTrailing) {
-            if let explanation {
-                PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: infoButtonHorizontalOffset, y: 2)
-            }
-        }
-    }
-
-    private var ratingHeaderHorizontalOffset: CGFloat {
-        explanation == nil ? -5 : -10
-    }
-
-    private var infoButtonHorizontalOffset: CGFloat {
-        explanation == .recMe ? 9 : 6
-    }
-
 }
 
 private struct PlaceProfileTagRail: View {

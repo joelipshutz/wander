@@ -1446,7 +1446,8 @@ private struct PlaceImportCandidatePicker: View {
             .map { visiblePlace in
                 PlaceSaveSummary(
                     visiblePlace: visiblePlace,
-                    attributes: store.attributes(for: visiblePlace.userPlace.id)
+                    attributes: store.attributes(for: visiblePlace.userPlace.id),
+                    viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
                 )
             }
     }
@@ -1455,7 +1456,8 @@ private struct PlaceImportCandidatePicker: View {
         store.currentUserVisiblePlaces.map { visiblePlace in
             PlaceSaveSummary(
                 visiblePlace: visiblePlace,
-                attributes: store.attributes(for: visiblePlace.userPlace.id)
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
             )
         }
     }

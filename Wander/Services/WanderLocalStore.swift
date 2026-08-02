@@ -3585,6 +3585,11 @@ final class WanderStore: ObservableObject {
         return .nonFollower
     }
 
+    func viewerFollows(_ userID: String) -> Bool {
+        let currentRelationship = relationship(to: userID)
+        return currentRelationship == .follower || currentRelationship == .mutual
+    }
+
     func hasAcknowledgedFollow(to userID: String) -> Bool {
         let viewerID = currentUser.id
         return follows.contains(where: { follow in
