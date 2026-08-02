@@ -106,6 +106,17 @@ Before cutover, Joe must explicitly choose how to handle the 11 Clerk-developmen
 - Hosted metadata check after any future live migration: RPC ACL, `prosecdef`, pinned `search_path`, analytics grants, policy expressions, and migration ledger.
 - No iOS test suite is required for this DB-only patch; no client payload or value-type contract changes.
 
+## Execution evidence
+
+- Focused hosted migration preview: 15/15 pgTAP assertions passed; transaction rolled back.
+- Full hosted smoke with migration preview: passed; transaction rolled back.
+- Dry run: exactly `20260802001500_production_security_hardening.sql` pending.
+- Live push: exactly that migration applied successfully.
+- Post-push ledger: local and hosted both include `20260802001500`.
+- Post-push metadata: `anon` and `authenticated` cannot execute Clerk mirroring; `service_role` can; anonymous analytics insert is revoked; authenticated analytics update/delete are revoked; both list policies contain the qualified place equality.
+- Full hosted smoke on deployed state: passed after making the pre-existing geography assertion select its named fixture deterministically; transaction rolled back.
+- REC-163: production trigger presence and both deletion transitions verified; no duplicate trigger migration created.
+
 ## Out of scope
 
 - Applying the migration to production before review.

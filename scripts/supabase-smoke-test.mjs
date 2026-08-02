@@ -781,6 +781,7 @@ begin
 
   select locality into visible_city
   from public.profile_visible_places(${smokeUser}, null, null)
+  where canonical_name = 'Codex Smoke Coffee'
   limit 1;
   if visible_city is distinct from 'Los Angeles' then
     raise exception 'profile geography payload failed';
@@ -2166,6 +2167,7 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
       select locality, region, country, owner_avatar_url,
              visited_at, saved_at, created_at, updated_at
       from public.profile_visible_places($1, null, null)
+      where canonical_name = 'Codex Smoke Coffee'
       limit 1
     `,
     [smokeUserID],
