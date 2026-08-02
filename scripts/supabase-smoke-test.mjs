@@ -9,6 +9,7 @@ const DEFAULT_ENV_FILE = `${homedir()}/.openclaw/workspace/.env.keys`;
 const DEFAULT_SMOKE_USER_ID = "user_codex_supabase_smoke";
 const DEFAULT_SMOKE_COLLABORATOR_ID = "user_codex_supabase_smoke_collab";
 const DEFAULT_SMOKE_STRANGER_ID = "user_codex_supabase_smoke_stranger";
+const SUPABASE_CLI_PACKAGE = "supabase@2.109.1";
 const ENV_KEYS = new Set([
   "WANDER_SUPABASE_DB_URL",
   "WANDER_SUPABASE_PROJECT_REF",
@@ -76,6 +77,7 @@ async function main() {
         console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
+        await runProductionSecuritySmokeChecks(client);
         await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
@@ -236,8 +238,8 @@ function runLinkedSmokeChecks(
       mode: 0o600,
     });
     const result = spawnSync(
-      "pnpm",
-      ["dlx", "supabase", "db", "query", "--linked", "--file", filePath],
+      "npx",
+      ["--yes", SUPABASE_CLI_PACKAGE, "db", "query", "--linked", "--file", filePath],
       { cwd: process.cwd(), encoding: "utf8", env: process.env },
     );
     if (result.status !== 0) {
@@ -307,6 +309,8 @@ function buildLinkedSmokeSQL(
 begin;
 
 ${migrationPreviewSQL}
+
+${buildProductionSecuritySmokeSQL()}
 
 ${buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID)}
 
@@ -1170,6 +1174,73 @@ ${migrationPreviewTestSQL}
 reset role;
 rollback;
 `;
+}
+
+function buildProductionSecuritySmokeSQL() {
+  return `
+do $production_security_smoke$
+begin
+  if has_function_privilege(
+    'anon',
+    'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+    'execute'
+  ) then
+    raise exception 'anonymous can execute public.mirror_clerk_profile';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+    'execute'
+  ) then
+    raise exception 'authenticated can execute public.mirror_clerk_profile';
+  end if;
+
+  if not has_function_privilege(
+    'service_role',
+    'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+    'execute'
+  ) then
+    raise exception 'service_role cannot execute public.mirror_clerk_profile';
+  end if;
+
+  if has_table_privilege('anon', 'public.analytics_events', 'insert') then
+    raise exception 'anonymous retains analytics_events insert';
+  end if;
+end;
+$production_security_smoke$;
+`;
+}
+
+async function runProductionSecuritySmokeChecks(client) {
+  await expectQuery(
+    client,
+    "production security grants",
+    `
+      select
+        has_function_privilege(
+          'anon',
+          'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+          'execute'
+        ) as anon_mirror,
+        has_function_privilege(
+          'authenticated',
+          'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+          'execute'
+        ) as authenticated_mirror,
+        has_function_privilege(
+          'service_role',
+          'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+          'execute'
+        ) as service_mirror,
+        has_table_privilege('anon', 'public.analytics_events', 'insert') as anon_analytics_insert
+    `,
+    [],
+    (result) => result.rows[0]?.anon_mirror === false
+      && result.rows[0]?.authenticated_mirror === false
+      && result.rows[0]?.service_mirror === true
+      && result.rows[0]?.anon_analytics_insert === false,
+  );
 }
 
 function loadEnvFile(filePath) {
