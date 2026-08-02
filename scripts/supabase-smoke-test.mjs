@@ -317,6 +317,11 @@ create temporary table smoke_shared_visit_invitation (
 ) on commit drop;
 grant select, insert on smoke_shared_visit_invitation to authenticated;
 
+create temporary table smoke_shared_source_delete_result (
+  result jsonb not null
+) on commit drop;
+grant select, insert on smoke_shared_source_delete_result to authenticated;
+
 insert into public.follows (follower_user_id, followed_user_id, source)
 values
   (${collaboratorUser}, ${smokeUser}, 'profile'),
@@ -1164,6 +1169,34 @@ begin
   end if;
 end
 $shared_remove_persistence$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+insert into smoke_shared_source_delete_result(result)
+select public.delete_own_check_in('${smokeVisitID}'::uuid);
+reset role;
+do $shared_source_delete$
+declare
+  delete_result jsonb;
+  source_deleted_at timestamptz;
+  group_count integer;
+begin
+  select source.result into delete_result
+  from smoke_shared_source_delete_result source;
+  select visit.deleted_at into source_deleted_at
+  from public.place_visits visit
+  where visit.id = '${smokeVisitID}'::uuid;
+  select count(*)::integer into group_count
+  from public.shared_visit_groups shared_group
+  where shared_group.source_visit_id = '${smokeVisitID}'::uuid;
+
+  if delete_result->>'visit_id' is distinct from '${smokeVisitID}'
+     or source_deleted_at is null
+     or group_count <> 1 then
+    raise exception 'shared visit source check-in soft deletion failed';
+  end if;
+end
+$shared_source_delete$;
 
 ${migrationPreviewTestSQL}
 

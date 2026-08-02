@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(21);
+select plan(23);
 
 create temporary table check_in_tap_results(message text) on commit drop;
 
@@ -90,6 +90,28 @@ insert into check_in_tap_results select ok(
     where oid = 'app.delete_own_check_in(uuid)'::regprocedure
   ),
   'internal check-in delete pins search_path'
+);
+insert into check_in_tap_results select has_trigger(
+  'public',
+  'place_visits',
+  'place_visits_sync_user_place_after_soft_delete',
+  'soft-deleted check-ins reconcile their parent save'
+);
+insert into check_in_tap_results select ok(
+  (
+    select
+      position(
+        'update public.place_visits'
+        in lower(pg_get_functiondef(oid))
+      ) > 0
+      and position(
+        'shared_visit_source_deleted'
+        in lower(pg_get_functiondef(oid))
+      ) > 0
+    from pg_proc
+    where oid = 'app.delete_own_check_in(uuid)'::regprocedure
+  ),
+  'check-in deletion preserves referenced tickets and retires pending shared-visit notifications'
 );
 insert into check_in_tap_results select is(
   (
