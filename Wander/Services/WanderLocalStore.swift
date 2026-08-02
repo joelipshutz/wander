@@ -2723,6 +2723,16 @@ final class WanderStore: ObservableObject {
             }
     }
 
+    var deletedVisitPhotoReferenceIDs: Set<String> {
+        visitPhotos.reduce(into: Set<String>()) { result, photo in
+            guard photo.deletedAt != nil else { return }
+            result.insert(photo.localID)
+            if let serverID = photo.serverID {
+                result.insert(serverID)
+            }
+        }
+    }
+
     @discardableResult
     func applySharedVisitAcceptance(
         invitation: SharedVisitInvitation,
