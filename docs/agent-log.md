@@ -28603,3 +28603,8 @@ Outcome and validation:
   iPhone 17 Pro / iOS 26.5 simulator.
 - Known issues: existing Swift 6 formatter-isolation and legacy headermap build
   warnings remain unchanged. No TestFlight build or release was requested.
+- Implementation commit `c4990d0d0` was pushed to
+  `origin/codex/rec-206-delete-refresh`. Xcode was opened on this isolated
+  worktree and its Branch Chooser showed `codex/rec-206-delete-refresh`.
+  Automatic PR creation was blocked by a stale local `gh` token and GitHub App
+  PR-write 403; use the branch's GitHub compare/new-PR URL after reauthentication.
