@@ -276,6 +276,19 @@ final class WannaGoReminderTests: XCTestCase {
         XCTAssertEqual(PushNotificationManager.destination(from: request.content.userInfo), .quickCapture)
     }
 
+    func testSaveStreakProductionReconciliationDoesNotCancelDebugReminder() {
+        let identifiers = [
+            SaveStreakReminderPlanner.notificationIdentifier,
+            SaveStreakReminderPlanner.notificationIdentifierPrefix + "debug",
+            WannaGoReminderPlanner.notificationIdentifierPrefix + "unrelated"
+        ]
+
+        XCTAssertEqual(
+            SaveStreakReminderPlanner.productionReminderIdentifiers(in: identifiers),
+            [SaveStreakReminderPlanner.notificationIdentifier]
+        )
+    }
+
     func testSaveStreakReminderPreferenceIsIsolatedByAccount() {
         let suiteName = "SaveStreakReminderTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

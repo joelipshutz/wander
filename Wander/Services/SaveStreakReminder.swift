@@ -13,6 +13,10 @@ enum SaveStreakReminderPlanner {
     static let notificationType = "save_streak_reminder"
     static let reminderHour = 20
 
+    static func productionReminderIdentifiers(in identifiers: [String]) -> [String] {
+        identifiers.filter { $0 == notificationIdentifier }
+    }
+
     static func plan(
         for summary: SaveStreakSummary,
         now: Date = .now,

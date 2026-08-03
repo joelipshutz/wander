@@ -700,9 +700,9 @@ final class PushNotificationManager: ObservableObject {
     ) async {
         await refreshAuthorizationStatus()
         let center = UNUserNotificationCenter.current()
-        let identifiers = await center.pendingNotificationRequests()
-            .map(\.identifier)
-            .filter { $0.hasPrefix(SaveStreakReminderPlanner.notificationIdentifierPrefix) }
+        let identifiers = SaveStreakReminderPlanner.productionReminderIdentifiers(
+            in: await center.pendingNotificationRequests().map(\.identifier)
+        )
 
         if !identifiers.isEmpty {
             center.removePendingNotificationRequests(withIdentifiers: identifiers)
