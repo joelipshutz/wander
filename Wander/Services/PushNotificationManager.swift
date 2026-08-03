@@ -43,7 +43,8 @@ private final class AuthenticatedNotificationGate: @unchecked Sendable {
         pendingResponses.removeAll()
     }
 
-    func authenticate(userID: String) {
+    @discardableResult
+    func authenticate(userID: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         state = .authenticated
@@ -52,6 +53,7 @@ private final class AuthenticatedNotificationGate: @unchecked Sendable {
         pendingResponses.removeAll {
             $0.expectedUserID != userID || $0.validationGeneration != validationGeneration
         }
+        return !pendingResponses.isEmpty
     }
 
     func signOut() {
@@ -135,8 +137,19 @@ final class WanderAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificati
     }
 
     nonisolated static func setAuthenticatedSessionActive(userID: String) {
-        authenticatedNotificationGate.authenticate(userID: userID)
+        let hasPendingResponse = authenticatedNotificationGate.authenticate(userID: userID)
         UserDefaults.standard.set(userID, forKey: lastValidatedUserIDKey)
+        guard hasPendingResponse else { return }
+
+        Task { @MainActor in
+            #if DEBUG
+            WanderDebugLog.remote.debug("notification response release signaled after auth validation")
+            #endif
+            NotificationCenter.default.post(
+                name: Self.didReceiveNotificationResponse,
+                object: nil
+            )
+        }
     }
 
     nonisolated static func setAuthenticatedSessionSignedOut() {

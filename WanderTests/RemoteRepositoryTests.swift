@@ -2592,6 +2592,36 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
     }
 
+    func testBufferedNotificationResponseSignalsRootWhenExpectedSessionAuthenticates() async {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_buffered_during_validation",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+        let releaseSignal = expectation(
+            forNotification: WanderAppDelegate.didReceiveNotificationResponse,
+            object: nil
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo))
+
+        // Reproduces the launch ordering where the root drains before session
+        // validation opens the gate. Authentication must wake it for a retry.
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        await fulfillment(of: [releaseSignal], timeout: 1)
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+    }
+
     func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
         let manager = PushNotificationManager()
         let userInfo: [AnyHashable: Any] = [
