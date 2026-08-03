@@ -1,0 +1,15 @@
+{
+  "issue": "REC-195",
+  "captured_at": "2026-08-03T12:35:00-07:00",
+  "source": "Successful physical-device validation plus SettingsScreen source snapshot",
+  "precondition": [
+    "Run the DEBUG app build used for physical-device validation",
+    "Open Profile > Settings > Notifications",
+    "Scroll to the Save streak reminders preference"
+  ],
+  "observed": "A bordered 'send test streak reminder' button is visible beneath the Save streak reminders toggle.",
+  "root_cause_evidence": "SettingsScreen conditionally renders the validation control under #if DEBUG. Local Xcode builds are DEBUG builds, so the temporary tester control remains visible after REC-195 behavior has been confirmed.",
+  "expected": "The Notifications UI shows the Save streak reminders preference without any test-reminder button or test-only accessibility element.",
+  "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration",
+  "screenshot_capture": "not repeated: the tester confirmed the control on the physical device and its exact label and accessibility identifier are present in the captured source"
+}

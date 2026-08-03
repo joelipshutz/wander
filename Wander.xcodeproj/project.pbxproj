@@ -107,6 +107,7 @@
 		7EB2D803677BEB26C58F3C02 /* WanderWidgetLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117EAEC1389AE3A61BBEE3C1 /* WanderWidgetLaunchRequest.swift */; };
 		802B6E19ED265CAD0AE34C82 /* SyncStateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4A6B29FC1235EFF60DA19D /* SyncStateMachineTests.swift */; };
 		812F84570207D139A528319C /* DiscoverScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0322598C99E44A8C80A90F4E /* DiscoverScreen.swift */; };
+		83882725B1B0F79C773EE744 /* rec-195-test-streak-control-visible-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */; };
 		855C09EA80524544A1FACE89 /* WanderCalendarWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 455002E5CE44493FF0A47191 /* WanderCalendarWidgetSnapshot.swift */; };
 		85AADE6CC89E67EF821CA62E /* PhotoPlaceTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A0C8AFCFBDE5C371CED21E /* PhotoPlaceTextExtractor.swift */; };
 		89DD4F9F93B8FFA91B6B350B /* PlaceExternalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F0D3D160FF8337D43E3C2F /* PlaceExternalLinks.swift */; };
@@ -326,6 +327,7 @@
 		86E70265B6612F2CECA3C7A8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8930E1796F6C94740DFFF448 /* WanderStorePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderStorePersistence.swift; sourceTree = "<group>"; };
 		8BC421EE589B4FAAD045DA9E /* VisitPhotoLocalFileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitPhotoLocalFileStore.swift; sourceTree = "<group>"; };
+		8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-test-streak-control-visible-pre.json"; sourceTree = "<group>"; };
 		8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfilePresentation.swift; sourceTree = "<group>"; };
 		8E8DC0A8E7A20017527489A9 /* PlaceImportParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceImportParser.swift; sourceTree = "<group>"; };
 		909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-166-feed-search-pre.json"; sourceTree = "<group>"; };
@@ -710,6 +712,7 @@
 				62DA04AEBFE6C66CC313B4C7 /* rec-195-streak-notification-not-delivered-pre.json */,
 				F15A0A0901CFD503ABBFF5DA /* rec-195-streak-notification-routing-pre.json */,
 				FF6AE45FE275A8A1C5617108 /* rec-195-streak-notification-routing-still-broken.png */,
+				8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */,
 				A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */,
 			);
 			path = Fixtures;
@@ -1052,6 +1055,7 @@
 				BF68D1ABCCBC6DF9386E24D2 /* rec-195-streak-notification-not-delivered-pre.json in Resources */,
 				612FA998BF76FF6B9C736B86 /* rec-195-streak-notification-routing-pre.json in Resources */,
 				F6437AF5CC81D57E03A5621C /* rec-195-streak-notification-routing-still-broken.png in Resources */,
+				83882725B1B0F79C773EE744 /* rec-195-test-streak-control-visible-pre.json in Resources */,
 				E4FD872A229A8C85B3F63CEF /* rec-196-offline-map-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

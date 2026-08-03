@@ -973,6 +973,19 @@ final class NavigationContractTests: XCTestCase {
         }
     }
 
+    func testNotificationSettingsDoNotExposeTheStreakValidationControl() throws {
+        let settings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/SettingsScreen.swift"
+            )
+        )
+
+        XCTAssertTrue(settings.contains("title: \"Save streak reminders\""))
+        XCTAssertFalse(settings.contains("send test streak reminder"))
+        XCTAssertFalse(settings.contains("settings.notifications.testSaveStreakReminder"))
+        XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
+    }
+
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
         let addScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")

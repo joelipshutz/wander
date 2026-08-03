@@ -443,25 +443,6 @@ struct NotificationSettingsSheet: View {
                             systemImage: "flame",
                             binding: saveStreakReminderBinding
                         )
-                        #if DEBUG
-                        Button {
-                            Task {
-                                errorMessage = nil
-                                if await pushNotifications.scheduleDebugSaveStreakReminder(store.saveStreakSummary) {
-                                    errorMessage = "Test reminder scheduled. Background rec.me for five seconds."
-                                } else {
-                                    errorMessage = pushNotifications.lastErrorMessage
-                                }
-                            }
-                        } label: {
-                            Label("send test streak reminder", systemImage: "bell.badge")
-                                .font(.system(size: 14, weight: .bold))
-                                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!notificationsEnabled || !pushNotifications.saveStreakRemindersEnabled)
-                        .accessibilityIdentifier("settings.notifications.testSaveStreakReminder")
-                        #endif
                     }
                     .padding(WanderTheme.spacing3)
                     .background(WanderTheme.surfaceBone.color)
