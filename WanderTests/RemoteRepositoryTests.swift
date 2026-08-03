@@ -1565,14 +1565,15 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(plans.first?.plannedDate)), "2026-08-20")
     }
 
-    func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {
+    func testOwnPlaceDeleteUsesAtomicRPC() async throws {
         let rpc = RecordingRPC()
-        let repository = SupabaseUserPlaceRepository(rpc: rpc, userPlaceDeleter: rpc)
+        rpc.responses["delete_own_user_place"] = #"{"user_place_id":"up_saved","transition":"removed"}"#.data(using: .utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
 
         try await repository.delete(userPlaceID: "up_saved")
 
-        XCTAssertEqual(rpc.deletedUserPlaceIDs, ["up_saved"])
-        XCTAssertTrue(rpc.calls.isEmpty)
+        XCTAssertEqual(rpc.calls.map(\.name), ["delete_own_user_place"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_user_place_id"] as? String, "up_saved")
     }
 
     func testUnblockCallsExpectedRPC() async throws {
@@ -3102,7 +3103,7 @@ private struct FailingDiscoverFilterRepository: DiscoverFilterParsingRepository 
 }
 
 @MainActor
-private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling, RemoteUserPlaceDeleting {
+private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling {
     struct Call: Equatable {
         let name: String
         let body: [String: AnyHashable]
@@ -3111,7 +3112,6 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
     var responses: [String: Data] = [:]
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
-    private(set) var deletedUserPlaceIDs: [String] = []
 
     func call<Value: Decodable, Params: Encodable>(
         _ name: String,
@@ -3148,10 +3148,6 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
         }
 
         return try decoder.decode(Value.self, from: data)
-    }
-
-    func deleteUserPlace(userPlaceID: String) async throws {
-        deletedUserPlaceIDs.append(userPlaceID)
     }
 
     private func encodedObject<Params: Encodable>(_ params: Params) throws -> [String: Any] {

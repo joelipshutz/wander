@@ -296,19 +296,8 @@ struct ProfileScreen: View {
     }
 
     private var profileStats: ProfileStats {
-        var seen: Set<String> = []
-        let active = store.currentUserCalendarProjection.userPlaces.filter {
-            $0.userID == store.currentUser.id && $0.deletedAt == nil && seen.insert($0.id).inserted
-        }
-        let uniqueCheckedInPlaces = active.filter { $0.status == .been }.count
-        let activeIDs = Set(active.flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0 } })
-        let checkInCount = store.placeVisits.filter {
-            $0.deletedAt == nil && activeIDs.contains($0.userPlaceID)
-        }.count
-        return ProfileStats(
-            been: uniqueCheckedInPlaces,
-            checkIns: max(checkInCount, uniqueCheckedInPlaces),
-            wanna: active.filter { $0.status == .wannaGo }.count,
+        store.currentUserCalendarProjection.profileStats(
+            currentUserID: store.currentUser.id,
             friends: store.friends(of: store.currentUser.id).count
         )
     }
