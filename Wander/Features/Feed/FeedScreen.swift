@@ -329,7 +329,11 @@ struct FeedScreen: View {
                 return true
             }
             .map { visiblePlace in
-                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: attributes(for: visiblePlace))
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: attributes(for: visiblePlace),
+                    viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
+                )
             }
             .sorted { lhs, rhs in
                 if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
@@ -342,7 +346,11 @@ struct FeedScreen: View {
 
     private var tasteSummaries: [PlaceSaveSummary] {
         store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
+            )
         }
     }
 

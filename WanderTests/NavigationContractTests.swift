@@ -893,6 +893,9 @@ final class NavigationContractTests: XCTestCase {
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
+        let ratingExplanation = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/PlaceRatingExplanation.swift")
+        )
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
@@ -909,13 +912,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("design: .serif"))
         XCTAssertTrue(typography.contains(".monospacedDigit()"))
 
-        let overallRatingTiles = try XCTUnwrap(
-            placeProfile.components(separatedBy: "private struct PlaceProfileRatingTile: View").last?
-                .components(separatedBy: "private struct PlaceProfileTagRail: View").first
+        let ratingsRail = try XCTUnwrap(
+            ratingExplanation.components(separatedBy: "struct PlaceProfileRatingsRail: View").last?
+                .components(separatedBy: "struct PlaceRatingInfoButton: View").first
         )
-        XCTAssertTrue(overallRatingTiles.contains("WanderTypography.editorialRatingDisplay"))
-        XCTAssertTrue(overallRatingTiles.contains("WanderTypography.editorialRatingSuffix"))
-        XCTAssertFalse(overallRatingTiles.contains(".font(.system(size: valueFontSize, weight: .black))"))
+        XCTAssertTrue(ratingsRail.contains("WanderTypography.editorialRatingDisplay"))
+        XCTAssertTrue(ratingsRail.contains("WanderTypography.editorialRatingSuffix"))
+        XCTAssertTrue(ratingsRail.contains("WanderTheme.borderHairline.color"))
+        XCTAssertFalse(ratingsRail.contains("WanderTheme.surfaceSand.color"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfileRatingsRail(presentation: presentation)"))
 
         let checkInRatings = try XCTUnwrap(
             placeProfile.components(separatedBy: "private struct PlaceProfileSaveCard: View").last?
@@ -977,7 +982,8 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
-        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet(context: context)"))
+        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertTrue(addScreen.contains("context: context"))
         XCTAssertTrue(addScreen.contains("persistNewPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))

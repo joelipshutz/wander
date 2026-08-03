@@ -126,7 +126,7 @@ struct AppEntryView: View {
                     return
                 }
                 auth.beginSessionValidation()
-                Task { await coordinator.start() }
+                Task { await coordinator.start(preservingReadyState: true) }
             case .inactive:
                 break
             @unknown default:

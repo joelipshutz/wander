@@ -1208,15 +1208,18 @@ final class WanderStore: ObservableObject {
             $0.owner.id == currentUser.id && $0.userPlace.deletedAt == nil
         }
         let isAuthoritative = authoritativeCalendarUserID == currentUser.id
+        let dirtyRows = userPlaces.filter {
+            $0.userID == currentUser.id && $0.syncState != .synced
+        }
+        let dirtyReferenceIDs = dirtyRows.reduce(into: Set<String>()) {
+            $0.formUnion(Self.referenceIDs(for: $1))
+        }
+        let unshadowedRemotePlaces = remoteOwnerPlaces.filter {
+            Self.referenceIDs(for: $0.userPlace).isDisjoint(with: dirtyReferenceIDs)
+        }
 
         let projectedPlaces: [VisiblePlace]
         if isAuthoritative {
-            let dirtyRows = userPlaces.filter {
-                $0.userID == currentUser.id && $0.syncState != .synced
-            }
-            let dirtyReferenceIDs = dirtyRows.reduce(into: Set<String>()) {
-                $0.formUnion(Self.referenceIDs(for: $1))
-            }
             let remoteReferenceIDs = remoteOwnerPlaces.reduce(into: Set<String>()) {
                 $0.formUnion(Self.referenceIDs(for: $1.userPlace))
             }
@@ -1238,13 +1241,10 @@ final class WanderStore: ObservableObject {
                 !Self.referenceIDs(for: $0.userPlace)
                     .isDisjoint(with: preservedLocalReferenceIDs)
             }
-            let unshadowedRemotePlaces = remoteOwnerPlaces.filter {
-                Self.referenceIDs(for: $0.userPlace).isDisjoint(with: dirtyReferenceIDs)
-            }
             projectedPlaces = preservedLocalPlaces + unshadowedRemotePlaces
         } else {
             projectedPlaces = mergeCalendarVisiblePlaces(
-                localOwnerPlaces + remoteOwnerPlaces
+                localOwnerPlaces + unshadowedRemotePlaces
             )
         }
 
@@ -3482,14 +3482,18 @@ final class WanderStore: ObservableObject {
                     && userPlaceReferenceIDs.contains($0.userPlaceID)
             }
             if remainingVisits.isEmpty {
+                let materializedUserPlace = materializeRemoteCurrentUserPlace(
+                    remoteOwnerPlace
+                )
                 if !restoreHistoricalWantAfterLastVisit(
-                    remoteOwnerPlace.userPlace,
+                    materializedUserPlace,
                     at: now
                 ) {
-                    remoteVisiblePlaceCache.removeAll {
-                        $0.owner.id == currentUser.id
-                            && VisiblePlaceGrouping.matches($0, remoteOwnerPlace)
-                    }
+                    deleteUserPlaceAfterLastVisit(materializedUserPlace, at: now)
+                }
+                remoteVisiblePlaceCache.removeAll {
+                    $0.owner.id == currentUser.id
+                        && VisiblePlaceGrouping.matches($0, remoteOwnerPlace)
                 }
             }
         }
@@ -3625,6 +3629,11 @@ final class WanderStore: ObservableObject {
         if iFollowThem && theyFollowMe { return .mutual }
         if iFollowThem { return .follower }
         return .nonFollower
+    }
+
+    func viewerFollows(_ userID: String) -> Bool {
+        let currentRelationship = relationship(to: userID)
+        return currentRelationship == .follower || currentRelationship == .mutual
     }
 
     func hasAcknowledgedFollow(to userID: String) -> Bool {
@@ -6462,6 +6471,28 @@ final class WanderStore: ObservableObject {
                 && Self.referenceIDs(for: visiblePlace.userPlace)
                     .contains(userPlaceID)
         }
+    }
+
+    private func materializeRemoteCurrentUserPlace(
+        _ visiblePlace: VisiblePlace
+    ) -> LocalUserPlace {
+        let remoteReferenceIDs = Self.referenceIDs(for: visiblePlace.userPlace)
+        if let existing = userPlaces.first(where: {
+            $0.userID == currentUser.id
+                && !Self.referenceIDs(for: $0).isDisjoint(with: remoteReferenceIDs)
+        }) {
+            return existing
+        }
+
+        if !places.contains(where: {
+            $0.id == visiblePlace.place.id
+                || $0.localID == visiblePlace.place.localID
+                || ($0.serverID != nil && $0.serverID == visiblePlace.place.serverID)
+        }) {
+            places.append(visiblePlace.place)
+        }
+        userPlaces.append(visiblePlace.userPlace)
+        return visiblePlace.userPlace
     }
 
     private func currentUserPhoto(matching photoID: String) -> LocalVisitPhoto? {

@@ -3,6 +3,17 @@ import Foundation
 struct PlaceSaveSummary: Identifiable {
     let visiblePlace: VisiblePlace
     let attributes: [LocalPlaceAttribute]
+    let viewerFollowsOwner: Bool
+
+    init(
+        visiblePlace: VisiblePlace,
+        attributes: [LocalPlaceAttribute],
+        viewerFollowsOwner: Bool = false
+    ) {
+        self.visiblePlace = visiblePlace
+        self.attributes = attributes
+        self.viewerFollowsOwner = viewerFollowsOwner
+    }
 
     var id: String { visiblePlace.userPlace.id }
 }
@@ -10,7 +21,8 @@ struct PlaceSaveSummary: Identifiable {
 struct PlaceActualRating: Equatable {
     enum Source: Equatable {
         case own
-        case trusted
+        case friends
+        case community
     }
 
     let score: Double
@@ -25,7 +37,9 @@ struct PlaceActualRating: Equatable {
         switch source {
         case .own:
             "Your rating"
-        case .trusted:
+        case .friends:
+            "Friends rating"
+        case .community:
             "rec.me rating"
         }
     }
@@ -34,8 +48,10 @@ struct PlaceActualRating: Equatable {
         switch source {
         case .own:
             CheckInCopy.count(count)
-        case .trusted:
-            count == 1 ? "1 rating" : "\(count) ratings"
+        case .friends:
+            count == 1 ? "1 person you follow" : "\(count) people you follow"
+        case .community:
+            count == 1 ? "1 community rating" : "\(count) community ratings"
         }
     }
 }
@@ -125,36 +141,39 @@ enum PlaceProfilePresenter {
         from saves: [PlaceSaveSummary],
         currentUserID: String
     ) -> PlaceActualRating? {
-        let localAggregates = saves
+        let followedRatings = saves
             .filter {
                 $0.visiblePlace.owner.id != currentUserID
+                    && $0.viewerFollowsOwner
                     && $0.visiblePlace.userPlace.status == .been
             }
-            .compactMap { summary -> (score: Double, count: Int)? in
+            .compactMap { summary -> (ownerID: String, score: Double)? in
                 guard let score = summary.visiblePlace.userPlace.ratingScore else { return nil }
-                return (score, max(summary.visiblePlace.userPlace.recommendedCount, 1))
+                return (summary.visiblePlace.owner.id, score)
             }
 
-        let localCount = localAggregates.reduce(0) { $0 + $1.count }
-        if localCount > 0 {
-            let average = localAggregates.reduce(0) { $0 + ($1.score * Double($1.count)) } / Double(localCount)
-            return PlaceActualRating(score: average, count: localCount, source: .trusted)
+        if !followedRatings.isEmpty {
+            let ratingsByOwner = Dictionary(grouping: followedRatings) { $0.ownerID }
+            let personAverages = ratingsByOwner.values.map { ratings in
+                ratings.reduce(0) { $0 + $1.score } / Double(ratings.count)
+            }
+            let average = personAverages.reduce(0, +) / Double(personAverages.count)
+            return PlaceActualRating(score: average, count: personAverages.count, source: .friends)
         }
 
         guard let aggregateSource = saves.first(where: {
-            $0.visiblePlace.owner.id != currentUserID
-                && $0.visiblePlace.recommendedScore != nil
+            $0.visiblePlace.userPlace.recommendedScore != nil
+                && $0.visiblePlace.userPlace.recommendedCount > 0
         }),
-              let score = aggregateSource.visiblePlace.recommendedScore,
-              aggregateSource.visiblePlace.recommendedCount > 0
+              let score = aggregateSource.visiblePlace.userPlace.recommendedScore
         else {
             return nil
         }
 
         return PlaceActualRating(
             score: score,
-            count: aggregateSource.visiblePlace.recommendedCount,
-            source: .trusted
+            count: aggregateSource.visiblePlace.userPlace.recommendedCount,
+            source: .community
         )
     }
 

@@ -43,6 +43,7 @@ struct AddScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @ObservedObject var importStore: PlaceImportStore
+    @ObservedObject var placeSaveDraftStore: PlaceSaveDraftStore
     let resetToken: UUID
     @Binding private var selectedDetent: PresentationDetent
     let launchRequest: WanderAddLaunchRequest?
@@ -74,6 +75,7 @@ struct AddScreen: View {
 
     init(
         importStore: PlaceImportStore,
+        placeSaveDraftStore: PlaceSaveDraftStore,
         resetToken: UUID = UUID(),
         selectedDetent: Binding<PresentationDetent>,
         launchRequest: WanderAddLaunchRequest? = nil,
@@ -81,6 +83,7 @@ struct AddScreen: View {
         onClose: @escaping () -> Void
     ) {
         self.importStore = importStore
+        self.placeSaveDraftStore = placeSaveDraftStore
         self.resetToken = resetToken
         _selectedDetent = selectedDetent
         self.launchRequest = launchRequest
@@ -164,19 +167,33 @@ struct AddScreen: View {
                     candidates = [candidate]
                     selectedCandidateID = candidate.id
                     pendingVisitPhotoAttachments = []
-                    addSaveFlow = addCandidateContext(
+                    presentSaveFlow(addCandidateContext(
                         candidate,
                         sourceType: .currentLocation,
                         defaultVisibility: store.effectiveDefaultVisibility
-                    )
+                    ))
                 }
                 guard !Task.isCancelled else { return }
                 onLaunchRequestHandled(launchRequest.id)
             }
+            .task(id: placeSaveDraftStore.draft?.id) {
+                restoreActiveSaveFlowIfNeeded()
+            }
             .sheet(item: $addSaveFlow, onDismiss: {
+                placeSaveDraftStore.clear()
                 store.saveFlowDidDismiss(.saveSheet)
             }) { context in
-                MapPlaceSaveFlowSheet(context: context) { submission in
+                MapPlaceSaveFlowSheet(
+                    context: context,
+                    draft: placeSaveDraftStore.draft,
+                    onDraftChange: { draftID, form, submittedAt in
+                        placeSaveDraftStore.update(
+                            draftID: draftID,
+                            form: form,
+                            submittedAt: submittedAt
+                        )
+                    }
+                ) { submission in
                     await saveSharedSubmission(submission)
                 } onRemove: { _ in
                     false
@@ -513,6 +530,7 @@ struct AddScreen: View {
         pendingVisitPhotoAttachments = []
         isImportingPhoto = false
         addSaveFlow = nil
+        placeSaveDraftStore.clear()
         showsImportHub = false
         showsImportInbox = false
         selectedDetent = restingDetent
@@ -577,12 +595,47 @@ struct AddScreen: View {
     private func openSharedSaveFlow() {
         guard let selectedCandidate else { return }
 
-        addSaveFlow = addCandidateContext(
+        presentSaveFlow(addCandidateContext(
             selectedCandidate,
             sourceType: selectedSource,
             defaultVisibility: store.effectiveDefaultVisibility,
             initialPhotoAttachments: pendingVisitPhotoAttachments
+        ))
+    }
+
+    private func presentSaveFlow(_ context: MapPlaceSaveContext) {
+        if let draft = PlaceSaveDraft.addFlow(
+            ownerUserID: store.currentUser.id,
+            context: context
+        ) {
+            placeSaveDraftStore.begin(draft)
+        }
+        addSaveFlow = context
+    }
+
+    private func restoreActiveSaveFlowIfNeeded() {
+        guard addSaveFlow == nil,
+              let draft = placeSaveDraftStore.draft,
+              draft.ownerUserID == store.currentUser.id
+        else { return }
+
+        selectedSource = draft.sourceType
+        candidates = [draft.candidate]
+        selectedCandidateID = draft.candidate.id
+        pendingVisitPhotoAttachments = draft.form.photoAttachments.compactMap(
+            MapPlaceSavePhotoAttachment.restore
         )
+        var context = addCandidateContext(
+            draft.candidate,
+            sourceType: draft.sourceType,
+            defaultVisibility: draft.form.selectedVisibility,
+            initialPhotoAttachments: pendingVisitPhotoAttachments
+        )
+        if draft.form.step == .details {
+            context = context.resolvingExistingSave(selection: draft.form.selectedStatus)
+        }
+        selectedDetent = .large
+        addSaveFlow = context
     }
 
     private func addCandidateContext(
@@ -648,6 +701,7 @@ struct AddScreen: View {
             backend: auth.isSignedIn ? backend : nil
         ) else { return nil }
 
+        placeSaveDraftStore.clear()
         let needsSignIn = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         resetAfterSave()

@@ -356,7 +356,8 @@ struct ProfileScreen: View {
             .map { visiblePlace in
                 PlaceSaveSummary(
                     visiblePlace: visiblePlace,
-                    attributes: store.attributes(for: visiblePlace.userPlace.id)
+                    attributes: store.attributes(for: visiblePlace.userPlace.id),
+                    viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
                 )
             }
             .sorted { lhs, rhs in
@@ -372,7 +373,8 @@ struct ProfileScreen: View {
         store.currentUserVisiblePlaces.map { visiblePlace in
             PlaceSaveSummary(
                 visiblePlace: visiblePlace,
-                attributes: store.attributes(for: visiblePlace.userPlace.id)
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
             )
         }
     }
@@ -2708,7 +2710,11 @@ private struct SavedPlacesListScreen: View {
                 return true
             }
             .map { visiblePlace in
-                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: store.attributes(for: visiblePlace.userPlace.id),
+                    viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
+                )
             }
 
         return summaries.sorted { lhs, rhs in
@@ -2722,7 +2728,11 @@ private struct SavedPlacesListScreen: View {
 
     private var tasteSummaries: [PlaceSaveSummary] {
         store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
+            )
         }
     }
 
