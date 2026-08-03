@@ -36,11 +36,22 @@ private final class AuthenticatedNotificationGate: @unchecked Sendable {
         if state == .unknown, self.expectedUserID == expectedUserID {
             return
         }
+        let retainedUserInfo = pendingResponses.compactMap { response in
+            response.expectedUserID == expectedUserID ? response.userInfo : nil
+        }
         state = .unknown
         authenticatedUserID = nil
         self.expectedUserID = expectedUserID
         validationGeneration &+= 1
-        pendingResponses.removeAll()
+        pendingResponses = expectedUserID.map { retainedUserID in
+            retainedUserInfo.map {
+                PendingResponse(
+                    userInfo: $0,
+                    expectedUserID: retainedUserID,
+                    validationGeneration: validationGeneration
+                )
+            }
+        } ?? []
     }
 
     @discardableResult

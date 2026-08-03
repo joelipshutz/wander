@@ -61,6 +61,7 @@
 		3AF80074E8D094F572E97DB2 /* WannaGoReminderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73D64500CA1377F2C798EB38 /* WannaGoReminderTests.swift */; };
 		3CF5CCC68B3176026CC6C517 /* WanderTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B3AB5F19E8F9650C9E32C1B /* WanderTheme.swift */; };
 		3DA817E338E98E7ED70B1A67 /* ClerkKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F81D752928A4F01332482548 /* ClerkKitUI */; };
+		416A007AA98854F088979D5D /* rec-195-streak-notification-live-entry-gate-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 2EC6DBFE09F2D96DE9F1DD38 /* rec-195-streak-notification-live-entry-gate-pre.json */; };
 		448B652BEB843822DC3B2FEA /* WannaGoReminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159326A07925C1A61C5DEB5F /* WannaGoReminder.swift */; };
 		465D9A85D1A855682F9C99CD /* WanderActionButtonControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3483D9CDDB48DA65E279CFF8 /* WanderActionButtonControlTests.swift */; };
 		4852690B9E162276A1564F4A /* NavigationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15482C29796B02CF92D9B5AD /* NavigationContractTests.swift */; };
@@ -265,6 +266,7 @@
 		249D58D889C2DFE7795EB7C6 /* PlacePhotoCarouselMockupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoCarouselMockupTests.swift; sourceTree = "<group>"; };
 		260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverParserTests.swift; sourceTree = "<group>"; };
 		2D56F3E007FB8CA01FD8B342 /* WanderCheckInControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderCheckInControl.swift; sourceTree = "<group>"; };
+		2EC6DBFE09F2D96DE9F1DD38 /* rec-195-streak-notification-live-entry-gate-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-streak-notification-live-entry-gate-pre.json"; sourceTree = "<group>"; };
 		2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderStoreTests.swift; sourceTree = "<group>"; };
 		2F6E53AF7F6E50A969880C4C /* ProfileEditScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEditScreen.swift; sourceTree = "<group>"; };
 		2F7C135DE60BED317B033C7E /* PhotoPlaceTextExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPlaceTextExtractorTests.swift; sourceTree = "<group>"; };
@@ -704,6 +706,7 @@
 				1CEEF5EC131D187840F4751C /* rec-168-check-in-date-reselection-pre.json */,
 				0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */,
 				82139F335706F798EFC2439B /* rec-195-streak-notification-auth-race-pre.json */,
+				2EC6DBFE09F2D96DE9F1DD38 /* rec-195-streak-notification-live-entry-gate-pre.json */,
 				62DA04AEBFE6C66CC313B4C7 /* rec-195-streak-notification-not-delivered-pre.json */,
 				F15A0A0901CFD503ABBFF5DA /* rec-195-streak-notification-routing-pre.json */,
 				FF6AE45FE275A8A1C5617108 /* rec-195-streak-notification-routing-still-broken.png */,
@@ -1045,6 +1048,7 @@
 				12E3D915545B913AF7F72F9E /* rec-168-check-in-date-reselection-pre.json in Resources */,
 				5A2EA828AD976F076EAD53E5 /* rec-191-map-search-menu-pre.json in Resources */,
 				8B6F8926CF8E18D2B2B21F22 /* rec-195-streak-notification-auth-race-pre.json in Resources */,
+				416A007AA98854F088979D5D /* rec-195-streak-notification-live-entry-gate-pre.json in Resources */,
 				BF68D1ABCCBC6DF9386E24D2 /* rec-195-streak-notification-not-delivered-pre.json in Resources */,
 				612FA998BF76FF6B9C736B86 /* rec-195-streak-notification-routing-pre.json in Resources */,
 				F6437AF5CC81D57E03A5621C /* rec-195-streak-notification-routing-still-broken.png in Resources */,

@@ -2622,6 +2622,63 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testNotificationResponseSurvivesSameAccountForegroundRevalidation() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_foreground_revalidation",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo),
+            "user_a"
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+    }
+
+    func testAppEntryNotificationGateStateTracksProductionAuthLifecycle() {
+        let session = AuthSession(
+            userID: "user_a",
+            displayName: "A",
+            handle: "a"
+        )
+
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedIn(session),
+                isSessionValidated: false
+            ),
+            .validating(expectedUserID: "user_a")
+        )
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedIn(session),
+                isSessionValidated: true
+            ),
+            .authenticated(userID: "user_a")
+        )
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedOut,
+                isSessionValidated: false
+            ),
+            .signedOut
+        )
+    }
+
     func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
         let manager = PushNotificationManager()
         let userInfo: [AnyHashable: Any] = [
