@@ -53,6 +53,8 @@ struct WanderApp: App {
                 SaveStreakMockupRoot(page: streakMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
+            } else if let inviteMockupPage = InviteMockupPage.resolved() {
+                InviteMockupRoot(page: inviteMockupPage)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
