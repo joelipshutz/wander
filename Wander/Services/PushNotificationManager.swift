@@ -307,6 +307,7 @@ final class PushNotificationManager: ObservableObject {
     @Published private(set) var saveStreakRemindersEnabled = false
 
     private let userDefaults: UserDefaults
+    private let saveStreakReminderAnalytics: SaveStreakReminderAnalytics
     private let tokenKey = "wander.apnsDeviceToken"
     private static let wannaGoRemindersKey = "wander.wannaGoRemindersEnabled"
     private static let saveStreakRemindersKeyPrefix = "wander.saveStreakRemindersEnabled."
@@ -314,8 +315,15 @@ final class PushNotificationManager: ObservableObject {
     private var saveStreakReminderUserID: String?
     private var handledEventIDs: [String] = []
 
-    init(userDefaults: UserDefaults = .standard) {
+    init(
+        userDefaults: UserDefaults = .standard,
+        analytics: AnalyticsClient = NoopAnalyticsClient()
+    ) {
         self.userDefaults = userDefaults
+        self.saveStreakReminderAnalytics = SaveStreakReminderAnalytics(
+            analytics: analytics,
+            userDefaults: userDefaults
+        )
         self.wannaGoRemindersEnabled = userDefaults.bool(forKey: Self.wannaGoRemindersKey)
     }
 
@@ -357,6 +365,9 @@ final class PushNotificationManager: ObservableObject {
     }
 
     func clearAuthenticatedSessionState() {
+        if let saveStreakReminderUserID {
+            saveStreakReminderAnalytics.clearOpenAttribution(userID: saveStreakReminderUserID)
+        }
         navigationRequest = nil
         handledEventIDs.removeAll()
         applyNotificationPreferences(.allDisabled)
@@ -519,7 +530,10 @@ final class PushNotificationManager: ObservableObject {
     }
 
     @discardableResult
-    func handleNotificationResponse(userInfo: [AnyHashable: Any]) -> Bool {
+    func handleNotificationResponse(
+        userInfo: [AnyHashable: Any],
+        userID: String? = nil
+    ) -> Bool {
         let eventID = Self.eventID(from: userInfo)
         if let eventID, handledEventIDs.contains(eventID) {
             return false
@@ -537,6 +551,12 @@ final class PushNotificationManager: ObservableObject {
             }
         }
         navigationRequest = NotificationNavigationRequest(destination: destination)
+        if let userID = userID ?? saveStreakReminderUserID {
+            saveStreakReminderAnalytics.recordOpened(
+                userInfo: userInfo,
+                userID: userID
+            )
+        }
         #if DEBUG
         WanderDebugLog.remote.debug("notification navigation request created destination=\(String(describing: destination), privacy: .public)")
         #endif
@@ -720,33 +740,70 @@ final class PushNotificationManager: ObservableObject {
 
     func reconcileSaveStreakReminder(
         _ summary: SaveStreakSummary,
-        now: Date = .now
+        now: Date = .now,
+        cancelledBySaveStatus: PlaceStatus? = nil
     ) async {
         await refreshAuthorizationStatus()
         let center = UNUserNotificationCenter.current()
-        let identifiers = SaveStreakReminderPlanner.productionReminderIdentifiers(
-            in: await center.pendingNotificationRequests().map(\.identifier)
-        )
-
-        if !identifiers.isEmpty {
-            center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        let pendingRequests = await center.pendingNotificationRequests()
+        let productionRequests = pendingRequests.filter {
+            $0.identifier == SaveStreakReminderPlanner.notificationIdentifier
         }
+        let identifiers = productionRequests.map(\.identifier)
 
         guard saveStreakRemindersEnabled,
               canRegisterForRemoteNotifications,
               let plan = SaveStreakReminderPlanner.plan(for: summary, now: now)
         else {
+            if summary.isTodayCovered,
+               let cancelledBySaveStatus,
+               let request = productionRequests.first {
+                saveStreakReminderAnalytics.recordCancelledBySave(
+                    request: request,
+                    status: cancelledBySaveStatus,
+                    streakCount: summary.currentCount
+                )
+            }
+            if !identifiers.isEmpty {
+                center.removePendingNotificationRequests(withIdentifiers: identifiers)
+            }
             return
+        }
+
+        if productionRequests.contains(where: { request in
+            SaveStreakReminderPlanner.matches(request, plan: plan)
+        }) {
+            return
+        }
+
+        if !identifiers.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: identifiers)
         }
 
         do {
             try await center.add(SaveStreakReminderPlanner.request(for: plan))
+            saveStreakReminderAnalytics.recordScheduled(plan)
         } catch {
             lastErrorMessage = "Could not schedule a save streak reminder."
             #if DEBUG
             WanderDebugLog.remote.error("save streak reminder scheduling failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
         }
+    }
+
+    @discardableResult
+    func recordSaveCompletedAfterReminderOpen(
+        userID: String,
+        status: PlaceStatus,
+        streakCount: Int,
+        savedAt: Date
+    ) -> Bool {
+        saveStreakReminderAnalytics.recordSaveCompletedAfterOpen(
+            userID: userID,
+            status: status,
+            streakCount: streakCount,
+            now: savedAt
+        )
     }
 
     func cancelAllSaveStreakReminders() async {

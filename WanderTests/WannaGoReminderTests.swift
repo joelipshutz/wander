@@ -198,7 +198,7 @@ final class WannaGoReminderTests: XCTestCase {
     func testSaveStreakPlannerSchedulesEightPMWhenActiveDayIsUncovered() throws {
         let calendar = testCalendar()
         let now = try XCTUnwrap(
-            calendar.date(from: DateComponents(year: 2026, month: 8, day: 1, hour: 14))
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
         )
         let summary = SaveStreakSummary(
             currentCount: 4,
@@ -213,19 +213,21 @@ final class WannaGoReminderTests: XCTestCase {
 
         XCTAssertEqual(plan.identifier, "recme.save-streak-reminder.daily")
         XCTAssertEqual(plan.streakCount, 4)
+        XCTAssertEqual(plan.copyVariant, .current)
+        XCTAssertEqual(plan.scheduledWeekday, "monday")
         XCTAssertEqual(
             calendar.dateComponents([.year, .month, .day, .hour, .minute], from: plan.fireDate),
-            DateComponents(year: 2026, month: 8, day: 1, hour: 20, minute: 0)
+            DateComponents(year: 2026, month: 8, day: 3, hour: 20, minute: 0)
         )
     }
 
     func testSaveStreakPlannerSkipsCoveredExpiredAndInactiveDays() throws {
         let calendar = testCalendar()
         let afternoon = try XCTUnwrap(
-            calendar.date(from: DateComponents(year: 2026, month: 8, day: 1, hour: 14))
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
         )
         let evening = try XCTUnwrap(
-            calendar.date(from: DateComponents(year: 2026, month: 8, day: 1, hour: 20))
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 20))
         )
         let active = SaveStreakSummary(
             currentCount: 2,
@@ -248,7 +250,7 @@ final class WannaGoReminderTests: XCTestCase {
     func testSaveStreakReminderCopyPayloadAndQuickCaptureRoute() throws {
         let calendar = testCalendar()
         let now = try XCTUnwrap(
-            calendar.date(from: DateComponents(year: 2026, month: 8, day: 1, hour: 14))
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
         )
         let summary = SaveStreakSummary(
             currentCount: 4,
@@ -272,8 +274,237 @@ final class WannaGoReminderTests: XCTestCase {
         XCTAssertEqual(payload["notification_type"] as? String, "save_streak_reminder")
         XCTAssertEqual(payload["deeplink_url"] as? String, "recme://add/here-now")
         XCTAssertEqual(data["streak_count"], "4")
+        XCTAssertEqual(data["copy_variant"], "current")
+        XCTAssertEqual(data["scheduled_weekday"], "monday")
         XCTAssertEqual(trigger.dateComponents.hour, 20)
         XCTAssertEqual(PushNotificationManager.destination(from: request.content.userInfo), .quickCapture)
+    }
+
+    func testSaveStreakReminderCopyRotationIsDeterministicByWeekday() throws {
+        let calendar = testCalendar()
+        let summary = SaveStreakSummary(
+            currentCount: 4,
+            bestCount: 4,
+            isTodayCovered: false,
+            recentDayCoverage: Array(repeating: false, count: 7)
+        )
+        let expectations: [(day: Int, variant: SaveStreakReminderCopyVariant, title: String, body: String)] = [
+            (2, .anythingWorthRemembering, "Anything worth remembering today?", "Save it now and keep your streak going."),
+            (3, .current, "Your 4-day streak is waiting", "Where did you go today? Check in or save a place to keep your streak."),
+            (4, .anythingWorthRemembering, "Anything worth remembering today?", "Save it now and keep your streak going."),
+            (5, .onePlaceKeepsStreakAlive, "One place keeps the streak alive", "Check in or save somewhere before the day ends."),
+            (6, .current, "Your 4-day streak is waiting", "Where did you go today? Check in or save a place to keep your streak."),
+            (7, .mapHasRoom, "Your map has room for today", "Add somewhere you went or somewhere you want to go."),
+            (8, .onePlaceKeepsStreakAlive, "One place keeps the streak alive", "Check in or save somewhere before the day ends.")
+        ]
+
+        for expectation in expectations {
+            let now = try XCTUnwrap(
+                calendar.date(
+                    from: DateComponents(
+                        year: 2026,
+                        month: 8,
+                        day: expectation.day,
+                        hour: 14
+                    )
+                )
+            )
+            let plan = try XCTUnwrap(
+                SaveStreakReminderPlanner.plan(for: summary, now: now, calendar: calendar)
+            )
+            let request = SaveStreakReminderPlanner.request(for: plan, calendar: calendar)
+
+            XCTAssertEqual(plan.copyVariant, expectation.variant)
+            XCTAssertEqual(request.content.title, expectation.title)
+            XCTAssertEqual(request.content.body, expectation.body)
+        }
+    }
+
+    func testMatchingSameDaySaveStreakRequestCanBeKeptWithoutRescheduling() throws {
+        let calendar = testCalendar()
+        let summary = SaveStreakSummary(
+            currentCount: 4,
+            bestCount: 4,
+            isTodayCovered: false,
+            recentDayCoverage: Array(repeating: false, count: 7)
+        )
+        let monday = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
+        )
+        let tuesday = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 4, hour: 14))
+        )
+        let mondayPlan = try XCTUnwrap(
+            SaveStreakReminderPlanner.plan(for: summary, now: monday, calendar: calendar)
+        )
+        let changedCountPlan = try XCTUnwrap(
+            SaveStreakReminderPlanner.plan(
+                for: SaveStreakSummary(
+                    currentCount: 5,
+                    bestCount: 5,
+                    isTodayCovered: false,
+                    recentDayCoverage: Array(repeating: false, count: 7)
+                ),
+                now: monday,
+                calendar: calendar
+            )
+        )
+        let tuesdayPlan = try XCTUnwrap(
+            SaveStreakReminderPlanner.plan(for: summary, now: tuesday, calendar: calendar)
+        )
+        let mondayRequest = SaveStreakReminderPlanner.request(for: mondayPlan, calendar: calendar)
+
+        XCTAssertTrue(
+            SaveStreakReminderPlanner.matches(mondayRequest, plan: mondayPlan, calendar: calendar)
+        )
+        XCTAssertFalse(
+            SaveStreakReminderPlanner.matches(mondayRequest, plan: tuesdayPlan, calendar: calendar)
+        )
+        XCTAssertFalse(
+            SaveStreakReminderPlanner.matches(
+                mondayRequest,
+                plan: changedCountPlan,
+                calendar: calendar
+            )
+        )
+    }
+
+    func testSaveStreakReminderFunnelEventsContainOnlyAggregateProperties() throws {
+        let calendar = testCalendar()
+        let suiteName = "SaveStreakReminderAnalyticsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let analytics = ReminderRecordingAnalyticsClient()
+        let tracker = SaveStreakReminderAnalytics(analytics: analytics, userDefaults: defaults)
+        let summary = SaveStreakSummary(
+            currentCount: 4,
+            bestCount: 4,
+            isTodayCovered: false,
+            recentDayCoverage: Array(repeating: false, count: 7)
+        )
+        let now = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
+        )
+        let plan = try XCTUnwrap(
+            SaveStreakReminderPlanner.plan(for: summary, now: now, calendar: calendar)
+        )
+        let request = SaveStreakReminderPlanner.request(for: plan, calendar: calendar)
+        let openedAt = plan.fireDate.addingTimeInterval(5 * 60)
+
+        tracker.recordScheduled(plan)
+        tracker.recordCancelledBySave(request: request, status: .wannaGo, streakCount: 5)
+        tracker.recordOpened(userInfo: request.content.userInfo, userID: "local-user-a", now: openedAt)
+        XCTAssertFalse(
+            tracker.recordSaveCompletedAfterOpen(
+                userID: "local-user-b",
+                status: .wannaGo,
+                streakCount: 5,
+                now: openedAt.addingTimeInterval(9 * 60)
+            )
+        )
+        XCTAssertTrue(
+            tracker.recordSaveCompletedAfterOpen(
+                userID: "local-user-a",
+                status: .wannaGo,
+                streakCount: 5,
+                now: openedAt.addingTimeInterval(10 * 60)
+            )
+        )
+        XCTAssertFalse(
+            tracker.recordSaveCompletedAfterOpen(
+                userID: "local-user-a",
+                status: .wannaGo,
+                streakCount: 5,
+                now: openedAt.addingTimeInterval(11 * 60)
+            )
+        )
+
+        XCTAssertEqual(
+            analytics.events.map(\.name),
+            [
+                WanderAnalyticsEvents.saveStreakReminderScheduled,
+                WanderAnalyticsEvents.saveStreakReminderCancelledBySave,
+                WanderAnalyticsEvents.saveStreakReminderOpened,
+                WanderAnalyticsEvents.saveStreakReminderCompletedSaveAfterOpen
+            ]
+        )
+        XCTAssertEqual(analytics.events[0].properties["copy_variant"], "current")
+        XCTAssertEqual(analytics.events[0].properties["scheduled_weekday"], "monday")
+        XCTAssertEqual(analytics.events[1].properties["status"], PlaceStatus.wannaGo.rawValue)
+        XCTAssertEqual(analytics.events[3].properties["time_to_save_bucket"], "5_to_15_minutes")
+
+        let forbiddenKeys = Set([
+            "user_id", "account_id", "event_id", "place_id", "place_name",
+            "note", "latitude", "longitude", "coordinates"
+        ])
+        for event in analytics.events {
+            XCTAssertTrue(forbiddenKeys.isDisjoint(with: event.properties.keys))
+            XCTAssertFalse(event.properties.values.contains("local-user-a"))
+        }
+    }
+
+    func testExpiredSaveStreakReminderOpenDoesNotClaimACompletion() throws {
+        let suiteName = "SaveStreakReminderExpiredAnalyticsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let analytics = ReminderRecordingAnalyticsClient()
+        let tracker = SaveStreakReminderAnalytics(analytics: analytics, userDefaults: defaults)
+        let request = SaveStreakReminderPlanner.debugRequest(for: .empty)
+        let openedAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+        tracker.recordOpened(userInfo: request.content.userInfo, userID: "local-user-a", now: openedAt)
+        XCTAssertFalse(
+            tracker.recordSaveCompletedAfterOpen(
+                userID: "local-user-a",
+                status: .been,
+                streakCount: 1,
+                now: openedAt.addingTimeInterval(
+                    SaveStreakReminderAnalytics.completionAttributionWindow + 1
+                )
+            )
+        )
+        XCTAssertEqual(
+            analytics.events.map(\.name),
+            [WanderAnalyticsEvents.saveStreakReminderOpened]
+        )
+    }
+
+    func testPushNotificationManagerAttributesOneSaveToOneReminderOpen() throws {
+        let suiteName = "SaveStreakReminderManagerAnalyticsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let analytics = ReminderRecordingAnalyticsClient()
+        let manager = PushNotificationManager(userDefaults: defaults, analytics: analytics)
+        let request = SaveStreakReminderPlanner.debugRequest(for: .empty)
+
+        XCTAssertTrue(
+            manager.handleNotificationResponse(
+                userInfo: request.content.userInfo,
+                userID: "local-user-a"
+            )
+        )
+        XCTAssertFalse(
+            manager.handleNotificationResponse(
+                userInfo: request.content.userInfo,
+                userID: "local-user-a"
+            )
+        )
+        XCTAssertTrue(
+            manager.recordSaveCompletedAfterReminderOpen(
+                userID: "local-user-a",
+                status: .been,
+                streakCount: 1,
+                savedAt: .now
+            )
+        )
+
+        XCTAssertEqual(
+            analytics.events.map(\.name),
+            [
+                WanderAnalyticsEvents.saveStreakReminderOpened,
+                WanderAnalyticsEvents.saveStreakReminderCompletedSaveAfterOpen
+            ]
+        )
     }
 
     func testSaveStreakProductionReconciliationDoesNotCancelDebugReminder() {
@@ -317,4 +548,15 @@ final class WannaGoReminderTests: XCTestCase {
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         return calendar
     }
+}
+
+private final class ReminderRecordingAnalyticsClient: AnalyticsClient {
+    private(set) var events: [AnalyticsEvent] = []
+
+    func track(_ event: AnalyticsEvent) {
+        events.append(event)
+    }
+
+    func identify(userID: String) {}
+    func resetIdentity() {}
 }

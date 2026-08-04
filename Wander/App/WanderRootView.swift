@@ -619,8 +619,19 @@ struct WanderRootView: View {
         .onChange(of: store.saveStreakCelebration) { _, celebration in
             guard isSessionValidated else { return }
             queueSaveStreakCelebration(celebration)
+            if let celebration {
+                pushNotifications.recordSaveCompletedAfterReminderOpen(
+                    userID: store.currentUser.id,
+                    status: celebration.status,
+                    streakCount: celebration.streakCount,
+                    savedAt: celebration.saveDate
+                )
+            }
             Task {
-                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+                await pushNotifications.reconcileSaveStreakReminder(
+                    store.saveStreakSummary,
+                    cancelledBySaveStatus: celebration?.status
+                )
             }
         }
         .onChange(of: store.presentationRevision) { _, _ in
@@ -916,12 +927,6 @@ struct WanderRootView: View {
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
         if request.destination == .quickCapture {
-            analytics.track(
-                AnalyticsEvent(
-                    name: WanderAnalyticsEvents.saveStreakReminderOpened,
-                    properties: [:]
-                )
-            )
             pushNotifications.consumeNavigationRequest(id: request.id)
             beginDeepLinkHandoff(to: .quickCapture)
             return
@@ -946,13 +951,15 @@ struct WanderRootView: View {
             for: store.currentUser.id
         ) {
             handledResponse = pushNotifications.handleNotificationResponse(
-                userInfo: pendingUserInfo
+                userInfo: pendingUserInfo,
+                userID: store.currentUser.id
             ) || handledResponse
         }
 
         if !handledResponse, let fallbackUserInfo {
             handledResponse = pushNotifications.handleNotificationResponse(
-                userInfo: fallbackUserInfo
+                userInfo: fallbackUserInfo,
+                userID: store.currentUser.id
             )
         }
 

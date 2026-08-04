@@ -10,7 +10,7 @@ struct WanderApp: App {
     @StateObject private var auth: AuthSessionStore
     @StateObject private var backend: WanderBackend
     @StateObject private var entryCoordinator: AppEntryCoordinator
-    @StateObject private var pushNotifications = PushNotificationManager()
+    @StateObject private var pushNotifications: PushNotificationManager
     #if DEBUG
     @StateObject private var mapCaptureBackend: WanderBackend
     #endif
@@ -26,6 +26,9 @@ struct WanderApp: App {
             analyticsClient = NoopAnalyticsClient()
         }
         analytics = analyticsClient
+        _pushNotifications = StateObject(
+            wrappedValue: PushNotificationManager(analytics: analyticsClient)
+        )
         let authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
         let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
         discoverParser = Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
