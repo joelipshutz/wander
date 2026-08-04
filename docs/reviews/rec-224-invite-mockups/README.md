@@ -1,8 +1,9 @@
 # REC-224 invite mockups
 
 This first milestone turns the attached "Add members" recording into a reusable
-rec.me SwiftUI pattern before Contacts, matching, deep-link, and share plumbing
-are connected.
+rec.me SwiftUI pattern. The check-in Friends picker uses the real entry point;
+Feed People and list collaborators remain reviewable mock surfaces while native
+Contacts, matching, deep-link, and share plumbing are still to come.
 
 ## Direction to review
 
@@ -47,4 +48,5 @@ Launch with `-WanderInviteMockup <page>`, where `<page>` is one of:
 - privacy-preserving phone/email normalization and rec.me account matching
 - native share-sheet result and cancellation handling
 - scoped invite tokens, deferred deep links, and acceptance reconciliation
-- production entry-point integration and PII-free funnel analytics
+- Feed People and list-collaborator production entry-point integration
+- PII-free funnel analytics

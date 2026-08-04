@@ -146,6 +146,32 @@ struct InviteContact: Identifiable, Equatable {
         guard case .recmeUser(let handle, _) = relationship else { return nil }
         return handle
     }
+
+    init(
+        id: String,
+        displayName: String,
+        contactDetail: String?,
+        relationship: InviteContactRelationship,
+        isFrequentlyContacted: Bool
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.contactDetail = contactDetail
+        self.relationship = relationship
+        self.isFrequentlyContacted = isFrequentlyContacted
+    }
+
+    init(contactMatch: ContactMatch) {
+        id = contactMatch.id
+        displayName = contactMatch.displayName
+        contactDetail = nil
+        if let handle = contactMatch.handle, let userID = contactMatch.userID {
+            relationship = .recmeUser(handle: handle, userID: userID)
+        } else {
+            relationship = .contactOnly
+        }
+        isFrequentlyContacted = contactMatch.isAlreadyFollowing || contactMatch.followsCurrentUser
+    }
 }
 
 struct InviteContactSection: Identifiable, Equatable {

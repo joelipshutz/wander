@@ -122,6 +122,8 @@ struct SharedVisitFriendPicker: View {
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
     @State private var query = ""
+    @State private var isPresentingContactInvites = false
+    @State private var inviteContacts: [InviteContact] = []
 
     private var friends: [LocalProfile] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -147,6 +149,15 @@ struct SharedVisitFriendPicker: View {
                             .autocorrectionDisabled()
                     }
                 }
+
+                Section {
+                    InviteEntryPointButton(surface: .sharedVisit(placeName: nil)) {
+                        Task { await presentContactInvites() }
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
                 Section("friends") {
                     if friends.isEmpty {
@@ -193,7 +204,20 @@ struct SharedVisitFriendPicker: View {
                         .font(.system(size: 15, weight: .bold))
                 }
             }
+            .sheet(isPresented: $isPresentingContactInvites) {
+                ContactInviteSheet(
+                    surface: .sharedVisit(placeName: nil),
+                    contacts: inviteContacts
+                )
+            }
         }
+    }
+
+    @MainActor
+    private func presentContactInvites() async {
+        let matches = (try? await store.contactProvider.matches()) ?? []
+        inviteContacts = matches.map(InviteContact.init(contactMatch:))
+        isPresentingContactInvites = true
     }
 
     private func toggle(_ userID: String) {

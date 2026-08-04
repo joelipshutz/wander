@@ -59,4 +59,52 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertFalse(selection.contains("maya"))
         XCTAssertTrue(selection.contains("joe"))
     }
+
+    func testContactMatchMapsExistingAndNonUserContactsWithoutPIIAnalytics() {
+        let existing = InviteContact(
+            contactMatch: ContactMatch(
+                id: "maya-contact",
+                displayName: "Maya Chen",
+                handle: "mayac",
+                userID: "user-maya",
+                isAlreadyFollowing: true,
+                followsCurrentUser: false
+            )
+        )
+        let nonUser = InviteContact(
+            contactMatch: ContactMatch(
+                id: "sam-contact",
+                displayName: "Sam Rivera",
+                handle: nil,
+                userID: nil,
+                isAlreadyFollowing: false,
+                followsCurrentUser: false
+            )
+        )
+
+        XCTAssertEqual(existing.relationship, .recmeUser(handle: "mayac", userID: "user-maya"))
+        XCTAssertTrue(existing.isFrequentlyContacted)
+        XCTAssertEqual(nonUser.relationship, .contactOnly)
+        XCTAssertNil(nonUser.contactDetail)
+    }
+
+    func testCheckInFriendPickerPlacesContactInviteBetweenSearchAndFriends() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/SharedVisits/SharedVisitComponents.swift"
+            )
+        )
+
+        let search = try XCTUnwrap(source.range(of: "TextField(\"Search friends\""))
+        let invite = try XCTUnwrap(source.range(of: "InviteEntryPointButton(surface: .sharedVisit"))
+        let friends = try XCTUnwrap(source.range(of: "Section(\"friends\")"))
+
+        XCTAssertLessThan(search.lowerBound, invite.lowerBound)
+        XCTAssertLessThan(invite.lowerBound, friends.lowerBound)
+        XCTAssertTrue(source.contains("Button(\"Done\") { dismiss() }"))
+        XCTAssertTrue(source.contains("ContactInviteSheet("))
+    }
 }

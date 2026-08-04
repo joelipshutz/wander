@@ -29,7 +29,7 @@ struct InviteMockupRoot: View {
         Group {
             switch page {
             case .checkInEntry:
-                InviteEntryPointMockup(surface: .sharedVisit(placeName: "Gjelina"))
+                SharedVisitFriendPickerMockup()
             case .feedPeopleEntry:
                 InviteEntryPointMockup(surface: .feedPeople)
             case .listCollaboratorEntry:
@@ -82,6 +82,17 @@ struct InviteMockupRoot: View {
     }
 }
 
+@MainActor
+private struct SharedVisitFriendPickerMockup: View {
+    @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
+    @State private var selectedUserIDs: [String] = []
+
+    var body: some View {
+        SharedVisitFriendPicker(selectedUserIDs: $selectedUserIDs)
+            .environmentObject(store)
+    }
+}
+
 private struct InviteEntryPointMockup: View {
     let surface: InviteSurface
     @State private var isPresentingInviteSheet = false
@@ -102,6 +113,16 @@ private struct InviteEntryPointMockup: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
             .wanderScreen()
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if case .sharedVisit = surface {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {}
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                }
+            }
         }
         .sheet(isPresented: $isPresentingInviteSheet) {
             ContactInviteSheet(surface: surface, contacts: InviteMockupData.contacts)
@@ -112,14 +133,7 @@ private struct InviteEntryPointMockup: View {
     private var mockHeader: some View {
         switch surface {
         case .sharedVisit:
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("who were you with?")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
-                HStack(spacing: WanderTheme.spacing2) {
-                    mockSegment("details", selected: false)
-                    mockSegment("friends", selected: true)
-                }
-            }
+            EmptyView()
         case .feedPeople:
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("feed")
@@ -138,6 +152,11 @@ private struct InviteEntryPointMockup: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
         }
+    }
+
+    private var navigationTitle: String {
+        if case .sharedVisit = surface { return "add friends" }
+        return ""
     }
 
     private func mockSegment(_ label: String, selected: Bool) -> some View {
