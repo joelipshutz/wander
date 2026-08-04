@@ -17,6 +17,41 @@ struct AppEntryForegroundRefreshPolicy {
     }
 }
 
+enum AppEntryNotificationGateState: Equatable {
+    case validating(expectedUserID: String?)
+    case authenticated(userID: String)
+    case signedOut
+
+    init(authState: AuthState, isSessionValidated: Bool) {
+        if isSessionValidated, case .signedIn(let session) = authState {
+            self = .authenticated(userID: session.userID)
+            return
+        }
+
+        switch authState {
+        case .signedIn(let session), .offline(let session, _):
+            self = .validating(expectedUserID: session.userID)
+        case .loading:
+            self = .validating(expectedUserID: nil)
+        case .signedOut, .unavailable:
+            self = .signedOut
+        }
+    }
+
+    func synchronize() {
+        switch self {
+        case .validating(let expectedUserID):
+            WanderAppDelegate.beginAuthenticatedSessionValidation(
+                expectedUserID: expectedUserID
+            )
+        case .authenticated(let userID):
+            WanderAppDelegate.setAuthenticatedSessionActive(userID: userID)
+        case .signedOut:
+            WanderAppDelegate.setAuthenticatedSessionSignedOut()
+        }
+    }
+}
+
 @MainActor
 struct AppEntryView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -33,6 +68,11 @@ struct AppEntryView: View {
     @State private var foregroundRefreshPolicy = AppEntryForegroundRefreshPolicy()
 
     var body: some View {
+        let notificationGateState = AppEntryNotificationGateState(
+            authState: auth.state,
+            isSessionValidated: auth.isSessionValidated
+        )
+
         Group {
             switch coordinator.state {
             case .launching:
@@ -108,6 +148,9 @@ struct AppEntryView: View {
         .onChange(of: auth.state) { _, state in
             guard didFinishInitialResolution else { return }
             coordinator.authStateChanged(state)
+        }
+        .onChange(of: notificationGateState, initial: true) { _, state in
+            state.synchronize()
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

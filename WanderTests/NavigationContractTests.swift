@@ -35,6 +35,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(entry.contains("foregroundRefreshPolicy.didEnterBackground("))
         XCTAssertTrue(entry.contains("case .active:"))
         XCTAssertTrue(entry.contains("foregroundRefreshPolicy.shouldRefreshSession("))
+        XCTAssertTrue(entry.contains("let notificationGateState = AppEntryNotificationGateState("))
+        XCTAssertTrue(entry.contains(".onChange(of: notificationGateState, initial: true)"))
+        XCTAssertTrue(entry.contains("state.synchronize()"))
         XCTAssertFalse(authStore.contains("willEnterForegroundNotification"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
         XCTAssertTrue(root.contains(".task(id: isSessionValidated)"))
@@ -970,6 +973,19 @@ final class NavigationContractTests: XCTestCase {
         }
     }
 
+    func testNotificationSettingsDoNotExposeTheStreakValidationControl() throws {
+        let settings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/SettingsScreen.swift"
+            )
+        )
+
+        XCTAssertTrue(settings.contains("title: \"Save streak reminders\""))
+        XCTAssertFalse(settings.contains("send test streak reminder"))
+        XCTAssertFalse(settings.contains("settings.notifications.testSaveStreakReminder"))
+        XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
+    }
+
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
         let addScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
@@ -1590,6 +1606,7 @@ final class NavigationContractTests: XCTestCase {
 
     @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
+        XCTAssertEqual(WanderRootView.notificationTab(for: .quickCapture), .map)
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)

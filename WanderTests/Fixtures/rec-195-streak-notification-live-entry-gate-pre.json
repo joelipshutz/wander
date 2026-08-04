@@ -1,0 +1,15 @@
+{
+  "issue": "REC-195",
+  "captured_at": "2026-08-03T12:10:00-07:00",
+  "source": "Tester report plus live Xcode console trace from Ry's iPhone running commit 9660453e9",
+  "precondition": [
+    "The signed-in user schedules the DEBUG save-streak reminder",
+    "The notification is delivered on Ry's iPhone",
+    "The user taps the notification while the production AppEntryView is active"
+  ],
+  "observed": "The app foregrounds without navigating. Xcode logs 'notification response received action=com.apple.UNNotificationDefaultActionIdentifier' followed by 'notification response buffered or dropped by auth gate'. A complete signed-in maintenance pass follows, but there is no 'notification response release signaled after auth validation', root notification-response, or navigation-request log.",
+  "root_cause_evidence": "The app launches AppEntryView, but the authentication-gate lifecycle added in the previous patch exists only in the unused WanderAppEntryView. AppEntryView validates the signed-in session without calling WanderAppDelegate.setAuthenticatedSessionActive, leaving the notification gate unknown and the tapped response stranded.",
+  "expected": "The production AppEntryView must synchronize every validated signed-in session with WanderAppDelegate so a buffered response is released and routed to the expanded I'm here now flow.",
+  "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration",
+  "screenshot_capture": "live Xcode console was inspected through Computer Use; the failure is proven by the missing gate-release log after successful signed-in validation"
+}

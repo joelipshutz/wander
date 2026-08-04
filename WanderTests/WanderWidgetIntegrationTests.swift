@@ -306,6 +306,33 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertNil(registry.sheetDidDismiss(surface: .add))
     }
 
+    func testStreakNotificationHandoffWaitsForProfileSettingsDismissal() throws {
+        let settings = WanderDeepLinkPresentationToken(
+            surface: .profileSettings,
+            generation: UUID()
+        )
+        let requestID = UUID()
+        var registry = WanderDeepLinkPresentationRegistry()
+        var handoff = WanderDeepLinkHandoffCoordinator()
+
+        XCTAssertTrue(registry.presentationDidAppear(settings))
+        handoff.begin(
+            requestID: requestID,
+            route: .quickCapture,
+            awaitingDismissals: registry.tokensAwaitingDismissal
+        )
+
+        XCTAssertNil(handoff.takeReadyRoute(requestID: requestID))
+        XCTAssertTrue(registry.presentationWillDisappear(settings))
+        let dismissedSettings = try XCTUnwrap(
+            registry.sheetDidDismiss(surface: .profileSettings)
+        )
+        XCTAssertEqual(
+            handoff.acknowledgeDismissal(dismissedSettings),
+            .quickCapture
+        )
+    }
+
     func testPresentationRegistryMapsDismissCallbackToOldestPhysicalGeneration() {
         let olderAdd = WanderDeepLinkPresentationToken(
             surface: .add,
@@ -456,6 +483,11 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         )
         XCTAssertTrue(root.contains(".fullScreenCover(item: $sharedProfile)"))
         XCTAssertTrue(root.contains("WanderRootPresentationLifecycle("))
+        XCTAssertTrue(root.contains("case profileSettings"))
+        XCTAssertTrue(root.contains("onSettingsPresentation: handleDeepLinkPresentation"))
+        XCTAssertTrue(root.contains("handleDeepLinkPresentationDismissal(of: .profileSettings)"))
+        XCTAssertTrue(profileScreen.contains("surface: .profileSettings"))
+        XCTAssertTrue(profileScreen.contains("onDismiss: onSettingsDidDismiss"))
         XCTAssertTrue(root.contains("onDismiss: handleDeepLinkPresentationWillDismiss"))
         XCTAssertTrue(root.contains("onDismiss: handleDeepLinkPresentationDismissalImmediately"))
         XCTAssertTrue(root.contains("presentedTokens.remove(token)"))

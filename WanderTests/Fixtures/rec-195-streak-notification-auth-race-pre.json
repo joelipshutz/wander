@@ -1,0 +1,15 @@
+{
+  "issue": "REC-195",
+  "captured_at": "2026-08-03T00:00:00-07:00",
+  "source": "Tester report plus live Xcode console trace from Ry's iPhone",
+  "precondition": [
+    "The signed-in user schedules the DEBUG save-streak reminder",
+    "The app backgrounds before delivery",
+    "The user taps the delivered notification while session validation is restarting"
+  ],
+  "observed": "The app foregrounds but does not navigate. Xcode logs 'notification response received action=com.apple.UNNotificationDefaultActionIdentifier' followed by 'notification response buffered or dropped by auth gate'; no root notification-response or navigation-request log follows.",
+  "root_cause_evidence": "The response is buffered while the authentication gate is unknown. WanderRootView can try to drain before WanderAppDelegate.setAuthenticatedSessionActive opens the gate. Authentication preserves the response but emits no signal after the gate opens, so that ordering leaves the response stranded indefinitely.",
+  "expected": "Opening the authentication gate must signal the live root whenever a matching notification response is pending, allowing the root to drain it and route to the expanded I'm here now flow.",
+  "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration",
+  "screenshot_capture": "live Xcode console was inspected through Computer Use; the failure is an ordering race visible in logs rather than a distinct static screen"
+}
