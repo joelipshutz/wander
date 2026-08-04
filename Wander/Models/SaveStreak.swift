@@ -2,7 +2,7 @@ import Foundation
 
 enum SaveStreakWindow {
     static let dayCount = 7
-    static let minimumRecoveryStreakCount = 3
+    static let minimumRecoveryStreakCount = 2
     static let recoveryCooldownDayCount = 30
 }
 

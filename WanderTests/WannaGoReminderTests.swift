@@ -377,8 +377,8 @@ final class WannaGoReminderTests: XCTestCase {
             calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
         )
         let coveredToday = SaveStreakSummary(
-            currentCount: 4,
-            bestCount: 4,
+            currentCount: 2,
+            bestCount: 2,
             isTodayCovered: true,
             recentDayCoverage: Array(repeating: true, count: 7)
         )
@@ -402,7 +402,7 @@ final class WannaGoReminderTests: XCTestCase {
             DateComponents(year: 2026, month: 8, day: 5, hour: 10)
         )
         XCTAssertEqual(request.content.title, "Keep your streak alive")
-        XCTAssertEqual(request.content.body, "Save a place today to bring back your 4-day streak.")
+        XCTAssertEqual(request.content.body, "Save a place today to bring back your 2-day streak.")
         XCTAssertEqual(data["reminder_kind"], "recovery")
         XCTAssertEqual(PushNotificationManager.destination(from: request.content.userInfo), .quickCapture)
     }

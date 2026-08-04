@@ -251,7 +251,12 @@ final class SaveStreakCalculatorTests: XCTestCase {
         XCTAssertFalse(summary.hasRecoveryEntitlement)
     }
 
-    func testRecoveryRequiresThreeDaysAndExpiresAfterFollowingDay() {
+    func testRecoveryRequiresTwoDaysAndExpiresAfterFollowingDay() {
+        let oneDayStreak = SaveStreakCalculator.summary(
+            saveDates: [date(2026, 7, 3, hour: 9)],
+            now: date(2026, 7, 5, hour: 9),
+            calendar: testCalendar
+        )
         let twoDayStreak = SaveStreakCalculator.summary(
             saveDates: [date(2026, 7, 2, hour: 9), date(2026, 7, 3, hour: 9)],
             now: date(2026, 7, 5, hour: 9),
@@ -267,7 +272,9 @@ final class SaveStreakCalculatorTests: XCTestCase {
             calendar: testCalendar
         )
 
-        XCTAssertFalse(twoDayStreak.isRecoveryAvailable)
+        XCTAssertFalse(oneDayStreak.isRecoveryAvailable)
+        XCTAssertTrue(twoDayStreak.isRecoveryAvailable)
+        XCTAssertEqual(twoDayStreak.recoverableCount, 2)
         XCTAssertFalse(twoMissedDays.isRecoveryAvailable)
     }
 
@@ -468,14 +475,14 @@ final class SaveStreakStoreTests: XCTestCase {
 
         let celebration = try XCTUnwrap(store.saveStreakCelebration)
         XCTAssertNotNil(celebration.recoveryDate)
-        XCTAssertEqual(store.saveStreakSummary.currentCount, 5)
+        XCTAssertEqual(store.saveStreakSummary.currentCount, 4)
         XCTAssertEqual(store.saveStreakSummary.displayedDayStates.suffix(2), [.streakSave, .saved])
         XCTAssertEqual(snapshot?.saveStreakRecoveryDatesByUserID?[store.currentUser.id]?.count, 1)
 
         let recoveryEvent = try XCTUnwrap(
             analytics.events.first(where: { $0.name == WanderAnalyticsEvents.saveStreakRecovered })
         )
-        XCTAssertEqual(recoveryEvent.properties["recovered_streak_count"], "3")
+        XCTAssertEqual(recoveryEvent.properties["recovered_streak_count"], "2")
         XCTAssertEqual(recoveryEvent.properties["recovery_cooldown_days"], "30")
         XCTAssertNil(recoveryEvent.properties["user_id"])
         XCTAssertNil(recoveryEvent.properties["place_id"])
@@ -484,15 +491,64 @@ final class SaveStreakStoreTests: XCTestCase {
             fixtures: .empty(),
             persistence: persistence
         )
-        XCTAssertEqual(relaunchedStore.saveStreakSummary.currentCount, 5)
+        XCTAssertEqual(relaunchedStore.saveStreakSummary.currentCount, 4)
         XCTAssertEqual(relaunchedStore.saveStreakSummary.displayedDayStates.suffix(2), [.streakSave, .saved])
+    }
+
+    func testRecoveryLedgerMovesFromGuestAndRemainsIsolatedByAccount() {
+        var snapshot: WanderStoreSnapshot?
+        let persistence = WanderStorePersistence(
+            load: { snapshot },
+            save: { snapshot = $0 }
+        )
+        let store = WanderStore(
+            fixtures: recoveryEligibleFixtures(),
+            persistence: persistence
+        )
+        let guestUserID = store.currentUser.id
+
+        _ = store.saveCandidate(
+            candidate(id: "guest_recovery", name: "Guest Recovery Coffee"),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+        XCTAssertEqual(snapshot?.saveStreakRecoveryDatesByUserID?[guestUserID]?.count, 1)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Aye", handle: "aye")
+            )
+        )
+        XCTAssertEqual(store.saveStreakSummary.currentCount, 4)
+        XCTAssertNil(snapshot?.saveStreakRecoveryDatesByUserID?[guestUserID])
+        XCTAssertEqual(snapshot?.saveStreakRecoveryDatesByUserID?["user_a"]?.count, 1)
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_b", displayName: "Bee", handle: "bee")
+            )
+        )
+        XCTAssertEqual(store.saveStreakSummary.currentCount, 0)
+        XCTAssertFalse(store.saveStreakSummary.isTodayCovered)
+        XCTAssertFalse(store.saveStreakSummary.isRecoveryAvailable)
+        XCTAssertNil(snapshot?.saveStreakRecoveryDatesByUserID?["user_b"])
+
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_a", displayName: "Aye", handle: "aye")
+            )
+        )
+        XCTAssertEqual(store.saveStreakSummary.currentCount, 4)
+        XCTAssertEqual(store.saveStreakSummary.displayedDayStates.suffix(2), [.streakSave, .saved])
     }
 
     private func recoveryEligibleFixtures() -> WanderFixtures {
         let empty = WanderFixtures.empty()
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)
-        let places = (2...4).map { offset in
+        let places = (2...3).map { offset in
             LocalPlace(
                 localID: "historical_place_\(offset)",
                 canonicalName: "Historical Place \(offset)",
@@ -501,7 +557,7 @@ final class SaveStreakStoreTests: XCTestCase {
                 longitude: -118.25
             )
         }
-        let userPlaces = zip(places, 2...4).map { place, offset in
+        let userPlaces = zip(places, 2...3).map { place, offset in
             LocalUserPlace(
                 localID: "historical_save_\(offset)",
                 userID: empty.currentUser.id,
