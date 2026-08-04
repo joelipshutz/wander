@@ -649,7 +649,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("mode: .member("))
         XCTAssertTrue(profileScreen.contains("placesInCommon(with: profileID)"))
         XCTAssertTrue(home.contains("if mode.isOwner"))
-        XCTAssertTrue(home.contains("label: \"IN COMMON\""))
+        XCTAssertTrue(home.contains("ProfileInCommonPlacesRow("))
+        XCTAssertTrue(home.contains("See where your maps overlap"))
         XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
     }
 
@@ -2378,6 +2379,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(screen.contains("No Been activity"))
         XCTAssertTrue(recentActivity.contains("filteredItems.prefix(6)"))
         XCTAssertTrue(recentActivity.contains("Text(\"See more\")"))
+        XCTAssertTrue(recentActivity.contains("Text(\"Activity\")"))
+        XCTAssertFalse(recentActivity.contains("Text(\"Recent activity\")"))
         XCTAssertTrue(screen.contains("ProfileActivityHistoryScreen("))
         XCTAssertTrue(screen.contains("initialSection: .activity"))
         XCTAssertTrue(
@@ -2385,6 +2388,61 @@ final class NavigationContractTests: XCTestCase {
                 "scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)"
             )
         )
+    }
+
+    func testOtherUserProfileUsesPersistentStandaloneInCommonGlassRowAndOwnerParity() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let screen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let body = try sourceSection(
+            home,
+            after: "struct ProfileOwnerHome: View {",
+            before: "private var identitySection: some View"
+        )
+        let identity = try sourceSection(
+            home,
+            after: "private var identitySection: some View {",
+            before: "private var profileAvatar: some View"
+        )
+        let inCommonRow = try sourceSection(
+            home,
+            after: "private struct ProfileInCommonPlacesRow: View",
+            before: "private struct ProfileGraphCountButton: View"
+        )
+        let monthButton = try sourceSection(
+            home,
+            after: "private struct ProfileMonthButton: View",
+            before: "private struct ProfileCalendarMetric: View"
+        )
+        let mapPicker = try sourceSection(
+            home,
+            after: "private struct ProfileMapSummaryPicker: View",
+            before: "private struct ProfileMapSnapshotView: View"
+        )
+
+        let identityIndex = try XCTUnwrap(body.range(of: "identitySection")?.lowerBound)
+        let inCommonIndex = try XCTUnwrap(body.range(of: "ProfileInCommonPlacesRow")?.lowerBound)
+        let activityIndex = try XCTUnwrap(body.range(of: "ProfileRecentActivitySection")?.lowerBound)
+
+        XCTAssertLessThan(identityIndex, inCommonIndex)
+        XCTAssertLessThan(inCommonIndex, activityIndex)
+        XCTAssertTrue(body.contains("if let inCommonCount = mode.inCommonCount"))
+        XCTAssertFalse(body.contains("savedPlacesSection"))
+        XCTAssertTrue(inCommonRow.contains("See where your maps overlap"))
+        XCTAssertTrue(inCommonRow.contains(".wanderGlassPanel(cornerRadius: 22)"))
+        XCTAssertTrue(inCommonRow.contains("viewerProfile.avatarURL"))
+        XCTAssertTrue(inCommonRow.contains("profile.avatarURL"))
+        XCTAssertTrue(identity.contains(".wanderGlassPanel(cornerRadius: 22)"))
+        XCTAssertTrue(identity.contains(".wanderGlassCapsule(tone:"))
+        XCTAssertTrue(home.contains("private struct ProfileHeaderActionLabel: View"))
+        XCTAssertTrue(home.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(monthButton.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(mapPicker.contains(".wanderGlassCapsule(tone:"))
+        XCTAssertEqual(screen.components(separatedBy: "recentActivity: profileActivityItems").count - 1, 2)
+        XCTAssertEqual(screen.components(separatedBy: "viewerProfile: store.currentUser").count - 1, 2)
     }
 
     private var projectRoot: URL {
