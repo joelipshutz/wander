@@ -212,6 +212,7 @@ final class WannaGoReminderTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.identifier, "recme.save-streak-reminder.daily")
+        XCTAssertEqual(plan.kind, .daily)
         XCTAssertEqual(plan.streakCount, 4)
         XCTAssertEqual(plan.copyVariant, .current)
         XCTAssertEqual(plan.scheduledWeekday, "monday")
@@ -276,6 +277,7 @@ final class WannaGoReminderTests: XCTestCase {
         XCTAssertEqual(data["streak_count"], "4")
         XCTAssertEqual(data["copy_variant"], "current")
         XCTAssertEqual(data["scheduled_weekday"], "monday")
+        XCTAssertEqual(data["reminder_kind"], "daily")
         XCTAssertEqual(trigger.dateComponents.hour, 20)
         XCTAssertEqual(PushNotificationManager.destination(from: request.content.userInfo), .quickCapture)
     }
@@ -369,6 +371,104 @@ final class WannaGoReminderTests: XCTestCase {
         )
     }
 
+    func testRecoveryReminderIsScheduledProspectivelyForDayAfterOneMiss() throws {
+        let calendar = testCalendar()
+        let now = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
+        )
+        let coveredToday = SaveStreakSummary(
+            currentCount: 4,
+            bestCount: 4,
+            isTodayCovered: true,
+            recentDayCoverage: Array(repeating: true, count: 7)
+        )
+        let plan = try XCTUnwrap(
+            SaveStreakReminderPlanner.recoveryPlan(
+                for: coveredToday,
+                now: now,
+                calendar: calendar
+            )
+        )
+        let request = SaveStreakReminderPlanner.request(for: plan, calendar: calendar)
+        let data = try XCTUnwrap(
+            (request.content.userInfo["recme"] as? [String: Any])?["data"] as? [String: String]
+        )
+
+        XCTAssertEqual(plan.kind, .recovery)
+        XCTAssertEqual(plan.identifier, SaveStreakReminderPlanner.recoveryNotificationIdentifier)
+        XCTAssertEqual(plan.copyVariant, .recovery)
+        XCTAssertEqual(
+            calendar.dateComponents([.year, .month, .day, .hour], from: plan.fireDate),
+            DateComponents(year: 2026, month: 8, day: 5, hour: 10)
+        )
+        XCTAssertEqual(request.content.title, "Keep your streak alive")
+        XCTAssertEqual(request.content.body, "Save a place today to bring back your 4-day streak.")
+        XCTAssertEqual(data["reminder_kind"], "recovery")
+        XCTAssertEqual(PushNotificationManager.destination(from: request.content.userInfo), .quickCapture)
+    }
+
+    func testRecoveryReminderReconcilesToSameRequestOnceMissIsKnown() throws {
+        let calendar = testCalendar()
+        let firstNow = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 3, hour: 14))
+        )
+        let recoveryDayNow = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 5, hour: 8))
+        )
+        let active = SaveStreakSummary(
+            currentCount: 4,
+            bestCount: 4,
+            isTodayCovered: true,
+            recentDayCoverage: Array(repeating: true, count: 7)
+        )
+        let recoverable = SaveStreakSummary(
+            currentCount: 0,
+            bestCount: 4,
+            isTodayCovered: false,
+            recentDayCoverage: [false, false, true, true, true, true, false],
+            isRecoveryAvailable: true,
+            recoverableCount: 4
+        )
+        let prospective = try XCTUnwrap(
+            SaveStreakReminderPlanner.recoveryPlan(for: active, now: firstNow, calendar: calendar)
+        )
+        let current = try XCTUnwrap(
+            SaveStreakReminderPlanner.recoveryPlan(for: recoverable, now: recoveryDayNow, calendar: calendar)
+        )
+        let request = SaveStreakReminderPlanner.request(for: prospective, calendar: calendar)
+
+        XCTAssertEqual(prospective, current)
+        XCTAssertTrue(SaveStreakReminderPlanner.matches(request, plan: current, calendar: calendar))
+    }
+
+    func testRecoveryReminderSkipsUsedEntitlementAndExpiredMorning() throws {
+        let calendar = testCalendar()
+        let morning = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 5, hour: 8))
+        )
+        let lateMorning = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 5, hour: 11))
+        )
+        let used = SaveStreakSummary(
+            currentCount: 4,
+            bestCount: 4,
+            isTodayCovered: true,
+            recentDayCoverage: Array(repeating: true, count: 7),
+            hasRecoveryEntitlement: false
+        )
+        let recoverable = SaveStreakSummary(
+            currentCount: 0,
+            bestCount: 4,
+            isTodayCovered: false,
+            recentDayCoverage: Array(repeating: false, count: 7),
+            isRecoveryAvailable: true,
+            recoverableCount: 4
+        )
+
+        XCTAssertNil(SaveStreakReminderPlanner.recoveryPlan(for: used, now: morning, calendar: calendar))
+        XCTAssertNil(SaveStreakReminderPlanner.recoveryPlan(for: recoverable, now: lateMorning, calendar: calendar))
+    }
+
     func testSaveStreakReminderFunnelEventsContainOnlyAggregateProperties() throws {
         let calendar = testCalendar()
         let suiteName = "SaveStreakReminderAnalyticsTests.\(UUID().uuidString)"
@@ -430,6 +530,7 @@ final class WannaGoReminderTests: XCTestCase {
         )
         XCTAssertEqual(analytics.events[0].properties["copy_variant"], "current")
         XCTAssertEqual(analytics.events[0].properties["scheduled_weekday"], "monday")
+        XCTAssertEqual(analytics.events[0].properties["reminder_kind"], "daily")
         XCTAssertEqual(analytics.events[1].properties["status"], PlaceStatus.wannaGo.rawValue)
         XCTAssertEqual(analytics.events[3].properties["time_to_save_bucket"], "5_to_15_minutes")
 
@@ -510,13 +611,17 @@ final class WannaGoReminderTests: XCTestCase {
     func testSaveStreakProductionReconciliationDoesNotCancelDebugReminder() {
         let identifiers = [
             SaveStreakReminderPlanner.notificationIdentifier,
+            SaveStreakReminderPlanner.recoveryNotificationIdentifier,
             SaveStreakReminderPlanner.notificationIdentifierPrefix + "debug",
             WannaGoReminderPlanner.notificationIdentifierPrefix + "unrelated"
         ]
 
         XCTAssertEqual(
             SaveStreakReminderPlanner.productionReminderIdentifiers(in: identifiers),
-            [SaveStreakReminderPlanner.notificationIdentifier]
+            [
+                SaveStreakReminderPlanner.notificationIdentifier,
+                SaveStreakReminderPlanner.recoveryNotificationIdentifier
+            ]
         )
     }
 

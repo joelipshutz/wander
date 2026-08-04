@@ -214,6 +214,111 @@ final class SaveStreakCalculatorTests: XCTestCase {
         XCTAssertFalse(summary.isTodayCovered)
     }
 
+    func testSummaryOffersOneDayRecoveryForEstablishedStreak() {
+        let summary = SaveStreakCalculator.summary(
+            saveDates: [
+                date(2026, 7, 1, hour: 9),
+                date(2026, 7, 2, hour: 9),
+                date(2026, 7, 3, hour: 9)
+            ],
+            now: date(2026, 7, 5, hour: 9),
+            calendar: testCalendar
+        )
+
+        XCTAssertEqual(summary.currentCount, 0)
+        XCTAssertTrue(summary.isRecoveryAvailable)
+        XCTAssertEqual(summary.recoverableCount, 3)
+        XCTAssertTrue(summary.hasRecoveryEntitlement)
+    }
+
+    func testRecoveryDayTransparentlyContinuesCalendarStreak() {
+        let summary = SaveStreakCalculator.summary(
+            saveDates: [
+                date(2026, 7, 1, hour: 9),
+                date(2026, 7, 2, hour: 9),
+                date(2026, 7, 3, hour: 9),
+                date(2026, 7, 5, hour: 9)
+            ],
+            recoveryDates: [date(2026, 7, 4, hour: 0)],
+            now: date(2026, 7, 5, hour: 9),
+            calendar: testCalendar
+        )
+
+        XCTAssertEqual(summary.currentCount, 5)
+        XCTAssertEqual(summary.bestCount, 5)
+        XCTAssertTrue(summary.isTodayCovered)
+        XCTAssertEqual(summary.displayedDayStates.suffix(5), [.saved, .saved, .saved, .streakSave, .saved])
+        XCTAssertFalse(summary.hasRecoveryEntitlement)
+    }
+
+    func testRecoveryRequiresThreeDaysAndExpiresAfterFollowingDay() {
+        let twoDayStreak = SaveStreakCalculator.summary(
+            saveDates: [date(2026, 7, 2, hour: 9), date(2026, 7, 3, hour: 9)],
+            now: date(2026, 7, 5, hour: 9),
+            calendar: testCalendar
+        )
+        let twoMissedDays = SaveStreakCalculator.summary(
+            saveDates: [
+                date(2026, 7, 1, hour: 9),
+                date(2026, 7, 2, hour: 9),
+                date(2026, 7, 3, hour: 9)
+            ],
+            now: date(2026, 7, 6, hour: 9),
+            calendar: testCalendar
+        )
+
+        XCTAssertFalse(twoDayStreak.isRecoveryAvailable)
+        XCTAssertFalse(twoMissedDays.isRecoveryAvailable)
+    }
+
+    func testRecoveryEntitlementReturnsAfterRollingThirtyDayCooldown() {
+        let activeStreakDates = [
+            date(2026, 8, 16, hour: 9),
+            date(2026, 8, 17, hour: 9),
+            date(2026, 8, 18, hour: 9)
+        ]
+        let unavailable = SaveStreakCalculator.summary(
+            saveDates: activeStreakDates,
+            recoveryDates: [date(2026, 8, 1, hour: 0)],
+            now: date(2026, 8, 20, hour: 9),
+            calendar: testCalendar
+        )
+        let available = SaveStreakCalculator.summary(
+            saveDates: activeStreakDates,
+            recoveryDates: [date(2026, 7, 21, hour: 0)],
+            now: date(2026, 8, 20, hour: 9),
+            calendar: testCalendar
+        )
+
+        XCTAssertFalse(unavailable.hasRecoveryEntitlement)
+        XCTAssertFalse(unavailable.isRecoveryAvailable)
+        XCTAssertTrue(available.hasRecoveryEntitlement)
+        XCTAssertTrue(available.isRecoveryAvailable)
+    }
+
+    func testCelebrationMarksRecoveryDateAndUsesSavedHelperText() {
+        let recoveryDate = date(2026, 7, 24, hour: 0)
+        let celebration = SaveStreakCelebration(
+            kind: .dailyTakeover,
+            placeName: "Maru Coffee",
+            placeDetail: nil,
+            status: .been,
+            streakCount: 5,
+            saveDate: date(2026, 7, 25, hour: 12),
+            recoveryDate: recoveryDate
+        )
+        let days = SaveStreakCelebrationPresentation.weekdays(
+            streakCount: celebration.streakCount,
+            endingOn: celebration.saveDate,
+            recoveryDate: celebration.recoveryDate,
+            calendar: testCalendar
+        )
+
+        XCTAssertEqual(SaveStreakCelebrationPresentation.helperText(for: celebration), "Streak saved 🔥")
+        XCTAssertEqual(days.filter(\.isRecoveryDay).map(\.date), [recoveryDate])
+        XCTAssertTrue(days.first(where: \.isRecoveryDay)?.isCovered == true)
+    }
+
     private var testCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
@@ -339,6 +444,90 @@ final class SaveStreakStoreTests: XCTestCase {
         XCTAssertNil(relaunchedStore.saveStreakCelebration)
     }
 
+    func testQualifyingSaveRestoresMissedDayPersistsAndTracksAggregateEvent() throws {
+        var snapshot: WanderStoreSnapshot?
+        let persistence = WanderStorePersistence(
+            load: { snapshot },
+            save: { snapshot = $0 }
+        )
+        let analytics = SaveStreakRecordingAnalyticsClient()
+        let store = WanderStore(
+            fixtures: recoveryEligibleFixtures(),
+            analytics: analytics,
+            persistence: persistence
+        )
+
+        XCTAssertTrue(store.saveStreakSummary.isRecoveryAvailable)
+        _ = store.saveCandidate(
+            candidate(id: "recovery", name: "Recovery Coffee"),
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+
+        let celebration = try XCTUnwrap(store.saveStreakCelebration)
+        XCTAssertNotNil(celebration.recoveryDate)
+        XCTAssertEqual(store.saveStreakSummary.currentCount, 5)
+        XCTAssertEqual(store.saveStreakSummary.displayedDayStates.suffix(2), [.streakSave, .saved])
+        XCTAssertEqual(snapshot?.saveStreakRecoveryDatesByUserID?[store.currentUser.id]?.count, 1)
+
+        let recoveryEvent = try XCTUnwrap(
+            analytics.events.first(where: { $0.name == WanderAnalyticsEvents.saveStreakRecovered })
+        )
+        XCTAssertEqual(recoveryEvent.properties["recovered_streak_count"], "3")
+        XCTAssertEqual(recoveryEvent.properties["recovery_cooldown_days"], "30")
+        XCTAssertNil(recoveryEvent.properties["user_id"])
+        XCTAssertNil(recoveryEvent.properties["place_id"])
+
+        let relaunchedStore = WanderStore(
+            fixtures: .empty(),
+            persistence: persistence
+        )
+        XCTAssertEqual(relaunchedStore.saveStreakSummary.currentCount, 5)
+        XCTAssertEqual(relaunchedStore.saveStreakSummary.displayedDayStates.suffix(2), [.streakSave, .saved])
+    }
+
+    private func recoveryEligibleFixtures() -> WanderFixtures {
+        let empty = WanderFixtures.empty()
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let places = (2...4).map { offset in
+            LocalPlace(
+                localID: "historical_place_\(offset)",
+                canonicalName: "Historical Place \(offset)",
+                category: "place",
+                latitude: 34.05,
+                longitude: -118.25
+            )
+        }
+        let userPlaces = zip(places, 2...4).map { place, offset in
+            LocalUserPlace(
+                localID: "historical_save_\(offset)",
+                userID: empty.currentUser.id,
+                placeID: place.id,
+                status: .been,
+                visibility: .followers,
+                savedAt: calendar.date(byAdding: .day, value: -offset, to: today)!,
+                sourceType: AddSourceType.manual.rawValue
+            )
+        }
+
+        return WanderFixtures(
+            currentUser: empty.currentUser,
+            profiles: empty.profiles,
+            places: places,
+            userPlaces: userPlaces,
+            placeAttributes: [],
+            follows: [],
+            blocks: [],
+            placeLists: [],
+            placeListMembers: [],
+            placeListItems: [],
+            contactProvider: empty.contactProvider
+        )
+    }
+
     private func candidate(id: String, name: String) -> PlaceCandidate {
         PlaceCandidate(
             id: id,
@@ -351,4 +540,15 @@ final class SaveStreakStoreTests: XCTestCase {
             confidence: 1
         )
     }
+}
+
+private final class SaveStreakRecordingAnalyticsClient: AnalyticsClient {
+    private(set) var events: [AnalyticsEvent] = []
+
+    func track(_ event: AnalyticsEvent) {
+        events.append(event)
+    }
+
+    func identify(userID: String) {}
+    func resetIdentity() {}
 }

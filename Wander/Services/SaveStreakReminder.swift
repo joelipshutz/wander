@@ -2,11 +2,17 @@ import Foundation
 @preconcurrency import UserNotifications
 
 struct SaveStreakReminderPlan: Equatable {
+    enum Kind: String, Equatable {
+        case daily
+        case recovery
+    }
+
     let streakCount: Int
     let identifier: String
     let fireDate: Date
     let copyVariant: SaveStreakReminderCopyVariant
     let scheduledWeekday: String
+    let kind: Kind
 }
 
 struct SaveStreakReminderCopy: Equatable {
@@ -19,6 +25,7 @@ enum SaveStreakReminderCopyVariant: String, CaseIterable, Equatable {
     case anythingWorthRemembering = "anything_worth_remembering"
     case onePlaceKeepsStreakAlive = "one_place_keeps_streak_alive"
     case mapHasRoom = "map_has_room"
+    case recovery = "keep_your_streak_alive"
 
     func copy(streakCount: Int) -> SaveStreakReminderCopy {
         switch self {
@@ -44,6 +51,11 @@ enum SaveStreakReminderCopyVariant: String, CaseIterable, Equatable {
                 title: "Your map has room for today",
                 body: "Add somewhere you went or somewhere you want to go."
             )
+        case .recovery:
+            return SaveStreakReminderCopy(
+                title: "Keep your streak alive",
+                body: "Save a place today to bring back your \(streakCount)-day streak."
+            )
         }
     }
 }
@@ -51,11 +63,24 @@ enum SaveStreakReminderCopyVariant: String, CaseIterable, Equatable {
 enum SaveStreakReminderPlanner {
     static let notificationIdentifierPrefix = "recme.save-streak-reminder."
     static let notificationIdentifier = notificationIdentifierPrefix + "daily"
+    static let recoveryNotificationIdentifier = notificationIdentifierPrefix + "recovery"
     static let notificationType = "save_streak_reminder"
     static let reminderHour = 20
+    static let recoveryReminderHour = 10
 
     static func productionReminderIdentifiers(in identifiers: [String]) -> [String] {
-        identifiers.filter { $0 == notificationIdentifier }
+        identifiers.filter { $0 == notificationIdentifier || $0 == recoveryNotificationIdentifier }
+    }
+
+    static func plans(
+        for summary: SaveStreakSummary,
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> [SaveStreakReminderPlan] {
+        [
+            plan(for: summary, now: now, calendar: calendar),
+            recoveryPlan(for: summary, now: now, calendar: calendar)
+        ].compactMap { $0 }
     }
 
     static func plan(
@@ -81,7 +106,48 @@ enum SaveStreakReminderPlanner {
             identifier: notificationIdentifier,
             fireDate: fireDate,
             copyVariant: copyVariant,
-            scheduledWeekday: weekdayName(for: fireDate, calendar: calendar)
+            scheduledWeekday: weekdayName(for: fireDate, calendar: calendar),
+            kind: .daily
+        )
+    }
+
+    static func recoveryPlan(
+        for summary: SaveStreakSummary,
+        now: Date = .now,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> SaveStreakReminderPlan? {
+        guard summary.hasRecoveryEntitlement else { return nil }
+
+        let dayOffset: Int
+        let streakCount: Int
+        if summary.isRecoveryAvailable {
+            dayOffset = 0
+            streakCount = summary.recoverableCount
+        } else if summary.currentCount >= SaveStreakWindow.minimumRecoveryStreakCount {
+            dayOffset = summary.isTodayCovered ? 2 : 1
+            streakCount = summary.currentCount
+        } else {
+            return nil
+        }
+
+        guard let fireDay = calendar.date(byAdding: .day, value: dayOffset, to: now) else {
+            return nil
+        }
+        var fireComponents = calendar.dateComponents([.year, .month, .day], from: fireDay)
+        fireComponents.hour = recoveryReminderHour
+        fireComponents.minute = 0
+        fireComponents.second = 0
+        guard let fireDate = calendar.date(from: fireComponents), fireDate > now else {
+            return nil
+        }
+
+        return SaveStreakReminderPlan(
+            streakCount: streakCount,
+            identifier: recoveryNotificationIdentifier,
+            fireDate: fireDate,
+            copyVariant: .recovery,
+            scheduledWeekday: weekdayName(for: fireDate, calendar: calendar),
+            kind: .recovery
         )
     }
 
@@ -99,6 +165,7 @@ enum SaveStreakReminderPlanner {
                 streakCount: plan.streakCount,
                 copyVariant: plan.copyVariant,
                 scheduledWeekday: plan.scheduledWeekday,
+                reminderKind: plan.kind,
                 eventID: "\(notificationType):\(Int(plan.fireDate.timeIntervalSince1970))"
             ),
             trigger: UNCalendarNotificationTrigger(dateMatching: triggerComponents, repeats: false)
@@ -118,6 +185,7 @@ enum SaveStreakReminderPlanner {
                 streakCount: max(summary.currentCount, 1),
                 copyVariant: copyVariant,
                 scheduledWeekday: weekdayName(for: now, calendar: calendar),
+                reminderKind: .daily,
                 eventID: "\(notificationType):debug:\(UUID().uuidString.lowercased())"
             ),
             trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(delay, 1), repeats: false)
@@ -128,6 +196,7 @@ enum SaveStreakReminderPlanner {
         streakCount: Int,
         copyVariant: SaveStreakReminderCopyVariant,
         scheduledWeekday: String,
+        reminderKind: SaveStreakReminderPlan.Kind,
         eventID: String
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
@@ -143,7 +212,8 @@ enum SaveStreakReminderPlanner {
                 "data": [
                     "streak_count": "\(streakCount)",
                     "copy_variant": copyVariant.rawValue,
-                    "scheduled_weekday": scheduledWeekday
+                    "scheduled_weekday": scheduledWeekday,
+                    "reminder_kind": reminderKind.rawValue
                 ]
             ]
         ]
@@ -193,7 +263,8 @@ enum SaveStreakReminderPlanner {
               let data = payload["data"] as? [String: String],
               data["copy_variant"] == plan.copyVariant.rawValue,
               data["scheduled_weekday"] == plan.scheduledWeekday,
-              data["streak_count"] == "\(plan.streakCount)"
+              data["streak_count"] == "\(plan.streakCount)",
+              data["reminder_kind"] == plan.kind.rawValue
         else {
             return false
         }
@@ -228,6 +299,7 @@ struct SaveStreakReminderAnalytics {
     private static let openedVariantKeyPrefix = "wander.saveStreakReminderAnalytics.openedVariant."
     private static let openedWeekdayKeyPrefix = "wander.saveStreakReminderAnalytics.openedWeekday."
     private static let openedStreakCountKeyPrefix = "wander.saveStreakReminderAnalytics.openedStreakCount."
+    private static let openedKindKeyPrefix = "wander.saveStreakReminderAnalytics.openedKind."
 
     private let analytics: AnalyticsClient
     private let userDefaults: UserDefaults
@@ -244,8 +316,9 @@ struct SaveStreakReminderAnalytics {
                 properties: [
                     "copy_variant": plan.copyVariant.rawValue,
                     "scheduled_weekday": plan.scheduledWeekday,
-                    "scheduled_hour": "20",
-                    "streak_count": "\(plan.streakCount)"
+                    "scheduled_hour": "\(plan.kind == .daily ? SaveStreakReminderPlanner.reminderHour : SaveStreakReminderPlanner.recoveryReminderHour)",
+                    "streak_count": "\(plan.streakCount)",
+                    "reminder_kind": plan.kind.rawValue
                 ]
             )
         )
@@ -264,7 +337,8 @@ struct SaveStreakReminderAnalytics {
                     "copy_variant": data["copy_variant"] ?? "unknown",
                     "scheduled_weekday": data["scheduled_weekday"] ?? "unknown",
                     "status": status.rawValue,
-                    "streak_count": "\(streakCount)"
+                    "streak_count": "\(streakCount)",
+                    "reminder_kind": data["reminder_kind"] ?? "unknown"
                 ]
             )
         )
@@ -280,6 +354,7 @@ struct SaveStreakReminderAnalytics {
         let copyVariant = data["copy_variant"] ?? "unknown"
         let scheduledWeekday = data["scheduled_weekday"] ?? "unknown"
         let streakCount = Int(data["streak_count"] ?? "") ?? 0
+        let reminderKind = data["reminder_kind"] ?? "unknown"
 
         analytics.track(
             AnalyticsEvent(
@@ -287,7 +362,8 @@ struct SaveStreakReminderAnalytics {
                 properties: [
                     "copy_variant": copyVariant,
                     "scheduled_weekday": scheduledWeekday,
-                    "streak_count": "\(streakCount)"
+                    "streak_count": "\(streakCount)",
+                    "reminder_kind": reminderKind
                 ]
             )
         )
@@ -296,6 +372,7 @@ struct SaveStreakReminderAnalytics {
         userDefaults.set(copyVariant, forKey: Self.openedVariantKeyPrefix + userID)
         userDefaults.set(scheduledWeekday, forKey: Self.openedWeekdayKeyPrefix + userID)
         userDefaults.set(streakCount, forKey: Self.openedStreakCountKeyPrefix + userID)
+        userDefaults.set(reminderKind, forKey: Self.openedKindKeyPrefix + userID)
     }
 
     @discardableResult
@@ -312,6 +389,7 @@ struct SaveStreakReminderAnalytics {
         let copyVariant = userDefaults.string(forKey: Self.openedVariantKeyPrefix + userID) ?? "unknown"
         let scheduledWeekday = userDefaults.string(forKey: Self.openedWeekdayKeyPrefix + userID) ?? "unknown"
         let openedStreakCount = userDefaults.integer(forKey: Self.openedStreakCountKeyPrefix + userID)
+        let reminderKind = userDefaults.string(forKey: Self.openedKindKeyPrefix + userID) ?? "unknown"
         clearOpenAttribution(userID: userID)
 
         guard elapsed >= 0, elapsed <= Self.completionAttributionWindow else {
@@ -327,7 +405,8 @@ struct SaveStreakReminderAnalytics {
                     "status": status.rawValue,
                     "opened_streak_count": "\(openedStreakCount)",
                     "streak_count": "\(streakCount)",
-                    "time_to_save_bucket": Self.timeToSaveBucket(elapsed)
+                    "time_to_save_bucket": Self.timeToSaveBucket(elapsed),
+                    "reminder_kind": reminderKind
                 ]
             )
         )
@@ -339,6 +418,7 @@ struct SaveStreakReminderAnalytics {
         userDefaults.removeObject(forKey: Self.openedVariantKeyPrefix + userID)
         userDefaults.removeObject(forKey: Self.openedWeekdayKeyPrefix + userID)
         userDefaults.removeObject(forKey: Self.openedStreakCountKeyPrefix + userID)
+        userDefaults.removeObject(forKey: Self.openedKindKeyPrefix + userID)
     }
 
     private static func timeToSaveBucket(_ elapsed: TimeInterval) -> String {
