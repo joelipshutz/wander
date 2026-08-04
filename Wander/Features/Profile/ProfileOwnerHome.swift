@@ -79,6 +79,10 @@ enum ProfileActivityPresenter {
             from: visiblePlaces,
             currentUserID: currentUserID
         )
+        let visitsByUserPlaceID = Dictionary(
+            grouping: visits.filter { $0.deletedAt == nil },
+            by: \.userPlaceID
+        )
 
         return representativePlaces
             .flatMap { visiblePlace -> [ProfileActivityItem] in
@@ -86,8 +90,8 @@ enum ProfileActivityPresenter {
                 let referenceIDs = Set(
                     [userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 }
                 )
-                let matchingVisits = visits.filter {
-                    $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
+                let matchingVisits = referenceIDs.flatMap { referenceID in
+                    visitsByUserPlaceID[referenceID] ?? []
                 }
 
                 if userPlace.status == .been {
@@ -196,6 +200,11 @@ enum ProfileHomeMode: Equatable {
         guard case .member(let relationship, _) = self else { return nil }
         return relationship
     }
+
+    func visibleInCommonCount(profileID: String, viewerID: String) -> Int? {
+        guard profileID != viewerID else { return nil }
+        return inCommonCount
+    }
 }
 
 struct ProfileMemberActions {
@@ -241,7 +250,10 @@ struct ProfileOwnerHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 identitySection
-                if let inCommonCount = mode.inCommonCount {
+                if let inCommonCount = mode.visibleInCommonCount(
+                    profileID: profile.id,
+                    viewerID: viewerProfile.id
+                ) {
                     ProfileInCommonPlacesRow(
                         viewerProfile: viewerProfile,
                         profile: profile,
@@ -592,10 +604,10 @@ private struct ProfileInCommonPlacesRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(count) \(count == 1 ? "place" : "places") in common")
-                        .font(.system(size: 16, weight: .black))
+                        .font(.system(.body, design: .default, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
                     Text("See where your maps overlap")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(.caption, design: .default, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
 
@@ -1484,7 +1496,9 @@ private struct ProfileMapSummaryPicker: View {
                     selection = kind
                 } label: {
                     Text(kind.title)
-                        .font(.system(size: 13, weight: .black))
+                        .font(.system(.subheadline, design: .default, weight: .black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .foregroundStyle(
                             selection == kind
                                 ? WanderTheme.terracottaDark.color

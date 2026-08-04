@@ -1400,7 +1400,7 @@ private struct ProfileActivityHistoryScreen: View {
                 if filteredItems.isEmpty {
                     SmallEmptyRow(
                         title: emptyStateTitle,
-                        subtitle: "Your saved places and check-ins will appear here"
+                        subtitle: "Saved places and check-ins will appear here"
                     )
                 } else {
                     LazyVStack(spacing: 0) {

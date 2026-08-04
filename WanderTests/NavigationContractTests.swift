@@ -654,6 +654,24 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
     }
 
+    func testInCommonVisibilityPersistsForMembersButNeverAppearsOnSelfProfile() {
+        let memberMode = ProfileHomeMode.member(relationship: .mutual, inCommonCount: 0)
+
+        XCTAssertEqual(
+            memberMode.visibleInCommonCount(profileID: "user_maya", viewerID: "user_joe"),
+            0
+        )
+        XCTAssertNil(
+            memberMode.visibleInCommonCount(profileID: "user_joe", viewerID: "user_joe")
+        )
+        XCTAssertNil(
+            ProfileHomeMode.owner.visibleInCommonCount(
+                profileID: "user_joe",
+                viewerID: "user_joe"
+            )
+        )
+    }
+
     func testSharedProfileHomeHidesUnusedNavigationBar() throws {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
@@ -2381,6 +2399,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(recentActivity.contains("Text(\"See more\")"))
         XCTAssertTrue(recentActivity.contains("Text(\"Activity\")"))
         XCTAssertFalse(recentActivity.contains("Text(\"Recent activity\")"))
+        XCTAssertTrue(screen.contains("Saved places and check-ins will appear here"))
+        XCTAssertFalse(screen.contains("Your saved places and check-ins will appear here"))
         XCTAssertTrue(screen.contains("ProfileActivityHistoryScreen("))
         XCTAssertTrue(screen.contains("initialSection: .activity"))
         XCTAssertTrue(
@@ -2429,7 +2449,9 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertLessThan(identityIndex, inCommonIndex)
         XCTAssertLessThan(inCommonIndex, activityIndex)
-        XCTAssertTrue(body.contains("if let inCommonCount = mode.inCommonCount"))
+        XCTAssertTrue(body.contains("mode.visibleInCommonCount("))
+        XCTAssertTrue(body.contains("profileID: profile.id"))
+        XCTAssertTrue(body.contains("viewerID: viewerProfile.id"))
         XCTAssertFalse(body.contains("savedPlacesSection"))
         XCTAssertTrue(inCommonRow.contains("See where your maps overlap"))
         XCTAssertTrue(inCommonRow.contains(".wanderGlassPanel(cornerRadius: 22)"))
