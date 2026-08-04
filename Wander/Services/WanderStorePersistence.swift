@@ -201,6 +201,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let extractionJobs: [ExtractionJobRecord]
     let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]?
     let saveStreakDatesByUserID: [String: [Date]]?
+    let saveStreakRecoveryDatesByUserID: [String: [Date]]?
     let savedPlaceResetVersion: Int?
     let defaultVisibilityRaw: String
     let isPrivateProfile: Bool?
@@ -237,6 +238,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
         providerCategoryEnrichmentAttemptedAtByKey = store.providerCategoryEnrichmentAttemptedAtByKey
         saveStreakDatesByUserID = store.saveStreakDatesByUserID
+        saveStreakRecoveryDatesByUserID = store.saveStreakRecoveryDatesByUserID
         savedPlaceResetVersion = Self.currentSavedPlaceResetVersion
         defaultVisibilityRaw = store.defaultVisibility.rawValue
         isPrivateProfile = store.isPrivateProfile
@@ -285,6 +287,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             saveStreakDatesByUserID: shouldResetSavedPlaces
                 ? [:]
                 : saveStreakDatesByUserID ?? fallbackStreakDates,
+            saveStreakRecoveryDatesByUserID: shouldResetSavedPlaces
+                ? [:]
+                : saveStreakRecoveryDatesByUserID ?? [:],
             contactProvider: contactProvider,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
             isPrivateProfile: isPrivateProfile ?? restoredCurrentUser.isPrivateProfile,
@@ -316,6 +321,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let extractionJobs: [LocalExtractionJob]
         let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]
         let saveStreakDatesByUserID: [String: [Date]]
+        let saveStreakRecoveryDatesByUserID: [String: [Date]]
         let contactProvider: FakeContactProvider
         let defaultVisibility: PlaceVisibility
         let isPrivateProfile: Bool

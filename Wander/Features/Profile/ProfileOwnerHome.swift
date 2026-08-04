@@ -951,14 +951,16 @@ private struct ProfileSaveStreakRow: View {
                 Spacer(minLength: WanderTheme.spacing1)
 
                 HStack(spacing: 3) {
-                    ForEach(summary.recentDayCoverage.indices, id: \.self) { index in
+                    ForEach(summary.displayedDayStates.indices, id: \.self) { index in
                         Capsule()
-                            .fill(
-                                summary.recentDayCoverage[index]
-                                    ? WanderTheme.terracotta.color
-                                    : WanderTheme.borderHairline.color.opacity(0.65)
-                            )
+                            .fill(dayFill(summary.displayedDayStates[index]))
                             .frame(width: 10, height: 4)
+                            .overlay {
+                                if summary.displayedDayStates[index] == .streakSave {
+                                    Capsule()
+                                        .stroke(WanderTheme.terracotta.color, lineWidth: 1)
+                                }
+                            }
                     }
                 }
                 .accessibilityHidden(true)
@@ -981,16 +983,36 @@ private struct ProfileSaveStreakRow: View {
     }
 
     private var streakTitle: String {
+        if summary.isRecoveryAvailable {
+            return "restore \(summary.recoverableCount)-day streak"
+        }
         guard summary.currentCount > 0 else { return "start a streak" }
         return "\(summary.currentCount)-day streak"
     }
 
     private var accessibilityLabel: String {
+        if summary.isRecoveryAvailable {
+            return "Your \(summary.recoverableCount) day save streak can be restored today. Check in or save a place to use your Streak Save."
+        }
         guard summary.currentCount > 0 else {
             return "No active save streak. Check in or save a Wanna place to start one."
         }
         let todayStatus = summary.isTodayCovered ? "Today is covered." : "Save today to keep it going."
-        return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus)"
+        let streakSaveStatus = summary.displayedDayStates.contains(.streakSave)
+            ? "One missed day was protected by a Streak Save."
+            : ""
+        return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus) \(streakSaveStatus)"
+    }
+
+    private func dayFill(_ state: SaveStreakDayState) -> Color {
+        switch state {
+        case .saved:
+            WanderTheme.terracotta.color
+        case .streakSave:
+            WanderTheme.terracotta.color.opacity(0.2)
+        case .missed:
+            WanderTheme.borderHairline.color.opacity(0.65)
+        }
     }
 }
 
