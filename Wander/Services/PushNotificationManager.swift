@@ -747,22 +747,25 @@ final class PushNotificationManager: ObservableObject {
         let center = UNUserNotificationCenter.current()
         let pendingRequests = await center.pendingNotificationRequests()
         let productionRequests = pendingRequests.filter {
-            $0.identifier == SaveStreakReminderPlanner.notificationIdentifier
+            SaveStreakReminderPlanner.productionReminderIdentifiers(in: [$0.identifier]).isEmpty == false
         }
         let identifiers = productionRequests.map(\.identifier)
 
+        let plans = SaveStreakReminderPlanner.plans(for: summary, now: now)
+
         guard saveStreakRemindersEnabled,
               canRegisterForRemoteNotifications,
-              let plan = SaveStreakReminderPlanner.plan(for: summary, now: now)
+              !plans.isEmpty
         else {
             if summary.isTodayCovered,
-               let cancelledBySaveStatus,
-               let request = productionRequests.first {
-                saveStreakReminderAnalytics.recordCancelledBySave(
-                    request: request,
-                    status: cancelledBySaveStatus,
-                    streakCount: summary.currentCount
-                )
+               let cancelledBySaveStatus {
+                for request in productionRequests {
+                    saveStreakReminderAnalytics.recordCancelledBySave(
+                        request: request,
+                        status: cancelledBySaveStatus,
+                        streakCount: summary.currentCount
+                    )
+                }
             }
             if !identifiers.isEmpty {
                 center.removePendingNotificationRequests(withIdentifiers: identifiers)
@@ -770,24 +773,36 @@ final class PushNotificationManager: ObservableObject {
             return
         }
 
-        if productionRequests.contains(where: { request in
-            SaveStreakReminderPlanner.matches(request, plan: plan)
-        }) {
-            return
+        let matchingIdentifiers = Set(plans.compactMap { plan in
+            productionRequests.first(where: {
+                SaveStreakReminderPlanner.matches($0, plan: plan)
+            })?.identifier
+        })
+        let staleRequests = productionRequests.filter { !matchingIdentifiers.contains($0.identifier) }
+        if summary.isTodayCovered,
+           let cancelledBySaveStatus {
+            for request in staleRequests {
+                saveStreakReminderAnalytics.recordCancelledBySave(
+                    request: request,
+                    status: cancelledBySaveStatus,
+                    streakCount: summary.currentCount
+                )
+            }
+        }
+        if !staleRequests.isEmpty {
+            center.removePendingNotificationRequests(withIdentifiers: staleRequests.map(\.identifier))
         }
 
-        if !identifiers.isEmpty {
-            center.removePendingNotificationRequests(withIdentifiers: identifiers)
-        }
-
-        do {
-            try await center.add(SaveStreakReminderPlanner.request(for: plan))
-            saveStreakReminderAnalytics.recordScheduled(plan)
-        } catch {
-            lastErrorMessage = "Could not schedule a save streak reminder."
-            #if DEBUG
-            WanderDebugLog.remote.error("save streak reminder scheduling failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
-            #endif
+        for plan in plans where !matchingIdentifiers.contains(plan.identifier) {
+            do {
+                try await center.add(SaveStreakReminderPlanner.request(for: plan))
+                saveStreakReminderAnalytics.recordScheduled(plan)
+            } catch {
+                lastErrorMessage = "Could not schedule a save streak reminder."
+                #if DEBUG
+                WanderDebugLog.remote.error("save streak reminder scheduling failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
+                #endif
+            }
         }
     }
 
