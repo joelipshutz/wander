@@ -410,11 +410,9 @@ struct SupabaseFeedRepository: FeedRepository {
 
 struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository {
     private let rpc: RemoteProcedureCalling
-    private let userPlaceDeleter: RemoteUserPlaceDeleting?
 
-    init(rpc: RemoteProcedureCalling, userPlaceDeleter: RemoteUserPlaceDeleting? = nil) {
+    init(rpc: RemoteProcedureCalling) {
         self.rpc = rpc
-        self.userPlaceDeleter = userPlaceDeleter
     }
 
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] {
@@ -488,11 +486,10 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 
     func delete(userPlaceID: String) async throws {
-        guard let userPlaceDeleter else {
-            throw WanderRemoteError.notConfigured
-        }
-
-        try await userPlaceDeleter.deleteUserPlace(userPlaceID: userPlaceID)
+        let _: DeleteOwnUserPlaceResponse = try await rpc.call(
+            "delete_own_user_place",
+            params: DeleteOwnUserPlaceParams(inputUserPlaceID: userPlaceID)
+        )
     }
 
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult {
@@ -2691,6 +2688,24 @@ private struct DeleteOwnCheckInResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case visitID = "visit_id"
+        case userPlaceID = "user_place_id"
+        case transition
+    }
+}
+
+private struct DeleteOwnUserPlaceParams: Encodable {
+    let inputUserPlaceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputUserPlaceID = "input_user_place_id"
+    }
+}
+
+private struct DeleteOwnUserPlaceResponse: Decodable {
+    let userPlaceID: String
+    let transition: String
+
+    enum CodingKeys: String, CodingKey {
         case userPlaceID = "user_place_id"
         case transition
     }
