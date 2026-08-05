@@ -1,0 +1,15 @@
+{
+  "issue": "REC-215",
+  "captured_at": "2026-08-02T11:52:00-07:00",
+  "source": "Joe report plus native iPhone 16 Plus simulator capture from origin/main 869520c5",
+  "precondition": [
+    "Launch the debug app with -WanderMapCapture and -WanderUseDemoFixtures",
+    "Open the Lists tab with -WanderInitialTab lists",
+    "Render the deterministic populated state with -WanderListsScenario populated"
+  ],
+  "observed": "The Lists title and plus action sit inside a contrasting full-width glass panel, which reads as a separate horizontal color block.",
+  "expected": "The Lists title, subtitle, and add action sit directly on the screen canvas without a full-width header panel; the plus action remains a distinct accessible button.",
+  "root_cause": "ListsScreen.header uses WanderGlassHeader, whose title row always applies wanderGlassPanel across the available width.",
+  "visual_validation": "Compared local before/after simulator captures on iPhone 16 Plus and iPhone 16e. Binary screenshots are intentionally not tracked because WanderTests is recursively included by XcodeGen.",
+  "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration"
+}
