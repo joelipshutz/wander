@@ -158,6 +158,11 @@ struct AddScreen: View {
                 case .hereNow:
                     expandSheet()
                     await resolveCurrentLocationCandidates()
+                case .search(let query):
+                    expandSheet()
+                    quickAddQuery = query
+                    manualName = query
+                    await resolveQuickAddQuery()
                 case .importInbox:
                     expandSheet()
                     showsImportInbox = true

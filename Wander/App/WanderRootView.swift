@@ -1185,6 +1185,13 @@ struct WanderRootView: View {
             addLaunchRequest = WanderAddLaunchRequest(destination: .hereNow)
             addSheetDetent = .large
             isPresentingAdd = true
+        case .addSearch(let query):
+            selectedTab = .map
+            store.saveFlowDidPresent(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = WanderAddLaunchRequest(destination: .search(query: query))
+            addSheetDetent = .large
+            isPresentingAdd = true
         case .map:
             selectedTab = .map
         case .nearbyPlace(let candidateID):

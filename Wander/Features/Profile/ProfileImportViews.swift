@@ -356,10 +356,10 @@ struct PlaceImportInboxScreen: View {
     @State private var pendingQuickSave: PlaceImportQuickSaveIntent?
     @State private var rescueItem: PlaceImportItem?
     @State private var showsClearConfirmation = false
-    @State private var stagedStatuses: [String: PlaceStatus] = [:]
-    @State private var bulkSaveQueue: [PlaceImportQuickSaveIntent] = []
     @State private var isBulkSaveRunning = false
-    @State private var didSaveCurrentBulkItem = false
+    @State private var bulkSavedCount = 0
+    @State private var presentedReceipt: PlaceImportReceipt?
+    @State private var receiptIDsAwaitingPresentation: [String] = []
 
     var body: some View {
         Group {
@@ -459,14 +459,15 @@ struct PlaceImportInboxScreen: View {
                 importStore.clearAll()
                 selectedFilter = .unresolved
                 visibleLimit = 50
-                stagedStatuses = [:]
-                bulkSaveQueue = []
                 isBulkSaveRunning = false
+                bulkSavedCount = 0
             }
         } message: {
             Text("Are you sure you want to clear the import list?")
         }
-        .sheet(item: $saveRoute, onDismiss: saveSheetDidDismiss) { route in
+        .sheet(item: $saveRoute, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { route in
             MapPlaceSaveFlowSheet(context: route.context) { submission in
                 await save(submission, itemID: route.itemID)
             } onRemove: { _ in
@@ -503,11 +504,24 @@ struct PlaceImportInboxScreen: View {
                 }
             )
         }
+        .sheet(item: $presentedReceipt, onDismiss: receiptDidDismiss) { receipt in
+            PlaceImportReceiptSheet(
+                receipt: receipt,
+                streakCount: store.saveStreakSummary.currentCount,
+                isTodayCovered: store.saveStreakSummary.isTodayCovered
+            )
+        }
         .task(id: duplicateSignature) {
             importStore.reconcileDuplicates(with: existingPlaces)
         }
         .onAppear {
             importStore.resumePendingImports()
+            if presentedReceipt == nil,
+               let receipt = importStore.latestUnpresentedReceipt {
+                receiptIDsAwaitingPresentation = [receipt.id]
+                store.saveFlowDidPresent(.saveSheet)
+                presentedReceipt = receipt
+            }
         }
     }
 
@@ -543,12 +557,12 @@ struct PlaceImportInboxScreen: View {
         inboxItems.filter { $0.state == .ready && $0.selectedCandidate != nil }
     }
 
-    private var selectedReadyItems: [PlaceImportItem] {
-        readyItems.filter { stagedStatuses[$0.id] != nil }
+    private var reviewPlan: PlaceImportReviewPlan {
+        PlaceImportReviewPlan(items: inboxItems)
     }
 
     private var showsBulkSaveButton: Bool {
-        selectedFilter == .unresolved && !selectedReadyItems.isEmpty
+        selectedFilter == .unresolved && reviewPlan.committableCount > 0
     }
 
     private var filterStrip: some View {
@@ -639,14 +653,14 @@ struct PlaceImportInboxScreen: View {
         case .unresolved:
             PlaceImportUnresolvedRow(
                 item: item,
-                selectedStatus: stagedStatuses[item.id],
+                selectedStatus: item.stagedStatus,
                 loadsRemotePhoto: auth.isSignedIn,
-                statusAction: { toggleStatus($0, for: item) },
+                statusAction: { importStore.setStagedStatus($0, itemID: item.id) },
+                detailsAction: { beginSave(item, status: item.stagedStatus) },
                 candidateAction: { candidatePickerItem = item },
                 rescueAction: { rescueItem = item },
                 retryAction: { importStore.retry(itemID: item.id) },
                 dismissAction: {
-                    stagedStatuses[item.id] = nil
                     importStore.dismiss(itemID: item.id)
                 }
             )
@@ -680,7 +694,7 @@ struct PlaceImportInboxScreen: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
                 importSelectionButton(
                     status: .wannaGo,
-                    isSelected: readyItems.allSatisfy { stagedStatuses[$0.id] == .wannaGo },
+                    isSelected: readyItems.allSatisfy { $0.stagedStatus == .wannaGo },
                     action: { markAll(as: .wannaGo) }
                 )
             }
@@ -691,7 +705,7 @@ struct PlaceImportInboxScreen: View {
                     .foregroundStyle(WanderTheme.textMuted.color)
                 importSelectionButton(
                     status: .been,
-                    isSelected: readyItems.allSatisfy { stagedStatuses[$0.id] == .been },
+                    isSelected: readyItems.allSatisfy { $0.stagedStatus == .been },
                     action: { markAll(as: .been) }
                 )
             }
@@ -705,14 +719,16 @@ struct PlaceImportInboxScreen: View {
                     ProgressView()
                         .tint(WanderTheme.surfaceRaised.color)
                 }
-                Text("Save")
+                Text(reviewPlan.primaryActionTitle ?? "Add places")
                     .font(.system(size: 17, weight: .black))
-                Text("\(selectedReadyItems.count)")
-                    .font(.system(size: 12, weight: .black))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(WanderTheme.surfaceRaised.color.opacity(0.18))
-                    .clipShape(Capsule())
+                if isBulkSaveRunning {
+                    Text("\(bulkSavedCount)/\(reviewPlan.committableCount)")
+                        .font(.system(size: 12, weight: .black))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(WanderTheme.surfaceRaised.color.opacity(0.18))
+                        .clipShape(Capsule())
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 52)
             .foregroundStyle(WanderTheme.surfaceRaised.color)
@@ -725,7 +741,7 @@ struct PlaceImportInboxScreen: View {
         .padding(.vertical, WanderTheme.spacing2)
         .background(WanderTheme.canvasWarm.color.opacity(0.96))
         .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 10, y: -2)
-        .accessibilityLabel("Save \(selectedReadyItems.count) selected imports")
+        .accessibilityLabel(reviewPlan.primaryActionTitle ?? "Add imported places")
     }
 
     private func importSelectionButton(
@@ -783,61 +799,194 @@ struct PlaceImportInboxScreen: View {
             status: status,
             defaultVisibility: store.effectiveDefaultVisibility
         )
+        store.saveFlowDidPresent(.saveSheet)
         saveRoute = PlaceImportSaveRoute(itemID: item.id, status: status, context: context)
     }
 
-    private func toggleStatus(_ status: PlaceStatus, for item: PlaceImportItem) {
-        withAnimation(.easeInOut(duration: 0.16)) {
-            if stagedStatuses[item.id] == status {
-                stagedStatuses[item.id] = nil
-            } else {
-                stagedStatuses[item.id] = status
-            }
-        }
-    }
-
     private func markAll(as status: PlaceStatus) {
-        let alreadySelected = readyItems.allSatisfy { stagedStatuses[$0.id] == status }
         withAnimation(.easeInOut(duration: 0.16)) {
-            for item in readyItems {
-                stagedStatuses[item.id] = alreadySelected ? nil : status
-            }
+            importStore.applyStagedStatus(status)
         }
     }
 
     private func startBulkSave() {
         guard !isBulkSaveRunning else { return }
-        bulkSaveQueue = selectedReadyItems.compactMap { item in
-            stagedStatuses[item.id].map { PlaceImportQuickSaveIntent(itemID: item.id, status: $0) }
+        guard auth.isSignedIn else {
+            auth.presentGate(for: .syncPlace)
+            return
         }
-        guard !bulkSaveQueue.isEmpty else { return }
         isBulkSaveRunning = true
-        beginNextBulkSave()
+        bulkSavedCount = 0
+        store.saveFlowDidPresent(.saveSheet)
+        Task { @MainActor in
+            await commitReadyImports()
+        }
     }
 
-    private func beginNextBulkSave() {
-        guard isBulkSaveRunning else { return }
-        while !bulkSaveQueue.isEmpty {
-            let intent = bulkSaveQueue.removeFirst()
-            guard let item = importStore.item(id: intent.itemID), item.state == .ready else { continue }
-            didSaveCurrentBulkItem = false
-            beginSave(item, status: intent.status)
-            return
+    @MainActor
+    private func commitReadyImports() async {
+        let batchOrder = importStore.batches.sorted { $0.createdAt < $1.createdAt }
+        var combinedEntries: [PlaceImportReceiptEntry] = []
+        var recordedReceiptIDs: [String] = []
+        var lastDestinationListID: String?
+
+        for batch in batchOrder {
+            let batchItems = importStore.items(for: batch.id)
+            let ready = batchItems.filter { $0.state == .ready && $0.selectedCandidate != nil }
+            let duplicates = batchItems.filter {
+                $0.state == .duplicate && $0.duplicateUserPlaceID != nil
+            }
+            guard !ready.isEmpty || !duplicates.isEmpty else { continue }
+
+            let destinationList = destinationList(for: batch, itemCount: batchItems.count)
+            let remoteBackend = auth.isSignedIn ? backend : nil
+            var entries: [PlaceImportReceiptEntry] = []
+
+            for item in ready {
+                guard let candidate = item.selectedCandidate else { continue }
+                let existedBeforeCommit = MapPlaceSaveContext.currentUserSave(
+                    matching: candidate,
+                    in: store.currentUserVisiblePlaces
+                ) != nil
+                let status = item.stagedStatus
+                let result = await store.saveCandidate(
+                    candidate,
+                    status: status,
+                    visibility: .selfOnly,
+                    note: nil,
+                    sourceType: item.source.addSourceType,
+                    backend: remoteBackend
+                )
+                await add(userPlaceID: result.userPlaceID, to: destinationList, backend: remoteBackend)
+                importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
+                entries.append(
+                    PlaceImportReceiptEntry(
+                        itemID: item.id,
+                        displayName: item.displayName,
+                        displayArea: item.displayArea,
+                        status: status,
+                        outcome: existedBeforeCommit ? .existing : .added,
+                        userPlaceID: result.userPlaceID
+                    )
+                )
+                bulkSavedCount += 1
+            }
+
+            for item in duplicates {
+                guard let userPlaceID = item.duplicateUserPlaceID else { continue }
+                let visiblePlace = store.currentUserVisiblePlaces.first {
+                    $0.userPlace.id == userPlaceID
+                }
+                await add(visiblePlace: visiblePlace, to: destinationList, backend: remoteBackend)
+                importStore.markSaved(itemID: item.id, userPlaceID: userPlaceID)
+                entries.append(
+                    PlaceImportReceiptEntry(
+                        itemID: item.id,
+                        displayName: item.displayName,
+                        displayArea: item.displayArea,
+                        status: visiblePlace?.userPlace.status,
+                        outcome: .existing,
+                        userPlaceID: userPlaceID
+                    )
+                )
+                bulkSavedCount += 1
+            }
+
+            entries.append(contentsOf: batchItems.compactMap { item in
+                guard [.ambiguous, .needsHelp, .failed].contains(item.state) else { return nil }
+                return PlaceImportReceiptEntry(
+                    itemID: item.id,
+                    displayName: item.displayName,
+                    displayArea: item.displayArea,
+                    status: nil,
+                    outcome: .needsReview,
+                    userPlaceID: nil
+                )
+            })
+
+            importStore.recordReceipt(
+                batchID: batch.id,
+                entries: entries,
+                destinationListID: destinationList?.id
+            )
+            if let receipt = importStore.batches.first(where: { $0.id == batch.id })?.receipt {
+                recordedReceiptIDs.append(receipt.id)
+            }
+            combinedEntries.append(contentsOf: entries)
+            lastDestinationListID = destinationList?.id ?? lastDestinationListID
         }
+
         isBulkSaveRunning = false
-    }
-
-    private func saveSheetDidDismiss() {
-        store.saveFlowDidDismiss(.saveSheet)
-        guard isBulkSaveRunning else { return }
-        guard didSaveCurrentBulkItem else {
-            bulkSaveQueue = []
-            isBulkSaveRunning = false
+        guard !combinedEntries.isEmpty else {
+            store.saveFlowDidDismiss(.saveSheet)
             return
         }
-        DispatchQueue.main.async {
-            beginNextBulkSave()
+        receiptIDsAwaitingPresentation = recordedReceiptIDs
+        presentedReceipt = PlaceImportReceipt(
+            batchID: batchOrder.count == 1 ? batchOrder[0].id : "combined",
+            sourceName: batchOrder.count == 1 ? batchOrder[0].sourceName : "Imported places",
+            entries: combinedEntries,
+            destinationListID: lastDestinationListID
+        )
+    }
+
+    private func destinationList(
+        for batch: PlaceImportBatch,
+        itemCount: Int
+    ) -> LocalPlaceList? {
+        guard batch.source == .googleMaps,
+              batch.sourceName != nil || itemCount > 1
+        else { return nil }
+        if let destinationListID = batch.destinationListID,
+           let existing = store.visiblePlaceLists.first(where: { $0.id == destinationListID }) {
+            return existing
         }
+        let existingNames = Set(
+            store.visiblePlaceLists
+                .filter { $0.ownerUserID == store.currentUser.id }
+                .map(\.name)
+        )
+        let name = PlaceImportDestinationListName.unique(
+            batch.sourceName,
+            existingNames: existingNames
+        )
+        guard let list = store.createPlaceList(
+            name: name,
+            description: "Imported from Google Maps",
+            visibility: .stealth
+        ) else { return nil }
+        importStore.setDestinationListID(list.id, batchID: batch.id)
+        return list
+    }
+
+    @MainActor
+    private func add(
+        userPlaceID: String,
+        to list: LocalPlaceList?,
+        backend: WanderBackend?
+    ) async {
+        let visiblePlace = store.currentUserVisiblePlaces.first {
+            $0.userPlace.id == userPlaceID
+        }
+        await add(visiblePlace: visiblePlace, to: list, backend: backend)
+    }
+
+    @MainActor
+    private func add(
+        visiblePlace: VisiblePlace?,
+        to list: LocalPlaceList?,
+        backend: WanderBackend?
+    ) async {
+        guard let visiblePlace, let list else { return }
+        _ = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+    }
+
+    private func receiptDidDismiss() {
+        for receiptID in receiptIDsAwaitingPresentation {
+            importStore.markReceiptPresented(receiptID: receiptID)
+        }
+        receiptIDsAwaitingPresentation = []
+        store.saveFlowDidDismiss(.saveSheet)
     }
 
     private func beginPendingQuickSave() {
@@ -869,10 +1018,6 @@ struct PlaceImportInboxScreen: View {
             backend: remoteBackend
         )
         importStore.markSaved(itemID: itemID, userPlaceID: result.userPlaceID)
-        stagedStatuses[itemID] = nil
-        if isBulkSaveRunning {
-            didSaveCurrentBulkItem = true
-        }
         if !auth.isSignedIn {
             auth.presentGate(for: .syncPlace)
         }
@@ -885,6 +1030,207 @@ struct PlaceImportInboxScreen: View {
               visibleLimit < filteredItems.count
         else { return }
         visibleLimit = min(filteredItems.count, visibleLimit + 50)
+    }
+}
+
+private struct PlaceImportReceiptSheet: View {
+    let receipt: PlaceImportReceipt
+    let streakCount: Int
+    let isTodayCovered: Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    summaryCard
+
+                    VStack(spacing: 0) {
+                        ForEach(receipt.entries) { entry in
+                            receiptRow(entry)
+
+                            if entry.id != receipt.entries.last?.id {
+                                Divider()
+                                    .overlay(WanderTheme.borderHairline.color)
+                                    .padding(.leading, 46)
+                            }
+                        }
+                    }
+                    .background(WanderTheme.surfaceBone.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
+                }
+                .padding(WanderTheme.spacing4)
+            }
+            .background(WanderTheme.canvasWarm.color)
+            .navigationTitle("Import saved")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.bold)
+                }
+            }
+        }
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 34, weight: .black))
+                    .foregroundStyle(WanderTheme.stateSuccess.color)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(summaryTitle)
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    if let sourceName = receipt.sourceName,
+                       !sourceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(sourceName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(2)
+                    }
+                }
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                if receipt.addedCount > 0 {
+                    receiptMetric(receipt.addedCount, "added", WanderTheme.stateSuccess.color)
+                }
+                if receipt.existingCount > 0 {
+                    receiptMetric(receipt.existingCount, "already saved", WanderTheme.stateInfo.color)
+                }
+                if receipt.needsReviewCount > 0 {
+                    receiptMetric(receipt.needsReviewCount, "needs review", WanderTheme.stateWarning.color)
+                }
+            }
+
+            if isTodayCovered {
+                Label(
+                    streakCount == 1 ? "Today is covered" : "Today is covered · \(streakCount)-day streak",
+                    systemImage: "flame.fill"
+                )
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .background(WanderTheme.terracottaTint.color)
+                .clipShape(Capsule())
+            }
+        }
+        .padding(WanderTheme.spacing4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+    }
+
+    private var summaryTitle: String {
+        let savedCount = receipt.addedCount + receipt.existingCount
+        if savedCount == 0 {
+            return "Nothing added yet"
+        }
+        return savedCount == 1 ? "1 place saved" : "\(savedCount) places saved"
+    }
+
+    private func receiptMetric(_ value: Int, _ label: String, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(value)")
+                .font(.system(size: 18, weight: .black))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func receiptRow(_ entry: PlaceImportReceiptEntry) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: entry.outcome.receiptSystemImage)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(entry.outcome.receiptColor)
+                .frame(width: 28, height: 28)
+                .background(entry.outcome.receiptColor.opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.displayName)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(2)
+                Text(entry.receiptDetail)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 4)
+
+            Button("Edit") {
+                openAddSearch(for: entry)
+            }
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(WanderTheme.terracotta.color)
+            .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit \(entry.displayName) in Add search")
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+    }
+
+    private func openAddSearch(for entry: PlaceImportReceiptEntry) {
+        let query = [entry.displayName, entry.displayArea]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard let url = WanderDeepLinkRoute.addSearch(query: query).url else { return }
+        dismiss()
+        DispatchQueue.main.async {
+            openURL(url)
+        }
+    }
+}
+
+private extension PlaceImportReceiptOutcome {
+    var receiptSystemImage: String {
+        switch self {
+        case .added: "plus"
+        case .existing: "checkmark"
+        case .needsReview: "magnifyingglass"
+        case .failed: "exclamationmark"
+        }
+    }
+
+    var receiptColor: Color {
+        switch self {
+        case .added: WanderTheme.stateSuccess.color
+        case .existing: WanderTheme.stateInfo.color
+        case .needsReview: WanderTheme.stateWarning.color
+        case .failed: WanderTheme.stateError.color
+        }
+    }
+}
+
+private extension PlaceImportReceiptEntry {
+    var receiptDetail: String {
+        let outcomeCopy = switch outcome {
+        case .added: status == .been ? CheckInCopy.noun : "Wanna"
+        case .existing: "Already in your places"
+        case .needsReview: "Needs a place match"
+        case .failed: "Could not save"
+        }
+        guard let displayArea,
+              !displayArea.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return outcomeCopy }
+        return "\(outcomeCopy) · \(displayArea)"
     }
 }
 
@@ -983,33 +1329,45 @@ private struct PlaceImportUnresolvedRow: View {
     let selectedStatus: PlaceStatus?
     let loadsRemotePhoto: Bool
     let statusAction: (PlaceStatus) -> Void
+    let detailsAction: () -> Void
     let candidateAction: () -> Void
     let rescueAction: () -> Void
     let retryAction: () -> Void
     let dismissAction: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-            PlaceImportPhotoThumb(item: item, loadsRemotePhoto: loadsRemotePhoto)
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                PlaceImportPhotoThumb(item: item, loadsRemotePhoto: loadsRemotePhoto)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.displayName)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .layoutPriority(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.displayName)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
 
-                Text(item.reviewMetadata)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text(item.reviewMetadata)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                unresolvedAction
+                    unresolvedAction
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                importItemMenu(
+                    item: item,
+                    detailsAction: detailsAction,
+                    candidateAction: candidateAction,
+                    rescueAction: rescueAction,
+                    retryAction: retryAction,
+                    dismissAction: dismissAction
+                )
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             if item.state == .ready {
-                HStack(spacing: 6) {
+                HStack(spacing: WanderTheme.spacing2) {
                     PlaceImportStatusSelector(
                         status: .wannaGo,
                         isSelected: selectedStatus == .wannaGo,
@@ -1020,18 +1378,18 @@ private struct PlaceImportUnresolvedRow: View {
                         isSelected: selectedStatus == .been,
                         action: { statusAction(.been) }
                     )
+
+                    Spacer(minLength: 0)
+
+                    Button("Edit place", systemImage: "magnifyingglass", action: rescueAction)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(minHeight: WanderTheme.tapMinimum)
+                        .buttonStyle(.plain)
                 }
             }
-
-            importItemMenu(
-                item: item,
-                candidateAction: candidateAction,
-                rescueAction: rescueAction,
-                retryAction: retryAction,
-                dismissAction: dismissAction
-            )
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, WanderTheme.spacing1)
         .accessibilityElement(children: .contain)
     }
 
@@ -1173,13 +1531,17 @@ private struct PlaceImportStatusSelector: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: status == .been ? "checkmark" : "bookmark")
-                .font(.system(size: 16, weight: .bold))
-                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            Label(
+                status == .been ? CheckInCopy.noun : "Wanna",
+                systemImage: status == .been ? "checkmark.circle.fill" : "bookmark.fill"
+            )
+                .font(.system(size: 12, weight: .bold))
+                .padding(.horizontal, 12)
+                .frame(minHeight: WanderTheme.tapMinimum)
                 .background(isSelected ? status.importColor : WanderTheme.surfaceRaised.color)
                 .foregroundStyle(isSelected ? Color.white : status.importColor)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(status.importColor.opacity(0.28), lineWidth: 1))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(status.importColor.opacity(0.28), lineWidth: 1))
                 .shadow(color: status.importColor.opacity(0.14), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
@@ -1207,12 +1569,16 @@ private struct PlaceImportInlineAction: View {
 
 private func importItemMenu(
     item: PlaceImportItem,
+    detailsAction: @escaping () -> Void,
     candidateAction: @escaping () -> Void,
     rescueAction: @escaping () -> Void,
     retryAction: @escaping () -> Void,
     dismissAction: @escaping () -> Void
 ) -> some View {
     Menu {
+        if item.state == .ready {
+            Button("Add optional details", systemImage: "slider.horizontal.3", action: detailsAction)
+        }
         if item.candidates.count > 1 {
             Button("Review matches", systemImage: "map", action: candidateAction)
         }
