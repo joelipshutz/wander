@@ -2437,7 +2437,8 @@ private struct FriendCollaboratorSearchContent: View {
         .sheet(isPresented: $isPresentingContactInvites) {
             ContactInviteSheet(
                 surface: .listCollaborator(listName: listName),
-                contactProvider: store.contactProvider
+                contactProvider: store.contactProvider,
+                senderProfileID: store.currentUser.id
             )
         }
     }

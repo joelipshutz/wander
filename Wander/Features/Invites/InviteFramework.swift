@@ -93,11 +93,11 @@ enum InviteSurface: Equatable {
     var completionTitle: String {
         switch self {
         case .sharedVisit:
-            "invites ready"
+            "invite sent"
         case .feedPeople:
-            "invites ready"
+            "invite sent"
         case .listCollaborator:
-            "collaborator invites ready"
+            "collaborator invite sent"
         }
     }
 }

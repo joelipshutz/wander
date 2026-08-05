@@ -467,6 +467,23 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testAppInviteContainsTestFlightAndSenderProfileLinks() {
+        let content = WanderShareContent.appInvite(senderProfileID: "user sender")
+
+        XCTAssertEqual(content.item, WanderShareContent.publicTestFlightURL)
+        XCTAssertEqual(content.items.map(\.absoluteString), [
+            "https://testflight.apple.com/join/knEhRa6t",
+            "https://getrec.me/profiles/user%20sender"
+        ])
+        XCTAssertTrue(content.messageBody.contains("Install the TestFlight beta"))
+        XCTAssertTrue(content.messageBody.contains("https://testflight.apple.com/join/knEhRa6t"))
+        XCTAssertTrue(content.messageBody.contains("https://getrec.me/profiles/user%20sender"))
+
+        let anonymousContent = WanderShareContent.appInvite(senderProfileID: nil)
+        XCTAssertEqual(anonymousContent.items, [WanderShareContent.publicTestFlightURL])
+    }
+
+    @MainActor
     func testPlaceListAndInviteSharesUseCanonicalGetRecMeURLs() throws {
         let placeID = "40000000-0000-0000-0000-000000000001"
         let listID = "44000000-0000-0000-0000-000000000001"
@@ -1669,6 +1686,7 @@ final class NavigationContractTests: XCTestCase {
     @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
         XCTAssertEqual(WanderRootView.notificationTab(for: .quickCapture), .map)
+        XCTAssertEqual(WanderRootView.notificationTab(for: .profile(id: "profile-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)

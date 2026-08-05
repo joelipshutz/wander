@@ -2742,7 +2742,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 from: URL(string: "recme://profiles/user_joe")!,
                 notificationType: "mutual_follow"
             ),
-            .people(.friends)
+            .profile(id: "user_joe")
         )
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "https://getrec.me/lists/44000000-0000-0000-0000-000000000001")!),
@@ -2791,6 +2791,14 @@ final class RemoteRepositoryTests: XCTestCase {
 
         XCTAssertEqual(destination("followed_you"), .people(.followers))
         XCTAssertEqual(destination("mutual_follow"), .people(.friends))
+        XCTAssertEqual(
+            destination("followed_you", data: ["actor_user_id": "user-1"]),
+            .profile(id: "user-1")
+        )
+        XCTAssertEqual(
+            destination("mutual_follow", data: ["actor_user_id": "user-2"]),
+            .profile(id: "user-2")
+        )
         XCTAssertEqual(destination("list_collaborator_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("list_place_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("place_saved_from_your_map", data: ["place_id": "place-1"]), .place(id: "place-1"))

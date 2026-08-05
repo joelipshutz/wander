@@ -1,3 +1,4 @@
+import MessageUI
 import SwiftUI
 import UIKit
 
@@ -67,6 +68,7 @@ struct ContactInviteSheet: View {
 
     let surface: InviteSurface
     let contactProvider: (any ContactProvider)?
+    let senderProfileID: String?
     let canDismiss: Bool
 
     @State private var contacts: [InviteContact]
@@ -76,6 +78,13 @@ struct ContactInviteSheet: View {
     @State private var selection: InviteSelection
     @State private var isLoadingContacts = false
     @State private var didFailLoadingContacts = false
+    @State private var isPresentingMessageComposer = false
+    @State private var messageRecipient: String?
+    @State private var pendingMessageContacts: [InviteContact] = []
+    @State private var sharePresentation: InviteSharePresentation?
+    @State private var deliveryErrorMessage: String?
+    @State private var completionHeadline: String?
+    @State private var completionDetail: String?
 
     init(
         surface: InviteSurface,
@@ -84,10 +93,12 @@ struct ContactInviteSheet: View {
         presentationState: ContactInvitePresentationState = .choosing,
         selectedContactIDs: Set<String> = [],
         query: String = "",
+        senderProfileID: String? = nil,
         canDismiss: Bool = true
     ) {
         self.surface = surface
         contactProvider = nil
+        self.senderProfileID = senderProfileID
         self.canDismiss = canDismiss
         _contacts = State(initialValue: contacts)
         _accessState = State(initialValue: accessState)
@@ -99,10 +110,12 @@ struct ContactInviteSheet: View {
     init(
         surface: InviteSurface,
         contactProvider: any ContactProvider,
+        senderProfileID: String? = nil,
         canDismiss: Bool = true
     ) {
         self.surface = surface
         self.contactProvider = contactProvider
+        self.senderProfileID = senderProfileID
         self.canDismiss = canDismiss
         _contacts = State(initialValue: [])
         _accessState = State(initialValue: .primer)
@@ -150,6 +163,29 @@ struct ContactInviteSheet: View {
             guard phase == .active, contactProvider != nil else { return }
             Task { await refreshProviderState() }
         }
+        .sheet(isPresented: $isPresentingMessageComposer) {
+            if let messageRecipient {
+                ContactInviteMessageComposer(
+                    recipients: [messageRecipient],
+                    body: inviteShareContent.messageBody,
+                    onFinish: handleMessageComposerResult
+                )
+            }
+        }
+        .sheet(item: $sharePresentation) { presentation in
+            WanderShareSheet(content: presentation.content) { completed in
+                guard completed else { return }
+                completeDelivery(
+                    headline: selection.count == 1 ? "invite shared" : "invites shared",
+                    detail: "The TestFlight link was handed off successfully."
+                )
+            }
+        }
+        .alert("Invite wasn’t sent", isPresented: deliveryErrorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deliveryErrorMessage ?? "Messages could not send this invitation. Try again.")
+        }
     }
 
     private var header: some View {
@@ -186,9 +222,7 @@ struct ContactInviteSheet: View {
                 if presentationState == .choosing && accessState == .authorized {
                     Button {
                         guard selection.count > 0 else { return }
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            presentationState = .completed
-                        }
+                        beginInviteDelivery()
                     } label: {
                         Text(surface.primaryActionTitle)
                             .font(.system(size: 14, weight: .black))
@@ -222,30 +256,40 @@ struct ContactInviteSheet: View {
             } else if sections.isEmpty {
                 emptyResults
             } else {
-                ZStack(alignment: .trailing) {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3, pinnedViews: [.sectionHeaders]) {
-                            ForEach(sections) { section in
-                                Section {
-                                    contactGroup(section.contacts)
-                                } header: {
-                                    Text(section.title)
-                                        .font(.system(size: 13, weight: .black))
-                                        .foregroundStyle(WanderTheme.textMuted.color)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(.vertical, WanderTheme.spacing1)
-                                        .background(WanderTheme.surfaceBone.color)
+                ScrollViewReader { proxy in
+                    ZStack(alignment: .trailing) {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3, pinnedViews: [.sectionHeaders]) {
+                                ForEach(sections) { section in
+                                    Section {
+                                        contactGroup(section.contacts)
+                                    } header: {
+                                        Text(section.title)
+                                            .font(.system(size: 13, weight: .black))
+                                            .foregroundStyle(WanderTheme.textMuted.color)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .padding(.vertical, WanderTheme.spacing1)
+                                            .background(WanderTheme.surfaceBone.color)
+                                            .id(section.id)
+                                    }
                                 }
                             }
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.trailing, WanderTheme.spacing4)
+                            .padding(.bottom, WanderTheme.spacing8)
                         }
-                        .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.trailing, WanderTheme.spacing2)
-                        .padding(.bottom, WanderTheme.spacing8)
-                    }
-                    .scrollDismissesKeyboard(.interactively)
+                        .scrollDismissesKeyboard(.interactively)
 
-                    alphabetIndex
-                        .padding(.trailing, 3)
+                        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            AlphabetScrubber(letters: alphabetLetters) { letter in
+                                guard let targetID = scrollTargetID(for: letter) else { return }
+                                withAnimation(.snappy(duration: 0.18)) {
+                                    proxy.scrollTo(targetID, anchor: .top)
+                                }
+                            }
+                            .padding(.trailing, 2)
+                        }
+                    }
                 }
             }
         }
@@ -373,16 +417,19 @@ struct ContactInviteSheet: View {
         .accessibilityValue(selection.contains(contact.id) ? "Selected" : "Not selected")
     }
 
-    private var alphabetIndex: some View {
-        VStack(spacing: 0) {
-            ForEach(Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ#").map(String.init), id: \.self) { letter in
-                Text(letter)
-                    .font(.system(size: 8, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(height: 12)
-            }
+    private var alphabetLetters: [String] {
+        Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ#").map(String.init)
+    }
+
+    private func scrollTargetID(for requestedLetter: String) -> String? {
+        let letterSections = sections.filter { $0.id.hasPrefix("letter-") }
+        if let exact = letterSections.first(where: { $0.title == requestedLetter }) {
+            return exact.id
         }
-        .accessibilityHidden(true)
+        if let next = letterSections.first(where: { $0.title >= requestedLetter }) {
+            return next.id
+        }
+        return letterSections.last?.id
     }
 
     private var permissionPrimer: some View {
@@ -493,9 +540,7 @@ struct ContactInviteSheet: View {
                 .clipShape(Capsule())
 
             Button {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    presentationState = .completed
-                }
+                sharePresentation = InviteSharePresentation(content: inviteShareContent)
             } label: {
                 Label("share an invite link", systemImage: "square.and.arrow.up")
                     .font(.system(size: 14, weight: .black))
@@ -576,17 +621,17 @@ struct ContactInviteSheet: View {
             }
 
             VStack(spacing: WanderTheme.spacing2) {
-                Text(surface.completionTitle)
+                Text(completionHeadline ?? surface.completionTitle)
                     .font(.system(size: 28, weight: .black, design: .rounded))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text(completionMessage)
+                Text(completionDetail ?? "The TestFlight invitation was shared.")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Nothing is added or attributed until each person accepts.")
+            Text("If they follow you, tap their follow notification to open their profile and follow back.")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(WanderTheme.textInk.color)
                 .multilineTextAlignment(.center)
@@ -611,13 +656,6 @@ struct ContactInviteSheet: View {
         .padding(.horizontal, WanderTheme.spacing4)
     }
 
-    private var completionMessage: String {
-        if selection.count == 0 {
-            return "Use the native share sheet to send the right link in the app you prefer."
-        }
-        return "Choose how to share with \(selection.count) selected \(selection.count == 1 ? "person" : "people")."
-    }
-
     private func rowDetail(for contact: InviteContact) -> String? {
         if case .recmeUser(let handle, _) = contact.relationship {
             return "@\(handle)"
@@ -639,6 +677,96 @@ struct ContactInviteSheet: View {
 
     private func avatarForeground(for contact: InviteContact) -> Color {
         contact.relationship.isOnRecme ? WanderTheme.stateInfo.color : WanderTheme.terracottaDark.color
+    }
+
+    private var inviteShareContent: WanderShareContent {
+        WanderShareContent.appInvite(senderProfileID: senderProfileID)
+    }
+
+    private var selectedContacts: [InviteContact] {
+        contacts.filter { selection.contains($0.id) }
+    }
+
+    private func beginInviteDelivery() {
+        let recipients = selectedContacts
+        guard !recipients.isEmpty else { return }
+
+        let canAddressEveryRecipient = recipients.allSatisfy {
+            guard let detail = $0.contactDetail else { return false }
+            return isLikelyPhoneNumber(detail)
+        }
+        guard MFMessageComposeViewController.canSendText(), canAddressEveryRecipient else {
+            sharePresentation = InviteSharePresentation(content: inviteShareContent)
+            return
+        }
+
+        pendingMessageContacts = recipients
+        presentNextMessageComposer()
+    }
+
+    private func presentNextMessageComposer() {
+        guard let nextContact = pendingMessageContacts.first,
+              let recipient = nextContact.contactDetail
+        else {
+            let sentCount = selectedContacts.count
+            completeDelivery(
+                headline: sentCount == 1 ? "invite sent" : "invites sent",
+                detail: sentCount == 1
+                    ? "The TestFlight link was sent in Messages."
+                    : "The TestFlight link was sent to \(sentCount) people in Messages."
+            )
+            return
+        }
+        messageRecipient = recipient
+        isPresentingMessageComposer = true
+    }
+
+    private func handleMessageComposerResult(_ result: MessageComposeResult) {
+        isPresentingMessageComposer = false
+        messageRecipient = nil
+
+        switch result {
+        case .sent:
+            if !pendingMessageContacts.isEmpty {
+                pendingMessageContacts.removeFirst()
+            }
+            if pendingMessageContacts.isEmpty {
+                presentNextMessageComposer()
+            } else {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    presentNextMessageComposer()
+                }
+            }
+        case .cancelled:
+            pendingMessageContacts.removeAll()
+        case .failed:
+            pendingMessageContacts.removeAll()
+            deliveryErrorMessage = "Messages could not send this invitation. Try again."
+        @unknown default:
+            pendingMessageContacts.removeAll()
+            deliveryErrorMessage = "Messages returned an unknown result. Try again."
+        }
+    }
+
+    private func completeDelivery(headline: String, detail: String) {
+        completionHeadline = headline
+        completionDetail = detail
+        withAnimation(.easeInOut(duration: 0.22)) {
+            presentationState = .completed
+        }
+    }
+
+    private func isLikelyPhoneNumber(_ value: String) -> Bool {
+        guard !value.contains("@") else { return false }
+        return value.filter(\.isNumber).count >= 3
+    }
+
+    private var deliveryErrorBinding: Binding<Bool> {
+        Binding(
+            get: { deliveryErrorMessage != nil },
+            set: { if !$0 { deliveryErrorMessage = nil } }
+        )
     }
 
     @MainActor
@@ -689,6 +817,146 @@ struct ContactInviteSheet: View {
             contacts = try await contactProvider.matches().map(InviteContact.init(contactMatch:))
         } catch {
             didFailLoadingContacts = true
+        }
+    }
+}
+
+private struct InviteSharePresentation: Identifiable {
+    let id = UUID()
+    let content: WanderShareContent
+}
+
+private struct ContactInviteMessageComposer: UIViewControllerRepresentable {
+    let recipients: [String]
+    let body: String
+    let onFinish: (MessageComposeResult) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFinish: onFinish)
+    }
+
+    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+        let controller = MFMessageComposeViewController()
+        controller.messageComposeDelegate = context.coordinator
+        controller.recipients = recipients
+        controller.body = body
+        return controller
+    }
+
+    func updateUIViewController(
+        _ uiViewController: MFMessageComposeViewController,
+        context: Context
+    ) {}
+
+    final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+        let onFinish: (MessageComposeResult) -> Void
+
+        init(onFinish: @escaping (MessageComposeResult) -> Void) {
+            self.onFinish = onFinish
+        }
+
+        func messageComposeViewController(
+            _ controller: MFMessageComposeViewController,
+            didFinishWith result: MessageComposeResult
+        ) {
+            onFinish(result)
+        }
+    }
+}
+
+private struct AlphabetScrubber: View {
+    let letters: [String]
+    let onSelect: (String) -> Void
+
+    @State private var selectedIndex = 0
+    @State private var isScrubbing = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                ForEach(letters.indices, id: \.self) { index in
+                    let distance = abs(index - selectedIndex)
+                    let scale = isScrubbing ? magnification(for: distance) : 1
+
+                    Text(letters[index])
+                        .font(.system(size: 8, weight: .black, design: .rounded))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .scaleEffect(scale)
+                        .offset(x: isScrubbing ? horizontalOffset(for: distance) : 0)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .padding(.vertical, 2)
+            .background(
+                Capsule()
+                    .fill(WanderTheme.surfaceRaised.color.opacity(isScrubbing ? 0.96 : 0.58))
+                    .shadow(
+                        color: WanderTheme.textInk.color.opacity(isScrubbing ? 0.10 : 0),
+                        radius: 6,
+                        x: -2,
+                        y: 2
+                    )
+            )
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        isScrubbing = true
+                        updateSelection(at: value.location.y, height: geometry.size.height)
+                    }
+                    .onEnded { _ in
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            isScrubbing = false
+                        }
+                    }
+            )
+        }
+        .frame(width: 34, height: 324)
+        .accessibilityElement()
+        .accessibilityLabel("Contact index")
+        .accessibilityValue(letters[selectedIndex])
+        .accessibilityHint("Swipe up or down to jump through contact sections")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                selectedIndex = min(selectedIndex + 1, letters.count - 1)
+            case .decrement:
+                selectedIndex = max(selectedIndex - 1, 0)
+            @unknown default:
+                return
+            }
+            onSelect(letters[selectedIndex])
+        }
+    }
+
+    private func updateSelection(at yPosition: CGFloat, height: CGFloat) {
+        guard !letters.isEmpty, height > 0 else { return }
+        let progress = min(max(yPosition / height, 0), 0.999_999)
+        let nextIndex = min(Int(progress * CGFloat(letters.count)), letters.count - 1)
+        guard nextIndex != selectedIndex else { return }
+
+        selectedIndex = nextIndex
+        UISelectionFeedbackGenerator().selectionChanged()
+        onSelect(letters[nextIndex])
+    }
+
+    private func magnification(for distance: Int) -> CGFloat {
+        switch distance {
+        case 0: 2.15
+        case 1: 1.72
+        case 2: 1.38
+        case 3: 1.16
+        default: 1
+        }
+    }
+
+    private func horizontalOffset(for distance: Int) -> CGFloat {
+        switch distance {
+        case 0: -14
+        case 1: -10
+        case 2: -6
+        case 3: -3
+        default: 0
         }
     }
 }

@@ -282,6 +282,7 @@ enum NotificationPeopleMode: String, Equatable {
 
 enum NotificationDestination: Equatable {
     case quickCapture
+    case profile(id: String)
     case people(NotificationPeopleMode)
     case list(id: String)
     case listInvite(token: String)
@@ -592,9 +593,11 @@ final class PushNotificationManager: ObservableObject {
         case SaveStreakReminderPlanner.notificationType:
             return .quickCapture
         case "followed_you":
-            return .people(.followers)
+            return (data?["actor_user_id"] as? String).map { .profile(id: $0) }
+                ?? .people(.followers)
         case "mutual_follow":
-            return .people(.friends)
+            return (data?["actor_user_id"] as? String).map { .profile(id: $0) }
+                ?? .people(.friends)
         case "list_collaborator_added", "list_place_added":
             return (data?["list_id"] as? String).map { .list(id: $0) }
         case "place_saved_from_your_map", "followed_place_visit", WannaGoReminderPlanner.notificationType:
@@ -625,8 +628,8 @@ final class PushNotificationManager: ObservableObject {
             switch route {
             case .quickCapture:
                 return .quickCapture
-            case .sharedProfile:
-                return .people(notificationType == "mutual_follow" ? .friends : .followers)
+            case .sharedProfile(let profileID):
+                return .profile(id: profileID)
             case .sharedPlace(let placeID):
                 return .place(id: placeID)
             case .sharedList(let listID):
@@ -644,7 +647,7 @@ final class PushNotificationManager: ObservableObject {
 
         switch root {
         case "profiles", "profile":
-            return .people(notificationType == "mutual_follow" ? .friends : .followers)
+            return identifier.map { .profile(id: $0) }
         case "lists":
             return identifier.map { .list(id: $0) }
         case "places":

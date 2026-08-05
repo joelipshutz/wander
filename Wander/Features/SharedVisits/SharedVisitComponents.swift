@@ -206,7 +206,8 @@ struct SharedVisitFriendPicker: View {
             .sheet(isPresented: $isPresentingContactInvites) {
                 ContactInviteSheet(
                     surface: .sharedVisit(placeName: nil),
-                    contactProvider: store.contactProvider
+                    contactProvider: store.contactProvider,
+                    senderProfileID: store.currentUser.id
                 )
             }
         }

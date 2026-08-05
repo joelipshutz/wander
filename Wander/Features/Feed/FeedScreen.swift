@@ -477,7 +477,8 @@ private struct FeedPeopleSurface: View {
         .sheet(isPresented: $isPresentingContactInvites) {
             ContactInviteSheet(
                 surface: .feedPeople,
-                contactProvider: store.contactProvider
+                contactProvider: store.contactProvider,
+                senderProfileID: store.currentUser.id
             )
         }
     }

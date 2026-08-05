@@ -109,6 +109,7 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(source.contains("Button(\"Done\") { dismiss() }"))
         XCTAssertTrue(source.contains("ContactInviteSheet("))
         XCTAssertTrue(source.contains("contactProvider: store.contactProvider"))
+        XCTAssertTrue(source.contains("senderProfileID: store.currentUser.id"))
     }
 
     func testFeedPeoplePlacesContactInviteDirectlyAfterSearch() throws {
@@ -121,6 +122,7 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertLessThan(search.lowerBound, invite.lowerBound)
         XCTAssertLessThan(invite.lowerBound, results.lowerBound)
         XCTAssertTrue(surface.contains("contactProvider: store.contactProvider"))
+        XCTAssertTrue(surface.contains("senderProfileID: store.currentUser.id"))
     }
 
     func testListCollaboratorPlacesContactInviteBetweenSearchAndFriends() throws {
@@ -133,6 +135,7 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertLessThan(search.lowerBound, invite.lowerBound)
         XCTAssertLessThan(invite.lowerBound, friends.lowerBound)
         XCTAssertTrue(content.contains("contactProvider: store.contactProvider"))
+        XCTAssertTrue(content.contains("senderProfileID: store.currentUser.id"))
     }
 
     func testProductionContactsUsePermissionAndLoadingStatesInsteadOfEmptySeed() throws {
@@ -143,6 +146,22 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("await contactProvider.requestAccess()"))
         XCTAssertTrue(sheet.contains("await contactProvider.matches()"))
         XCTAssertTrue(sheet.contains("if isLoadingContacts"))
+    }
+
+    func testContactInviteAddUsesMessagesDeliveryAndInteractiveAlphabetScrubber() throws {
+        let sheet = try projectSource("Wander/Features/Invites/ContactInviteSheet.swift")
+
+        XCTAssertTrue(sheet.contains("MFMessageComposeViewController.canSendText()"))
+        XCTAssertTrue(sheet.contains("ContactInviteMessageComposer("))
+        XCTAssertTrue(sheet.contains("case .sent:"))
+        XCTAssertTrue(sheet.contains("WanderShareContent.appInvite(senderProfileID:"))
+        XCTAssertFalse(sheet.contains("Choose how to share"))
+
+        XCTAssertTrue(sheet.contains("AlphabetScrubber(letters:"))
+        XCTAssertTrue(sheet.contains("DragGesture(minimumDistance: 0"))
+        XCTAssertTrue(sheet.contains("proxy.scrollTo(targetID"))
+        XCTAssertTrue(sheet.contains("magnification(for:"))
+        XCTAssertTrue(sheet.contains("UISelectionFeedbackGenerator().selectionChanged()"))
     }
 
     private func projectSource(_ path: String) throws -> String {
