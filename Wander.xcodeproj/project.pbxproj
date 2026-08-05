@@ -79,6 +79,7 @@
 		585EF6A4AC3B56563BD53412 /* MapHitTestingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */; };
 		58986486438F908962A1B26E /* WanderWidgetConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */; };
 		5A2EA828AD976F076EAD53E5 /* rec-191-map-search-menu-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */; };
+		5D617E05453E3C10BF23889B /* rec-215-list-header-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 386CEC6A26C58634D12C1B39 /* rec-215-list-header-pre.json */; };
 		5E4B71CB254F3580D462444C /* WanderStorePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8930E1796F6C94740DFFF448 /* WanderStorePersistence.swift */; };
 		608BB46CD2A6B2D1CA394015 /* WanderWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F1EB6D9E784DEB05C9AC510B /* WanderWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		612FA998BF76FF6B9C736B86 /* rec-195-streak-notification-routing-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = F15A0A0901CFD503ABBFF5DA /* rec-195-streak-notification-routing-pre.json */; };
@@ -280,6 +281,7 @@
 		34977B260344994771BCC93E /* AuthSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionTests.swift; sourceTree = "<group>"; };
 		3697512B32B506276A012FE2 /* MapRegionFitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRegionFitterTests.swift; sourceTree = "<group>"; };
 		37422B8F2E5F0D4CBE2C20BA /* ProfileOwnerHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileOwnerHome.swift; sourceTree = "<group>"; };
+		386CEC6A26C58634D12C1B39 /* rec-215-list-header-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-215-list-header-pre.json"; sourceTree = "<group>"; };
 		38B79CCA80D059C362EF9946 /* RemoteRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteRepositoryTests.swift; sourceTree = "<group>"; };
 		3993D0CE7A907E02E0B1A590 /* ProfileAvatarStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAvatarStorage.swift; sourceTree = "<group>"; };
 		3A8893E8CF16E21653DE03BA /* PushNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationManager.swift; sourceTree = "<group>"; };
@@ -720,6 +722,7 @@
 				8D20A107FABCCAE2DB1A9F9F /* rec-195-test-streak-control-visible-pre.json */,
 				A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */,
 				FC7A37127E589B3983B23875 /* rec-206-profile-activity-count-instability-pre.json */,
+				386CEC6A26C58634D12C1B39 /* rec-215-list-header-pre.json */,
 			);
 			path = Fixtures;
 			sourceTree = "<group>";
@@ -1065,6 +1068,7 @@
 				83882725B1B0F79C773EE744 /* rec-195-test-streak-control-visible-pre.json in Resources */,
 				E4FD872A229A8C85B3F63CEF /* rec-196-offline-map-pre.json in Resources */,
 				4056AC46D01697D51C1D24A0 /* rec-206-profile-activity-count-instability-pre.json in Resources */,
+				5D617E05453E3C10BF23889B /* rec-215-list-header-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1414,7 +1418,7 @@
 		98BE6269A1618DE2ECCB47B5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 120;
+				CURRENT_PROJECT_VERSION = 121;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.1;
@@ -1428,7 +1432,7 @@
 		98C77DC356FB1881F7298017 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 120;
+				CURRENT_PROJECT_VERSION = 121;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.1;
