@@ -2165,6 +2165,30 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(placeResolver.manualInputs.first?.name, "mendocino farms")
     }
 
+    func testUsesCaptionCapturedByTheExtensionWhenInstagramMetadataIsUnavailable() async throws {
+        let candidate = placeImportCandidate(name: "Mendocino Farms")
+        let placeResolver = FakeDevicePlaceResolver(candidates: [candidate])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/reel/example/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1,
+            socialCaptionHint: "Lunch at @mendocinofarms restaurant in Los Angeles."
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
+        XCTAssertEqual(placeResolver.manualInputs.first?.name, "mendocino farms")
+    }
+
     func testUsesCoverFrameTextWhenTheSocialCaptionHasNoPlaceName() async throws {
         let candidate = placeImportCandidate(name: "Mendocino Farms")
         let metadata = SocialImportMetadata(

@@ -574,6 +574,7 @@ struct WanderRootView: View {
             drainSharedPlaceImports()
             importStore.resumePendingImports()
             reconcilePlaceImports()
+            handleAutomaticSharedPlaceImports()
             publishWidgetSnapshot()
             refreshNearbyWidgetSnapshot()
             await pushNotifications.refreshAuthorizationStatus()
@@ -627,6 +628,9 @@ struct WanderRootView: View {
                 restoredPlaceSaveDraftOwnerID = nil
             }
             applyAuthStateIfNeeded(state)
+            if state.isSignedIn {
+                drainSharedPlaceImports()
+            }
             publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: state)
@@ -682,6 +686,11 @@ struct WanderRootView: View {
         .onChange(of: importStore.items) { _, _ in
             guard isSessionValidated else { return }
             reconcilePlaceImports()
+            handleAutomaticSharedPlaceImports()
+        }
+        .onChange(of: importStore.batches) { _, _ in
+            guard isSessionValidated else { return }
+            handleAutomaticSharedPlaceImports()
         }
         .onChange(of: importStore.summary.hasPendingImports) { _, _ in
             guard addSheetDetent != .large else { return }
@@ -857,6 +866,10 @@ struct WanderRootView: View {
     }
 
     private func drainSharedPlaceImports() {
+        guard SharedPlaceImportDrainPolicy.canDrain(
+            isSessionValidated: isSessionValidated,
+            isSignedIn: auth.isSignedIn
+        ) else { return }
         guard let inbox = try? SharedPlaceImportInbox.live() else { return }
         let report = SharedPlaceImportInboxDrainer.drain(
             inbox: inbox,

@@ -107,6 +107,7 @@
 		7AE6B55E9D5E343894865F0B /* ExtractionCandidateFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9E0413D74DC5421A150467 /* ExtractionCandidateFilterTests.swift */; };
 		7C5DB3131D4202BEA9F16D27 /* WanderNearbyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D8130F094346B277D53F8733 /* WanderNearbyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7D8ED2DDE879BB97894C67E5 /* WanderShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DD3F0D58920B1D355AB2E8DB /* WanderShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7DEF7563B13704B7AA76A6D2 /* ShareExtensionItemLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 249294F471250D2DE675EDA8 /* ShareExtensionItemLoader.swift */; };
 		7EA0CEE2490A8C95F486A1F3 /* ListPlacePhotoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 693C10045243D1D398714042 /* ListPlacePhotoTests.swift */; };
 		7EAAF1336D42DE0DB9D236F9 /* AddScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB7720F9AA05786E6D66C6D1 /* AddScreen.swift */; };
 		7EB2D803677BEB26C58F3C02 /* WanderWidgetLaunchRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117EAEC1389AE3A61BBEE3C1 /* WanderWidgetLaunchRequest.swift */; };
@@ -149,6 +150,7 @@
 		B84BABB0A3FC62E816F68710 /* PostHogAnalyticsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A3B6E88CE5E045D8FA3403 /* PostHogAnalyticsClient.swift */; };
 		B9316725D9B7600BBCA51692 /* PlacePhotoCarouselMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BC2B6B7EBCC7219D1EDB524 /* PlacePhotoCarouselMockups.swift */; };
 		B93A6A9228FB03C85F8DC2F0 /* SaveStreakTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7550C652E50A85ADBBDDCFC /* SaveStreakTests.swift */; };
+		B9B87807B29E79DE972D056F /* ShareExtensionItemLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 249294F471250D2DE675EDA8 /* ShareExtensionItemLoader.swift */; };
 		BA4B6ADEA88EC07C1D231D7F /* rec-225-trusted-place-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 92B51226DAD7E3D05BC0BE52 /* rec-225-trusted-place-search-pre.json */; };
 		BC07AB3F1E3B95100DB6F3F0 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF55A883DB97E39A4A2D85F2 /* MapScreen.swift */; };
 		BC27BD6C9E2995A175F52958 /* ProfileMetadataTagParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF4AB698D7C8717206FB36A4 /* ProfileMetadataTagParserTests.swift */; };
@@ -276,6 +278,7 @@
 		1F632D2BDC390C70FD727599 /* rec-195-copy-rotation-analytics-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-copy-rotation-analytics-pre.json"; sourceTree = "<group>"; };
 		21979B6601194E839F12552D /* SupabaseDTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseDTOs.swift; sourceTree = "<group>"; };
 		239D0D23B8EE7628FE0F2C5C /* PlaceRatingExplanation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceRatingExplanation.swift; sourceTree = "<group>"; };
+		249294F471250D2DE675EDA8 /* ShareExtensionItemLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareExtensionItemLoader.swift; sourceTree = "<group>"; };
 		249D58D889C2DFE7795EB7C6 /* PlacePhotoCarouselMockupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoCarouselMockupTests.swift; sourceTree = "<group>"; };
 		250A52345423E83FCB445CEE /* InviteFrameworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFrameworkTests.swift; sourceTree = "<group>"; };
 		260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverParserTests.swift; sourceTree = "<group>"; };
@@ -515,6 +518,7 @@
 			isa = PBXGroup;
 			children = (
 				0A294B4D596A37D263243FAF /* SharedPlaceImportInbox.swift */,
+				249294F471250D2DE675EDA8 /* ShareExtensionItemLoader.swift */,
 			);
 			path = WanderImportShared;
 			sourceTree = "<group>";
@@ -1176,6 +1180,7 @@
 				FC37BACBA2619692E8814305 /* SaveStreakCelebrationView.swift in Sources */,
 				03435FEBB745514BF4E77424 /* SaveStreakReminder.swift in Sources */,
 				13E758A98CE1235F8E35D5C9 /* SettingsScreen.swift in Sources */,
+				7DEF7563B13704B7AA76A6D2 /* ShareExtensionItemLoader.swift in Sources */,
 				18622774B25BD7DAE231ADE4 /* SharedPlaceImportInbox.swift in Sources */,
 				F4FB6BEEE27D8866E2FA6187 /* SharedPlaceImportInboxDrainer.swift in Sources */,
 				9A2B61C3874341AE3A94072F /* SharedVisitComponents.swift in Sources */,
@@ -1228,6 +1233,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B9B87807B29E79DE972D056F /* ShareExtensionItemLoader.swift in Sources */,
 				C500C85EDAC2AC11197F7CC8 /* ShareViewController.swift in Sources */,
 				489B81B85CE01E5443268DAF /* SharedPlaceImportInbox.swift in Sources */,
 			);

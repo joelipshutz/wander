@@ -280,6 +280,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
     let longitude: Double?
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
+    let socialCaptionHint: String?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -291,7 +292,8 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         latitude: Double? = nil,
         longitude: Double? = nil,
         sourceProvider: String? = nil,
-        sourceProviderPlaceID: String? = nil
+        sourceProviderPlaceID: String? = nil,
+        socialCaptionHint: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -303,6 +305,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         self.longitude = longitude
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.socialCaptionHint = socialCaptionHint
     }
 }
 
@@ -318,6 +321,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var processedCount: Int
     var destinationListID: String?
     var receipt: PlaceImportReceipt?
+    var autoSaveWhenReady: Bool?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -330,7 +334,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         totalCount: Int,
         processedCount: Int = 0,
         destinationListID: String? = nil,
-        receipt: PlaceImportReceipt? = nil
+        receipt: PlaceImportReceipt? = nil,
+        autoSaveWhenReady: Bool? = nil
     ) {
         self.id = id
         self.source = source
@@ -343,11 +348,12 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.processedCount = processedCount
         self.destinationListID = destinationListID
         self.receipt = receipt
+        self.autoSaveWhenReady = autoSaveWhenReady
     }
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
-    static let currentResolverVersion = 7
+    static let currentResolverVersion = 8
 
     let id: String
     let batchID: String

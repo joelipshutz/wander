@@ -176,7 +176,10 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     ) async throws -> PlaceImportResolution {
         let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
         try Task.checkCancellation()
-        guard let metadata = fetchedMetadata else {
+        guard let metadata = socialMetadata(
+            fetched: fetchedMetadata,
+            capturedCaption: seed.socialCaptionHint
+        ) else {
             return .needsHelp(
                 "This public post did not expose a caption or cover image. Check the link and retry automatic matching."
             )
@@ -354,6 +357,34 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         }
         return .needsHelp(
             "No confident place match was found from this post's caption or cover image. Retry automatic matching."
+        )
+    }
+
+    private func socialMetadata(
+        fetched: SocialImportMetadata?,
+        capturedCaption: String?
+    ) -> SocialImportMetadata? {
+        let capturedCaption = normalized(capturedCaption)
+        guard fetched != nil || capturedCaption != nil else { return nil }
+        guard let fetched else {
+            return SocialImportMetadata(
+                title: nil,
+                caption: capturedCaption,
+                authorName: nil,
+                thumbnailURL: nil
+            )
+        }
+        var seen = Set<String>()
+        let caption = [capturedCaption, fetched.caption]
+            .compactMap { normalized($0) }
+            .filter { seen.insert($0).inserted }
+            .joined(separator: "\n")
+        return SocialImportMetadata(
+            title: fetched.title,
+            caption: caption.isEmpty ? nil : caption,
+            authorName: fetched.authorName,
+            thumbnailURL: fetched.thumbnailURL,
+            mediaItems: fetched.mediaItems
         )
     }
 
@@ -584,7 +615,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             latitude: candidate?.latitude,
             longitude: candidate?.longitude,
             sourceProvider: candidate?.sourceProvider,
-            sourceProviderPlaceID: candidate?.sourceProviderPlaceID
+            sourceProviderPlaceID: candidate?.sourceProviderPlaceID,
+            socialCaptionHint: original.socialCaptionHint
         )
     }
 
@@ -767,7 +799,8 @@ final class PlaceImportStore: ObservableObject {
                     nameHint: nil,
                     areaHint: nil,
                     sourceURLString: sourceURLString,
-                    sourceLine: item.seed.sourceLine
+                    sourceLine: item.seed.sourceLine,
+                    socialCaptionHint: item.seed.socialCaptionHint
                 )
             }
 
@@ -851,6 +884,49 @@ final class PlaceImportStore: ObservableObject {
         items.append(contentsOf: seeds.map { seed in
             PlaceImportItem(batchID: batch.id, source: source, seed: seed)
         })
+        persist()
+        startProcessing(batchID: batch.id)
+        return batch.id
+    }
+
+    @discardableResult
+    func enqueueSharedSocialLink(
+        source: PlaceImportSource,
+        urlString: String,
+        caption: String?,
+        sourceName: String?,
+        captureDeliveryID: String
+    ) throws -> String {
+        if let existingBatch = batches.first(where: { $0.captureDeliveryID == captureDeliveryID }) {
+            return existingBatch.id
+        }
+        guard [.instagram, .tiktok].contains(source),
+              let url = URL(string: urlString),
+              ["http", "https"].contains(url.scheme?.lowercased()),
+              url.host?.isEmpty == false
+        else {
+            throw PlaceImportParsingError.noPlacesFound
+        }
+        let trimmedCaption = caption?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCaption = trimmedCaption?.isEmpty == false ? trimmedCaption : nil
+        let batch = PlaceImportBatch(
+            source: source,
+            sourceName: sourceName,
+            captureDeliveryID: captureDeliveryID,
+            totalCount: 1,
+            autoSaveWhenReady: true
+        )
+        let seed = PlaceImportSeed(
+            rawText: url.absoluteString,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: url.absoluteString,
+            sourceLine: 1,
+            socialCaptionHint: normalizedCaption
+        )
+        batches.append(batch)
+        items.append(PlaceImportItem(batchID: batch.id, source: source, seed: seed))
         persist()
         startProcessing(batchID: batch.id)
         return batch.id
@@ -1093,7 +1169,8 @@ final class PlaceImportStore: ObservableObject {
             latitude: existingSeed.latitude,
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
-            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
+            socialCaptionHint: existingSeed.socialCaptionHint
         )
 
         do {
@@ -1150,7 +1227,8 @@ final class PlaceImportStore: ObservableObject {
             latitude: existingSeed.latitude,
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
-            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
+            socialCaptionHint: existingSeed.socialCaptionHint
         )
         items[index].pendingManualSearch = nil
         items[index].candidates = candidates
@@ -1178,7 +1256,8 @@ final class PlaceImportStore: ObservableObject {
             latitude: existingSeed.latitude,
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
-            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
+            socialCaptionHint: existingSeed.socialCaptionHint
         )
         items[index].candidates = []
         items[index].selectedCandidateID = nil

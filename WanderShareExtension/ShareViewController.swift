@@ -1,15 +1,23 @@
 import UIKit
-import UniformTypeIdentifiers
 
 final class ShareViewController: UIViewController {
+    private enum State {
+        case loading
+        case saved
+        case failed
+    }
+
+    private let sourceLabel = UILabel()
+    private let previewLabel = UILabel()
     private let statusLabel = UILabel()
-    private let captureButton = UIButton(type: .system)
+    private let primaryButton = UIButton(type: .system)
     private var inputs: [SharedPlaceImportCaptureInput] = []
+    private var state: State = .loading
 
     override func viewDidLoad() {
         super.viewDidLoad()
         configureView()
-        loadSharedItems()
+        loadAndCaptureSharedItems()
     }
 
     private func configureView() {
@@ -21,7 +29,7 @@ final class ShareViewController: UIViewController {
         icon.setContentHuggingPriority(.required, for: .horizontal)
 
         let titleLabel = UILabel()
-        titleLabel.text = "Save places to rec.me"
+        titleLabel.text = "Saving to rec.me"
         titleLabel.font = .systemFont(ofSize: 22, weight: .black)
         titleLabel.textColor = UIColor(red: 0.15, green: 0.13, blue: 0.11, alpha: 1)
         titleLabel.adjustsFontForContentSizeCategory = true
@@ -31,30 +39,51 @@ final class ShareViewController: UIViewController {
         header.alignment = .center
         header.spacing = 12
 
-        statusLabel.text = "Checking what was shared…"
+        sourceLabel.text = "Reading shared post…"
+        sourceLabel.font = .systemFont(ofSize: 16, weight: .bold)
+        sourceLabel.textColor = UIColor(red: 0.15, green: 0.13, blue: 0.11, alpha: 1)
+        sourceLabel.numberOfLines = 1
+        sourceLabel.adjustsFontForContentSizeCategory = true
+
+        previewLabel.text = "We’ll keep the link and any caption the app shared."
+        previewLabel.font = .preferredFont(forTextStyle: .subheadline)
+        previewLabel.textColor = UIColor(red: 0.36, green: 0.33, blue: 0.29, alpha: 1)
+        previewLabel.numberOfLines = 3
+        previewLabel.adjustsFontForContentSizeCategory = true
+
+        let previewStack = UIStackView(arrangedSubviews: [sourceLabel, previewLabel])
+        previewStack.axis = .vertical
+        previewStack.spacing = 5
+        previewStack.isLayoutMarginsRelativeArrangement = true
+        previewStack.layoutMargins = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        previewStack.backgroundColor = .white
+        previewStack.layer.cornerRadius = 16
+        previewStack.layer.borderWidth = 1
+        previewStack.layer.borderColor = UIColor(red: 0.88, green: 0.84, blue: 0.76, alpha: 1).cgColor
+
+        statusLabel.text = "Saving privately as Wanna…"
         statusLabel.font = .preferredFont(forTextStyle: .body)
         statusLabel.textColor = UIColor(red: 0.36, green: 0.33, blue: 0.29, alpha: 1)
         statusLabel.numberOfLines = 0
         statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.accessibilityIdentifier = "share-extension-status"
 
-        captureButton.configuration = .filled()
-        captureButton.configuration?.title = "Add to rec.me"
-        captureButton.configuration?.image = UIImage(systemName: "arrow.down.doc.fill")
-        captureButton.configuration?.imagePadding = 8
-        captureButton.configuration?.baseBackgroundColor = UIColor(
+        primaryButton.configuration = .filled()
+        primaryButton.configuration?.title = "Saving…"
+        primaryButton.configuration?.showsActivityIndicator = true
+        primaryButton.configuration?.baseBackgroundColor = UIColor(
             red: 0.78,
             green: 0.29,
             blue: 0.18,
             alpha: 1
         )
-        captureButton.configuration?.baseForegroundColor = .white
-        captureButton.configuration?.cornerStyle = .capsule
-        captureButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
-        captureButton.isEnabled = false
-        captureButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
-        captureButton.addTarget(self, action: #selector(captureSharedItems), for: .touchUpInside)
-        captureButton.accessibilityIdentifier = "share-extension-capture"
+        primaryButton.configuration?.baseForegroundColor = .white
+        primaryButton.configuration?.cornerStyle = .capsule
+        primaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
+        primaryButton.isEnabled = false
+        primaryButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
+        primaryButton.addTarget(self, action: #selector(primaryAction), for: .touchUpInside)
+        primaryButton.accessibilityIdentifier = "share-extension-primary"
 
         let cancelButton = UIButton(type: .system)
         cancelButton.setTitle("Cancel", for: .normal)
@@ -63,27 +92,34 @@ final class ShareViewController: UIViewController {
         cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         cancelButton.addTarget(self, action: #selector(cancelShare), for: .touchUpInside)
 
-        let actions = UIStackView(arrangedSubviews: [captureButton, cancelButton])
+        let actions = UIStackView(arrangedSubviews: [primaryButton, cancelButton])
         actions.axis = .vertical
         actions.spacing = 8
 
-        let content = UIStackView(arrangedSubviews: [header, statusLabel, actions])
+        let content = UIStackView(arrangedSubviews: [header, previewStack, statusLabel, actions])
         content.translatesAutoresizingMaskIntoConstraints = false
         content.axis = .vertical
-        content.spacing = 20
-        content.setCustomSpacing(28, after: statusLabel)
+        content.spacing = 16
+        content.setCustomSpacing(20, after: statusLabel)
         view.addSubview(content)
 
         NSLayoutConstraint.activate([
             content.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
             content.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
-            content.topAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
-            content.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            content.topAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            content.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
             content.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor)
         ])
     }
 
-    private func loadSharedItems() {
+    private func loadAndCaptureSharedItems() {
+        state = .loading
+        primaryButton.isEnabled = false
+        primaryButton.configuration?.title = "Saving…"
+        primaryButton.configuration?.showsActivityIndicator = true
+        statusLabel.text = "Saving privately as Wanna…"
+        statusLabel.textColor = UIColor(red: 0.36, green: 0.33, blue: 0.29, alpha: 1)
+
         guard let extensionContext else {
             showError(SharedPlaceImportInboxError.noSupportedContent.localizedDescription)
             return
@@ -94,8 +130,8 @@ final class ShareViewController: UIViewController {
                 switch result {
                 case .success(let inputs):
                     self.inputs = inputs
-                    self.statusLabel.text = Self.readyMessage(for: inputs)
-                    self.captureButton.isEnabled = true
+                    self.showPreview(for: inputs)
+                    self.captureSharedItems()
                 case .failure(let error):
                     self.showError(
                         (error as? LocalizedError)?.errorDescription
@@ -106,26 +142,41 @@ final class ShareViewController: UIViewController {
         }
     }
 
-    @objc
-    private func captureSharedItems() {
-        captureButton.isEnabled = false
-        statusLabel.text = "Adding this to your import inbox…"
+    private func showPreview(for inputs: [SharedPlaceImportCaptureInput]) {
+        let summary = SharedPlaceImportCaptureSummary(inputs: inputs)
+        sourceLabel.text = summary.title
+        previewLabel.text = summary.detail ?? "Public link captured"
+    }
 
+    private func captureSharedItems() {
         do {
             let inbox = try SharedPlaceImportInbox.live()
             try inbox.capture(inputs)
-            statusLabel.text = "Added. Open rec.me to match and review your places."
-            captureButton.configuration?.title = "Added to rec.me"
-            captureButton.configuration?.image = UIImage(systemName: "checkmark.circle.fill")
+            state = .saved
+            statusLabel.text = "Saved to rec.me. We’ll match it as Wanna when you open the app—or hold it safely until you log in."
+            primaryButton.configuration?.title = "Done"
+            primaryButton.configuration?.image = UIImage(systemName: "checkmark.circle.fill")
+            primaryButton.configuration?.imagePadding = 8
+            primaryButton.configuration?.showsActivityIndicator = false
+            primaryButton.isEnabled = true
             UIAccessibility.post(notification: .announcement, argument: statusLabel.text)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
-                self?.extensionContext?.completeRequest(returningItems: nil)
-            }
         } catch {
             showError(
                 (error as? LocalizedError)?.errorDescription
                     ?? "rec.me could not save this share. Try again."
             )
+        }
+    }
+
+    @objc
+    private func primaryAction() {
+        switch state {
+        case .saved:
+            extensionContext?.completeRequest(returningItems: nil)
+        case .failed:
+            loadAndCaptureSharedItems()
+        case .loading:
+            break
         }
     }
 
@@ -140,217 +191,14 @@ final class ShareViewController: UIViewController {
     }
 
     private func showError(_ message: String) {
+        state = .failed
         statusLabel.text = message
         statusLabel.textColor = UIColor(red: 0.66, green: 0.17, blue: 0.13, alpha: 1)
-        captureButton.isEnabled = false
+        primaryButton.configuration?.title = "Try again"
+        primaryButton.configuration?.image = UIImage(systemName: "arrow.clockwise")
+        primaryButton.configuration?.imagePadding = 8
+        primaryButton.configuration?.showsActivityIndicator = false
+        primaryButton.isEnabled = true
         UIAccessibility.post(notification: .announcement, argument: message)
-    }
-
-    private static func readyMessage(for inputs: [SharedPlaceImportCaptureInput]) -> String {
-        let fileCount = inputs.filter {
-            if case .file = $0 { return true }
-            return false
-        }.count
-        let textCount = inputs.count - fileCount
-        if fileCount > 0, textCount > 0 {
-            return "\(textCount) link or text item\(textCount == 1 ? "" : "s") and \(fileCount) file\(fileCount == 1 ? "" : "s") are ready."
-        }
-        if fileCount > 0 {
-            return "\(fileCount) supported file\(fileCount == 1 ? " is" : "s are") ready."
-        }
-        return "\(textCount) link or text item\(textCount == 1 ? " is" : "s are") ready."
-    }
-}
-
-private enum ShareExtensionItemLoader {
-    private final class Callback<Value>: @unchecked Sendable {
-        let call: (Value) -> Void
-
-        init(_ call: @escaping (Value) -> Void) {
-            self.call = call
-        }
-    }
-
-    static func load(
-        from contextItems: [Any],
-        completion: @escaping (Result<[SharedPlaceImportCaptureInput], Error>) -> Void
-    ) {
-        let providers = contextItems
-            .compactMap { $0 as? NSExtensionItem }
-            .flatMap { $0.attachments ?? [] }
-        guard !providers.isEmpty else {
-            completion(.failure(SharedPlaceImportInboxError.noSupportedContent))
-            return
-        }
-        guard providers.count <= SharedPlaceImportInbox.maximumItemCount else {
-            completion(.failure(SharedPlaceImportInboxError.tooManyItems))
-            return
-        }
-        load(providers: providers, at: 0, accumulated: [], completion: completion)
-    }
-
-    private static func load(
-        providers: [NSItemProvider],
-        at index: Int,
-        accumulated: [SharedPlaceImportCaptureInput],
-        completion: @escaping (Result<[SharedPlaceImportCaptureInput], Error>) -> Void
-    ) {
-        guard index < providers.count else {
-            guard !accumulated.isEmpty else {
-                completion(.failure(SharedPlaceImportInboxError.noSupportedContent))
-                return
-            }
-            completion(.success(accumulated))
-            return
-        }
-
-        load(provider: providers[index]) { result in
-            switch result {
-            case .success(let input):
-                load(
-                    providers: providers,
-                    at: index + 1,
-                    accumulated: input.map { accumulated + [$0] } ?? accumulated,
-                    completion: completion
-                )
-            case .failure(let error):
-                completion(.failure(error))
-            }
-        }
-    }
-
-    private static func load(
-        provider: NSItemProvider,
-        completion: @escaping (Result<SharedPlaceImportCaptureInput?, Error>) -> Void
-    ) {
-        let callback = Callback(completion)
-        let suggestedName = provider.suggestedName
-
-        if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-            provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, error in
-                if let error {
-                    callback.call(.failure(error))
-                    return
-                }
-                guard let url = Self.url(from: item) else {
-                    callback.call(.success(nil))
-                    return
-                }
-                if url.isFileURL {
-                    callback.call(Self.fileInput(from: url, fileName: suggestedName))
-                } else {
-                    callback.call(
-                        .success(
-                            .text(url.absoluteString, suggestedName: suggestedName)
-                        )
-                    )
-                }
-            }
-            return
-        }
-
-        if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-            provider.loadItem(
-                forTypeIdentifier: UTType.plainText.identifier,
-                options: nil
-            ) { item, error in
-                if let error {
-                    callback.call(.failure(error))
-                    return
-                }
-                guard let text = Self.text(from: item) else {
-                    callback.call(.success(nil))
-                    return
-                }
-                callback.call(.success(.text(text, suggestedName: suggestedName)))
-            }
-            return
-        }
-
-        guard let typeIdentifier = supportedFileTypeIdentifier(for: provider) else {
-            callback.call(.success(nil))
-            return
-        }
-        provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, error in
-            if let error {
-                callback.call(.failure(error))
-                return
-            }
-            guard let url else {
-                callback.call(.failure(SharedPlaceImportInboxError.missingAttachment))
-                return
-            }
-            callback.call(
-                Self.fileInput(
-                    from: url,
-                    fileName: suggestedName,
-                    contentTypeIdentifier: typeIdentifier
-                )
-            )
-        }
-    }
-
-    private static func supportedFileTypeIdentifier(for provider: NSItemProvider) -> String? {
-        let supportedTypes: [UTType] = [
-            .commaSeparatedText,
-            .json,
-            .plainText,
-            .rtf,
-            UTType(filenameExtension: "md") ?? .plainText
-        ]
-        return provider.registeredTypeIdentifiers.first { identifier in
-            guard let type = UTType(identifier) else { return false }
-            return supportedTypes.contains(where: { type.conforms(to: $0) })
-        }
-    }
-
-    private static func fileInput(
-        from url: URL,
-        fileName: String?,
-        contentTypeIdentifier: String? = nil
-    ) -> Result<SharedPlaceImportCaptureInput?, Error> {
-        do {
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey])
-            if let fileSize = values?.fileSize,
-               fileSize > SharedPlaceImportInbox.maximumFileBytes {
-                throw SharedPlaceImportInboxError.fileTooLarge
-            }
-            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-            return .success(
-                .file(
-                    data,
-                    fileName: fileName ?? url.lastPathComponent,
-                    contentTypeIdentifier: contentTypeIdentifier
-                )
-            )
-        } catch {
-            return .failure(error)
-        }
-    }
-
-    private static func url(from item: NSSecureCoding?) -> URL? {
-        if let url = item as? URL {
-            return url
-        }
-        if let url = item as? NSURL {
-            return url as URL
-        }
-        if let string = item as? String {
-            return URL(string: string)
-        }
-        return nil
-    }
-
-    private static func text(from item: NSSecureCoding?) -> String? {
-        if let string = item as? String {
-            return string
-        }
-        if let attributed = item as? NSAttributedString {
-            return attributed.string
-        }
-        if let data = item as? Data {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
     }
 }
