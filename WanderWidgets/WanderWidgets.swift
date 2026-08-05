@@ -445,7 +445,7 @@ private struct WanderActivityCalendarWidget: Widget {
             WanderActivityCalendarWidgetView(entry: entry)
         }
         .configurationDisplayName("Activity calendar")
-        .description("See your been activity for the current month.")
+        .description("See your check-in activity for the current month.")
         .supportedFamilies([.systemLarge])
     }
 }
@@ -541,20 +541,22 @@ private struct WanderActivityCalendarWidgetView: View {
 
             Spacer(minLength: 8)
 
-            Text("\(model.beenCount) been")
+            Text(
+                "\(model.beenCount) \(model.beenCount == 1 ? "check-in" : "check-ins")"
+            )
                 .foregroundStyle(WanderWidgetPalette.terracottaDark)
                 .font(.caption2.weight(.black))
                 .fontDesign(.rounded)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(model.monthTitle). Been: \(model.beenCount)."
+            "\(model.monthTitle). Check-ins: \(model.beenCount)."
         )
     }
 
     private var footer: some View {
         HStack(spacing: 10) {
-            WanderCalendarLegendItem(state: .been, title: "been")
+            WanderCalendarLegendItem(state: .been, title: "check-in")
 
             Spacer(minLength: 2)
 
@@ -570,7 +572,7 @@ private struct WanderActivityCalendarWidgetView: View {
         .accessibilityLabel(
             model.needsRefresh
                 ? "Calendar has not synced yet. Open rec.me to update."
-                : "Calendar legend: filled is been."
+                : "Calendar legend: filled dates have check-ins."
         )
     }
 }
@@ -645,7 +647,7 @@ private struct WanderCalendarDayCell: View {
         guard let snapshot, snapshot.beenCount > 0 else {
             return "\(dateLabel)\(todayLabel), no activity"
         }
-        return "\(dateLabel)\(todayLabel). Been: \(snapshot.beenCount)."
+        return "\(dateLabel)\(todayLabel). Check-ins: \(snapshot.beenCount)."
     }
 }
 

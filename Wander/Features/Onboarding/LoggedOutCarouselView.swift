@@ -20,7 +20,7 @@ struct OnboardingCarouselSlide: Identifiable, Equatable {
             id: 0,
             imageName: "OnboardingMapDiary",
             eyebrow: "YOUR PLACE DIARY",
-            title: "Keep track of everywhere you’ve been",
+            title: "Keep track of every place you check in",
             body: "Build a map of the places worth remembering — with notes that bring every visit back."
         ),
         OnboardingCarouselSlide(
