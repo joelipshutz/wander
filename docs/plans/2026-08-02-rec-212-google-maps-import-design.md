@@ -565,7 +565,7 @@ Database constraints enforce the idempotency and scheduling contract rather than
 - Unique `(owner_user_id, client_request_id)` plus the stored `create_request_hash` makes batch creation replay-safe and detects conflicting reuse.
 - Unique `(batch_id, source_item_key_hash)` prevents one normalized source item from appearing twice in the same batch.
 - `save_operation_id` and `membership_operation_id` are independently unique. Membership identity includes destination generation so a repaired destination cannot collide with the original membership operation.
-- A partial unique index on `owner_user_id` where `state = 'committing'` enforces one committing batch per owner. Losing the race returns a retryable queued/invalid-state result instead of violating the constraint.
+- A partial unique index on `owner_user_id` where `state = 'committing'` enforces one committing batch per owner. A batch that loses the race remains `ready_to_confirm` and receives `invalid_state` or `rate_limited` with retry guidance instead of exposing the constraint error.
 - Worker claim indexes cover claimable item state, `next_attempt_at`, and stable ordinal ordering. Read indexes cover `(batch_id, ordinal)` paging and `(owner_user_id, source_list_key_hash)` re-import lookup.
 
 Before Gate 2, hosted query-plan checks and multi-user load tests must prove these indexes are used as historical import rows accumulate.
