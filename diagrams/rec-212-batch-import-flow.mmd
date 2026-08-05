@@ -1,0 +1,31 @@
+graph TD
+  AD["Import-focused ad"] --> ACQ
+  ON["Onboarding"] --> ACQ
+  ADD["Add or Share"] --> ACQ
+
+  ACQ["Paste or share<br/>Google Maps list"] --> RES["Resolve places<br/>and detect duplicates"]
+  RES --> REVIEW["Batch review<br/>34 ready - 3 need help<br/>Default: Wanna"]
+
+  REVIEW -->|"Happy path"| ADDALL["Add 34 of 37 places<br/>31 Wanna - 3 Check-ins - 3 need help"]
+  ADDALL --> DONE["Places available<br/>Map + private source list"]
+
+  REVIEW -.->|"Optional"| EXPAND["Expand one place<br/>No per-row save"]
+  EXPAND -.-> STATUS["Choose status<br/>Wanna = save for later<br/>Check-in = I have been"]
+  STATUS -.-> DETAILS["Optional details<br/>rating - visit date - note"]
+  DETAILS -.->|"Stage changes"| REVIEW
+
+  REVIEW -.->|"Only exceptions"| HELP["Places needing help"]
+  HELP -.-> FIX["Match or skip"]
+  FIX -.-> REVIEW
+
+  classDef entry fill:#F7F1E8,stroke:#30302E,color:#1F1F1E,stroke-width:1px;
+  classDef primary fill:#F7D8C6,stroke:#B85F3C,color:#2A211D,stroke-width:2px;
+  classDef action fill:#242422,stroke:#242422,color:#FFFFFF,stroke-width:2px;
+  classDef optional fill:#FFFFFF,stroke:#77736D,color:#33312E,stroke-width:1px,stroke-dasharray:5 4;
+  classDef success fill:#E6EFE4,stroke:#4E744C,color:#203120,stroke-width:2px;
+
+  class AD,ON,ADD,ACQ,RES entry;
+  class REVIEW primary;
+  class ADDALL action;
+  class DONE success;
+  class EXPAND,STATUS,DETAILS,HELP,FIX optional;
