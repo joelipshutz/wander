@@ -7,6 +7,11 @@ Status: EXPLORATION — NOT APPROVED
 Mode: Startup  
 Linear: [REC-212](https://linear.app/recme/issue/REC-212/explore-google-maps-list-import-flows-from-ads-and-onboarding)
 
+Flow diagrams:
+
+- `diagrams/rec-212-adaptive-import-routing.mmd`
+- `diagrams/rec-212-batch-import-flow.mmd`
+
 ## Problem Statement
 
 People already have valuable place collections in Google Maps and regularly share place content from Instagram and TikTok. rec.me currently exposes too much import machinery and asks people to rebuild personal metadata one place at a time. The existing review screen presents a bulk action, then opens the regular save sheet once per item. Importing a 37-place list can therefore require 37 save flows, while sharing one Instagram or TikTok post can still dump the user into a disproportionately heavy inbox/review experience.
