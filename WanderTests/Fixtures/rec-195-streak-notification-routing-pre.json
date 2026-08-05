@@ -1,0 +1,15 @@
+{
+  "issue": "REC-195",
+  "captured_at": "2026-08-01T20:49:00-07:00",
+  "source": "Tester report from a physical notification tap",
+  "precondition": [
+    "The signed-in user opens Profile > Settings > Notifications",
+    "The user schedules the DEBUG five-second save-streak reminder",
+    "The app is backgrounded while the Notifications sheet is visible",
+    "The delivered save-streak notification is tapped"
+  ],
+  "observed": "rec.me foregrounds back on Settings > Notifications instead of opening the I'm Here Now capture flow.",
+  "expected": "Dismiss the nested Settings presentation completely, select Map, and present Add directly on I'm Here Now.",
+  "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration",
+  "screenshot_capture": "unavailable: the tester supplied the behavioral result without a screenshot"
+}

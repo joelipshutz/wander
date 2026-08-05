@@ -1,0 +1,16 @@
+{
+  "issue": "REC-195",
+  "captured_at": "2026-08-02T02:20:00-07:00",
+  "source": "Tester report plus source-level pending-request trace",
+  "precondition": [
+    "The signed-in user opens Profile > Settings > Notifications",
+    "Save streak reminders is enabled",
+    "The user taps send test streak reminder",
+    "A save-streak reconciliation overlaps the five-second DEBUG delay"
+  ],
+  "observed": "No local notification is delivered.",
+  "root_cause_evidence": "reconcileSaveStreakReminder removes every pending request whose identifier starts with recme.save-streak-reminder.; that set includes recme.save-streak-reminder.debug, so an overlapping reconciliation cancels the test request before it fires.",
+  "expected": "Production reminder reconciliation must replace only recme.save-streak-reminder.daily and leave the DEBUG test request pending long enough to deliver.",
+  "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration",
+  "screenshot_capture": "not meaningful for a missing notification; the tester supplied the absence-of-delivery result"
+}

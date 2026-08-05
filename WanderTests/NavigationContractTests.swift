@@ -35,6 +35,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(entry.contains("foregroundRefreshPolicy.didEnterBackground("))
         XCTAssertTrue(entry.contains("case .active:"))
         XCTAssertTrue(entry.contains("foregroundRefreshPolicy.shouldRefreshSession("))
+        XCTAssertTrue(entry.contains("let notificationGateState = AppEntryNotificationGateState("))
+        XCTAssertTrue(entry.contains(".onChange(of: notificationGateState, initial: true)"))
+        XCTAssertTrue(entry.contains("state.synchronize()"))
         XCTAssertFalse(authStore.contains("willEnterForegroundNotification"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
         XCTAssertTrue(root.contains(".task(id: isSessionValidated)"))
@@ -673,8 +676,27 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("mode: .member("))
         XCTAssertTrue(profileScreen.contains("placesInCommon(with: profileID)"))
         XCTAssertTrue(home.contains("if mode.isOwner"))
-        XCTAssertTrue(home.contains("label: \"IN COMMON\""))
+        XCTAssertTrue(home.contains("ProfileInCommonPlacesRow("))
+        XCTAssertTrue(home.contains("See where your maps overlap"))
         XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
+    }
+
+    func testInCommonVisibilityPersistsForMembersButNeverAppearsOnSelfProfile() {
+        let memberMode = ProfileHomeMode.member(relationship: .mutual, inCommonCount: 0)
+
+        XCTAssertEqual(
+            memberMode.visibleInCommonCount(profileID: "user_maya", viewerID: "user_joe"),
+            0
+        )
+        XCTAssertNil(
+            memberMode.visibleInCommonCount(profileID: "user_joe", viewerID: "user_joe")
+        )
+        XCTAssertNil(
+            ProfileHomeMode.owner.visibleInCommonCount(
+                profileID: "user_joe",
+                viewerID: "user_joe"
+            )
+        )
     }
 
     func testSharedProfileHomeHidesUnusedNavigationBar() throws {
@@ -920,6 +942,9 @@ final class NavigationContractTests: XCTestCase {
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
+        let ratingExplanation = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/PlaceRatingExplanation.swift")
+        )
         let feed = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
         )
@@ -936,13 +961,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("design: .serif"))
         XCTAssertTrue(typography.contains(".monospacedDigit()"))
 
-        let overallRatingTiles = try XCTUnwrap(
-            placeProfile.components(separatedBy: "private struct PlaceProfileRatingTile: View").last?
-                .components(separatedBy: "private struct PlaceProfileTagRail: View").first
+        let ratingsRail = try XCTUnwrap(
+            ratingExplanation.components(separatedBy: "struct PlaceProfileRatingsRail: View").last?
+                .components(separatedBy: "struct PlaceRatingInfoButton: View").first
         )
-        XCTAssertTrue(overallRatingTiles.contains("WanderTypography.editorialRatingDisplay"))
-        XCTAssertTrue(overallRatingTiles.contains("WanderTypography.editorialRatingSuffix"))
-        XCTAssertFalse(overallRatingTiles.contains(".font(.system(size: valueFontSize, weight: .black))"))
+        XCTAssertTrue(ratingsRail.contains("WanderTypography.editorialRatingDisplay"))
+        XCTAssertTrue(ratingsRail.contains("WanderTypography.editorialRatingSuffix"))
+        XCTAssertTrue(ratingsRail.contains("WanderTheme.borderHairline.color"))
+        XCTAssertFalse(ratingsRail.contains("WanderTheme.surfaceSand.color"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfileRatingsRail(presentation: presentation)"))
 
         let checkInRatings = try XCTUnwrap(
             placeProfile.components(separatedBy: "private struct PlaceProfileSaveCard: View").last?
@@ -992,6 +1019,19 @@ final class NavigationContractTests: XCTestCase {
         }
     }
 
+    func testNotificationSettingsDoNotExposeTheStreakValidationControl() throws {
+        let settings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/SettingsScreen.swift"
+            )
+        )
+
+        XCTAssertTrue(settings.contains("title: \"Save streak reminders\""))
+        XCTAssertFalse(settings.contains("send test streak reminder"))
+        XCTAssertFalse(settings.contains("settings.notifications.testSaveStreakReminder"))
+        XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
+    }
+
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
         let addScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
@@ -1004,7 +1044,8 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
-        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet(context: context)"))
+        XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet("))
+        XCTAssertTrue(addScreen.contains("context: context"))
         XCTAssertTrue(addScreen.contains("persistNewPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))
@@ -1611,6 +1652,7 @@ final class NavigationContractTests: XCTestCase {
 
     @MainActor
     func testNotificationDestinationsSelectTheirOwningTabs() {
+        XCTAssertEqual(WanderRootView.notificationTab(for: .quickCapture), .map)
         XCTAssertEqual(WanderRootView.notificationTab(for: .people(.friends)), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .drafts(extractionJobID: "job-1")), .profile)
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)
@@ -2382,6 +2424,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(screen.contains("No Been activity"))
         XCTAssertTrue(recentActivity.contains("filteredItems.prefix(6)"))
         XCTAssertTrue(recentActivity.contains("Text(\"See more\")"))
+        XCTAssertTrue(recentActivity.contains("Text(\"Activity\")"))
+        XCTAssertFalse(recentActivity.contains("Text(\"Recent activity\")"))
+        XCTAssertTrue(screen.contains("Saved places and check-ins will appear here"))
+        XCTAssertFalse(screen.contains("Your saved places and check-ins will appear here"))
         XCTAssertTrue(screen.contains("ProfileActivityHistoryScreen("))
         XCTAssertTrue(screen.contains("initialSection: .activity"))
         XCTAssertTrue(
@@ -2389,6 +2435,63 @@ final class NavigationContractTests: XCTestCase {
                 "scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)"
             )
         )
+    }
+
+    func testOtherUserProfileUsesPersistentStandaloneInCommonGlassRowAndOwnerParity() throws {
+        let home = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let screen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let body = try sourceSection(
+            home,
+            after: "struct ProfileOwnerHome: View {",
+            before: "private var identitySection: some View"
+        )
+        let identity = try sourceSection(
+            home,
+            after: "private var identitySection: some View {",
+            before: "private var profileAvatar: some View"
+        )
+        let inCommonRow = try sourceSection(
+            home,
+            after: "private struct ProfileInCommonPlacesRow: View",
+            before: "private struct ProfileGraphCountButton: View"
+        )
+        let monthButton = try sourceSection(
+            home,
+            after: "private struct ProfileMonthButton: View",
+            before: "private struct ProfileCalendarMetric: View"
+        )
+        let mapPicker = try sourceSection(
+            home,
+            after: "private struct ProfileMapSummaryPicker: View",
+            before: "private struct ProfileMapSnapshotView: View"
+        )
+
+        let identityIndex = try XCTUnwrap(body.range(of: "identitySection")?.lowerBound)
+        let inCommonIndex = try XCTUnwrap(body.range(of: "ProfileInCommonPlacesRow")?.lowerBound)
+        let activityIndex = try XCTUnwrap(body.range(of: "ProfileRecentActivitySection")?.lowerBound)
+
+        XCTAssertLessThan(identityIndex, inCommonIndex)
+        XCTAssertLessThan(inCommonIndex, activityIndex)
+        XCTAssertTrue(body.contains("mode.visibleInCommonCount("))
+        XCTAssertTrue(body.contains("profileID: profile.id"))
+        XCTAssertTrue(body.contains("viewerID: viewerProfile.id"))
+        XCTAssertFalse(body.contains("savedPlacesSection"))
+        XCTAssertTrue(inCommonRow.contains("See where your maps overlap"))
+        XCTAssertTrue(inCommonRow.contains(".wanderGlassPanel(cornerRadius: 22)"))
+        XCTAssertTrue(inCommonRow.contains("viewerProfile.avatarURL"))
+        XCTAssertTrue(inCommonRow.contains("profile.avatarURL"))
+        XCTAssertTrue(identity.contains(".wanderGlassPanel(cornerRadius: 22)"))
+        XCTAssertTrue(identity.contains(".wanderGlassCapsule(tone:"))
+        XCTAssertTrue(home.contains("private struct ProfileHeaderActionLabel: View"))
+        XCTAssertTrue(home.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(monthButton.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(mapPicker.contains(".wanderGlassCapsule(tone:"))
+        XCTAssertEqual(screen.components(separatedBy: "recentActivity: profileActivityItems").count - 1, 2)
+        XCTAssertEqual(screen.components(separatedBy: "viewerProfile: store.currentUser").count - 1, 2)
     }
 
     private var projectRoot: URL {

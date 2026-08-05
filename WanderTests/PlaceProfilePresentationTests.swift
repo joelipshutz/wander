@@ -122,19 +122,12 @@ final class PlaceProfilePresentationTests: XCTestCase {
     #endif
 
     func testRatingExplanationCopyDescribesDistinctSignals() {
-        XCTAssertEqual(PlaceRatingExplanation.recMe.title, "rec.me rating")
+        XCTAssertEqual(PlaceRatingExplanation.ratings.title, "Ratings")
         XCTAssertEqual(
-            PlaceRatingExplanation.recMe.message,
-            "The average rating from people you follow who checked in here. Your own rating is shown separately."
+            PlaceRatingExplanation.ratings.message,
+            "Friends rating averages ratings from people you follow who checked in here. If none have rated it, rec.me rating shows the broader community average. Fit score is personalized from your ratings, categories, tags, and people you follow."
         )
-        XCTAssertEqual(PlaceRatingExplanation.recMe.accessibilityLabel, "About the rec.me rating")
-
-        XCTAssertEqual(PlaceRatingExplanation.fit.title, "Fit rating")
-        XCTAssertEqual(
-            PlaceRatingExplanation.fit.message,
-            "A personalized match score based on places you’ve rated, the categories and tags you like, and saves from people you follow."
-        )
-        XCTAssertEqual(PlaceRatingExplanation.fit.accessibilityLabel, "About the Fit rating")
+        XCTAssertEqual(PlaceRatingExplanation.ratings.accessibilityLabel, "About the Ratings")
     }
 
     func testPlacePhotoDecodesProviderTypesForCategoryEnrichment() throws {
@@ -465,7 +458,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let overallRating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
         let ownRating = try XCTUnwrap(PlaceProfilePresenter.ownRating(from: summaries, currentUserID: currentUser.id))
 
-        XCTAssertEqual(overallRating.source, .trusted)
+        XCTAssertEqual(overallRating.source, .friends)
         XCTAssertEqual(overallRating.score, 5)
         XCTAssertEqual(overallRating.count, 1)
         XCTAssertEqual(ownRating.source, .own)
@@ -500,12 +493,12 @@ final class PlaceProfilePresentationTests: XCTestCase {
 
         let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
-        XCTAssertEqual(rating.source, .trusted)
+        XCTAssertEqual(rating.source, .friends)
         XCTAssertEqual(rating.score, 4.5)
         XCTAssertEqual(rating.count, 2)
     }
 
-    func testOverallRatingUsesAggregatedTrustedRatingCounts() throws {
+    func testFriendsRatingWeightsEachFollowedPersonOnce() throws {
         let currentUser = profile(id: "user_joe", handle: "joe")
         let maya = profile(id: "user_maya", handle: "maya")
         let ryan = profile(id: "user_ryan", handle: "ryan")
@@ -517,10 +510,10 @@ final class PlaceProfilePresentationTests: XCTestCase {
 
         let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
-        XCTAssertEqual(rating.source, .trusted)
-        XCTAssertEqual(rating.score, 4.333333333333333, accuracy: 0.0001)
-        XCTAssertEqual(rating.count, 3)
-        XCTAssertEqual(rating.subtitle, "3 ratings")
+        XCTAssertEqual(rating.source, .friends)
+        XCTAssertEqual(rating.score, 4.5, accuracy: 0.0001)
+        XCTAssertEqual(rating.count, 2)
+        XCTAssertEqual(rating.subtitle, "2 people you follow")
     }
 
     func testCurrentUserWannaSaveCanShowTrustedOverallButNoOwnRating() throws {
@@ -535,21 +528,66 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let overallRating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
         XCTAssertNil(PlaceProfilePresenter.ownRating(from: summaries, currentUserID: currentUser.id))
-        XCTAssertEqual(overallRating.source, .trusted)
+        XCTAssertEqual(overallRating.source, .friends)
         XCTAssertEqual(overallRating.score, 5)
     }
 
-    func testOverallRatingDoesNotFallbackToCurrentUsersOwnAggregate() throws {
+    func testOverallRatingUsesCommunityFallbackWhenNoFollowedPersonHasRated() throws {
         let currentUser = profile(id: "user_joe", handle: "joe")
+        let stranger = profile(id: "user_stranger", handle: "stranger")
         let place = place(id: "place_solo", category: "coffee")
         let summaries = [
-            summary(owner: currentUser, place: place, ratingScore: 5, tags: [])
+            summary(
+                owner: stranger,
+                place: place,
+                ratingScore: 2,
+                recommendedScore: 4.2,
+                recommendedCount: 12,
+                viewerFollowsOwner: false,
+                tags: []
+            )
         ]
 
-        let ownRating = try XCTUnwrap(PlaceProfilePresenter.ownRating(from: summaries, currentUserID: currentUser.id))
+        let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
-        XCTAssertNil(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
-        XCTAssertEqual(ownRating.score, 5)
+        XCTAssertEqual(rating.source, .community)
+        XCTAssertEqual(rating.title, "rec.me rating")
+        XCTAssertEqual(rating.score, 4.2)
+        XCTAssertEqual(rating.count, 12)
+    }
+
+    func testFriendsRatingExcludesNonFollowedPeopleEvenWhenTheirRatingIsLoaded() throws {
+        let currentUser = profile(id: "user_joe", handle: "joe")
+        let followed = profile(id: "user_maya", handle: "maya")
+        let stranger = profile(id: "user_stranger", handle: "stranger")
+        let place = place(id: "place_cafe", category: "coffee")
+        let summaries = [
+            summary(
+                owner: followed,
+                place: place,
+                ratingScore: 5,
+                recommendedScore: 2.5,
+                recommendedCount: 20,
+                viewerFollowsOwner: true,
+                tags: []
+            ),
+            summary(
+                owner: stranger,
+                place: place,
+                ratingScore: 1,
+                recommendedScore: 2.5,
+                recommendedCount: 20,
+                viewerFollowsOwner: false,
+                tags: []
+            )
+        ]
+
+        let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
+
+        XCTAssertEqual(rating.source, .friends)
+        XCTAssertEqual(rating.title, "Friends rating")
+        XCTAssertEqual(rating.score, 5)
+        XCTAssertEqual(rating.count, 1)
     }
 
     func testFitRatingIsNilWhenEvidenceIsThin() {
@@ -630,7 +668,9 @@ final class PlaceProfilePresentationTests: XCTestCase {
         place: LocalPlace,
         status: PlaceStatus? = nil,
         ratingScore: Double?,
+        recommendedScore: Double? = nil,
         recommendedCount: Int? = nil,
+        viewerFollowsOwner: Bool = true,
         interestSignal: String? = nil,
         tags: [String]
     ) -> PlaceSaveSummary {
@@ -644,13 +684,13 @@ final class PlaceProfilePresentationTests: XCTestCase {
             visibility: .followers,
             note: nil,
             ratingScore: ratingScore,
-            recommendedScore: ratingScore,
+            recommendedScore: recommendedScore ?? ratingScore,
             recommendedCount: recommendedCount ?? (ratingScore == nil ? 0 : 1),
             sourceType: "test",
             syncState: .synced
         )
         userPlace.ratingScore = ratingScore
-        userPlace.recommendedScore = ratingScore
+        userPlace.recommendedScore = recommendedScore ?? ratingScore
         let visiblePlace = VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
         var attributes: [LocalPlaceAttribute] = []
 
@@ -662,7 +702,11 @@ final class PlaceProfilePresentationTests: XCTestCase {
             attributes.append(attribute(userPlaceID: userPlace.id, key: "\(place.category)_tags", valueType: "multi_tag", values: tags))
         }
 
-        return PlaceSaveSummary(visiblePlace: visiblePlace, attributes: attributes)
+        return PlaceSaveSummary(
+            visiblePlace: visiblePlace,
+            attributes: attributes,
+            viewerFollowsOwner: viewerFollowsOwner
+        )
     }
 
     private func attribute(userPlaceID: String, key: String, valueType: String, value: String) -> LocalPlaceAttribute {

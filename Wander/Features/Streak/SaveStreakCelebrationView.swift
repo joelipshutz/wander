@@ -80,7 +80,8 @@ struct SaveStreakCelebrationView: View {
 
                     SaveStreakWeekCard(
                         streakCount: celebration.streakCount,
-                        saveDate: celebration.saveDate
+                        saveDate: celebration.saveDate,
+                        recoveryDate: celebration.recoveryDate
                     )
                     .frame(maxWidth: 340)
                     .frame(maxWidth: .infinity)
@@ -89,7 +90,7 @@ struct SaveStreakCelebrationView: View {
                     .offset(y: accessibilityReduceMotion || ticketLanded ? 0 : 10)
                     .animation(copyAnimation, value: ticketLanded)
 
-                    Text(SaveStreakCelebrationPresentation.helperText)
+                    Text(SaveStreakCelebrationPresentation.helperText(for: celebration))
                         .font(.body.weight(.medium))
                         .foregroundStyle(WanderTheme.textOnAction.color.opacity(0.72))
                         .multilineTextAlignment(.center)
@@ -257,6 +258,7 @@ private struct SaveStreakTicketCard: View {
 private struct SaveStreakWeekCard: View {
     let streakCount: Int
     let saveDate: Date
+    let recoveryDate: Date?
 
     var body: some View {
         let days = weekdays
@@ -275,12 +277,18 @@ private struct SaveStreakWeekCard: View {
                     ZStack {
                         Circle()
                             .fill(
-                                day.isCovered
-                                    ? WanderTheme.terracotta.color
-                                    : WanderTheme.surfaceSand.color
+                                day.isRecoveryDay
+                                    ? WanderTheme.terracotta.color.opacity(0.2)
+                                    : day.isCovered
+                                        ? WanderTheme.terracotta.color
+                                        : WanderTheme.surfaceSand.color
                             )
 
-                        if day.isCovered {
+                        if day.isRecoveryDay {
+                            Image(systemName: "shield.fill")
+                                .font(.system(size: 10, weight: .black))
+                                .foregroundStyle(WanderTheme.terracottaDark.color)
+                        } else if day.isCovered {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .black))
                                 .foregroundStyle(WanderTheme.textOnAction.color)
@@ -312,13 +320,17 @@ private struct SaveStreakWeekCard: View {
     private var weekdays: [SaveStreakWeekday] {
         SaveStreakCelebrationPresentation.weekdays(
             streakCount: streakCount,
-            endingOn: saveDate
+            endingOn: saveDate,
+            recoveryDate: recoveryDate
         )
     }
 
     private func weekAccessibilityLabel(for days: [SaveStreakWeekday]) -> String {
         let coveredCount = days.filter(\.isCovered).count
-        return "Last \(SaveStreakWindow.dayCount) days. \(coveredCount) days complete. Today complete."
+        let recoveryCopy = days.contains(where: \.isRecoveryDay)
+            ? " One missed day used a Streak Save."
+            : ""
+        return "Last \(SaveStreakWindow.dayCount) days. \(coveredCount) days complete. Today complete.\(recoveryCopy)"
     }
 }
 

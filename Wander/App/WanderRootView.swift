@@ -6,6 +6,7 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case authGate
     case nativeAuth
     case initialPresentation
+    case profileSettings
     case sharedProfile
 }
 
@@ -253,7 +254,7 @@ struct WanderDeepLinkPresentationRegistry {
     }
 }
 
-private struct WanderRootPresentationLifecycle<Content: View>: View {
+struct WanderRootPresentationLifecycle<Content: View>: View {
     let surface: WanderDeepLinkPresentationSurface
     let onPresent: (WanderDeepLinkPresentationToken) -> Void
     let onDismiss: (WanderDeepLinkPresentationToken) -> Void
@@ -318,13 +319,17 @@ struct WanderRootView: View {
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
+    @State private var restoredPlaceSaveDraftOwnerID: String?
+    @State private var interruptedSaveRecoveryMessage: String?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
+    @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
+    private let analytics: AnalyticsClient
 
     init(
         initialTab: WanderTab? = nil,
@@ -342,6 +347,7 @@ struct WanderRootView: View {
         self.isSessionValidated = isSessionValidated
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
+        self.analytics = analytics
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
@@ -359,6 +365,7 @@ struct WanderRootView: View {
         )
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
+        _placeSaveDraftStore = StateObject(wrappedValue: PlaceSaveDraftStore())
         _addSheetDetent = State(
             initialValue: AddSheetLayout.restingDetent(
                 hasPendingImports: importStore.summary.hasPendingImports
@@ -393,7 +400,12 @@ struct WanderRootView: View {
                 visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
                 presentationResetRequest: presentationResetRequest,
                 calendarLaunchRequest: profileCalendarLaunchRequest,
-                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest
+                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
+                onSettingsPresentation: handleDeepLinkPresentation,
+                onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
+                onSettingsDidDismiss: {
+                    handleDeepLinkPresentationDismissal(of: .profileSettings)
+                }
             ) {
                 selectedTab = .discover
             }
@@ -456,6 +468,7 @@ struct WanderRootView: View {
             ) {
                 AddScreen(
                     importStore: importStore,
+                    placeSaveDraftStore: placeSaveDraftStore,
                     resetToken: addTabResetToken,
                     selectedDetent: $addSheetDetent,
                     launchRequest: addLaunchRequest,
@@ -537,6 +550,7 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            restorePlaceSaveDraftIfNeeded()
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
             drainSharedPlaceImports()
@@ -549,11 +563,7 @@ struct WanderRootView: View {
             applyAuthStateIfNeeded(auth.state)
             await refreshWannaGoReminders(for: auth.state)
             guard !Task.isCancelled, isSessionValidated else { return }
-            while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo(
-                for: store.currentUser.id
-            ) {
-                pushNotifications.handleNotificationResponse(userInfo: pendingUserInfo)
-            }
+            drainPendingNotificationResponses()
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didRegisterForRemoteNotifications)) { notification in
             guard isSessionValidated,
@@ -568,14 +578,12 @@ struct WanderRootView: View {
             pushNotifications.handleRegistrationFailure(error)
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveNotificationResponse)) { notification in
-            guard isSessionValidated,
-                  let userInfo = WanderAppDelegate.takePendingNotificationUserInfo(
-                      for: store.currentUser.id
-                  )
-                ?? notification.userInfo?[WanderAppDelegate.userInfoKey] as? [AnyHashable: Any]
-            else { return }
-            pushNotifications.handleNotificationResponse(userInfo: userInfo)
-            scheduleSignedInMaintenance(for: auth.state)
+            #if DEBUG
+            WanderDebugLog.remote.debug("root received notification response session_validated=\(isSessionValidated, privacy: .public)")
+            #endif
+            let fallbackUserInfo = notification.userInfo?[WanderAppDelegate.userInfoKey]
+                as? [AnyHashable: Any]
+            drainPendingNotificationResponses(fallbackUserInfo: fallbackUserInfo)
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveRemoteNotification)) { _ in
             guard isSessionValidated else { return }
@@ -586,10 +594,17 @@ struct WanderRootView: View {
     private var authObservedRoot: some View {
         lifecycleRoot
         .onChange(of: pushNotifications.navigationRequest) { _, request in
+            #if DEBUG
+            WanderDebugLog.remote.debug("root observed notification navigation request destination=\(String(describing: request?.destination), privacy: .public) session_validated=\(isSessionValidated, privacy: .public)")
+            #endif
             guard isSessionValidated, let request else { return }
             routeNotification(request)
         }
         .onChange(of: auth.state) { _, state in
+            if !state.isSignedIn {
+                placeSaveDraftStore.clear()
+                restoredPlaceSaveDraftOwnerID = nil
+            }
             applyAuthStateIfNeeded(state)
             publishWidgetSnapshot()
             Task {
@@ -613,6 +628,20 @@ struct WanderRootView: View {
         .onChange(of: store.saveStreakCelebration) { _, celebration in
             guard isSessionValidated else { return }
             queueSaveStreakCelebration(celebration)
+            if let celebration {
+                pushNotifications.recordSaveCompletedAfterReminderOpen(
+                    userID: store.currentUser.id,
+                    status: celebration.status,
+                    streakCount: celebration.streakCount,
+                    savedAt: celebration.saveDate
+                )
+            }
+            Task {
+                await pushNotifications.reconcileSaveStreakReminder(
+                    store.saveStreakSummary,
+                    cancelledBySaveStatus: celebration?.status
+                )
+            }
         }
         .onChange(of: store.presentationRevision) { _, _ in
             guard isSessionValidated else { return }
@@ -654,7 +683,11 @@ struct WanderRootView: View {
             handleControlNavigationRequestIfReady(request)
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                placeSaveDraftStore.flush()
+            }
             guard phase == .active, isSessionValidated else { return }
+            drainPendingNotificationResponses()
             drainSharedPlaceImports()
             scheduleSignedInMaintenance(for: auth.state)
             publishWidgetSnapshot()
@@ -669,8 +702,22 @@ struct WanderRootView: View {
                 onReview: presentSharedPlaceImportReview
             )
         )
+        .alert(
+            "Saved to your map",
+            isPresented: Binding(
+                get: { interruptedSaveRecoveryMessage != nil },
+                set: { if !$0 { interruptedSaveRecoveryMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                interruptedSaveRecoveryMessage = nil
+            }
+        } message: {
+            Text(interruptedSaveRecoveryMessage ?? "")
+        }
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
+                drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
                     controlNavigationCenter.pendingRequest
                 )
@@ -694,10 +741,60 @@ struct WanderRootView: View {
     }
 
     private func presentAddSheet() {
+        placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
         addLaunchRequest = nil
         addSheetDetent = addSheetRestingDetent
+        isPresentingAdd = true
+    }
+
+    private func restorePlaceSaveDraftIfNeeded() {
+        let ownerUserID = store.currentUser.id
+        guard restoredPlaceSaveDraftOwnerID != ownerUserID else { return }
+        restoredPlaceSaveDraftOwnerID = ownerUserID
+
+        guard case .restored(let draft) = placeSaveDraftStore.restore(
+            ownerUserID: ownerUserID
+        ) else { return }
+
+        let currentSave = MapPlaceSaveContext.currentUserSave(
+            matching: draft.candidate,
+            in: store.currentUserVisiblePlaces
+        )
+        let latestVisit = currentSave.flatMap {
+            store.visits(for: $0.userPlace.id).first
+        }
+        let evidence = currentSave.map {
+            PlaceSaveDraftCommitEvidence(
+                userPlaceLocalID: $0.userPlace.localID,
+                userPlaceUpdatedAt: $0.userPlace.localUpdatedAt,
+                status: $0.userPlace.status,
+                latestVisitLocalID: latestVisit?.localID,
+                latestVisitCreatedAt: latestVisit?.createdAt
+            )
+        }
+
+        switch PlaceSaveDraftRecoveryPolicy.outcome(for: draft, evidence: evidence) {
+        case .committed:
+            placeSaveDraftStore.clear()
+            interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
+                ? "Your check-in finished while rec.me was in the background."
+                : "This place was added to Wanna while rec.me was in the background."
+        case .retry:
+            placeSaveDraftStore.prepareRetry(
+                message: "Save was interrupted before rec.me could confirm it. Review your details and try again."
+            )
+            presentRestoredAddSheet()
+        case .editing:
+            presentRestoredAddSheet()
+        }
+    }
+
+    private func presentRestoredAddSheet() {
+        store.saveFlowDidPresent(.addSheet)
+        addLaunchRequest = nil
+        addSheetDetent = .large
         isPresentingAdd = true
     }
 
@@ -793,6 +890,9 @@ struct WanderRootView: View {
         widgetCalendarHydratedUserID = session.userID
         widgetCalendarLastHydratedAt = .now
         publishWidgetSnapshot(allowFreshnessAdvance: true)
+        Task {
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+        }
     }
 
     static func calendarRefreshDidFinish(
@@ -826,6 +926,7 @@ struct WanderRootView: View {
         saveStreakCelebrationTask?.cancel()
 
         guard !auth.state.isSignedIn, fixtureMode == .empty else { return }
+        placeSaveDraftStore.clear()
         WanderWidgetSnapshotPublisher.clear()
         store.apply(authState: auth.state)
         Task {
@@ -834,6 +935,12 @@ struct WanderRootView: View {
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
+        if request.destination == .quickCapture {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .quickCapture)
+            return
+        }
+
         isPresentingAdd = false
         initialPresentation = nil
 
@@ -843,8 +950,36 @@ struct WanderRootView: View {
         }
     }
 
+    private func drainPendingNotificationResponses(
+        fallbackUserInfo: [AnyHashable: Any]? = nil
+    ) {
+        guard isSessionValidated else { return }
+
+        var handledResponse = false
+        while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo(
+            for: store.currentUser.id
+        ) {
+            handledResponse = pushNotifications.handleNotificationResponse(
+                userInfo: pendingUserInfo,
+                userID: store.currentUser.id
+            ) || handledResponse
+        }
+
+        if !handledResponse, let fallbackUserInfo {
+            handledResponse = pushNotifications.handleNotificationResponse(
+                userInfo: fallbackUserInfo,
+                userID: store.currentUser.id
+            )
+        }
+
+        if handledResponse {
+            scheduleSignedInMaintenance(for: auth.state)
+        }
+    }
+
     static func notificationTab(for destination: NotificationDestination) -> WanderTab {
         switch destination {
+        case .quickCapture: .map
         case .people, .drafts: .profile
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
@@ -892,6 +1027,9 @@ struct WanderRootView: View {
             route: route,
             awaitingDismissals: deepLinkPresentationTokensAwaitingDismissal()
         )
+        #if DEBUG
+        WanderDebugLog.remote.debug("deep link handoff began route=\(String(describing: route), privacy: .public) awaiting=\(deepLinkHandoff.awaitingDismissals.count, privacy: .public)")
+        #endif
         presentationResetRequest = resetRequest
         resetRootPresentationsForDeepLink()
 
@@ -929,6 +1067,7 @@ struct WanderRootView: View {
     }
 
     private func handleAddSheetDismissal() {
+        placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
     }
 
@@ -1357,6 +1496,7 @@ struct WanderRootView: View {
         guard case .signedIn = state else {
             pushNotifications.applyNotificationPreferences(.allDisabled)
             await pushNotifications.cancelAllWannaGoReminders()
+            await pushNotifications.cancelAllSaveStreakReminders()
             return
         }
         guard isSessionValidated || fixtureMode != .empty else { return }
@@ -1366,10 +1506,13 @@ struct WanderRootView: View {
             guard auth.state == state, !Task.isCancelled else { return }
             pushNotifications.applyNotificationPreferences(preferences)
         }
+        pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
         guard auth.state == state, !Task.isCancelled else { return }
         await store.refreshRemoteWannaGoPlans(backend: backend)
         guard auth.state == state, !Task.isCancelled else { return }
         await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+        guard auth.state == state, !Task.isCancelled else { return }
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
     }
 
     static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {

@@ -1565,14 +1565,15 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(plans.first?.plannedDate)), "2026-08-20")
     }
 
-    func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {
+    func testOwnPlaceDeleteUsesAtomicRPC() async throws {
         let rpc = RecordingRPC()
-        let repository = SupabaseUserPlaceRepository(rpc: rpc, userPlaceDeleter: rpc)
+        rpc.responses["delete_own_user_place"] = #"{"user_place_id":"up_saved","transition":"removed"}"#.data(using: .utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
 
         try await repository.delete(userPlaceID: "up_saved")
 
-        XCTAssertEqual(rpc.deletedUserPlaceIDs, ["up_saved"])
-        XCTAssertTrue(rpc.calls.isEmpty)
+        XCTAssertEqual(rpc.calls.map(\.name), ["delete_own_user_place"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_user_place_id"] as? String, "up_saved")
     }
 
     func testUnblockCallsExpectedRPC() async throws {
@@ -2568,6 +2569,117 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testAuthenticatedNotificationResponseRemainsPendingUntilRootDrainsIt() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_authenticated",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        XCTAssertEqual(
+            WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo),
+            "user_a"
+        )
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+    }
+
+    func testBufferedNotificationResponseSignalsRootWhenExpectedSessionAuthenticates() async {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_buffered_during_validation",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+        let releaseSignal = expectation(
+            forNotification: WanderAppDelegate.didReceiveNotificationResponse,
+            object: nil
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo))
+
+        // Reproduces the launch ordering where the root drains before session
+        // validation opens the gate. Authentication must wake it for a retry.
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        await fulfillment(of: [releaseSignal], timeout: 1)
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+    }
+
+    func testNotificationResponseSurvivesSameAccountForegroundRevalidation() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_foreground_revalidation",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo),
+            "user_a"
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+    }
+
+    func testAppEntryNotificationGateStateTracksProductionAuthLifecycle() {
+        let session = AuthSession(
+            userID: "user_a",
+            displayName: "A",
+            handle: "a"
+        )
+
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedIn(session),
+                isSessionValidated: false
+            ),
+            .validating(expectedUserID: "user_a")
+        )
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedIn(session),
+                isSessionValidated: true
+            ),
+            .authenticated(userID: "user_a")
+        )
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedOut,
+                isSessionValidated: false
+            ),
+            .signedOut
+        )
+    }
+
     func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
         let manager = PushNotificationManager()
         let userInfo: [AnyHashable: Any] = [
@@ -3102,7 +3214,7 @@ private struct FailingDiscoverFilterRepository: DiscoverFilterParsingRepository 
 }
 
 @MainActor
-private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling, RemoteUserPlaceDeleting {
+private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling {
     struct Call: Equatable {
         let name: String
         let body: [String: AnyHashable]
@@ -3111,7 +3223,6 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
     var responses: [String: Data] = [:]
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
-    private(set) var deletedUserPlaceIDs: [String] = []
 
     func call<Value: Decodable, Params: Encodable>(
         _ name: String,
@@ -3148,10 +3259,6 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
         }
 
         return try decoder.decode(Value.self, from: data)
-    }
-
-    func deleteUserPlace(userPlaceID: String) async throws {
-        deletedUserPlaceIDs.append(userPlaceID)
     }
 
     private func encodedObject<Params: Encodable>(_ params: Params) throws -> [String: Any] {

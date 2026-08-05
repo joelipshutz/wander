@@ -82,6 +82,38 @@ struct CurrentUserCalendarProjection {
     var attributes: [LocalPlaceAttribute] {
         visiblePlaces.flatMap(\.attributes)
     }
+
+    func profileStats(currentUserID: String, friends: Int) -> ProfileStats {
+        let representativePlaces = VisiblePlaceGrouping.representativePlaces(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        )
+        let checkedInPlaces = representativePlaces.filter {
+            $0.userPlace.status == .been && $0.userPlace.deletedAt == nil
+        }
+        let checkInCount = checkedInPlaces.reduce(into: 0) { count, visiblePlace in
+            let referenceIDs = Set(
+                [
+                    visiblePlace.userPlace.id,
+                    visiblePlace.userPlace.localID,
+                    visiblePlace.userPlace.serverID
+                ].compactMap { $0 }
+            )
+            let matchingVisitCount = visits.filter {
+                $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
+            }.count
+            count += max(matchingVisitCount, 1)
+        }
+
+        return ProfileStats(
+            been: checkedInPlaces.count,
+            checkIns: checkInCount,
+            wanna: representativePlaces.filter {
+                $0.userPlace.status == .wannaGo && $0.userPlace.deletedAt == nil
+            }.count,
+            friends: friends
+        )
+    }
 }
 
 struct SmartFilter: Identifiable, Equatable {
@@ -111,6 +143,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeListItems: [LocalPlaceListItem]
     @Published private(set) var unresolvedDrafts: [UnresolvedDraft] = []
     @Published private(set) var saveStreakDatesByUserID: [String: [Date]] = [:]
+    @Published private(set) var saveStreakRecoveryDatesByUserID: [String: [Date]] = [:]
     @Published private(set) var saveStreakCelebration: SaveStreakCelebration?
     @Published private(set) var isSaveFlowPresented = false
     private var activeSaveFlowPresentationLayers: Set<SaveFlowPresentationLayer> = []
@@ -415,6 +448,7 @@ final class WanderStore: ObservableObject {
             self.autoSaveListAddsToWant = restored.autoSaveListAddsToWant
             self.providerCategoryEnrichmentAttemptedAtByKey = restored.providerCategoryEnrichmentAttemptedAtByKey
             self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
+            self.saveStreakRecoveryDatesByUserID = restored.saveStreakRecoveryDatesByUserID
             shouldPersistAfterRestore = restored.didApplySavedPlaceReset
         } else {
             self.currentUser = fixtures.currentUser
@@ -439,6 +473,7 @@ final class WanderStore: ObservableObject {
             self.autoSaveListAddsToWant = true
             self.saveStreakDatesByUserID = Dictionary(grouping: fixtures.userPlaces, by: \.userID)
                 .mapValues { $0.map(\.savedAt) }
+            self.saveStreakRecoveryDatesByUserID = [:]
         }
 
         self.currentUser.isPrivateProfile = self.isPrivateProfile
@@ -928,26 +963,17 @@ final class WanderStore: ObservableObject {
     }
 
     var stats: ProfileStats {
-        let mine = userPlaces.filter { $0.userID == currentUser.id && $0.deletedAt == nil }
-        let uniqueCheckedInPlaces = mine.filter { $0.status == .been }.count
-        let checkedInPlaceIDs = Set(
-            mine
-                .filter { $0.status == .been }
-                .flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0 } }
-        )
-        let checkInCount = placeVisits.filter {
-            $0.deletedAt == nil && checkedInPlaceIDs.contains($0.userPlaceID)
-        }.count
-        return ProfileStats(
-            been: uniqueCheckedInPlaces,
-            checkIns: max(checkInCount, uniqueCheckedInPlaces),
-            wanna: mine.filter { $0.status == .wannaGo }.count,
+        currentUserCalendarProjection.profileStats(
+            currentUserID: currentUser.id,
             friends: profiles.filter { relationship(to: $0.id) == .mutual }.count
         )
     }
 
     var saveStreakSummary: SaveStreakSummary {
-        SaveStreakCalculator.summary(saveDates: currentUserSaveStreakDates)
+        SaveStreakCalculator.summary(
+            saveDates: currentUserSaveStreakDates,
+            recoveryDates: saveStreakRecoveryDatesByUserID[currentUser.id, default: []]
+        )
     }
 
     func dismissSaveStreakCelebration(id: UUID) {
@@ -979,11 +1005,25 @@ final class WanderStore: ObservableObject {
         place: LocalPlace,
         status: PlaceStatus,
         savedAt: Date,
-        wasTodayCovered: Bool
+        previousSummary: SaveStreakSummary
     ) {
-        let kind: SaveStreakCelebration.Kind = wasTodayCovered
+        let kind: SaveStreakCelebration.Kind = previousSummary.isTodayCovered
             ? .sameDayConfetti
             : .dailyTakeover
+
+        let calendar = Calendar.current
+        let recoveryDate: Date? = if previousSummary.isRecoveryAvailable {
+            calendar.date(
+                byAdding: .day,
+                value: -1,
+                to: calendar.startOfDay(for: savedAt)
+            )
+        } else {
+            nil
+        }
+        if let recoveryDate {
+            saveStreakRecoveryDatesByUserID[currentUser.id, default: []].append(recoveryDate)
+        }
 
         saveStreakDatesByUserID[currentUser.id, default: []].append(savedAt)
         let updatedSummary = saveStreakSummary
@@ -1002,7 +1042,8 @@ final class WanderStore: ObservableObject {
             placeDetail: detail.isEmpty ? nil : detail,
             status: status,
             streakCount: updatedSummary.currentCount,
-            saveDate: savedAt
+            saveDate: savedAt,
+            recoveryDate: recoveryDate
         )
 
         if saveStreakCelebration?.kind != .dailyTakeover || kind == .dailyTakeover {
@@ -1020,6 +1061,19 @@ final class WanderStore: ObservableObject {
                 ]
             )
         )
+        if recoveryDate != nil {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.saveStreakRecovered,
+                    properties: [
+                        "status": status.rawValue,
+                        "recovered_streak_count": "\(previousSummary.recoverableCount)",
+                        "streak_count": "\(updatedSummary.currentCount)",
+                        "recovery_cooldown_days": "\(SaveStreakWindow.recoveryCooldownDayCount)"
+                    ]
+                )
+            )
+        }
     }
 
     var pendingSyncCount: Int {
@@ -1152,6 +1206,7 @@ final class WanderStore: ObservableObject {
         sourceArtifacts = []
         extractionJobs = []
         saveStreakDatesByUserID = [:]
+        saveStreakRecoveryDatesByUserID = [:]
         saveStreakCelebration = nil
         remoteVisiblePlaceCache = []
         discoverPeopleRecommendationsState = .idle
@@ -1188,15 +1243,18 @@ final class WanderStore: ObservableObject {
             $0.owner.id == currentUser.id && $0.userPlace.deletedAt == nil
         }
         let isAuthoritative = authoritativeCalendarUserID == currentUser.id
+        let dirtyRows = userPlaces.filter {
+            $0.userID == currentUser.id && $0.syncState != .synced
+        }
+        let dirtyReferenceIDs = dirtyRows.reduce(into: Set<String>()) {
+            $0.formUnion(Self.referenceIDs(for: $1))
+        }
+        let unshadowedRemotePlaces = remoteOwnerPlaces.filter {
+            Self.referenceIDs(for: $0.userPlace).isDisjoint(with: dirtyReferenceIDs)
+        }
 
         let projectedPlaces: [VisiblePlace]
         if isAuthoritative {
-            let dirtyRows = userPlaces.filter {
-                $0.userID == currentUser.id && $0.syncState != .synced
-            }
-            let dirtyReferenceIDs = dirtyRows.reduce(into: Set<String>()) {
-                $0.formUnion(Self.referenceIDs(for: $1))
-            }
             let remoteReferenceIDs = remoteOwnerPlaces.reduce(into: Set<String>()) {
                 $0.formUnion(Self.referenceIDs(for: $1.userPlace))
             }
@@ -1218,13 +1276,10 @@ final class WanderStore: ObservableObject {
                 !Self.referenceIDs(for: $0.userPlace)
                     .isDisjoint(with: preservedLocalReferenceIDs)
             }
-            let unshadowedRemotePlaces = remoteOwnerPlaces.filter {
-                Self.referenceIDs(for: $0.userPlace).isDisjoint(with: dirtyReferenceIDs)
-            }
             projectedPlaces = preservedLocalPlaces + unshadowedRemotePlaces
         } else {
             projectedPlaces = mergeCalendarVisiblePlaces(
-                localOwnerPlaces + remoteOwnerPlaces
+                localOwnerPlaces + unshadowedRemotePlaces
             )
         }
 
@@ -2741,7 +2796,7 @@ final class WanderStore: ObservableObject {
     ) -> LocalPlaceVisit {
         let place = upsertPlace(from: invitation.candidate, sourceType: .socialSave)
         let now = Date.now
-        let wasTodayCovered = saveStreakSummary.isTodayCovered
+        let streakSummaryBeforeSave = saveStreakSummary
         let userPlace: LocalUserPlace
         let createdNewUserPlace: Bool
 
@@ -2836,7 +2891,7 @@ final class WanderStore: ObservableObject {
                 place: place,
                 status: .been,
                 savedAt: now,
-                wasTodayCovered: wasTodayCovered
+                previousSummary: streakSummaryBeforeSave
             )
         }
         objectWillChange.send()
@@ -3433,6 +3488,9 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func deleteVisit(visitID: String) -> Bool {
         guard let visit = currentUserVisit(matching: visitID) else { return false }
+        let remoteOwnerPlace = remoteCurrentUserVisiblePlace(
+            matching: visit.userPlaceID
+        )
 
         let now = Date.now
         let visitIDs = matchingVisitIDs(visit.id)
@@ -3449,6 +3507,29 @@ final class WanderStore: ObservableObject {
                 }
             } else {
                 refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+            }
+        } else if let remoteOwnerPlace {
+            let userPlaceReferenceIDs = Self.referenceIDs(
+                for: remoteOwnerPlace.userPlace
+            )
+            let remainingVisits = placeVisits.filter {
+                $0.deletedAt == nil
+                    && userPlaceReferenceIDs.contains($0.userPlaceID)
+            }
+            if remainingVisits.isEmpty {
+                let materializedUserPlace = materializeRemoteCurrentUserPlace(
+                    remoteOwnerPlace
+                )
+                if !restoreHistoricalWantAfterLastVisit(
+                    materializedUserPlace,
+                    at: now
+                ) {
+                    deleteUserPlaceAfterLastVisit(materializedUserPlace, at: now)
+                }
+                remoteVisiblePlaceCache.removeAll {
+                    $0.owner.id == currentUser.id
+                        && VisiblePlaceGrouping.matches($0, remoteOwnerPlace)
+                }
             }
         }
         analytics.track(
@@ -3583,6 +3664,11 @@ final class WanderStore: ObservableObject {
         if iFollowThem && theyFollowMe { return .mutual }
         if iFollowThem { return .follower }
         return .nonFollower
+    }
+
+    func viewerFollows(_ userID: String) -> Bool {
+        let currentRelationship = relationship(to: userID)
+        return currentRelationship == .follower || currentRelationship == .mutual
     }
 
     func hasAcknowledgedFollow(to userID: String) -> Bool {
@@ -4001,7 +4087,7 @@ final class WanderStore: ObservableObject {
         }
 
         let savedAt = Date.now
-        let wasTodayCovered = saveStreakSummary.isTodayCovered
+        let streakSummaryBeforeSave = saveStreakSummary
         let userPlace = LocalUserPlace(
             localID: "local_up_\(currentUser.handle)_\(slug(place.localID))",
             userID: currentUser.id,
@@ -4051,7 +4137,7 @@ final class WanderStore: ObservableObject {
             place: place,
             status: status,
             savedAt: savedAt,
-            wasTodayCovered: wasTodayCovered
+            previousSummary: streakSummaryBeforeSave
         )
         persist()
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
@@ -4204,6 +4290,7 @@ final class WanderStore: ObservableObject {
             }
             lastRemoteError = nil
             await refreshRemoteVisiblePlaces(backend: backend)
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .tombstoned)
         } catch {
             let message = remoteErrorMessage(error)
@@ -4319,6 +4406,7 @@ final class WanderStore: ObservableObject {
             return 0
         }
 
+        let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
         let retryableIDs = syncableOwnPlaceIDs { syncState in
             syncState == .failed
         }
@@ -4327,7 +4415,7 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
         _ = await syncPendingVisits(backend: backend)
-        return syncedCount
+        return syncedCount + deletedCount
     }
 
     @discardableResult
@@ -4340,6 +4428,7 @@ final class WanderStore: ObservableObject {
             return 0
         }
 
+        let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
         let syncableIDs = syncableOwnPlaceIDs { syncState in
             syncState != .synced
                 && syncState != .pendingDelete
@@ -4351,6 +4440,49 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
         _ = await syncPendingVisits(backend: backend)
+        return syncedCount + deletedCount
+    }
+
+    @discardableResult
+    func retryPendingUserPlaceDeletes(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+        let pendingRows = userPlaces.filter {
+            $0.userID == currentUser.id
+                && $0.deletedAt != nil
+                && $0.serverID != nil
+                && ($0.syncState == .pendingDelete || $0.syncState == .failed)
+        }
+        let rowsByRemoteID = Dictionary(
+            grouping: pendingRows,
+            by: { $0.serverID ?? $0.id }
+        )
+
+        var syncedCount = 0
+        for remoteUserPlaceID in rowsByRemoteID.keys.sorted() {
+            let rows = rowsByRemoteID[remoteUserPlaceID] ?? []
+            do {
+                try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
+                for row in rows {
+                    markUserPlace(localOrServerID: row.id, syncState: .tombstoned)
+                }
+                lastRemoteError = nil
+                syncedCount += 1
+            } catch {
+                let message = remoteErrorMessage(error)
+                for row in rows {
+                    markUserPlace(
+                        localOrServerID: row.id,
+                        syncState: .failed,
+                        error: message
+                    )
+                }
+                lastRemoteError = message
+            }
+        }
+
+        if syncedCount > 0 {
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
+        }
         return syncedCount
     }
 
@@ -4495,12 +4627,16 @@ final class WanderStore: ObservableObject {
             do {
                 _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
                 markPlaceVisit(localOrServerID: visit.id, syncState: .tombstoned)
+                lastRemoteError = nil
                 syncedCount += 1
             } catch {
                 let message = remoteErrorMessage(error)
                 markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
                 lastRemoteError = message
             }
+        }
+        if syncedCount > 0 {
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
         }
         return syncedCount
     }
@@ -4585,12 +4721,13 @@ final class WanderStore: ObservableObject {
             _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
             markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
             lastRemoteError = nil
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
             return true
         } catch {
             let message = remoteErrorMessage(error)
             markPlaceVisit(localOrServerID: visitID, syncState: .failed, error: message)
             lastRemoteError = message
-            return false
+            return true
         }
     }
 
@@ -6089,6 +6226,11 @@ final class WanderStore: ObservableObject {
             saveStreakDatesByUserID[signedInProfile.id, default: []].append(contentsOf: guestStreakDates)
             didClaimRows = true
         }
+        if let guestRecoveryDates = saveStreakRecoveryDatesByUserID.removeValue(forKey: previousUserID),
+           !guestRecoveryDates.isEmpty {
+            saveStreakRecoveryDatesByUserID[signedInProfile.id, default: []].append(contentsOf: guestRecoveryDates)
+            didClaimRows = true
+        }
 
         guard didClaimRows else { return }
         objectWillChange.send()
@@ -6352,7 +6494,45 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
-        return currentUserPlace(matching: visit.userPlaceID) == nil ? nil : visit
+        let isOwnedLocally = currentUserPlace(matching: visit.userPlaceID) != nil
+        let isOwnedRemotely = remoteCurrentUserVisiblePlace(
+            matching: visit.userPlaceID
+        ) != nil
+        return isOwnedLocally || isOwnedRemotely ? visit : nil
+    }
+
+    private func remoteCurrentUserVisiblePlace(
+        matching userPlaceID: String
+    ) -> VisiblePlace? {
+        remoteVisiblePlaceCache.first { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && visiblePlace.userPlace.userID == currentUser.id
+                && visiblePlace.userPlace.deletedAt == nil
+                && Self.referenceIDs(for: visiblePlace.userPlace)
+                    .contains(userPlaceID)
+        }
+    }
+
+    private func materializeRemoteCurrentUserPlace(
+        _ visiblePlace: VisiblePlace
+    ) -> LocalUserPlace {
+        let remoteReferenceIDs = Self.referenceIDs(for: visiblePlace.userPlace)
+        if let existing = userPlaces.first(where: {
+            $0.userID == currentUser.id
+                && !Self.referenceIDs(for: $0).isDisjoint(with: remoteReferenceIDs)
+        }) {
+            return existing
+        }
+
+        if !places.contains(where: {
+            $0.id == visiblePlace.place.id
+                || $0.localID == visiblePlace.place.localID
+                || ($0.serverID != nil && $0.serverID == visiblePlace.place.serverID)
+        }) {
+            places.append(visiblePlace.place)
+        }
+        userPlaces.append(visiblePlace.userPlace)
+        return visiblePlace.userPlace
     }
 
     private func currentUserPhoto(matching photoID: String) -> LocalVisitPhoto? {
@@ -6920,9 +7100,26 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
+        let now = Date.now
         var removedUserPlaceIDs = Set<String>()
         var remoteUserPlaceIDs = Set<String>()
         for visiblePlace in matchingVisiblePlaces {
+            if !places.contains(where: {
+                $0.id == visiblePlace.place.id
+                    || $0.localID == visiblePlace.place.localID
+                    || ($0.serverID != nil
+                        && $0.serverID == visiblePlace.place.serverID)
+            }) {
+                places.append(visiblePlace.place)
+            }
+            if !userPlaces.contains(where: {
+                !Self.referenceIDs(for: $0).isDisjoint(
+                    with: Self.referenceIDs(for: visiblePlace.userPlace)
+                )
+            }) {
+                userPlaces.append(visiblePlace.userPlace)
+            }
+            deleteUserPlaceAfterLastVisit(visiblePlace.userPlace, at: now)
             removedUserPlaceIDs.insert(visiblePlace.userPlace.id)
             removedUserPlaceIDs.insert(visiblePlace.userPlace.localID)
             if let serverID = visiblePlace.userPlace.serverID {
@@ -7208,16 +7405,18 @@ final class WanderStore: ObservableObject {
         let retainedOwnerPlaces = remoteVisiblePlaceCache.filter {
             $0.owner.id == currentUser.id
         }
-        var mergedPlaces = visiblePlaces
-
-        for retainedPlace in retainedOwnerPlaces where !mergedPlaces.contains(where: {
-            $0.owner.id == currentUser.id
-                && VisiblePlaceGrouping.matches($0, retainedPlace)
-        }) {
-            mergedPlaces.append(retainedPlace)
+        let incomingNonOwnerPlaces = visiblePlaces.filter {
+            $0.owner.id != currentUser.id
         }
+        let ownerPlaces = authoritativeCalendarUserID == currentUser.id
+            ? retainedOwnerPlaces
+            : mergeCalendarVisiblePlaces(
+                retainedOwnerPlaces + visiblePlaces.filter {
+                    $0.owner.id == currentUser.id
+                }
+            )
 
-        remoteVisiblePlaceCache = mergeVisiblePlaces(mergedPlaces)
+        remoteVisiblePlaceCache = mergeVisiblePlaces(incomingNonOwnerPlaces + ownerPlaces)
         hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
     }
 
