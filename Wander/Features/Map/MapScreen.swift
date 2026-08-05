@@ -94,19 +94,9 @@ struct MapScreen: View {
 
     private var visiblePlaces: [VisiblePlace] {
         let places = baseVisiblePlaces
-        let normalizedQuery = mapQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else { return places }
-
-        return places.filter { visiblePlace in
-            visiblePlace.place.canonicalName.lowercased().contains(normalizedQuery)
-                || visiblePlace.effectiveCategoryDisplay.compactTitle.lowercased().contains(normalizedQuery)
-                || (visiblePlace.place.locality?.lowercased().contains(normalizedQuery) ?? false)
-                || visiblePlace.owner.displayName.lowercased().contains(normalizedQuery)
-                || visiblePlace.owner.handle.lowercased().contains(normalizedQuery)
-                || (visiblePlace.userPlace.note?.lowercased().contains(normalizedQuery) ?? false)
-                || (visiblePlace.userPlace.ratingSignal?.lowercased().contains(normalizedQuery) ?? false)
-                || (visiblePlace.recommendedScore.map(PlaceRating.averageDisplay)?.lowercased().contains(normalizedQuery) ?? false)
-        }
+        let query = TrustedPlaceSearchQuery(mapQuery)
+        guard query.hasMeaningfulTokens else { return places }
+        return TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
@@ -1795,16 +1785,10 @@ struct MapScreen: View {
         let normalized = Self.normalized(query)
         guard !normalized.isEmpty else { return [] }
 
-        let sortedMatches = baseVisiblePlaces
-            .filter { visiblePlace in
-                matchesTypeahead(visiblePlace, normalizedQuery: normalized)
-            }
-            .sorted { lhs, rhs in
-                let lhsIsMine = lhs.owner.id == store.currentUser.id
-                let rhsIsMine = rhs.owner.id == store.currentUser.id
-                if lhsIsMine != rhsIsMine { return lhsIsMine }
-                return lhs.place.canonicalName.localizedCaseInsensitiveCompare(rhs.place.canonicalName) == .orderedAscending
-            }
+        let sortedMatches = TrustedPlaceSearch.matches(
+            query: query,
+            in: baseVisiblePlaces
+        ).map(\.place)
 
         return VisiblePlaceGrouping.groups(
             from: sortedMatches,
@@ -1823,22 +1807,8 @@ struct MapScreen: View {
             .map { $0 }
     }
 
-    private func matchesTypeahead(_ visiblePlace: VisiblePlace, normalizedQuery: String) -> Bool {
-        [
-            visiblePlace.place.canonicalName,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
-            visiblePlace.place.locality,
-            visiblePlace.owner.displayName,
-            "@\(visiblePlace.owner.handle)",
-            visiblePlace.userPlace.note,
-            visiblePlace.userPlace.ratingSignal,
-            visiblePlace.recommendedScore.map(PlaceRating.averageDisplay)
-        ]
-        .compactMap { $0 }
-        .contains { Self.normalized($0).contains(normalizedQuery) }
-    }
-
     private func selectTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
+        trackMapSearchSelection(suggestion)
         dismissKeyboard()
         typeaheadTask?.cancel()
         isLoadingTypeahead = false
@@ -1864,6 +1834,7 @@ struct MapScreen: View {
     }
 
     private func addTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
+        trackMapSearchSelection(suggestion)
         dismissKeyboard()
         typeaheadTask?.cancel()
         isLoadingTypeahead = false
@@ -1891,6 +1862,37 @@ struct MapScreen: View {
                 defaultVisibility: store.effectiveDefaultVisibility
             )
         }
+    }
+
+    private func trackMapSearchSelection(_ suggestion: MapSearchSuggestion) {
+        let index = typeaheadSuggestions.firstIndex { $0.id == suggestion.id } ?? 0
+        let rankBucket: String
+        switch index {
+        case 0: rankBucket = "1"
+        case 1...2: rankBucket = "2_3"
+        default: rankBucket = "4_plus"
+        }
+
+        let provider: String
+        let stage: String
+        switch suggestion.source {
+        case .saved:
+            provider = "trusted"
+            stage = "immediate"
+        case .mapKit:
+            provider = "mapkit"
+            stage = "external"
+        }
+
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.trustedPlaceSearchResultSelected,
+            properties: [
+                "surface": "map",
+                "provider": provider,
+                "stage": stage,
+                "rank": rankBucket
+            ]
+        )
     }
 
     private func dismissKeyboard() {

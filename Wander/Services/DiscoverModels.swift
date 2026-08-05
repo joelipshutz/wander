@@ -470,6 +470,7 @@ enum DiscoverParseSource: String, Equatable {
 }
 
 enum DiscoverEvidenceKind: String, Equatable {
+    case name
     case owner
     case opinion
     case rating
@@ -477,6 +478,8 @@ enum DiscoverEvidenceKind: String, Equatable {
     case category
     case status
     case area
+    case note
+    case attribute
     case tag
     case relationship
 }

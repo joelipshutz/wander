@@ -851,7 +851,7 @@ private struct FeedSearchLauncher: View {
     @State private var placeholderIndex = 0
 
     private var placeholder: String {
-        guard !placeholders.isEmpty else { return "Search places and people" }
+        guard !placeholders.isEmpty else { return "Search trusted places" }
         return placeholders[placeholderIndex % placeholders.count]
     }
 
@@ -877,7 +877,7 @@ private struct FeedSearchLauncher: View {
             .wanderGlassCapsule()
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Search places and people")
+        .accessibilityLabel("Search trusted places")
         .accessibilityIdentifier("feed.searchLauncher")
         .task {
             guard placeholders.count > 1 else { return }

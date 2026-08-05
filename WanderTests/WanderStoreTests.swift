@@ -5871,7 +5871,25 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
     }
 
-    func testDiscoverUnknownNonemptyQueryDoesNotSilentlyReturnEveryPlace() async {
+    func testDiscoverFreeTextSearchMatchesTrustedPlaceMemory() async {
+        let store = makeStore()
+
+        let results = await store.discover(query: "Circuit Coffee")
+
+        XCTAssertFalse(results.places.isEmpty)
+        XCTAssertTrue(results.places.allSatisfy { $0.place.canonicalName == "Circuit Coffee" })
+    }
+
+    func testTrustedPlaceImmediateAndRefinedFreeTextUseSameOrdering() async {
+        let store = makeStore()
+
+        let immediate = store.searchTrustedPlaces(query: "Circuit Coffee")
+        let refined = await store.discover(query: "Circuit Coffee")
+
+        XCTAssertEqual(immediate.places.map(\.userPlace.id), refined.places.map(\.userPlace.id))
+    }
+
+    func testDiscoverGenuineFreeTextMissDoesNotSilentlyReturnEveryPlace() async {
         let store = makeStore()
 
         let results = await store.discover(query: "teleport me somewhere surprising")
