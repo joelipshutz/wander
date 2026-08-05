@@ -10,10 +10,6 @@
   "observed": "The Lists title and plus action sit inside a contrasting full-width glass panel, which reads as a separate horizontal color block.",
   "expected": "The Lists title, subtitle, and add action sit directly on the screen canvas without a full-width header panel; the plus action remains a distinct accessible button.",
   "root_cause": "ListsScreen.header uses WanderGlassHeader, whose title row always applies wanderGlassPanel across the available width.",
-  "screenshot": "WanderTests/Fixtures/rec-215-list-header-pre.png",
-  "post_screenshots": [
-    "WanderTests/Fixtures/rec-215-list-header-post.png",
-    "WanderTests/Fixtures/rec-215-list-header-post-iphone16e.png"
-  ],
+  "visual_validation": "Compared local before/after simulator captures on iPhone 16 Plus and iPhone 16e. Binary screenshots are intentionally not tracked because WanderTests is recursively included by XcodeGen.",
   "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration"
 }
