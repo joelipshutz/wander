@@ -6,7 +6,7 @@ graph TD
   ACQ["Paste or share<br/>Google Maps list"] --> RES["Resolve places<br/>and detect duplicates"]
   RES --> REVIEW["Batch review<br/>34 ready - 3 need help<br/>Default: Wanna"]
 
-  REVIEW -->|"Happy path"| ADDALL["Add 34 places<br/>31 Wanna - 3 Check-ins"]
+  REVIEW -->|"Happy path"| ADDALL["Add 34 of 37 places<br/>31 Wanna - 3 Check-ins - 3 need help"]
   ADDALL --> DONE["Places available<br/>Map + private source list"]
 
   REVIEW -.->|"Optional"| EXPAND["Expand one place<br/>No per-row save"]
