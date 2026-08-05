@@ -224,6 +224,7 @@ final class TrustedPlaceSearchTests: XCTestCase {
         samples.sort()
         let p95Index = min(samples.count - 1, Int((Double(samples.count) * 0.95).rounded(.up)) - 1)
         let p95 = samples[p95Index]
+        print("[REC225Performance] host=\(ProcessInfo.processInfo.hostName) p95_ms=\(p95)")
         XCTAssertLessThan(
             p95,
             50,
