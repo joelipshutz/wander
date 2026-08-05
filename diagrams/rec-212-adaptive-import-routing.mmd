@@ -1,0 +1,39 @@
+graph LR
+  IG["Instagram share"] --> CAPTURE
+  TT["TikTok share"] --> CAPTURE
+  GM["Google Maps<br/>place or list"] --> CAPTURE
+  TEXT["Pasted text<br/>or multiple links"] --> CAPTURE
+
+  CAPTURE["Capture and extract"] --> MATCH["Normalize and match places"]
+  MATCH --> COUNT{"How many are ready?"}
+
+  COUNT -->|"1 place"| QUICK["Quick Add card<br/>Default: Wanna<br/>Add 1 place"]
+  COUNT -->|"2 to 5"| COMPACT["Compact review<br/>Explicit status per row<br/>Add all"]
+  COUNT -->|"6 or more"| BATCH["Batch review<br/>Default: Wanna<br/>Apply to all + Add N"]
+
+  QUICK -.-> DETAIL["Optional caret<br/>status - rating - date - note"]
+  COMPACT -.-> DETAIL
+  BATCH -.-> DETAIL
+
+  QUICK --> SAVE["Save ready places<br/>without required enrichment"]
+  COMPACT --> SAVE
+  BATCH --> SAVE
+  SAVE --> DEST["Map + private source list"]
+
+  MATCH -.-> HELP["Needs help<br/>match or skip later"]
+
+  classDef source fill:#F7F1E8,stroke:#30302E,color:#1F1F1E,stroke-width:1px;
+  classDef system fill:#FFFFFF,stroke:#77736D,color:#33312E,stroke-width:1px;
+  classDef choice fill:#F7D8C6,stroke:#B85F3C,color:#2A211D,stroke-width:2px;
+  classDef surface fill:#FFF8F2,stroke:#B85F3C,color:#2A211D,stroke-width:1px;
+  classDef action fill:#242422,stroke:#242422,color:#FFFFFF,stroke-width:2px;
+  classDef optional fill:#FFFFFF,stroke:#77736D,color:#33312E,stroke-width:1px,stroke-dasharray:5 4;
+  classDef success fill:#E6EFE4,stroke:#4E744C,color:#203120,stroke-width:2px;
+
+  class IG,TT,GM,TEXT source;
+  class CAPTURE,MATCH system;
+  class COUNT choice;
+  class QUICK,COMPACT,BATCH surface;
+  class DETAIL,HELP optional;
+  class SAVE action;
+  class DEST success;
