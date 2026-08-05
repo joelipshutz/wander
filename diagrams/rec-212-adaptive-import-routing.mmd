@@ -7,7 +7,8 @@ graph LR
   CAPTURE["Capture and extract"] --> MATCH["Normalize and match places"]
   MATCH --> COUNT{"Total candidates + ready/help counts?"}
 
-  COUNT -->|"1 total - 1 ready"| QUICK["Quick Add card<br/>Default: Wanna<br/>Add 1 place"]
+  COUNT -->|"1 total - ready new"| QUICK["Quick Add card<br/>Default: Wanna<br/>Add 1 place"]
+  COUNT -->|"1 total - exact duplicate"| DUP["Duplicate Add card<br/>Preserve existing status<br/>Add to imported list"]
   COUNT -->|"2 to 5 total - at least 1 ready"| COMPACT["Compact review<br/>Explicit status per row<br/>Add N of total"]
   COUNT -->|"6 or more total - at least 1 ready"| BATCH["Batch review<br/>Default: Wanna<br/>Apply to all + Add N of total"]
   COUNT -->|"0 ready"| HELP["Needs help<br/>No Add 0 action"]
@@ -17,6 +18,7 @@ graph LR
   BATCH -.-> DETAIL
 
   QUICK --> SAVE["Save ready places<br/>without required enrichment"]
+  DUP --> SAVE
   COMPACT --> SAVE
   BATCH --> SAVE
   SAVE --> DEST["Map + private source list"]
@@ -32,7 +34,7 @@ graph LR
   class IG,TT,GM,TEXT source;
   class CAPTURE,MATCH system;
   class COUNT choice;
-  class QUICK,COMPACT,BATCH surface;
+  class QUICK,DUP,COMPACT,BATCH surface;
   class DETAIL,HELP optional;
   class SAVE action;
   class DEST success;

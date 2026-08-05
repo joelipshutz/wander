@@ -16,7 +16,7 @@ Flow diagrams:
 
 Joe approved the low-fidelity adaptive import direction for implementation:
 
-- One resolved place opens a Quick Add surface with an explicit `Wanna` default and a visible `Check-in` alternative.
+- One newly resolved place opens Quick Add with an explicit `Wanna` default and visible `Check-in` alternative. A one-item exact duplicate uses a read-only duplicate variant with its preserved status and `Add to imported list` copy.
 - Two to five ready places use compact multi-place review.
 - Six or more total candidates use batch review with a clear batch default and one explicit `Add N of T places` action when exceptions exist.
 - Every surface keeps rating, date, note, and other enrichment optional behind the same disclosure pattern. A user can save every ready place without opening any row.
@@ -289,13 +289,15 @@ Candidate presentation thresholds:
 
 | Total candidates | Surface | Primary action | Optional depth |
 |---|---|---|---|
-| 1 | Quick Add card/sheet | `Add as Wanna` | Change to Check-in; caret for rating, date, note |
+| 1 new | Quick Add card/sheet | `Add as Wanna` | Change to Check-in; caret for rating, date, note |
+| 1 exact duplicate | Duplicate Add card/sheet | `Add to imported list` | Show preserved status/details read-only |
 | 2–5 | Compact review list | `Add all` | Explicit status per row; expand any row |
 | 6+ | Batch review | `Add N` or `Add N of T` | Wanna batch default; apply to all; expand exceptions or chosen rows |
 
 These thresholds are the approved starting behavior and remain tunable. Routing uses total normalized candidates plus ready/help counts, not ready count alone:
 
-- Quick Add requires exactly one total candidate, one ready place, and zero exceptions.
+- Quick Add requires exactly one total candidate, one `ready_new` place, and zero exceptions.
+- A single `exact_duplicate` uses the duplicate variant; it never claims the place will become Wanna or changes an existing Check-in/rating/note.
 - Compact review handles two to five total candidates and always exposes any Needs Help count.
 - Six or more total candidates always use batch review, even if only one is ready.
 - Zero ready places open recovery/Needs Help, never an `Add 0` action.
@@ -467,7 +469,7 @@ One tap initiates the batch. The UI reports progress without requiring individua
 
 Lead with received value:
 
-> **34 places are on your map**
+> **34 of 37 places are on your map**
 > We made a private LA Spots list. Add ratings whenever you want.
 
 Primary action: `View on map`
@@ -528,7 +530,8 @@ GoogleImportBatch
   confirmation_operation_id, confirmation_request_hash
   source_list_key_hash, source_display_name, canonical_batch_id
   entry_context, destination_list_id, destination_generation
-  state, state_version, capability_version, draft_revision, drafts_frozen_at
+  state, state_version, capability_version
+  draft_revision, active_draft_generation, generation_frozen_at
   commit_lease_token, commit_lease_generation, commit_lease_expires_at, last_progress_at
   recovery_expires_at
   ready_new_count, exact_duplicate_count, needs_help_count
@@ -538,7 +541,8 @@ GoogleImportBatch
 GoogleImportItem
   id, batch_id, ordinal, source_item_key_hash, source_fingerprint
   normalized_candidate, resolved_place_id, match_kind, state, state_version
-  staged_status, staged_rating, staged_visit_date, staged_note, draft_version
+  staged_status, staged_rating, staged_visit_date, staged_note
+  draft_version, draft_generation, draft_frozen_at
   has_manual_override, claim_token, claim_generation, claim_expires_at
   save_operation_id, save_request_hash
   membership_operation_id, membership_request_hash, result_user_place_id
@@ -625,9 +629,11 @@ CommandResult
 
 Batch and item `state_version` values increment on every lifecycle transition, retry attempt, claim, lease expiry/reassignment, and terminalization. Draft versions increment only for editable values. Lifecycle RPCs compare state versions, while draft/default RPCs compare draft revisions, preventing an ABA state cycle from making a stale command valid again.
 
-Draft mutations accept only `wanna_go` or `checked_in`, are owner-scoped, and are valid only for uncommitted `ready_new` items while `drafts_frozen_at` is null. Each item update uses compare-and-swap on `draft_version`, sets `has_manual_override = true`, and atomically increments the batch `draft_revision`. An Apply-to-all mutation declares `mode = preserve_overrides | force_all`: `preserve_overrides` changes only items without a manual override; `force_all` is an explicit user action whose copy states how many manual edits it will replace. Both modes compare/increment the batch revision and persist their replay hash. A stale edit returns `version_conflict` with the latest summary instead of overwriting a newer choice.
+Draft mutations accept only `wanna_go` or `checked_in`, are owner-scoped, and are valid only for uncommitted `ready_new` items assigned to the active draft generation while both the batch generation and item draft remain unfrozen. Each item update uses compare-and-swap on `draft_version`, sets `has_manual_override = true`, and atomically increments the batch `draft_revision`. An Apply-to-all mutation declares `mode = preserve_overrides | force_all`: `preserve_overrides` changes only items without a manual override; `force_all` is an explicit user action whose copy states how many manual edits it will replace. Both modes compare/increment the batch revision and persist their replay hash. A stale edit returns `version_conflict` with the latest summary instead of overwriting a newer choice.
 
-Confirmation is valid only from `ready_to_confirm`. It compares the expected batch state version and draft revision and, in one transaction, hashes the destination plus every ready item ID, state version, draft version, and override marker; freezes that exact snapshot; stores the confirmation hash; increments the state versions; and moves the items into a claimable commit state. No draft mutation can succeed after that freeze, including delayed Apply-to-all responses or retries. Rating and visit date must be null for Wanna; switching from Check-in back to Wanna atomically clears those staged values. Check-in permits a null rating and date. Notes use the existing bounded save-note contract. Exact duplicates are read-only during import.
+Confirmation is valid only from `ready_to_confirm`. It compares the expected batch state version and draft revision and, in one transaction, hashes the destination plus the active draft generation and every ready item ID, state version, draft version, and override marker; freezes that generation and its items; stores the confirmation hash; increments the state versions; and moves only those items into a claimable commit state. No draft mutation can succeed for a frozen generation, including delayed Apply-to-all responses or retries. Rating and visit date must be null for Wanna; switching from Check-in back to Wanna atomically clears those staged values. Check-in permits a null rating and date. Notes use the existing bounded save-note contract. Exact duplicates are read-only during import.
+
+The initial ready set uses draft generation 1. Resolving an exception after `completed_with_exceptions` creates the next generation, assigns only the recovered item(s), resets the generation-local draft revision/freeze, and moves the batch through `ready_to_confirm -> committing` for that generation. Previously committed/frozen generations remain immutable. This gives recovered items the same optional status/detail review and confirmation contract without reopening earlier saves.
 
 ### Commit and partial-failure semantics
 
@@ -691,10 +697,15 @@ ready_to_confirm
 acquiring / resolving
   -> needs_source_help -> resolving or cancelled
 
+acquiring / resolving / ready_to_confirm
+  -> superseded through canonical-lineage convergence
+     (terminal; reads/replays return canonical_batch_id)
+
 resolving / committing
   -- retry metadata/backoff --> same batch state
 
 completed_with_exceptions
+  -> ready_to_confirm for next recovery generation
   -> committing -> completed or completed_with_exceptions
   -> destination_deleted -> committing after explicit replacement
 
@@ -771,11 +782,11 @@ Do not send URLs, list names, place names, notes, coordinates, or raw error payl
 
 ### Technical validation
 
-- Adaptive-routing tests cover zero ready items and the 1, 2, 5, 6, 100, and 101 total-candidate boundaries, including exception-heavy cases such as 1 ready/99 help, selected surface, ready/help denominator copy, CTA state, and no partial staging for an oversized source.
+- Adaptive-routing tests cover zero ready items and the 1, 2, 5, 6, 100, and 101 total-candidate boundaries, including one `ready_new`, one `exact_duplicate`, exception-heavy cases such as 1 ready/99 help, selected surface, preserved-status/denominator copy, CTA state, and no partial staging for an oversized source.
 - Deep-link intent survives sign-in/onboarding and process recreation where the platform contract permits it.
 - The batch commit is idempotent and has regression coverage for new save, existing save, save/membership transaction rollback, deleted destination, cancellation during commit, retry-hash conflict, re-import, user-removed membership, account switching, and cross-user isolation.
 - Draft-contract tests cover Wanna and Check-in, null Check-in rating/date, invalid Wanna rating/date payloads, clearing visit-only values when switching back to Wanna, bounded notes, `preserve_overrides` versus explicitly confirmed `force_all`, and exact duplicates remaining read-only.
-- Revision/freeze tests race row edits, Apply-to-all, double confirmation, delayed responses, worker claims, and ABA lifecycle transitions; they prove one destination-and-draft snapshot commits and stale draft/state mutations return `version_conflict`.
+- Revision/freeze tests race row edits, Apply-to-all, double confirmation, delayed responses, worker claims, ABA lifecycle transitions, and post-commit exception recovery. They prove each draft generation freezes and commits only its assigned items, prior generations stay immutable, and stale draft/state mutations return `version_conflict`.
 - Mutation-ledger tests replay and conflict every mutating RPC, including retry/skip/reopen/cancel and destination replacement, verify one replacement per expected destination generation, and inject crashes before/after operation claim, domain mutation, version increment, and result persistence to prove transactional atomicity or fenced takeover.
 - State-machine and hosted RPC tests cover disallowed transitions, missing and cross-owner batch/item IDs, manual-retry throttling, concurrent identical/conflicting confirmations, and two batches racing for the same owner's single `committing` slot.
 - Cross-device re-import tests use different client request IDs for the same source and prove they converge on one owner/source lineage and destination association; losing batches become `superseded`, return the canonical batch, delete transient sources, and leave active quotas/resume UI.
