@@ -250,6 +250,7 @@ enum DiscoverTrustedPlaceSearchPlanner {
                 phrases.append(entry.group)
                 phrases.append(entry.id.replacingOccurrences(of: "_", with: " "))
                 phrases.append(contentsOf: entry.aliases)
+                phrases.append(contentsOf: DiscoverCategoryAliasLexicon.aliases[normalizedCategory, default: []])
                 if let defaultSubcategory = entry.defaultSubcategory {
                     phrases.append(defaultSubcategory)
                 }
@@ -270,9 +271,13 @@ enum DiscoverTrustedPlaceSearchPlanner {
         for status in filters.statuses {
             switch status {
             case .been:
-                phrases.append(contentsOf: ["been", "went", "tried", "visited", "checked in", "check in", "check ins"])
+                phrases.append(contentsOf: [
+                    "been", "went", "tried", "visited", "checked in", "check in", "check ins", "liked", "recommended"
+                ])
             case .wannaGo:
-                phrases.append(contentsOf: ["wanna go", "want to go", "want to try", "wishlist", "saved for later"])
+                phrases.append(contentsOf: [
+                    "wanna", "wanna go", "want", "want to go", "want to try", "try", "wishlist", "saved", "saved for later"
+                ])
             }
         }
 
@@ -282,7 +287,7 @@ enum DiscoverTrustedPlaceSearchPlanner {
         case .mutual:
             phrases.append(contentsOf: ["friend", "friends", "mutual", "mutuals"])
         case .follower:
-            phrases.append(contentsOf: ["people i follow", "people you follow", "from people", "following"])
+            phrases.append(contentsOf: ["people", "people i follow", "people you follow", "from people", "following"])
         case .nonFollower:
             phrases.append(contentsOf: ["not following", "people i don't follow"])
         case nil:

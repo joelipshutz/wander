@@ -142,6 +142,23 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertTrue(query.allowsConsumedOnlyMatches)
     }
 
+    func testPlannerUsesDeterministicParserCategoryAndRelationshipAliases() {
+        let filters = DiscoverFilters(
+            query: "hikes in LA from people",
+            categories: [WanderPlaceCategory.outdoorsNature],
+            area: "LA",
+            relationship: .follower
+        )
+
+        let query = TrustedPlaceSearchQuery(
+            filters.query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+
+        XCTAssertTrue(query.requiredTokens.isEmpty)
+        XCTAssertEqual(Set(query.consumedTokens), ["hikes", "la", "from", "people"])
+    }
+
     func testInferredFacetWithoutLiteralSpanConsumesNothing() {
         let filters = DiscoverFilters(query: "great coffee", tags: ["cozy"])
         let query = TrustedPlaceSearchQuery(
