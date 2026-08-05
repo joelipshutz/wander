@@ -542,7 +542,7 @@ GoogleImportItem
   id, batch_id, ordinal, source_item_key_hash, source_fingerprint
   normalized_candidate, resolved_place_id, match_kind, state, state_version
   staged_status, staged_rating, staged_visit_date, staged_note
-  draft_version, draft_generation, draft_frozen_at
+  draft_version, draft_generation, draft_frozen_at, commit_generation
   has_manual_override, claim_token, claim_generation, claim_expires_at
   save_operation_id, save_request_hash
   membership_operation_id, membership_request_hash, result_user_place_id
@@ -580,8 +580,8 @@ The client generates `client_request_id` and confirmation-operation UUIDs, persi
 
 The server derives two item operations:
 
-- `save_operation_id = (batch_id, item_id, save_contract_version)` with a canonical hash covering canonical place ID, staged status, normalized optional rating/date/note values, fixed place visibility `self`, and contract version. Untouched items canonicalize to `wanna_go` with null optional values.
-- `membership_operation_id = (batch_id, item_id, destination_generation, membership_contract_version)` with a canonical hash covering destination list ID, canonical place ID, destination generation, and contract version.
+- `save_operation_id = (batch_id, item_id, commit_generation, save_contract_version)` with a canonical hash covering canonical place ID, staged status, normalized optional rating/date/note values, fixed place visibility `self`, and contract version. Untouched items canonicalize to `wanna_go` with null optional values.
+- `membership_operation_id = (batch_id, item_id, commit_generation, destination_generation, membership_contract_version)` with a canonical hash covering destination list ID, canonical place ID, commit generation, destination generation, and contract version.
 
 Canonical hashes use sorted-key canonical JSON. Reusing either operation ID with a different hash is a hard conflict. Splitting the operations lets destination repair attach an existing successful save to a replacement list without recreating or mutating the personal save.
 
@@ -633,7 +633,7 @@ Draft mutations accept only `wanna_go` or `checked_in`, are owner-scoped, and ar
 
 Confirmation is valid only from `ready_to_confirm`. It compares the expected batch state version and draft revision and, in one transaction, hashes the destination plus the active draft generation and every ready item ID, state version, draft version, and override marker; freezes that generation and its items; stores the confirmation hash; increments the state versions; and moves only those items into a claimable commit state. No draft mutation can succeed for a frozen generation, including delayed Apply-to-all responses or retries. Rating and visit date must be null for Wanna; switching from Check-in back to Wanna atomically clears those staged values. Check-in permits a null rating and date. Notes use the existing bounded save-note contract. Exact duplicates are read-only during import.
 
-The initial ready set uses draft generation 1. Resolving an exception after `completed_with_exceptions` creates the next generation, assigns only the recovered item(s), resets the generation-local draft revision/freeze, and moves the batch through `ready_to_confirm -> committing` for that generation. Previously committed/frozen generations remain immutable. This gives recovered items the same optional status/detail review and confirmation contract without reopening earlier saves.
+The initial ready set uses draft/commit generation 1. Resolving an exception after `completed_with_exceptions` creates the next generation, assigns only the recovered item(s), derives new save/membership operation IDs, resets the generation-local draft revision/freeze, and moves the batch through `ready_to_confirm -> committing` for that generation. Earlier generations and their operation IDs/hashes remain immutable audit history. This gives recovered items the same optional status/detail review and confirmation contract without conflicting with or reopening earlier saves.
 
 ### Commit and partial-failure semantics
 
@@ -786,7 +786,7 @@ Do not send URLs, list names, place names, notes, coordinates, or raw error payl
 - Deep-link intent survives sign-in/onboarding and process recreation where the platform contract permits it.
 - The batch commit is idempotent and has regression coverage for new save, existing save, save/membership transaction rollback, deleted destination, cancellation during commit, retry-hash conflict, re-import, user-removed membership, account switching, and cross-user isolation.
 - Draft-contract tests cover Wanna and Check-in, null Check-in rating/date, invalid Wanna rating/date payloads, clearing visit-only values when switching back to Wanna, bounded notes, `preserve_overrides` versus explicitly confirmed `force_all`, and exact duplicates remaining read-only.
-- Revision/freeze tests race row edits, Apply-to-all, double confirmation, delayed responses, worker claims, ABA lifecycle transitions, and post-commit exception recovery. They prove each draft generation freezes and commits only its assigned items, prior generations stay immutable, and stale draft/state mutations return `version_conflict`.
+- Revision/freeze tests race row edits, Apply-to-all, double confirmation, delayed responses, worker claims, ABA lifecycle transitions, and post-commit exception recovery. They prove each draft/commit generation freezes and commits only its assigned items, corrected recovery payloads receive new operation IDs, prior generations stay immutable, and stale draft/state mutations return `version_conflict`.
 - Mutation-ledger tests replay and conflict every mutating RPC, including retry/skip/reopen/cancel and destination replacement, verify one replacement per expected destination generation, and inject crashes before/after operation claim, domain mutation, version increment, and result persistence to prove transactional atomicity or fenced takeover.
 - State-machine and hosted RPC tests cover disallowed transitions, missing and cross-owner batch/item IDs, manual-retry throttling, concurrent identical/conflicting confirmations, and two batches racing for the same owner's single `committing` slot.
 - Cross-device re-import tests use different client request IDs for the same source and prove they converge on one owner/source lineage and destination association; losing batches become `superseded`, return the canonical batch, delete transient sources, and leave active quotas/resume UI.
