@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum ContactInviteAccessState: Equatable {
     case primer
@@ -61,15 +62,20 @@ struct InviteEntryPointButton: View {
 
 struct ContactInviteSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     let surface: InviteSurface
-    let contacts: [InviteContact]
+    let contactProvider: (any ContactProvider)?
     let canDismiss: Bool
 
+    @State private var contacts: [InviteContact]
     @State private var accessState: ContactInviteAccessState
     @State private var presentationState: ContactInvitePresentationState
     @State private var query: String
     @State private var selection: InviteSelection
+    @State private var isLoadingContacts = false
+    @State private var didFailLoadingContacts = false
 
     init(
         surface: InviteSurface,
@@ -81,12 +87,28 @@ struct ContactInviteSheet: View {
         canDismiss: Bool = true
     ) {
         self.surface = surface
-        self.contacts = contacts
+        contactProvider = nil
         self.canDismiss = canDismiss
+        _contacts = State(initialValue: contacts)
         _accessState = State(initialValue: accessState)
         _presentationState = State(initialValue: presentationState)
         _query = State(initialValue: query)
         _selection = State(initialValue: InviteSelection(contactIDs: selectedContactIDs))
+    }
+
+    init(
+        surface: InviteSurface,
+        contactProvider: any ContactProvider,
+        canDismiss: Bool = true
+    ) {
+        self.surface = surface
+        self.contactProvider = contactProvider
+        self.canDismiss = canDismiss
+        _contacts = State(initialValue: [])
+        _accessState = State(initialValue: .primer)
+        _presentationState = State(initialValue: .choosing)
+        _query = State(initialValue: "")
+        _selection = State(initialValue: InviteSelection())
     }
 
     private var sections: [InviteContactSection] {
@@ -121,6 +143,13 @@ struct ContactInviteSheet: View {
             .padding(.top, WanderTheme.spacing2)
         }
         .preferredColorScheme(.light)
+        .task {
+            await refreshProviderState()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, contactProvider != nil else { return }
+            Task { await refreshProviderState() }
+        }
     }
 
     private var header: some View {
@@ -186,7 +215,11 @@ struct ContactInviteSheet: View {
         VStack(spacing: 0) {
             searchField
 
-            if sections.isEmpty {
+            if isLoadingContacts {
+                loadingContacts
+            } else if didFailLoadingContacts {
+                failedContacts
+            } else if sections.isEmpty {
                 emptyResults
             } else {
                 ZStack(alignment: .trailing) {
@@ -386,18 +419,24 @@ struct ContactInviteSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
 
             Button {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    accessState = .authorized
-                }
+                Task { await requestContactsAccess() }
             } label: {
-                Text("continue to contacts")
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(maxWidth: .infinity, minHeight: 52)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
+                Group {
+                    if isLoadingContacts {
+                        ProgressView()
+                            .tint(WanderTheme.textOnAction.color)
+                    } else {
+                        Text("continue to contacts")
+                    }
+                }
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(WanderTheme.terracotta.color)
+                .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .disabled(isLoadingContacts)
 
             Button("not now") {
                 if canDismiss { dismiss() }
@@ -443,7 +482,10 @@ struct ContactInviteSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button("open settings") {}
+            Button("open settings") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                openURL(url)
+            }
                 .font(.system(size: 15, weight: .black))
                 .foregroundStyle(WanderTheme.textOnAction.color)
                 .frame(maxWidth: .infinity, minHeight: 52)
@@ -480,6 +522,40 @@ struct ContactInviteSheet: View {
             Text("Try another name, number, or username.")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(WanderTheme.textMuted.color)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var loadingContacts: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            Spacer()
+            ProgressView()
+                .tint(WanderTheme.terracotta.color)
+            Text("loading contacts")
+                .font(.system(size: 17, weight: .black, design: .rounded))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var failedContacts: some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            Spacer()
+            Image(systemName: "arrow.clockwise.circle.fill")
+                .font(.system(size: 42, weight: .black))
+                .foregroundStyle(WanderTheme.terracotta.color)
+            Text("contacts couldn’t load")
+                .font(.system(size: 20, weight: .black, design: .rounded))
+            Button("try again") {
+                Task { await loadContacts() }
+            }
+            .font(.system(size: 14, weight: .black))
+            .foregroundStyle(WanderTheme.textOnAction.color)
+            .padding(.horizontal, WanderTheme.spacing4)
+            .frame(minHeight: WanderTheme.tapMinimum)
+            .background(WanderTheme.terracotta.color)
+            .clipShape(Capsule())
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -563,5 +639,56 @@ struct ContactInviteSheet: View {
 
     private func avatarForeground(for contact: InviteContact) -> Color {
         contact.relationship.isOnRecme ? WanderTheme.stateInfo.color : WanderTheme.terracottaDark.color
+    }
+
+    @MainActor
+    private func refreshProviderState() async {
+        guard let contactProvider else { return }
+        switch await contactProvider.authorization() {
+        case .notDetermined:
+            accessState = .primer
+        case .authorized:
+            accessState = .authorized
+            await loadContacts()
+        case .denied:
+            accessState = .denied
+        }
+    }
+
+    @MainActor
+    private func requestContactsAccess() async {
+        guard let contactProvider else {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                accessState = .authorized
+            }
+            return
+        }
+
+        isLoadingContacts = true
+        let authorization = await contactProvider.requestAccess()
+        switch authorization {
+        case .authorized:
+            accessState = .authorized
+            await loadContacts()
+        case .notDetermined:
+            accessState = .primer
+            isLoadingContacts = false
+        case .denied:
+            accessState = .denied
+            isLoadingContacts = false
+        }
+    }
+
+    @MainActor
+    private func loadContacts() async {
+        guard let contactProvider else { return }
+        isLoadingContacts = true
+        didFailLoadingContacts = false
+        defer { isLoadingContacts = false }
+        do {
+            contacts = try await contactProvider.matches().map(InviteContact.init(contactMatch:))
+        } catch {
+            didFailLoadingContacts = true
+        }
     }
 }

@@ -15,7 +15,7 @@ struct WanderFixtures {
     let placeLists: [LocalPlaceList]
     let placeListMembers: [LocalPlaceListMember]
     let placeListItems: [LocalPlaceListItem]
-    let contactProvider: FakeContactProvider
+    let contactProvider: any ContactProvider
 
     @MainActor
     static func empty() -> WanderFixtures {
@@ -37,7 +37,7 @@ struct WanderFixtures {
             placeLists: [],
             placeListMembers: [],
             placeListItems: [],
-            contactProvider: FakeContactProvider(seededMatches: [])
+            contactProvider: SystemContactProvider()
         )
     }
 

@@ -274,7 +274,7 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    let contactProvider: FakeContactProvider
+    let contactProvider: any ContactProvider
 
     private let visibilityPolicy = VisibilityPolicy()
     private let parser: any LLMFilterParser

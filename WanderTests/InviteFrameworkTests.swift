@@ -75,6 +75,7 @@ final class InviteFrameworkTests: XCTestCase {
             contactMatch: ContactMatch(
                 id: "sam-contact",
                 displayName: "Sam Rivera",
+                contactDetail: "+1 (555) 010-1000",
                 handle: nil,
                 userID: nil,
                 isAlreadyFollowing: false,
@@ -85,7 +86,8 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertEqual(existing.relationship, .recmeUser(handle: "mayac", userID: "user-maya"))
         XCTAssertTrue(existing.isFrequentlyContacted)
         XCTAssertEqual(nonUser.relationship, .contactOnly)
-        XCTAssertNil(nonUser.contactDetail)
+        XCTAssertEqual(nonUser.contactDetail, "+1 (555) 010-1000")
+        XCTAssertTrue(nonUser.matches("555"))
     }
 
     func testCheckInFriendPickerPlacesContactInviteBetweenSearchAndFriends() throws {
@@ -106,5 +108,47 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertLessThan(invite.lowerBound, friends.lowerBound)
         XCTAssertTrue(source.contains("Button(\"Done\") { dismiss() }"))
         XCTAssertTrue(source.contains("ContactInviteSheet("))
+        XCTAssertTrue(source.contains("contactProvider: store.contactProvider"))
+    }
+
+    func testFeedPeoplePlacesContactInviteDirectlyAfterSearch() throws {
+        let source = try projectSource("Wander/Features/Feed/FeedScreen.swift")
+        let surface = try XCTUnwrap(source.components(separatedBy: "private struct FeedPeopleSurface: View").last)
+        let search = try XCTUnwrap(surface.range(of: "FeedPeopleSearchField(text: $memberQuery)"))
+        let invite = try XCTUnwrap(surface.range(of: "InviteEntryPointButton(surface: .feedPeople)"))
+        let results = try XCTUnwrap(surface.range(of: "if isMemberSearchActive"))
+
+        XCTAssertLessThan(search.lowerBound, invite.lowerBound)
+        XCTAssertLessThan(invite.lowerBound, results.lowerBound)
+        XCTAssertTrue(surface.contains("contactProvider: store.contactProvider"))
+    }
+
+    func testListCollaboratorPlacesContactInviteBetweenSearchAndFriends() throws {
+        let source = try projectSource("Wander/Features/Lists/ListsScreen.swift")
+        let content = try XCTUnwrap(source.components(separatedBy: "private struct FriendCollaboratorSearchContent: View").last)
+        let search = try XCTUnwrap(content.range(of: "TextField(\"Search friends\""))
+        let invite = try XCTUnwrap(content.range(of: "InviteEntryPointButton(surface: .listCollaborator"))
+        let friends = try XCTUnwrap(content.range(of: "Text(\"friends\")"))
+
+        XCTAssertLessThan(search.lowerBound, invite.lowerBound)
+        XCTAssertLessThan(invite.lowerBound, friends.lowerBound)
+        XCTAssertTrue(content.contains("contactProvider: store.contactProvider"))
+    }
+
+    func testProductionContactsUsePermissionAndLoadingStatesInsteadOfEmptySeed() throws {
+        let fixtures = try projectSource("Wander/Services/WanderFixtures.swift")
+        let sheet = try projectSource("Wander/Features/Invites/ContactInviteSheet.swift")
+
+        XCTAssertTrue(fixtures.contains("contactProvider: SystemContactProvider()"))
+        XCTAssertTrue(sheet.contains("await contactProvider.requestAccess()"))
+        XCTAssertTrue(sheet.contains("await contactProvider.matches()"))
+        XCTAssertTrue(sheet.contains("if isLoadingContacts"))
+    }
+
+    private func projectSource(_ path: String) throws -> String {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: projectRoot.appendingPathComponent(path))
     }
 }

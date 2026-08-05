@@ -164,7 +164,7 @@ struct InviteContact: Identifiable, Equatable {
     init(contactMatch: ContactMatch) {
         id = contactMatch.id
         displayName = contactMatch.displayName
-        contactDetail = nil
+        contactDetail = contactMatch.contactDetail
         if let handle = contactMatch.handle, let userID = contactMatch.userID {
             relationship = .recmeUser(handle: handle, userID: userID)
         } else {

@@ -246,7 +246,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         savedAt = .now
     }
 
-    func restoredState(contactProvider: FakeContactProvider) -> RestoredState {
+    func restoredState(contactProvider: any ContactProvider) -> RestoredState {
         let shouldResetSavedPlaces = (savedPlaceResetVersion ?? 0) < Self.currentSavedPlaceResetVersion
         let restoredCurrentUser = currentUser.model()
         var restoredProfiles = profiles.map { $0.model() }
@@ -322,7 +322,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]
         let saveStreakDatesByUserID: [String: [Date]]
         let saveStreakRecoveryDatesByUserID: [String: [Date]]
-        let contactProvider: FakeContactProvider
+        let contactProvider: any ContactProvider
         let defaultVisibility: PlaceVisibility
         let isPrivateProfile: Bool
         let autoSaveListAddsToWant: Bool

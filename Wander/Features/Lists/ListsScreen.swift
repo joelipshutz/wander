@@ -2151,7 +2151,10 @@ private struct CollaboratorInviteSheet: View {
                                 : "Existing collaborators stay on this list. New collaborator invites are unavailable while Private Profile is on."
                         )
                     } else {
-                        FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
+                        FriendCollaboratorSearchContent(
+                            selectedCollaborators: $selectedCollaborators,
+                            listName: list.name
+                        )
                         inviteByLinkSection
                     }
                 }
@@ -2269,10 +2272,16 @@ private struct FriendCollaboratorSearchSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var selectedCollaborators: [ListCollaboratorMock]
     let allowsInvitesWhilePrivate: Bool
+    let listName: String?
 
-    init(selectedCollaborators: Binding<[ListCollaboratorMock]>, allowsInvitesWhilePrivate: Bool = false) {
+    init(
+        selectedCollaborators: Binding<[ListCollaboratorMock]>,
+        allowsInvitesWhilePrivate: Bool = false,
+        listName: String? = nil
+    ) {
         _selectedCollaborators = selectedCollaborators
         self.allowsInvitesWhilePrivate = allowsInvitesWhilePrivate
+        self.listName = listName
     }
 
     var body: some View {
@@ -2298,7 +2307,10 @@ private struct FriendCollaboratorSearchSheet: View {
                                 : "Existing collaborators stay on this list. New collaborator invites are unavailable while Private Profile is on."
                         )
                     } else {
-                        FriendCollaboratorSearchContent(selectedCollaborators: $selectedCollaborators)
+                        FriendCollaboratorSearchContent(
+                            selectedCollaborators: $selectedCollaborators,
+                            listName: listName
+                        )
                     }
                 }
                 .padding(WanderTheme.spacing4)
@@ -2321,7 +2333,9 @@ private struct FriendCollaboratorSearchSheet: View {
 private struct FriendCollaboratorSearchContent: View {
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedCollaborators: [ListCollaboratorMock]
+    let listName: String?
     @State private var query = ""
+    @State private var isPresentingContactInvites = false
 
     private var allFriendCandidates: [ListCollaboratorMock] {
         store.following(of: store.currentUser.id)
@@ -2365,6 +2379,10 @@ private struct FriendCollaboratorSearchContent: View {
                     .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
             )
 
+            InviteEntryPointButton(surface: .listCollaborator(listName: listName)) {
+                isPresentingContactInvites = true
+            }
+
             if !selectedCollaborators.isEmpty {
                 selectedCollaboratorsSection
             }
@@ -2404,6 +2422,12 @@ private struct FriendCollaboratorSearchContent: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $isPresentingContactInvites) {
+            ContactInviteSheet(
+                surface: .listCollaborator(listName: listName),
+                contactProvider: store.contactProvider
+            )
         }
     }
 
@@ -3559,7 +3583,8 @@ private struct ListEditorSheet: View {
             .sheet(isPresented: $isShowingFriendSearch) {
                 FriendCollaboratorSearchSheet(
                     selectedCollaborators: $stagedCollaborators,
-                    allowsInvitesWhilePrivate: canEditCollaborators
+                    allowsInvitesWhilePrivate: canEditCollaborators,
+                    listName: title
                 )
                     .presentationDetents([.large])
                     .presentationBackground(WanderTheme.canvasWarm.color)
