@@ -470,6 +470,7 @@ enum DiscoverParseSource: String, Equatable {
 }
 
 enum DiscoverEvidenceKind: String, Equatable {
+    case name
     case owner
     case opinion
     case rating
@@ -477,6 +478,8 @@ enum DiscoverEvidenceKind: String, Equatable {
     case category
     case status
     case area
+    case note
+    case attribute
     case tag
     case relationship
 }
@@ -889,6 +892,30 @@ extension LLMFilterParser {
     var parseSource: DiscoverParseSource { .remote }
 }
 
+enum DiscoverCategoryAliasLexicon {
+    static let aliases: [String: [String]] = [
+        "restaurants_food": ["restaurant", "restaurants", "food", "fast food", "noodle", "noodles", "dinner", "lunch", "brunch", "sushi", "thai", "taco", "pizza"],
+        "coffee_tea_sweets": ["coffee", "cafe", "cafes", "work from", "tea", "bakery", "dessert", "ice cream", "juice", "smoothie"],
+        "bars_nightlife": ["bar", "bars", "drink", "drinks", "patio", "cocktail", "pub", "brewery", "wine bar", "nightlife", "club"],
+        "outdoors_nature": ["hike", "hikes", "trail", "trails", "park", "parks", "beach", "waterfall"],
+        "things_to_do": ["museum", "gallery", "movie", "concert", "venue", "arcade", "tourist attraction", "landmark", "bowling", "zoo"],
+        "shopping": ["shop", "shops", "store", "stores", "boutique", "market"],
+        "wellness_fitness": ["wellness", "spa", "hospital", "pharmacy", "clinic", "gym", "fitness", "pilates", "yoga", "court", "vet", "veterinarian"],
+        "stays": ["hotel", "motel", "resort", "stay", "stays"],
+        "services_errands": ["salon", "barber", "repair", "bank", "atm", "laundry", "tailor", "plumber", "pet care"],
+        "travel_transit": ["airport", "train", "bus", "transit", "parking", "taxi", "gas station", "ev charging"],
+        "work_education": ["school", "university", "library", "office", "coworking", "work"],
+        "civic_faith": ["temple", "church", "shrine", "mosque", "synagogue", "government", "post office", "police"],
+        "areas_addresses": ["city", "address", "neighborhood", "region", "street"],
+        "facilities_other": ["restroom", "bathroom", "public bath", "unknown"],
+        "coffee": ["coffee", "cafe", "cafes", "work from"],
+        "restaurant": ["restaurant", "restaurants", "noodle", "noodles", "dinner", "lunch"],
+        "hike": ["hike", "hikes", "trail", "trails"],
+        "bar": ["bar", "bars", "drink", "drinks", "patio"],
+        "park": ["park", "parks"]
+    ]
+}
+
 struct DeterministicFilterParser: LLMFilterParser {
     var parseSource: DiscoverParseSource { .deterministic }
 
@@ -900,7 +927,7 @@ struct DeterministicFilterParser: LLMFilterParser {
             filters.categories.insert(category)
         }
 
-        for (category, aliases) in Self.categoryAliases where schema.allowedCategories.contains(category) {
+        for (category, aliases) in DiscoverCategoryAliasLexicon.aliases where schema.allowedCategories.contains(category) {
             if aliases.contains(where: { normalized.contains($0) }) {
                 filters.categories.insert(category)
             }
@@ -957,28 +984,6 @@ struct DeterministicFilterParser: LLMFilterParser {
         .openNow: ["open now", "open late"],
         .price: ["cheap", "price", "$"],
         .recency: ["recent", "lately", "this week", "last week"]
-    ]
-
-    private static let categoryAliases: [String: [String]] = [
-        "restaurants_food": ["restaurant", "restaurants", "food", "fast food", "noodle", "noodles", "dinner", "lunch", "brunch", "sushi", "thai", "taco", "pizza"],
-        "coffee_tea_sweets": ["coffee", "cafe", "cafes", "work from", "tea", "bakery", "dessert", "ice cream", "juice", "smoothie"],
-        "bars_nightlife": ["bar", "bars", "drink", "drinks", "patio", "cocktail", "pub", "brewery", "wine bar", "nightlife", "club"],
-        "outdoors_nature": ["hike", "hikes", "trail", "trails", "park", "parks", "beach", "waterfall"],
-        "things_to_do": ["museum", "gallery", "movie", "concert", "venue", "arcade", "tourist attraction", "landmark", "bowling", "zoo"],
-        "shopping": ["shop", "shops", "store", "stores", "boutique", "market"],
-        "wellness_fitness": ["wellness", "spa", "hospital", "pharmacy", "clinic", "gym", "fitness", "pilates", "yoga", "court", "vet", "veterinarian"],
-        "stays": ["hotel", "motel", "resort", "stay", "stays"],
-        "services_errands": ["salon", "barber", "repair", "bank", "atm", "laundry", "tailor", "plumber", "pet care"],
-        "travel_transit": ["airport", "train", "bus", "transit", "parking", "taxi", "gas station", "ev charging"],
-        "work_education": ["school", "university", "library", "office", "coworking", "work"],
-        "civic_faith": ["temple", "church", "shrine", "mosque", "synagogue", "government", "post office", "police"],
-        "areas_addresses": ["city", "address", "neighborhood", "region", "street"],
-        "facilities_other": ["restroom", "bathroom", "public bath", "unknown"],
-        "coffee": ["coffee", "cafe", "cafes", "work from"],
-        "restaurant": ["restaurant", "restaurants", "noodle", "noodles", "dinner", "lunch"],
-        "hike": ["hike", "hikes", "trail", "trails"],
-        "bar": ["bar", "bars", "drink", "drinks", "patio"],
-        "park": ["park", "parks"]
     ]
 
     private static func ownerQuery(from normalized: String) -> String? {

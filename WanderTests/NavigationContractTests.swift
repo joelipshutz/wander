@@ -98,7 +98,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher(placeholders: tickerSuggestions)"))
         XCTAssertTrue(feed.contains("isShowingSearch = true"))
-        XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search places and people\")"))
+        XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search trusted places\")"))
         XCTAssertTrue(feed.contains(".accessibilityIdentifier(\"feed.searchLauncher\")"))
         XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
         XCTAssertTrue(feed.contains("DiscoverScreen("))
