@@ -154,9 +154,25 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(peopleSearch.contains(".wanderGlassCapsule()"))
         XCTAssertFalse(peopleSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
-        XCTAssertTrue(lists.contains("WanderGlassHeader("))
+        XCTAssertFalse(lists.contains("WanderGlassHeader("))
         XCTAssertTrue(lists.contains("accessibilityIdentifier: \"lists.headerAdd\""))
         XCTAssertTrue(lists.contains("WanderGlassSegmentedSwitch("))
+    }
+
+    func testListsHeaderKeepsItsAddActionWithoutAFullWidthGlassPanel() throws {
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let header = try XCTUnwrap(
+            lists.components(separatedBy: "private var header: some View").last?
+                .components(separatedBy: "private var scopeSwitch: some View").first
+        )
+
+        XCTAssertTrue(header.contains("Text(\"lists\")"))
+        XCTAssertTrue(header.contains("WanderGlassActionButton("))
+        XCTAssertTrue(header.contains("accessibilityIdentifier: \"lists.headerAdd\""))
+        XCTAssertFalse(header.contains("WanderGlassHeader("))
+        XCTAssertFalse(header.contains(".wanderGlassPanel("))
     }
 
     @MainActor
@@ -863,8 +879,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialMasthead").count - 1, 1)
         XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialNamedContent").count - 1, 4)
         XCTAssertEqual(lists.components(separatedBy: "WanderTypography.editorialSmallNamedContent").count - 1, 2)
-        XCTAssertTrue(lists.contains("subtitle: \"save places into a plan you can actually use\""))
-        XCTAssertTrue(lists.contains("WanderGlassHeader("))
+        XCTAssertTrue(lists.contains("Text(\"save places into a plan you can actually use\")"))
+        XCTAssertFalse(lists.contains("WanderGlassHeader("))
 
         let discoverMastheadUses = discover.components(separatedBy: "WanderTypography.editorialMasthead").count - 1
         XCTAssertEqual(discoverMastheadUses, 1)
