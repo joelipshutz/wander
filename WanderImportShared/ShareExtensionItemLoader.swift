@@ -1,34 +1,6 @@
 import Foundation
 import UniformTypeIdentifiers
 
-struct SharedPlaceImportCaptureSummary: Equatable, Sendable {
-    let title: String
-    let detail: String?
-    let itemCount: Int
-
-    init(title: String, detail: String?, itemCount: Int) {
-        self.title = title
-        self.detail = detail
-        self.itemCount = itemCount
-    }
-
-    init(inputs: [SharedPlaceImportCaptureInput]) {
-        itemCount = inputs.count
-        if inputs.count == 1, let input = inputs.first {
-            title = switch input.previewSource {
-            case .instagram: "Instagram post"
-            case .tiktok: "TikTok post"
-            case .googleMaps: "Google Maps places"
-            case .textNotes: "Shared place"
-            }
-            detail = input.previewText
-        } else {
-            title = "\(inputs.count) shared items"
-            detail = inputs.compactMap(\.previewText).first
-        }
-    }
-}
-
 enum ShareExtensionItemLoader {
     private enum ProviderOutput {
         case url(URL, suggestedName: String?)

@@ -75,42 +75,6 @@ enum SharedPlaceImportCaptureInput: Equatable, Sendable {
     case file(Data, fileName: String, contentTypeIdentifier: String?)
 }
 
-extension SharedPlaceImportCaptureInput {
-    var previewSource: SharedPlaceImportSource {
-        switch self {
-        case .text(let text, let suggestedName):
-            SharedPlaceImportSourceDetector.source(for: text, fileName: suggestedName)
-        case .sharedLink(let url, let contextText, _):
-            SharedPlaceImportSourceDetector.source(
-                for: [contextText, url.absoluteString].compactMap { $0 }.joined(separator: "\n")
-            )
-        case .file(_, let fileName, _):
-            SharedPlaceImportSourceDetector.source(for: "", fileName: fileName)
-        }
-    }
-
-    var previewText: String? {
-        switch self {
-        case .text(let text, _):
-            Self.previewLine(text)
-        case .sharedLink(let url, let contextText, _):
-            Self.previewLine(contextText) ?? url.host
-        case .file(_, let fileName, _):
-            fileName
-        }
-    }
-
-    private static func previewLine(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let line = value
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { !$0.isEmpty }
-        guard let line else { return nil }
-        return line.count <= 140 ? line : String(line.prefix(137)) + "…"
-    }
-}
-
 struct SharedPlaceImportInboxEntry: Equatable, Sendable {
     let envelope: SharedPlaceImportEnvelope
     let envelopeURL: URL

@@ -248,14 +248,6 @@ final class ShareExtensionItemLoaderTests: XCTestCase {
                 )
             ]
         )
-        XCTAssertEqual(
-            SharedPlaceImportCaptureSummary(inputs: inputs),
-            SharedPlaceImportCaptureSummary(
-                title: "Instagram post",
-                detail: "Lunch at @mendocinofarms in Los Angeles",
-                itemCount: 1
-            )
-        )
     }
 }
 
