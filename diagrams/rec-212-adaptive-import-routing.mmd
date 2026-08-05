@@ -5,11 +5,12 @@ graph LR
   TEXT["Pasted text<br/>or multiple links"] --> CAPTURE
 
   CAPTURE["Capture and extract"] --> MATCH["Normalize and match places"]
-  MATCH --> COUNT{"How many are ready?"}
+  MATCH --> COUNT{"Total candidates + ready/help counts?"}
 
-  COUNT -->|"1 place"| QUICK["Quick Add card<br/>Default: Wanna<br/>Add 1 place"]
-  COUNT -->|"2 to 5"| COMPACT["Compact review<br/>Explicit status per row<br/>Add all"]
-  COUNT -->|"6 or more"| BATCH["Batch review<br/>Default: Wanna<br/>Apply to all + Add N"]
+  COUNT -->|"1 total - 1 ready"| QUICK["Quick Add card<br/>Default: Wanna<br/>Add 1 place"]
+  COUNT -->|"2 to 5 total"| COMPACT["Compact review<br/>Explicit status per row<br/>Add N of total"]
+  COUNT -->|"6 or more total"| BATCH["Batch review<br/>Default: Wanna<br/>Apply to all + Add N of total"]
+  COUNT -->|"0 ready"| HELP["Needs help<br/>No Add 0 action"]
 
   QUICK -.-> DETAIL["Optional caret<br/>status - rating - date - note"]
   COMPACT -.-> DETAIL
@@ -19,8 +20,6 @@ graph LR
   COMPACT --> SAVE
   BATCH --> SAVE
   SAVE --> DEST["Map + private source list"]
-
-  MATCH -.-> HELP["Needs help<br/>match or skip later"]
 
   classDef source fill:#F7F1E8,stroke:#30302E,color:#1F1F1E,stroke-width:1px;
   classDef system fill:#FFFFFF,stroke:#77736D,color:#33312E,stroke-width:1px;

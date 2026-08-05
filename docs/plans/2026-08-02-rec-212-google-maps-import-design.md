@@ -285,7 +285,7 @@ The exploration now includes Instagram and TikTok share-extension imports, not o
 
 Source-specific acquisition remains different because extracting an Instagram post, TikTok, Google Maps place, Google list, or pasted text requires different parsing and recovery copy. After places are normalized, status, optional enrichment, duplicate handling, and saving should behave consistently.
 
-Candidate presentation thresholds to prototype:
+Candidate presentation thresholds:
 
 | Ready items | Surface | Primary action | Optional depth |
 |---|---|---|---|
@@ -293,7 +293,15 @@ Candidate presentation thresholds to prototype:
 | 2–5 | Compact review list | `Add all` | Explicit status per row; expand any row |
 | 6+ | Batch review | `Add N places` | Wanna batch default; apply to all; expand exceptions or chosen rows |
 
-These thresholds are the approved starting behavior and remain tunable. The key behavior to validate is whether one adaptive component family feels coherent without forcing a one-item Instagram share through a large import inbox or giving a 37-place list a one-item save flow 37 times.
+These thresholds are the approved starting behavior and remain tunable. Routing uses total normalized candidates plus ready/help counts, not ready count alone:
+
+- Quick Add requires exactly one total candidate, one ready place, and zero exceptions.
+- Compact review handles two to five total candidates and always exposes any Needs Help count.
+- Six or more total candidates always use batch review, even if only one is ready.
+- Zero ready places open recovery/Needs Help, never an `Add 0` action.
+- Every CTA and success message states the denominator when exceptions exist, such as `Add 1 of 100 · 99 need help`, so partial extraction cannot look like complete success.
+
+The key behavior to validate is whether one adaptive component family feels coherent without forcing a one-item Instagram share through a large import inbox or giving a 37-place list a one-item save flow 37 times.
 
 Working rules:
 
@@ -520,36 +528,47 @@ GoogleImportBatch
   confirmation_operation_id, confirmation_request_hash
   source_list_key_hash, source_display_name
   entry_context, destination_list_id, destination_generation
-  state, capability_version
+  state, capability_version, draft_revision, drafts_frozen_at
+  commit_lease_token, commit_lease_expires_at, last_progress_at
   ready_new_count, exact_duplicate_count, needs_help_count
   newly_saved_count, existing_attached_count, skipped_count, failed_count
-  created_at, confirmed_at, completed_at
+  created_at, confirmed_at, completed_at, transient_data_expires_at
 
 GoogleImportItem
   id, batch_id, ordinal, source_item_key_hash, source_fingerprint
   normalized_candidate, resolved_place_id, match_kind, state
   staged_status, staged_rating, staged_visit_date, staged_note, draft_version
+  claim_token, claim_expires_at
   save_operation_id, save_request_hash
   membership_operation_id, membership_request_hash, result_user_place_id
   attempt_count, next_attempt_at, coarse_error_code
+
+GoogleImportSourceLineage
+  owner_user_id, source_list_key_hash, current_batch_id
+  destination_list_id, destination_generation, updated_at
+
+ImportMutationOperation
+  operation_id, owner_user_id, batch_id, item_id?, kind
+  canonical_request_hash, expected_state, expected_revision
+  outcome, result_revision, created_at
 ```
 
 Expected authenticated client contracts:
 
 - `create_google_import_batch(public_list_url, client_request_id, entry_context) -> batch_id`
 - `get_google_import_batch(batch_id) -> batch summary + paged item summaries`
-- `apply_google_import_default(batch_id, status, operation_id) -> updated counts/state`
-- `update_google_import_item_draft(item_id, draft, operation_id) -> item summary`
-- `confirm_google_import_batch(batch_id, confirmation_operation_id) -> accepted counts/state`
-- `retry_google_import_source(batch_id)`
-- `select_google_import_match(item_id, canonical_place_id, operation_id)`
-- `retry_google_import_item(item_id)`
-- `skip_google_import_item(item_id)`
-- `reopen_google_import_item(item_id)`
-- `replace_google_import_destination(batch_id, operation_id)`
-- `cancel_google_import_batch(batch_id)`
+- `apply_google_import_default(batch_id, status, expected_draft_revision, operation_id) -> updated revision/counts/state`
+- `update_google_import_item_draft(item_id, draft, expected_item_version, operation_id) -> item summary + batch revision`
+- `confirm_google_import_batch(batch_id, expected_draft_revision, confirmation_operation_id) -> accepted counts/state`
+- `retry_google_import_source(batch_id, expected_revision, operation_id)`
+- `select_google_import_match(item_id, canonical_place_id, expected_item_version, operation_id)`
+- `retry_google_import_item(item_id, expected_item_version, operation_id)`
+- `skip_google_import_item(item_id, expected_item_version, operation_id)`
+- `reopen_google_import_item(item_id, expected_item_version, operation_id)`
+- `replace_google_import_destination(batch_id, expected_destination_generation, operation_id)`
+- `cancel_google_import_batch(batch_id, expected_revision, operation_id)`
 
-The submitted URL is stored only as an application-layer-encrypted, owner-scoped source artifact so acquisition can retry. It is deleted 24 hours after source resolution succeeds, immediately on cancellation, or at a seven-day absolute expiry, whichever comes first. It is never retained in analytics or long-term batch metadata. Owner-facing RPCs derive the user from authenticated claims and never accept a caller-selected owner ID.
+The submitted URL is stored only as an application-layer-encrypted, owner-scoped source artifact so acquisition can retry. It is deleted 24 hours after source resolution succeeds, immediately on cancellation, or at a seven-day absolute expiry, whichever comes first. It is never retained in analytics or long-term batch metadata. A normalized candidate stores a stable provider ID or one-way fingerprint, never a reusable raw URL/share token. If resolution temporarily requires such a token, it remains in the same encrypted expiring source artifact. Owner-facing RPCs derive the user from authenticated claims and never accept a caller-selected owner ID.
 
 The client generates `client_request_id` and confirmation-operation UUIDs, persists them before sending, and reuses them on retry. A create request stores a canonical hash of normalized URL plus entry context. Replaying the same `client_request_id` and hash returns the existing batch; reusing it with a different URL or entry context returns `operation_conflict`.
 
@@ -560,11 +579,15 @@ The server derives two item operations:
 
 Canonical hashes use sorted-key canonical JSON. Reusing either operation ID with a different hash is a hard conflict. Splitting the operations lets destination repair attach an existing successful save to a replacement list without recreating or mutating the personal save.
 
+Every mutating RPC, including defaults, drafts, match selection, retries, skip/reopen, destination replacement, and cancellation, writes an owner-scoped `ImportMutationOperation` before returning. A unique operation ID, canonical payload hash, expected state/revision or destination generation, and stored result make timeout retries and double taps replay-safe. Reusing an ID with a different payload is `operation_conflict`; a new ID against stale state is `version_conflict`. Destination replacement permits only one successful mutation for an expected generation.
+
 Database constraints enforce the idempotency and scheduling contract rather than relying on process-local checks:
 
 - Unique `(owner_user_id, client_request_id)` plus the stored `create_request_hash` makes batch creation replay-safe and detects conflicting reuse.
+- Unique `(owner_user_id, source_list_key_hash)` on `GoogleImportSourceLineage` serializes cross-device imports after the source identifier is known. Concurrent batches atomically converge on the canonical lineage and destination association rather than creating parallel lists; a later re-import advances `current_batch_id` under the same lock.
 - Unique `(batch_id, source_item_key_hash)` prevents one normalized source item from appearing twice in the same batch.
 - `save_operation_id` and `membership_operation_id` are independently unique. Membership identity includes destination generation so a repaired destination cannot collide with the original membership operation.
+- `ImportMutationOperation.operation_id` is unique per owner, and its stored canonical request hash/result is the replay surface for all other mutations.
 - A partial unique index on `owner_user_id` where `state = 'committing'` enforces one committing batch per owner. A batch that loses the race remains `ready_to_confirm` and receives `invalid_state` or `rate_limited` with retry guidance instead of exposing the constraint error.
 - Worker claim indexes cover claimable item state, `next_attempt_at`, and stable ordinal ordering. Read indexes cover `(batch_id, ordinal)` paging and `(owner_user_id, source_list_key_hash)` re-import lookup.
 
@@ -585,27 +608,32 @@ ItemState = queued | resolving | ready_new | exact_duplicate
 MatchKind = stable_provider_id | exact_canonical_id | ambiguous | none
 ```
 
-`normalized_candidate` contains only the bounded resolver input: display name, coarse address, coordinates when supplied, provider ID/URL token when supplied, source ordinal, and parser version. Legal item transitions are `queued -> resolving -> ready_new|exact_duplicate|needs_help`, ready/duplicate/reopened items `-> committing -> committed_*|failed_retryable|failed_terminal`, `failed_retryable -> committing`, `needs_help -> ready_new|exact_duplicate|skipped`, and `skipped -> needs_help` only through reopen.
+`normalized_candidate` contains only the bounded resolver input: display name, coarse address, coordinates when supplied, stable provider ID or one-way source fingerprint when supplied, source ordinal, and parser version. Legal item transitions are `queued -> resolving -> ready_new|exact_duplicate|needs_help`, ready/duplicate/reopened items `-> committing -> committed_*|failed_retryable|failed_terminal`, `failed_retryable -> committing`, `failed_terminal -> needs_help|skipped` through explicit recovery, `needs_help -> ready_new|exact_duplicate|skipped`, and `skipped -> needs_help` only through reopen. Exhausted transient/provider failures remain manually retryable; invariant, security, or irreconcilable-personal-data failures route to Needs Help or Skip rather than stranding the batch.
 
 Mutation RPCs return:
 
 ```text
 CommandResult
-  outcome = accepted | idempotent_replay | operation_conflict
-    | invalid_state | not_found | forbidden | rate_limited
+  outcome = accepted | idempotent_replay | operation_conflict | version_conflict
+    | invalid_state | not_found | forbidden | rate_limited | capacity_unavailable
   batch_state, item_state?, summary_counts, coarse_error_code?
 ```
 
-Draft mutations accept only `wanna_go` or `checked_in`, are owner-scoped, and are valid only for uncommitted `ready_new` items. Rating and visit date must be null for Wanna; switching from Check-in back to Wanna atomically clears those staged values. Check-in permits a null rating and date. Notes use the existing bounded save-note contract. Exact duplicates are read-only during import.
+Draft mutations accept only `wanna_go` or `checked_in`, are owner-scoped, and are valid only for uncommitted `ready_new` items while `drafts_frozen_at` is null. Each item update uses compare-and-swap on `draft_version` and atomically increments the batch `draft_revision`; each Apply-to-all operation compares and increments the batch revision and stores its replay hash. A stale edit returns `version_conflict` with the latest summary instead of overwriting a newer choice.
+
+Confirmation is valid only from `ready_to_confirm`. It compares the expected batch revision and, in one transaction, hashes the destination plus every ready item ID and draft version, freezes that exact snapshot, stores the confirmation hash, and moves the items into a claimable commit state. No draft mutation can succeed after that freeze, including delayed Apply-to-all responses or retries. Rating and visit date must be null for Wanna; switching from Check-in back to Wanna atomically clears those staged values. Check-in permits a null rating and date. Notes use the existing bounded save-note contract. Exact duplicates are read-only during import.
 
 ### Commit and partial-failure semantics
 
 1. Confirmation creates or resolves the destination `stealth` list before any item is claimable. If destination setup fails, zero items commit and the batch remains retryable at `destination_setup_failed`.
-2. A worker claims items with bounded concurrency. One database transaction per item executes the personal-save operation, preserves existing personal fields, executes the current-generation membership operation, and records the import-item result.
+2. A worker claims items with bounded concurrency using an atomic claim token and expiring lease. One database transaction per item verifies the live claim, executes the personal-save operation, preserves existing personal fields, executes the current-generation membership operation, and records the import-item result.
 3. If any part of that per-item transaction fails, that item's save/membership/result roll back together. Other item transactions continue.
 4. An existing active membership is an idempotent success. A previously user-deleted membership is not silently restored on re-import.
 5. If the destination list is deleted during commit, the batch pauses at `destination_deleted`. `Create replacement list` increments `destination_generation`, makes a new unique `stealth` list, and runs a distinct idempotent membership-repair operation for already successful saves before resuming remaining items. `Stop import` keeps successful personal saves and cancels uncommitted items.
 6. Cancellation stops new item claims. An in-flight item transaction may finish; completed saves remain and the final state is `cancelled_partial` when any item committed.
+7. A worker heartbeat extends only its own lease. If a worker dies, a watchdog expires the stale item/batch claim, preserves the same operation IDs and frozen drafts, and makes unfinished work claimable again. A maximum commit lifetime moves poison work to a recorded exception/partial terminal state so the owner's partial unique `committing` slot cannot remain occupied forever.
+
+Before reopening or claiming an exception from `completed_with_exceptions`, the server verifies the current destination generation. If the destination was deleted, the batch enters `destination_deleted` and requires the same explicit replacement consent and membership-repair contract as the initial commit.
 
 User-facing counts never collapse different outcomes. Confirmation reports `new places`, `already saved`, and `need help`. Completion reports `newly saved`, `already saved and added to list`, `need help`, and `skipped`.
 
@@ -627,11 +655,15 @@ If the prior destination was deleted before a later import begins, confirmation 
 - Invalid/private URLs, authorization failures, the 100-item limit, no match, and ambiguous match are not automatically retried.
 - Resolution and commit concurrency are each capped at four items per batch initially. Load tests at 50 and 100 items must verify provider throttling before Gate 2.
 - Provider acquisition also has a server-wide rate/concurrency budget, and workers have a server-wide transaction budget. A fair per-owner queue, backpressure, and provider `Retry-After` handling prevent concurrent onboarding/ad traffic from multiplying the per-batch cap into an unbounded aggregate load. These budgets are remotely configurable and validated under concurrent multi-user traffic before Gates 2 and 4.
+- Batch creation and source fetching have per-owner, per-device, per-IP, and global rate limits. Initially, one owner may have at most three non-terminal batches; a full global queue returns `capacity_unavailable` with retry guidance before fetching or persisting a new source. Limits are remotely configurable and never reveal whether another account imported the same source.
 - Only one batch per owner may be in `committing`; additional imports may resolve and wait at confirmation.
-- Multiple App Group shares remain in a seven-day FIFO queue and are presented one at a time. They are encrypted with iOS complete-file protection and contain only the minimum share envelope.
+- Multiple App Group shares remain in a seven-day FIFO queue and are presented one at a time. They are encrypted with iOS complete-file protection and contain only the minimum share envelope. The queue holds at most 20 envelopes or 256 KiB total; once full, the extension refuses a new capture with `Open rec.me to finish or delete an older import` and never silently evicts a source.
 - On logout/account switch, bound server batches remain with their owner and disappear from the local UI. Unbound share envelopes require an explicit `Import to @handle` confirmation before binding and never transfer after binding.
+- Local batch summaries, normalized candidates, staged notes, notifications, and pending routes are owner-keyed. Account switch/logout purges or cryptographically separates the prior owner's cache before rendering the next account; notifications never expose place or note text on a shared lock screen. Unbound envelopes stay in their separately protected queue until binding or expiry.
 - App termination does not lose state. Server workers may continue; client UI resumes by reading the durable batch. The product never relies on an ordinary foreground task surviving suspension.
-- Server-side acquisition accepts only HTTPS Google Maps list URLs through a purpose-built fetcher: allowlisted Google host/path patterns, port 443 only, no embedded credentials, at most five redirects, host validation and DNS/IP checks on every redirect, rejection of private/loopback/link-local/reserved IPs, DNS rebinding protection, fixed connection/read timeouts, and the existing 20 MB response cap. It cannot fetch arbitrary caller-selected URLs.
+- Source inputs are bounded before persistence: URL 8 KiB, source display name 1 KiB before 96-grapheme normalization, place name 1 KiB, coarse address 2 KiB, provider ID 512 bytes, and one normalized candidate 8 KiB. Limits are byte-aware for multibyte Unicode.
+- Server-side acquisition accepts only HTTPS Google Maps list URLs through a purpose-built fetcher: allowlisted Google host/path patterns, port 443 only, no embedded credentials, at most five redirects, host validation and DNS/IP checks on every redirect, rejection of private/loopback/link-local/reserved IPs, DNS rebinding protection, and fixed connection/read/parser timeouts. Fetching is streamed and bounded to 5 MB compressed, 20 MB decoded, and a 20:1 compression ratio. Accepted content types/encodings, nesting/token count, per-field length, normalized candidate size, and parser work are bounded before the 100-item rule. Archives and unsupported encodings fail closed. It cannot fetch arbitrary caller-selected URLs.
+- Active encrypted source artifacts expire under the source policy above. After a terminal batch, staged notes and normalized candidate payloads are deleted on a bounded retention schedule while compact hashes, operation IDs, item outcomes, and source membership provenance remain only as long as required for idempotency, re-import semantics, user-visible history, and the documented product retention policy. Garbage collection is resumable and auditable.
 
 ### State model
 
@@ -657,6 +689,7 @@ resolving / committing
 
 completed_with_exceptions
   -> committing -> completed or completed_with_exceptions
+  -> destination_deleted -> committing after explicit replacement
 
 committing
   -> cancelled when zero items committed
@@ -674,11 +707,13 @@ Auth/onboarding routing owns only the pending entry intent. The import repositor
 
 ### Additive schema rollout and rollback
 
-The capability flag remains off while the schema lands. Deploy in expand-first order: tables/nullable columns, constraints and indexes, owner-scoped RPCs, workers, then clients. Create production indexes with the project's low-lock/concurrent strategy where supported and verify their definitions plus RPC grants/security metadata in hosted checks before enabling writers.
+The capability bundle remains off while the schema lands. Deploy in expand-first order: tables/nullable columns, constraints and indexes, owner-scoped RPCs, workers, then clients. Create production indexes with the project's low-lock/concurrent strategy where supported and verify their definitions plus RPC grants/security metadata in hosted checks before enabling writers.
+
+Capabilities are independently controllable and versioned: `accept_new_sources`, `continue_resolution`, `confirm_commit`, `retry_repair`, and `emergency_stop`. Each batch pins the contract version it started under while current server overrides determine which lifecycle operations remain allowed. A provider incident normally disables new source acceptance while letting safe existing batches finish; disabling confirmation, repair, or all writes requires a specific recovery message and preserves the batch for later resume.
 
 If this uses new import tables, no historical backfill is required. If it extends existing REC-97 rows, add nullable fields first, run a bounded resumable backfill keyed by primary key, verify counts and hashes, and only then add non-null or uniqueness constraints. Mixed old/new worker versions must safely ignore unclaimed new fields while the flag is off.
 
-Rollback disables acquisition and new writes through the capability flag, lets in-flight item transactions reach a recorded terminal state, and retains durable import rows for resume/debugging. Do not drop the schema or erase completed user saves as a rollback mechanism.
+Rollback first disables `accept_new_sources`, then selectively pauses later lifecycle scopes only if required by the incident. In-flight item transactions reach a recorded terminal state, and durable import rows remain for resume/debugging. `emergency_stop` is the explicit last resort and shows that existing imports are paused, not lost. Do not drop the schema or erase completed user saves as a rollback mechanism.
 
 ### Analytics and privacy
 
@@ -687,14 +722,14 @@ Add funnel events with counts and coarse states only:
 - `google_import_entry_viewed` with entry context: ad, onboarding, add, share.
 - `google_import_source_submitted` with method: paste or share.
 - `google_import_resolution_completed` with ready-new/exact-duplicate/exception counts and duration bucket.
-- `google_import_confirmed` with item count bucket; the MVP default is fixed.
+- `google_import_confirmed` with item-count bucket and coarse Wanna/Check-in counts.
 - `google_import_commit_completed` with added/existing/failed counts and duration bucket.
 - `google_import_success_action` with map, list, or review_exceptions.
 - `google_import_explicitly_exited` with state and duration bucket.
 
 Server analysis may infer abandonment when a ready batch remains unconfirmed for 24 hours; the client does not pretend it can emit an event when iOS kills the app. Resolution duration runs from accepted source submission to resolution terminal state. Commit duration runs from server acceptance of confirmation to commit terminal state and includes network/worker time.
 
-Allowed coarse failure codes are `invalid_url`, `private_source`, `source_oversize`, `provider_unavailable`, `network_timeout`, `rate_limited`, `no_match`, `ambiguous_match`, `destination_deleted`, `commit_validation`, and `unknown`.
+Allowed coarse failure codes are `invalid_url`, `private_source`, `source_oversize`, `provider_unavailable`, `network_timeout`, `rate_limited`, `capacity_unavailable`, `no_match`, `ambiguous_match`, `destination_deleted`, `commit_validation`, and `unknown`.
 
 Do not send URLs, list names, place names, notes, coordinates, or raw error payloads.
 
@@ -729,23 +764,28 @@ Do not send URLs, list names, place names, notes, coordinates, or raw error payl
 
 ### Technical validation
 
-- Adaptive-routing tests cover zero ready items and the 1, 2, 5, 6, 100, and 101 item boundaries, including the selected surface, ready/help counts, CTA state, and no partial staging for an oversized source.
+- Adaptive-routing tests cover zero ready items and the 1, 2, 5, 6, 100, and 101 total-candidate boundaries, including exception-heavy cases such as 1 ready/99 help, selected surface, ready/help denominator copy, CTA state, and no partial staging for an oversized source.
 - Deep-link intent survives sign-in/onboarding and process recreation where the platform contract permits it.
 - The batch commit is idempotent and has regression coverage for new save, existing save, save/membership transaction rollback, deleted destination, cancellation during commit, retry-hash conflict, re-import, user-removed membership, account switching, and cross-user isolation.
 - Draft-contract tests cover Wanna and Check-in, null Check-in rating/date, invalid Wanna rating/date payloads, clearing visit-only values when switching back to Wanna, bounded notes, Apply-to-all affecting only untouched new items, and exact duplicates remaining read-only.
+- Revision/freeze tests race row edits, Apply-to-all, double confirmation, delayed responses, and worker claims; they prove one destination-and-draft snapshot commits and stale mutations return `version_conflict`.
+- Mutation-ledger tests replay and conflict every mutating RPC, including retry/skip/reopen/cancel and destination replacement, and verify one replacement per expected destination generation.
 - State-machine and hosted RPC tests cover disallowed transitions, missing and cross-owner batch/item IDs, manual-retry throttling, concurrent identical/conflicting confirmations, and two batches racing for the same owner's single `committing` slot.
+- Cross-device re-import tests use different client request IDs for the same source and prove they converge on one owner/source lineage and destination association.
 - Destination-name tests cover NFC normalization, controls and line breaks, control-only/empty fallback, names at and over 96 characters, emoji and multi-code-point graphemes, and deterministic collision suffixes without splitting a grapheme.
-- Source fetch tests cover redirect allowlists, DNS rebinding, private/reserved IP rejection, credentials/ports, timeouts, redirect loops, and response-size limits.
+- Source fetch tests cover redirect allowlists, DNS rebinding, private/reserved IP rejection, credentials/ports, timeouts, redirect loops, compressed/decoded byte and ratio limits, unsupported content types/encodings, pathological nesting/token counts, per-field/candidate byte bounds, multibyte Unicode, and parser-time limits.
 - Hosted verification covers any new or changed iOS-called Supabase RPC, grants, `search_path`, ownership, anonymous access, and rollback safety.
-- The public-list acquisition path has a server-controlled kill switch, remote copy, legal/provider review, redacted fixtures, and a live reliability canary before Gate 4.
+- The public-list acquisition path has server-controlled lifecycle capabilities and emergency stop, remote copy, legal/provider review, redacted fixtures, and a live reliability canary before Gate 4.
 - Load tests demonstrate per-batch and server-wide bounded concurrency, fair multi-user scheduling, provider backpressure/`Retry-After` behavior, and terminal-time distributions for 50- and 100-item batches before onboarding exposure.
-- Hosted schema verification covers idempotency uniqueness, the partial one-committing-batch constraint, claim/paging/re-import indexes and query plans, expand-first deployment compatibility, and kill-switch rollback without data loss.
+- Recovery and abuse tests cover worker death after claim/freeze/write boundaries, lease expiry and reclaim with unchanged operation IDs, maximum commit lifetime, creation/fetch quotas, active-batch and share-envelope limits, global queue saturation, transient-data garbage collection, and the owner becoming able to start a later import.
+- Account-boundary tests cover logout/switch cache cleanup, owner-keyed pending routes and summaries, protected unbound envelopes, and non-sensitive notification copy.
+- Hosted schema verification covers idempotency and mutation-ledger uniqueness, canonical source lineage, the partial one-committing-batch constraint, lease/claim/paging indexes and query plans, expand-first deployment compatibility, and lifecycle-scoped rollback without data loss.
 
 ## Distribution Plan
 
 Implementation should land through short-lived feature branches and PRs to `main`, linked to REC-212 and split by the four gates in Approved Direction. Instagram extraction/recovery work lands separately under REC-227, but is planned for the same TestFlight release cohort once both PRs are independently merge-ready. Gate 1 proves batch save through Add/share; Gate 2 adds onboarding only after Gate 1 metrics and lifecycle tests pass; Gate 3 adds installed-app ad routing; Gate 4 is the paid/new-install launch gate.
 
-The feature remains behind a server-controlled capability until routing, batch save, analytics, provider availability, and physical-device share/deep-link tests pass for the relevant gate. Turning off acquisition must not hide already imported places or prevent users from resolving existing batches.
+The feature remains behind the server-controlled capability bundle until routing, batch save, analytics, provider availability, and physical-device share/deep-link tests pass for the relevant gate. Turning off new acquisition must not hide already imported places; any separate pause to resolution, commit, or repair must preserve resumable state and explain the affected action.
 
 After merge, release only through the repo's explicit TestFlight workflow when Joe or Ryan asks for a TestFlight build. Tester notes should focus on importing a public Google Maps list, resuming after onboarding/backgrounding, duplicate behavior, and exception recovery.
 
