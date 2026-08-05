@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case add
@@ -384,15 +385,15 @@ struct WanderRootView: View {
                 onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
                 onAdd: presentAddSheet
             )
-                .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
+                .tabItem { tabItemLabel(for: .map) }
                 .tag(WanderTab.map)
 
             FeedScreen(onAdd: presentAddSheet)
-                .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
+                .tabItem { tabItemLabel(for: .discover) }
                 .tag(WanderTab.discover)
 
             ListsScreen()
-                .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
+                .tabItem { tabItemLabel(for: .lists) }
                 .tag(WanderTab.lists)
 
             ProfileScreen(
@@ -408,7 +409,7 @@ struct WanderRootView: View {
             ) {
                 selectedTab = .discover
             }
-                .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
+                .tabItem { tabItemLabel(for: .profile) }
                 .tag(WanderTab.profile)
         }
         .tint(WanderTheme.terracotta.color)
@@ -446,6 +447,14 @@ struct WanderRootView: View {
                 .transition(.opacity)
                 .zIndex(100)
             }
+        }
+    }
+
+    private func tabItemLabel(for tab: WanderTab) -> some View {
+        Label {
+            Text(tab.title)
+        } icon: {
+            Image(uiImage: tab.tabBarImage(isSelected: selectedTab == tab))
         }
     }
 
@@ -1616,6 +1625,8 @@ enum WanderTab: String, CaseIterable, Hashable {
     case lists
     case profile
 
+    static let primaryTabs: [WanderTab] = [.map, .discover, .lists, .profile]
+
     var title: String {
         switch self {
         case .map: "Map"
@@ -1634,5 +1645,41 @@ enum WanderTab: String, CaseIterable, Hashable {
         case .lists: "bookmark.square"
         case .profile: "person.crop.circle"
         }
+    }
+
+    var selectedSystemImage: String {
+        switch self {
+        case .map: "map.fill"
+        case .discover: "newspaper.fill"
+        case .add: "plus"
+        case .lists: "bookmark.square.fill"
+        case .profile: "person.crop.circle.fill"
+        }
+    }
+
+    func systemImage(isSelected: Bool) -> String {
+        isSelected ? selectedSystemImage : systemImage
+    }
+
+    @MainActor
+    func tabBarImage(isSelected: Bool) -> UIImage {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+        let name = systemImage(isSelected: isSelected)
+        guard let symbol = UIImage(systemName: name, withConfiguration: configuration) else {
+            return UIImage()
+        }
+
+        // SwiftUI automatically applies the fill symbol variant inside native tab items.
+        // Flatten the chosen variant first so the standard tab bar only tints the image.
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = symbol.scale
+
+        let template = symbol.withTintColor(.white, renderingMode: .alwaysOriginal)
+        return UIGraphicsImageRenderer(size: symbol.size, format: format)
+            .image { _ in
+                template.draw(in: CGRect(origin: .zero, size: symbol.size))
+            }
+            .withRenderingMode(.alwaysTemplate)
     }
 }

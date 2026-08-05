@@ -338,17 +338,28 @@ struct ListsScreen: View {
     }
 
     private var header: some View {
-        WanderGlassHeader(
-            title: "lists",
-            subtitle: "save places into a plan you can actually use"
-        ) {
-            WanderGlassActionButton(
-                systemImage: "plus",
-                accessibilityLabel: "New list",
-                accessibilityIdentifier: "lists.headerAdd"
-            ) {
-                editorPresentation = .create
+        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                Text("lists")
+                    .font(.system(.title2, design: .default, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+
+                Spacer(minLength: WanderTheme.spacing2)
+
+                WanderGlassActionButton(
+                    systemImage: "plus",
+                    accessibilityLabel: "New list",
+                    accessibilityIdentifier: "lists.headerAdd"
+                ) {
+                    editorPresentation = .create
+                }
             }
+
+            Text("save places into a plan you can actually use")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
         }
     }
 

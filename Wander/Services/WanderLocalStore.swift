@@ -3879,6 +3879,37 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func searchTrustedPlaces(
+        query: String,
+        scope: DiscoverPlaceScope = .everyone
+    ) -> DiscoverResults {
+        let filters = DiscoverFilters(query: query)
+        let matches = TrustedPlaceSearch.matches(
+            query: query,
+            in: visiblePlaces(filters: PlaceFilters(ownerScopes: scope.ownerScopes))
+        )
+        let places = matches.map(\.place)
+        let evidenceByUserPlaceID = Dictionary(
+            uniqueKeysWithValues: matches.map { match in
+                (
+                    match.place.userPlace.id,
+                    discoverMatchEvidence(
+                        for: match.place,
+                        filters: filters,
+                        searchEvidence: match.evidence
+                    )
+                )
+            }
+        )
+        return DiscoverResults(
+            places: places,
+            profiles: [],
+            filters: filters,
+            parseSource: .deterministic,
+            evidenceByUserPlaceID: evidenceByUserPlaceID
+        )
+    }
+
     func discover(query: String, scope: DiscoverPlaceScope = .everyone, backend: WanderBackend? = nil) async -> DiscoverResults {
         let filters = await parseDiscover(query: query)
         guard !Task.isCancelled else {
@@ -3908,31 +3939,49 @@ final class WanderStore: ObservableObject {
         }
 
         let hasSearchText = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        var places = (hasSearchText && !filters.hasRecognizedFacet ? [] : visiblePlaces(filters: placeFilters))
+        let candidates = visiblePlaces(filters: placeFilters)
             .filter { visiblePlace in
                 matchesArea(filters.area, visiblePlace: visiblePlace)
                     && matchesOwner(filters.ownerQuery, visiblePlace: visiblePlace)
                     && matchesTags(filters.tags, visiblePlace: visiblePlace)
                     && matchesOpinion(filters.opinion, visiblePlace: visiblePlace)
             }
-
-        if filters.sort == .ownerRatingDescending {
-            places.sort { lhs, rhs in
-                let lhsScore = lhs.userPlace.ratingScore ?? -.infinity
-                let rhsScore = rhs.userPlace.ratingScore ?? -.infinity
-                if lhsScore != rhsScore { return lhsScore > rhsScore }
-                if lhs.userPlace.savedAt != rhs.userPlace.savedAt {
-                    return lhs.userPlace.savedAt > rhs.userPlace.savedAt
-                }
-                return lhs.userPlace.id < rhs.userPlace.id
+        let queryPlan = TrustedPlaceSearchQuery(
+            query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+        var searchMatches: [TrustedPlaceSearchMatch]
+        if hasSearchText {
+            searchMatches = TrustedPlaceSearch.matches(query: queryPlan, in: candidates)
+        } else {
+            searchMatches = candidates.map {
+                TrustedPlaceSearchMatch(place: $0, score: 0, evidence: [])
             }
         }
 
+        if filters.sort == .ownerRatingDescending {
+            searchMatches.sort { lhs, rhs in
+                let lhsRating = lhs.place.userPlace.ratingScore ?? -.infinity
+                let rhsRating = rhs.place.userPlace.ratingScore ?? -.infinity
+                if lhsRating != rhsRating { return lhsRating > rhsRating }
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                if lhs.place.userPlace.savedAt != rhs.place.userPlace.savedAt {
+                    return lhs.place.userPlace.savedAt > rhs.place.userPlace.savedAt
+                }
+                return lhs.place.userPlace.id < rhs.place.userPlace.id
+            }
+        }
+        let places = searchMatches.map(\.place)
+
         let evidenceByUserPlaceID = Dictionary(
-            uniqueKeysWithValues: places.map { visiblePlace in
+            uniqueKeysWithValues: searchMatches.map { searchMatch in
                 (
-                    visiblePlace.userPlace.id,
-                    discoverMatchEvidence(for: visiblePlace, filters: filters)
+                    searchMatch.place.userPlace.id,
+                    discoverMatchEvidence(
+                        for: searchMatch.place,
+                        filters: filters,
+                        searchEvidence: queryPlan.requiredTokens.isEmpty ? [] : searchMatch.evidence
+                    )
                 )
             }
         )
@@ -8457,7 +8506,8 @@ final class WanderStore: ObservableObject {
 
     private func discoverMatchEvidence(
         for visiblePlace: VisiblePlace,
-        filters: DiscoverFilters
+        filters: DiscoverFilters,
+        searchEvidence: [TrustedPlaceSearchEvidence] = []
     ) -> DiscoverMatchEvidence {
         var items: [DiscoverEvidenceItem] = []
 
@@ -8558,6 +8608,27 @@ final class WanderStore: ObservableObject {
                 )
             )
         }
+
+        items.append(contentsOf: searchEvidence.compactMap { evidence in
+            let kind: DiscoverEvidenceKind
+            switch evidence.field {
+            case .name: kind = .name
+            case .owner: kind = .owner
+            case .category: kind = .category
+            case .area: kind = .area
+            case .note: kind = .note
+            case .attribute: kind = .attribute
+            case .status: kind = .status
+            }
+            guard !items.contains(where: { $0.kind == kind && $0.displayValue == evidence.displayValue }) else {
+                return nil
+            }
+            return DiscoverEvidenceItem(
+                kind: kind,
+                displayValue: evidence.displayValue,
+                sourceOwnerID: visiblePlace.owner.id
+            )
+        })
 
         return DiscoverMatchEvidence(
             userPlaceID: visiblePlace.userPlace.id,
