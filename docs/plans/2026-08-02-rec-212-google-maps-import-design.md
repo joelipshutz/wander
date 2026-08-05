@@ -87,7 +87,7 @@ An iPhone user who already maintains at least one Google Maps list, is trying re
 - A hard beta limit of 100 source items. The importer never silently truncates. Lists over the limit stop before resolution with: `This beta supports lists with up to 100 places. Choose a smaller list and try again.`
 - Resolved places default to Wanna.
 - New imported saves use place visibility `self`; the destination list uses list visibility `stealth`.
-- No imported rating, note, visit date, tags, or user-selectable defaults.
+- No imported tags or required enrichment. New places default to Wanna; rating, note, and visit date remain empty unless the user explicitly adds them through the optional detail disclosure.
 - One confirmation commits all ready places.
 - A private rec.me list preserves the Google list name and membership.
 - Exact duplicates attach to the imported rec.me list without overwriting existing personal data.
@@ -116,7 +116,7 @@ This release does not require Google account authentication, private-library acc
 1. A Google Maps list proves “keep this accessible,” not “I have been here.” The safest default is Wanna.
 2. Migration is successful when the useful places become available, not when every candidate has been enriched.
 3. Human attention belongs on exceptions. Ready items should not require item-by-item confirmation.
-4. A single visible confirmation is enough because the user deliberately supplied the list and sees the count and fixed defaults before committing.
+4. A single visible confirmation is enough because the user deliberately supplied the list and sees the count, defaults, and any staged choices before committing.
 5. New imported saves use place visibility `self`; the destination collection uses list visibility `stealth`. Sharing can be intentional and reversible later.
 6. The source list's organization is valuable. Flattening all places into a generic Wanna collection throws away context.
 7. “Bulk save” is a UX promise, not necessarily one database transaction. The system should process each item idempotently and report partial success.
@@ -239,7 +239,7 @@ Venice, CA
 [ Add 34 places ]
 ```
 
-Interaction hypotheses:
+Interaction contract:
 
 - Every ready row starts as Wanna; the default is visible in words, not inferred from iconography.
 - The batch default control explains both concepts: `Wanna — Save it for later` and `Check-in — I've been here`.
@@ -247,10 +247,11 @@ Interaction hypotheses:
 - Each collapsed row shows its current status pill and a disclosure caret.
 - The caret expands inline optional fields. It never launches the normal save sheet.
 - Check-in expansion offers rating, visit date, and note as optional fields; no synthetic rating is created.
-- Wanna expansion may offer note and list choice, but should not display irrelevant rating/date controls.
+- Wanna expansion offers a note but does not display irrelevant rating/date controls. Choosing Check-in reveals the optional rating and visit-date fields; changing back to Wanna clears those visit-only staged values before commit.
 - The bottom action is always visible when ready items exist. Its label is `Add N places`; the line above reports the Wanna/Check-in breakdown.
 - Needs Help items are excluded from `N`, remain available after the batch add, and never block ready places.
 - A user can add all ready places without expanding a single row.
+- The row's full disclosure affordance, not the caret glyph alone, has a 44-point minimum target. VoiceOver announces the place, current status, and expanded/collapsed state (for example, `Maru Coffee, Wanna, show optional details`). Dynamic Type reflows the status and disclosure onto another line instead of truncating the place name or shrinking the target.
 
 ### Flow 3: Map-first preview
 
@@ -316,7 +317,7 @@ Working rules:
 
 Approach B with **Flow 2, batch-first with optional row enrichment**, is approved for implementation. The low-fidelity review covered one-item Quick Add, optional one-item deep dive, compact multi-place review, and Google Maps batch review. Delivery remains gated so acquisition work cannot outrun import reliability:
 
-1. **Core migration beta:** Add and pending share capture → dedicated acquire/confirm/success flow, fixed Wanna/private defaults, server-backed batch commit.
+1. **Core migration beta:** Add and pending share capture → dedicated acquire/confirm/success flow, visible Wanna/private defaults, optional staged status/details, server-backed batch commit.
 2. **Onboarding activation:** the same flow after identity, before permission prompts.
 3. **Installed-app ad routing:** a universal import link resumes after identity and opens the proven flow.
 4. **Paid/new-install distribution:** landing page, provider/legal approval, reliability canary, and any approved deferred-intent mechanism.
@@ -397,6 +398,14 @@ If iOS does not permit reliably opening the containing app from the share extens
 
 ### Screen and state design
 
+| Surface | Empty / zero ready | Offline | Partial / retry behavior | Primary action |
+|---|---|---|---|---|
+| Acquire | No source is staged; paste/share guidance remains visible | A captured share may remain locally queued, but resolution waits for connectivity | Invalid/private sources keep the field and offer correction | Submit only with a supported source and connectivity |
+| Resolving | A truly empty source becomes source-level Needs Help; an all-exception result goes directly to exception review | Persist progress and show that resolution will resume | Keep resolved items and retry only unfinished/retryable work | Leave screen, or retry/correct when available |
+| Review | With zero ready items, hide/disable `Add 0` and make `Review N` or source recovery primary | Existing staged edits remain visible; confirmation waits for connectivity | Ready items remain addable when other items need help | `Add N places` only when `N > 0` |
+| Commit | Not applicable after a valid confirmation | The server may continue; the client resumes by reading durable state | Completed item transactions remain; retry only failed/retryable items | Leave safely or view current progress |
+| Success | Never shown with zero committed items | Saved places remain locally available according to normal cache behavior | Report new, existing, help, skipped, and failed counts separately | View Map/list; exception review stays secondary |
+
 #### 1. Acquire
 
 Title: `Bring your Google Maps list`
@@ -426,13 +435,15 @@ Copy examples:
 
 The confirmation summarizes rather than demanding row review:
 
-> **37 places ready**
-> 32 new places will be saved as Wanna. 5 places you already saved will keep their details. All 37 will be added to a private list called LA Spots.
+> **34 places ready**
+> 31 new places start as Wanna. 3 places you already saved keep their details. All 34 will be added to a private list called LA Spots. 3 other places need help and will not block this import.
 
-Primary action: `Add 37 places`
+Primary action: `Add 34 places`
 Secondary disclosure: `View all places`
 
-MVP has no batch-default editor. New saves are Wanna with place visibility `self`; the destination list uses visibility `stealth` and the sanitized source name. People can change status, rating, place visibility, or list visibility after success through existing surfaces. This keeps the migration promise to one required decision after resolution.
+The review shows a batch control labeled `New places — Apply to all 31`, with `Wanna` selected and `Check-in` as the alternative. Changing it updates untouched new-place rows only. Every new row shows its staged status in words and a caret; expanding a row can change its status and add an optional note without launching another save sheet. Check-in also reveals optional rating and visit-date fields. Exact duplicates show their existing status and are excluded from `Apply to all`; the import never overwrites their personal details.
+
+New saves keep place visibility `self`; the destination list uses visibility `stealth` and the sanitized source name. These privacy defaults are not editable during import. The bottom `Add N places` action is still the only required decision after resolution because the user can accept every untouched default without opening a row.
 
 #### 4. Commit
 
@@ -505,7 +516,9 @@ The authenticated server-backed import repository is the source of truth. The mi
 
 ```text
 GoogleImportBatch
-  id, owner_user_id, source_list_key_hash, source_display_name
+  id, owner_user_id, client_request_id, create_request_hash
+  confirmation_operation_id, confirmation_request_hash
+  source_list_key_hash, source_display_name
   entry_context, destination_list_id, destination_generation
   state, capability_version
   ready_new_count, exact_duplicate_count, needs_help_count
@@ -515,7 +528,9 @@ GoogleImportBatch
 GoogleImportItem
   id, batch_id, ordinal, source_item_key_hash, source_fingerprint
   normalized_candidate, resolved_place_id, match_kind, state
-  commit_operation_id, canonical_request_hash, result_user_place_id
+  staged_status, staged_rating, staged_visit_date, staged_note, draft_version
+  save_operation_id, save_request_hash
+  membership_operation_id, membership_request_hash, result_user_place_id
   attempt_count, next_attempt_at, coarse_error_code
 ```
 
@@ -523,6 +538,8 @@ Expected authenticated client contracts:
 
 - `create_google_import_batch(public_list_url, client_request_id, entry_context) -> batch_id`
 - `get_google_import_batch(batch_id) -> batch summary + paged item summaries`
+- `apply_google_import_default(batch_id, status, operation_id) -> updated counts/state`
+- `update_google_import_item_draft(item_id, draft, operation_id) -> item summary`
 - `confirm_google_import_batch(batch_id, confirmation_operation_id) -> accepted counts/state`
 - `retry_google_import_source(batch_id)`
 - `select_google_import_match(item_id, canonical_place_id, operation_id)`
@@ -538,10 +555,20 @@ The client generates `client_request_id` and confirmation-operation UUIDs, persi
 
 The server derives two item operations:
 
-- `save_operation_id = (batch_id, item_id, save_contract_version)` with a canonical hash covering canonical place ID, fixed status `wanna_go`, fixed place visibility `self`, and contract version.
+- `save_operation_id = (batch_id, item_id, save_contract_version)` with a canonical hash covering canonical place ID, staged status, normalized optional rating/date/note values, fixed place visibility `self`, and contract version. Untouched items canonicalize to `wanna_go` with null optional values.
 - `membership_operation_id = (batch_id, item_id, destination_generation, membership_contract_version)` with a canonical hash covering destination list ID, canonical place ID, destination generation, and contract version.
 
 Canonical hashes use sorted-key canonical JSON. Reusing either operation ID with a different hash is a hard conflict. Splitting the operations lets destination repair attach an existing successful save to a replacement list without recreating or mutating the personal save.
+
+Database constraints enforce the idempotency and scheduling contract rather than relying on process-local checks:
+
+- Unique `(owner_user_id, client_request_id)` plus the stored `create_request_hash` makes batch creation replay-safe and detects conflicting reuse.
+- Unique `(batch_id, source_item_key_hash)` prevents one normalized source item from appearing twice in the same batch.
+- `save_operation_id` and `membership_operation_id` are independently unique. Membership identity includes destination generation so a repaired destination cannot collide with the original membership operation.
+- A partial unique index on `owner_user_id` where `state = 'committing'` enforces one committing batch per owner. Losing the race returns a retryable queued/invalid-state result instead of violating the constraint.
+- Worker claim indexes cover claimable item state, `next_attempt_at`, and stable ordinal ordering. Read indexes cover `(batch_id, ordinal)` paging and `(owner_user_id, source_list_key_hash)` re-import lookup.
+
+Before Gate 2, hosted query-plan checks and multi-user load tests must prove these indexes are used as historical import rows accumulate.
 
 Enumerated states and match types:
 
@@ -568,6 +595,8 @@ CommandResult
     | invalid_state | not_found | forbidden | rate_limited
   batch_state, item_state?, summary_counts, coarse_error_code?
 ```
+
+Draft mutations accept only `wanna_go` or `checked_in`, are owner-scoped, and are valid only for uncommitted `ready_new` items. Rating and visit date must be null for Wanna; switching from Check-in back to Wanna atomically clears those staged values. Check-in permits a null rating and date. Notes use the existing bounded save-note contract. Exact duplicates are read-only during import.
 
 ### Commit and partial-failure semantics
 
@@ -597,6 +626,7 @@ If the prior destination was deleted before a later import begins, confirmation 
 - Retry network timeouts, HTTP 408/429/5xx, and explicitly retryable provider/worker errors up to three automatic attempts with jittered 2-second, 8-second, and 30-second delays. A manual retry starts one new three-attempt cycle and is rate-limited server-side.
 - Invalid/private URLs, authorization failures, the 100-item limit, no match, and ambiguous match are not automatically retried.
 - Resolution and commit concurrency are each capped at four items per batch initially. Load tests at 50 and 100 items must verify provider throttling before Gate 2.
+- Provider acquisition also has a server-wide rate/concurrency budget, and workers have a server-wide transaction budget. A fair per-owner queue, backpressure, and provider `Retry-After` handling prevent concurrent onboarding/ad traffic from multiplying the per-batch cap into an unbounded aggregate load. These budgets are remotely configurable and validated under concurrent multi-user traffic before Gates 2 and 4.
 - Only one batch per owner may be in `committing`; additional imports may resolve and wait at confirmation.
 - Multiple App Group shares remain in a seven-day FIFO queue and are presented one at a time. They are encrypted with iOS complete-file protection and contain only the minimum share envelope.
 - On logout/account switch, bound server batches remain with their owner and disappear from the local UI. Unbound share envelopes require an explicit `Import to @handle` confirmation before binding and never transfer after binding.
@@ -641,6 +671,14 @@ acquiring / resolving / ready_to_confirm
 ```
 
 Auth/onboarding routing owns only the pending entry intent. The import repository owns batch progress, so process death or navigation does not erase a started import.
+
+### Additive schema rollout and rollback
+
+The capability flag remains off while the schema lands. Deploy in expand-first order: tables/nullable columns, constraints and indexes, owner-scoped RPCs, workers, then clients. Create production indexes with the project's low-lock/concurrent strategy where supported and verify their definitions plus RPC grants/security metadata in hosted checks before enabling writers.
+
+If this uses new import tables, no historical backfill is required. If it extends existing REC-97 rows, add nullable fields first, run a bounded resumable backfill keyed by primary key, verify counts and hashes, and only then add non-null or uniqueness constraints. Mixed old/new worker versions must safely ignore unclaimed new fields while the flag is off.
+
+Rollback disables acquisition and new writes through the capability flag, lets in-flight item transactions reach a recorded terminal state, and retains durable import rows for resume/debugging. Do not drop the schema or erase completed user saves as a rollback mechanism.
 
 ### Analytics and privacy
 
@@ -691,16 +729,21 @@ Do not send URLs, list names, place names, notes, coordinates, or raw error payl
 
 ### Technical validation
 
+- Adaptive-routing tests cover zero ready items and the 1, 2, 5, 6, 100, and 101 item boundaries, including the selected surface, ready/help counts, CTA state, and no partial staging for an oversized source.
 - Deep-link intent survives sign-in/onboarding and process recreation where the platform contract permits it.
 - The batch commit is idempotent and has regression coverage for new save, existing save, save/membership transaction rollback, deleted destination, cancellation during commit, retry-hash conflict, re-import, user-removed membership, account switching, and cross-user isolation.
+- Draft-contract tests cover Wanna and Check-in, null Check-in rating/date, invalid Wanna rating/date payloads, clearing visit-only values when switching back to Wanna, bounded notes, Apply-to-all affecting only untouched new items, and exact duplicates remaining read-only.
+- State-machine and hosted RPC tests cover disallowed transitions, missing and cross-owner batch/item IDs, manual-retry throttling, concurrent identical/conflicting confirmations, and two batches racing for the same owner's single `committing` slot.
+- Destination-name tests cover NFC normalization, controls and line breaks, control-only/empty fallback, names at and over 96 characters, emoji and multi-code-point graphemes, and deterministic collision suffixes without splitting a grapheme.
 - Source fetch tests cover redirect allowlists, DNS rebinding, private/reserved IP rejection, credentials/ports, timeouts, redirect loops, and response-size limits.
 - Hosted verification covers any new or changed iOS-called Supabase RPC, grants, `search_path`, ownership, anonymous access, and rollback safety.
 - The public-list acquisition path has a server-controlled kill switch, remote copy, legal/provider review, redacted fixtures, and a live reliability canary before Gate 4.
-- Load tests demonstrate bounded concurrency and record terminal-time distributions for 50- and 100-item batches before onboarding exposure.
+- Load tests demonstrate per-batch and server-wide bounded concurrency, fair multi-user scheduling, provider backpressure/`Retry-After` behavior, and terminal-time distributions for 50- and 100-item batches before onboarding exposure.
+- Hosted schema verification covers idempotency uniqueness, the partial one-committing-batch constraint, claim/paging/re-import indexes and query plans, expand-first deployment compatibility, and kill-switch rollback without data loss.
 
 ## Distribution Plan
 
-Implementation should land through short-lived feature branches and PRs to `main`, linked to REC-212 and split by the four gates in Recommended Approach. Instagram extraction/recovery work lands separately under REC-227, but is planned for the same TestFlight release cohort once both PRs are independently merge-ready. Gate 1 proves batch save through Add/share; Gate 2 adds onboarding only after Gate 1 metrics and lifecycle tests pass; Gate 3 adds installed-app ad routing; Gate 4 is the paid/new-install launch gate.
+Implementation should land through short-lived feature branches and PRs to `main`, linked to REC-212 and split by the four gates in Approved Direction. Instagram extraction/recovery work lands separately under REC-227, but is planned for the same TestFlight release cohort once both PRs are independently merge-ready. Gate 1 proves batch save through Add/share; Gate 2 adds onboarding only after Gate 1 metrics and lifecycle tests pass; Gate 3 adds installed-app ad routing; Gate 4 is the paid/new-install launch gate.
 
 The feature remains behind a server-controlled capability until routing, batch save, analytics, provider availability, and physical-device share/deep-link tests pass for the relevant gate. Turning off acquisition must not hide already imported places or prevent users from resolving existing batches.
 
@@ -718,16 +761,10 @@ An import-focused ad must not launch until Gate 4: installed-app routing, new-in
 - The server-backed REC-97 import batch/item repository as the durable owner.
 - A resumable, idempotent per-item transaction covering both personal save and list membership.
 - Private source-named rec.me list creation/membership.
-- No dependency on changing Been ratings: MVP imports only new Wanna saves. Optional/global Been ratings remain separate work.
+- No dependency on making Check-in ratings globally optional elsewhere: imported new places may be staged as Wanna or Check-in, and their rating remains null unless the user explicitly supplies one. Existing saves and ratings remain unchanged.
 - Physical-device verification of Google Maps sharing, extension handoff, universal links, auth interruption, process death, and first launch.
 - A controlled public-list acquisition boundary with kill switch, remote copy, provider/legal review, reliability monitoring, and an honest unavailable state.
 
 ## Validation Assignment
 
 During implementation, test the approved interactive prototype with three people who already maintain Google Maps lists. Give each person their own list and ask them to import it without coaching. Record whether they understand the defaults, where they hesitate, whether they look for per-place review, and whether Map or list detail feels like the stronger payoff. Treat confusing copy or hierarchy as implementation feedback; revisit the approved interaction model only if the tests expose a structural failure.
-
-## What I noticed about how you think
-
-- You separated capture from enrichment when you said you are “not realistically gonna go through and add notes for 37 places.” That is the key product simplification.
-- “But I want them accessible from the app” defines the activation event more clearly than a generic import-completed metric: the payoff is seeing the collection in rec.me.
-- Asking for both the ad entry point and onboarding prevents this from becoming an isolated settings utility; you are treating migration as acquisition and activation.
