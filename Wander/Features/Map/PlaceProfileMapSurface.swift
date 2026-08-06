@@ -741,23 +741,19 @@ private struct PlaceProfileFullView: View {
                 Button {
                     openURL(item.url)
                 } label: {
-                    HStack(spacing: WanderTheme.spacing1) {
+                    VStack(spacing: WanderTheme.spacing1) {
                         Image(systemName: iconName(for: item.kind))
-                            .font(.system(size: 14, weight: .black))
+                            .font(.system(size: 15, weight: .black))
                         Text(item.title)
-                            .font(.system(size: 13, weight: .black))
+                            .font(.system(size: 12, weight: .black))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.82)
+                            .minimumScaleFactor(0.74)
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .padding(.horizontal, WanderTheme.spacing2)
-                    .background(WanderTheme.surfaceRaised.color)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .padding(.horizontal, WanderTheme.spacing1)
                     .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
+                    .contentShape(Capsule())
+                    .wanderGlassCapsule()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(item.title)
@@ -968,6 +964,8 @@ private struct PlaceProfileFullView: View {
             "globe"
         case .call:
             "phone.fill"
+        case .reserve, .reservationSearch:
+            "calendar"
         default:
             "link"
         }
@@ -2107,6 +2105,15 @@ private enum PlaceProfileCopy {
         .filter { $0.kind == .website || $0.kind == .call }
 
         actions.append(contentsOf: businessActions)
+        if let reservation = PlaceExternalLinks.reservationAction(
+            placeName: place.name,
+            address: place.address,
+            locality: place.locality,
+            actionLinksJSON: place.actionLinksJSON,
+            allowsSearchFallback: place.primaryCategory == WanderPlaceCategory.restaurantsFood
+        ) {
+            actions.append(reservation)
+        }
         return actions
     }
 

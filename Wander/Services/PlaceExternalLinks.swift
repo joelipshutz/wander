@@ -130,6 +130,74 @@ enum PlaceExternalLinks {
         return components.url
     }
 
+    static func googleReservationSearchURL(
+        placeName: String,
+        address: String? = nil,
+        locality: String? = nil
+    ) -> URL? {
+        let placeQuery = [
+            trimmed(placeName),
+            trimmed(address),
+            trimmed(locality)
+        ]
+        .compactMap { value -> String? in
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }
+        .joined(separator: " ")
+
+        guard !placeQuery.isEmpty else { return nil }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "www.google.com"
+        components.path = "/search"
+        components.queryItems = [
+            URLQueryItem(name: "q", value: "\(placeQuery) reservation")
+        ]
+        return components.url
+    }
+
+    static func reservationAction(
+        placeName: String,
+        address: String? = nil,
+        locality: String? = nil,
+        actionLinksJSON: String?,
+        allowsSearchFallback: Bool
+    ) -> PlaceExternalAction? {
+        let reservationLinks = PlaceActionLink.decode(actionLinksJSON)
+
+        if let exactLink = reservationLinks.first(where: {
+            $0.kind == .reserve && $0.confidence == .exact
+        }), let action = action(from: exactLink) {
+            return normalizedReservationAction(action)
+        }
+
+        if let searchLink = reservationLinks.first(where: {
+            $0.kind == .reservationSearch
+                || ($0.kind == .reserve && $0.confidence == .search)
+        }), let action = action(from: searchLink) {
+            return normalizedReservationAction(action)
+        }
+
+        guard allowsSearchFallback,
+              let url = googleReservationSearchURL(
+                placeName: placeName,
+                address: address,
+                locality: locality
+              )
+        else {
+            return nil
+        }
+
+        return PlaceExternalAction(
+            kind: .reservationSearch,
+            title: "Reservation",
+            systemImage: "calendar",
+            url: url
+        )
+    }
+
     static func shareSummary(placeName: String, locality: String?, status: PlaceStatus?) -> String {
         let placeLine = [
             trimmed(placeName),
@@ -173,6 +241,15 @@ enum PlaceExternalLinks {
 
     private static func actionTitle(_ title: String, fallback: String) -> String {
         trimmed(title) ?? fallback
+    }
+
+    private static func normalizedReservationAction(_ action: PlaceExternalAction) -> PlaceExternalAction {
+        PlaceExternalAction(
+            kind: action.kind,
+            title: "Reservation",
+            systemImage: "calendar",
+            url: action.url
+        )
     }
 
     private static func deduped(_ actions: [PlaceExternalAction]) -> [PlaceExternalAction] {

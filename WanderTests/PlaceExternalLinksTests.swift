@@ -109,4 +109,92 @@ final class PlaceExternalLinksTests: XCTestCase {
         XCTAssertEqual(actions.first { $0.kind == .reserve }, nil)
         XCTAssertEqual(actions.first { $0.kind == .reservationSearch }?.url.absoluteString, "https://resy.example/search?q=place")
     }
+
+    func testReservationActionPrefersExactProviderAndUsesRequestedPresentation() throws {
+        let links = [
+            PlaceActionLink(
+                kind: .reservationSearch,
+                title: "Search Resy",
+                urlString: "https://resy.com/cities/los-angeles-ca/search",
+                source: .providerSearch,
+                confidence: .search
+            ),
+            PlaceActionLink(
+                kind: .reserve,
+                title: "Book on OpenTable",
+                urlString: "https://www.opentable.com/r/example",
+                source: .backendExtraction,
+                confidence: .exact
+            )
+        ]
+
+        let action = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                placeName: "Example Restaurant",
+                actionLinksJSON: PlaceActionLink.encode(links),
+                allowsSearchFallback: true
+            )
+        )
+
+        XCTAssertEqual(action.kind, .reserve)
+        XCTAssertEqual(action.title, "Reservation")
+        XCTAssertEqual(action.systemImage, "calendar")
+        XCTAssertEqual(action.url.absoluteString, "https://www.opentable.com/r/example")
+    }
+
+    func testReservationActionUsesKnownProviderSearchBeforeFallback() throws {
+        let links = [
+            PlaceActionLink(
+                kind: .reserve,
+                title: "Find a table",
+                urlString: "https://resy.com/cities/los-angeles-ca/search?query=Example",
+                source: .providerSearch,
+                confidence: .search
+            )
+        ]
+
+        let action = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                placeName: "Example Restaurant",
+                actionLinksJSON: PlaceActionLink.encode(links),
+                allowsSearchFallback: true
+            )
+        )
+
+        XCTAssertEqual(action.kind, .reservationSearch)
+        XCTAssertEqual(action.url.host, "resy.com")
+    }
+
+    func testReservationActionUsesKeylessGoogleFallbackForEligiblePlace() throws {
+        let action = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                placeName: "Bar Nido",
+                address: "1280 Glendale Blvd",
+                locality: "Los Angeles",
+                actionLinksJSON: nil,
+                allowsSearchFallback: true
+            )
+        )
+        let components = try XCTUnwrap(URLComponents(url: action.url, resolvingAgainstBaseURL: false))
+
+        XCTAssertEqual(action.kind, .reservationSearch)
+        XCTAssertEqual(action.title, "Reservation")
+        XCTAssertEqual(action.systemImage, "calendar")
+        XCTAssertEqual(components.host, "www.google.com")
+        XCTAssertEqual(
+            components.queryItems?.first(where: { $0.name == "q" })?.value,
+            "Bar Nido 1280 Glendale Blvd Los Angeles reservation"
+        )
+        XCTAssertNil(components.queryItems?.first(where: { $0.name.lowercased().contains("key") }))
+    }
+
+    func testReservationActionStaysHiddenWithoutKnownLinkOrEligibleFallback() {
+        XCTAssertNil(
+            PlaceExternalLinks.reservationAction(
+                placeName: "Griffith Observatory",
+                actionLinksJSON: nil,
+                allowsSearchFallback: false
+            )
+        )
+    }
 }
