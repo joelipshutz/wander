@@ -430,6 +430,7 @@ private struct FeedPeopleSurface: View {
     @State private var memberResults: [ProfileShell] = []
     @State private var followInFlightProfileIDs: Set<String> = []
     @State private var followFailedProfileIDs: Set<String> = []
+    @State private var isPresentingContactInvites = false
     @FocusState private var searchFieldFocused: Bool
 
     private var isMemberSearchActive: Bool {
@@ -446,6 +447,10 @@ private struct FeedPeopleSurface: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 FeedPeopleSearchField(text: $memberQuery)
                     .focused($searchFieldFocused)
+
+                InviteEntryPointButton(surface: .feedPeople) {
+                    isPresentingContactInvites = true
+                }
 
                 if isMemberSearchActive {
                     memberSearchResultsSection
@@ -468,6 +473,13 @@ private struct FeedPeopleSurface: View {
         }
         .task(id: memberQuery) {
             await refreshMembers(query: memberQuery, debounce: true)
+        }
+        .sheet(isPresented: $isPresentingContactInvites) {
+            ContactInviteSheet(
+                surface: .feedPeople,
+                contactProvider: store.contactProvider,
+                senderProfileID: store.currentUser.id
+            )
         }
     }
 

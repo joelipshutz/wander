@@ -956,6 +956,11 @@ struct WanderRootView: View {
             beginDeepLinkHandoff(to: .quickCapture)
             return
         }
+        if case .profile(let profileID) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .sharedProfile(profileID: profileID))
+            return
+        }
 
         isPresentingAdd = false
         initialPresentation = nil
@@ -996,6 +1001,7 @@ struct WanderRootView: View {
     static func notificationTab(for destination: NotificationDestination) -> WanderTab {
         switch destination {
         case .quickCapture: .map
+        case .profile: .profile
         case .people, .drafts: .profile
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map

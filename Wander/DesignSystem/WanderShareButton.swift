@@ -3,6 +3,8 @@ import SwiftUI
 import UIKit
 
 struct WanderShareContent: Equatable {
+    static let publicTestFlightURL = URL(string: "https://testflight.apple.com/join/knEhRa6t")!
+
     let item: URL
     let additionalItems: [URL]
     let subject: String
@@ -77,6 +79,25 @@ struct WanderShareContent: Equatable {
         )
     }
 
+    static func appInvite(senderProfileID: String?, contextMessage: String? = nil) -> WanderShareContent {
+        let profileURL = senderProfileID.flatMap {
+            WanderDeepLinkRoute.sharedProfile(profileID: $0).url
+        }
+        let opening = contextMessage ?? "Join me on rec.me."
+        return WanderShareContent(
+            item: publicTestFlightURL,
+            additionalItems: [profileURL].compactMap { $0 },
+            subject: "Join me on rec.me",
+            message: profileURL == nil
+                ? "\(opening) Install the TestFlight beta to get started."
+                : "\(opening) Install the TestFlight beta, then open my profile to connect."
+        )
+    }
+
+    var messageBody: String {
+        ([message] + items.map(\.absoluteString)).joined(separator: "\n\n")
+    }
+
     private init(item: URL, additionalItems: [URL] = [], subject: String, message: String) {
         self.item = item
         self.additionalItems = additionalItems
@@ -88,6 +109,7 @@ struct WanderShareContent: Equatable {
 
 struct WanderShareSheet: UIViewControllerRepresentable {
     let content: WanderShareContent
+    var onComplete: ((Bool) -> Void)? = nil
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
         var activityItems: [Any] = [
@@ -97,10 +119,14 @@ struct WanderShareSheet: UIViewControllerRepresentable {
             )
         ]
         activityItems.append(contentsOf: content.items)
-        return UIActivityViewController(
+        let controller = UIActivityViewController(
             activityItems: activityItems,
             applicationActivities: nil
         )
+        controller.completionWithItemsHandler = { _, completed, _, _ in
+            onComplete?(completed)
+        }
+        return controller
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
