@@ -939,6 +939,36 @@ final class PlaceImportStore: ObservableObject {
         persist()
     }
 
+    func setStagedNote(_ note: String?, itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].state == .ready
+        else { return }
+        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        items[index].stagedNote = trimmed?.isEmpty == false ? trimmed : nil
+        items[index].updatedAt = .now
+        persist()
+    }
+
+    func setStagedRatingScore(_ score: Double?, itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].state == .ready,
+              items[index].stagedStatus == .been
+        else { return }
+        items[index].stagedRatingScore = score
+        items[index].updatedAt = .now
+        persist()
+    }
+
+    func setStagedVisitedAt(_ date: Date?, itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].state == .ready,
+              items[index].stagedStatus == .been
+        else { return }
+        items[index].stagedVisitedAt = date
+        items[index].updatedAt = .now
+        persist()
+    }
+
     func applyStagedStatus(_ status: PlaceStatus, batchID: String? = nil) {
         var changed = false
         for index in items.indices where items[index].state == .ready {

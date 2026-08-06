@@ -57,6 +57,7 @@ struct WanderAddLaunchRequest: Equatable, Identifiable {
         case hereNow
         case search(query: String)
         case importInbox
+        case importReview(batchIDs: [String])
         case nearbyPlace(PlaceCandidate)
     }
 

@@ -71,6 +71,8 @@ struct AddScreen: View {
     @State private var addSaveFlow: MapPlaceSaveContext?
     @State private var showsImportHub = false
     @State private var showsImportInbox = false
+    @State private var showsImportReview = false
+    @State private var importReviewBatchIDs: [String] = []
     @FocusState private var isQuickAddFocused: Bool
 
     init(
@@ -166,6 +168,8 @@ struct AddScreen: View {
                 case .importInbox:
                     expandSheet()
                     showsImportInbox = true
+                case .importReview(let batchIDs):
+                    openImportReview(batchIDs: batchIDs)
                 case .nearbyPlace(let candidate):
                     expandSheet()
                     selectedSource = .currentLocation
@@ -228,8 +232,19 @@ struct AddScreen: View {
             .navigationDestination(isPresented: $showsImportHub) {
                 PlaceImportHubScreen(
                     importStore: importStore,
+                    reviewAction: openImportReview,
                     inboxAction: openImportInbox
                 )
+            }
+            .navigationDestination(isPresented: $showsImportReview) {
+                PlaceImportAdaptiveReviewScreen(
+                    importStore: importStore,
+                    batchIDs: importReviewBatchIDs,
+                    onViewMap: onClose
+                )
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
             }
             .navigationDestination(isPresented: $showsImportInbox) {
                 PlaceImportInboxScreen(importStore: importStore)
@@ -595,6 +610,13 @@ struct AddScreen: View {
     private func openImportInbox() {
         expandSheet()
         showsImportInbox = true
+    }
+
+    private func openImportReview(batchIDs: [String]) {
+        guard !batchIDs.isEmpty else { return }
+        expandSheet()
+        importReviewBatchIDs = batchIDs
+        showsImportReview = true
     }
 
     private func openSharedSaveFlow() {

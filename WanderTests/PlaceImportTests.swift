@@ -326,6 +326,38 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertEqual(store?.item(id: itemID)?.stagedStatus, .been)
     }
 
+    func testOptionalImportDetailsPersistAndWannaClearsCheckInOnlyFields() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try XCTUnwrap(store).enqueue(
+            source: .textNotes,
+            text: "Ready, Los Angeles"
+        )
+        await store?.waitForProcessing(batchID: batchID)
+        let itemID = try XCTUnwrap(store?.items(for: batchID).first?.id)
+        let visitDate = Date(timeIntervalSince1970: 1_774_000_000)
+
+        store?.setStagedStatus(.been, itemID: itemID)
+        store?.setStagedNote("  Great patio  ", itemID: itemID)
+        store?.setStagedRatingScore(4, itemID: itemID)
+        store?.setStagedVisitedAt(visitDate, itemID: itemID)
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+
+        XCTAssertEqual(store?.item(id: itemID)?.stagedNote, "Great patio")
+        XCTAssertEqual(store?.item(id: itemID)?.stagedRatingScore, 4)
+        XCTAssertEqual(store?.item(id: itemID)?.stagedVisitedAt, visitDate)
+
+        store?.setStagedStatus(.wannaGo, itemID: itemID)
+
+        XCTAssertEqual(store?.item(id: itemID)?.stagedStatus, .wannaGo)
+        XCTAssertEqual(store?.item(id: itemID)?.stagedNote, "Great patio")
+        XCTAssertNil(store?.item(id: itemID)?.stagedRatingScore)
+        XCTAssertNil(store?.item(id: itemID)?.stagedVisitedAt)
+    }
+
     func testReceiptPersistsUntilPresented() async throws {
         let persistence = InMemoryPlaceImportPersistence()
         var store: PlaceImportStore? = PlaceImportStore(

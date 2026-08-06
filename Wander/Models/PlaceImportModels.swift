@@ -316,6 +316,9 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     var resolverVersion: Int?
     var pendingManualSearch: Bool?
     var stagedStatusRaw: String?
+    var stagedNote: String?
+    var stagedRatingScore: Double?
+    var stagedVisitedAt: Date?
     let createdAt: Date
     var updatedAt: Date
 
@@ -333,6 +336,9 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         resolverVersion: Int? = PlaceImportItem.currentResolverVersion,
         pendingManualSearch: Bool? = nil,
         stagedStatus: PlaceStatus? = nil,
+        stagedNote: String? = nil,
+        stagedRatingScore: Double? = nil,
+        stagedVisitedAt: Date? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -349,6 +355,9 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.resolverVersion = resolverVersion
         self.pendingManualSearch = pendingManualSearch
         stagedStatusRaw = stagedStatus?.rawValue
+        self.stagedNote = stagedNote
+        self.stagedRatingScore = stagedRatingScore
+        self.stagedVisitedAt = stagedVisitedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -363,7 +372,13 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
 
     var stagedStatus: PlaceStatus {
         get { stagedStatusRaw.flatMap(PlaceStatus.init(rawValue:)) ?? .wannaGo }
-        set { stagedStatusRaw = newValue.rawValue }
+        set {
+            stagedStatusRaw = newValue.rawValue
+            if newValue == .wannaGo {
+                stagedRatingScore = nil
+                stagedVisitedAt = nil
+            }
+        }
     }
 
     var displayName: String {
