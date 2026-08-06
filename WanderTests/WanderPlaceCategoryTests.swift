@@ -506,10 +506,13 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Thai")
         XCTAssertEqual(visiblePlace.categoryEmoji, "🇹🇭")
+        XCTAssertEqual(visiblePlace.effectiveCompactType, "Thai")
+        XCTAssertEqual(visiblePlace.effectiveDetailedType, "Restaurants & Food · Thai")
 
         cuisine.valueJSON = "\"Italian\""
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Italian")
         XCTAssertEqual(visiblePlace.categoryEmoji, "🍝")
+        XCTAssertEqual(visiblePlace.effectiveCompactType, "Italian")
 
         userPlace.categoryOverride = WanderPlaceCategory.wellnessFitness
         userPlace.subcategoryOverride = "Gym"
@@ -908,11 +911,20 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(restaurant.category, "Restaurants & Food")
         XCTAssertEqual(restaurant.subcategory, "Restaurant")
         XCTAssertEqual(restaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
-        XCTAssertEqual(restaurant.compactTitle, "Restaurant · Restaurants & Food")
+        XCTAssertEqual(restaurant.compactType(foodType: "Hot dogs"), "Hot dogs")
+        XCTAssertEqual(restaurant.detailedType(foodType: "Hot dogs"), "Restaurants & Food · Hot dogs")
+        XCTAssertEqual(restaurant.compactType(), "Restaurants & Food")
+        XCTAssertEqual(restaurant.detailedType(), "Restaurants & Food")
+        XCTAssertEqual(
+            restaurant.detailedType(foodType: "Restaurants & Food"),
+            "Restaurants & Food"
+        )
 
         let transit = WanderPlaceCategory.display(for: "transportation")
         XCTAssertEqual(transit.category, "Travel & Transit")
         XCTAssertEqual(transit.subcategory, "Transit stop")
+        XCTAssertEqual(transit.compactType(), "Transit stop")
+        XCTAssertEqual(transit.detailedType(), "Transit stop")
 
         let providerRestaurant = WanderPlaceCategory.display(for: "thai restaurant")
         XCTAssertEqual(providerRestaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
@@ -992,7 +1004,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Restaurants & Food"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurants & Food"
         )
 
         let commaCandidate = PlaceCandidate(
@@ -1008,7 +1020,22 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             commaCandidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Restaurants & Food"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurants & Food"
+        )
+
+        let thaiCandidate = PlaceCandidate(
+            id: "thai-restaurant",
+            name: "Jitlada",
+            category: "restaurant",
+            rawProviderType: "thai restaurant",
+            locality: "Los Angeles",
+            latitude: 34.0,
+            longitude: -118.0,
+            confidence: 0.9
+        )
+        XCTAssertEqual(
+            thaiCandidate.previewSubtitle(includeDistance: false),
+            "Los Angeles · Thai"
         )
     }
 

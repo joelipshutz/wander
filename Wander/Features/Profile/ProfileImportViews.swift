@@ -1244,7 +1244,7 @@ private extension PlaceImportItem {
     var reviewMetadata: String {
         let candidate = selectedCandidate ?? candidates.first
         let type = candidate.map {
-            WanderPlaceCategory.display(for: $0.categoryAssignment).compactTitle
+            $0.compactPlaceType
         }
         var seen = Set<String>()
         let parts = [displayArea, type].compactMap { value -> String? in

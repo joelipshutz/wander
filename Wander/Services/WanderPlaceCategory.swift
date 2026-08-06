@@ -95,15 +95,29 @@ struct PlaceCategoryDisplay: Equatable {
     let subcategory: String?
     let sourceLabel: String
 
-    var compactTitle: String {
-        var parts: [String] = []
-        if let subcategory, !subcategory.isEmpty {
-            parts.append(subcategory)
+    func compactType(foodType: String? = nil) -> String {
+        if primaryCategory == WanderPlaceCategory.restaurantsFood {
+            return uniqueDisplayValues([foodType, category]).first ?? ""
         }
-        if !category.isEmpty {
-            parts.append(category)
+        return uniqueDisplayValues([subcategory, category]).first ?? ""
+    }
+
+    func detailedType(foodType: String? = nil) -> String {
+        guard primaryCategory == WanderPlaceCategory.restaurantsFood else {
+            return compactType(foodType: foodType)
         }
-        return parts.joined(separator: " · ")
+        return uniqueDisplayValues([category, foodType]).joined(separator: " · ")
+    }
+
+    private func uniqueDisplayValues(_ values: [String?]) -> [String] {
+        var seen = Set<String>()
+        return values.compactMap { value in
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return nil }
+            let key = WanderPlaceCategory.normalizedCategoryText(value)
+            guard !key.isEmpty, seen.insert(key).inserted else { return nil }
+            return value
+        }
     }
 }
 
@@ -379,8 +393,8 @@ enum PlaceMemoryDefaultCatalog {
                     selectedWannaTags: [cuisineTag],
                     labelOptions: cuisineAware(["craving list", "dinner rotation", "bring friends", "neighborhood staple", "date night"], cuisine: context.cuisine),
                     selectedLabels: ["craving list"],
-                    wannaLabelOptions: cuisineAware(["cuisine shortlist", "dinner shortlist", "friend rec", "try soon", "date idea"], cuisine: context.cuisine),
-                    selectedWannaLabels: ["cuisine shortlist"]
+                    wannaLabelOptions: cuisineAware(["food type shortlist", "dinner shortlist", "friend rec", "try soon", "date idea"], cuisine: context.cuisine),
+                    selectedWannaLabels: ["food type shortlist"]
                 )
             }
 
@@ -874,7 +888,7 @@ enum WanderPlaceCategory {
         PlaceCategoryTaxonomyEntry(
             id: restaurantsFood,
             group: "Restaurants & Food",
-            detail: "Restaurants, cuisines, quick bites",
+            detail: "Restaurants, food types, quick bites",
             defaultSubcategory: "Restaurant",
             emoji: "🍽️",
             aliases: [

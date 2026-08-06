@@ -242,6 +242,14 @@ struct VisiblePlaceCategoryPresentation {
     let display: PlaceCategoryDisplay
     let restaurantCuisine: String?
     let emoji: String
+
+    var compactType: String {
+        display.compactType(foodType: restaurantCuisine)
+    }
+
+    var detailedType: String {
+        display.detailedType(foodType: restaurantCuisine)
+    }
 }
 
 private final class BoundedMemoizationCache<Key: Hashable, Value>: @unchecked Sendable {
@@ -443,6 +451,14 @@ struct VisiblePlace: Identifiable {
 
     var restaurantCuisine: String? {
         categoryPresentation.restaurantCuisine
+    }
+
+    var effectiveCompactType: String {
+        categoryPresentation.compactType
+    }
+
+    var effectiveDetailedType: String {
+        categoryPresentation.detailedType
     }
 
     var categoryEmoji: String {

@@ -372,7 +372,7 @@ private struct TrustedPlaceSearchDocument {
             values: [
                 categoryDisplay.category,
                 categoryDisplay.subcategory,
-                categoryDisplay.compactTitle,
+                categoryPresentation.compactType,
                 categoryPresentation.assignment.primaryCategory,
                 categoryPresentation.assignment.subcategory,
                 categoryPresentation.restaurantCuisine,
