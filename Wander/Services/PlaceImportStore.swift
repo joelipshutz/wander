@@ -81,6 +81,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         let emptyOrFailedCount: Int
     }
 
+    private struct SocialRecoveryHint {
+        let hint: SocialPlaceSearchHint
+        let helpMessage: String
+    }
+
     private let placeResolver: any PlaceCandidateResolving
     private let metadataProvider: any SocialImportMetadataProviding
     private let googleListLoader: any GoogleMapsSharedListLoading
@@ -185,10 +190,12 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             )
         }
         let recognition = try await recognizeSocialMedia(in: metadata)
-        let hints = SocialPlaceHintExtractor.hints(
-            from: metadata,
-            recognizedTexts: recognition.recognizedTexts,
-            limit: Self.maximumExtractedSocialHints
+        let hints = SocialImportEvidencePlanner.reviewHints(
+            SocialPlaceHintExtractor.hints(
+                from: metadata,
+                recognizedTexts: recognition.recognizedTexts,
+                limit: Self.maximumExtractedSocialHints
+            )
         )
 
         let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
@@ -223,6 +230,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var lowConfidenceCount = 0
         var rejectedHintCount = 0
         var lookupFailureCount = 0
+        var recoveryHints: [SocialRecoveryHint] = []
         for hint in hints {
             try Task.checkCancellation()
             let fetchedCandidates: [PlaceCandidate]
@@ -235,16 +243,15 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             } catch {
                 try Task.checkCancellation()
                 lookupFailureCount += 1
-                if !appendUnresolvedSocialHint(
-                    hint,
-                    originalSeed: seed,
-                    to: &entries,
-                    seenHints: &seenPlausibleHints,
-                    helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
-                ) {
-                    rejectedHintCount += 1
+                if hint.evidence.shouldRemainVisibleWithoutCandidates {
+                    recoveryHints.append(
+                        SocialRecoveryHint(
+                            hint: hint,
+                            helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
+                        )
+                    )
                 } else {
-                    unresolvedCount += 1
+                    rejectedHintCount += 1
                 }
                 continue
             }
@@ -255,15 +262,15 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             )
             guard !candidates.isEmpty else {
                 noCandidateCount += 1
-                if !appendUnresolvedSocialHint(
-                    hint,
-                    originalSeed: seed,
-                    to: &entries,
-                    seenHints: &seenPlausibleHints
-                ) {
-                    rejectedHintCount += 1
+                if hint.evidence.shouldRemainVisibleWithoutCandidates {
+                    recoveryHints.append(
+                        SocialRecoveryHint(
+                            hint: hint,
+                            helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+                        )
+                    )
                 } else {
-                    unresolvedCount += 1
+                    rejectedHintCount += 1
                 }
                 continue
             }
@@ -313,20 +320,34 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 }
             } else {
                 lowConfidenceCount += 1
-                if !appendUnresolvedSocialHint(
-                    hint,
-                    originalSeed: seed,
-                    to: &entries,
-                    seenHints: &seenPlausibleHints
-                ) {
-                    rejectedHintCount += 1
+                if hint.evidence.shouldRemainVisibleWithoutCandidates {
+                    recoveryHints.append(
+                        SocialRecoveryHint(
+                            hint: hint,
+                            helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+                        )
+                    )
                 } else {
-                    unresolvedCount += 1
+                    rejectedHintCount += 1
                 }
             }
             if match.bestScore > (strongest?.bestScore ?? 0) {
                 strongest = match
             }
+        }
+
+        if let recovery = bestRecoveryHint(recoveryHints),
+           appendUnresolvedSocialHint(
+               recovery.hint,
+               originalSeed: seed,
+               to: &entries,
+               seenHints: &seenPlausibleHints,
+               helpMessage: recovery.helpMessage
+           ) {
+            unresolvedCount += 1
+            rejectedHintCount += max(0, recoveryHints.count - 1)
+        } else {
+            rejectedHintCount += recoveryHints.count
         }
 
         let discoveredMediaCount = metadata.mediaItems.isEmpty
@@ -386,6 +407,21 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             thumbnailURL: fetched.thumbnailURL,
             mediaItems: fetched.mediaItems
         )
+    }
+
+    private func bestRecoveryHint(_ hints: [SocialRecoveryHint]) -> SocialRecoveryHint? {
+        hints.enumerated().max { lhs, rhs in
+            if lhs.element.hint.evidence.trustRank != rhs.element.hint.evidence.trustRank {
+                return lhs.element.hint.evidence.trustRank < rhs.element.hint.evidence.trustRank
+            }
+            if (lhs.element.hint.area == nil) != (rhs.element.hint.area == nil) {
+                return lhs.element.hint.area == nil
+            }
+            if lhs.element.hint.name.count != rhs.element.hint.name.count {
+                return lhs.element.hint.name.count < rhs.element.hint.name.count
+            }
+            return lhs.offset > rhs.offset
+        }?.element
     }
 
     private func recognizeSocialMedia(in metadata: SocialImportMetadata) async throws -> SocialMediaRecognition {
@@ -914,8 +950,7 @@ final class PlaceImportStore: ObservableObject {
             source: source,
             sourceName: sourceName,
             captureDeliveryID: captureDeliveryID,
-            totalCount: 1,
-            autoSaveWhenReady: true
+            totalCount: 1
         )
         let seed = PlaceImportSeed(
             rawText: url.absoluteString,

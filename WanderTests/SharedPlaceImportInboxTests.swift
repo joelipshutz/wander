@@ -290,7 +290,7 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
         XCTAssertTrue(try inbox.scan().entries.isEmpty)
     }
 
-    func testDrainKeepsCapturedSocialCaptionForAppSideMatching() throws {
+    func testDrainKeepsCapturedSocialCaptionForScopedAppReview() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("SharedPlaceImportDrainerCaptionTests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -314,9 +314,8 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
         let report = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: store)
 
         XCTAssertEqual(report.importedBatchCount, 1)
-        XCTAssertEqual(report.automaticSaveBatchCount, 1)
-        XCTAssertTrue(report.hasOnlyAutomaticSaves)
-        XCTAssertEqual(store.batches.first?.autoSaveWhenReady, true)
+        XCTAssertEqual(report.batchIDs, store.batches.map(\.id))
+        XCTAssertNil(store.batches.first?.receipt)
         XCTAssertNil(store.items.first?.seed.nameHint)
         XCTAssertEqual(
             store.items.first?.seed.socialCaptionHint,
@@ -361,6 +360,11 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
                 "WanderShareExtension/WanderShareExtension.entitlements"
             )
         )
+        let shareController = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "WanderShareExtension/ShareViewController.swift"
+            )
+        )
 
         XCTAssertTrue(project.contains("WanderShareExtension:"))
         XCTAssertTrue(project.contains("PRODUCT_BUNDLE_IDENTIFIER: com.grayline.wander.share"))
@@ -385,6 +389,9 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
             entitlements["com.apple.security.application-groups"] as? [String],
             [SharedPlaceImportInbox.appGroupIdentifier]
         )
+        XCTAssertTrue(shareController.contains("Captured for rec.me"))
+        XCTAssertTrue(shareController.contains("review the match before anything is saved"))
+        XCTAssertFalse(shareController.contains("Saving to rec.me"))
     }
 
     private func propertyList(_ url: URL) throws -> [String: Any] {

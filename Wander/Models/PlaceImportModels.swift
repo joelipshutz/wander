@@ -321,7 +321,6 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var processedCount: Int
     var destinationListID: String?
     var receipt: PlaceImportReceipt?
-    var autoSaveWhenReady: Bool?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -334,8 +333,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         totalCount: Int,
         processedCount: Int = 0,
         destinationListID: String? = nil,
-        receipt: PlaceImportReceipt? = nil,
-        autoSaveWhenReady: Bool? = nil
+        receipt: PlaceImportReceipt? = nil
     ) {
         self.id = id
         self.source = source
@@ -348,7 +346,6 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.processedCount = processedCount
         self.destinationListID = destinationListID
         self.receipt = receipt
-        self.autoSaveWhenReady = autoSaveWhenReady
     }
 }
 
@@ -450,6 +447,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         return selectedCandidate?.name
             ?? seed.nameHint
             ?? candidates.first?.name
+            ?? socialSourceFallbackName
             ?? sourceURLHost
             ?? "Imported place"
     }
@@ -473,6 +471,14 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
               let host = URL(string: sourceURLString)?.host
         else { return nil }
         return host.replacingOccurrences(of: "www.", with: "")
+    }
+
+    private var socialSourceFallbackName: String? {
+        switch source {
+        case .instagram: "Instagram post"
+        case .tiktok: "TikTok post"
+        case .googleMaps, .textNotes: nil
+        }
     }
 
     private var sourceURLString: String? {

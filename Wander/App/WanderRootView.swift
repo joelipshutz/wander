@@ -574,7 +574,6 @@ struct WanderRootView: View {
             drainSharedPlaceImports()
             importStore.resumePendingImports()
             reconcilePlaceImports()
-            handleAutomaticSharedPlaceImports()
             publishWidgetSnapshot()
             refreshNearbyWidgetSnapshot()
             await pushNotifications.refreshAuthorizationStatus()
@@ -686,11 +685,6 @@ struct WanderRootView: View {
         .onChange(of: importStore.items) { _, _ in
             guard isSessionValidated else { return }
             reconcilePlaceImports()
-            handleAutomaticSharedPlaceImports()
-        }
-        .onChange(of: importStore.batches) { _, _ in
-            guard isSessionValidated else { return }
-            handleAutomaticSharedPlaceImports()
         }
         .onChange(of: importStore.summary.hasPendingImports) { _, _ in
             guard addSheetDetent != .large else { return }
