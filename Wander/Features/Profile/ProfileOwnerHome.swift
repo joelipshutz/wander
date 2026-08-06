@@ -3,6 +3,8 @@ import SwiftUI
 import UIKit
 
 private enum ProfileHomeScrollAnchor {
+    static let identity = "profile.identity"
+    static let activity = "profile.activity"
     static let calendar = "profile.calendar"
 }
 
@@ -216,6 +218,7 @@ struct ProfileMemberActions {
 }
 
 struct ProfileOwnerHome: View {
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let profile: LocalProfile
     let viewerProfile: LocalProfile
     let mode: ProfileHomeMode
@@ -230,6 +233,7 @@ struct ProfileOwnerHome: View {
     let avatarAction: () -> Void
     let editAction: () -> Void
     let settingsAction: () -> Void
+    let shareAction: () -> Void
     let relationshipAction: () -> Void
     let backAction: (() -> Void)?
     let memberActions: ProfileMemberActions?
@@ -250,6 +254,7 @@ struct ProfileOwnerHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 identitySection
+                    .id(ProfileHomeScrollAnchor.identity)
                 if let inCommonCount = mode.visibleInCommonCount(
                     profileID: profile.id,
                     viewerID: viewerProfile.id
@@ -279,6 +284,7 @@ struct ProfileOwnerHome: View {
                     itemAction: recentActivityAction,
                     allActivityAction: allActivityAction
                 )
+                .id(ProfileHomeScrollAnchor.activity)
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
@@ -316,6 +322,17 @@ struct ProfileOwnerHome: View {
             else { return }
             onCalendarScrollRequestHandled(calendarScrollRequestID)
         }
+        .onChange(of: walkthroughs.currentStep?.target) { _, target in
+            guard mode.isOwner else { return }
+            switch target {
+            case .profileActivity:
+                profileScrollPosition = ProfileHomeScrollAnchor.activity
+            case .profileSettings, .profileSocial, .profileShare:
+                profileScrollPosition = ProfileHomeScrollAnchor.identity
+            default:
+                break
+            }
+        }
         .wanderScreen()
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -348,15 +365,17 @@ struct ProfileOwnerHome: View {
                         displayName: profile.displayName,
                         handle: profile.handle
                     ) {
-                        WanderShareButton(content: shareContent) {
+                        WanderShareButton(content: shareContent, onTap: shareAction) {
                             ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Share profile")
+                        .walkthroughTarget(mode.isOwner ? .profileShare : nil)
                     }
 
                     if mode.isOwner {
                         ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
+                            .walkthroughTarget(.profileSettings)
                     } else if let memberActions {
                         ProfileHeaderActionButton(
                             systemImage: "ellipsis",
@@ -442,6 +461,7 @@ struct ProfileOwnerHome: View {
             }
             .padding(.vertical, WanderTheme.spacing1)
             .wanderGlassPanel(cornerRadius: 22)
+            .walkthroughTarget(mode.isOwner ? .profileSocial : nil)
         }
     }
 
@@ -780,6 +800,7 @@ struct ProfileActivityFilterControl: View {
 }
 
 private struct ProfileRecentActivitySection: View {
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let items: [ProfileActivityItem]
     let checkInCount: Int
     let wannaCount: Int
@@ -798,10 +819,19 @@ private struct ProfileRecentActivitySection: View {
                 .accessibilityAddTraits(.isHeader)
 
             ProfileActivityFilterControl(
-                selection: $filter,
+                selection: Binding(
+                    get: { filter },
+                    set: { newFilter in
+                        if newFilter != filter {
+                            walkthroughs.perform(.profileActivity)
+                        }
+                        filter = newFilter
+                    }
+                ),
                 checkInCount: checkInCount,
                 wannaCount: wannaCount
             )
+            .walkthroughTarget(.profileActivity)
 
             VStack(spacing: 0) {
                 if filteredItems.isEmpty {
@@ -831,6 +861,7 @@ private struct ProfileRecentActivitySection: View {
             }
 
             Button {
+                walkthroughs.perform(.profileActivity)
                 allActivityAction(filter)
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {

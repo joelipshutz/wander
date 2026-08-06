@@ -42,6 +42,7 @@ struct AddScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @ObservedObject var importStore: PlaceImportStore
     @ObservedObject var placeSaveDraftStore: PlaceSaveDraftStore
     let resetToken: UUID
@@ -137,6 +138,7 @@ struct AddScreen: View {
             }
             .onChange(of: isQuickAddFocused) { _, isFocused in
                 if isFocused {
+                    walkthroughs.perform(.addSearch)
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 120_000_000)
                         guard isQuickAddFocused else { return }
@@ -233,6 +235,7 @@ struct AddScreen: View {
                     .environmentObject(backend)
             }
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
     }
 
     private var compactSheetContent: some View {
@@ -241,12 +244,16 @@ struct AddScreen: View {
 
             AddImportEntrySection(
                 summary: importStore.summary,
-                action: openImportHub
+                action: {
+                    walkthroughs.perform(.addImport)
+                    openImportHub()
+                }
             )
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing2)
             .padding(.bottom, WanderTheme.spacing3)
             .background(WanderTheme.canvasWarm.color)
+            .walkthroughTarget(.addImport)
         }
     }
 
@@ -367,6 +374,7 @@ struct AddScreen: View {
                 showsPhotoLibrary = true
             }
         )
+        .walkthroughTarget(.addSearch)
     }
 
     private var suggestedPlaces: some View {

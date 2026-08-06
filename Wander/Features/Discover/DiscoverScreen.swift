@@ -9,6 +9,7 @@ struct DiscoverScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var selectedMode: DiscoverMode = .places
     @State private var placesQuery: String
     @State private var submittedPlacesQuery: String?
@@ -385,6 +386,7 @@ struct DiscoverScreen: View {
             }
             .onDisappear(perform: cancelPlaceSearchWork)
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .feedSearch)
     }
 
     private func applyRequestedSection() {
@@ -817,6 +819,7 @@ struct DiscoverScreen: View {
                 ) {
                     ForEach(suggestedSearches) { suggestion in
                         Button {
+                            walkthroughs.perform(.feedSmartSearch)
                             placesQuery = suggestion.query
                             store.trackDiscoverSearchEvent(
                                 WanderAnalyticsEvents.discoverSearchExampleSelected,
@@ -853,6 +856,7 @@ struct DiscoverScreen: View {
                 .padding(.vertical, 1)
             }
         }
+        .walkthroughTarget(.feedSmartSearch)
     }
 
     private var placeResultsSection: some View {

@@ -22,6 +22,7 @@ struct MapScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
@@ -208,6 +209,9 @@ struct MapScreen: View {
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
                                 .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
+                                .walkthroughTarget(
+                                    group.key == annotationGroups.first?.key ? .mapMarker : nil
+                                )
                             }
                         }
 
@@ -277,6 +281,7 @@ struct MapScreen: View {
                                 },
                                 onSubmit: submitMapSearch
                             )
+                            .walkthroughTarget(.mapSearch)
 
                             if isMapSearchFocused {
                                 MapSearchCancelButton(action: cancelMapSearch)
@@ -287,6 +292,7 @@ struct MapScreen: View {
                                     accessibilityIdentifier: "map.headerAdd",
                                     action: onAdd
                                 )
+                                .walkthroughTarget(.mapAdd)
                             }
                         }
                         .padding(.horizontal, WanderTheme.spacing3)
@@ -330,6 +336,7 @@ struct MapScreen: View {
                                 .padding(.vertical, WanderTheme.spacing1)
                             }
                             .frame(height: 48)
+                            .walkthroughTarget(.mapFilters)
                         }
 
                     }
@@ -401,6 +408,16 @@ struct MapScreen: View {
                    !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey ?? "") {
                     selectedPlaceGroupKey = firstGroupKey
                     isPlaceProfilePresented = false
+                }
+            }
+            .onChange(of: isMapSearchFocused) { _, isFocused in
+                if isFocused {
+                    walkthroughs.perform(.mapSearch)
+                }
+            }
+            .onChange(of: walkthroughs.currentStep?.target) { _, target in
+                if target == .mapMarker {
+                    isMapSearchFocused = false
                 }
             }
             .onDisappear {
@@ -605,6 +622,7 @@ struct MapScreen: View {
     }
 
     private func toggle(_ filter: MapFilter) {
+        walkthroughs.perform(.mapFilters)
         if selectedFilters.contains(filter) {
             selectedFilters.remove(filter)
             if filter == .social {
@@ -616,16 +634,19 @@ struct MapScreen: View {
     }
 
     private func showAllSocialPlaces() {
+        walkthroughs.perform(.mapFilters)
         selectedFilters.insert(.social)
         selectedSocialOwnerID = nil
     }
 
     private func hideSocialPlaces() {
+        walkthroughs.perform(.mapFilters)
         selectedFilters.remove(.social)
         selectedSocialOwnerID = nil
     }
 
     private func showSocialPlaces(for ownerID: String) {
+        walkthroughs.perform(.mapFilters)
         selectedFilters.insert(.social)
         selectedSocialOwnerID = ownerID
     }
@@ -676,6 +697,7 @@ struct MapScreen: View {
     }
 
     private func selectVisiblePlaceFromMapTap(_ visiblePlace: VisiblePlace) {
+        walkthroughs.perform(.mapMarker)
         mapSelectionRevision += 1
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()

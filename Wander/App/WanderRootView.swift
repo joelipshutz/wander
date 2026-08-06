@@ -322,9 +322,11 @@ struct WanderRootView: View {
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
+    @State private var didApplyWalkthroughLaunchConfiguration = false
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
+    @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
@@ -344,6 +346,7 @@ struct WanderRootView: View {
         parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
+        let launchArguments = ProcessInfo.processInfo.arguments
         self.fixtureMode = fixtureMode
         self.isSessionValidated = isSessionValidated
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
@@ -367,6 +370,11 @@ struct WanderRootView: View {
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
         _placeSaveDraftStore = StateObject(wrappedValue: PlaceSaveDraftStore())
+        _walkthroughs = StateObject(
+            wrappedValue: FirstVisitWalkthroughCoordinator(
+                isEnabled: fixtureMode == .empty || launchArguments.contains("-WanderEnableWalkthroughs")
+            )
+        )
         _addSheetDetent = State(
             initialValue: AddSheetLayout.restingDetent(
                 hasPendingImports: importStore.summary.hasPendingImports
@@ -425,6 +433,15 @@ struct WanderRootView: View {
             .accessibilityHidden(true)
         }
         .environmentObject(store)
+        .environmentObject(walkthroughs)
+        .overlay(alignment: .bottom) {
+            Color.clear
+                .frame(height: 84)
+                .contentShape(Rectangle())
+                .allowsHitTesting(false)
+                .walkthroughTarget(.mapTabs)
+        }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
         .overlay {
             GeometryReader { proxy in
                 if let invitation = sharedVisitBannerInvitation {
@@ -494,6 +511,7 @@ struct WanderRootView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(walkthroughs)
                     .presentationDetents(
                         AddSheetLayout.detents(
                         hasPendingImports: importStore.summary.hasPendingImports
@@ -621,6 +639,8 @@ struct WanderRootView: View {
                 restoredPlaceSaveDraftOwnerID = nil
             }
             applyAuthStateIfNeeded(state)
+            walkthroughs.setUserID(store.currentUser.id)
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
             publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: state)
@@ -732,6 +752,14 @@ struct WanderRootView: View {
         }
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
+                walkthroughs.setUserID(store.currentUser.id)
+                if !didApplyWalkthroughLaunchConfiguration {
+                    didApplyWalkthroughLaunchConfiguration = true
+                    if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
+                        walkthroughs.resetCurrentUser()
+                    }
+                }
+                walkthroughs.activate(walkthroughSurface(for: selectedTab))
                 drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
                     controlNavigationCenter.pendingRequest
@@ -751,12 +779,16 @@ struct WanderRootView: View {
             if newTab == .add {
                 presentAddSheet()
             } else {
+                walkthroughs.perform(.mapTabs)
                 selectedTab = newTab
+                walkthroughs.activate(walkthroughSurface(for: newTab))
             }
         }
     }
 
     private func presentAddSheet() {
+        walkthroughs.perform(.mapAdd)
+        walkthroughs.activate(.add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
@@ -1091,6 +1123,20 @@ struct WanderRootView: View {
     private func handleAddSheetDismissal() {
         placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
+        walkthroughs.activate(walkthroughSurface(for: selectedTab))
+    }
+
+    private func walkthroughSurface(for tab: WanderTab) -> WalkthroughSurface {
+        switch tab {
+        case .map, .add:
+            .map
+        case .discover:
+            .feed
+        case .lists:
+            .lists
+        case .profile:
+            .profile
+        }
     }
 
     private func handleDeepLinkPresentationDismissal(
