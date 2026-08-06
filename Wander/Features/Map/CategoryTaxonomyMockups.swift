@@ -287,7 +287,7 @@ private struct CategoryTaxonomyEditMockup: View {
                 Text("5233 Sunset Blvd")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                Text("Restaurants & Food · Thai")
+                Text("Thai")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
             }

@@ -507,7 +507,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Thai")
         XCTAssertEqual(visiblePlace.categoryEmoji, "🇹🇭")
         XCTAssertEqual(visiblePlace.effectiveCompactType, "Thai")
-        XCTAssertEqual(visiblePlace.effectiveDetailedType, "Restaurants & Food · Thai")
+        XCTAssertEqual(visiblePlace.effectiveDetailedType, "Thai")
 
         cuisine.valueJSON = "\"Italian\""
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Italian")
@@ -912,12 +912,12 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(restaurant.subcategory, "Restaurant")
         XCTAssertEqual(restaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
         XCTAssertEqual(restaurant.compactType(foodType: "Hot dogs"), "Hot dogs")
-        XCTAssertEqual(restaurant.detailedType(foodType: "Hot dogs"), "Restaurants & Food · Hot dogs")
-        XCTAssertEqual(restaurant.compactType(), "Restaurants & Food")
-        XCTAssertEqual(restaurant.detailedType(), "Restaurants & Food")
+        XCTAssertEqual(restaurant.detailedType(foodType: "Hot dogs"), "Hot dogs")
+        XCTAssertEqual(restaurant.compactType(), "Restaurant")
+        XCTAssertEqual(restaurant.detailedType(), "Restaurant")
         XCTAssertEqual(
             restaurant.detailedType(foodType: "Restaurants & Food"),
-            "Restaurants & Food"
+            "Restaurant"
         )
 
         let transit = WanderPlaceCategory.display(for: "transportation")
@@ -925,6 +925,16 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(transit.subcategory, "Transit stop")
         XCTAssertEqual(transit.compactType(), "Transit stop")
         XCTAssertEqual(transit.detailedType(), "Transit stop")
+
+        let nightlifeWithoutSubcategory = PlaceCategoryDisplay(
+            rawCategory: "nightlife",
+            primaryCategory: WanderPlaceCategory.barsNightlife,
+            category: "Bars & Nightlife",
+            subcategory: nil,
+            sourceLabel: "suggested"
+        )
+        XCTAssertEqual(nightlifeWithoutSubcategory.compactType(), "Bars & Nightlife")
+        XCTAssertEqual(nightlifeWithoutSubcategory.detailedType(), "Bars & Nightlife")
 
         let providerRestaurant = WanderPlaceCategory.display(for: "thai restaurant")
         XCTAssertEqual(providerRestaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
@@ -1004,7 +1014,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurants & Food"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant"
         )
 
         let commaCandidate = PlaceCandidate(
@@ -1020,7 +1030,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             commaCandidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurants & Food"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant"
         )
 
         let thaiCandidate = PlaceCandidate(

@@ -97,16 +97,18 @@ struct PlaceCategoryDisplay: Equatable {
 
     func compactType(foodType: String? = nil) -> String {
         if primaryCategory == WanderPlaceCategory.restaurantsFood {
-            return uniqueDisplayValues([foodType, category]).first ?? ""
+            let primaryCategoryKey = WanderPlaceCategory.normalizedCategoryText(category)
+            return uniqueDisplayValues([foodType, subcategory])
+                .first { WanderPlaceCategory.normalizedCategoryText($0) != primaryCategoryKey }
+                ?? "Restaurant"
         }
         return uniqueDisplayValues([subcategory, category]).first ?? ""
     }
 
     func detailedType(foodType: String? = nil) -> String {
-        guard primaryCategory == WanderPlaceCategory.restaurantsFood else {
-            return compactType(foodType: foodType)
-        }
-        return uniqueDisplayValues([category, foodType]).joined(separator: " · ")
+        // Detailed cards add more place context around this value; the type itself
+        // stays specific so cards never reintroduce a broad category label.
+        compactType(foodType: foodType)
     }
 
     private func uniqueDisplayValues(_ values: [String?]) -> [String] {
