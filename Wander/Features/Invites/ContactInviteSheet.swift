@@ -80,7 +80,7 @@ struct ContactInviteSheet: View {
     @State private var didFailLoadingContacts = false
     @State private var isPresentingMessageComposer = false
     @State private var messageRecipient: String?
-    @State private var pendingMessageContacts: [InviteContact] = []
+    @State private var messageDeliveryPlan: InviteMessageDeliveryPlan?
     @State private var sharePresentation: InviteSharePresentation?
     @State private var deliveryErrorMessage: String?
     @State private var completionHeadline: String?
@@ -195,7 +195,7 @@ struct ContactInviteSheet: View {
                     .font(.system(size: 17, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
                 if presentationState == .choosing && accessState == .authorized {
-                    Text("\(selection.count)/20")
+                    Text("\(selection.count)/\(InviteSelection.maximumCount)")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .monospacedDigit()
@@ -314,7 +314,7 @@ struct ContactInviteSheet: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(WanderTheme.textFaint.color)
-                        .frame(width: 32, height: 32)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -354,7 +354,7 @@ struct ContactInviteSheet: View {
     private func contactRow(_ contact: InviteContact) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.15)) {
-                selection.toggle(contact.id)
+                _ = selection.toggle(contact.id)
             }
         } label: {
             HStack(spacing: WanderTheme.spacing3) {
@@ -413,8 +413,9 @@ struct ContactInviteSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(contact.displayName)
+        .accessibilityLabel(contactAccessibilityLabel(for: contact))
         .accessibilityValue(selection.contains(contact.id) ? "Selected" : "Not selected")
+        .accessibilityHint(selection.contains(contact.id) ? "Double-tap to deselect" : "Double-tap to select")
     }
 
     private var alphabetLetters: [String] {
@@ -680,7 +681,10 @@ struct ContactInviteSheet: View {
     }
 
     private var inviteShareContent: WanderShareContent {
-        WanderShareContent.appInvite(senderProfileID: senderProfileID)
+        WanderShareContent.appInvite(
+            senderProfileID: senderProfileID,
+            contextMessage: surface.inviteMessage
+        )
     }
 
     private var selectedContacts: [InviteContact] {
@@ -700,15 +704,16 @@ struct ContactInviteSheet: View {
             return
         }
 
-        pendingMessageContacts = recipients
+        messageDeliveryPlan = InviteMessageDeliveryPlan(contacts: recipients)
         presentNextMessageComposer()
     }
 
     private func presentNextMessageComposer() {
-        guard let nextContact = pendingMessageContacts.first,
+        guard let nextContact = messageDeliveryPlan?.currentContact,
               let recipient = nextContact.contactDetail
         else {
-            let sentCount = selectedContacts.count
+            let sentCount = messageDeliveryPlan?.sentCount ?? 0
+            guard sentCount > 0 else { return }
             completeDelivery(
                 headline: sentCount == 1 ? "invite sent" : "invites sent",
                 detail: sentCount == 1
@@ -727,10 +732,10 @@ struct ContactInviteSheet: View {
 
         switch result {
         case .sent:
-            if !pendingMessageContacts.isEmpty {
-                pendingMessageContacts.removeFirst()
+            if let sentContact = messageDeliveryPlan?.markCurrentSent() {
+                selection.remove(sentContact.id)
             }
-            if pendingMessageContacts.isEmpty {
+            if messageDeliveryPlan?.currentContact == nil {
                 presentNextMessageComposer()
             } else {
                 Task { @MainActor in
@@ -739,12 +744,12 @@ struct ContactInviteSheet: View {
                 }
             }
         case .cancelled:
-            pendingMessageContacts.removeAll()
+            messageDeliveryPlan?.cancelRemaining()
         case .failed:
-            pendingMessageContacts.removeAll()
+            messageDeliveryPlan?.cancelRemaining()
             deliveryErrorMessage = "Messages could not send this invitation. Try again."
         @unknown default:
-            pendingMessageContacts.removeAll()
+            messageDeliveryPlan?.cancelRemaining()
             deliveryErrorMessage = "Messages returned an unknown result. Try again."
         }
     }
@@ -767,6 +772,12 @@ struct ContactInviteSheet: View {
             get: { deliveryErrorMessage != nil },
             set: { if !$0 { deliveryErrorMessage = nil } }
         )
+    }
+
+    private func contactAccessibilityLabel(for contact: InviteContact) -> String {
+        let detail = rowDetail(for: contact)
+        let relationship = contact.relationship.isOnRecme ? "Already on rec.me" : "Phone contact"
+        return [contact.displayName, detail, relationship].compactMap { $0 }.joined(separator: ", ")
     }
 
     @MainActor
@@ -911,7 +922,7 @@ private struct AlphabetScrubber: View {
                     }
             )
         }
-        .frame(width: 34, height: 324)
+        .frame(width: WanderTheme.tapMinimum, height: 324)
         .accessibilityElement()
         .accessibilityLabel("Contact index")
         .accessibilityValue(letters[selectedIndex])
@@ -931,8 +942,11 @@ private struct AlphabetScrubber: View {
 
     private func updateSelection(at yPosition: CGFloat, height: CGFloat) {
         guard !letters.isEmpty, height > 0 else { return }
-        let progress = min(max(yPosition / height, 0), 0.999_999)
-        let nextIndex = min(Int(progress * CGFloat(letters.count)), letters.count - 1)
+        guard let nextIndex = InviteAlphabetIndex.index(
+            yPosition: yPosition,
+            height: height,
+            itemCount: letters.count
+        ) else { return }
         guard nextIndex != selectedIndex else { return }
 
         selectedIndex = nextIndex

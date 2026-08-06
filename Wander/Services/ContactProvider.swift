@@ -90,8 +90,7 @@ actor SystemContactProvider: ContactProvider {
             CNContactIdentifierKey as CNKeyDescriptor,
             CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
             CNContactOrganizationNameKey as CNKeyDescriptor,
-            CNContactPhoneNumbersKey as CNKeyDescriptor,
-            CNContactEmailAddressesKey as CNKeyDescriptor
+            CNContactPhoneNumbersKey as CNKeyDescriptor
         ]
         let request = CNContactFetchRequest(keysToFetch: keys)
         request.sortOrder = .userDefault
@@ -123,9 +122,8 @@ actor SystemContactProvider: ContactProvider {
         let organization = contact.organizationName.trimmingCharacters(in: .whitespacesAndNewlines)
         let phoneNumber = contact.phoneNumbers.first?.value.stringValue
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let email = contact.emailAddresses.first.map { String($0.value) }
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let displayNameCandidates: [String?] = [formattedName, organization, phoneNumber, email]
+        guard let phoneNumber, !phoneNumber.isEmpty else { return nil }
+        let displayNameCandidates: [String?] = [formattedName, organization, phoneNumber]
         let displayName = displayNameCandidates
             .compactMap { $0 }
             .first { !$0.isEmpty }
@@ -134,7 +132,7 @@ actor SystemContactProvider: ContactProvider {
         return ContactMatch(
             id: contact.identifier,
             displayName: displayName,
-            contactDetail: phoneNumber?.isEmpty == false ? phoneNumber : email,
+            contactDetail: phoneNumber,
             handle: nil,
             userID: nil,
             isAlreadyFollowing: false,

@@ -10,6 +10,8 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertEqual(visit.sheetSubtitle, "Who joined you at Gjelina?")
         XCTAssertEqual(feed.entryTitle, "invite people to rec.me")
         XCTAssertEqual(list.sheetSubtitle, "Invite people to help build LA date nights.")
+        XCTAssertEqual(visit.entrySubtitle, "Invite them to rec.me, then connect after they join.")
+        XCTAssertTrue(list.inviteMessage.contains("add you as a collaborator on LA date nights"))
         XCTAssertEqual(InviteIntent(surface: visit, resourceID: "visit-123").analyticsProperties, ["surface": "shared_visit"])
         XCTAssertFalse(InviteIntent(surface: visit, resourceID: "visit-123").analyticsProperties.values.contains("visit-123"))
     }
@@ -58,6 +60,48 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertEqual(selection.count, 1)
         XCTAssertFalse(selection.contains("maya"))
         XCTAssertTrue(selection.contains("joe"))
+    }
+
+    func testSelectionEnforcesTwentyPersonLimitAndStillAllowsRemoval() {
+        var selection = InviteSelection()
+
+        for index in 0..<InviteSelection.maximumCount {
+            XCTAssertTrue(selection.toggle("contact-\(index)"))
+        }
+
+        XCTAssertEqual(selection.count, 20)
+        XCTAssertFalse(selection.toggle("contact-over-limit"))
+        XCTAssertFalse(selection.contains("contact-over-limit"))
+        XCTAssertTrue(selection.toggle("contact-0"))
+        XCTAssertEqual(selection.count, 19)
+        XCTAssertTrue(selection.toggle("contact-over-limit"))
+        XCTAssertEqual(selection.count, 20)
+    }
+
+    func testMessageDeliveryPlanPreservesProgressAcrossCancellation() throws {
+        let first = inviteContact(id: "first")
+        let second = inviteContact(id: "second")
+        var plan = InviteMessageDeliveryPlan(contacts: [first, second])
+
+        XCTAssertEqual(plan.currentContact, first)
+        XCTAssertEqual(plan.markCurrentSent(), first)
+        XCTAssertEqual(plan.sentContactIDs, ["first"])
+        XCTAssertEqual(plan.sentCount, 1)
+        XCTAssertEqual(plan.currentContact, second)
+
+        plan.cancelRemaining()
+
+        XCTAssertNil(plan.currentContact)
+        XCTAssertEqual(plan.sentContactIDs, ["first"])
+        XCTAssertEqual(plan.sentCount, 1)
+    }
+
+    func testAlphabetIndexMapsDragPositionToBoundedLetter() {
+        XCTAssertEqual(InviteAlphabetIndex.index(yPosition: -20, height: 270, itemCount: 27), 0)
+        XCTAssertEqual(InviteAlphabetIndex.index(yPosition: 135, height: 270, itemCount: 27), 13)
+        XCTAssertEqual(InviteAlphabetIndex.index(yPosition: 270, height: 270, itemCount: 27), 26)
+        XCTAssertNil(InviteAlphabetIndex.index(yPosition: 10, height: 0, itemCount: 27))
+        XCTAssertNil(InviteAlphabetIndex.index(yPosition: 10, height: 270, itemCount: 0))
     }
 
     func testContactMatchMapsExistingAndNonUserContactsWithoutPIIAnalytics() {
@@ -146,6 +190,9 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("await contactProvider.requestAccess()"))
         XCTAssertTrue(sheet.contains("await contactProvider.matches()"))
         XCTAssertTrue(sheet.contains("if isLoadingContacts"))
+        let provider = try projectSource("Wander/Services/ContactProvider.swift")
+        XCTAssertFalse(provider.contains("CNContactEmailAddressesKey"))
+        XCTAssertTrue(provider.contains("guard let phoneNumber, !phoneNumber.isEmpty else { return nil }"))
     }
 
     func testContactInviteAddUsesMessagesDeliveryAndInteractiveAlphabetScrubber() throws {
@@ -154,7 +201,8 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("MFMessageComposeViewController.canSendText()"))
         XCTAssertTrue(sheet.contains("ContactInviteMessageComposer("))
         XCTAssertTrue(sheet.contains("case .sent:"))
-        XCTAssertTrue(sheet.contains("WanderShareContent.appInvite(senderProfileID:"))
+        XCTAssertTrue(sheet.contains("WanderShareContent.appInvite("))
+        XCTAssertTrue(sheet.contains("contextMessage: surface.inviteMessage"))
         XCTAssertFalse(sheet.contains("Choose how to share"))
 
         XCTAssertTrue(sheet.contains("AlphabetScrubber(letters:"))
@@ -169,5 +217,15 @@ final class InviteFrameworkTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         return try String(contentsOf: projectRoot.appendingPathComponent(path))
+    }
+
+    private func inviteContact(id: String) -> InviteContact {
+        InviteContact(
+            id: id,
+            displayName: id.capitalized,
+            contactDetail: "+1 (555) 010-1000",
+            relationship: .contactOnly,
+            isFrequentlyContacted: false
+        )
     }
 }

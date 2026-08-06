@@ -30,11 +30,30 @@ enum InviteSurface: Equatable {
     var entrySubtitle: String {
         switch self {
         case .sharedVisit:
-            "They’ll be added only after accepting."
+            "Invite them to rec.me, then connect after they join."
         case .feedPeople:
             "Bring the people whose taste you trust."
         case .listCollaborator:
-            "Share this list with someone not here yet."
+            "Invite someone to rec.me, then add them to this list."
+        }
+    }
+
+    var inviteMessage: String {
+        switch self {
+        case .sharedVisit(let placeName):
+            if let placeName, !placeName.isEmpty {
+                "Join me on rec.me so we can connect around my check-in at \(placeName)."
+            } else {
+                "Join me on rec.me so we can connect around our check-ins."
+            }
+        case .feedPeople:
+            "Join me on rec.me so we can share places worth remembering."
+        case .listCollaborator(let listName):
+            if let listName, !listName.isEmpty {
+                "Join me on rec.me so I can add you as a collaborator on \(listName)."
+            } else {
+                "Join me on rec.me so I can add you as a list collaborator."
+            }
         }
     }
 
@@ -214,6 +233,8 @@ struct InviteContactSection: Identifiable, Equatable {
 }
 
 struct InviteSelection: Equatable {
+    static let maximumCount = 20
+
     private(set) var contactIDs: Set<String> = []
 
     init(contactIDs: Set<String> = []) {
@@ -226,12 +247,52 @@ struct InviteSelection: Equatable {
         contactIDs.contains(contactID)
     }
 
-    mutating func toggle(_ contactID: String) {
+    @discardableResult
+    mutating func toggle(_ contactID: String) -> Bool {
         if contactIDs.contains(contactID) {
             contactIDs.remove(contactID)
+            return true
         } else {
+            guard contactIDs.count < Self.maximumCount else { return false }
             contactIDs.insert(contactID)
+            return true
         }
+    }
+
+    mutating func remove(_ contactID: String) {
+        contactIDs.remove(contactID)
+    }
+}
+
+struct InviteMessageDeliveryPlan: Equatable {
+    private(set) var pendingContacts: [InviteContact]
+    private(set) var sentContactIDs: [String] = []
+
+    init(contacts: [InviteContact]) {
+        pendingContacts = contacts
+    }
+
+    var currentContact: InviteContact? { pendingContacts.first }
+    var sentCount: Int { sentContactIDs.count }
+
+    @discardableResult
+    mutating func markCurrentSent() -> InviteContact? {
+        guard !pendingContacts.isEmpty else { return nil }
+        let contact = pendingContacts.removeFirst()
+        sentContactIDs.append(contact.id)
+        return contact
+    }
+
+    mutating func cancelRemaining() {
+        pendingContacts.removeAll()
+    }
+}
+
+enum InviteAlphabetIndex {
+    static func index(yPosition: CGFloat, height: CGFloat, itemCount: Int) -> Int? {
+        guard itemCount > 0, height > 0 else { return nil }
+        let progress = min(max(yPosition / height, 0), 0.999_999)
+        return min(Int(progress * CGFloat(itemCount)), itemCount - 1)
     }
 }
 

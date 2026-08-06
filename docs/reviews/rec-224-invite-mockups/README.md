@@ -12,8 +12,9 @@ contacts through `SystemContactProvider`.
   list in check-in Friends, Feed People, and list collaborators.
 - Use one contact picker with surface-specific copy rather than three divergent
   flows.
-- Identify contacts who already use rec.me, while preserving the acceptance
-  contract: nobody is added or attributed until they accept.
+- Invite phone contacts through a pre-addressed Messages composer. The public
+  TestFlight link is an app invitation only; it does not add or attribute the
+  person to a check-in or list.
 - Ask for Contacts access only after a branded primer, and retain a share-link
   fallback when access is denied.
 - Never place contact names, phone numbers, resource ids, or address-book data
@@ -29,7 +30,7 @@ contacts through `SystemContactProvider`.
 | --- | --- | --- |
 | ![Permission primer](permission.png) | ![Contact picker](contacts.png) | ![Selected contacts](selected.png) |
 
-| Permission denied | Invite handoff |
+| Permission denied | Earlier invite handoff direction |
 | --- | --- |
 | ![Permission denied](denied.png) | ![Invite handoff](success.png) |
 
@@ -43,9 +44,14 @@ Launch with `-WanderInviteMockup <page>`, where `<page>` is one of:
 `checkInEntry`, `feedPeopleEntry`, `listCollaboratorEntry`, `permission`,
 `contacts`, `selected`, `empty`, `denied`, or `success`.
 
+The checked-in implementation now sends one user-confirmed Messages invitation
+per selected phone contact. The invite-handoff image above is retained as an
+earlier review artifact; the shipped screen reports only invitations that the
+Messages composer marked as sent.
+
 ## Intentionally not wired yet
 
-- privacy-preserving phone/email normalization and rec.me account matching
-- native share-sheet result and cancellation handling
-- scoped invite tokens, deferred deep links, and acceptance reconciliation
+- privacy-preserving phone normalization and rec.me account matching
+- scoped invite tokens, install/signup attribution, joined notifications,
+  deferred deep links, and check-in/list acceptance reconciliation
 - PII-free funnel analytics
