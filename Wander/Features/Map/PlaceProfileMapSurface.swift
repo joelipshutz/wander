@@ -428,6 +428,7 @@ private struct PlaceProfileFullView: View {
     @State private var isLoadingGallery = false
     @State private var selectedHeaderPhotoID: String?
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
+    @State private var discoveredReservationAction: PlaceExternalAction?
 
     var body: some View {
         GeometryReader { proxy in
@@ -529,6 +530,9 @@ private struct PlaceProfileFullView: View {
         }
         .task(id: place.photoLookupKey) {
             await reloadGallery()
+        }
+        .task(id: reservationLookupKey) {
+            await resolveReservationAction()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -876,7 +880,26 @@ private struct PlaceProfileFullView: View {
     }
 
     private var actionItems: [PlaceExternalAction] {
-        PlaceProfileCopy.actionItems(for: place)
+        PlaceProfileCopy.actionItems(
+            for: place,
+            reservationAction: discoveredReservationAction
+        )
+    }
+
+    private var reservationLookupKey: String {
+        [place.id, place.websiteURLString, place.actionLinksJSON]
+            .compactMap { $0 }
+            .joined(separator: "|")
+    }
+
+    private func resolveReservationAction() async {
+        discoveredReservationAction = nil
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: place.actionLinksJSON,
+            websiteURLString: place.websiteURLString
+        )
+        guard !Task.isCancelled else { return }
+        discoveredReservationAction = action
     }
 
     private var shareURL: URL? {
@@ -2092,7 +2115,10 @@ private enum PlaceProfileCopy {
         presentation.commonTags.map(\.title)
     }
 
-    static func actionItems(for place: PlaceSheetPlace) -> [PlaceExternalAction] {
+    static func actionItems(
+        for place: PlaceSheetPlace,
+        reservationAction: PlaceExternalAction? = nil
+    ) -> [PlaceExternalAction] {
         var actions: [PlaceExternalAction] = []
         if let latitude = place.latitude,
            let longitude = place.longitude,
@@ -2108,7 +2134,8 @@ private enum PlaceProfileCopy {
         .filter { $0.kind == .website || $0.kind == .call }
 
         actions.append(contentsOf: businessActions)
-        if let reservation = PlaceExternalLinks.reservationAction(actionLinksJSON: place.actionLinksJSON) {
+        if let reservation = reservationAction
+            ?? PlaceExternalLinks.reservationAction(actionLinksJSON: place.actionLinksJSON) {
             actions.append(reservation)
         }
         return actions

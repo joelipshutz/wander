@@ -2421,6 +2421,22 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(actionRow.contains("minimumScaleFactor"))
     }
 
+    func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "private struct PlacePhotoGalleryViewerRoute: Identifiable {"
+        )
+
+        XCTAssertTrue(fullView.contains("@State private var discoveredReservationAction: PlaceExternalAction?"))
+        XCTAssertTrue(fullView.contains(".task(id: reservationLookupKey)"))
+        XCTAssertTrue(fullView.contains("PlaceExternalLinks.discoverReservationAction("))
+        XCTAssertTrue(fullView.contains("reservationAction: discoveredReservationAction"))
+    }
+
     func testRestaurantPlaceTypeUsesCuisineInsteadOfSubcategory() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")

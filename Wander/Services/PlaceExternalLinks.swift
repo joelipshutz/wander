@@ -23,6 +23,8 @@ struct PlaceExternalAction: Identifiable, Equatable {
 }
 
 enum PlaceExternalLinks {
+    typealias ReservationPageLoader = @Sendable (URLRequest) async throws -> (Data, URL?)
+
     static func websiteURL(from rawValue: String?) -> URL? {
         guard let rawValue = trimmed(rawValue) else { return nil }
 
@@ -134,20 +136,84 @@ enum PlaceExternalLinks {
         for link in PlaceActionLink.decode(actionLinksJSON)
         where link.kind == .reserve && link.confidence == .exact {
             guard let url = websiteURL(from: link.urlString),
-                  isDirectReservationProviderURL(url)
+                  let action = reservationAction(url: url)
             else {
                 continue
             }
-
-            return PlaceExternalAction(
-                kind: .reserve,
-                title: "Reservation",
-                systemImage: "calendar",
-                url: url
-            )
+            return action
         }
 
         return nil
+    }
+
+    static func discoverReservationAction(
+        actionLinksJSON: String?,
+        websiteURLString: String?,
+        pageLoader: ReservationPageLoader? = nil
+    ) async -> PlaceExternalAction? {
+        if let knownAction = reservationAction(actionLinksJSON: actionLinksJSON) {
+            return knownAction
+        }
+
+        guard let websiteURL = safeReservationDiscoveryWebsite(from: websiteURLString) else {
+            return nil
+        }
+        if let directAction = reservationAction(url: websiteURL) {
+            return directAction
+        }
+
+        let loader = pageLoader ?? loadReservationPage
+        guard let homePage = try? await loader(reservationRequest(for: websiteURL)) else {
+            return nil
+        }
+        let homePageURL = homePage.1 ?? websiteURL
+        if let redirectedAction = reservationAction(url: homePageURL) {
+            return redirectedAction
+        }
+
+        let homeHTML = decodedHTML(from: homePage.0)
+        if let providerAction = firstDirectReservationAction(in: homeHTML, relativeTo: homePageURL) {
+            return providerAction
+        }
+
+        let reservationPages = linkedURLs(in: homeHTML, relativeTo: homePageURL)
+            .filter {
+                $0.scheme?.lowercased() == "https"
+                    && isSameWebsite($0, as: homePageURL)
+                    && looksLikeReservationPage($0)
+            }
+            .prefix(2)
+
+        for reservationPageURL in reservationPages {
+            guard !Task.isCancelled,
+                  let reservationPage = try? await loader(reservationRequest(for: reservationPageURL))
+            else {
+                continue
+            }
+            let finalURL = reservationPage.1 ?? reservationPageURL
+            if let redirectedAction = reservationAction(url: finalURL) {
+                return redirectedAction
+            }
+            let reservationHTML = decodedHTML(from: reservationPage.0)
+            if let providerAction = firstDirectReservationAction(in: reservationHTML, relativeTo: finalURL) {
+                return providerAction
+            }
+        }
+
+        return nil
+    }
+
+    static func reservationAction(url: URL?) -> PlaceExternalAction? {
+        guard let url,
+              let secureURL = secureReservationProviderURL(from: url),
+              isDirectReservationProviderURL(secureURL)
+        else { return nil }
+        return PlaceExternalAction(
+            kind: .reserve,
+            title: "Reservation",
+            systemImage: "calendar",
+            url: secureURL
+        )
     }
 
     static func shareSummary(placeName: String, locality: String?, status: PlaceStatus?) -> String {
@@ -195,6 +261,118 @@ enum PlaceExternalLinks {
         trimmed(title) ?? fallback
     }
 
+    private static func loadReservationPage(_ request: URLRequest) async throws -> (Data, URL?) {
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let response = response as? HTTPURLResponse {
+            guard (200..<300).contains(response.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+            let contentType = response.value(forHTTPHeaderField: "Content-Type")?.lowercased()
+            guard contentType == nil || contentType?.contains("text/html") == true else {
+                throw URLError(.cannotDecodeContentData)
+            }
+        }
+        return (Data(data.prefix(750_000)), response.url)
+    }
+
+    private static func reservationRequest(for url: URL) -> URLRequest {
+        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 6)
+        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        request.setValue("rec.me reservation link resolver", forHTTPHeaderField: "User-Agent")
+        return request
+    }
+
+    private static func safeReservationDiscoveryWebsite(from rawValue: String?) -> URL? {
+        guard let url = websiteURL(from: rawValue),
+              url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              !host.isEmpty,
+              host != "localhost",
+              !host.hasSuffix(".local"),
+              !host.contains(":")
+        else {
+            return nil
+        }
+
+        let hostParts = host.split(separator: ".")
+        let isIPv4Address = hostParts.count == 4 && hostParts.allSatisfy { Int($0) != nil }
+        return isIPv4Address ? nil : url
+    }
+
+    private static func decodedHTML(from data: Data) -> String {
+        let html = String(decoding: data, as: UTF8.self)
+        return html
+            .replacingOccurrences(of: "\\/", with: "/")
+            .replacingOccurrences(of: "\\u0026", with: "&")
+            .replacingOccurrences(of: "&#x26;", with: "&", options: .caseInsensitive)
+            .replacingOccurrences(of: "&#38;", with: "&")
+            .replacingOccurrences(of: "&amp;", with: "&", options: .caseInsensitive)
+    }
+
+    private static func firstDirectReservationAction(
+        in html: String,
+        relativeTo baseURL: URL
+    ) -> PlaceExternalAction? {
+        for url in linkedURLs(in: html, relativeTo: baseURL) {
+            if let action = reservationAction(url: url) {
+                return action
+            }
+        }
+        return nil
+    }
+
+    private static func linkedURLs(in html: String, relativeTo baseURL: URL) -> [URL] {
+        let patterns = [
+            #"(?i)\bhref\s*=\s*["']([^"']+)["']"#,
+            #"(?i)https?://[^\s"'<>]+"#
+        ]
+        var urls: [URL] = []
+        var seen = Set<String>()
+
+        for pattern in patterns {
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(html.startIndex..<html.endIndex, in: html)
+            for match in expression.matches(in: html, range: range) {
+                let captureIndex = match.numberOfRanges > 1 ? 1 : 0
+                guard let matchRange = Range(match.range(at: captureIndex), in: html) else { continue }
+                let rawValue = String(html[matchRange])
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "()[]{}.,;"))
+                guard let url = URL(string: rawValue, relativeTo: baseURL)?.absoluteURL,
+                      ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                      url.host?.isEmpty == false
+                else {
+                    continue
+                }
+                let key = url.absoluteString.lowercased()
+                if seen.insert(key).inserted {
+                    urls.append(url)
+                }
+            }
+        }
+        return urls
+    }
+
+    private static func isSameWebsite(_ lhs: URL, as rhs: URL) -> Bool {
+        normalizedWebsiteHost(lhs.host) == normalizedWebsiteHost(rhs.host)
+    }
+
+    private static func normalizedWebsiteHost(_ host: String?) -> String? {
+        guard var host = host?.lowercased(), !host.isEmpty else { return nil }
+        if host.hasPrefix("www.") {
+            host.removeFirst(4)
+        }
+        return host
+    }
+
+    private static func looksLikeReservationPage(_ url: URL) -> Bool {
+        let value = [url.path, url.query, url.fragment]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        return ["reservation", "reserve", "booking", "book-a-table", "bookatable"]
+            .contains { value.contains($0) }
+    }
+
     private static func isDirectReservationProviderURL(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https",
               let host = url.host?.lowercased()
@@ -204,8 +382,23 @@ enum PlaceExternalLinks {
 
         let pathComponents = url.pathComponents.filter { $0 != "/" }
         if matches(host: host, domain: "resy.com") {
-            guard let venuesIndex = pathComponents.firstIndex(of: "venues") else { return false }
-            return pathComponents.indices.contains(pathComponents.index(after: venuesIndex))
+            if let venuesIndex = pathComponents.firstIndex(of: "venues"),
+               pathComponents.indices.contains(pathComponents.index(after: venuesIndex)) {
+                return true
+            }
+            if pathComponents.first == "cities",
+               pathComponents.count == 3,
+               let venueSlug = pathComponents.last,
+               !["search", "collections", "events", "guides"].contains(venueSlug) {
+                return true
+            }
+            let providerValue = [url.query, url.fragment]
+                .compactMap { $0 }
+                .joined(separator: " ")
+                .lowercased()
+            return providerValue.contains("venue_id=")
+                || providerValue.contains("venueid=")
+                || providerValue.contains("/venues/")
         }
 
         let openTableDomains = [
@@ -226,16 +419,43 @@ enum PlaceExternalLinks {
             return true
         }
 
-        guard pathComponents.first == "booking",
+        guard pathComponents.first != "s",
+              pathComponents.first != "search",
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        else {
-            return false
-        }
+        else { return false }
 
         return components.queryItems?.contains { item in
             item.name.caseInsensitiveCompare("rid") == .orderedSame
                 || item.name.caseInsensitiveCompare("restref") == .orderedSame
         } == true
+    }
+
+    private static func secureReservationProviderURL(from url: URL) -> URL? {
+        guard let host = url.host?.lowercased(),
+              isSupportedReservationProviderHost(host)
+        else { return nil }
+
+        if url.scheme?.lowercased() == "https" {
+            return url
+        }
+        guard url.scheme?.lowercased() == "http",
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.scheme = "https"
+        return components.url
+    }
+
+    private static func isSupportedReservationProviderHost(_ host: String) -> Bool {
+        matches(host: host, domain: "resy.com") || [
+            "opentable.com",
+            "opentable.ca",
+            "opentable.co.uk",
+            "opentable.com.au",
+            "opentable.de",
+            "opentable.ie",
+            "opentable.jp",
+            "opentable.nl"
+        ].contains(where: { matches(host: host, domain: $0) })
     }
 
     private static func matches(host: String, domain: String) -> Bool {

@@ -205,6 +205,101 @@ final class PlaceExternalLinksTests: XCTestCase {
         XCTAssertEqual(action.url.absoluteString, "https://resy.com/cities/la/venues/example-restaurant")
     }
 
+    func testReservationActionAcceptsLegacyResyVenueLink() throws {
+        let action = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://resy.com/cities/la/the-dresden-restaurant-and-lounge")
+            )
+        )
+
+        XCTAssertEqual(
+            action.url.absoluteString,
+            "https://resy.com/cities/la/the-dresden-restaurant-and-lounge"
+        )
+    }
+
+    func testReservationActionUpgradesKnownProviderHTTPLinkToHTTPS() throws {
+        let action = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "http://resy.com/cities/la/the-dresden-restaurant-and-lounge")
+            )
+        )
+
+        XCTAssertEqual(action.url.scheme, "https")
+        XCTAssertEqual(action.url.host, "resy.com")
+    }
+
+    func testReservationActionAcceptsOpenTableWidgetRestaurantIdentifier() throws {
+        let action = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.opentable.com/booking/restref/availability?rid=12345")
+            )
+        )
+
+        XCTAssertEqual(action.kind, .reserve)
+        XCTAssertEqual(action.url.host, "www.opentable.com")
+    }
+
+    func testReservationDiscoveryFindsDirectResyVenueOnOfficialWebsite() async throws {
+        let html = """
+        <html><body>
+          <a href="https://resy.com/cities/los-angeles-ca/venues/example-restaurant?date=2026-08-07">Book a table</a>
+        </body></html>
+        """
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://example-restaurant.com",
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertEqual(action?.kind, .reserve)
+        XCTAssertEqual(
+            action?.url.absoluteString,
+            "https://resy.com/cities/los-angeles-ca/venues/example-restaurant?date=2026-08-07"
+        )
+    }
+
+    func testReservationDiscoveryFollowsOfficialReservationPageToOpenTable() async throws {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://example-restaurant.com",
+            pageLoader: { request in
+                if request.url?.path == "/reservations" {
+                    return (
+                        Data(#"<a href="https://www.opentable.com/r/example-restaurant">Reserve</a>"#.utf8),
+                        request.url
+                    )
+                }
+                return (
+                    Data(#"<a href="/reservations">Reservations</a>"#.utf8),
+                    request.url
+                )
+            }
+        )
+
+        XCTAssertEqual(action?.url.absoluteString, "https://www.opentable.com/r/example-restaurant")
+    }
+
+    func testReservationDiscoveryRejectsSearchAndGoogleLinksFromOfficialWebsite() async {
+        let html = """
+        <a href="https://resy.com/cities/los-angeles-ca/search?query=Example">Search Resy</a>
+        <a href="https://www.google.com/search?q=Example+reservations">Google</a>
+        """
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://example-restaurant.com",
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertNil(action)
+    }
+
     func testReservationActionStaysHiddenWithoutExactProviderLink() {
         XCTAssertNil(PlaceExternalLinks.reservationAction(actionLinksJSON: nil))
     }
