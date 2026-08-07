@@ -518,6 +518,33 @@ final class WanderPlaceCategoryTests: XCTestCase {
         userPlace.categoryOverrideSource = PlaceCategorySource.user.rawValue
         XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.wellnessFitness)
         XCTAssertEqual(visiblePlace.categoryEmoji, "💪")
+
+        let inferredRestaurant = LocalPlace(
+            localID: "inferred-restaurant",
+            canonicalName: "Jitlada",
+            category: WanderPlaceCategory.restaurantsFood,
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            rawProviderType: "thai restaurant",
+            latitude: 34.0,
+            longitude: -118.0
+        )
+        let inferredUserPlace = LocalUserPlace(
+            localID: "inferred-user-place",
+            userID: owner.id,
+            placeID: inferredRestaurant.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let inferredVisiblePlace = VisiblePlace(
+            id: inferredUserPlace.id,
+            place: inferredRestaurant,
+            userPlace: inferredUserPlace,
+            owner: owner
+        )
+        XCTAssertEqual(inferredVisiblePlace.restaurantCuisine, "Thai")
+        XCTAssertEqual(inferredVisiblePlace.effectiveCompactType, "Thai")
     }
 
     func testEveryRestaurantCuisineHasDishOrRegionalEmoji() {
@@ -916,6 +943,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
             restaurant.compactType(foodType: "Restaurants & Food"),
             "Restaurant"
         )
+        XCTAssertEqual(restaurant.compactType(foodType: "restaurants_food"), "Restaurant")
+        XCTAssertEqual(restaurant.compactType(foodType: "food_drink"), "Restaurant")
 
         let transit = WanderPlaceCategory.display(for: "transportation")
         XCTAssertEqual(transit.category, "Travel & Transit")

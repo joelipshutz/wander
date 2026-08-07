@@ -97,9 +97,15 @@ struct PlaceCategoryDisplay: Equatable {
 
     func compactType(foodType: String? = nil) -> String {
         if primaryCategory == WanderPlaceCategory.restaurantsFood {
-            let primaryCategoryKey = WanderPlaceCategory.normalizedCategoryText(category)
+            let broadCategoryKeys = Set([
+                primaryCategory,
+                category,
+                "Restaurants & Food",
+                "food_drink",
+                "food and drink"
+            ].map(WanderPlaceCategory.normalizedCategoryText))
             return uniqueDisplayValues([foodType, subcategory])
-                .first { WanderPlaceCategory.normalizedCategoryText($0) != primaryCategoryKey }
+                .first { !broadCategoryKeys.contains(WanderPlaceCategory.normalizedCategoryText($0)) }
                 ?? "Restaurant"
         }
         return uniqueDisplayValues([subcategory, category]).first ?? ""

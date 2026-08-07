@@ -373,6 +373,7 @@ private enum VisiblePlaceCategoryPresentationResolver {
             }
 
             let restaurantCuisine = decodedRestaurantCuisine(from: cuisineValueJSON)
+                ?? inferredRestaurantCuisine(for: assignment, place: place)
             return VisiblePlaceCategoryPresentation(
                 assignment: assignment,
                 display: WanderPlaceCategory.display(for: assignment),
@@ -394,6 +395,19 @@ private enum VisiblePlaceCategoryPresentationResolver {
             return value
         }
         return (try? JSONDecoder().decode([String].self, from: data))?.first
+    }
+
+    private static func inferredRestaurantCuisine(
+        for assignment: PlaceCategoryAssignment,
+        place: LocalPlace
+    ) -> String? {
+        guard assignment.primaryCategory == WanderPlaceCategory.restaurantsFood else { return nil }
+        return WanderPlaceCategory.restaurantCuisineInference(
+            name: place.canonicalName,
+            rawProviderType: place.rawProviderType,
+            subcategory: assignment.subcategory,
+            category: assignment.primaryCategory
+        )?.cuisine
     }
 }
 
