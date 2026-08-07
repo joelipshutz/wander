@@ -1728,8 +1728,7 @@ private struct PlaceImportCandidateCard: View {
 
 private extension PlaceCandidate {
     var importCategoryTitle: String {
-        let display = WanderPlaceCategory.display(for: categoryAssignment)
-        let title = display.subcategory ?? display.category
+        let title = compactPlaceType
         return title.isEmpty ? "Place" : title
     }
 
