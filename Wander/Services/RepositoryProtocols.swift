@@ -300,6 +300,16 @@ extension PlaceCandidate {
         return "\(Int(miles.rounded())) mi"
     }
 
+    var inferredRestaurantFoodType: String? {
+        guard primaryCategory == WanderPlaceCategory.restaurantsFood else { return nil }
+        return WanderPlaceCategory.restaurantCuisineInference(for: self)?.cuisine
+    }
+
+    var compactPlaceType: String {
+        WanderPlaceCategory.display(for: categoryAssignment)
+            .compactType(foodType: inferredRestaurantFoodType)
+    }
+
     func previewSubtitle(
         includeDistance: Bool = true,
         includeCategory: Bool = true,
@@ -308,7 +318,7 @@ extension PlaceCandidate {
     ) -> String {
         let locality = Self.trimmed(self.locality)
         let address = Self.addressWithoutDuplicateLocality(self.address, locality: locality)
-        let categoryDisplay = WanderPlaceCategory.display(for: categoryAssignment).compactTitle
+        let categoryDisplay = compactPlaceType
         let category = includeCategory && !categoryDisplay.isEmpty && self.primaryCategory != "place" ? categoryDisplay : nil
         let baseParts: [String?] = [
             includeDistance ? previewFormattedDistance : nil,

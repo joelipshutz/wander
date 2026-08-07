@@ -2414,7 +2414,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(placeTypeSection.contains("if isRestaurantsFoodSelected"))
         XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .cuisine"))
-        XCTAssertTrue(placeTypeSection.contains("title: \"cuisine\""))
+        XCTAssertTrue(placeTypeSection.contains("title: \"food type\""))
         XCTAssertTrue(placeTypeSection.contains("} else {"))
         XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .subcategory"))
         XCTAssertTrue(placeTypeSection.contains("PlaceTypeRow(title: \"subcategory\""))
@@ -2425,7 +2425,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(
             mapScreen.contains(
-                "let noun = category == WanderPlaceCategory.restaurantsFood ? \"cuisines\" : \"types\""
+                "let noun = category == WanderPlaceCategory.restaurantsFood ? \"food types\" : \"types\""
             )
         )
 

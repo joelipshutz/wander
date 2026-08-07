@@ -1244,7 +1244,7 @@ private extension PlaceImportItem {
     var reviewMetadata: String {
         let candidate = selectedCandidate ?? candidates.first
         let type = candidate.map {
-            WanderPlaceCategory.display(for: $0.categoryAssignment).compactTitle
+            $0.compactPlaceType
         }
         var seen = Set<String>()
         let parts = [displayArea, type].compactMap { value -> String? in
@@ -1728,8 +1728,7 @@ private struct PlaceImportCandidateCard: View {
 
 private extension PlaceCandidate {
     var importCategoryTitle: String {
-        let display = WanderPlaceCategory.display(for: categoryAssignment)
-        let title = display.subcategory ?? display.category
+        let title = compactPlaceType
         return title.isEmpty ? "Place" : title
     }
 
