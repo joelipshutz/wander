@@ -3,8 +3,8 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithTwentyFourActionSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 24)
+    func testApprovedWalkthroughCoversEverySurfaceWithTwentySixActionSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 26)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -16,6 +16,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
             [.profileSettings, .profileSocial, .profileActivity, .profileShare]
+        )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.importHub]?.map(\.target),
+            [.importInput, .importStart]
         )
     }
 
@@ -108,6 +112,57 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         coordinator.activate(.map)
         XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.currentStep)
+    }
+
+    func testDeviceFeaturesLessonBecomesEligibleOnSecondLaunchAfterPageWalkthroughClears() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+
+        let firstLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        firstLaunch.registerLaunch()
+        firstLaunch.activate(.map)
+        firstLaunch.presentDeviceFeaturesLessonIfEligible()
+        XCTAssertFalse(firstLaunch.isPresentingDeviceFeaturesLesson)
+
+        let secondLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        secondLaunch.registerLaunch()
+        secondLaunch.activate(.map)
+        secondLaunch.presentDeviceFeaturesLessonIfEligible()
+        XCTAssertFalse(secondLaunch.isPresentingDeviceFeaturesLesson)
+
+        for target in [
+            WalkthroughTargetID.mapAdd,
+            .mapFilters,
+            .mapSearch,
+            .mapMarker,
+            .mapTabs
+        ] {
+            secondLaunch.perform(target)
+        }
+        secondLaunch.presentDeviceFeaturesLessonIfEligible()
+        XCTAssertTrue(secondLaunch.isPresentingDeviceFeaturesLesson)
+
+        secondLaunch.completeDeviceFeaturesLesson()
+        XCTAssertFalse(secondLaunch.isPresentingDeviceFeaturesLesson)
+
+        let thirdLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        thirdLaunch.registerLaunch()
+        thirdLaunch.activate(.map)
+        thirdLaunch.presentDeviceFeaturesLessonIfEligible()
+        XCTAssertFalse(thirdLaunch.isPresentingDeviceFeaturesLesson)
+    }
+
+    func testForcedDeviceFeaturesLessonSupportsVisualTesting() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "visual-test",
+            store: FirstVisitWalkthroughStore(defaults: defaults)
+        )
+
+        coordinator.registerLaunch(forceDeviceFeaturesLesson: true)
+
+        XCTAssertTrue(coordinator.isPresentingDeviceFeaturesLesson)
         XCTAssertNil(coordinator.currentStep)
     }
 

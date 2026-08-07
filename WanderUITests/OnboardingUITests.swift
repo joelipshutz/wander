@@ -2,6 +2,46 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testImportHubWalkthroughAdvancesFromInputToStartImport() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderOpenAdd",
+            "-WanderOpenImportHub"
+        ]
+        app.launch()
+
+        let inputStep = app.descendants(matching: .any)[
+            "walkthrough.importHub.importInput"
+        ]
+        let input = app.textViews["import.input"]
+        XCTAssertTrue(inputStep.waitForExistence(timeout: 5))
+        XCTAssertTrue(input.waitForExistence(timeout: 2))
+
+        input.tap()
+        input.typeText("Maru Coffee")
+
+        let startStep = app.descendants(matching: .any)[
+            "walkthrough.importHub.importStart"
+        ]
+        let startButton = app.buttons["import.start"]
+        XCTAssertTrue(startStep.waitForExistence(timeout: 3))
+        XCTAssertTrue(startButton.isEnabled)
+        expectation(
+            for: NSPredicate(format: "isHittable == true"),
+            evaluatedWith: startButton
+        )
+        waitForExpectations(timeout: 3)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 Import Hub walkthrough start step"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testTabActivatesOnTouchDownBeforeNativeSelectionCommits() {
         let app = XCUIApplication()
         app.launchArguments = [

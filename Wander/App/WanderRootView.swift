@@ -376,9 +376,11 @@ struct WanderRootView: View {
             )
         )
         _addSheetDetent = State(
-            initialValue: AddSheetLayout.restingDetent(
-                hasPendingImports: importStore.summary.hasPendingImports
-            )
+            initialValue: launchArguments.contains("-WanderOpenImportHub")
+                ? .large
+                : AddSheetLayout.restingDetent(
+                    hasPendingImports: importStore.summary.hasPendingImports
+                )
         )
     }
 
@@ -442,6 +444,7 @@ struct WanderRootView: View {
                 .walkthroughTarget(.mapTabs)
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
+        .deviceFeaturesWalkthroughOverlay(walkthroughs)
         .overlay {
             GeometryReader { proxy in
                 if let invitation = sharedVisitBannerInvitation {
@@ -639,8 +642,9 @@ struct WanderRootView: View {
                 restoredPlaceSaveDraftOwnerID = nil
             }
             applyAuthStateIfNeeded(state)
-            walkthroughs.setUserID(store.currentUser.id)
-            walkthroughs.activate(walkthroughSurface(for: selectedTab))
+            if isSessionValidated {
+                configureWalkthroughsForCurrentUser()
+            }
             publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: state)
@@ -752,20 +756,18 @@ struct WanderRootView: View {
         }
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
-                walkthroughs.setUserID(store.currentUser.id)
-                if !didApplyWalkthroughLaunchConfiguration {
-                    didApplyWalkthroughLaunchConfiguration = true
-                    if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
-                        walkthroughs.resetCurrentUser()
-                    }
-                }
-                walkthroughs.activate(walkthroughSurface(for: selectedTab))
+                configureWalkthroughsForCurrentUser()
                 drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
                     controlNavigationCenter.pendingRequest
                 )
             } else {
                 cancelSignedInMaintenance()
+            }
+        }
+        .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
+            if !isPresented {
+                walkthroughs.activate(walkthroughSurface(for: selectedTab))
             }
         }
         .onDisappear(perform: handleRootDisappear)
@@ -781,6 +783,7 @@ struct WanderRootView: View {
             } else {
                 walkthroughs.perform(.mapTabs)
                 selectedTab = newTab
+                presentDeviceFeaturesLessonIfAppropriate()
                 walkthroughs.activate(walkthroughSurface(for: newTab))
             }
         }
@@ -1124,6 +1127,29 @@ struct WanderRootView: View {
         placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
         walkthroughs.activate(walkthroughSurface(for: selectedTab))
+        presentDeviceFeaturesLessonIfAppropriate()
+    }
+
+    private func configureWalkthroughsForCurrentUser() {
+        walkthroughs.setUserID(store.currentUser.id)
+        if !didApplyWalkthroughLaunchConfiguration {
+            didApplyWalkthroughLaunchConfiguration = true
+            if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
+                walkthroughs.resetCurrentUser()
+            }
+        }
+        walkthroughs.registerLaunch(
+            forceDeviceFeaturesLesson: ProcessInfo.processInfo.arguments.contains(
+                "-WanderShowDeviceFeaturesWalkthrough"
+            )
+        )
+        walkthroughs.activate(walkthroughSurface(for: selectedTab))
+        presentDeviceFeaturesLessonIfAppropriate()
+    }
+
+    private func presentDeviceFeaturesLessonIfAppropriate() {
+        guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil else { return }
+        walkthroughs.presentDeviceFeaturesLessonIfEligible()
     }
 
     private func walkthroughSurface(for tab: WanderTab) -> WalkthroughSurface {

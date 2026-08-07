@@ -70,7 +70,9 @@ struct AddScreen: View {
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
-    @State private var showsImportHub = false
+    @State private var showsImportHub = ProcessInfo.processInfo.arguments.contains(
+        "-WanderOpenImportHub"
+    )
     @State private var showsImportInbox = false
     @FocusState private var isQuickAddFocused: Bool
 
@@ -130,6 +132,11 @@ struct AddScreen: View {
                 }
             }
             .wanderScreen()
+            .onAppear {
+                if showsImportHub {
+                    expandSheet()
+                }
+            }
             .onChange(of: resetToken) { _, _ in
                 reset()
             }

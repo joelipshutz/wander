@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 
 enum WalkthroughSurface: String, CaseIterable, Codable, Sendable {
     case map
     case add
+    case importHub
     case feed
     case feedSearch
     case lists
@@ -19,6 +21,8 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case mapTabs
     case addSearch
     case addImport
+    case importInput
+    case importStart
     case feedActivity
     case feedSurfaceSwitch
     case feedPeopleSearch
@@ -61,6 +65,20 @@ enum FirstVisitWalkthroughContent {
         .add: [
             step(.add, .addSearch, "Start with a place", "Search by name or use the camera menu to bring one in."),
             step(.add, .addImport, "Bring saves with you", "Import from a link, social app, or your notes.")
+        ],
+        .importHub: [
+            step(
+                .importHub,
+                .importInput,
+                "Bring links straight in",
+                "In Maps, Instagram, TikTok, or Safari, tap Share → More → rec.me. Or paste a link or place name here now."
+            ),
+            step(
+                .importHub,
+                .importStart,
+                "Start the import",
+                "Tap Start Import. Nothing is saved to your map until you review each place."
+            )
         ],
         .feed: [
             step(.feed, .feedActivity, "Why this place matters", "See who saved it, what they did, and the note they left."),
@@ -137,6 +155,22 @@ struct FirstVisitWalkthroughStore {
             defaults.removeObject(forKey: progressKey(userID: userID, surface: surface))
             defaults.removeObject(forKey: completionKey(userID: userID, surface: surface))
         }
+        defaults.removeObject(forKey: launchCountKey(userID: userID))
+        defaults.removeObject(forKey: deviceFeaturesCompletionKey(userID: userID))
+    }
+
+    func registerLaunch(for userID: String) -> Int {
+        let nextCount = defaults.integer(forKey: launchCountKey(userID: userID)) + 1
+        defaults.set(nextCount, forKey: launchCountKey(userID: userID))
+        return nextCount
+    }
+
+    func hasCompletedDeviceFeaturesLesson(for userID: String) -> Bool {
+        defaults.bool(forKey: deviceFeaturesCompletionKey(userID: userID))
+    }
+
+    func markDeviceFeaturesLessonComplete(for userID: String) {
+        defaults.set(true, forKey: deviceFeaturesCompletionKey(userID: userID))
     }
 
     private func progressKey(userID: String, surface: WalkthroughSurface) -> String {
@@ -146,15 +180,26 @@ struct FirstVisitWalkthroughStore {
     private func completionKey(userID: String, surface: WalkthroughSurface) -> String {
         "wander.walkthrough.v\(version).\(userID).\(surface.rawValue).complete"
     }
+
+    private func launchCountKey(userID: String) -> String {
+        "wander.walkthrough.v\(version).\(userID).authenticatedLaunchCount"
+    }
+
+    private func deviceFeaturesCompletionKey(userID: String) -> String {
+        "wander.walkthrough.v\(version).\(userID).deviceFeatures.complete"
+    }
 }
 
 @MainActor
 final class FirstVisitWalkthroughCoordinator: ObservableObject {
     @Published private(set) var activeSurface: WalkthroughSurface?
     @Published private(set) var currentStepIndex = 0
+    @Published private(set) var isPresentingDeviceFeaturesLesson = false
 
     private(set) var userID: String
     private let store: FirstVisitWalkthroughStore
+    private var registeredLaunchUserID: String?
+    private var isDeviceFeaturesLessonEligible = false
     let isEnabled: Bool
 
     init(
@@ -183,6 +228,27 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         self.userID = userID
         activeSurface = nil
         currentStepIndex = 0
+        registeredLaunchUserID = nil
+        isDeviceFeaturesLessonEligible = false
+        isPresentingDeviceFeaturesLesson = false
+    }
+
+    func registerLaunch(forceDeviceFeaturesLesson: Bool = false) {
+        guard isEnabled else { return }
+
+        if registeredLaunchUserID != userID {
+            registeredLaunchUserID = userID
+            let launchCount = store.registerLaunch(for: userID)
+            isDeviceFeaturesLessonEligible = launchCount >= 2
+                && !store.hasCompletedDeviceFeaturesLesson(for: userID)
+        }
+
+        if forceDeviceFeaturesLesson {
+            isDeviceFeaturesLessonEligible = true
+            activeSurface = nil
+            currentStepIndex = 0
+            isPresentingDeviceFeaturesLesson = true
+        }
     }
 
     func activate(_ surface: WalkthroughSurface) {
@@ -190,6 +256,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             activeSurface = nil
             return
         }
+        guard !isPresentingDeviceFeaturesLesson else { return }
         guard !store.isComplete(for: userID, surface: surface) else {
             if activeSurface == surface { activeSurface = nil }
             return
@@ -219,6 +286,26 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         store.reset(for: userID)
         activeSurface = nil
         currentStepIndex = 0
+        registeredLaunchUserID = nil
+        isDeviceFeaturesLessonEligible = false
+        isPresentingDeviceFeaturesLesson = false
+    }
+
+    func presentDeviceFeaturesLessonIfEligible() {
+        guard
+            isEnabled,
+            isDeviceFeaturesLessonEligible,
+            activeSurface == nil,
+            !isPresentingDeviceFeaturesLesson
+        else { return }
+        isPresentingDeviceFeaturesLesson = true
+    }
+
+    func completeDeviceFeaturesLesson() {
+        guard isPresentingDeviceFeaturesLesson else { return }
+        store.markDeviceFeaturesLessonComplete(for: userID)
+        isDeviceFeaturesLessonEligible = false
+        isPresentingDeviceFeaturesLesson = false
     }
 
     private func advance() {
@@ -260,6 +347,122 @@ extension View {
         surface: WalkthroughSurface
     ) -> some View {
         modifier(FirstVisitWalkthroughModifier(coordinator: coordinator, surface: surface))
+    }
+
+    func deviceFeaturesWalkthroughOverlay(
+        _ coordinator: FirstVisitWalkthroughCoordinator
+    ) -> some View {
+        overlay {
+            if coordinator.isPresentingDeviceFeaturesLesson {
+                DeviceFeaturesWalkthroughOverlay {
+                    coordinator.completeDeviceFeaturesLesson()
+                }
+                .transition(.opacity)
+                .zIndex(2_000)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingDeviceFeaturesLesson)
+    }
+}
+
+private struct DeviceFeaturesWalkthroughOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let onComplete: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.76)
+                .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    ZStack {
+                        Circle()
+                            .fill(WanderTheme.terracotta.color)
+                            .frame(width: 52, height: 52)
+                        Image(systemName: "hand.tap.fill")
+                            .font(.system(size: 22, weight: .black))
+                            .foregroundStyle(WanderTheme.textOnAction.color)
+                    }
+
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        Text("Keep rec.me one press away")
+                            .font(.system(.title2, design: .rounded, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text("Set these up once, then save or find a place without hunting for the app.")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    DeviceFeatureInstruction(
+                        systemImage: "button.programmable",
+                        title: "Action Button & Control Center",
+                        instruction: "Open Settings → Action Button → Controls, then choose rec.me Check In. You can add the same control from Control Center."
+                    )
+
+                    DeviceFeatureInstruction(
+                        systemImage: "square.grid.2x2.fill",
+                        title: "Home & Lock Screen widgets",
+                        instruction: "Long-press your screen, tap Edit or +, search rec.me, then choose Quick Add, Search, Activity, or Nearby."
+                    )
+
+                    Button("Got it", action: onComplete)
+                        .font(.system(size: 16, weight: .black))
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(WanderTheme.terracotta.color)
+                        .clipShape(Capsule())
+                        .buttonStyle(.plain)
+                }
+                .padding(WanderTheme.spacing4)
+                .background(
+                    WanderTheme.surfaceBone.color,
+                    in: RoundedRectangle(cornerRadius: 28, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(WanderTheme.textInk.color.opacity(0.08), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, WanderTheme.spacing8)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("walkthrough.deviceFeatures")
+        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88), value: true)
+    }
+}
+
+private struct DeviceFeatureInstruction: View {
+    let systemImage: String
+    let title: String
+    let instruction: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(width: 32, height: 32)
+                .background(WanderTheme.terracotta.color.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(.subheadline, design: .rounded, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text(instruction)
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(WanderTheme.surfaceRaised.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
     }
 }
 
@@ -349,7 +552,7 @@ private struct FirstVisitWalkthroughOverlay: View {
             WalkthroughScrim(spotlightFrame: spotlightFrame)
                 .allowsHitTesting(false)
 
-            WalkthroughOutsideTouchBlocker(frame: spotlightFrame, containerSize: containerSize)
+            WalkthroughTouchShield(spotlightFrame: spotlightFrame)
 
             VStack(spacing: 0) {
                 if !cardAboveTarget {
@@ -388,6 +591,7 @@ private struct FirstVisitWalkthroughOverlay: View {
             .position(cardCenter)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(step.title). \(step.message)")
+            .accessibilityIdentifier("walkthrough.\(step.id)")
         }
         .ignoresSafeArea()
         .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: step.id)
@@ -407,26 +611,35 @@ private struct WalkthroughScrim: View {
     }
 }
 
-private struct WalkthroughOutsideTouchBlocker: View {
-    let frame: CGRect
-    let containerSize: CGSize
+private struct WalkthroughTouchShield: UIViewRepresentable {
+    let spotlightFrame: CGRect
 
-    var body: some View {
-        ZStack {
-            blocker(CGRect(x: 0, y: 0, width: containerSize.width, height: max(0, frame.minY)))
-            blocker(CGRect(x: 0, y: frame.maxY, width: containerSize.width, height: max(0, containerSize.height - frame.maxY)))
-            blocker(CGRect(x: 0, y: frame.minY, width: max(0, frame.minX), height: max(0, frame.height)))
-            blocker(CGRect(x: frame.maxX, y: frame.minY, width: max(0, containerSize.width - frame.maxX), height: max(0, frame.height)))
-        }
-        .accessibilityHidden(true)
+    func makeUIView(context: Context) -> WalkthroughTouchShieldView {
+        WalkthroughTouchShieldView()
     }
 
-    private func blocker(_ rect: CGRect) -> some View {
-        Color.black.opacity(0.001)
-            .frame(width: rect.width, height: rect.height)
-            .position(x: rect.midX, y: rect.midY)
-            .contentShape(Rectangle())
-            .onTapGesture { }
+    func updateUIView(_ view: WalkthroughTouchShieldView, context: Context) {
+        view.spotlightFrame = spotlightFrame
+    }
+}
+
+private final class WalkthroughTouchShieldView: UIView {
+    var spotlightFrame: CGRect = .zero
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isAccessibilityElement = false
+        accessibilityElementsHidden = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        !spotlightFrame.contains(point)
     }
 }
 
