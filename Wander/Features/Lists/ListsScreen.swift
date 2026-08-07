@@ -4319,10 +4319,10 @@ private struct ListPlaceMock: Identifiable {
     }
 
     var detailsLine: String {
-        let categoryDisplay = WanderPlaceCategory.display(
-            for: WanderPlaceCategory.assignment(forRawCategory: category)
-        )
-        let categoryTitle = categoryDisplay.subcategory ?? categoryDisplay.category
+        let categoryTitle = profilePlace?.compactPlaceType
+            ?? WanderPlaceCategory.display(
+                for: WanderPlaceCategory.assignment(forRawCategory: category)
+            ).compactType()
         let parts = [categoryTitle, locality]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -4387,7 +4387,7 @@ private struct ListPlaceMock: Identifiable {
         let category = categoryPresentation.assignment.primaryCategory
         let metadataParts = [
             visiblePlace.userPlace.status.displayTitle,
-            categoryPresentation.display.compactTitle,
+            categoryPresentation.compactType,
             place.locality
         ]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -4440,7 +4440,7 @@ private struct ListPlaceMock: Identifiable {
             name: place.canonicalName,
             category: category,
             emoji: categoryPresentation.emoji,
-            metadata: categoryPresentation.display.compactTitle,
+            metadata: categoryPresentation.compactType,
             tint: Self.tint(for: category),
             pinPosition: Self.previewPinPosition(for: place.id),
             latitude: place.latitude,

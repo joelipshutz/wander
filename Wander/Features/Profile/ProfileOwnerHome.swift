@@ -1164,7 +1164,7 @@ private struct ProfileCalendarSection: View {
 
             HStack(spacing: 0) {
                 ProfileCalendarMetric(value: insights.monthSpotCount, label: "spots ranked")
-                ProfileCalendarMetric(value: insights.monthCategoryCount, label: "cuisines")
+                ProfileCalendarMetric(value: insights.monthCategoryCount, label: "categories")
                 ProfileCalendarMetric(value: insights.monthCityCount, label: "cities")
             }
 

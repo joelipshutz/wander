@@ -2363,7 +2363,7 @@ private struct MapSearchSuggestion: Identifiable {
         let subtitle = [
             statusLabel,
             visiblePlace.place.locality,
-            visiblePlace.effectiveCategoryDisplay.compactTitle
+            visiblePlace.effectiveCompactType
         ]
         .compactMap { value -> String? in
             let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2850,7 +2850,7 @@ private struct WanderMapPin: View {
             .accessibilityLabel(
                 MapPinAccessibility.label(
                     outlines: outlines,
-                    category: visiblePlace.effectiveCategoryDisplay.compactTitle,
+                    category: visiblePlace.effectiveCompactType,
                     placeName: visiblePlace.place.canonicalName
                 )
             )
@@ -3212,6 +3212,11 @@ struct PlaceSheetPlace {
             cuisine: cuisine,
             name: name
         )
+    }
+
+    var compactPlaceType: String {
+        WanderPlaceCategory.display(for: categoryAssignment)
+            .compactType(foodType: cuisine)
     }
 
     var photoRequest: PlacePhotoRequest {
@@ -5119,7 +5124,7 @@ struct MapPlaceSaveFlowSheet: View {
                         isChoosingPlaceType = true
                     } label: {
                         PlaceTypeRow(
-                            title: "cuisine",
+                            title: "food type",
                             value: selectedCuisine ?? "optional",
                             isPlaceholderValue: selectedCuisine == nil
                         )
@@ -6122,12 +6127,12 @@ struct PlaceTypePickerSheet: View {
     private var cuisinePickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             CategoryPickerHeader(
-                title: "explore cuisines",
+                title: "explore food types",
                 subtitle: "We’ll start with our best guess. Change it only if we missed."
             )
 
             if selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
-                CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Cuisine only applies to restaurants and food places.")
+                CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Food type only applies to restaurants and food places.")
             } else {
                 selectedCategoryPills
 
@@ -6143,7 +6148,7 @@ struct PlaceTypePickerSheet: View {
                     }
                 }
 
-                CategoryPickerSearchField(placeholder: "Search cuisines", text: $query)
+                CategoryPickerSearchField(placeholder: "Search food types", text: $query)
 
                 if !recentCuisines.isEmpty {
                     RestaurantCuisineRecentsStrip(
@@ -6161,7 +6166,7 @@ struct PlaceTypePickerSheet: View {
 
                 if filteredCuisineOptions.isEmpty {
                     CategoryPickerEmptyState(
-                        title: "No matching cuisine",
+                        title: "No matching food type",
                         message: "Try Thai, Mexican, Korean BBQ, or South American."
                     )
                 } else {
@@ -6217,7 +6222,7 @@ struct PlaceTypePickerSheet: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .black))
-                    Text("No cuisine")
+                    Text("No food type")
                         .font(.system(size: 13, weight: .black))
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -6228,7 +6233,7 @@ struct PlaceTypePickerSheet: View {
                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Clear cuisine")
+            .accessibilityLabel("Clear food type")
         }
     }
 
@@ -6399,7 +6404,7 @@ private struct RestaurantCuisineSuggestionCard: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Best guess for \(placeName): \(cuisine)")
+        .accessibilityLabel("Best food type guess for \(placeName): \(cuisine)")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityHint(reason)
     }
@@ -6499,7 +6504,7 @@ private struct RestaurantCuisineRegionFilters: View {
                                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(filter.id) cuisines")
+                        .accessibilityLabel("\(filter.id) food types")
                         .accessibilityValue(selectedRegion == filter.id ? "Selected" : "Not selected")
                     }
                 }
@@ -6566,8 +6571,8 @@ private struct RestaurantCuisineSelectionFooter: View {
 
     var body: some View {
         PlaceTypeSelectionFooter(
-            label: "CUISINE",
-            value: cuisine ?? "No cuisine",
+            label: "FOOD TYPE",
+            value: cuisine ?? "No food type",
             onDone: onDone
         )
     }
@@ -6772,7 +6777,7 @@ struct PrimaryCategoryPickerTile: View {
 
     private var optionCountLabel: String {
         let count = WanderPlaceCategory.subcategorySuggestions(for: category).count
-        let noun = category == WanderPlaceCategory.restaurantsFood ? "cuisines" : "types"
+        let noun = category == WanderPlaceCategory.restaurantsFood ? "food types" : "types"
         return "\(count) \(noun)"
     }
 
@@ -6981,7 +6986,7 @@ private enum CategoryPickerVisuals {
     static func tileDetail(for category: String) -> String {
         switch category {
         case WanderPlaceCategory.restaurantsFood:
-            "Restaurants, cuisines, quick bites"
+            "Restaurants, food types, quick bites"
         case WanderPlaceCategory.coffeeTeaSweets:
             "Coffee, tea, bakeries"
         case WanderPlaceCategory.barsNightlife:
@@ -7866,11 +7871,11 @@ struct PlaceSheet: View {
     }
 
     private var compactSubtitle: String? {
-        trimmed(place.compactSubtitleOverride) ?? joinedText([place.locality, categoryDisplay])
+        trimmed(place.compactSubtitleOverride) ?? joinedText([place.locality, compactCategoryDisplay])
     }
 
     private var expandedSubtitle: String? {
-        joinedText([addressLine, categoryDisplay])
+        joinedText([addressLine, compactCategoryDisplay])
     }
 
     private var addressLine: String? {
@@ -7881,9 +7886,8 @@ struct PlaceSheet: View {
         return joinedText([place.locality, place.region])
     }
 
-    private var categoryDisplay: String? {
-        let display = WanderPlaceCategory.display(for: place.categoryAssignment).compactTitle
-        let trimmedDisplay = trimmed(display)
+    private var compactCategoryDisplay: String? {
+        let trimmedDisplay = trimmed(place.compactPlaceType)
         return place.primaryCategory == "place" ? nil : trimmedDisplay
     }
 
@@ -7899,8 +7903,8 @@ struct PlaceSheet: View {
 
     private var placeFacts: [PlaceFact] {
         var facts: [PlaceFact] = []
-        if let categoryDisplay {
-            facts.append(PlaceFact(title: categoryDisplay, emoji: place.categoryEmoji))
+        if let compactCategoryDisplay {
+            facts.append(PlaceFact(title: compactCategoryDisplay, emoji: place.categoryEmoji))
         }
         return facts
     }

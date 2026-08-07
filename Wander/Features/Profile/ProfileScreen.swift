@@ -1646,7 +1646,7 @@ enum ProfilePlaceCollectionMapProjection {
             ownership = "Social saved place"
         }
 
-        return "\(ownership) \(visiblePlace.effectiveCategoryDisplay.compactTitle), \(visiblePlace.place.canonicalName)"
+        return "\(ownership) \(visiblePlace.effectiveCompactType), \(visiblePlace.place.canonicalName)"
     }
 }
 
@@ -2815,7 +2815,11 @@ private struct SavedPlacesListScreen: View {
 
         let searchable = [
             visiblePlace.place.canonicalName,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
+            visiblePlace.effectiveCompactType,
+            visiblePlace.effectiveCategoryDisplay.category,
+            visiblePlace.effectiveCategoryDisplay.subcategory,
+            visiblePlace.restaurantCuisine,
+            visiblePlace.place.rawProviderType,
             visiblePlace.place.locality,
             visiblePlace.userPlace.note,
             visiblePlace.userPlace.ratingSignal,

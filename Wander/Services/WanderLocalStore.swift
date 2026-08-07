@@ -8564,7 +8564,7 @@ final class WanderStore: ObservableObject {
             items.append(
                 DiscoverEvidenceItem(
                     kind: .category,
-                    displayValue: visiblePlace.effectiveCategoryDisplay.compactTitle,
+                    displayValue: visiblePlace.effectiveCompactType,
                     sourceOwnerID: visiblePlace.owner.id
                 )
             )
