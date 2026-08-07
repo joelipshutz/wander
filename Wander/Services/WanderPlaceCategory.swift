@@ -897,12 +897,12 @@ enum WanderPlaceCategory {
             "restaurants_food", "restaurants food", "restaurants and food", "food_drink", "food drink",
             "food and drink", "restaurant", "restaurants", "fast food", "fine dining", "casual family", "diner",
             "bistro", "buffet", "food court", "takeout", "cafeteria", "breakfast", "brunch", "sandwich", "deli",
-            "pizza", "burger", "barbecue", "ramen", "noodle", "dumpling", "dim sum", "hot pot", "taco", "taqueria",
+            "pizza", "burger", "barbecue", "ramen", "noodle", "dumpling", "bao", "bao bun", "bao buns", "dim sum", "hot pot", "taco", "taqueria",
             "thai restaurant", "sushi restaurant", "korean bbq"
         ],
             subcategories: [
             "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi", "Ramen",
-            "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya", "Yakitori",
+            "Dumplings", "Bao buns", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya", "Yakitori",
             "Yakiniku", "North Indian", "South Indian", "Pakistani", "Sri Lankan", "Bangladeshi", "Nepalese",
             "Malaysian", "Singaporean", "Indonesian", "Filipino", "Burmese", "Cambodian", "Laotian", "Asian",
             "Tibetan", "Mongolian", "Georgian", "Armenian", "Uzbek", "Mongolian BBQ", "Korean BBQ",
@@ -935,12 +935,12 @@ enum WanderPlaceCategory {
             aliases: [
             "coffee_tea_sweets", "coffee tea sweets", "coffee tea and sweets", "coffee", "coffee shop", "cafe",
             "espresso", "roaster", "roastery", "tea", "tea house", "tea store", "bakery", "dessert", "sweets",
-            "juice", "smoothie", "acai", "ice cream", "candy", "chocolate", "cat cafe", "dog cafe"
+            "juice", "smoothie", "acai", "ice cream", "gelato", "candy", "chocolate", "cat cafe", "dog cafe"
         ],
             subcategories: [
             "Coffee shop", "Cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store", "Juice shop",
             "Smoothie shop", "Acai", "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop",
-            "Dessert shop", "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop",
+            "Dessert shop", "Dessert restaurant", "Ice cream", "Gelato", "Candy store", "Chocolate shop",
             "Chocolate factory", "Chocolate lounge", "Confectionery", "Cat cafe", "Dog cafe"
         ],
             isEditable: true
@@ -1399,7 +1399,7 @@ enum WanderPlaceCategory {
         restaurantsFood: [
             PlaceCategorySubcategoryGroup(title: "Asian", subcategories: [
                 "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi",
-                "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya",
+                "Ramen", "Dumplings", "Bao buns", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya",
                 "Yakitori", "Yakiniku", "North Indian", "South Indian", "Pakistani", "Sri Lankan",
                 "Bangladeshi", "Nepalese", "Malaysian", "Singaporean", "Indonesian", "Filipino", "Burmese",
                 "Cambodian", "Laotian", "Asian", "Tibetan", "Mongolian", "Georgian", "Armenian", "Uzbek",
@@ -1442,7 +1442,7 @@ enum WanderPlaceCategory {
             ]),
             PlaceCategorySubcategoryGroup(title: "Bakeries & sweets", subcategories: [
                 "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop", "Dessert shop",
-                "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop", "Chocolate factory",
+                "Dessert restaurant", "Ice cream", "Gelato", "Candy store", "Chocolate shop", "Chocolate factory",
                 "Chocolate lounge", "Confectionery"
             ])
         ],
@@ -2029,6 +2029,7 @@ enum WanderPlaceCategory {
             ("Pizza", ["pizzeria"]),
             ("Japanese", ["udon", "soba", "teppanyaki"]),
             ("Vietnamese", ["banh mi"]),
+            ("Bao buns", ["bao", "bao bun", "baozi"]),
             ("Indian", ["tandoor", "tandoori", "masala"]),
             ("Middle Eastern", ["mezze"]),
             ("Mediterranean", ["mediterranean grill"])

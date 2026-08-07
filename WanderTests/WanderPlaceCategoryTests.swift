@@ -1081,7 +1081,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
-        XCTAssertEqual(shared.version, 8)
+        XCTAssertEqual(shared.version, 9)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
@@ -1125,11 +1125,11 @@ final class WanderPlaceCategoryTests: XCTestCase {
             "Americas & Pacific",
             "Misc"
         ])
-        XCTAssertEqual(groups.map(\.subcategories.count), [42, 29, 40, 45, 17])
+        XCTAssertEqual(groups.map(\.subcategories.count), [43, 29, 40, 45, 17])
         XCTAssertTrue(groups.allSatisfy { $0.role == .cuisine })
 
         let cuisines = WanderPlaceCategory.restaurantCuisineOptions
-        XCTAssertEqual(cuisines.count, 173)
+        XCTAssertEqual(cuisines.count, 174)
         XCTAssertEqual(Set(cuisines).count, cuisines.count)
         XCTAssertEqual(
             WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood),
@@ -1147,7 +1147,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let expectedByGroup: [String: [String]] = [
             "Asian": [
                 "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi",
-                "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Pakistani", "Sri Lankan",
+                "Ramen", "Dumplings", "Bao buns", "Noodles", "Dim sum", "Hot pot", "Pakistani", "Sri Lankan",
                 "Bangladeshi", "Nepalese", "Singaporean", "Laotian", "Mongolian", "Georgian",
                 "Armenian", "Uzbek"
             ],
@@ -1194,6 +1194,16 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "gluten-free restaurant"), "Gluten-free")
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "laotian restaurant"), "Laotian")
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "poke restaurant"), "Poke")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "bao buns restaurant"), "Bao buns")
+        XCTAssertEqual(
+            WanderPlaceCategory.restaurantCuisineInference(
+                name: "Little Bao",
+                rawProviderType: "bao bun shop",
+                subcategory: "Restaurant",
+                category: "Restaurants & Food"
+            )?.cuisine,
+            "Bao buns"
+        )
     }
 
     func testRecentRestaurantCuisinesUseLatestUniqueSavedChoices() {
@@ -1382,9 +1392,10 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
     func testCoffeeTeaSweetsIncludesLoungeSubcategories() {
         let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets)
-        XCTAssertEqual(suggestions.count, 25)
+        XCTAssertEqual(suggestions.count, 26)
         XCTAssertTrue(suggestions.contains("Coffee lounge"))
         XCTAssertTrue(suggestions.contains("Chocolate lounge"))
+        XCTAssertTrue(suggestions.contains("Gelato"))
         XCTAssertEqual(
             WanderPlaceCategory.canonicalSubcategory("coffee lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
             "Coffee lounge"
@@ -1393,9 +1404,29 @@ final class WanderPlaceCategoryTests: XCTestCase {
             WanderPlaceCategory.canonicalSubcategory("chocolate lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
             "Chocolate lounge"
         )
+        XCTAssertEqual(
+            WanderPlaceCategory.canonicalSubcategory("gelato", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
+            "Gelato"
+        )
 
         let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.coffeeTeaSweets)
         XCTAssertTrue(groups.first { $0.title == "Coffee & tea" }?.subcategories.contains("Coffee lounge") == true)
         XCTAssertTrue(groups.first { $0.title == "Bakeries & sweets" }?.subcategories.contains("Chocolate lounge") == true)
+        XCTAssertTrue(groups.first { $0.title == "Bakeries & sweets" }?.subcategories.contains("Gelato") == true)
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.coffeeTeaSweets,
+                subcategory: "Gelato"
+            ),
+            "🍦"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                cuisine: "Bao buns"
+            ),
+            "🥟"
+        )
     }
 }

@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "categories": [
     {
       "id": "restaurants_food",
@@ -36,6 +36,9 @@
         "ramen",
         "noodle",
         "dumpling",
+        "bao",
+        "bao bun",
+        "bao buns",
         "dim sum",
         "hot pot",
         "taco",
@@ -55,6 +58,7 @@
         "Sushi",
         "Ramen",
         "Dumplings",
+        "Bao buns",
         "Noodles",
         "Dim sum",
         "Hot pot",
@@ -247,6 +251,7 @@
         "smoothie",
         "acai",
         "ice cream",
+        "gelato",
         "candy",
         "chocolate",
         "cat cafe",
@@ -271,6 +276,7 @@
         "Dessert shop",
         "Dessert restaurant",
         "Ice cream",
+        "Gelato",
         "Candy store",
         "Chocolate shop",
         "Chocolate factory",
