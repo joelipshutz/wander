@@ -175,6 +175,118 @@ final class PlaceImportReviewPlanTests: XCTestCase {
         XCTAssertEqual(plan(ready: 1).primaryActionTitle, "Add as Wanna")
     }
 
+    func testCheckedSubsetControlsCommitCountWithoutChangingBatchSurface() {
+        let firstCandidate = placeImportCandidate(name: "First")
+        let secondCandidate = placeImportCandidate(name: "Second")
+        let first = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: firstCandidate.name,
+                nameHint: firstCandidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [firstCandidate],
+            selectedCandidateID: firstCandidate.id
+        )
+        let second = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: secondCandidate.name,
+                nameHint: secondCandidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 1
+            ),
+            state: .ready,
+            candidates: [secondCandidate],
+            selectedCandidateID: secondCandidate.id,
+            isIncludedInImport: false
+        )
+        let recovery = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Needs help",
+                nameHint: "Needs help",
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 2
+            ),
+            state: .needsHelp,
+            isIncludedInImport: false
+        )
+
+        let review = PlaceImportReviewPlan(items: [first, second, recovery])
+
+        XCTAssertEqual(review.surface, .compact)
+        XCTAssertEqual(review.totalCount, 3)
+        XCTAssertEqual(review.selectedCount, 1)
+        XCTAssertEqual(review.committableCount, 1)
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 place")
+    }
+
+    func testCheckedUnresolvedRowsRemainInTheSelectedDenominator() {
+        let candidate = placeImportCandidate(name: "Ready")
+        let ready = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: candidate.name,
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id
+        )
+        let recovery = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Needs help",
+                nameHint: "Needs help",
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 1
+            ),
+            state: .needsHelp
+        )
+
+        let review = PlaceImportReviewPlan(items: [ready, recovery])
+
+        XCTAssertEqual(review.selectedCount, 2)
+        XCTAssertEqual(review.committableCount, 1)
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 of 2 places")
+    }
+
+    func testSingleBeenCandidateUsesExplicitBeenAction() {
+        let candidate = placeImportCandidate(name: "Visited")
+        let item = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: candidate.name,
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            stagedStatus: .been
+        )
+
+        XCTAssertEqual(PlaceImportReviewPlan(items: [item]).primaryActionTitle, "Add as Been")
+    }
+
     func testDestinationListNameNormalizesBoundsAndCollisionsWithoutSplittingGraphemes() {
         XCTAssertEqual(
             PlaceImportDestinationListName.normalized("  LA\n\t Spots  "),
@@ -324,6 +436,26 @@ final class PlaceImportStoreTests: XCTestCase {
         store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
 
         XCTAssertEqual(store?.item(id: itemID)?.stagedStatus, .been)
+    }
+
+    func testImportSelectionDefaultsOnAndSurvivesReload() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try XCTUnwrap(store).enqueue(
+            source: .textNotes,
+            text: "Ready, Los Angeles"
+        )
+        await store?.waitForProcessing(batchID: batchID)
+        let itemID = try XCTUnwrap(store?.items(for: batchID).first?.id)
+
+        XCTAssertEqual(store?.item(id: itemID)?.isSelectedForImport, true)
+        store?.setIncludedInImport(false, itemID: itemID)
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+
+        XCTAssertEqual(store?.item(id: itemID)?.isSelectedForImport, false)
     }
 
     func testOptionalImportDetailsPersistAndWannaClearsCheckInOnlyFields() async throws {

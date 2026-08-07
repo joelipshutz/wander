@@ -939,6 +939,15 @@ final class PlaceImportStore: ObservableObject {
         persist()
     }
 
+    func setIncludedInImport(_ isIncluded: Bool, itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              ![.saved, .dismissed].contains(items[index].state)
+        else { return }
+        items[index].isSelectedForImport = isIncluded
+        items[index].updatedAt = .now
+        persist()
+    }
+
     func setStagedNote(_ note: String?, itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               items[index].state == .ready

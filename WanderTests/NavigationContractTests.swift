@@ -1279,6 +1279,29 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(profileHome.contains("ImportSection"))
     }
 
+    func testAdaptiveImportReviewUsesSelectableNativeRows() throws {
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+        let adaptiveReview = try XCTUnwrap(
+            importViews
+                .components(separatedBy: "struct PlaceImportAdaptiveReviewScreen: View")
+                .last?
+                .components(separatedBy: "private struct PlaceImportSourceIconStack: View")
+                .first
+        )
+
+        XCTAssertTrue(adaptiveReview.contains("setIncludedInImport"))
+        XCTAssertTrue(adaptiveReview.contains("checkmark.circle.fill"))
+        XCTAssertTrue(adaptiveReview.contains("WanderGlassSegmentedSwitch("))
+        XCTAssertTrue(adaptiveReview.contains("WanderTypography.editorialNamedContent"))
+        XCTAssertTrue(adaptiveReview.contains("WanderPrimaryButton("))
+        XCTAssertTrue(adaptiveReview.contains("let excludedItems = activeItems.filter { !$0.isSelectedForImport }"))
+        XCTAssertTrue(adaptiveReview.contains("let items = activeItems.filter(\\.isSelectedForImport)"))
+        XCTAssertTrue(adaptiveReview.contains("importStore.dismiss(itemID: item.id)"))
+        XCTAssertFalse(adaptiveReview.contains("PlaceImportStatusSelector("))
+    }
+
     func testChoosePlaceUsesEmojiCardsWithProfileNavigationAndCompactActions() throws {
         let importViews = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")

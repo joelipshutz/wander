@@ -42,14 +42,21 @@ enum PlaceImportReviewSurface: String, Equatable {
 struct PlaceImportReviewPlan: Equatable {
     let surface: PlaceImportReviewSurface
     let totalCount: Int
+    let selectedCount: Int
     let processingCount: Int
     let readyCount: Int
     let duplicateCount: Int
     let needsHelpCount: Int
+    let selectedReadyCount: Int
+    let selectedDuplicateCount: Int
+    let selectedNeedsHelpCount: Int
+    private let quickAddStatus: PlaceStatus?
 
     init(items: [PlaceImportItem]) {
         let activeItems = items.filter { ![.saved, .dismissed].contains($0.state) }
+        let selectedItems = activeItems.filter(\.isSelectedForImport)
         totalCount = activeItems.count
+        selectedCount = selectedItems.count
         processingCount = activeItems.filter { [.queued, .resolving].contains($0.state) }.count
         readyCount = activeItems.filter { $0.state == .ready && $0.selectedCandidate != nil }.count
         duplicateCount = activeItems.filter {
@@ -58,6 +65,18 @@ struct PlaceImportReviewPlan: Equatable {
         needsHelpCount = activeItems.filter {
             [.ambiguous, .needsHelp, .failed].contains($0.state)
         }.count
+        selectedReadyCount = selectedItems.filter {
+            $0.state == .ready && $0.selectedCandidate != nil
+        }.count
+        selectedDuplicateCount = selectedItems.filter {
+            $0.state == .duplicate && $0.duplicateUserPlaceID != nil
+        }.count
+        selectedNeedsHelpCount = selectedItems.filter {
+            [.ambiguous, .needsHelp, .failed].contains($0.state)
+        }.count
+        quickAddStatus = activeItems.count == 1 && selectedItems.count == 1
+            ? selectedItems.first?.stagedStatus
+            : nil
 
         if totalCount == 0 {
             surface = .complete
@@ -77,20 +96,20 @@ struct PlaceImportReviewPlan: Equatable {
     }
 
     var committableCount: Int {
-        readyCount + duplicateCount
+        selectedReadyCount + selectedDuplicateCount
     }
 
     var primaryActionTitle: String? {
         guard committableCount > 0 else { return nil }
         if surface == .quickAdd {
-            return "Add as Wanna"
+            return quickAddStatus == .been ? "Add as Been" : "Add as Wanna"
         }
         if surface == .duplicate {
             return "Add to imported list"
         }
-        if needsHelpCount > 0 {
-            let denominatorNoun = totalCount == 1 ? "place" : "places"
-            return "Add \(committableCount) of \(totalCount) \(denominatorNoun)"
+        if selectedNeedsHelpCount > 0 {
+            let denominatorNoun = selectedCount == 1 ? "place" : "places"
+            return "Add \(committableCount) of \(selectedCount) \(denominatorNoun)"
         }
         let noun = committableCount == 1 ? "place" : "places"
         return "Add \(committableCount) \(noun)"
@@ -319,6 +338,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     var stagedNote: String?
     var stagedRatingScore: Double?
     var stagedVisitedAt: Date?
+    var isIncludedInImport: Bool?
     let createdAt: Date
     var updatedAt: Date
 
@@ -339,6 +359,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         stagedNote: String? = nil,
         stagedRatingScore: Double? = nil,
         stagedVisitedAt: Date? = nil,
+        isIncludedInImport: Bool? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -358,8 +379,14 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.stagedNote = stagedNote
         self.stagedRatingScore = stagedRatingScore
         self.stagedVisitedAt = stagedVisitedAt
+        self.isIncludedInImport = isIncludedInImport
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    var isSelectedForImport: Bool {
+        get { isIncludedInImport ?? true }
+        set { isIncludedInImport = newValue }
     }
 
     var selectedCandidate: PlaceCandidate? {

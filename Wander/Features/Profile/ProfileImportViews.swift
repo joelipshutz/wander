@@ -284,7 +284,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 }
             }
             .padding(WanderTheme.spacing4)
-            .padding(.bottom, displayedReceipt == nil && reviewPlan.committableCount > 0 ? 92 : WanderTheme.spacing6)
+            .padding(.bottom, displayedReceipt == nil && bottomActionTitle != nil ? 88 : WanderTheme.spacing6)
         }
         .scrollDismissesKeyboard(.interactively)
         .wanderScreen()
@@ -299,26 +299,21 @@ struct PlaceImportAdaptiveReviewScreen: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if displayedReceipt == nil, let title = reviewPlan.primaryActionTitle {
-                Button(action: startSave) {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        if isSaving {
-                            ProgressView().tint(WanderTheme.textOnAction.color)
-                        }
-                        Text(isSaving ? "Saving…" : title)
-                    }
-                    .font(.system(size: 17, weight: .black))
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background(WanderTheme.terracotta.color)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                }
-                .buttonStyle(.plain)
-                .disabled(isSaving)
+            if displayedReceipt == nil, let title = bottomActionTitle {
+                WanderPrimaryButton(
+                    title: isSaving ? "Saving…" : title,
+                    systemImage: isSaving ? nil : bottomActionSystemImage,
+                    isDisabled: isSaving,
+                    action: startSave
+                )
                 .padding(.horizontal, WanderTheme.spacing4)
                 .padding(.vertical, WanderTheme.spacing2)
                 .background(WanderTheme.canvasWarm.color.opacity(0.97))
-                .accessibilityHint("Saves only the places shown in this import")
+                .accessibilityHint(
+                    reviewPlan.committableCount > 0
+                        ? "Adds only the checked places that are ready"
+                        : "Closes this import without adding unchecked places"
+                )
             }
         }
         .sheet(item: $candidatePickerItem) { item in
@@ -370,7 +365,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
         case .quickAdd:
             heading(
                 title: "Ready to add",
-                subtitle: "Wanna is selected. Change it to a check-in or add details only if you want."
+                subtitle: "Keep it checked, then choose Wanna or Been. Details are optional."
             )
             if let item = scopedItems.first {
                 adaptiveCard(item, prominent: true)
@@ -378,7 +373,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
         case .duplicate:
             heading(
                 title: "You already saved this",
-                subtitle: "Your existing status stays exactly as it is."
+                subtitle: "Keep it checked to include it in the imported list. Your existing details stay unchanged."
             )
             if let item = scopedItems.first {
                 duplicateCard(item)
@@ -386,16 +381,16 @@ struct PlaceImportAdaptiveReviewScreen: View {
         case .compact:
             heading(
                 title: "Review \(scopedItems.count) places",
-                subtitle: "Everything starts as Wanna. Open any place to add optional details."
+                subtitle: "Uncheck anything you don’t want. Choose Wanna or Been on each place."
             )
-            applyToAll
+            batchControls
             itemStack
         case .batch:
             heading(
                 title: "Ready to import \(scopedItems.count) places",
-                subtitle: "Scan the list, change any check-ins, then add the places that are ready."
+                subtitle: "Check the places you want, then set each one to Wanna or Been."
             )
-            applyToAll
+            batchControls
             itemStack
         case .recovery:
             heading(
@@ -424,16 +419,20 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     .tint(WanderTheme.terracotta.color)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Matching \(reviewPlan.processingCount) item\(reviewPlan.processingCount == 1 ? "" : "s")")
-                        .font(.system(size: 16, weight: .black))
+                        .font(WanderTypography.editorialNamedContent)
                     Text(captureSourceCopy)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(WanderTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
         }
     }
 
@@ -449,73 +448,79 @@ struct PlaceImportAdaptiveReviewScreen: View {
         }
     }
 
-    private var applyToAll: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Set all as")
-                .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+    private var batchControls: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(spacing: WanderTheme.spacing2) {
-                bulkStatusButton(.wannaGo)
-                bulkStatusButton(.been)
-            }
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-    }
+                Text("\(reviewPlan.selectedCount) of \(reviewPlan.totalCount) selected")
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.textMuted.color)
 
-    private func bulkStatusButton(_ status: PlaceStatus) -> some View {
-        let ready = scopedItems.filter { $0.state == .ready }
-        let isSelected = !ready.isEmpty && ready.allSatisfy { $0.stagedStatus == status }
-        return PlaceImportStatusSelector(
-            status: status,
-            isSelected: isSelected,
-            action: {
-                withAnimation(.easeInOut(duration: 0.16)) {
-                    for batchID in batchIDs {
-                        importStore.applyStagedStatus(status, batchID: batchID)
-                    }
+                Spacer()
+
+                Button(allItemsSelected ? "Clear all" : "Select all") {
+                    setAllIncluded(!allItemsSelected)
+                }
+                .font(WanderTypography.label)
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(minHeight: WanderTheme.tapMinimum)
+                .buttonStyle(.plain)
+            }
+
+            if !selectedReadyItems.isEmpty {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text("Apply to selected")
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    WanderGlassSegmentedSwitch(
+                        options: importStatusOptions,
+                        selection: bulkStatusSelection
+                    )
+                    .accessibilityLabel("Status for selected places")
                 }
             }
-        )
+        }
+        .padding(.horizontal, WanderTheme.spacing1)
     }
 
     private func adaptiveCard(_ item: PlaceImportItem, prominent: Bool) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        let isSelected = item.isSelectedForImport
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                 PlaceImportPhotoThumb(
                     item: item,
                     loadsRemotePhoto: auth.isSignedIn,
-                    size: prominent ? 72 : 54
+                    size: prominent ? 64 : 52
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.displayName)
-                        .font(.system(size: prominent ? 19 : 16, weight: .black))
+                        .font(prominent ? WanderTypography.editorialCardTitle : WanderTypography.editorialNamedContent)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(item.reviewMetadata)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(WanderTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                selectionButton(for: item)
             }
+            .opacity(isSelected ? 1 : 0.62)
 
             if item.state == .ready {
-                HStack(spacing: WanderTheme.spacing2) {
-                    PlaceImportStatusSelector(
-                        status: .wannaGo,
-                        isSelected: item.stagedStatus == .wannaGo,
-                        action: { importStore.setStagedStatus(.wannaGo, itemID: item.id) }
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    Text("Save as")
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    WanderGlassSegmentedSwitch(
+                        options: importStatusOptions,
+                        selection: statusSelection(for: item)
                     )
-                    PlaceImportStatusSelector(
-                        status: .been,
-                        isSelected: item.stagedStatus == .been,
-                        action: { importStore.setStagedStatus(.been, itemID: item.id) }
-                    )
-                    Spacer(minLength: 0)
+                    .accessibilityLabel("Status for \(item.displayName)")
                 }
+                .disabled(!isSelected)
+                .opacity(isSelected ? 1 : 0.48)
 
                 HStack(spacing: WanderTheme.spacing2) {
                     Button {
@@ -525,7 +530,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                             "Optional details",
                             systemImage: expandedItemIDs.contains(item.id) ? "chevron.up" : "chevron.down"
                         )
-                        .font(.system(size: 12, weight: .bold))
+                        .font(WanderTypography.label)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .frame(minHeight: WanderTheme.tapMinimum)
                     }
@@ -536,56 +541,101 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     Button("Edit place", systemImage: "magnifyingglass") {
                         rescueItem = item
                     }
-                    .font(.system(size: 12, weight: .bold))
+                    .font(WanderTypography.label)
                     .foregroundStyle(WanderTheme.terracotta.color)
                     .frame(minHeight: WanderTheme.tapMinimum)
                     .buttonStyle(.plain)
                 }
+                .disabled(!isSelected)
+                .opacity(isSelected ? 1 : 0.48)
 
                 if expandedItemIDs.contains(item.id) {
                     optionalDetails(for: item)
                         .transition(.opacity.combined(with: .move(edge: .top)))
+                        .disabled(!isSelected)
+                        .opacity(isSelected ? 1 : 0.48)
                 }
             } else {
                 recoveryActions(for: item)
+                    .disabled(!isSelected)
+                    .opacity(isSelected ? 1 : 0.48)
+            }
+
+            if !isSelected {
+                Label("Won’t be added", systemImage: "minus.circle")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
             }
         }
         .padding(prominent ? WanderTheme.spacing4 : WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceRaised.color)
+        .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                 .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .animation(.easeInOut(duration: 0.16), value: isSelected)
     }
 
     private func duplicateCard(_ item: PlaceImportItem) -> some View {
         let existing = existingVisiblePlace(item)
-        return HStack(spacing: WanderTheme.spacing3) {
-            PlaceImportPhotoThumb(item: item, loadsRemotePhoto: auth.isSignedIn, size: 58)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.displayName)
-                    .font(.system(size: 16, weight: .black))
-                Text(item.reviewMetadata)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                Label(
-                    existing?.userPlace.status == .been ? "Already a check-in" : "Already saved as Wanna",
-                    systemImage: "checkmark.seal.fill"
-                )
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.stateInfo.color)
+        let isSelected = item.isSelectedForImport
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(spacing: WanderTheme.spacing3) {
+                PlaceImportPhotoThumb(item: item, loadsRemotePhoto: auth.isSignedIn, size: 52)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.displayName)
+                        .font(WanderTypography.editorialNamedContent)
+                    Text(item.reviewMetadata)
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                    Label(
+                        existing?.userPlace.status == .been ? "Already Been" : "Already in Wanna",
+                        systemImage: "checkmark.seal.fill"
+                    )
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.stateInfo.color)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                selectionButton(for: item)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(isSelected ? 1 : 0.62)
+
+            if !isSelected {
+                Label("Won’t be added to the imported list", systemImage: "minus.circle")
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
         }
-        .padding(WanderTheme.spacing4)
-        .background(WanderTheme.surfaceRaised.color)
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
         .overlay(
             RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.stateInfo.color.opacity(0.25), lineWidth: 1)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
         )
+        .animation(.easeInOut(duration: 0.16), value: isSelected)
+    }
+
+    private func selectionButton(for item: PlaceImportItem) -> some View {
+        Button {
+            importStore.setIncludedInImport(!item.isSelectedForImport, itemID: item.id)
+        } label: {
+            Image(systemName: item.isSelectedForImport ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(
+                    item.isSelectedForImport
+                        ? WanderTheme.terracotta.color
+                        : WanderTheme.borderStrong.color
+                )
+                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.isSelectedForImport ? "Exclude \(item.displayName)" : "Include \(item.displayName)")
+        .accessibilityValue(item.isSelectedForImport ? "Included" : "Excluded")
     }
 
     @ViewBuilder
@@ -594,13 +644,13 @@ struct PlaceImportAdaptiveReviewScreen: View {
             HStack(spacing: WanderTheme.spacing2) {
                 ProgressView().controlSize(.small)
                 Text("Matching place…")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
         } else {
             if let help = item.helpMessage, !help.isEmpty {
                 Text(help)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.stateError.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -608,19 +658,19 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 Button("Search for the place", systemImage: "magnifyingglass") {
                     rescueItem = item
                 }
-                .font(.system(size: 13, weight: .black))
+                .font(WanderTypography.label)
                 .foregroundStyle(WanderTheme.terracotta.color)
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .buttonStyle(.plain)
 
                 if item.candidates.count > 1 {
                     Button("Review matches") { candidatePickerItem = item }
-                        .font(.system(size: 13, weight: .bold))
+                        .font(WanderTypography.label)
                         .frame(minHeight: WanderTheme.tapMinimum)
                         .buttonStyle(.plain)
                 } else {
                     Button("Retry") { importStore.retry(itemID: item.id) }
-                        .font(.system(size: 13, weight: .bold))
+                        .font(WanderTypography.label)
                         .frame(minHeight: WanderTheme.tapMinimum)
                         .buttonStyle(.plain)
                 }
@@ -635,7 +685,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             if item.stagedStatus == .been {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("Rating")
-                        .font(.system(size: 12, weight: .black))
+                        .font(WanderTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
                     HStack(spacing: 6) {
                         ForEach(1...5, id: \.self) { score in
@@ -666,7 +716,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         }
                     )
                 )
-                .font(.system(size: 13, weight: .bold))
+                .font(WanderTypography.label)
                 .tint(WanderTheme.terracotta.color)
 
                 if let date = item.stagedVisitedAt {
@@ -679,14 +729,14 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         in: ...Date.now,
                         displayedComponents: .date
                     )
-                    .font(.system(size: 13, weight: .bold))
+                    .font(WanderTypography.label)
                     .datePickerStyle(.compact)
                 }
             }
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text("Note")
-                    .font(.system(size: 12, weight: .black))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
                 TextField(
                     item.stagedStatus == .been ? "What should you remember?" : "Why do you want to go?",
@@ -696,7 +746,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     ),
                     axis: .vertical
                 )
-                .font(.system(size: 14, weight: .medium))
+                .font(WanderTypography.body)
                 .lineLimit(2...5)
                 .padding(WanderTheme.spacing3)
                 .background(WanderTheme.surfaceBone.color)
@@ -710,10 +760,10 @@ struct PlaceImportAdaptiveReviewScreen: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 HStack(spacing: WanderTheme.spacing3) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 38, weight: .black))
+                        .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(WanderTheme.stateSuccess.color)
                     Text(completionTitle(receipt))
-                        .font(.system(size: 24, weight: .black))
+                        .font(WanderTypography.editorialMajorSectionTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                 }
 
@@ -746,8 +796,12 @@ struct PlaceImportAdaptiveReviewScreen: View {
             }
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+            )
 
             VStack(spacing: 0) {
                 ForEach(receipt.entries) { entry in
@@ -760,9 +814,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
                             .clipShape(Circle())
                         VStack(alignment: .leading, spacing: 2) {
                             Text(entry.displayName)
-                                .font(.system(size: 14, weight: .bold))
+                                .font(WanderTypography.editorialNamedContent)
                             Text(entry.receiptDetail)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(WanderTypography.metadata)
                                 .foregroundStyle(WanderTheme.textMuted.color)
                         }
                         Spacer()
@@ -772,7 +826,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                                 completedReceipt = nil
                                 rescueItem = item
                             }
-                            .font(.system(size: 12, weight: .bold))
+                            .font(WanderTypography.label)
                             .foregroundStyle(WanderTheme.terracotta.color)
                             .frame(minHeight: WanderTheme.tapMinimum)
                             .buttonStyle(.plain)
@@ -788,7 +842,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     }
                 }
             }
-            .background(WanderTheme.surfaceRaised.color)
+            .background(WanderTheme.surfaceBone.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             .overlay(
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -799,41 +853,32 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 Button("Review remaining \(receipt.needsReviewCount)") {
                     completedReceipt = nil
                 }
-                .font(.system(size: 16, weight: .black))
+                .font(WanderTypography.label)
                 .frame(maxWidth: .infinity, minHeight: 52)
-                .foregroundStyle(WanderTheme.terracotta.color)
-                .background(WanderTheme.surfaceRaised.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                .overlay(
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                        .stroke(WanderTheme.terracotta.color, lineWidth: 1)
-                )
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .wanderGlassCapsule(tone: .accent)
                 .buttonStyle(.plain)
             }
 
-            Button(action: onViewMap) {
-                Label("View on map", systemImage: "map.fill")
-                    .font(.system(size: 17, weight: .black))
-                    .frame(maxWidth: .infinity, minHeight: 54)
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            }
-            .buttonStyle(.plain)
+            WanderPrimaryButton(
+                title: "View on map",
+                systemImage: "map.fill",
+                action: onViewMap
+            )
         }
     }
 
     private func heading(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 25, weight: .black))
+                .font(WanderTypography.editorialMajorSectionTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
             Text(subtitle)
-                .font(.system(size: 14, weight: .semibold))
+                .font(WanderTypography.body)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(captureSourceCopy)
-                .font(.system(size: 12, weight: .bold))
+            Label(captureSourceCopy, systemImage: "arrow.down.circle")
+                .font(WanderTypography.metadata)
                 .foregroundStyle(WanderTheme.terracottaDark.color)
         }
     }
@@ -860,6 +905,72 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
     private var reviewPlan: PlaceImportReviewPlan {
         PlaceImportReviewPlan(items: scopedItems)
+    }
+
+    private var bottomActionTitle: String? {
+        if reviewPlan.committableCount > 0 {
+            return reviewPlan.primaryActionTitle
+        }
+        if !scopedItems.isEmpty, reviewPlan.selectedCount == 0 {
+            return "Done"
+        }
+        return nil
+    }
+
+    private var bottomActionSystemImage: String? {
+        reviewPlan.committableCount > 0 ? "plus" : "checkmark"
+    }
+
+    private var importStatusOptions: [WanderSegmentOption] {
+        [
+            WanderSegmentOption(id: PlaceStatus.wannaGo.rawValue, title: "Wanna"),
+            WanderSegmentOption(id: PlaceStatus.been.rawValue, title: "Been")
+        ]
+    }
+
+    private var selectedReadyItems: [PlaceImportItem] {
+        scopedItems.filter { $0.state == .ready && $0.isSelectedForImport }
+    }
+
+    private var allItemsSelected: Bool {
+        !scopedItems.isEmpty && scopedItems.allSatisfy(\.isSelectedForImport)
+    }
+
+    private var bulkStatusSelection: Binding<String> {
+        Binding(
+            get: {
+                guard let first = selectedReadyItems.first?.stagedStatus,
+                      selectedReadyItems.allSatisfy({ $0.stagedStatus == first })
+                else { return "mixed" }
+                return first.rawValue
+            },
+            set: { rawValue in
+                guard let status = PlaceStatus(rawValue: rawValue) else { return }
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    for item in selectedReadyItems {
+                        importStore.setStagedStatus(status, itemID: item.id)
+                    }
+                }
+            }
+        )
+    }
+
+    private func statusSelection(for item: PlaceImportItem) -> Binding<String> {
+        Binding(
+            get: { item.stagedStatus.rawValue },
+            set: { rawValue in
+                guard let status = PlaceStatus(rawValue: rawValue) else { return }
+                importStore.setStagedStatus(status, itemID: item.id)
+            }
+        )
+    }
+
+    private func setAllIncluded(_ isIncluded: Bool) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            for item in scopedItems {
+                importStore.setIncludedInImport(isIncluded, itemID: item.id)
+            }
+        }
     }
 
     private var displayedReceipt: PlaceImportReceipt? {
@@ -928,6 +1039,13 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
     private func startSave() {
         guard !isSaving else { return }
+        if reviewPlan.selectedCount == 0 {
+            for item in scopedItems {
+                importStore.dismiss(itemID: item.id)
+            }
+            dismiss()
+            return
+        }
         guard auth.isSignedIn else {
             auth.presentGate(for: .syncPlace)
             return
@@ -944,15 +1062,25 @@ struct PlaceImportAdaptiveReviewScreen: View {
         var destinationListID: String?
 
         for batch in scopedBatches {
-            let items = importStore.items(for: batch.id)
+            let activeItems = importStore.items(for: batch.id)
                 .filter { ![.saved, .dismissed].contains($0.state) }
+            let excludedItems = activeItems.filter { !$0.isSelectedForImport }
+            let items = activeItems.filter(\.isSelectedForImport)
+            for item in excludedItems {
+                importStore.dismiss(itemID: item.id)
+            }
             let ready = items.filter { $0.state == .ready && $0.selectedCandidate != nil }
             let duplicates = items.filter {
                 $0.state == .duplicate && $0.duplicateUserPlaceID != nil
             }
-            guard !ready.isEmpty || !duplicates.isEmpty else { continue }
+            let recovery = items.filter {
+                [.ambiguous, .needsHelp, .failed].contains($0.state)
+            }
+            guard !ready.isEmpty || !duplicates.isEmpty || !recovery.isEmpty else { continue }
 
-            let destination = destinationList(for: batch, itemCount: items.count)
+            let destination = ready.isEmpty && duplicates.isEmpty
+                ? nil
+                : destinationList(for: batch, itemCount: items.count)
             let remoteBackend = auth.isSignedIn ? backend : nil
             var entries: [PlaceImportReceiptEntry] = []
 
@@ -1004,8 +1132,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 )
             }
 
-            entries.append(contentsOf: items.compactMap { item in
-                guard [.ambiguous, .needsHelp, .failed].contains(item.state) else { return nil }
+            entries.append(contentsOf: recovery.map { item in
                 return PlaceImportReceiptEntry(
                     itemID: item.id,
                     displayName: item.displayName,
