@@ -2796,7 +2796,6 @@ private struct SavedPlacesListScreen: View {
         let searchable = [
             visiblePlace.place.canonicalName,
             visiblePlace.effectiveCompactType,
-            visiblePlace.effectiveDetailedType,
             visiblePlace.effectiveCategoryDisplay.category,
             visiblePlace.effectiveCategoryDisplay.subcategory,
             visiblePlace.restaurantCuisine,

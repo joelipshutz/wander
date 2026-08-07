@@ -31,6 +31,7 @@ Deno.test("place taxonomy normalizes provider subcategories to primary categorie
   const cases: Array<[string, string]> = [
     ["thai restaurant", "restaurants_food"],
     ["bao bun shop", "restaurants_food"],
+    ["baozi shop", "restaurants_food"],
     ["MKPOICategoryNightlife", "bars_nightlife"],
     ["coffee shop", "coffee_tea_sweets"],
     ["gelato shop", "coffee_tea_sweets"],

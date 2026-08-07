@@ -278,7 +278,7 @@ private struct ProfileCalendarMockup: View {
 
             HStack(spacing: 0) {
                 CalendarMetric(value: "4", label: "spots ranked")
-                CalendarMetric(value: "3", label: "food types")
+                CalendarMetric(value: "3", label: "categories")
                 CalendarMetric(value: "2", label: "cities")
             }
 

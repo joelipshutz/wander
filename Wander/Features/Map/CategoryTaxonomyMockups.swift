@@ -173,8 +173,20 @@ private struct PrimaryCategoryMock: Identifiable {
 
 private enum CategoryTaxonomyMockData {
     static let primaryCategories: [PrimaryCategoryMock] = [
-        PrimaryCategoryMock(id: "restaurants_food", title: "Restaurants & Food", detail: "Restaurants, food types, quick bites", color: WanderTheme.terracotta.color, count: 174),
-        PrimaryCategoryMock(id: "coffee_tea_sweets", title: "Coffee, Tea, & Sweets", detail: "Coffee, tea, bakeries", color: WanderTheme.categorySun.color, count: 26),
+        PrimaryCategoryMock(
+            id: "restaurants_food",
+            title: "Restaurants & Food",
+            detail: "Restaurants, food types, quick bites",
+            color: WanderTheme.terracotta.color,
+            count: WanderPlaceCategory.restaurantCuisineOptions.count
+        ),
+        PrimaryCategoryMock(
+            id: "coffee_tea_sweets",
+            title: "Coffee, Tea, & Sweets",
+            detail: "Coffee, tea, bakeries",
+            color: WanderTheme.categorySun.color,
+            count: WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets).count
+        ),
         PrimaryCategoryMock(id: "bars_nightlife", title: "Bars & Nightlife", detail: "Bars, lounges, clubs", color: WanderTheme.terracottaDark.color, count: 26),
         PrimaryCategoryMock(id: "outdoors_nature", title: "Outdoors & Nature", detail: "Parks, trails, water", color: WanderTheme.categoryMoss.color, count: 41),
         PrimaryCategoryMock(id: "things_to_do", title: "Things To Do", detail: "Attractions, arts, venues", color: WanderTheme.avatarSofia.color, count: 52),
@@ -384,7 +396,7 @@ private struct CuisineSmartPickerMockup: View {
                 selectedCuisine = "Thai"
             }
 
-            MockupSearchField(text: "Search 174 food types")
+            MockupSearchField(text: "Search \(WanderPlaceCategory.restaurantCuisineOptions.count) food types")
 
             MockupSection(title: "quick picks") {
                 MockupChipGrid(

@@ -23,7 +23,7 @@ const aliasRules: Array<{ category: PlaceCategory; patterns: RegExp[] }> = [
   {
     category: "restaurants_food",
     patterns: [
-      /\b(restaurants\s+food|food\s+drink|restaurant|fast\s+food|fine\s+dining|diner|bistro|food\s+court|takeout|cafeteria|brunch|sandwich|deli|pizza|burger|barbecue|ramen|noodle|dumpling|bao(?:\s+buns?)?|dim\s+sum|hot\s+pot|taco|taqueria|thai\s+restaurant|sushi\s+restaurant|korean\s+bbq|japanese\s+curry)\b/,
+      /\b(restaurants\s+food|food\s+drink|restaurant|fast\s+food|fine\s+dining|diner|bistro|food\s+court|takeout|cafeteria|brunch|sandwich|deli|pizza|burger|barbecue|ramen|noodle|dumpling|bao(?:\s+buns?)?|baozi|dim\s+sum|hot\s+pot|taco|taqueria|thai\s+restaurant|sushi\s+restaurant|korean\s+bbq|japanese\s+curry)\b/,
     ],
   },
   {

@@ -105,12 +105,6 @@ struct PlaceCategoryDisplay: Equatable {
         return uniqueDisplayValues([subcategory, category]).first ?? ""
     }
 
-    func detailedType(foodType: String? = nil) -> String {
-        // Detailed cards add more place context around this value; the type itself
-        // stays specific so cards never reintroduce a broad category label.
-        compactType(foodType: foodType)
-    }
-
     private func uniqueDisplayValues(_ values: [String?]) -> [String] {
         var seen = Set<String>()
         return values.compactMap { value in
@@ -418,7 +412,7 @@ enum PlaceMemoryDefaultCatalog {
                 )
             }
 
-            if containsAny(key, ["bakery", "bagel", "donut", "cake", "pastry", "dessert", "ice cream", "candy", "chocolate", "confectionery", "acai", "smoothie", "juice"]) {
+            if containsAny(key, ["bakery", "bagel", "donut", "cake", "pastry", "dessert", "ice cream", "gelato", "candy", "chocolate", "confectionery", "acai", "smoothie", "juice"]) {
                 return Defaults(
                     tagOptions: ["sweet treat", "bring home", "cute", "shareable", "worth a detour"],
                     selectedTags: ["sweet treat", "shareable"],
@@ -897,7 +891,7 @@ enum WanderPlaceCategory {
             "restaurants_food", "restaurants food", "restaurants and food", "food_drink", "food drink",
             "food and drink", "restaurant", "restaurants", "fast food", "fine dining", "casual family", "diner",
             "bistro", "buffet", "food court", "takeout", "cafeteria", "breakfast", "brunch", "sandwich", "deli",
-            "pizza", "burger", "barbecue", "ramen", "noodle", "dumpling", "bao", "bao bun", "bao buns", "dim sum", "hot pot", "taco", "taqueria",
+            "pizza", "burger", "barbecue", "ramen", "noodle", "dumpling", "bao", "bao bun", "bao buns", "baozi", "dim sum", "hot pot", "taco", "taqueria",
             "thai restaurant", "sushi restaurant", "korean bbq"
         ],
             subcategories: [

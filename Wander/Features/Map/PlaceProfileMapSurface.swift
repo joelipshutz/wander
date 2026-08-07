@@ -2053,7 +2053,7 @@ private enum PlaceProfileCopy {
     }
 
     static func categoryDisplay(for place: PlaceSheetPlace) -> String? {
-        let display = place.detailedPlaceType
+        let display = place.compactPlaceType
         guard let display = trimmed(display), place.primaryCategory != "place" else { return nil }
         return display
     }

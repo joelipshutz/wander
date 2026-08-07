@@ -3197,11 +3197,6 @@ struct PlaceSheetPlace {
             .compactType(foodType: cuisine)
     }
 
-    var detailedPlaceType: String {
-        WanderPlaceCategory.display(for: categoryAssignment)
-            .detailedType(foodType: cuisine)
-    }
-
     var photoRequest: PlacePhotoRequest {
         PlacePhotoRequest(
             placeID: id,
@@ -7858,7 +7853,7 @@ struct PlaceSheet: View {
     }
 
     private var expandedSubtitle: String? {
-        joinedText([addressLine, detailedCategoryDisplay])
+        joinedText([addressLine, compactCategoryDisplay])
     }
 
     private var addressLine: String? {
@@ -7874,11 +7869,6 @@ struct PlaceSheet: View {
         return place.primaryCategory == "place" ? nil : trimmedDisplay
     }
 
-    private var detailedCategoryDisplay: String? {
-        let trimmedDisplay = trimmed(place.detailedPlaceType)
-        return place.primaryCategory == "place" ? nil : trimmedDisplay
-    }
-
     private var selectedNote: String? {
         trimmed(place.note)
     }
@@ -7891,8 +7881,8 @@ struct PlaceSheet: View {
 
     private var placeFacts: [PlaceFact] {
         var facts: [PlaceFact] = []
-        if let detailedCategoryDisplay {
-            facts.append(PlaceFact(title: detailedCategoryDisplay, emoji: place.categoryEmoji))
+        if let compactCategoryDisplay {
+            facts.append(PlaceFact(title: compactCategoryDisplay, emoji: place.categoryEmoji))
         }
         return facts
     }

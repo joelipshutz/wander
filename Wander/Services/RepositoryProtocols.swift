@@ -310,11 +310,6 @@ extension PlaceCandidate {
             .compactType(foodType: inferredRestaurantFoodType)
     }
 
-    var detailedPlaceType: String {
-        WanderPlaceCategory.display(for: categoryAssignment)
-            .detailedType(foodType: inferredRestaurantFoodType)
-    }
-
     func previewSubtitle(
         includeDistance: Bool = true,
         includeCategory: Bool = true,
