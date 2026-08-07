@@ -130,72 +130,24 @@ enum PlaceExternalLinks {
         return components.url
     }
 
-    static func googleReservationSearchURL(
-        placeName: String,
-        address: String? = nil,
-        locality: String? = nil
-    ) -> URL? {
-        let placeQuery = [
-            trimmed(placeName),
-            trimmed(address),
-            trimmed(locality)
-        ]
-        .compactMap { value -> String? in
-            guard let value, !value.isEmpty else { return nil }
-            return value
-        }
-        .joined(separator: " ")
+    static func reservationAction(actionLinksJSON: String?) -> PlaceExternalAction? {
+        for link in PlaceActionLink.decode(actionLinksJSON)
+        where link.kind == .reserve && link.confidence == .exact {
+            guard let url = websiteURL(from: link.urlString),
+                  isDirectReservationProviderURL(url)
+            else {
+                continue
+            }
 
-        guard !placeQuery.isEmpty else { return nil }
-
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "www.google.com"
-        components.path = "/search"
-        components.queryItems = [
-            URLQueryItem(name: "q", value: "\(placeQuery) reservation")
-        ]
-        return components.url
-    }
-
-    static func reservationAction(
-        placeName: String,
-        address: String? = nil,
-        locality: String? = nil,
-        actionLinksJSON: String?,
-        allowsSearchFallback: Bool
-    ) -> PlaceExternalAction? {
-        let reservationLinks = PlaceActionLink.decode(actionLinksJSON)
-
-        if let exactLink = reservationLinks.first(where: {
-            $0.kind == .reserve && $0.confidence == .exact
-        }), let action = action(from: exactLink) {
-            return normalizedReservationAction(action)
+            return PlaceExternalAction(
+                kind: .reserve,
+                title: "Reservation",
+                systemImage: "calendar",
+                url: url
+            )
         }
 
-        if let searchLink = reservationLinks.first(where: {
-            $0.kind == .reservationSearch
-                || ($0.kind == .reserve && $0.confidence == .search)
-        }), let action = action(from: searchLink) {
-            return normalizedReservationAction(action)
-        }
-
-        guard allowsSearchFallback,
-              let url = googleReservationSearchURL(
-                placeName: placeName,
-                address: address,
-                locality: locality
-              )
-        else {
-            return nil
-        }
-
-        return PlaceExternalAction(
-            kind: .reservationSearch,
-            title: "Reservation",
-            systemImage: "calendar",
-            url: url
-        )
+        return nil
     }
 
     static func shareSummary(placeName: String, locality: String?, status: PlaceStatus?) -> String {
@@ -243,13 +195,51 @@ enum PlaceExternalLinks {
         trimmed(title) ?? fallback
     }
 
-    private static func normalizedReservationAction(_ action: PlaceExternalAction) -> PlaceExternalAction {
-        PlaceExternalAction(
-            kind: action.kind,
-            title: "Reservation",
-            systemImage: "calendar",
-            url: action.url
-        )
+    private static func isDirectReservationProviderURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased()
+        else {
+            return false
+        }
+
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        if matches(host: host, domain: "resy.com") {
+            guard let venuesIndex = pathComponents.firstIndex(of: "venues") else { return false }
+            return pathComponents.indices.contains(pathComponents.index(after: venuesIndex))
+        }
+
+        let openTableDomains = [
+            "opentable.com",
+            "opentable.ca",
+            "opentable.co.uk",
+            "opentable.com.au",
+            "opentable.de",
+            "opentable.ie",
+            "opentable.jp",
+            "opentable.nl"
+        ]
+        guard openTableDomains.contains(where: { matches(host: host, domain: $0) }) else {
+            return false
+        }
+
+        if pathComponents.first == "r", pathComponents.count >= 2 {
+            return true
+        }
+
+        guard pathComponents.first == "booking",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+            return false
+        }
+
+        return components.queryItems?.contains { item in
+            item.name.caseInsensitiveCompare("rid") == .orderedSame
+                || item.name.caseInsensitiveCompare("restref") == .orderedSame
+        } == true
+    }
+
+    private static func matches(host: String, domain: String) -> Bool {
+        host == domain || host.hasSuffix(".\(domain)")
     }
 
     private static func deduped(_ actions: [PlaceExternalAction]) -> [PlaceExternalAction] {

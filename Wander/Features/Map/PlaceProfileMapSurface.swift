@@ -736,29 +736,32 @@ private struct PlaceProfileFullView: View {
     }
 
     private var actionRow: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            ForEach(actionItems) { item in
-                Button {
-                    openURL(item.url)
-                } label: {
-                    VStack(spacing: WanderTheme.spacing1) {
-                        Image(systemName: iconName(for: item.kind))
-                            .font(.system(size: 15, weight: .black))
-                        Text(item.title)
-                            .font(.system(size: 12, weight: .black))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.74)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(actionItems) { item in
+                    Button {
+                        openURL(item.url)
+                    } label: {
+                        HStack(spacing: WanderTheme.spacing1) {
+                            Image(systemName: iconName(for: item.kind))
+                                .font(.system(size: 15, weight: .black))
+                            Text(item.title)
+                                .font(.system(size: 13, weight: .black))
+                                .lineLimit(1)
+                        }
+                        .frame(width: 136, height: 48)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .contentShape(Capsule())
+                        .wanderGlassCapsule()
                     }
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .padding(.horizontal, WanderTheme.spacing1)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .contentShape(Capsule())
-                    .wanderGlassCapsule()
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.title)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.title)
             }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.vertical, 1)
         }
+        .padding(.horizontal, -WanderTheme.spacing4)
     }
 
     private var primaryPlaceAction: some View {
@@ -2105,13 +2108,7 @@ private enum PlaceProfileCopy {
         .filter { $0.kind == .website || $0.kind == .call }
 
         actions.append(contentsOf: businessActions)
-        if let reservation = PlaceExternalLinks.reservationAction(
-            placeName: place.name,
-            address: place.address,
-            locality: place.locality,
-            actionLinksJSON: place.actionLinksJSON,
-            allowsSearchFallback: place.primaryCategory == WanderPlaceCategory.restaurantsFood
-        ) {
+        if let reservation = PlaceExternalLinks.reservationAction(actionLinksJSON: place.actionLinksJSON) {
             actions.append(reservation)
         }
         return actions

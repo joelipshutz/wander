@@ -2402,6 +2402,25 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testPlaceProfileActionsUseAnEqualWidthSingleLineHorizontalRail() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let actionRow = try sourceSection(
+            placeProfile,
+            after: "private var actionRow: some View {",
+            before: "private var primaryPlaceAction: some View {"
+        )
+
+        XCTAssertTrue(actionRow.contains("ScrollView(.horizontal, showsIndicators: false)"))
+        XCTAssertTrue(actionRow.contains("HStack(spacing: WanderTheme.spacing1)"))
+        XCTAssertTrue(actionRow.contains(".frame(width: 136, height: 48)"))
+        XCTAssertTrue(actionRow.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(actionRow.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
+        XCTAssertFalse(actionRow.contains("VStack("))
+        XCTAssertFalse(actionRow.contains("minimumScaleFactor"))
+    }
+
     func testRestaurantPlaceTypeUsesCuisineInsteadOfSubcategory() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
