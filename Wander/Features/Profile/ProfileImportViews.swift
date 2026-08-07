@@ -3158,7 +3158,8 @@ struct PlaceImportAdaptiveMockupRoot: View {
                 name: "Gjusta",
                 area: "Venice, CA",
                 category: "bakery",
-                status: .been
+                status: .been,
+                isIncluded: false
             ),
             PlaceImportItem(
                 id: "manual-match",
@@ -3182,7 +3183,8 @@ struct PlaceImportAdaptiveMockupRoot: View {
         name: String,
         area: String,
         category: String,
-        status: PlaceStatus = .wannaGo
+        status: PlaceStatus = .wannaGo,
+        isIncluded: Bool = true
     ) -> PlaceImportItem {
         let candidate = PlaceCandidate(
             id: "candidate-\(id)",
@@ -3212,7 +3214,8 @@ struct PlaceImportAdaptiveMockupRoot: View {
             state: .ready,
             candidates: [candidate],
             selectedCandidateID: candidate.id,
-            stagedStatus: status
+            stagedStatus: status,
+            isIncludedInImport: isIncluded
         )
     }
 }
