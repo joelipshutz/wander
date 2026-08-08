@@ -292,7 +292,11 @@ struct MapScreen: View {
                                     accessibilityIdentifier: "map.headerAdd",
                                     action: onAdd
                                 )
-                                .walkthroughTarget(.mapAdd)
+                                .walkthroughTarget(
+                                    walkthroughs.currentStep?.target == .mapAddAgain
+                                        ? .mapAddAgain
+                                        : .mapAdd
+                                )
                             }
                         }
                         .padding(.horizontal, WanderTheme.spacing3)
@@ -408,11 +412,6 @@ struct MapScreen: View {
                    !visiblePlaceGroupKeys.contains(selectedPlaceGroupKey ?? "") {
                     selectedPlaceGroupKey = firstGroupKey
                     isPlaceProfilePresented = false
-                }
-            }
-            .onChange(of: isMapSearchFocused) { _, isFocused in
-                if isFocused {
-                    walkthroughs.perform(.mapSearch)
                 }
             }
             .onChange(of: walkthroughs.currentStep?.target) { _, target in
@@ -990,6 +989,7 @@ struct MapScreen: View {
     }
 
     private func submitMapSearch() {
+        walkthroughs.perform(.mapSearch)
         dismissKeyboard()
         suppressedTypeaheadQuery = Self.normalized(mapQuery)
         typeaheadTask?.cancel()
@@ -4349,6 +4349,7 @@ struct MapPlaceSaveFlowSheet: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedAssignment: PlaceCategoryAssignment
     @State private var selectedStatus: PlaceStatus
@@ -4597,6 +4598,8 @@ struct MapPlaceSaveFlowSheet: View {
                 Text(context.removeConfirmationMessage)
             }
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
+        .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
     }
 
     private var header: some View {
@@ -4644,6 +4647,8 @@ struct MapPlaceSaveFlowSheet: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close")
+                    .disabled(walkthroughs.activeSurface == .saveFlow)
+                    .accessibilityHidden(walkthroughs.activeSurface == .saveFlow)
                 }
             }
 
@@ -4670,19 +4675,24 @@ struct MapPlaceSaveFlowSheet: View {
             MapSavePickerBlock(title: "what do you want to do?") {
                 HStack(spacing: WanderTheme.spacing2) {
                     MapSaveChoicePill(title: CheckInCopy.verb, isSelected: selectedStatus == .been) {
+                        walkthroughs.perform(.saveStatus)
                         selectedStatus = .been
                     }
                     if context.allowsWannaGoSelection {
                         MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
+                            walkthroughs.perform(.saveStatus)
                             selectedStatus = .wannaGo
                         }
                     }
                 }
+                .walkthroughTarget(.saveStatus)
             }
 
             WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
+                walkthroughs.perform(.saveContinue)
                 prepareDetails()
             }
+            .walkthroughTarget(.saveContinue)
         }
     }
 
@@ -4695,6 +4705,7 @@ struct MapPlaceSaveFlowSheet: View {
             }
 
             placeTypeSection
+                .walkthroughTarget(.saveDetails)
 
             if selectedStatus == .been {
                 ratingSection
@@ -4740,6 +4751,7 @@ struct MapPlaceSaveFlowSheet: View {
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing2)
         .background(WanderTheme.canvasWarm.color)
+        .walkthroughTarget(.saveSubmit)
     }
 
     private var primaryActionTitle: String {
@@ -5512,6 +5524,7 @@ struct MapPlaceSaveFlowSheet: View {
             await MainActor.run {
                 isSaving = false
                 if result != nil {
+                    walkthroughs.perform(.saveSubmit)
                     dismiss()
                 } else if auth.isSignedIn {
                     saveAttemptedAt = nil

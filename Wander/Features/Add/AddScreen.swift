@@ -68,6 +68,7 @@ struct AddScreen: View {
     @State private var showsPhotoLibrary = false
     @State private var showsCamera = false
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
+    @State private var closesAfterSaveFlowDismiss = false
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
     @State private var showsImportHub = ProcessInfo.processInfo.arguments.contains(
@@ -145,7 +146,6 @@ struct AddScreen: View {
             }
             .onChange(of: isQuickAddFocused) { _, isFocused in
                 if isFocused {
-                    walkthroughs.perform(.addSearch)
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 120_000_000)
                         guard isQuickAddFocused else { return }
@@ -167,6 +167,9 @@ struct AddScreen: View {
                 case .hereNow:
                     expandSheet()
                     await resolveCurrentLocationCandidates()
+                case .importHub:
+                    expandSheet()
+                    showsImportHub = true
                 case .importInbox:
                     expandSheet()
                     showsImportInbox = true
@@ -191,6 +194,10 @@ struct AddScreen: View {
             .sheet(item: $addSaveFlow, onDismiss: {
                 placeSaveDraftStore.clear()
                 store.saveFlowDidDismiss(.saveSheet)
+                if closesAfterSaveFlowDismiss {
+                    closesAfterSaveFlowDismiss = false
+                    onClose()
+                }
             }) { context in
                 MapPlaceSaveFlowSheet(
                     context: context,
@@ -334,6 +341,8 @@ struct AddScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close add place")
+            .disabled(walkthroughs.activeSurface == .add)
+            .accessibilityHidden(walkthroughs.activeSurface == .add)
         }
     }
 
@@ -499,6 +508,7 @@ struct AddScreen: View {
         WanderPrimaryButton(title: "Save", systemImage: "arrow.right") {
             openSharedSaveFlow()
         }
+        .walkthroughTarget(.addPlace)
     }
 
     private var draftView: some View {
@@ -610,6 +620,8 @@ struct AddScreen: View {
     private func openSharedSaveFlow() {
         guard let selectedCandidate else { return }
 
+        walkthroughs.perform(.addPlace)
+        walkthroughs.activate(.saveFlow)
         presentSaveFlow(addCandidateContext(
             selectedCandidate,
             sourceType: selectedSource,
@@ -720,7 +732,7 @@ struct AddScreen: View {
         let needsSignIn = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         resetAfterSave()
-        onClose()
+        closesAfterSaveFlowDismiss = true
         if needsSignIn {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(400))
@@ -775,6 +787,9 @@ struct AddScreen: View {
             }
             isShowingInlineCandidateResults = inline
             step = inline ? .source : .confirm
+            if inline {
+                walkthroughs.perform(.addSearch)
+            }
         } catch {
             candidates = []
             selectedCandidateID = nil

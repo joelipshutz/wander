@@ -3,23 +3,27 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithTwentySixActionSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 26)
+    func testApprovedWalkthroughCoversEverySurfaceWithThirtyGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 30)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.map]?.map(\.target),
-            [.mapAdd, .mapFilters, .mapSearch, .mapMarker, .mapTabs]
+            [.mapAdd, .mapAddAgain, .mapFilters, .mapSearch, .mapMarker, .mapTabs]
+        )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.add]?.map(\.target),
+            [.addSearch, .addPlace, .addImport]
+        )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.saveFlow]?.map(\.target),
+            [.saveStatus, .saveContinue, .saveDetails, .saveSubmit]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
             [.profileSettings, .profileSocial, .profileActivity, .profileShare]
-        )
-        XCTAssertEqual(
-            FirstVisitWalkthroughContent.stepsBySurface[.importHub]?.map(\.target),
-            [.importInput, .importStart]
         )
     }
 
@@ -37,7 +41,33 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(coordinator.currentStep?.target, .mapAdd)
 
         coordinator.perform(.mapAdd)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapAddAgain)
+
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .mapAddAgain)
+
+        coordinator.perform(.mapAddAgain)
         XCTAssertEqual(coordinator.currentStep?.target, .mapFilters)
+    }
+
+    func testPassiveStepOnlyAdvancesThroughNext() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: FirstVisitWalkthroughStore(defaults: defaults)
+        )
+
+        coordinator.activate(.add)
+        coordinator.perform(.addSearch)
+        coordinator.perform(.addPlace)
+        XCTAssertEqual(coordinator.currentStep?.target, .addImport)
+
+        coordinator.perform(.addImport)
+        XCTAssertEqual(coordinator.currentStep?.target, .addImport)
+
+        coordinator.advancePassiveStep()
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertEqual(coordinator.requestedSurface, .map)
     }
 
     func testProgressResumesPerUserAndPerSurface() throws {
@@ -115,55 +145,125 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertNil(coordinator.currentStep)
     }
 
-    func testDeviceFeaturesLessonBecomesEligibleOnSecondLaunchAfterPageWalkthroughClears() throws {
+    func testImportLessonUsesSecondLaunchAndDeviceLessonUsesThirdLaunch() throws {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)
 
         let firstLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
         firstLaunch.registerLaunch()
-        firstLaunch.activate(.map)
-        firstLaunch.presentDeviceFeaturesLessonIfEligible()
+        firstLaunch.presentLaunchLessonIfEligible()
+        XCTAssertFalse(firstLaunch.isPresentingImportLesson)
         XCTAssertFalse(firstLaunch.isPresentingDeviceFeaturesLesson)
 
         let secondLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
         secondLaunch.registerLaunch()
-        secondLaunch.activate(.map)
-        secondLaunch.presentDeviceFeaturesLessonIfEligible()
+        secondLaunch.presentLaunchLessonIfEligible()
+        XCTAssertTrue(secondLaunch.isPresentingImportLesson)
         XCTAssertFalse(secondLaunch.isPresentingDeviceFeaturesLesson)
 
-        for target in [
-            WalkthroughTargetID.mapAdd,
-            .mapFilters,
-            .mapSearch,
-            .mapMarker,
-            .mapTabs
-        ] {
-            secondLaunch.perform(target)
-        }
-        secondLaunch.presentDeviceFeaturesLessonIfEligible()
-        XCTAssertTrue(secondLaunch.isPresentingDeviceFeaturesLesson)
-
-        secondLaunch.completeDeviceFeaturesLesson()
-        XCTAssertFalse(secondLaunch.isPresentingDeviceFeaturesLesson)
+        secondLaunch.completeImportLesson()
+        XCTAssertFalse(secondLaunch.isPresentingImportLesson)
 
         let thirdLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
         thirdLaunch.registerLaunch()
-        thirdLaunch.activate(.map)
-        thirdLaunch.presentDeviceFeaturesLessonIfEligible()
+        thirdLaunch.presentLaunchLessonIfEligible()
+        XCTAssertTrue(thirdLaunch.isPresentingDeviceFeaturesLesson)
+
+        thirdLaunch.completeDeviceFeaturesLesson()
         XCTAssertFalse(thirdLaunch.isPresentingDeviceFeaturesLesson)
+
+        let fourthLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        fourthLaunch.registerLaunch()
+        fourthLaunch.presentLaunchLessonIfEligible()
+        XCTAssertFalse(fourthLaunch.isPresentingLaunchLesson)
     }
 
-    func testForcedDeviceFeaturesLessonSupportsVisualTesting() throws {
+    func testForcedLaunchLessonsSupportVisualTesting() throws {
         let defaults = try makeDefaults()
-        let coordinator = FirstVisitWalkthroughCoordinator(
+        let importCoordinator = FirstVisitWalkthroughCoordinator(
             userID: "visual-test",
             store: FirstVisitWalkthroughStore(defaults: defaults)
         )
 
-        coordinator.registerLaunch(forceDeviceFeaturesLesson: true)
+        importCoordinator.registerLaunch(forceImportLesson: true)
+        XCTAssertTrue(importCoordinator.isPresentingImportLesson)
+        XCTAssertNil(importCoordinator.currentStep)
 
-        XCTAssertTrue(coordinator.isPresentingDeviceFeaturesLesson)
-        XCTAssertNil(coordinator.currentStep)
+        let deviceCoordinator = FirstVisitWalkthroughCoordinator(
+            userID: "visual-test-2",
+            store: FirstVisitWalkthroughStore(defaults: defaults)
+        )
+        deviceCoordinator.registerLaunch(forceDeviceFeaturesLesson: true)
+        XCTAssertTrue(deviceCoordinator.isPresentingDeviceFeaturesLesson)
+        XCTAssertNil(deviceCoordinator.currentStep)
+    }
+
+    func testCompletedSurfacesRequestTheNextGuidedDestination() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: FirstVisitWalkthroughStore(defaults: defaults)
+        )
+
+        coordinator.activate(.map)
+        for target in [
+            WalkthroughTargetID.mapAdd,
+            .mapAddAgain,
+            .mapFilters,
+            .mapSearch,
+            .mapMarker
+        ] {
+            coordinator.perform(target)
+        }
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.requestedSurface, .feed)
+
+        coordinator.consumeRequestedSurface(.feed)
+        coordinator.activate(.feedSearch)
+        coordinator.perform(.feedSmartSearch)
+        XCTAssertEqual(coordinator.requestedSurface, .feed)
+
+        coordinator.consumeRequestedSurface(.feed)
+        coordinator.activate(.listEditor)
+        coordinator.perform(.listEditorTitle)
+        coordinator.perform(.listEditorPrivacy)
+        coordinator.perform(.listEditorCollaborators)
+        XCTAssertEqual(coordinator.requestedSurface, .lists)
+
+        coordinator.consumeRequestedSurface(.lists)
+        coordinator.activate(.listDetail)
+        coordinator.perform(.listMap)
+        coordinator.perform(.listActions)
+        XCTAssertEqual(coordinator.requestedSurface, .profile)
+    }
+
+    func testCaretConnectsTopTargetToCardAndStaysInsideSpotlight() {
+        let layout = WalkthroughCoachMarkLayout(
+            targetFrame: CGRect(x: 650, y: 72, width: 56, height: 56),
+            containerSize: CGSize(width: 734, height: 844),
+            cardSize: CGSize(width: 286, height: 112)
+        )
+
+        XCTAssertFalse(layout.cardAboveTarget)
+        XCTAssertEqual(layout.pointerTip.y, layout.spotlightFrame.maxY, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(layout.pointerTip.x, layout.spotlightFrame.minX)
+        XCTAssertLessThanOrEqual(layout.pointerTip.x, layout.spotlightFrame.maxX)
+        XCTAssertGreaterThanOrEqual(layout.cardFrame.minX, 16)
+        XCTAssertLessThanOrEqual(layout.cardFrame.maxX, 718)
+    }
+
+    func testCaretConnectsBottomTabTargetToCardAndStaysInsideSpotlight() {
+        let layout = WalkthroughCoachMarkLayout(
+            targetFrame: CGRect(x: 252, y: 758, width: 92, height: 56),
+            containerSize: CGSize(width: 390, height: 844),
+            cardSize: CGSize(width: 326, height: 146)
+        )
+
+        XCTAssertTrue(layout.cardAboveTarget)
+        XCTAssertEqual(layout.pointerTip.y, layout.spotlightFrame.minY, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(layout.pointerTip.x, layout.spotlightFrame.minX)
+        XCTAssertLessThanOrEqual(layout.pointerTip.x, layout.spotlightFrame.maxX)
+        XCTAssertEqual(layout.spotlightFrame.minY - layout.cardFrame.maxY, 12, accuracy: 0.001)
     }
 
     private func makeDefaults() throws -> UserDefaults {

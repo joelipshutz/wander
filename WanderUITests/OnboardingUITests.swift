@@ -2,7 +2,88 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
-    func testImportHubWalkthroughAdvancesFromInputToStartImport() {
+    func testSecondLaunchImportLessonOpensImportFromPage() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderShowImportWalkthrough"
+        ]
+        app.launch()
+
+        let lesson = app.descendants(matching: .any)["walkthrough.importLesson"]
+        let openImport = app.buttons["Open Import From"]
+        XCTAssertTrue(lesson.waitForExistence(timeout: 5))
+        XCTAssertTrue(openImport.isHittable)
+
+        let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        promptScreenshot.name = "REC-236 second-launch Import From prompt"
+        promptScreenshot.lifetime = .keepAlways
+        add(promptScreenshot)
+
+        openImport.tap()
+
+        XCTAssertTrue(app.textViews["import.input"].waitForExistence(timeout: 4))
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 second-launch Import From destination"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testFirstMapCoachMarkPointsToAddButtonWithoutOversizedCard() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs"
+        ]
+        app.launch()
+
+        let addButton = app.buttons["map.headerAdd"]
+        let coachMark = app.descendants(matching: .any)["walkthrough.map.mapAdd"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(coachMark.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(coachMark.frame.width, 326)
+        XCTAssertLessThan(coachMark.frame.height, 190)
+        XCTAssertGreaterThanOrEqual(coachMark.frame.minX, 0)
+        XCTAssertLessThanOrEqual(coachMark.frame.maxX, app.frame.maxX)
+        XCTAssertGreaterThanOrEqual(coachMark.frame.minY, 0)
+        XCTAssertLessThanOrEqual(coachMark.frame.maxY, app.frame.maxY)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 compact connected add coach mark"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testBottomTabCoachMarkCaretStaysConnectedToHighlightedTabs() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderWalkthroughTarget",
+            "mapTabs"
+        ]
+        app.launch()
+
+        let coachMark = app.descendants(matching: .any)["walkthrough.map.mapTabs"]
+        XCTAssertTrue(coachMark.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        XCTAssertLessThan(coachMark.frame.maxY, app.buttons["Map"].frame.minY)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 connected bottom-tab coach mark"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testAddImportShortcutShowsPassiveHighlight() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -10,34 +91,100 @@ final class OnboardingUITests: XCTestCase {
             "-WanderEnableWalkthroughs",
             "-WanderResetWalkthroughs",
             "-WanderOpenAdd",
-            "-WanderOpenImportHub"
+            "-WanderWalkthroughTarget",
+            "addImport"
         ]
         app.launch()
 
-        let inputStep = app.descendants(matching: .any)[
-            "walkthrough.importHub.importInput"
-        ]
-        let input = app.textViews["import.input"]
-        XCTAssertTrue(inputStep.waitForExistence(timeout: 5))
-        XCTAssertTrue(input.waitForExistence(timeout: 2))
-
-        input.tap()
-        input.typeText("Maru Coffee")
-
-        let startStep = app.descendants(matching: .any)[
-            "walkthrough.importHub.importStart"
-        ]
-        let startButton = app.buttons["import.start"]
-        XCTAssertTrue(startStep.waitForExistence(timeout: 3))
-        XCTAssertTrue(startButton.isEnabled)
-        expectation(
-            for: NSPredicate(format: "isHittable == true"),
-            evaluatedWith: startButton
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.add.addImport"]
+                .waitForExistence(timeout: 5)
         )
-        waitForExpectations(timeout: 3)
+        XCTAssertTrue(app.buttons["Next"].isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 Import Hub walkthrough start step"
+        screenshot.name = "REC-236 passive Import From highlight"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testFirstAddActionGuidesThroughSaveBeforeReturningToMap() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs"
+        ]
+        app.launch()
+
+        let addButton = app.buttons["map.headerAdd"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.add.addSearch"]
+                .waitForExistence(timeout: 5)
+        )
+        let searchField = app.textFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Maru Coffee\n")
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.add.addPlace"]
+                .waitForExistence(timeout: 6)
+        )
+        app.buttons["Save"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
+                .waitForExistence(timeout: 5)
+        )
+        app.buttons["check in"].tap()
+        XCTAssertTrue(app.buttons["continue to details"].waitForExistence(timeout: 3))
+        app.buttons["continue to details"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveDetails"]
+                .waitForExistence(timeout: 4)
+        )
+        app.buttons["Next"].tap()
+        XCTAssertTrue(app.buttons["Check in"].waitForExistence(timeout: 3))
+        app.buttons["Check in"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
+                .waitForExistence(timeout: 6)
+        )
+    }
+
+    func testThirdLaunchDeviceLessonIncludesExtensionsGuide() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderShowDeviceFeaturesWalkthrough"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.deviceFeatures"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.deviceFeatures.extensionsGuide"]
+                .exists
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.deviceFeatures.complete"]
+                .exists
+        )
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 third-launch device extensions lesson"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }

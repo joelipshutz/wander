@@ -94,6 +94,13 @@ struct ListsScreen: View {
                     .presentationDetents([.medium])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
+            .onChange(of: walkthroughs.requestedSurface) { _, surface in
+                guard surface == .lists else { return }
+                collaboratorList = nil
+                mapList = nil
+                editorPresentation = nil
+                selectedList = nil
+            }
             .fullScreenCover(item: $mapList) { list in
                 ListMapFullScreen(
                     list: list,

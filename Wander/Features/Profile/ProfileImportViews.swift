@@ -65,7 +65,6 @@ struct AddImportEntrySection: View {
 }
 
 struct PlaceImportHubScreen: View {
-    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @ObservedObject var importStore: PlaceImportStore
     let inboxAction: () -> Void
     @Environment(\.openURL) private var openURL
@@ -122,7 +121,6 @@ struct PlaceImportHubScreen: View {
                             .frame(minHeight: 220)
                             .background(Color.clear)
                     }
-                    .walkthroughTarget(.importInput)
                     .background(WanderTheme.surfaceRaised.color)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
                     .overlay(
@@ -155,7 +153,6 @@ struct PlaceImportHubScreen: View {
                 .buttonStyle(.plain)
                 .disabled(!canStart || isStarting)
                 .accessibilityIdentifier("import.start")
-                .walkthroughTarget(.importStart)
 
                 Button {
                     openURL(ImportHelpDestination.url)
@@ -220,18 +217,6 @@ struct PlaceImportHubScreen: View {
                 .accessibilityHint("Opens import progress and review")
             }
         }
-        .task(id: input) {
-            guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            try? await Task.sleep(for: .milliseconds(650))
-            guard !Task.isCancelled else { return }
-            walkthroughs.perform(.importInput)
-        }
-        .onChange(of: walkthroughs.currentStep?.target) { _, target in
-            if target == .importStart {
-                isInputFocused = false
-            }
-        }
-        .firstVisitWalkthroughOverlay(walkthroughs, surface: .importHub)
     }
 
     private var actionTitle: String {
@@ -258,7 +243,6 @@ struct PlaceImportHubScreen: View {
     }
 
     private func startImport() {
-        walkthroughs.perform(.importStart)
         isStarting = true
         do {
             _ = try importStore.enqueueUnified(text: input)

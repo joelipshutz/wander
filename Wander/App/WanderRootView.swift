@@ -444,7 +444,10 @@ struct WanderRootView: View {
                 .walkthroughTarget(.mapTabs)
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
-        .deviceFeaturesWalkthroughOverlay(walkthroughs)
+        .walkthroughLaunchLessonOverlay(
+            walkthroughs,
+            onOpenImport: presentWalkthroughImportHub
+        )
         .overlay {
             GeometryReader { proxy in
                 if let invitation = sharedVisitBannerInvitation {
@@ -525,6 +528,10 @@ struct WanderRootView: View {
                     .presentationCornerRadius(28)
                     .presentationBackground(WanderTheme.surfaceBone.color)
                     .presentationContentInteraction(.resizes)
+                    .interactiveDismissDisabled(
+                        walkthroughs.activeSurface == .add
+                            || walkthroughs.activeSurface == .saveFlow
+                    )
             }
         }
         .sheet(
@@ -770,6 +777,10 @@ struct WanderRootView: View {
                 walkthroughs.activate(walkthroughSurface(for: selectedTab))
             }
         }
+        .onChange(of: walkthroughs.requestedSurface) { _, surface in
+            guard let surface else { return }
+            routeWalkthrough(to: surface)
+        }
         .onDisappear(perform: handleRootDisappear)
     }
 
@@ -783,14 +794,18 @@ struct WanderRootView: View {
             } else {
                 walkthroughs.perform(.mapTabs)
                 selectedTab = newTab
-                presentDeviceFeaturesLessonIfAppropriate()
+                presentLaunchLessonIfAppropriate()
                 walkthroughs.activate(walkthroughSurface(for: newTab))
             }
         }
     }
 
     private func presentAddSheet() {
-        walkthroughs.perform(.mapAdd)
+        if walkthroughs.currentStep?.target == .mapAddAgain {
+            walkthroughs.perform(.mapAddAgain)
+        } else {
+            walkthroughs.perform(.mapAdd)
+        }
         walkthroughs.activate(.add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
@@ -1126,8 +1141,17 @@ struct WanderRootView: View {
     private func handleAddSheetDismissal() {
         placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
-        walkthroughs.activate(walkthroughSurface(for: selectedTab))
-        presentDeviceFeaturesLessonIfAppropriate()
+        if walkthroughs.requestedSurface == .map {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(260))
+                walkthroughs.consumeRequestedSurface(.map)
+                walkthroughs.activate(.map)
+                presentLaunchLessonIfAppropriate()
+            }
+        } else {
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
+            presentLaunchLessonIfAppropriate()
+        }
     }
 
     private func configureWalkthroughsForCurrentUser() {
@@ -1139,17 +1163,73 @@ struct WanderRootView: View {
             }
         }
         walkthroughs.registerLaunch(
+            forceImportLesson: ProcessInfo.processInfo.arguments.contains(
+                "-WanderShowImportWalkthrough"
+            ),
             forceDeviceFeaturesLesson: ProcessInfo.processInfo.arguments.contains(
                 "-WanderShowDeviceFeaturesWalkthrough"
             )
         )
-        walkthroughs.activate(walkthroughSurface(for: selectedTab))
-        presentDeviceFeaturesLessonIfAppropriate()
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") {
+            let valueIndex = launchArguments.index(after: flagIndex)
+            if launchArguments.indices.contains(valueIndex),
+               let target = WalkthroughTargetID(rawValue: launchArguments[valueIndex]) {
+                walkthroughs.forceActivate(target)
+                return
+            }
+        }
+        presentLaunchLessonIfAppropriate()
+        if !walkthroughs.isPresentingLaunchLesson {
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
+        }
     }
 
-    private func presentDeviceFeaturesLessonIfAppropriate() {
+    private func presentLaunchLessonIfAppropriate() {
         guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil else { return }
-        walkthroughs.presentDeviceFeaturesLessonIfEligible()
+        walkthroughs.presentLaunchLessonIfEligible()
+    }
+
+    private func presentWalkthroughImportHub() {
+        store.saveFlowDidPresent(.addSheet)
+        addTabResetToken = UUID()
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importHub)
+        addSheetDetent = .large
+        isPresentingAdd = true
+    }
+
+    private func routeWalkthrough(to surface: WalkthroughSurface) {
+        let waitsForAddDismissal = isPresentingAdd && surface == .map
+        switch surface {
+        case .map:
+            selectedTab = .map
+            if !waitsForAddDismissal {
+                isPresentingAdd = false
+            }
+        case .feed:
+            selectedTab = .discover
+            isPresentingAdd = false
+        case .lists:
+            selectedTab = .lists
+            isPresentingAdd = false
+        case .profile:
+            selectedTab = .profile
+            isPresentingAdd = false
+        case .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+            break
+        }
+
+        guard !waitsForAddDismissal else { return }
+
+        Task { @MainActor in
+            if isPresentingAdd {
+                await Task.yield()
+            } else {
+                try? await Task.sleep(for: .milliseconds(220))
+            }
+            walkthroughs.consumeRequestedSurface(surface)
+            walkthroughs.activate(surface)
+        }
     }
 
     private func walkthroughSurface(for tab: WanderTab) -> WalkthroughSurface {
