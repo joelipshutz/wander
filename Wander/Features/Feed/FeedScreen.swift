@@ -144,7 +144,6 @@ struct FeedScreen: View {
                 openPlace: openPlace,
                 openList: openList
             )
-            .walkthroughTarget(.feedActivity)
 
             if store.feedLoadState == .stale {
                 FeedRetryRow(
@@ -1057,6 +1056,9 @@ private struct FeedActivityList: View {
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList
+                )
+                .walkthroughTarget(
+                    event.id == activity.first?.id ? .feedActivity : nil
                 )
             }
         }

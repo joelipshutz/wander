@@ -102,10 +102,192 @@ final class OnboardingUITests: XCTestCase {
         )
         XCTAssertTrue(app.buttons["Next"].isHittable)
 
+        let importScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        importScreenshot.name = "REC-236 passive Import From highlight"
+        importScreenshot.lifetime = .keepAlways
+        add(importScreenshot)
+
+        app.buttons["Next"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.add.addClose"]
+                .waitForExistence(timeout: 4)
+        )
+        let closeButton = app.buttons["Close add place"]
+        XCTAssertTrue(closeButton.isHittable)
+
+        let closeScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        closeScreenshot.name = "REC-236 close Add a Place prompt"
+        closeScreenshot.lifetime = .keepAlways
+        add(closeScreenshot)
+
+        closeButton.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.map.mapAdd"]
+                .waitForExistence(timeout: 6)
+        )
+    }
+
+    func testMapFilterAndSearchExplanationsUseNextWithFullScrim() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderWalkthroughTarget",
+            "mapFilters"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.map.mapFilters"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        app.buttons["Next"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.map.mapSearch"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 passive Import From highlight"
+        screenshot.name = "REC-236 full scrim around Map search"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testFeedActivityExplanationUsesNext() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderWalkthroughTarget",
+            "feedActivity"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedActivity"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 Feed activity passive coach mark"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testFeedPeopleSearchAndInviteExplanationsUseNext() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderFeedSurface",
+            "people",
+            "-WanderWalkthroughTarget",
+            "feedPeopleSearch"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedPeopleSearch"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        app.buttons["Next"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 Feed contacts passive coach mark"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testListCreationExplanationsUseNext() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "lists",
+            "-WanderListsScenario",
+            "create",
+            "-WanderWalkthroughTarget",
+            "listEditorTitle"
+        ]
+        app.launch()
+
+        for target in ["listEditorTitle", "listEditorPrivacy", "listEditorCollaborators"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.listEditor.\(target)"]
+                    .waitForExistence(timeout: 6)
+            )
+            XCTAssertTrue(app.buttons["Next"].isHittable)
+
+            if target == "listEditorCollaborators" {
+                let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                screenshot.name = "REC-236 List creation passive coach mark"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+            }
+
+            app.buttons["Next"].tap()
+        }
+
+        XCTAssertTrue(app.buttons["lists.headerAdd"].waitForExistence(timeout: 6))
+    }
+
+    func testProfileExplanationsUseNext() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "profile",
+            "-WanderWalkthroughTarget",
+            "profileSettings"
+        ]
+        app.launch()
+
+        for target in ["profileSettings", "profileSocial", "profileActivity", "profileShare"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.profile.\(target)"]
+                    .waitForExistence(timeout: 6)
+            )
+            XCTAssertTrue(app.buttons["Next"].isHittable)
+
+            if target == "profileActivity" {
+                let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                screenshot.name = "REC-236 Profile history passive coach mark"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+            }
+
+            app.buttons["Next"].tap()
+        }
+
+        XCTAssertFalse(app.buttons["Next"].waitForExistence(timeout: 2))
     }
 
     func testFirstAddActionGuidesThroughSaveBeforeReturningToMap() {

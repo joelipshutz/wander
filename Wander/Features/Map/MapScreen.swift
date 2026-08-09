@@ -353,6 +353,8 @@ struct MapScreen: View {
                             RecenterButton(isLoading: isRecenteringOnUser) {
                                 recenterOnUser()
                             }
+                            .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
+                            .accessibilityHidden(walkthroughs.currentStep?.target == .mapTabs)
                             .padding(.trailing, WanderTheme.spacing3)
                             .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
                         }

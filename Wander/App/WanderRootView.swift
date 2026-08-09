@@ -438,7 +438,7 @@ struct WanderRootView: View {
         .environmentObject(walkthroughs)
         .overlay(alignment: .bottom) {
             Color.clear
-                .frame(height: 84)
+                .frame(height: 50)
                 .contentShape(Rectangle())
                 .allowsHitTesting(false)
                 .walkthroughTarget(.mapTabs)
@@ -498,6 +498,9 @@ struct WanderRootView: View {
 
     private var presentedRoot: some View {
         tabRoot
+        .walkthroughPresenterScrim(
+            isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
+        )
         .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
             WanderRootPresentationLifecycle(
                 surface: .add,
@@ -584,6 +587,11 @@ struct WanderRootView: View {
                     .environmentObject(backend)
             }
         }
+    }
+
+    private var shouldDimBehindAddWalkthrough: Bool {
+        walkthroughs.activeSurface == .add
+            || walkthroughs.activeSurface == .saveFlow
     }
 
     private var lifecycleRoot: some View {

@@ -1,10 +1,11 @@
+import SwiftUI
 import XCTest
 @testable import Wander
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithThirtyGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 30)
+    func testApprovedWalkthroughCoversEverySurfaceWithThirtyOneGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 31)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -15,7 +16,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.add]?.map(\.target),
-            [.addSearch, .addPlace, .addImport]
+            [.addSearch, .addPlace, .addImport, .addClose]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.saveFlow]?.map(\.target),
@@ -24,6 +25,50 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
             [.profileSettings, .profileSocial, .profileActivity, .profileShare]
+        )
+    }
+
+    func testRequestedExplanationStepsAdvanceWithNext() throws {
+        let passiveTargets: [WalkthroughTargetID] = [
+            .mapFilters,
+            .mapSearch,
+            .mapTabs,
+            .addImport,
+            .saveDetails,
+            .feedActivity,
+            .feedPeopleSearch,
+            .feedInvite,
+            .listEditorTitle,
+            .listEditorPrivacy,
+            .listEditorCollaborators,
+            .profileSettings,
+            .profileSocial,
+            .profileActivity,
+            .profileShare
+        ]
+
+        for target in passiveTargets {
+            let step = try XCTUnwrap(
+                FirstVisitWalkthroughContent.allSteps.first { $0.target == target }
+            )
+            XCTAssertEqual(step.advance, .next, "Expected \(target) to show Next")
+        }
+
+        let closeStep = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .addClose }
+        )
+        XCTAssertEqual(closeStep.advance, .action)
+    }
+
+    func testBottomNavigationCopyExplainsTheConnectedProduct() throws {
+        let step = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapTabs }
+        )
+
+        XCTAssertEqual(step.title, "Your places, all connected")
+        XCTAssertEqual(
+            step.message,
+            "Map, Feed, Lists, and Profile work together to help you find, plan, and remember."
         )
     }
 
@@ -48,6 +93,12 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         coordinator.perform(.mapAddAgain)
         XCTAssertEqual(coordinator.currentStep?.target, .mapFilters)
+
+        coordinator.perform(.mapFilters)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFilters)
+
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .mapSearch)
     }
 
     func testPassiveStepOnlyAdvancesThroughNext() throws {
@@ -66,6 +117,12 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(coordinator.currentStep?.target, .addImport)
 
         coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .addClose)
+
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .addClose)
+
+        coordinator.perform(.addClose)
         XCTAssertNil(coordinator.activeSurface)
         XCTAssertEqual(coordinator.requestedSurface, .map)
     }
@@ -76,7 +133,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let ryan = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
 
         ryan.activate(.feed)
-        ryan.perform(.feedActivity)
+        ryan.advancePassiveStep()
         XCTAssertEqual(ryan.currentStep?.target, .feedSurfaceSwitch)
 
         ryan.activate(.profile)
@@ -112,7 +169,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertTrue(firstVersion.isComplete(for: "ryan", surface: .lists))
         XCTAssertFalse(
-            FirstVisitWalkthroughStore(defaults: defaults, version: 2)
+            FirstVisitWalkthroughStore(defaults: defaults, version: 3)
                 .isComplete(for: "ryan", surface: .lists)
         )
     }
@@ -206,15 +263,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
 
         coordinator.activate(.map)
-        for target in [
-            WalkthroughTargetID.mapAdd,
-            .mapAddAgain,
-            .mapFilters,
-            .mapSearch,
-            .mapMarker
-        ] {
-            coordinator.perform(target)
-        }
+        coordinator.perform(.mapAdd)
+        coordinator.perform(.mapAddAgain)
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        coordinator.perform(.mapMarker)
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.requestedSurface, .feed)
 
@@ -225,9 +278,9 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         coordinator.consumeRequestedSurface(.feed)
         coordinator.activate(.listEditor)
-        coordinator.perform(.listEditorTitle)
-        coordinator.perform(.listEditorPrivacy)
-        coordinator.perform(.listEditorCollaborators)
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.requestedSurface, .lists)
 
         coordinator.consumeRequestedSurface(.lists)
@@ -266,6 +319,55 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(layout.spotlightFrame.minY - layout.cardFrame.maxY, 12, accuracy: 0.001)
     }
 
+    func testScrimRenderingDimsEveryEdgeAndCutsOutOnlyTheSpotlight() throws {
+        let size = CGSize(width: 100, height: 100)
+        let spotlight = CGRect(x: 30, y: 30, width: 40, height: 40)
+        let renderer = ImageRenderer(
+            content: WalkthroughScrim(
+                spotlightFrame: spotlight,
+                containerSize: size
+            )
+        )
+        renderer.scale = 1
+
+        let image = try XCTUnwrap(renderer.cgImage)
+        let pixels = try rgbaPixels(from: image)
+
+        for point in [
+            CGPoint(x: 1, y: 1),
+            CGPoint(x: 98, y: 1),
+            CGPoint(x: 1, y: 98),
+            CGPoint(x: 98, y: 98)
+        ] {
+            XCTAssertGreaterThan(pixels.alpha(at: point), 150, "Expected scrim at \(point)")
+        }
+
+        XCTAssertLessThan(pixels.alpha(at: CGPoint(x: 50, y: 50)), 10)
+    }
+
+    private func rgbaPixels(from image: CGImage) throws -> RGBAPixels {
+        let width = image.width
+        let height = image.height
+        let bytesPerRow = width * 4
+        var bytes = [UInt8](repeating: 0, count: bytesPerRow * height)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue
+            | CGImageAlphaInfo.premultipliedLast.rawValue
+        let context = try XCTUnwrap(
+            CGContext(
+                data: &bytes,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: colorSpace,
+                bitmapInfo: bitmapInfo
+            )
+        )
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return RGBAPixels(bytes: bytes, width: width, height: height)
+    }
+
     private func makeDefaults() throws -> UserDefaults {
         let suiteName = "FirstVisitWalkthroughTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -273,5 +375,17 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             defaults.removePersistentDomain(forName: suiteName)
         }
         return defaults
+    }
+}
+
+private struct RGBAPixels {
+    let bytes: [UInt8]
+    let width: Int
+    let height: Int
+
+    func alpha(at point: CGPoint) -> UInt8 {
+        let x = min(max(Int(point.x), 0), width - 1)
+        let y = min(max(Int(point.y), 0), height - 1)
+        return bytes[((y * width) + x) * 4 + 3]
     }
 }

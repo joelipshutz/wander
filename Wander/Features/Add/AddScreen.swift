@@ -141,6 +141,11 @@ struct AddScreen: View {
             .onChange(of: resetToken) { _, _ in
                 reset()
             }
+            .onChange(of: walkthroughs.activeSurface, initial: true) { _, activeSurface in
+                if activeSurface == .add {
+                    expandSheet()
+                }
+            }
             .task(id: resetToken) {
                 await loadNearbySuggestionsIfNeeded()
             }
@@ -329,7 +334,10 @@ struct AddScreen: View {
 
             Spacer()
 
-            Button(action: onClose) {
+            Button {
+                walkthroughs.perform(.addClose)
+                onClose()
+            } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
@@ -341,8 +349,15 @@ struct AddScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close add place")
-            .disabled(walkthroughs.activeSurface == .add)
-            .accessibilityHidden(walkthroughs.activeSurface == .add)
+            .walkthroughTarget(.addClose)
+            .disabled(
+                walkthroughs.activeSurface == .add
+                    && walkthroughs.currentStep?.target != .addClose
+            )
+            .accessibilityHidden(
+                walkthroughs.activeSurface == .add
+                    && walkthroughs.currentStep?.target != .addClose
+            )
         }
     }
 

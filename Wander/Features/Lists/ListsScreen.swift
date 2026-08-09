@@ -116,6 +116,10 @@ struct ListsScreen: View {
                 }
             }
         }
+        .walkthroughPresenterScrim(
+            isPresented: editorPresentation != nil
+                && walkthroughs.activeSurface == .listEditor
+        )
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
         }

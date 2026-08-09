@@ -22,6 +22,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case addSearch
     case addPlace
     case addImport
+    case addClose
     case saveStatus
     case saveContinue
     case saveDetails
@@ -61,20 +62,32 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 2
+    static let version = 3
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
             step(.map, .mapAdd, "Save your first place", "Tap + to add somewhere you've been or want to try."),
             step(.map, .mapAddAgain, "One more shortcut", "Tap + again and we’ll show you where imports live."),
-            step(.map, .mapFilters, "Shape your map", "Filter to the people and moments you trust: your saves, check-ins, Wanna places, and friends."),
-            step(.map, .mapSearch, "Search your trusted map", "Try a place, neighborhood, or person."),
+            step(
+                .map,
+                .mapFilters,
+                "Shape your map",
+                "Filter to the people and moments you trust: your saves, check-ins, Wanna places, and friends.",
+                advance: .next
+            ),
+            step(
+                .map,
+                .mapSearch,
+                "Search your trusted map",
+                "Try a place, neighborhood, or person.",
+                advance: .next
+            ),
             step(.map, .mapMarker, "Open a place memory", "Tap a marker to see who saved it and why."),
             step(
                 .map,
                 .mapTabs,
-                "Four ways back in",
-                "Map, Feed, Lists, and Profile each remember where you left off.",
+                "Your places, all connected",
+                "Map, Feed, Lists, and Profile work together to help you find, plan, and remember.",
                 advance: .next
             )
         ],
@@ -87,7 +100,8 @@ enum FirstVisitWalkthroughContent {
                 "Bring saves with you",
                 "Import From is where links, shared posts, and notes become places to review.",
                 advance: .next
-            )
+            ),
+            step(.add, .addClose, "Back to your map", "Tap × to close Add a Place and keep exploring.")
         ],
         .saveFlow: [
             step(.saveFlow, .saveStatus, "What kind of memory is this?", "Choose Check In if you’ve been there, or Wanna Go for later."),
@@ -102,10 +116,28 @@ enum FirstVisitWalkthroughContent {
             step(.saveFlow, .saveSubmit, "Put it on your map", "Save the place to finish your first memory.")
         ],
         .feed: [
-            step(.feed, .feedActivity, "Why this place matters", "See who saved it, what they did, and the note they left."),
+            step(
+                .feed,
+                .feedActivity,
+                "Why this place matters",
+                "See who saved it, what they did, and the note they left.",
+                advance: .next
+            ),
             step(.feed, .feedSurfaceSwitch, "Places and people", "Switch between trusted place activity and the people behind it."),
-            step(.feed, .feedPeopleSearch, "Find people you trust", "Search by name or handle, then follow their place activity."),
-            step(.feed, .feedInvite, "Build your trusted circle", "Invite the people whose taste you already rely on.")
+            step(
+                .feed,
+                .feedPeopleSearch,
+                "Find people you trust",
+                "Search by name or handle, then follow their place activity.",
+                advance: .next
+            ),
+            step(
+                .feed,
+                .feedInvite,
+                "Build your trusted circle",
+                "Invite the people whose taste you already rely on.",
+                advance: .next
+            )
         ],
         .feedSearch: [
             step(.feedSearch, .feedSmartSearch, "Search the way you think", "Try a moment, mood, or need—not just a place name.")
@@ -120,15 +152,57 @@ enum FirstVisitWalkthroughContent {
             step(.listDetail, .listActions, "Keep the plan moving", "Add a place or edit the list whenever plans change.")
         ],
         .listEditor: [
-            step(.listEditor, .listEditorTitle, "Name the plan", "Give this list a title you'll recognize when the moment comes."),
-            step(.listEditor, .listEditorPrivacy, "Choose who can see it", "Keep it private or make it visible to the people who follow you."),
-            step(.listEditor, .listEditorCollaborators, "Plan it together", "Add collaborators so everyone can keep the list current.")
+            step(
+                .listEditor,
+                .listEditorTitle,
+                "Name the plan",
+                "Give this list a title you'll recognize when the moment comes.",
+                advance: .next
+            ),
+            step(
+                .listEditor,
+                .listEditorPrivacy,
+                "Choose who can see it",
+                "Keep it private or make it visible to the people who follow you.",
+                advance: .next
+            ),
+            step(
+                .listEditor,
+                .listEditorCollaborators,
+                "Plan it together",
+                "Add collaborators so everyone can keep the list current.",
+                advance: .next
+            )
         ],
         .profile: [
-            step(.profile, .profileSettings, "Make rec.me yours", "Open settings for account, privacy, notifications, and app preferences."),
-            step(.profile, .profileSocial, "Your trusted circle", "See who you follow and who follows your recommendations."),
-            step(.profile, .profileActivity, "Your place history", "Filter recent activity to revisit saves, check-ins, and wanna places."),
-            step(.profile, .profileShare, "Share your rec.me", "Send your profile to friends whose taste you trust.")
+            step(
+                .profile,
+                .profileSettings,
+                "Make rec.me yours",
+                "Open settings for account, privacy, notifications, and app preferences.",
+                advance: .next
+            ),
+            step(
+                .profile,
+                .profileSocial,
+                "Your trusted circle",
+                "See who you follow and who follows your recommendations.",
+                advance: .next
+            ),
+            step(
+                .profile,
+                .profileActivity,
+                "Your place history",
+                "Filter recent activity to revisit saves, check-ins, and wanna places.",
+                advance: .next
+            ),
+            step(
+                .profile,
+                .profileShare,
+                "Share your rec.me",
+                "Send your profile to friends whose taste you trust.",
+                advance: .next
+            )
         ]
     ]
 
@@ -481,6 +555,19 @@ extension View {
         modifier(FirstVisitWalkthroughModifier(coordinator: coordinator, surface: surface))
     }
 
+    func walkthroughPresenterScrim(isPresented: Bool) -> some View {
+        overlay {
+            if isPresented {
+                Color.black.opacity(0.76)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isPresented)
+    }
+
     func walkthroughLaunchLessonOverlay(
         _ coordinator: FirstVisitWalkthroughCoordinator,
         onOpenImport: @escaping () -> Void
@@ -718,6 +805,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                     }
                 }
                 .animation(.easeInOut(duration: 0.2), value: coordinator.currentStep?.id)
+                .ignoresSafeArea()
                 .zIndex(1_000)
             }
     }
@@ -814,7 +902,11 @@ private struct FirstVisitWalkthroughOverlay: View {
 
     var body: some View {
         ZStack {
-            WalkthroughScrim(spotlightFrame: layout.spotlightFrame)
+            WalkthroughScrim(
+                spotlightFrame: layout.spotlightFrame,
+                containerSize: containerSize,
+                cornerRadius: step.target == .mapTabs ? 34 : WanderTheme.radiusLarge
+            )
                 .allowsHitTesting(false)
 
             WalkthroughTouchShield(
@@ -885,6 +977,7 @@ private struct FirstVisitWalkthroughOverlay: View {
             .accessibilityLabel("\(step.title). \(step.message)")
             .accessibilityIdentifier("walkthrough.\(step.id)")
         }
+        .frame(width: containerSize.width, height: containerSize.height)
         .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: step.id)
         .allowsHitTesting(step.advance == .next)
     }
@@ -901,16 +994,36 @@ private struct WalkthroughCardSizePreferenceKey: PreferenceKey {
     }
 }
 
-private struct WalkthroughScrim: View {
+struct WalkthroughScrim: View {
     let spotlightFrame: CGRect
+    let containerSize: CGSize
+    var cornerRadius = WanderTheme.radiusLarge
 
     var body: some View {
-        Color.black.opacity(0.72)
-            .reverseMask {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                    .frame(width: spotlightFrame.width, height: spotlightFrame.height)
-                    .position(x: spotlightFrame.midX, y: spotlightFrame.midY)
-            }
+        WalkthroughScrimShape(
+            spotlightFrame: spotlightFrame,
+            cornerRadius: cornerRadius
+        )
+            .fill(Color.black.opacity(0.76), style: FillStyle(eoFill: true))
+            .frame(width: containerSize.width, height: containerSize.height)
+    }
+}
+
+struct WalkthroughScrimShape: Shape {
+    let spotlightFrame: CGRect
+    var cornerRadius = WanderTheme.radiusLarge
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRect(rect)
+        path.addRoundedRect(
+            in: spotlightFrame.intersection(rect),
+            cornerSize: CGSize(
+                width: cornerRadius,
+                height: cornerRadius
+            )
+        )
+        return path
     }
 }
 
@@ -946,15 +1059,5 @@ private struct WalkthroughPointer: Shape {
         path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.closeSubpath()
         return path
-    }
-}
-
-private extension View {
-    func reverseMask<MaskContent: View>(@ViewBuilder _ maskContent: () -> MaskContent) -> some View {
-        self.mask {
-            Rectangle()
-                .overlay(maskContent().blendMode(.destinationOut))
-                .compositingGroup()
-        }
     }
 }
