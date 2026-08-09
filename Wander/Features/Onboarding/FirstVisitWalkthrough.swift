@@ -17,7 +17,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case mapAddAgain
     case mapFilters
     case mapSearch
-    case mapMarker
+    case mapMemory
     case mapTabs
     case addSearch
     case addPlace
@@ -25,7 +25,15 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case addClose
     case saveStatus
     case saveContinue
+    case saveDate
     case saveDetails
+    case saveRating
+    case saveFriends
+    case savePhotos
+    case saveMoreOptions
+    case saveNote
+    case saveTags
+    case savePrivacy
     case saveSubmit
     case feedActivity
     case feedSurfaceSwitch
@@ -62,7 +70,7 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 3
+    static let version = 4
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
@@ -82,7 +90,13 @@ enum FirstVisitWalkthroughContent {
                 "Try a place, neighborhood, or person.",
                 advance: .next
             ),
-            step(.map, .mapMarker, "Open a place memory", "Tap a marker to see who saved it and why."),
+            step(
+                .map,
+                .mapMemory,
+                "This is a place memory",
+                "Ratings, notes, tags, and the people behind a save stay together, so you can remember why the place matters.",
+                advance: .next
+            ),
             step(
                 .map,
                 .mapTabs,
@@ -104,13 +118,68 @@ enum FirstVisitWalkthroughContent {
             step(.add, .addClose, "Back to your map", "Tap × to close Add a Place and keep exploring.")
         ],
         .saveFlow: [
-            step(.saveFlow, .saveStatus, "What kind of memory is this?", "Choose Check In if you’ve been there, or Wanna Go for later."),
+            step(.saveFlow, .saveStatus, "Start with a check-in", "Choose Check In so we can show you every part of a place memory."),
             step(.saveFlow, .saveContinue, "Add what matters", "Continue to the details that will help future you choose."),
             step(
                 .saveFlow,
+                .saveDate,
+                "When were you here?",
+                "Today is selected automatically. Change the date for an older memory, or leave it as is.",
+                advance: .next
+            ),
+            step(
+                .saveFlow,
                 .saveDetails,
-                "Make the save useful",
-                "Add as much context as you want. rec.me keeps the place useful even when you leave optional details blank.",
+                "Confirm the place type",
+                "Category and subcategory make this memory easier to find later. The suggested choices are fine to keep.",
+                advance: .next
+            ),
+            step(
+                .saveFlow,
+                .saveRating,
+                "Rate it for future you",
+                "A quick rating helps you compare places later. Keep the suggested score or adjust it.",
+                advance: .next
+            ),
+            step(
+                .saveFlow,
+                .saveFriends,
+                "Remember who was there",
+                "Add friends who shared the visit, or leave this empty when the memory is just yours.",
+                advance: .next
+            ),
+            step(
+                .saveFlow,
+                .savePhotos,
+                "Keep a photo with the visit",
+                "Photos are optional. Add one now, or keep moving without it.",
+                advance: .next
+            ),
+            step(
+                .saveFlow,
+                .saveMoreOptions,
+                "Open more options",
+                "Tap More Options to see the rest of the memory fields."
+            ),
+            step(
+                .saveFlow,
+                .saveNote,
+                "Leave the useful detail",
+                "Write what you’d want to know next time, or leave the note blank.",
+                advance: .next
+            ),
+            step(
+                .saveFlow,
+                .saveTags,
+                "Make it easy to rediscover",
+                "Tags capture the mood, occasion, and details that make this place fit. They’re optional too.",
+                advance: .next
+            ),
+            step(
+                .saveFlow,
+                .savePrivacy,
+                "Choose who can see it",
+                "Stealth mode keeps this memory to you. Leave it off to use your normal sharing setting.",
                 advance: .next
             ),
             step(.saveFlow, .saveSubmit, "Put it on your map", "Save the place to finish your first memory.")
@@ -312,6 +381,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     @Published private(set) var requestedSurface: WalkthroughSurface?
     @Published private(set) var isPresentingImportLesson = false
     @Published private(set) var isPresentingDeviceFeaturesLesson = false
+    @Published private(set) var tutorialUserPlaceID: String?
 
     private(set) var userID: String
     private let store: FirstVisitWalkthroughStore
@@ -356,6 +426,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isDeviceFeaturesLessonEligible = false
         isPresentingImportLesson = false
         isPresentingDeviceFeaturesLesson = false
+        tutorialUserPlaceID = nil
     }
 
     func registerLaunch(
@@ -448,6 +519,11 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         advance()
     }
 
+    func recordTutorialSave(userPlaceID: String) {
+        guard activeSurface == .saveFlow else { return }
+        tutorialUserPlaceID = userPlaceID
+    }
+
     func resetCurrentUser() {
         store.reset(for: userID)
         activeSurface = nil
@@ -458,6 +534,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isDeviceFeaturesLessonEligible = false
         isPresentingImportLesson = false
         isPresentingDeviceFeaturesLesson = false
+        tutorialUserPlaceID = nil
     }
 
     func presentLaunchLessonIfEligible() {
@@ -911,6 +988,7 @@ private struct FirstVisitWalkthroughOverlay: View {
 
             WalkthroughTouchShield(
                 containerSize: containerSize,
+                spotlightFrame: layout.spotlightFrame,
                 allowsSpotlightInteraction: step.advance == .action
             )
 
@@ -979,7 +1057,6 @@ private struct FirstVisitWalkthroughOverlay: View {
         }
         .frame(width: containerSize.width, height: containerSize.height)
         .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: step.id)
-        .allowsHitTesting(step.advance == .next)
     }
 }
 
@@ -1029,13 +1106,46 @@ struct WalkthroughScrimShape: Shape {
 
 private struct WalkthroughTouchShield: View {
     let containerSize: CGSize
+    let spotlightFrame: CGRect
     let allowsSpotlightInteraction: Bool
 
     var body: some View {
         if allowsSpotlightInteraction {
-            Color.clear
-                .frame(width: containerSize.width, height: containerSize.height)
-                .allowsHitTesting(false)
+            ZStack(alignment: .topLeading) {
+                blocker(
+                    CGRect(
+                        x: 0,
+                        y: 0,
+                        width: containerSize.width,
+                        height: max(spotlightFrame.minY, 0)
+                    )
+                )
+                blocker(
+                    CGRect(
+                        x: 0,
+                        y: spotlightFrame.maxY,
+                        width: containerSize.width,
+                        height: max(containerSize.height - spotlightFrame.maxY, 0)
+                    )
+                )
+                blocker(
+                    CGRect(
+                        x: 0,
+                        y: spotlightFrame.minY,
+                        width: max(spotlightFrame.minX, 0),
+                        height: max(spotlightFrame.height, 0)
+                    )
+                )
+                blocker(
+                    CGRect(
+                        x: spotlightFrame.maxX,
+                        y: spotlightFrame.minY,
+                        width: max(containerSize.width - spotlightFrame.maxX, 0),
+                        height: max(spotlightFrame.height, 0)
+                    )
+                )
+            }
+            .frame(width: containerSize.width, height: containerSize.height)
         } else {
             blocker(CGRect(origin: .zero, size: containerSize))
         }
@@ -1045,7 +1155,7 @@ private struct WalkthroughTouchShield: View {
         Color.black.opacity(0.001)
             .contentShape(Rectangle())
             .frame(width: max(frame.width, 0), height: max(frame.height, 0))
-            .offset(x: frame.minX, y: frame.minY)
+            .position(x: frame.midX, y: frame.midY)
             .onTapGesture {}
             .accessibilityHidden(true)
     }

@@ -327,11 +327,58 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["continue to details"].waitForExistence(timeout: 3))
         app.buttons["continue to details"].tap()
 
+        for target in [
+            "saveDate",
+            "saveDetails",
+            "saveRating",
+            "saveFriends",
+            "savePhotos"
+        ] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.saveFlow.\(target)"]
+                    .waitForExistence(timeout: 5),
+                "Expected walkthrough step \(target)"
+            )
+            XCTAssertTrue(app.buttons["Next"].isHittable)
+
+            if target == "saveRating" {
+                let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                screenshot.name = "REC-236 full save flow rating step"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+            }
+
+            app.buttons["Next"].tap()
+        }
+
         XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveDetails"]
-                .waitForExistence(timeout: 4)
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveMoreOptions"]
+                .waitForExistence(timeout: 5)
         )
-        app.buttons["Next"].tap()
+        app.buttons["Show more options"].tap()
+
+        for target in ["saveNote", "saveTags", "savePrivacy"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.saveFlow.\(target)"]
+                    .waitForExistence(timeout: 5),
+                "Expected walkthrough step \(target)"
+            )
+            XCTAssertTrue(app.buttons["Next"].isHittable)
+
+            if target == "saveTags" {
+                let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+                screenshot.name = "REC-236 full save flow optional details"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+            }
+
+            app.buttons["Next"].tap()
+        }
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveSubmit"]
+                .waitForExistence(timeout: 5)
+        )
         XCTAssertTrue(app.buttons["Check in"].waitForExistence(timeout: 3))
         app.buttons["Check in"].tap()
 
@@ -339,6 +386,29 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
                 .waitForExistence(timeout: 6)
         )
+    }
+
+    func testPlaceMemoryUsesRealisticSeedWhenTutorialSaveIsUnavailable() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderWalkthroughTarget",
+            "mapMemory"
+        ]
+        app.launch()
+
+        let memoryCoach = app.descendants(matching: .any)["walkthrough.map.mapMemory"]
+        XCTAssertTrue(memoryCoach.waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        XCTAssertLessThan(memoryCoach.frame.maxY, app.buttons["Map"].frame.minY)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 seeded place memory fallback"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testThirdLaunchDeviceLessonIncludesExtensionsGuide() {

@@ -42,6 +42,7 @@ struct PlaceProfileMapSurface: View {
                 onOpen: onOpen,
                 onAction: onAction
             )
+            .walkthroughTarget(.mapMemory)
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing3)
         }

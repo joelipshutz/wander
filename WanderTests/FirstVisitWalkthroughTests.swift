@@ -4,15 +4,15 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithThirtyOneGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 31)
+    func testApprovedWalkthroughCoversEverySurfaceWithThirtyNineGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 39)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.map]?.map(\.target),
-            [.mapAdd, .mapAddAgain, .mapFilters, .mapSearch, .mapMarker, .mapTabs]
+            [.mapAdd, .mapAddAgain, .mapFilters, .mapSearch, .mapMemory, .mapTabs]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.add]?.map(\.target),
@@ -20,7 +20,20 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.saveFlow]?.map(\.target),
-            [.saveStatus, .saveContinue, .saveDetails, .saveSubmit]
+            [
+                .saveStatus,
+                .saveContinue,
+                .saveDate,
+                .saveDetails,
+                .saveRating,
+                .saveFriends,
+                .savePhotos,
+                .saveMoreOptions,
+                .saveNote,
+                .saveTags,
+                .savePrivacy,
+                .saveSubmit
+            ]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
@@ -32,9 +45,17 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let passiveTargets: [WalkthroughTargetID] = [
             .mapFilters,
             .mapSearch,
+            .mapMemory,
             .mapTabs,
             .addImport,
+            .saveDate,
             .saveDetails,
+            .saveRating,
+            .saveFriends,
+            .savePhotos,
+            .saveNote,
+            .saveTags,
+            .savePrivacy,
             .feedActivity,
             .feedPeopleSearch,
             .feedInvite,
@@ -169,7 +190,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertTrue(firstVersion.isComplete(for: "ryan", surface: .lists))
         XCTAssertFalse(
-            FirstVisitWalkthroughStore(defaults: defaults, version: 3)
+            FirstVisitWalkthroughStore(defaults: defaults, version: 4)
                 .isComplete(for: "ryan", surface: .lists)
         )
     }
@@ -267,7 +288,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.perform(.mapAddAgain)
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
-        coordinator.perform(.mapMarker)
+        coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.requestedSurface, .feed)
 
@@ -345,6 +366,75 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertLessThan(pixels.alpha(at: CGPoint(x: 50, y: 50)), 10)
     }
 
+    func testTutorialSaveIsRememberedOnlyDuringTheSaveWalkthrough() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: FirstVisitWalkthroughStore(defaults: defaults)
+        )
+
+        coordinator.recordTutorialSave(userPlaceID: "outside-walkthrough")
+        XCTAssertNil(coordinator.tutorialUserPlaceID)
+
+        coordinator.activate(.saveFlow)
+        coordinator.recordTutorialSave(userPlaceID: "tutorial-save")
+        XCTAssertEqual(coordinator.tutorialUserPlaceID, "tutorial-save")
+    }
+
+    func testPlaceMemoryPrefersTutorialSaveThenLatestOwnCheckIn() {
+        let owner = LocalProfile(
+            localID: "owner",
+            handle: "owner",
+            displayName: "Owner"
+        )
+        let older = makeVisiblePlace(
+            id: "older",
+            owner: owner,
+            status: .been,
+            savedAt: Date(timeIntervalSince1970: 10)
+        )
+        let tutorial = makeVisiblePlace(
+            id: "tutorial",
+            owner: owner,
+            status: .been,
+            savedAt: Date(timeIntervalSince1970: 20)
+        )
+
+        XCTAssertEqual(
+            MapWalkthroughMemoryPolicy.preferredVisiblePlace(
+                from: [older, tutorial],
+                tutorialUserPlaceID: older.userPlace.id,
+                currentUserID: owner.id
+            )?.userPlace.id,
+            older.userPlace.id
+        )
+        XCTAssertEqual(
+            MapWalkthroughMemoryPolicy.preferredVisiblePlace(
+                from: [older, tutorial],
+                tutorialUserPlaceID: nil,
+                currentUserID: owner.id
+            )?.userPlace.id,
+            tutorial.userPlace.id
+        )
+    }
+
+    func testPlaceMemoryFallbackLooksLikeARealCheckIn() {
+        let owner = LocalProfile(
+            localID: "owner",
+            handle: "owner",
+            displayName: "Owner"
+        )
+
+        let fallback = MapWalkthroughMemoryPolicy.realisticFallback(owner: owner)
+
+        XCTAssertEqual(fallback.place.canonicalName, "Juniper Table")
+        XCTAssertEqual(fallback.userPlace.status, .been)
+        XCTAssertEqual(fallback.userPlace.ratingScore, 4.5)
+        XCTAssertEqual(fallback.userPlace.recommendedScore, 4.5)
+        XCTAssertFalse(try XCTUnwrap(fallback.userPlace.note).isEmpty)
+        XCTAssertEqual(fallback.owner.id, owner.id)
+    }
+
     private func rgbaPixels(from image: CGImage) throws -> RGBAPixels {
         let width = image.width
         let height = image.height
@@ -375,6 +465,36 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             defaults.removePersistentDomain(forName: suiteName)
         }
         return defaults
+    }
+
+    private func makeVisiblePlace(
+        id: String,
+        owner: LocalProfile,
+        status: PlaceStatus,
+        savedAt: Date
+    ) -> VisiblePlace {
+        let place = LocalPlace(
+            localID: "place-\(id)",
+            canonicalName: id.capitalized,
+            category: "coffee",
+            latitude: 34.0,
+            longitude: -118.0
+        )
+        let userPlace = LocalUserPlace(
+            localID: "user-place-\(id)",
+            userID: owner.id,
+            placeID: place.id,
+            status: status,
+            visibility: .followers,
+            savedAt: savedAt,
+            sourceType: "test"
+        )
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
     }
 }
 

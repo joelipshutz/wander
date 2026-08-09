@@ -16,6 +16,70 @@ struct MapSaveFlowSelectionCoordinator {
     }
 }
 
+enum MapWalkthroughMemoryPolicy {
+    static func preferredVisiblePlace(
+        from visiblePlaces: [VisiblePlace],
+        tutorialUserPlaceID: String?,
+        currentUserID: String
+    ) -> VisiblePlace? {
+        if let tutorialUserPlaceID,
+           let tutorialSave = visiblePlaces.first(where: {
+               $0.userPlace.id == tutorialUserPlaceID
+           }) {
+            return tutorialSave
+        }
+
+        return visiblePlaces
+            .filter {
+                $0.owner.id == currentUserID && $0.userPlace.status == .been
+            }
+            .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
+            .first
+            ?? visiblePlaces
+                .filter { $0.userPlace.status == .been }
+                .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
+                .first
+            ?? visiblePlaces.first
+    }
+
+    @MainActor
+    static func realisticFallback(owner: LocalProfile) -> VisiblePlace {
+        let place = LocalPlace(
+            localID: "walkthrough_place_juniper_table",
+            canonicalName: "Juniper Table",
+            category: "restaurant",
+            address: "2106 Sunset Blvd",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.078,
+            longitude: -118.266,
+            sourceProvider: "walkthrough",
+            syncState: .localOnly
+        )
+        let userPlace = LocalUserPlace(
+            localID: "walkthrough_up_juniper_table",
+            userID: owner.id,
+            placeID: place.id,
+            status: .been,
+            visibility: .followers,
+            note: "Cozy date-night room, easy conversation, and the bar seats are the move.",
+            ratingScore: 4.5,
+            recommendedScore: 4.5,
+            recommendedCount: 1,
+            nearbyConfirmed: true,
+            visitedAt: .now,
+            sourceType: "walkthrough",
+            syncState: .localOnly
+        )
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
+    }
+}
+
 struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var store: WanderStore
@@ -55,6 +119,7 @@ struct MapScreen: View {
     @State private var handlingNotificationRequestID: UUID?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var mapSearchFocusRequestID: UUID?
+    @State private var walkthroughFallbackMemory: VisiblePlace?
     @FocusState private var isMapSearchFocused: Bool
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -209,9 +274,6 @@ struct MapScreen: View {
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
                                 .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
-                                .walkthroughTarget(
-                                    group.key == annotationGroups.first?.key ? .mapMarker : nil
-                                )
                             }
                         }
 
@@ -416,9 +478,15 @@ struct MapScreen: View {
                     isPlaceProfilePresented = false
                 }
             }
-            .onChange(of: walkthroughs.currentStep?.target) { _, target in
-                if target == .mapMarker {
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { previousTarget, target in
+                if target == .mapMemory {
                     isMapSearchFocused = false
+                    presentWalkthroughPlaceMemory()
+                } else if previousTarget == .mapMemory {
+                    walkthroughFallbackMemory = nil
+                    selectedPlaceGroupKey = nil
+                    selectedSearchCandidateID = nil
+                    isPlaceProfilePresented = false
                 }
             }
             .onDisappear {
@@ -698,7 +766,6 @@ struct MapScreen: View {
     }
 
     private func selectVisiblePlaceFromMapTap(_ visiblePlace: VisiblePlace) {
-        walkthroughs.perform(.mapMarker)
         mapSelectionRevision += 1
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
@@ -934,6 +1001,58 @@ struct MapScreen: View {
                 performAction(for: selectedPlace)
             }
             .zIndex(30)
+        } else if let walkthroughFallbackMemory,
+                  walkthroughs.currentStep?.target == .mapMemory {
+            PlaceProfileMapSurface(
+                place: PlaceSheetPlace(visiblePlace: walkthroughFallbackMemory),
+                saves: [
+                    PlaceSaveSummary(
+                        visiblePlace: walkthroughFallbackMemory,
+                        attributes: walkthroughFallbackMemory.attributes
+                    )
+                ],
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .none,
+                onOpen: {},
+                onAction: {}
+            )
+            .zIndex(30)
+        }
+    }
+
+    private func presentWalkthroughPlaceMemory() {
+        guard walkthroughs.currentStep?.target == .mapMemory else { return }
+
+        isMapSearchFocused = false
+        selectedFilters = [.you, .social, .been, .wanna]
+        selectedSocialOwnerID = nil
+        mapQuery = ""
+        mapSearchCandidates = []
+        selectedSearchCandidateID = nil
+        isPlaceProfilePresented = false
+
+        if let visiblePlace = MapWalkthroughMemoryPolicy.preferredVisiblePlace(
+            from: store.visiblePlaces(),
+            tutorialUserPlaceID: walkthroughs.tutorialUserPlaceID,
+            currentUserID: store.currentUser.id
+        ) {
+            walkthroughFallbackMemory = nil
+            selectVisiblePlace(visiblePlace)
+            centerMap(
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude
+            )
+        } else {
+            let fallback = MapWalkthroughMemoryPolicy.realisticFallback(
+                owner: store.currentUser
+            )
+            selectedPlaceGroupKey = nil
+            walkthroughFallbackMemory = fallback
+            centerMap(
+                latitude: fallback.place.latitude,
+                longitude: fallback.place.longitude
+            )
         }
     }
 
@@ -4528,76 +4647,81 @@ struct MapPlaceSaveFlowSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
-                    header
+            ScrollViewReader { walkthroughScrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
+                        header
 
-                    switch step {
-                    case .confirm:
-                        confirmContent
-                    case .details:
-                        detailsContent
+                        switch step {
+                        case .confirm:
+                            confirmContent
+                        case .details:
+                            detailsContent
+                        }
+                    }
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing6)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .background(WanderTheme.canvasWarm.color)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if step == .details {
+                        saveFooter
                     }
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing3)
-                .padding(.bottom, WanderTheme.spacing6)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background(WanderTheme.canvasWarm.color)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if step == .details {
-                    saveFooter
+                .sheet(isPresented: $isChoosingPlaceType) {
+                    PlaceTypePickerSheet(
+                        selectedAssignment: $selectedAssignment,
+                        selectedCuisine: $selectedCuisine,
+                        placeName: context.candidate.name,
+                        suggestedCuisine: cuisineSuggestionValue,
+                        suggestionReason: cuisineSuggestionReason,
+                        recentCuisines: recentRestaurantCuisines,
+                        initialMode: placeTypePickerMode
+                    ) {
+                        handlePlaceTypeSelection()
+                    }
+                    .id(placeTypePickerMode)
                 }
-            }
-            .sheet(isPresented: $isChoosingPlaceType) {
-                PlaceTypePickerSheet(
-                    selectedAssignment: $selectedAssignment,
-                    selectedCuisine: $selectedCuisine,
-                    placeName: context.candidate.name,
-                    suggestedCuisine: cuisineSuggestionValue,
-                    suggestionReason: cuisineSuggestionReason,
-                    recentCuisines: recentRestaurantCuisines,
-                    initialMode: placeTypePickerMode
-                ) {
-                    handlePlaceTypeSelection()
+                .onAppear {
+                    store.saveFlowDidPresent(.saveSheet)
+                    if store.isPrivateProfile {
+                        selectedVisibility = .selfOnly
+                    }
+                    if step == .details {
+                        syncAnswersForCurrentQuestions()
+                    }
                 }
-                .id(placeTypePickerMode)
-            }
-            .onAppear {
-                store.saveFlowDidPresent(.saveSheet)
-                if store.isPrivateProfile {
-                    selectedVisibility = .selfOnly
+                .task {
+                    await loadSharedVisitInviteesIfNeeded()
                 }
-                if step == .details {
-                    syncAnswersForCurrentQuestions()
+                .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
+                    if isPrivateProfile {
+                        selectedVisibility = .selfOnly
+                        selectedInviteeUserIDs = []
+                    }
                 }
-            }
-            .task {
-                await loadSharedVisitInviteesIfNeeded()
-            }
-            .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
-                if isPrivateProfile {
-                    selectedVisibility = .selfOnly
-                    selectedInviteeUserIDs = []
+                .onChange(of: canInviteFriends) { _, canInvite in
+                    if !canInvite {
+                        selectedInviteeUserIDs = []
+                    }
                 }
-            }
-            .onChange(of: canInviteFriends) { _, canInvite in
-                if !canInvite {
-                    selectedInviteeUserIDs = []
+                .onChange(of: draftUpdate, initial: true) { _, update in
+                    guard let draftID else { return }
+                    onDraftChange(draftID, update.form, update.submittedAt)
                 }
-            }
-            .onChange(of: draftUpdate, initial: true) { _, update in
-                guard let draftID else { return }
-                onDraftChange(draftID, update.form, update.submittedAt)
-            }
-            .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
-                Button(context.removeTitle, role: .destructive) {
-                    removeSave()
+                .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                    scrollToWalkthroughTarget(target, with: walkthroughScrollProxy)
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(context.removeConfirmationMessage)
+                .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
+                    Button(context.removeTitle, role: .destructive) {
+                        removeSave()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(context.removeConfirmationMessage)
+                }
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
@@ -4682,7 +4806,6 @@ struct MapPlaceSaveFlowSheet: View {
                     }
                     if context.allowsWannaGoSelection {
                         MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
-                            walkthroughs.perform(.saveStatus)
                             selectedStatus = .wannaGo
                         }
                     }
@@ -4704,16 +4827,24 @@ struct MapPlaceSaveFlowSheet: View {
 
             if selectedStatus == .been {
                 checkInDateSection
+                    .id(WalkthroughTargetID.saveDate)
+                    .walkthroughTarget(.saveDate)
             }
 
             placeTypeSection
+                .id(WalkthroughTargetID.saveDetails)
                 .walkthroughTarget(.saveDetails)
 
             if selectedStatus == .been {
                 ratingSection
+                    .id(WalkthroughTargetID.saveRating)
+                    .walkthroughTarget(.saveRating)
 
-                if canInviteFriends {
+                if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
                     sharedVisitInviteSection
+                        .disabled(!canInviteFriends)
+                        .id(WalkthroughTargetID.saveFriends)
+                        .walkthroughTarget(.saveFriends)
                 }
 
                 if context.allowsPhotoAttachments {
@@ -4721,6 +4852,8 @@ struct MapPlaceSaveFlowSheet: View {
                         canAddPhotos: true,
                         photos: $visitPhotoAttachments
                     )
+                    .id(WalkthroughTargetID.savePhotos)
+                    .walkthroughTarget(.savePhotos)
                 }
             }
 
@@ -4946,8 +5079,15 @@ struct MapPlaceSaveFlowSheet: View {
     private var optionalDetailsDisclosure: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Button {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    isShowingOptionalDetails.toggle()
+                if walkthroughs.currentStep?.target == .saveMoreOptions {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isShowingOptionalDetails = true
+                    }
+                    walkthroughs.perform(.saveMoreOptions)
+                } else {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        isShowingOptionalDetails.toggle()
+                    }
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
@@ -4980,15 +5120,27 @@ struct MapPlaceSaveFlowSheet: View {
             .buttonStyle(.plain)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
-            .accessibilityHint("Optional. Continue without opening this section.")
+            .accessibilityHint(
+                walkthroughs.currentStep?.target == .saveMoreOptions
+                    ? "Required for this walkthrough. Opens the optional note, tags, and privacy fields."
+                    : "Optional. Continue without opening this section."
+            )
+            .id(WalkthroughTargetID.saveMoreOptions)
+            .walkthroughTarget(.saveMoreOptions)
 
             if isShowingOptionalDetails {
                 if selectedStatus == .wannaGo {
                     plannedDateSection
                 }
                 noteSection
+                    .id(WalkthroughTargetID.saveNote)
+                    .walkthroughTarget(.saveNote)
                 questionAndLabelSections
+                    .id(WalkthroughTargetID.saveTags)
+                    .walkthroughTarget(.saveTags)
                 visibilitySection
+                    .id(WalkthroughTargetID.savePrivacy)
+                    .walkthroughTarget(.savePrivacy)
             }
         }
     }
@@ -5525,7 +5677,8 @@ struct MapPlaceSaveFlowSheet: View {
             let result = await onSave(submission)
             await MainActor.run {
                 isSaving = false
-                if result != nil {
+                if let result {
+                    walkthroughs.recordTutorialSave(userPlaceID: result.userPlaceID)
                     walkthroughs.perform(.saveSubmit)
                     dismiss()
                 } else if auth.isSignedIn {
@@ -5543,6 +5696,34 @@ struct MapPlaceSaveFlowSheet: View {
                         ? "Sign in to finish your check-in."
                         : "Sign in to add this to Wanna."
                 }
+            }
+        }
+    }
+
+    private func scrollToWalkthroughTarget(
+        _ target: WalkthroughTargetID?,
+        with proxy: ScrollViewProxy
+    ) {
+        guard walkthroughs.activeSurface == .saveFlow,
+              let target,
+              [
+                .saveDate,
+                .saveDetails,
+                .saveRating,
+                .saveFriends,
+                .savePhotos,
+                .saveMoreOptions,
+                .saveNote,
+                .saveTags,
+                .savePrivacy
+              ].contains(target)
+        else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard walkthroughs.currentStep?.target == target else { return }
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(target, anchor: .center)
             }
         }
     }
