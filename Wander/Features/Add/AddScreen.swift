@@ -75,6 +75,7 @@ struct AddScreen: View {
         "-WanderOpenImportHub"
     )
     @State private var showsImportInbox = false
+    @State private var isAutoClosingWalkthrough = false
     @FocusState private var isQuickAddFocused: Bool
 
     init(
@@ -134,6 +135,11 @@ struct AddScreen: View {
             }
             .wanderScreen()
             .onAppear {
+                if ProcessInfo.processInfo.arguments.contains(
+                    "-WanderShowWalkthroughCandidateResults"
+                ) {
+                    prepareWalkthroughCandidateResults()
+                }
                 if showsImportHub {
                     expandSheet()
                 }
@@ -255,6 +261,9 @@ struct AddScreen: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
+        .onChange(of: walkthroughs.currentStep?.target) { _, target in
+            autoCloseAfterImportIfNeeded(target)
+        }
     }
 
     private var compactSheetContent: some View {
@@ -498,6 +507,7 @@ struct AddScreen: View {
                 candidateSaveAction
             }
         }
+        .walkthroughTarget(showsFloatingCurrentLocationAction ? nil : .addPlace)
     }
 
     private var floatingCandidateAction: some View {
@@ -517,13 +527,65 @@ struct AddScreen: View {
                 .ignoresSafeArea(edges: .bottom)
             )
             .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 8, y: 4)
+            .walkthroughTarget(.addPlace)
     }
 
     private var candidateSaveAction: some View {
         WanderPrimaryButton(title: "Save", systemImage: "arrow.right") {
             openSharedSaveFlow()
         }
-        .walkthroughTarget(.addPlace)
+    }
+
+    private func autoCloseAfterImportIfNeeded(_ target: WalkthroughTargetID?) {
+        guard target == .addClose,
+              walkthroughs.activeSurface == .add,
+              !isAutoClosingWalkthrough
+        else { return }
+
+        isAutoClosingWalkthrough = true
+        Task { @MainActor in
+            await Task.yield()
+            guard walkthroughs.currentStep?.target == .addClose else {
+                isAutoClosingWalkthrough = false
+                return
+            }
+            walkthroughs.perform(.addClose)
+            onClose()
+        }
+    }
+
+    private func prepareWalkthroughCandidateResults() {
+        let previewCandidates = [
+            PlaceCandidate(
+                id: "walkthrough-maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                address: "1936 Hillhurst Ave",
+                locality: "Los Angeles",
+                latitude: 34.1062,
+                longitude: -118.2870,
+                confidence: 0.96
+            ),
+            PlaceCandidate(
+                id: "walkthrough-dayglow",
+                name: "Dayglow Coffee",
+                category: "coffee",
+                address: "3206 Sunset Blvd",
+                locality: "Los Angeles",
+                latitude: 34.0854,
+                longitude: -118.2755,
+                confidence: 0.94
+            )
+        ]
+
+        selectedSource = .manual
+        candidates = previewCandidates
+        selectedCandidateID = previewCandidates[0].id
+        quickAddQuery = "Coffee"
+        resolutionMessage = nil
+        isShowingInlineCandidateResults = true
+        step = .source
+        expandSheet()
     }
 
     private var draftView: some View {
@@ -1264,6 +1326,9 @@ private struct CandidateRow: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("add.candidate.\(candidate.id)")
+        .accessibilityLabel(candidate.name)
+        .accessibilityValue(isSelected ? "selected" : "not selected")
     }
 }
 

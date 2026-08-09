@@ -4,8 +4,8 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithThirtyNineGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 39)
+    func testApprovedWalkthroughCoversEverySurfaceWithFortyGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 40)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -13,6 +13,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.map]?.map(\.target),
             [.mapAdd, .mapAddAgain, .mapFilters, .mapSearch, .mapMemory, .mapTabs]
+        )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.sendoff]?.map(\.target),
+            [.mapSendoff]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.add]?.map(\.target),
@@ -65,7 +69,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .profileSettings,
             .profileSocial,
             .profileActivity,
-            .profileShare
+            .profileShare,
+            .mapSendoff
         ]
 
         for target in passiveTargets {
@@ -79,6 +84,45 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             FirstVisitWalkthroughContent.allSteps.first { $0.target == .addClose }
         )
         XCTAssertEqual(closeStep.advance, .action)
+    }
+
+    func testEditableSaveExplanationsAllowInteractionWithoutRequiringIt() throws {
+        let editableTargets: [WalkthroughTargetID] = [
+            .saveDate,
+            .saveDetails,
+            .saveRating,
+            .saveFriends,
+            .savePhotos,
+            .saveNote,
+            .saveTags,
+            .savePrivacy
+        ]
+
+        for target in editableTargets {
+            let step = try XCTUnwrap(
+                FirstVisitWalkthroughContent.allSteps.first { $0.target == target }
+            )
+            XCTAssertEqual(step.advance, .next)
+            XCTAssertTrue(step.allowsTargetInteraction, "Expected \(target) to remain editable")
+        }
+
+        for target in [WalkthroughTargetID.mapSearch, .addImport, .mapTabs, .profileActivity] {
+            let step = try XCTUnwrap(
+                FirstVisitWalkthroughContent.allSteps.first { $0.target == target }
+            )
+            XCTAssertFalse(step.allowsTargetInteraction, "Expected \(target) to be explanation-only")
+        }
+    }
+
+    func testFinalSendoffReturnsToMapWithMotivatingAction() throws {
+        let step = try XCTUnwrap(
+            FirstVisitWalkthroughContent.stepsBySurface[.sendoff]?.first
+        )
+
+        XCTAssertEqual(step.target, .mapSendoff)
+        XCTAssertEqual(step.title, "Your map is yours now")
+        XCTAssertEqual(step.nextButtonTitle, "Start exploring")
+        XCTAssertEqual(step.advance, .next)
     }
 
     func testBottomNavigationCopyExplainsTheConnectedProduct() throws {
@@ -190,7 +234,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertTrue(firstVersion.isComplete(for: "ryan", surface: .lists))
         XCTAssertFalse(
-            FirstVisitWalkthroughStore(defaults: defaults, version: 4)
+            FirstVisitWalkthroughStore(defaults: defaults, version: 5)
                 .isComplete(for: "ryan", surface: .lists)
         )
     }
@@ -309,6 +353,21 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.perform(.listMap)
         coordinator.perform(.listActions)
         XCTAssertEqual(coordinator.requestedSurface, .profile)
+
+        coordinator.consumeRequestedSurface(.profile)
+        coordinator.activate(.profile)
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.requestedSurface, .sendoff)
+
+        coordinator.consumeRequestedSurface(.sendoff)
+        coordinator.activate(.sendoff)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapSendoff)
+        coordinator.advancePassiveStep()
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.requestedSurface)
     }
 
     func testCaretConnectsTopTargetToCardAndStaysInsideSpotlight() {

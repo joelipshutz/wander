@@ -343,7 +343,11 @@ struct MapScreen: View {
                                 },
                                 onSubmit: submitMapSearch
                             )
-                            .walkthroughTarget(.mapSearch)
+                            .walkthroughTarget(
+                                walkthroughs.currentStep?.target == .mapSendoff
+                                    ? .mapSendoff
+                                    : .mapSearch
+                            )
 
                             if isMapSearchFocused {
                                 MapSearchCancelButton(action: cancelMapSearch)

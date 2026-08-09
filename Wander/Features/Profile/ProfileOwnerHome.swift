@@ -831,7 +831,6 @@ private struct ProfileRecentActivitySection: View {
                 checkInCount: checkInCount,
                 wannaCount: wannaCount
             )
-            .walkthroughTarget(.profileActivity)
 
             VStack(spacing: 0) {
                 if filteredItems.isEmpty {
@@ -883,6 +882,7 @@ private struct ProfileRecentActivitySection: View {
             }
             .buttonStyle(.plain)
         }
+        .walkthroughTarget(.profileActivity)
     }
 
     private var emptyStateText: String {

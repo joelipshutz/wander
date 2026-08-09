@@ -369,7 +369,11 @@ struct WanderRootView: View {
         )
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
-        _placeSaveDraftStore = StateObject(wrappedValue: PlaceSaveDraftStore())
+        _placeSaveDraftStore = StateObject(
+            wrappedValue: PlaceSaveDraftStore(
+                persistence: fixtureMode == .empty ? .live : .ephemeral
+            )
+        )
         _walkthroughs = StateObject(
             wrappedValue: FirstVisitWalkthroughCoordinator(
                 isEnabled: fixtureMode == .empty || launchArguments.contains("-WanderEnableWalkthroughs")
@@ -438,10 +442,11 @@ struct WanderRootView: View {
         .environmentObject(walkthroughs)
         .overlay(alignment: .bottom) {
             Color.clear
-                .frame(height: 50)
+                .frame(height: walkthroughTabBarTargetHeight)
                 .contentShape(Rectangle())
                 .allowsHitTesting(false)
                 .walkthroughTarget(.mapTabs)
+                .padding(.horizontal, walkthroughTabBarTargetHorizontalInset)
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
         .walkthroughLaunchLessonOverlay(
@@ -1209,7 +1214,7 @@ struct WanderRootView: View {
     private func routeWalkthrough(to surface: WalkthroughSurface) {
         let waitsForAddDismissal = isPresentingAdd && surface == .map
         switch surface {
-        case .map:
+        case .map, .sendoff:
             selectedTab = .map
             if !waitsForAddDismissal {
                 isPresentingAdd = false
@@ -1243,7 +1248,12 @@ struct WanderRootView: View {
     private func walkthroughSurface(for tab: WanderTab) -> WalkthroughSurface {
         switch tab {
         case .map, .add:
-            .map
+            if walkthroughs.activeSurface == .sendoff
+                || walkthroughs.requestedSurface == .sendoff {
+                .sendoff
+            } else {
+                .map
+            }
         case .discover:
             .feed
         case .lists:
@@ -1251,6 +1261,14 @@ struct WanderRootView: View {
         case .profile:
             .profile
         }
+    }
+
+    private var walkthroughTabBarTargetHeight: CGFloat {
+        if #available(iOS 26.0, *) { 44 } else { 50 }
+    }
+
+    private var walkthroughTabBarTargetHorizontalInset: CGFloat {
+        if #available(iOS 26.0, *) { 32 } else { 0 }
     }
 
     private func handleDeepLinkPresentationDismissal(

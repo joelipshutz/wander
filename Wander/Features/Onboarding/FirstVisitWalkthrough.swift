@@ -2,6 +2,7 @@ import SwiftUI
 
 enum WalkthroughSurface: String, CaseIterable, Codable, Sendable {
     case map
+    case sendoff
     case add
     case saveFlow
     case feed
@@ -19,6 +20,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case mapSearch
     case mapMemory
     case mapTabs
+    case mapSendoff
     case addSearch
     case addPlace
     case addImport
@@ -65,12 +67,14 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
     let title: String
     let message: String
     let advance: WalkthroughAdvance
+    let allowsTargetInteraction: Bool
+    let nextButtonTitle: String
 
     var id: String { "\(surface.rawValue).\(target.rawValue)" }
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 4
+    static let version = 5
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
@@ -105,9 +109,19 @@ enum FirstVisitWalkthroughContent {
                 advance: .next
             )
         ],
+        .sendoff: [
+            step(
+                .sendoff,
+                .mapSendoff,
+                "Your map is yours now",
+                "Save the places worth remembering. When you need the right spot, your people and your memories will be here.",
+                advance: .next,
+                nextButtonTitle: "Start exploring"
+            )
+        ],
         .add: [
             step(.add, .addSearch, "Find your first place", "Type a place name and submit the search."),
-            step(.add, .addPlace, "Choose the right place", "Review the result, then tap Save to start your memory."),
+            step(.add, .addPlace, "Choose the right place", "Review the options, choose the right result, then tap Save to start your memory."),
             step(
                 .add,
                 .addImport,
@@ -125,35 +139,40 @@ enum FirstVisitWalkthroughContent {
                 .saveDate,
                 "When were you here?",
                 "Today is selected automatically. Change the date for an older memory, or leave it as is.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
                 .saveDetails,
                 "Confirm the place type",
                 "Category and subcategory make this memory easier to find later. The suggested choices are fine to keep.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
                 .saveRating,
                 "Rate it for future you",
                 "A quick rating helps you compare places later. Keep the suggested score or adjust it.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
                 .saveFriends,
                 "Remember who was there",
                 "Add friends who shared the visit, or leave this empty when the memory is just yours.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
                 .savePhotos,
                 "Keep a photo with the visit",
                 "Photos are optional. Add one now, or keep moving without it.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
@@ -166,21 +185,24 @@ enum FirstVisitWalkthroughContent {
                 .saveNote,
                 "Leave the useful detail",
                 "Write what you’d want to know next time, or leave the note blank.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
                 .saveTags,
                 "Make it easy to rediscover",
                 "Tags capture the mood, occasion, and details that make this place fit. They’re optional too.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
                 .savePrivacy,
                 "Choose who can see it",
                 "Stealth mode keeps this memory to you. Leave it off to use your normal sharing setting.",
-                advance: .next
+                advance: .next,
+                allowsTargetInteraction: true
             ),
             step(.saveFlow, .saveSubmit, "Put it on your map", "Save the place to finish your first memory.")
         ],
@@ -284,14 +306,18 @@ enum FirstVisitWalkthroughContent {
         _ target: WalkthroughTargetID,
         _ title: String,
         _ message: String,
-        advance: WalkthroughAdvance = .action
+        advance: WalkthroughAdvance = .action,
+        allowsTargetInteraction: Bool? = nil,
+        nextButtonTitle: String = "Next"
     ) -> WalkthroughStep {
         WalkthroughStep(
             surface: surface,
             target: target,
             title: title,
             message: message,
-            advance: advance
+            advance: advance,
+            allowsTargetInteraction: allowsTargetInteraction ?? (advance == .action),
+            nextButtonTitle: nextButtonTitle
         )
     }
 }
@@ -590,6 +616,8 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         switch surface {
         case .map:
             .feed
+        case .sendoff:
+            nil
         case .add, .saveFlow:
             .map
         case .feed:
@@ -600,8 +628,10 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             .profile
         case .feedSearch:
             .feed
-        case .lists, .profile:
+        case .lists:
             nil
+        case .profile:
+            .sendoff
         }
     }
 }
@@ -989,7 +1019,7 @@ private struct FirstVisitWalkthroughOverlay: View {
             WalkthroughTouchShield(
                 containerSize: containerSize,
                 spotlightFrame: layout.spotlightFrame,
-                allowsSpotlightInteraction: step.advance == .action
+                allowsSpotlightInteraction: step.allowsTargetInteraction
             )
 
             ZStack(alignment: .topLeading) {
@@ -1003,7 +1033,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     if step.advance == .next {
-                        Button("Next", action: onNext)
+                        Button(step.nextButtonTitle, action: onNext)
                             .font(.system(size: 14, weight: .black))
                             .foregroundStyle(WanderTheme.textOnAction.color)
                             .frame(minWidth: 88, minHeight: 44)

@@ -110,22 +110,52 @@ final class OnboardingUITests: XCTestCase {
         app.buttons["Next"].tap()
 
         XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.add.addClose"]
-                .waitForExistence(timeout: 4)
-        )
-        let closeButton = app.buttons["Close add place"]
-        XCTAssertTrue(closeButton.isHittable)
-
-        let closeScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        closeScreenshot.name = "REC-236 close Add a Place prompt"
-        closeScreenshot.lifetime = .keepAlways
-        add(closeScreenshot)
-
-        closeButton.tap()
-        XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.map.mapAdd"]
                 .waitForExistence(timeout: 6)
         )
+        XCTAssertFalse(app.buttons["Close add place"].exists)
+    }
+
+    func testMultiplePlaceResultsRemainSelectableInsideTheSpotlight() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderOpenAdd",
+            "-WanderShowWalkthroughCandidateResults",
+            "-WanderWalkthroughTarget",
+            "addPlace"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.add.addPlace"]
+                .waitForExistence(timeout: 5)
+        )
+        let firstResult = app.buttons["add.candidate.walkthrough-maru"]
+        let secondResult = app.buttons["add.candidate.walkthrough-dayglow"]
+        XCTAssertTrue(firstResult.waitForExistence(timeout: 3))
+        XCTAssertTrue(secondResult.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstResult.isHittable)
+        XCTAssertTrue(secondResult.isHittable)
+
+        secondResult.tap()
+        XCTAssertEqual(secondResult.value as? String, "selected")
+        XCTAssertEqual(firstResult.value as? String, "not selected")
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 selectable multiple place results"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["Save"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(app.staticTexts["Dayglow Coffee"].exists)
     }
 
     func testMapFilterAndSearchExplanationsUseNextWithFullScrim() {
@@ -287,7 +317,21 @@ final class OnboardingUITests: XCTestCase {
             app.buttons["Next"].tap()
         }
 
-        XCTAssertFalse(app.buttons["Next"].waitForExistence(timeout: 2))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Start exploring"].isHittable)
+        XCTAssertTrue(app.buttons["Map"].isSelected)
+
+        let sendoffScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        sendoffScreenshot.name = "REC-236 final Map sendoff"
+        sendoffScreenshot.lifetime = .keepAlways
+        add(sendoffScreenshot)
+
+        app.buttons["Start exploring"].tap()
+        XCTAssertFalse(app.buttons["Start exploring"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["map.headerAdd"].exists)
     }
 
     func testFirstAddActionGuidesThroughSaveBeforeReturningToMap() {
@@ -342,8 +386,17 @@ final class OnboardingUITests: XCTestCase {
             XCTAssertTrue(app.buttons["Next"].isHittable)
 
             if target == "saveRating" {
+                let rating = app.otherElements["place-rating-slider"]
+                XCTAssertTrue(rating.waitForExistence(timeout: 3))
+                let originalValue = rating.value as? String
+                rating.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.58)).press(
+                    forDuration: 0.1,
+                    thenDragTo: rating.coordinate(withNormalizedOffset: CGVector(dx: 0.78, dy: 0.58))
+                )
+                XCTAssertNotEqual(rating.value as? String, originalValue)
+
                 let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-                screenshot.name = "REC-236 full save flow rating step"
+                screenshot.name = "REC-236 editable save flow rating step"
                 screenshot.lifetime = .keepAlways
                 add(screenshot)
             }
