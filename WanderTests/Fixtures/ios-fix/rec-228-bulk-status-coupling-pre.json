@@ -3,6 +3,7 @@
   "bug": "the bulk Apply to selected control mirrors whichever status is selected in the checked rows",
   "capture_source": "deterministic -WanderPlaceImportAdaptiveMockup simulator state",
   "screenshot": "rec-228-bulk-status-coupling-pre.png",
+  "post_fix_screenshot": "rec-228-bulk-status-coupling-post.png",
   "selected_ready_items": [
     {
       "id": "mart-collective",
