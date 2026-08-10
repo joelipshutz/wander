@@ -2330,7 +2330,6 @@ final class WanderStore: ObservableObject {
         guard !isBlockedBetweenCurrentUser(and: list.ownerUserID) else { return false }
         if list.ownerUserID == currentUser.id { return true }
         if isMember(of: list, userID: currentUser.id) { return true }
-        if hasInactiveMembership(of: list, userID: currentUser.id) { return false }
         guard !list.isStealth else { return false }
         let relationship = relationship(to: list.ownerUserID)
         return relationship == .follower || relationship == .mutual
@@ -2372,13 +2371,6 @@ final class WanderStore: ObservableObject {
         let listIDs = listReferenceIDs(for: list)
         return placeListMembers.contains { member in
             listIDs.contains(member.listID) && member.userID == userID && member.deletedAt == nil
-        }
-    }
-
-    private func hasInactiveMembership(of list: LocalPlaceList, userID: String) -> Bool {
-        let listIDs = listReferenceIDs(for: list)
-        return placeListMembers.contains { member in
-            listIDs.contains(member.listID) && member.userID == userID && member.deletedAt != nil
         }
     }
 

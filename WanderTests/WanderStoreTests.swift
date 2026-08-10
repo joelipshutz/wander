@@ -1661,7 +1661,7 @@ final class WanderStoreTests: XCTestCase {
             serverID: listID,
             ownerUserID: "user_ryan",
             name: "Shared follower list",
-            description: "The collaborator should not see this after leaving.",
+            description: "The former collaborator should see this through normal friend visibility.",
             visibility: .followers,
             syncState: .synced
         )
@@ -8057,7 +8057,7 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
-    func testRemoteCollaboratorLeaveUsesBackendAndRevokesFollowerVisibility() async {
+    func testRemoteCollaboratorLeaveUsesBackendAndMovesFollowerVisibleListToFriends() async {
         let (store, collaboratorList) = makeRemoteCollaboratorListStore()
         let repository = FakePlaceListRepository()
         let backend = WanderBackend(placeListRepository: repository)
@@ -8066,7 +8066,12 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertTrue(didLeave)
         XCTAssertEqual(repository.leftListIDs, [collaboratorList.id])
-        XCTAssertFalse(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertTrue(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == collaboratorList.id })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .friends).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.canLeave(collaboratorList))
+        XCTAssertFalse(store.canAddPlaces(to: collaboratorList))
         XCTAssertNil(store.lastRemoteError)
     }
 

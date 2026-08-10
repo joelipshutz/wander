@@ -1007,7 +1007,7 @@ private struct ListDetailScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Are you sure? You will not be able to see this list once you remove yourself")
+            Text("Are you sure? You’ll lose collaborator access. You may still see this list in Friends if the owner continues sharing it.")
         }
         .alert("Couldn’t Leave List", isPresented: leaveListErrorBinding) {
             Button("OK", role: .cancel) {}

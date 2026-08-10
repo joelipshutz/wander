@@ -2781,17 +2781,32 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
   );
   await expectQuery(
     client,
-    "left collaborator no longer sees shared list",
+    "former collaborator sees follower-visible list as a friend list",
     "select exists(select 1 from public.visible_place_lists() where id = $1::uuid) as visible",
     [collaboratorListID],
-    (result) => result.rows[0]?.visible === false,
+    (result) => result.rows[0]?.visible === true,
   );
   await expectQuery(
     client,
-    "left collaborator cannot load list detail",
+    "former collaborator can load follower-visible list detail",
     "select public.place_list_detail($1::uuid) as detail",
     [collaboratorListID],
-    (result) => result.rows[0]?.detail === null,
+    (result) => result.rows[0]?.detail !== null,
+  );
+  await expectQuery(
+    client,
+    "former collaborator is removed from list collaborators",
+    `
+      select not exists (
+        select 1
+        from jsonb_array_elements(
+          coalesce(public.place_list_detail($1::uuid)->'collaborators', '[]'::jsonb)
+        ) collaborator
+        where collaborator->>'id' = $2
+      ) as removed
+    `,
+    [collaboratorListID, collaboratorUserID],
+    (result) => result.rows[0]?.removed === true,
   );
   await expectQueryFailure(
     client,

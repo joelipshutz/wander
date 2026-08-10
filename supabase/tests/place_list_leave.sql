@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(16);
+select plan(17);
 
 select has_function('app', 'leave_place_list', array['uuid']);
 select has_function('public', 'leave_place_list', array['uuid']);
@@ -100,16 +100,23 @@ select set_config('request.jwt.claim.sub', 'user_leave_list_collaborator', true)
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 select ok(
-  not app.can_read_place_list(
+  app.can_read_place_list(
     'ce3845a9-4794-459c-b368-22dc34199349',
     'user_leave_list_collaborator'
   ),
-  'a collaborator who leaves cannot regain access through follower visibility'
+  'a former collaborator retains normal follower visibility'
 );
-select is(
+select isnt(
   public.place_list_detail('ce3845a9-4794-459c-b368-22dc34199349'),
   null::jsonb,
-  'a collaborator who leaves can no longer load list detail'
+  'a former collaborator can load follower-visible list detail'
+);
+select is(
+  jsonb_array_length(
+    public.place_list_detail('ce3845a9-4794-459c-b368-22dc34199349')->'collaborators'
+  ),
+  0,
+  'the former collaborator is absent from the list collaborator association'
 );
 select throws_ok(
   $$select public.leave_place_list('ce3845a9-4794-459c-b368-22dc34199349')$$,

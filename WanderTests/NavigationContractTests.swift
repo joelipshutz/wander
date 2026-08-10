@@ -1997,7 +1997,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(detailScreen.contains(".alert(\"Leave List?\""))
         XCTAssertTrue(
             detailScreen.contains(
-                "Are you sure? You will not be able to see this list once you remove yourself"
+                "Are you sure? You’ll lose collaborator access. You may still see this list in Friends if the owner continues sharing it."
             )
         )
         XCTAssertTrue(detailScreen.contains("sourceList.map(store.canLeave)"))
