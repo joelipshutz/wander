@@ -3,8 +3,9 @@ name: recme-pr-review-merge-release
 description: |
   rec.me/Wander PR landing and manual batched TestFlight workflow. Use when
   asked to review, merge, land, ship, or release a rec.me/Wander PR. Merges add
-  release context to the rolling Next TestFlight Linear record; build/archive/
-  upload steps run only after an explicit TestFlight request from Joe or Ryan.
+  release context to the machine-owned Next TestFlight GitHub manifest and its
+  Linear mirror; build/archive/upload steps run only after an explicit
+  TestFlight request from Joe or Ryan.
 triggers:
   - merge a pr
   - land a pr
@@ -31,9 +32,10 @@ Joe or Ryan decides the batch is worth testing.
 - Merge/land/review-and-merge language is not release authorization. Explicit
   release language includes "push the TestFlight build", "upload the TF build",
   "release this to TestFlight", and "go push in your build".
-- Updating the rolling Linear ticket's `## TestFlight note` is mandatory release
-  bookkeeping for every eligible `main` landing. It is not release
-  authorization and does not itself bump, archive, upload, or announce a build.
+- Every PR must include one valid `recme-testflight-payload` block. The
+  merge-to-main updater records that payload, or a visible `unclassified`
+  blocker, in the machine manifest. This is not release authorization and does
+  not itself bump, archive, upload, or announce a build.
 - Skip draft/WIP/hold/do-not-merge PRs, conflicts, failing required checks, or a
   head SHA already reviewed by this workflow unless new commits were pushed.
 - Do not submit an App Store production release, change the marketing version,
@@ -73,34 +75,38 @@ creates a focused bug; it does not keep every merged issue in `In Review`.
 
 ## Rolling `Next TestFlight` Contract
 
-There must be exactly one open Linear issue in the `recme` team and `mvp`
-project whose exact title is `Next TestFlight`. It normally stays in `Todo` and
-is reused across releases.
+There must be exactly one open GitHub issue titled
+`[machine] Next TestFlight manifest`. It is the machine source of truth. The
+`Next TestFlight` Linear issue remains the human status/relation mirror, not a
+second data source that the uploader reads.
 
-The issue is the mutable release queue, not an approval queue. Its description
-records the last completed TestFlight build and immutable
-`testflight/build-<n>` baseline tag/commit plus exactly one active section named
-`## TestFlight note`. Each eligible merge adds the implementation issue as
-related and appends one entry to that section while also posting the same
-payload as an immutable history comment:
+Every PR must carry exactly one hidden JSON block. The PR number and exact merge
+SHA are deliberately omitted because the updater fills those from GitHub after
+merge:
 
-```markdown
-Release payload — REC-<id> / PR #<n> / <merge-sha>
-
-- Tester-facing change: <plain-language outcome>
-- What to test: <one concrete tester action>
-- Release operations: <migration, deploy, flag, data action, or "none">
-- Validation: <tests/build/visual or hosted verification already passed>
+```html
+<!-- recme-testflight-payload
+{
+  "disposition": "ship",
+  "issue": "REC-123",
+  "testerFacingChange": "Plain-language outcome.",
+  "whatToTest": ["One concrete tester action."],
+  "releaseOperations": "none",
+  "validation": "Tests/build/visual verification passed."
+}
+-->
 ```
 
-The `## TestFlight note` section is the source for the next build's tester copy.
-Preserve all other description content. Never create a second note heading;
-append, correct, or deduplicate entries within the existing section.
+Use `exclude` with a `reason` for docs/process-only work and
+`release-operation` with a `reason` for build metadata. The PR check rejects a
+missing, malformed, or untouched template payload.
 
-At release time, the note is exported to a temporary JSON snapshot conforming
-to `scripts/testflight-manifest.schema.json`. Git remains authoritative for the
-binary; the JSON provides classification and tester context for every commit.
-Every first-parent commit must appear exactly once with one disposition:
+On every push to `main`, `.github/workflows/testflight-manifest.yml` sweeps the
+entire range after the last immutable TestFlight tag, resolves each commit's
+merged PR, and upserts a machine comment in that issue. Direct pushes and PRs
+without valid payloads become red `unclassified` entries and fail the updater
+check. A later push re-sweeps the complete range, so missed workflow runs are
+self-healing. Every first-parent commit appears exactly once as:
 
 - `ship`: user/tester-facing payload with issue, PR, summary, test actions,
   release operations, validation, and optional known limitations;
@@ -108,24 +114,34 @@ Every first-parent commit must appear exactly once with one disposition:
 - `release-operation`: build metadata or another release-only commit, with a
   reason.
 
-The snapshot is release evidence, not a checked-in product artifact. Attach the
-final passing reconciliation JSON to the Linear release record.
+At release time, `scripts/testflight-manifest.mjs snapshot` reads that same
+issue, refreshes it from Git, fails on any unclassified commit, and generates
+the temporary JSON, reconciliation evidence, TestFlight copy, Slack copy, and
+Linear release record. The TestFlight helper requires gate version 2, verifies
+the live issue still hashes to the locked snapshot, and then may touch App Store
+Connect. Attach the final passing reconciliation JSON to the Linear release
+record.
 
 At merge time:
 
 1. Decide whether the diff affects app code, UI, schema/contracts required by
    the app, testable behavior, user-facing copy/assets, or release QA.
-2. For eligible work, find the single open `Next TestFlight` issue. If none
-   exists, create it. If multiple exist, stop and reconcile them before writing.
-3. Relate the implementation issue, update the `## TestFlight note` section,
-   and post the matching payload comment while context is fresh.
+2. Put the correct `recme-testflight-payload` block in the PR before merge and
+   require the PR payload check to pass.
+3. After merge, require the `TestFlight manifest / sync-main` workflow to pass.
+   Its output links the machine issue. Relate the implementation issue to the
+   rolling Linear mirror for human status when applicable.
 4. Move the implementation issue to `Done` after merge validation. Do not wait
    for TestFlight.
 5. Exclude docs/process-only and truly backend-only work. Explain any non-obvious
    exclusion on the implementation issue.
 
-Do not edit old payload comments to rewrite history. Add a correction comment
-that links the original payload if release information changes.
+If a merged PR payload needs correction, edit the PR body and manually rerun the
+manifest workflow. The machine comment is updated and the next snapshot binds
+to its new hash; record the reason for correction on the implementation issue.
+For a true direct push, use
+`node scripts/testflight-manifest.mjs record --commit <sha> --entry-file <payload.json> --head origin/main`
+to add an explicit classification; never hand-edit the machine JSON comment.
 
 ## Required Sweep Order
 
@@ -176,14 +192,14 @@ Merge only when:
 - the PR matches its intent without unacceptable scope drift;
 - required validation passed, or a low-risk environment skip is explicit;
 - no required human decision or hold remains; and
-- the branch is mergeable into latest `main`.
+- the branch is mergeable into latest `main`; and
+- its machine-readable TestFlight payload is valid.
 
-If clean, squash-merge and safely delete the branch. Then complete both durable
-updates in the same workflow: the implementation issue becomes `Done`, and any
-eligible release payload is appended to the `Next TestFlight` issue's
-`## TestFlight note` and comment history. No TestFlight build or build-number
-change follows unless separately requested. A landing is incomplete until this
-note update succeeds or the diff is explicitly classified as release-excluded.
+If clean, squash-merge and safely delete the branch. Then require the main-push
+manifest updater to record the exact commit and classification, update the
+Linear mirror, and move the implementation issue to `Done`. No TestFlight build
+or build-number change follows unless separately requested. A landing is
+incomplete while its exact commit is unclassified in the machine issue.
 
 ## Manual Batched TestFlight Release
 
@@ -192,31 +208,31 @@ explicit release.
 
 ### 1. Freeze and reconcile
 
-1. Find the one open `Next TestFlight` issue and the latest immutable
+1. Find the one open machine manifest issue, its Linear mirror, and the latest immutable
    `testflight/build-<previous>` tag. For the first migrated release only, use
    the manually recorded baseline commit in the issue when no historical tag
    exists.
-2. Reconcile manifest payloads against the git range from that baseline through
-   current `origin/main`. Export the Linear payloads/classifications to a
-   temporary JSON manifest and run:
+2. Snapshot and reconcile the machine issue against the git range from that
+   baseline through current `origin/main`:
 
    ```bash
-   node scripts/reconcile-testflight-manifest.mjs \
+   node scripts/testflight-manifest.mjs snapshot \
      --base testflight/build-<previous> \
      --head <pre-bump-cutoff> \
-     --manifest <manifest.json> \
      --build <next-build> \
-     --status candidate
+     --status candidate \
+     --write-dir <temporary-output-directory>
    ```
 
    This is a mechanical completeness check, not product re-triage. The command
    must pass before the build-number PR begins. Correct missing/stale payloads
    and identify required migrations, deploys, flags, or manual QA. A missing
    entry is a release blocker, even when the commit is already in the binary.
-3. Choose the next monotonically increasing build number. Snapshot the current
-   `## TestFlight note` into a new `TestFlight build <n>` Linear release issue,
+3. Choose the next monotonically increasing build number. Put the generated
+   release-record output into a new `TestFlight build <n>` Linear release issue,
    move that release issue to `In Progress`, and record the intended pre-bump
-   cutoff SHA. Keep the rolling `Next TestFlight` issue open.
+   cutoff SHA plus machine-manifest issue URL. Keep the rolling Linear mirror
+   open.
 4. Briefly hold other app-code merges until the build-number PR lands and the
    exact candidate commit is captured. This prevents unmanifested code from
    entering the candidate. Docs-only work may continue if it cannot affect the
@@ -236,7 +252,7 @@ explicit release.
    short merge hold. New merges continue appending to `Next TestFlight`, but
    their merge SHAs place them after the recorded cutoff and outside the active
    build. Add the build-number PR as `release-operation`, update `candidateSha`,
-   and run the reconciliation command again against the exact candidate. This
+   and run the snapshot command again against the exact candidate. This
    second run catches a post-bump fix like a navigation hotfix. Write the output
    files to a temporary directory and attach the reconciliation JSON to the
    Linear release issue. Do not continue while it fails.
@@ -247,13 +263,12 @@ explicit release.
    relevant iOS test suite and generic Simulator build. Run hosted migration/
    RPC smoke verification required by any manifest payload.
 2. Generate concise TestFlight "What to Test", Slack copy, and the Linear
-   release-record section from the same passing manifest:
+   release-record section from the same live machine manifest:
 
    ```bash
-   node scripts/reconcile-testflight-manifest.mjs \
+   node scripts/testflight-manifest.mjs snapshot \
      --base testflight/build-<previous> \
      --head <exact-candidate> \
-     --manifest <manifest.json> \
      --build <n> \
      --status candidate \
      --write-dir <temporary-output-directory>
@@ -274,6 +289,15 @@ explicit release.
    the gate passes, continue the release and reuse the same copy in Slack.
 5. When upload/attachment is confirmed, create and push the immutable annotated
    tag `testflight/build-<n>` at the exact candidate. Never move or reuse it.
+   Then advance the same machine manifest baseline:
+
+   ```bash
+   node scripts/testflight-manifest.mjs finalize \
+     --build <n> \
+     --candidate <exact-candidate> \
+     --tag testflight/build-<n> \
+     --head origin/main
+   ```
 6. Post one top-level tester-facing announcement to `#release-notes`
    (`C0BM5CY0GQY`). Do not duplicate it in `#testflight-feedback` unless Joe
    explicitly asks.
@@ -282,12 +306,10 @@ explicit release.
    Slack link, known issues, and next action. Move it to `Done` only when the
    requested TestFlight release is actually available/complete.
 8. Only after the build is `VALID`, its What to Test copy is published, and it
-   is attached to the public TestFlight group, clear the shipped entries from
-   `Next TestFlight`'s `## TestFlight note`. Preserve entries whose merge SHA is
-   after the candidate or whose work did not ship. Update the baseline to the
-   completed build tag/commit. The note should say `No pending changes.` when
-   nothing remains. Do not clear it on upload, processing, copy, or attachment
-   failure. Do not create a release-record docs PR.
+   is attached to the public TestFlight group, update the Linear mirror from the
+   finalized machine baseline. Later commits remain pending automatically. Do
+   not finalize on upload, processing, copy, or attachment failure. Do not
+   create a release-record docs PR.
 
 For cumulative questions, never expand the current delta note by memory. Run
 `node scripts/reconcile-testflight-manifest.mjs --audit-sha <sha>` to report the
@@ -320,11 +342,11 @@ announcement Joe explicitly requests.
 
 ## Completion
 
-- Merge-only completion: PR merged, implementation issue `Done`, eligible
-  payload appended to the `Next TestFlight` note and history, no build or tester
+- Merge-only completion: PR merged, implementation issue `Done`, exact commit
+  classified by the machine updater and mirrored in Linear, no build or tester
   announcement.
 - Release completion: exact candidate validated/uploaded, immutable tag pushed,
-  release issue `Done`, shipped entries cleared from `Next TestFlight`, baseline
-  finalized, and tester note posted.
+  release issue `Done`, machine baseline finalized while later entries remain
+  pending, Linear mirror updated, and tester note posted.
 - Blocked completion: durable Linear/PR handoff contains exact state and restart
   commands. No repo diary or record-only PR is required.

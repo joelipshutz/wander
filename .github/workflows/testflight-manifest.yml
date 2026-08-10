@@ -1,0 +1,65 @@
+name: TestFlight manifest
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      head:
+        description: Main commit to sweep through
+        required: false
+        default: origin/main
+
+permissions:
+  contents: read
+
+jobs:
+  validate-pr-payload:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out trusted validator
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Bootstrap validator on its introducing PR
+        if: hashFiles('scripts/testflight-manifest.mjs') == ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Require a valid release classification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/testflight-manifest.mjs validate-pr --event "$GITHUB_EVENT_PATH" --check-files true
+
+  sync-main:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: testflight-manifest-main
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Check out complete main history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Fetch the current main ref
+        run: git fetch origin main --tags
+      - name: Update the machine manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST_HEAD: ${{ github.event_name == 'push' && github.sha || inputs.head }}
+        run: node scripts/testflight-manifest.mjs sync --head "$MANIFEST_HEAD"

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
+import { entriesSha256 } from "./testflight-manifest.mjs";
 import { validateReconciliationGate } from "./testflight-release.mjs";
 
 const candidateSha = "a".repeat(40);
@@ -13,8 +14,8 @@ function sha256(value) {
 }
 
 function passingGate(overrides = {}) {
-  return {
-    gateVersion: 1,
+  const gate = {
+    gateVersion: 2,
     ok: true,
     errors: [],
     buildNumber: 126,
@@ -36,8 +37,22 @@ function passingGate(overrides = {}) {
     excluded: [],
     releaseOperations: [],
     whatToTestSha256: sha256(whatToTest),
-    ...overrides,
+    manifestSource: {
+      kind: "github-issue",
+      repository: "joelipshutz/wander",
+      issueNumber: 42,
+      issueUrl: "https://github.com/joelipshutz/wander/issues/42",
+      baselineTag: "testflight/build-125",
+      baselineSha: "c".repeat(40),
+      candidateSha,
+      entriesSha256: null,
+    },
   };
+  Object.assign(gate, overrides);
+  if (!overrides.manifestSource) {
+    gate.manifestSource.entriesSha256 = entriesSha256(gate.entries);
+  }
+  return gate;
 }
 
 function validate(gate = passingGate(), overrides = {}) {
@@ -88,5 +103,21 @@ test("rejects an unrecognized disposition even when the commit is present", () =
   assert.throws(
     () => validate(gate),
     /invalid commit disposition/,
+  );
+});
+
+test("rejects legacy reconciliation that did not come from the machine manifest", () => {
+  assert.throws(
+    () => validate(passingGate({ gateVersion: 1 })),
+    /gateVersion must be 2/,
+  );
+});
+
+test("rejects classifications edited after the machine manifest snapshot", () => {
+  const gate = passingGate();
+  gate.entries[0].validation = "Hand-edited after snapshot.";
+  assert.throws(
+    () => validate(gate),
+    /source hash does not match/,
   );
 });
