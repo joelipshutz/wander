@@ -305,6 +305,35 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(fourthLaunch.isPresentingLaunchLesson)
     }
 
+    func testInterruptedImportLessonResumesBeforeTheDeviceLesson() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+
+        let firstLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        firstLaunch.registerLaunch()
+
+        let interruptedSecondLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store
+        )
+        interruptedSecondLaunch.registerLaunch()
+        interruptedSecondLaunch.presentLaunchLessonIfEligible()
+        XCTAssertTrue(interruptedSecondLaunch.isPresentingImportLesson)
+
+        let thirdLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        thirdLaunch.registerLaunch()
+        thirdLaunch.presentLaunchLessonIfEligible()
+        XCTAssertTrue(thirdLaunch.isPresentingImportLesson)
+        XCTAssertFalse(thirdLaunch.isPresentingDeviceFeaturesLesson)
+        thirdLaunch.completeImportLesson()
+
+        let fourthLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        fourthLaunch.registerLaunch()
+        fourthLaunch.presentLaunchLessonIfEligible()
+        XCTAssertFalse(fourthLaunch.isPresentingImportLesson)
+        XCTAssertTrue(fourthLaunch.isPresentingDeviceFeaturesLesson)
+    }
+
     func testImportLessonMatchesTheAdaptiveBuild124ReviewFlow() {
         XCTAssertEqual(ImportWalkthroughContent.actionTitle, "Open Import From")
         XCTAssertTrue(ImportWalkthroughContent.message.contains("one place, a few links, or a whole list"))

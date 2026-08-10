@@ -477,9 +477,11 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         if registeredLaunchUserID != userID {
             registeredLaunchUserID = userID
             let launchCount = store.registerLaunch(for: userID)
-            isImportLessonEligible = launchCount == 2
-                && !store.hasCompletedImportLesson(for: userID)
+            let hasCompletedImportLesson = store.hasCompletedImportLesson(for: userID)
+            isImportLessonEligible = launchCount >= 2
+                && !hasCompletedImportLesson
             isDeviceFeaturesLessonEligible = launchCount >= 3
+                && hasCompletedImportLesson
                 && !store.hasCompletedDeviceFeaturesLesson(for: userID)
         }
 
