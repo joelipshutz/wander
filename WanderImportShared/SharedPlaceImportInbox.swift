@@ -75,6 +75,16 @@ enum SharedPlaceImportCaptureInput: Equatable, Sendable {
     case file(Data, fileName: String, contentTypeIdentifier: String?)
 }
 
+enum SharedPlaceImportPayloadBudget {
+    static func adding(_ nextBytes: Int, to currentBytes: Int) throws -> Int {
+        let (total, overflowed) = currentBytes.addingReportingOverflow(nextBytes)
+        guard !overflowed, total <= SharedPlaceImportInbox.maximumTotalBytes else {
+            throw SharedPlaceImportInboxError.totalPayloadTooLarge
+        }
+        return total
+    }
+}
+
 struct SharedPlaceImportInboxEntry: Equatable, Sendable {
     let envelope: SharedPlaceImportEnvelope
     let envelopeURL: URL
@@ -230,10 +240,10 @@ struct SharedPlaceImportInbox: Sendable {
                     guard data.count <= Self.maximumTextBytes else {
                         throw SharedPlaceImportInboxError.textTooLarge
                     }
-                    totalBytes += data.count
-                    guard totalBytes <= Self.maximumTotalBytes else {
-                        throw SharedPlaceImportInboxError.totalPayloadTooLarge
-                    }
+                    totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                        data.count,
+                        to: totalBytes
+                    )
                     let contentHash = Self.sha256(data)
                     guard seenContentHashes.insert(contentHash).inserted else { continue }
                     envelopeItems.append(
@@ -267,10 +277,10 @@ struct SharedPlaceImportInbox: Sendable {
                     guard data.count <= Self.maximumTextBytes else {
                         throw SharedPlaceImportInboxError.textTooLarge
                     }
-                    totalBytes += data.count
-                    guard totalBytes <= Self.maximumTotalBytes else {
-                        throw SharedPlaceImportInboxError.totalPayloadTooLarge
-                    }
+                    totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                        data.count,
+                        to: totalBytes
+                    )
                     let contentHash = Self.sha256(data)
                     guard seenContentHashes.insert(contentHash).inserted else { continue }
                     envelopeItems.append(
@@ -291,10 +301,10 @@ struct SharedPlaceImportInbox: Sendable {
                     guard data.count <= Self.maximumFileBytes else {
                         throw SharedPlaceImportInboxError.fileTooLarge
                     }
-                    totalBytes += data.count
-                    guard totalBytes <= Self.maximumTotalBytes else {
-                        throw SharedPlaceImportInboxError.totalPayloadTooLarge
-                    }
+                    totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                        data.count,
+                        to: totalBytes
+                    )
                     let fileName = Self.safeFileName(rawFileName)
                     guard Self.supportedFileExtensions.contains(
                         URL(fileURLWithPath: fileName).pathExtension.lowercased()

@@ -75,6 +75,18 @@ enum ShareExtensionItemLoader {
         load(item: items[index]) { result in
             switch result {
             case .success(let inputs):
+                do {
+                    var totalBytes = accumulated.reduce(0) { $0 + payloadBytes($1) }
+                    for input in inputs {
+                        totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                            payloadBytes(input),
+                            to: totalBytes
+                        )
+                    }
+                } catch {
+                    completion(.failure(error))
+                    return
+                }
                 load(
                     items: items,
                     at: index + 1,
@@ -166,6 +178,18 @@ enum ShareExtensionItemLoader {
         load(provider: providers[index]) { result in
             switch result {
             case .success(let outputs):
+                do {
+                    var totalBytes = accumulated.reduce(0) { $0 + payloadBytes($1) }
+                    for output in outputs {
+                        totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                            payloadBytes(output),
+                            to: totalBytes
+                        )
+                    }
+                } catch {
+                    completion(.failure(error))
+                    return
+                }
                 load(
                     providers: providers,
                     at: index + 1,
@@ -314,6 +338,9 @@ enum ShareExtensionItemLoader {
                 throw SharedPlaceImportInboxError.fileTooLarge
             }
             let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            guard data.count <= SharedPlaceImportInbox.maximumFileBytes else {
+                throw SharedPlaceImportInboxError.fileTooLarge
+            }
             return .success(
                 .file(
                     data,
@@ -323,6 +350,28 @@ enum ShareExtensionItemLoader {
             )
         } catch {
             return .failure(error)
+        }
+    }
+
+    private static func payloadBytes(_ output: ProviderOutput) -> Int {
+        switch output {
+        case .url(let url, _):
+            Data(url.absoluteString.utf8).count
+        case .text(let text, _):
+            Data(text.utf8).count
+        case .file(let data, _, _):
+            data.count
+        }
+    }
+
+    private static func payloadBytes(_ input: SharedPlaceImportCaptureInput) -> Int {
+        switch input {
+        case .text(let text, _):
+            Data(text.utf8).count
+        case .sharedLink(let url, let contextText, _):
+            Data([url.absoluteString, contextText].compactMap { $0 }.joined(separator: "\n").utf8).count
+        case .file(let data, _, _):
+            data.count
         }
     }
 

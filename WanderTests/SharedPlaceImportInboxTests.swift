@@ -56,6 +56,20 @@ final class SharedPlaceImportSourceDetectorTests: XCTestCase {
 }
 
 final class SharedPlaceImportInboxTests: XCTestCase {
+    func testPayloadBudgetRejectsAggregateShareBeforeAnotherProviderLoads() throws {
+        let nearlyFull = SharedPlaceImportInbox.maximumTotalBytes - 4
+
+        XCTAssertEqual(
+            try SharedPlaceImportPayloadBudget.adding(4, to: nearlyFull),
+            SharedPlaceImportInbox.maximumTotalBytes
+        )
+        XCTAssertThrowsError(
+            try SharedPlaceImportPayloadBudget.adding(5, to: nearlyFull)
+        ) { error in
+            XCTAssertEqual(error as? SharedPlaceImportInboxError, .totalPayloadTooLarge)
+        }
+    }
+
     func testCaptureWritesEnvelopeAndAttachmentThenAcknowledgeRemovesBoth() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
