@@ -5,6 +5,10 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  entriesSha256,
+  verifyManifestSourceCurrent,
+} from "./testflight-manifest.mjs";
 
 const DEFAULTS = {
   apiBase: "https://api.appstoreconnect.apple.com/v1",
@@ -26,7 +30,7 @@ Options:
   --build-number <n>      Build number to process. Defaults to CURRENT_PROJECT_VERSION in project.yml.
   --archive-path <path>   Optional .xcarchive path. If present, verifies/uses Xcode's uploaded build number.
   --reconciliation-file <path>
-                           Required passing reconciliation JSON generated for the exact candidate.
+                           Required passing reconciliation JSON generated from the machine manifest.
   --project <path>        Project YAML path. Default: project.yml.
   --app-id <id>           App Store Connect app id. Default: ${DEFAULTS.appId}.
   --group <name>          TestFlight beta group name. Default: ${DEFAULTS.groupName}.
@@ -154,8 +158,8 @@ export function validateReconciliationGate({
   candidateSha,
   whatToTest,
 }) {
-  if (gate?.gateVersion !== 1) {
-    throw new Error("Reconciliation gateVersion must be 1");
+  if (gate?.gateVersion !== 2) {
+    throw new Error("Reconciliation gateVersion must be 2");
   }
   if (gate.ok !== true || !Array.isArray(gate.errors) || gate.errors.length > 0) {
     throw new Error("Reconciliation report is not passing");
@@ -197,6 +201,20 @@ export function validateReconciliationGate({
   if (gate.entries.some((entry) => !dispositions.has(entry.disposition))) {
     throw new Error("Reconciliation report contains an invalid commit disposition");
   }
+  if (
+    gate.manifestSource?.kind !== "github-issue"
+    || !gate.manifestSource.repository
+    || !Number.isInteger(gate.manifestSource.issueNumber)
+    || !gate.manifestSource.issueUrl
+    || gate.manifestSource.baselineTag !== gate.baseRef
+    || gate.manifestSource.baselineSha !== gate.baselineSha
+    || gate.manifestSource.candidateSha !== gate.candidateSha
+  ) {
+    throw new Error("Reconciliation must identify its GitHub issue manifest source");
+  }
+  if (gate.manifestSource.entriesSha256 !== entriesSha256(gate.entries)) {
+    throw new Error("Reconciliation manifest source hash does not match its classifications");
+  }
   const shippedEntryShas = new Set(
     gate.entries
       .filter((entry) => entry.disposition === "ship")
@@ -224,7 +242,7 @@ export function validateReconciliationGate({
 function readReconciliationGate(options, whatToTest) {
   if (!options.reconciliationFile) {
     throw new Error(
-      "--reconciliation-file is required; generate it with scripts/reconcile-testflight-manifest.mjs",
+      "--reconciliation-file is required; generate it with scripts/testflight-manifest.mjs snapshot",
     );
   }
   if (!fs.existsSync(options.reconciliationFile)) {
@@ -680,6 +698,10 @@ async function main() {
   resolveUploadedBuildNumber(options);
   const whatToTest = readWhatToTest(options);
   const reconciliation = readReconciliationGate(options, whatToTest);
+  const manifestVerification = await verifyManifestSourceCurrent({
+    source: reconciliation.manifestSource,
+    commits: reconciliation.commits,
+  });
 
   loadEnv(options.envPath);
 
@@ -698,6 +720,7 @@ async function main() {
       baselineSha: reconciliation.baselineSha,
       candidateSha: reconciliation.candidateSha,
       classifiedCommits: reconciliation.entries.length,
+      manifestIssue: manifestVerification.issueUrl,
       shippedPayloads: reconciliation.shipped.length,
     },
     timeoutAttempts: options.timeoutAttempts,

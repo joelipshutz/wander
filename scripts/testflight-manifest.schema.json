@@ -87,7 +87,7 @@
               "$ref": "#/$defs/sha"
             },
             "pr": {
-              "type": "integer",
+              "type": ["integer", "null"],
               "minimum": 1
             },
             "issue": {
