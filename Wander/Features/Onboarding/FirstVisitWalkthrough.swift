@@ -46,6 +46,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case listsScope
     case listsOpenPlan
     case listMap
+    case listMapPlace
     case listActions
     case listEditorTitle
     case listEditorPrivacy
@@ -74,7 +75,7 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 5
+    static let version = 6
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
@@ -132,7 +133,12 @@ enum FirstVisitWalkthroughContent {
             step(.add, .addClose, "Back to your map", "Tap × to close Add a Place and keep exploring.")
         ],
         .saveFlow: [
-            step(.saveFlow, .saveStatus, "Start with a check-in", "Choose Check In so we can show you every part of a place memory."),
+            step(
+                .saveFlow,
+                .saveStatus,
+                "Choose how to save it",
+                "Pick Check In or Wanna Go. Either way, we’ll guide you through the useful details before you save."
+            ),
             step(.saveFlow, .saveContinue, "Add what matters", "Continue to the details that will help future you choose."),
             step(
                 .saveFlow,
@@ -240,6 +246,13 @@ enum FirstVisitWalkthroughContent {
         ],
         .listDetail: [
             step(.listDetail, .listMap, "See the whole plan", "Open the map to understand how every place fits together."),
+            step(
+                .listDetail,
+                .listMapPlace,
+                "A place card at a glance",
+                "The focused card keeps the place type, who saved it, and whether it’s a Check In or Wanna Go together.",
+                advance: .next
+            ),
             step(.listDetail, .listActions, "Keep the plan moving", "Add a place or edit the list whenever plans change.")
         ],
         .listEditor: [

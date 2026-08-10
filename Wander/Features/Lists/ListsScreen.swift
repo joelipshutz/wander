@@ -2683,6 +2683,7 @@ private struct ListMapFullScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let list: PlaceListMock
     @State private var position: MapCameraPosition
     @State private var visibleRegion: MKCoordinateRegion
@@ -2809,6 +2810,12 @@ private struct ListMapFullScreen: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: profilePlaceDestinationBinding) {
                 profilePlaceDestination
+            }
+        }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
+        .onChange(of: walkthroughs.currentStep?.target) { previousTarget, target in
+            if previousTarget == .listMapPlace, target == .listActions {
+                dismiss()
             }
         }
     }
@@ -2968,12 +2975,25 @@ private struct ListMapFullScreen: View {
                 ListMapPlaceRail(
                     list: list,
                     focusedPlaceID: focusedPlaceIDBinding,
+                    walkthroughPlaceID: walkthroughPlaceID,
                     bottomInset: bottomInset
                 ) { place in
                     open(place)
                 }
             }
         }
+    }
+
+    private var walkthroughPlaceID: String? {
+        if let tutorialUserPlaceID = walkthroughs.tutorialUserPlaceID,
+           let tutorialPlace = list.places.first(where: {
+               $0.visiblePlaceID == tutorialUserPlaceID
+           }) {
+            return tutorialPlace.id
+        }
+
+        return list.places.first(where: { $0.saveOwnership == .currentUser })?.id
+            ?? list.places.first?.id
     }
 
     private func applyInitialViewportFit(
@@ -3138,6 +3158,7 @@ private struct ListMapPlaceRail: View {
     @ScaledMetric(relativeTo: .body) private var railViewportHeight: CGFloat = 102
     let list: PlaceListMock
     @Binding var focusedPlaceID: String?
+    let walkthroughPlaceID: String?
     let bottomInset: CGFloat
     let onSelect: (ListPlaceMock) -> Void
 
@@ -3167,6 +3188,7 @@ private struct ListMapPlaceRail: View {
                             onSelect(place)
                         }
                         .id(place.id)
+                        .walkthroughTarget(place.id == walkthroughPlaceID ? .listMapPlace : nil)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -3187,7 +3209,7 @@ private struct ListMapPlaceRail: View {
         .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 18, x: 0, y: -5)
         .onAppear {
             if focusedPlaceID == nil {
-                focusedPlaceID = list.places.first?.id
+                focusedPlaceID = walkthroughPlaceID ?? list.places.first?.id
             }
         }
     }

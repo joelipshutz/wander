@@ -4478,6 +4478,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedAssignment: PlaceCategoryAssignment
     @State private var selectedStatus: PlaceStatus
+    @State private var hasSelectedStatus: Bool
     @State private var selectedVisibility: PlaceVisibility
     @State private var selectedRatingScore: Double
     @State private var selectedAnswers: [String: Set<String>]
@@ -4545,6 +4546,9 @@ struct MapPlaceSaveFlowSheet: View {
         _step = State(initialValue: initialStep)
         _selectedAssignment = State(initialValue: initialAssignment)
         _selectedStatus = State(initialValue: initialStatus)
+        _hasSelectedStatus = State(
+            initialValue: initialStep == .details || !context.requiresStatusConfirmation
+        )
         _selectedVisibility = State(initialValue: initialVisibility)
         _selectedRatingScore = State(initialValue: initialRatingScore)
         _selectedAnswers = State(initialValue: initialAnswers)
@@ -4716,7 +4720,7 @@ struct MapPlaceSaveFlowSheet: View {
                     onDraftChange(draftID, update.form, update.submittedAt)
                 }
                 .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
-                    scrollToWalkthroughTarget(target, with: walkthroughScrollProxy)
+                    prepareWalkthroughTarget(target, with: walkthroughScrollProxy)
                 }
                 .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
                     Button(context.removeTitle, role: .destructive) {
@@ -4804,25 +4808,34 @@ struct MapPlaceSaveFlowSheet: View {
 
             MapSavePickerBlock(title: "what do you want to do?") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MapSaveChoicePill(title: CheckInCopy.verb, isSelected: selectedStatus == .been) {
-                        walkthroughs.perform(.saveStatus)
-                        selectedStatus = .been
+                    MapSaveChoicePill(
+                        title: CheckInCopy.verb,
+                        isSelected: hasSelectedStatus && selectedStatus == .been
+                    ) {
+                        selectStatus(.been)
                     }
                     if context.allowsWannaGoSelection {
-                        MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
-                            selectedStatus = .wannaGo
+                        MapSaveChoicePill(
+                            title: "wanna go",
+                            isSelected: hasSelectedStatus && selectedStatus == .wannaGo
+                        ) {
+                            selectStatus(.wannaGo)
                         }
                     }
                 }
                 .walkthroughTarget(.saveStatus)
             }
 
-            WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
-                walkthroughs.perform(.saveContinue)
-                prepareDetails()
+            if hasSelectedStatus {
+                WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
+                    walkthroughs.perform(.saveContinue)
+                    prepareDetails()
+                }
+                .walkthroughTarget(.saveContinue)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .walkthroughTarget(.saveContinue)
         }
+        .animation(.easeInOut(duration: 0.2), value: hasSelectedStatus)
     }
 
     private var detailsContent: some View {
@@ -4831,6 +4844,10 @@ struct MapPlaceSaveFlowSheet: View {
 
             if selectedStatus == .been {
                 checkInDateSection
+                    .id(WalkthroughTargetID.saveDate)
+                    .walkthroughTarget(.saveDate)
+            } else {
+                plannedDateSection
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
             }
@@ -5133,15 +5150,10 @@ struct MapPlaceSaveFlowSheet: View {
             .walkthroughTarget(.saveMoreOptions)
 
             if isShowingOptionalDetails {
-                if selectedStatus == .wannaGo {
-                    plannedDateSection
-                }
                 noteSection
                     .id(WalkthroughTargetID.saveNote)
                     .walkthroughTarget(.saveNote)
                 questionAndLabelSections
-                    .id(WalkthroughTargetID.saveTags)
-                    .walkthroughTarget(.saveTags)
                 visibilitySection
                     .id(WalkthroughTargetID.savePrivacy)
                     .walkthroughTarget(.savePrivacy)
@@ -5732,6 +5744,26 @@ struct MapPlaceSaveFlowSheet: View {
         }
     }
 
+    private func prepareWalkthroughTarget(
+        _ target: WalkthroughTargetID?,
+        with proxy: ScrollViewProxy
+    ) {
+        if selectedStatus == .wannaGo {
+            while let currentTarget = walkthroughs.currentStep?.target,
+                  [.saveRating, .saveFriends, .savePhotos].contains(currentTarget) {
+                walkthroughs.recoverUnavailableTarget(currentTarget)
+            }
+        }
+
+        scrollToWalkthroughTarget(walkthroughs.currentStep?.target ?? target, with: proxy)
+    }
+
+    private func selectStatus(_ status: PlaceStatus) {
+        selectedStatus = status
+        hasSelectedStatus = true
+        walkthroughs.perform(.saveStatus)
+    }
+
     private func loadSharedVisitInviteesIfNeeded() async {
         guard !didLoadSharedVisitInvitees,
               let visit = context.editedVisit,
@@ -5994,6 +6026,8 @@ private struct MapSaveChoicePill: View {
                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -7460,36 +7494,35 @@ private struct MapSaveUnifiedTagsSection: View {
     var body: some View {
         MapSaveQuestionBlock(title: block.title, tag: "optional") {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                selectedShelf
+                selectionHeader
 
-                if !suggestionOptions.isEmpty {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("more suggestions")
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-
-                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                            ForEach(suggestionOptions, id: \.self) { option in
-                                suggestionButton(option)
-                            }
+                ScrollView(.vertical, showsIndicators: allOptions.count > maximumVisibleTagCount) {
+                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                        ForEach(allOptions, id: \.self) { option in
+                            tagButton(option)
                         }
                     }
                 }
+                .scrollDisabled(allOptions.count <= maximumVisibleTagCount)
+                .frame(height: tagPickerHeight)
+                .accessibilityIdentifier("save.tags.picker")
+                .id(WalkthroughTargetID.saveTags)
+                .walkthroughTarget(.saveTags)
 
                 customTagControl
             }
         }
     }
 
-    private var selectedShelf: some View {
+    private var selectionHeader: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing2) {
                 Text("your tags")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
 
-                if !selectedOptions.isEmpty {
-                    Text("\(selectedOptions.count)")
+                if !selectedValues.isEmpty {
+                    Text("\(selectedValues.count)")
                         .font(.system(size: 10, weight: .black))
                         .foregroundStyle(WanderTheme.terracottaDark.color)
                         .frame(minWidth: 22, minHeight: 22)
@@ -7498,28 +7531,10 @@ private struct MapSaveUnifiedTagsSection: View {
                 }
             }
 
-            if selectedOptions.isEmpty {
-                HStack(spacing: WanderTheme.spacing2) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-
-                    Text("Pick the details that make this place worth remembering.")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color.opacity(0.72))
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            } else {
-                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                    ForEach(selectedOptions, id: \.self) { option in
-                        selectedButton(option)
-                    }
-                }
-            }
+            Text("Tap any that fit. Selected tags stay in place so you can review or change them.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceRaised.color)
@@ -7538,36 +7553,43 @@ private struct MapSaveUnifiedTagsSection: View {
         )
     }
 
-    private var selectedOptions: [String] {
-        let suggestedSelections = block.options.filter { option in
-            selectedValues.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
-        }
+    private var maximumVisibleTagCount: Int {
+        gridColumns.count * 4
+    }
+
+    private var tagPickerHeight: CGFloat {
+        let rows = min(
+            4,
+            max(1, Int(ceil(Double(allOptions.count) / Double(gridColumns.count))))
+        )
+        return CGFloat(rows) * 52 + CGFloat(rows - 1) * WanderTheme.spacing2
+    }
+
+    private var allOptions: [String] {
         let customSelections = selectedValues
             .filter { value in
                 !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
             }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
-        return suggestedSelections + customSelections
+        return block.options + customSelections
     }
 
-    private var suggestionOptions: [String] {
-        block.options.filter { option in
-            !selectedValues.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
+    private func tagButton(_ option: String) -> some View {
+        let isSelected = selectedValues.contains {
+            $0.caseInsensitiveCompare(option) == .orderedSame
         }
-    }
 
-    private func selectedButton(_ option: String) -> some View {
-        Button {
+        return Button {
             onSelect(option)
         } label: {
             HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
                 Text(option)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.leading)
 
@@ -7575,45 +7597,22 @@ private struct MapSaveUnifiedTagsSection: View {
             }
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .padding(.horizontal, WanderTheme.spacing2)
-            .background(WanderTheme.terracottaTint.color)
+            .background(isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             .overlay(
                 RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.terracotta.color.opacity(0.52), lineWidth: 1)
+                    .stroke(
+                        isSelected
+                            ? WanderTheme.terracotta.color.opacity(0.52)
+                            : WanderTheme.borderHairline.color,
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Remove \(option) tag")
-        .accessibilityAddTraits(.isSelected)
-    }
-
-    private func suggestionButton(_ option: String) -> some View {
-        Button {
-            onSelect(option)
-        } label: {
-            HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-
-                Text(option)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .multilineTextAlignment(.leading)
-
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-            .padding(.horizontal, WanderTheme.spacing2)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add \(option) tag")
+        .accessibilityLabel("\(isSelected ? "Remove" : "Add") \(option) tag")
+        .accessibilityIdentifier(isSelected ? "save.tags.selected" : "save.tags.suggestion")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     @ViewBuilder

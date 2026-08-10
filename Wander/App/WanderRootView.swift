@@ -443,6 +443,7 @@ struct WanderRootView: View {
         .overlay(alignment: .bottom) {
             Color.clear
                 .frame(height: walkthroughTabBarTargetHeight)
+                .offset(y: walkthroughTabBarTargetVerticalOffset)
                 .contentShape(Rectangle())
                 .allowsHitTesting(false)
                 .walkthroughTarget(.mapTabs)
@@ -1264,7 +1265,11 @@ struct WanderRootView: View {
     }
 
     private var walkthroughTabBarTargetHeight: CGFloat {
-        if #available(iOS 26.0, *) { 44 } else { 50 }
+        50
+    }
+
+    private var walkthroughTabBarTargetVerticalOffset: CGFloat {
+        if #available(iOS 26.0, *) { 6 } else { 2 }
     }
 
     private var walkthroughTabBarTargetHorizontalInset: CGFloat {

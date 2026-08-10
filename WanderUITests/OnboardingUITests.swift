@@ -367,7 +367,19 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
                 .waitForExistence(timeout: 5)
         )
-        app.buttons["check in"].tap()
+        let checkInChoice = app.buttons["check in"]
+        let wannaGoChoice = app.buttons["wanna go"]
+        XCTAssertEqual(checkInChoice.value as? String, "not selected")
+        XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
+        XCTAssertFalse(app.buttons["continue to details"].exists)
+
+        let statusScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        statusScreenshot.name = "REC-236 neutral Check In or Wanna Go choice"
+        statusScreenshot.lifetime = .keepAlways
+        add(statusScreenshot)
+
+        checkInChoice.tap()
+        XCTAssertEqual(checkInChoice.value as? String, "selected")
         XCTAssertTrue(app.buttons["continue to details"].waitForExistence(timeout: 3))
         app.buttons["continue to details"].tap()
 
@@ -419,8 +431,32 @@ final class OnboardingUITests: XCTestCase {
             XCTAssertTrue(app.buttons["Next"].isHittable)
 
             if target == "saveTags" {
+                let suggestions = app.buttons.matching(identifier: "save.tags.suggestion")
+                let suggestionLabels = suggestions.allElementsBoundByIndex.map(\.label)
+                XCTAssertGreaterThan(suggestionLabels.count, 1)
+                let tagPicker = app.descendants(matching: .any)["save.tags.picker"]
+                XCTAssertTrue(tagPicker.waitForExistence(timeout: 2))
+
+                for label in suggestionLabels {
+                    let suggestion = app.buttons[label]
+                    XCTAssertTrue(suggestion.waitForExistence(timeout: 2))
+                    var scrollAttempts = 0
+                    while !suggestion.isHittable, scrollAttempts < 4 {
+                        tagPicker.swipeUp()
+                        scrollAttempts += 1
+                    }
+                    XCTAssertTrue(suggestion.isHittable)
+                    suggestion.tap()
+                }
+                XCTAssertEqual(suggestions.count, 0)
+                XCTAssertEqual(
+                    app.buttons.matching(identifier: "save.tags.selected").count,
+                    suggestionLabels.count
+                )
+                XCTAssertTrue(app.buttons["Next"].isHittable)
+
                 let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-                screenshot.name = "REC-236 full save flow optional details"
+                screenshot.name = "REC-236 all tags selected without blocking save"
                 screenshot.lifetime = .keepAlways
                 add(screenshot)
             }
@@ -437,6 +473,135 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
+                .waitForExistence(timeout: 6)
+        )
+    }
+
+    func testWannaGoCanCompleteTheWalkthroughSaveFlow() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.map.mapAdd"]
+                .waitForExistence(timeout: 5)
+        )
+        app.buttons["map.headerAdd"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.add.addSearch"]
+                .waitForExistence(timeout: 5)
+        )
+        let searchField = app.textFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Maru Coffee\n")
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.add.addPlace"]
+                .waitForExistence(timeout: 6)
+        )
+        app.buttons["Save"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
+                .waitForExistence(timeout: 5)
+        )
+        let checkInChoice = app.buttons["check in"]
+        let wannaGoChoice = app.buttons["wanna go"]
+        XCTAssertEqual(checkInChoice.value as? String, "not selected")
+        XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
+        XCTAssertFalse(app.buttons["continue to details"].exists)
+        wannaGoChoice.tap()
+        XCTAssertEqual(wannaGoChoice.value as? String, "selected")
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveContinue"]
+                .waitForExistence(timeout: 3)
+        )
+        app.buttons["continue to details"].tap()
+
+        for target in ["saveDate", "saveDetails"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.saveFlow.\(target)"]
+                    .waitForExistence(timeout: 5)
+            )
+            app.buttons["Next"].tap()
+        }
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveMoreOptions"]
+                .waitForExistence(timeout: 5)
+        )
+        app.buttons["Show more options"].tap()
+
+        for target in ["saveNote", "saveTags", "savePrivacy"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.saveFlow.\(target)"]
+                    .waitForExistence(timeout: 5)
+            )
+            app.buttons["Next"].tap()
+        }
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveSubmit"]
+                .waitForExistence(timeout: 5)
+        )
+        let saveButton = app.buttons["Add to Wanna"]
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(saveButton.isHittable)
+        saveButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
+                .waitForExistence(timeout: 6)
+        )
+    }
+
+    func testListMapWalkthroughHighlightsTheFocusedPlaceCardThenReturnsToActions() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "lists",
+            "-WanderListsScenario",
+            "detail",
+            "-WanderWalkthroughTarget",
+            "listMap"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.listDetail.listMap"]
+                .waitForExistence(timeout: 5)
+        )
+        let viewMapButton = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "View map for")
+        ).firstMatch
+        XCTAssertTrue(viewMapButton.waitForExistence(timeout: 3))
+        viewMapButton.tap()
+
+        let placeCoach = app.descendants(matching: .any)["walkthrough.listDetail.listMapPlace"]
+        XCTAssertTrue(placeCoach.waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Circuit Coffee")).firstMatch.exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 list map focused place-card lesson"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["Next"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.listDetail.listActions"]
                 .waitForExistence(timeout: 6)
         )
     }

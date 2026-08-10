@@ -4,8 +4,8 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithFortyGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 40)
+    func testApprovedWalkthroughCoversEverySurfaceWithFortyOneGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 41)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -43,6 +43,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
             [.profileSettings, .profileSocial, .profileActivity, .profileShare]
         )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.listDetail]?.map(\.target),
+            [.listMap, .listMapPlace, .listActions]
+        )
     }
 
     func testRequestedExplanationStepsAdvanceWithNext() throws {
@@ -63,6 +67,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .feedActivity,
             .feedPeopleSearch,
             .feedInvite,
+            .listMapPlace,
             .listEditorTitle,
             .listEditorPrivacy,
             .listEditorCollaborators,
@@ -234,7 +239,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertTrue(firstVersion.isComplete(for: "ryan", surface: .lists))
         XCTAssertFalse(
-            FirstVisitWalkthroughStore(defaults: defaults, version: 5)
+            FirstVisitWalkthroughStore(defaults: defaults, version: 6)
                 .isComplete(for: "ryan", surface: .lists)
         )
     }
@@ -351,6 +356,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.consumeRequestedSurface(.lists)
         coordinator.activate(.listDetail)
         coordinator.perform(.listMap)
+        XCTAssertEqual(coordinator.currentStep?.target, .listMapPlace)
+        coordinator.advancePassiveStep()
         coordinator.perform(.listActions)
         XCTAssertEqual(coordinator.requestedSurface, .profile)
 
