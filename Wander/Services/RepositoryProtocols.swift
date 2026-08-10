@@ -1665,6 +1665,7 @@ protocol PlaceListRepository {
     func detail(listID: String) async throws -> RemotePlaceListDetail?
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String
     func delete(listID: String) async throws
+    func leave(listID: String) async throws
     func setCollaborators(listID: String, userIDs: [String]) async throws
     func addItem(_ draft: PlaceListItemDraft) async throws -> String
     func removeItem(listID: String, itemID: String) async throws
@@ -1675,6 +1676,10 @@ protocol PlaceListRepository {
 }
 
 extension PlaceListRepository {
+    func leave(listID: String) async throws {
+        throw WanderRemoteError.notConfigured
+    }
+
     func createInvite(listID: String) async throws -> PlaceListInviteCreation {
         throw WanderRemoteError.notConfigured
     }

@@ -227,6 +227,17 @@ struct ListsScreen: View {
             onListChanged: { sourceListID in
                 refreshOpenList(sourceListID: sourceListID)
             },
+            onListLeft: { sourceListID in
+                if selectedList?.sourceListID == sourceListID {
+                    selectedList = nil
+                }
+                if collaboratorList?.sourceListID == sourceListID {
+                    collaboratorList = nil
+                }
+                if mapList?.sourceListID == sourceListID {
+                    mapList = nil
+                }
+            },
             onOpenProfile: { profileID in
                 guard profileID != store.currentUser.id else { return }
                 selectedProfileID = profileID
@@ -824,6 +835,7 @@ private struct ListDetailScreen: View {
     var onCollaborators: (PlaceListMock) -> Void
     var onOpenMap: (PlaceListMock) -> Void
     var onListChanged: (String) -> Void
+    var onListLeft: (String) -> Void
     var onOpenProfile: (String) -> Void
     @State private var removedPlaceIDs = Set<String>()
     @State private var selectedPlace: ListPlaceMock?
@@ -832,6 +844,9 @@ private struct ListDetailScreen: View {
     @State private var isLoadingSuggestions = false
     @State private var shouldShowAutoSaveExplanation = false
     @State private var autoSaveToastTask: Task<Void, Never>?
+    @State private var isShowingLeaveConfirmation = false
+    @State private var isLeavingList = false
+    @State private var leaveListErrorMessage: String?
 
     init(
         list: PlaceListMock,
@@ -839,6 +854,7 @@ private struct ListDetailScreen: View {
         onCollaborators: @escaping (PlaceListMock) -> Void = { _ in },
         onOpenMap: @escaping (PlaceListMock) -> Void = { _ in },
         onListChanged: @escaping (String) -> Void = { _ in },
+        onListLeft: @escaping (String) -> Void = { _ in },
         onOpenProfile: @escaping (String) -> Void = { _ in },
         initialSelectedPlace: ListPlaceMock? = nil
     ) {
@@ -847,6 +863,7 @@ private struct ListDetailScreen: View {
         self.onCollaborators = onCollaborators
         self.onOpenMap = onOpenMap
         self.onListChanged = onListChanged
+        self.onListLeft = onListLeft
         self.onOpenProfile = onOpenProfile
         _selectedPlace = State(initialValue: initialSelectedPlace)
     }
@@ -913,6 +930,31 @@ private struct ListDetailScreen: View {
                     .accessibilityLabel("Edit list")
                     .walkthroughTarget(canAddPlaces ? nil : .listActions)
                 }
+
+                if canLeaveList {
+                    if isLeavingList {
+                        ProgressView()
+                            .tint(WanderTheme.textInk.color)
+                            .frame(width: 34, height: 34)
+                            .accessibilityLabel("Leaving list")
+                    } else {
+                        Menu {
+                            Button(role: .destructive) {
+                                isShowingLeaveConfirmation = true
+                            } label: {
+                                Label("Leave List", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 14, weight: .black))
+                                .frame(width: 34, height: 34)
+                                .background(WanderTheme.surfaceSand.color)
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .clipShape(Circle())
+                        }
+                        .accessibilityLabel("List actions")
+                    }
+                }
             }
         }
         .task(id: list.sourceListID ?? list.id) {
@@ -957,6 +999,21 @@ private struct ListDetailScreen: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
+        .alert("Leave List?", isPresented: $isShowingLeaveConfirmation) {
+            Button("Leave List", role: .destructive) {
+                Task {
+                    await leaveList()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure? You will not be able to see this list once you remove yourself")
+        }
+        .alert("Couldn’t Leave List", isPresented: leaveListErrorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(leaveListErrorMessage ?? "Please try again.")
+        }
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -1168,6 +1225,17 @@ private struct ListDetailScreen: View {
         sourceList.map(store.canAddPlaces(to:)) ?? list.canAddPlaces
     }
 
+    private var canLeaveList: Bool {
+        sourceList.map(store.canLeave) ?? list.canLeave
+    }
+
+    private var leaveListErrorBinding: Binding<Bool> {
+        Binding(
+            get: { leaveListErrorMessage != nil },
+            set: { if !$0 { leaveListErrorMessage = nil } }
+        )
+    }
+
     private var listShareContent: WanderShareContent? {
         WanderShareContent.list(
             serverID: sourceList?.serverID ?? list.sourceListID,
@@ -1194,6 +1262,22 @@ private struct ListDetailScreen: View {
         handleAddResult(result)
         onListChanged(sourceList.id)
         await loadSuggestions()
+    }
+
+    @MainActor
+    private func leaveList() async {
+        guard let sourceList, !isLeavingList else { return }
+
+        isLeavingList = true
+        let didLeave = await store.leavePlaceList(sourceList, backend: backend)
+        isLeavingList = false
+
+        if didLeave {
+            onListLeft(sourceList.id)
+            dismiss()
+        } else {
+            leaveListErrorMessage = store.lastRemoteError ?? "Please try again."
+        }
     }
 
     @MainActor
@@ -4085,6 +4169,7 @@ private struct PlaceListMock: Identifiable, Hashable {
     var ownerUserID: String = "you"
     var canManage: Bool = true
     var canAddPlaces: Bool = true
+    var canLeave: Bool = false
     var mapAvailability: ListMapAvailability = .ready
 
     var previewPlaces: [ListPlaceMock] { places }
@@ -4178,6 +4263,7 @@ private extension PlaceListMock {
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)
         self.canAddPlaces = store.canAddPlaces(to: list)
+        self.canLeave = store.canLeave(list)
         self.mapAvailability = .ready
     }
 
@@ -4218,6 +4304,7 @@ private extension PlaceListMock {
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)
         self.canAddPlaces = store.canAddPlaces(to: list)
+        self.canLeave = store.canLeave(list)
         // The store currently has no list-scoped request state. A cached count
         // without hydrated places is unresolved content, not proof that a
         // request is actively loading.

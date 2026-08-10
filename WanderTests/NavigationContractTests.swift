@@ -1980,6 +1980,29 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
     }
 
+    func testCollaboratorsLeaveListsFromNativeOverflowConfirmation() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let detailScreen = try sourceSection(
+            source,
+            after: "private struct ListDetailScreen: View",
+            before: "private struct ListSuggestionsSection: View"
+        )
+
+        XCTAssertTrue(detailScreen.contains("if canLeaveList"))
+        XCTAssertTrue(detailScreen.contains("Menu {"))
+        XCTAssertTrue(detailScreen.contains("Button(role: .destructive)"))
+        XCTAssertTrue(detailScreen.contains("Label(\"Leave List\""))
+        XCTAssertTrue(detailScreen.contains(".alert(\"Leave List?\""))
+        XCTAssertTrue(
+            detailScreen.contains(
+                "Are you sure? You will not be able to see this list once you remove yourself"
+            )
+        )
+        XCTAssertTrue(detailScreen.contains("sourceList.map(store.canLeave)"))
+    }
+
     func testListGridTopAlignsTilesWhileNamesGrowDownward() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")

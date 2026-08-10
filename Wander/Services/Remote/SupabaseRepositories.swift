@@ -1385,6 +1385,13 @@ struct SupabasePlaceListRepository: PlaceListRepository {
         )
     }
 
+    func leave(listID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "leave_place_list",
+            params: PlaceListIDParams(inputListID: listID)
+        )
+    }
+
     func setCollaborators(listID: String, userIDs: [String]) async throws {
         let _: EmptyRPCResponse = try await rpc.call(
             "set_place_list_collaborators",
