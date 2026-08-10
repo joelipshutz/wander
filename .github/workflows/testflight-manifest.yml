@@ -28,6 +28,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Bootstrap validator on its introducing PR
+        if: hashFiles('scripts/testflight-manifest.mjs') == ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
       - name: Require a valid release classification
         env:
           GH_TOKEN: ${{ github.token }}
