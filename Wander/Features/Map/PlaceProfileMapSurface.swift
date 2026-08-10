@@ -429,6 +429,7 @@ private struct PlaceProfileFullView: View {
     @State private var isLoadingGallery = false
     @State private var selectedHeaderPhotoID: String?
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
+    @State private var discoveredReservationAction: PlaceExternalAction?
 
     var body: some View {
         GeometryReader { proxy in
@@ -530,6 +531,9 @@ private struct PlaceProfileFullView: View {
         }
         .task(id: place.photoLookupKey) {
             await reloadGallery()
+        }
+        .task(id: reservationLookupKey) {
+            await resolveReservationAction()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -737,33 +741,32 @@ private struct PlaceProfileFullView: View {
     }
 
     private var actionRow: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            ForEach(actionItems) { item in
-                Button {
-                    openURL(item.url)
-                } label: {
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Image(systemName: iconName(for: item.kind))
-                            .font(.system(size: 14, weight: .black))
-                        Text(item.title)
-                            .font(.system(size: 13, weight: .black))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(actionItems) { item in
+                    Button {
+                        openURL(item.url)
+                    } label: {
+                        HStack(spacing: WanderTheme.spacing1) {
+                            Image(systemName: iconName(for: item.kind))
+                                .font(.system(size: 15, weight: .black))
+                            Text(item.title)
+                                .font(.system(size: 13, weight: .black))
+                                .lineLimit(1)
+                        }
+                        .frame(width: 136, height: 48)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .contentShape(Capsule())
+                        .wanderGlassCapsule()
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .padding(.horizontal, WanderTheme.spacing2)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.title)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.title)
             }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.vertical, 1)
         }
+        .padding(.horizontal, -WanderTheme.spacing4)
     }
 
     private var primaryPlaceAction: some View {
@@ -878,7 +881,52 @@ private struct PlaceProfileFullView: View {
     }
 
     private var actionItems: [PlaceExternalAction] {
-        PlaceProfileCopy.actionItems(for: place)
+        PlaceProfileCopy.actionItems(
+            for: place,
+            reservationAction: discoveredReservationAction
+        )
+    }
+
+    private var reservationLookupKey: String {
+        [
+            place.id,
+            place.name,
+            place.locality,
+            place.region,
+            place.websiteURLString,
+            place.actionLinksJSON,
+            place.category,
+            place.primaryCategory,
+            place.subcategory,
+            place.rawProviderType
+        ]
+            .compactMap { $0 }
+            .joined(separator: "|")
+    }
+
+    private var allowsOfficialNatureReservationPageFallback: Bool {
+        if place.primaryCategory == WanderPlaceCategory.outdoorsNature {
+            return true
+        }
+        let classification = [place.category, place.subcategory, place.rawProviderType]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        return ["campground", "camping", "national park", "state park", "rv park"]
+            .contains { classification.contains($0) }
+    }
+
+    private func resolveReservationAction() async {
+        discoveredReservationAction = nil
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: place.actionLinksJSON,
+            websiteURLString: place.websiteURLString,
+            placeName: place.name,
+            locality: place.locality,
+            region: place.region,
+            allowsOfficialReservationPageFallback: allowsOfficialNatureReservationPageFallback
+        )
+        guard !Task.isCancelled else { return }
+        discoveredReservationAction = action
     }
 
     private var shareURL: URL? {
@@ -969,6 +1017,8 @@ private struct PlaceProfileFullView: View {
             "globe"
         case .call:
             "phone.fill"
+        case .reserve, .reservationSearch:
+            "calendar"
         default:
             "link"
         }
@@ -2092,7 +2142,10 @@ private enum PlaceProfileCopy {
         presentation.commonTags.map(\.title)
     }
 
-    static func actionItems(for place: PlaceSheetPlace) -> [PlaceExternalAction] {
+    static func actionItems(
+        for place: PlaceSheetPlace,
+        reservationAction: PlaceExternalAction? = nil
+    ) -> [PlaceExternalAction] {
         var actions: [PlaceExternalAction] = []
         if let latitude = place.latitude,
            let longitude = place.longitude,
@@ -2108,6 +2161,10 @@ private enum PlaceProfileCopy {
         .filter { $0.kind == .website || $0.kind == .call }
 
         actions.append(contentsOf: businessActions)
+        if let reservation = reservationAction
+            ?? PlaceExternalLinks.reservationAction(actionLinksJSON: place.actionLinksJSON) {
+            actions.append(reservation)
+        }
         return actions
     }
 
