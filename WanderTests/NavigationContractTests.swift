@@ -206,8 +206,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
         XCTAssertFalse(root.contains("Label(WanderTab.add.title"))
         XCTAssertTrue(map.contains("accessibilityIdentifier: \"map.headerAdd\""))
+        XCTAssertTrue(map.contains("struct MapSourceFilterChip"))
         XCTAssertTrue(map.contains("tone: isSelected ? .selected : .neutral"))
-        XCTAssertTrue(map.contains("filter.trimColor(isSelected: isSelected)"))
+        XCTAssertTrue(map.contains("tone: isActive ? .selected : .neutral"))
 
         XCTAssertFalse(feed.contains("WanderGlassHeader("))
         XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))
@@ -2196,17 +2197,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander", "-WanderMapSheetExpanded"]))
         XCTAssertFalse(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander"]))
         XCTAssertEqual(
-            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "diary"]),
-            [.you, .been]
+            MapScreen.resolvedInitialMapFilterState(from: ["Wander"]).source,
+            .featured
         )
         XCTAssertEqual(
-            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "friends"]),
-            [.social, .been, .wanna]
+            MapScreen.resolvedInitialMapFilterState(from: ["Wander", "-WanderMapCaptureMode", "friends"]).source,
+            .friends
         )
         XCTAssertEqual(
-            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "trusted"]),
-            [.social, .been]
+            MapScreen.resolvedInitialMapFilterState(from: ["Wander", "-WanderMapCaptureMode", "trusted"]).source,
+            .featured
         )
+        XCTAssertTrue(
+            MapScreen.resolvedInitialMoreFiltersPresentation(from: ["Wander", "-WanderMapMoreFiltersOpen"])
+        )
+        XCTAssertFalse(MapScreen.resolvedInitialMoreFiltersPresentation(from: ["Wander"]))
     }
 
     @MainActor

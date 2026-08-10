@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-05
+Last updated: 2026-08-10
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -9,6 +9,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Decision | Status | Notes |
 |---|---|---|
 | Map-first app | Locked | The map is the primary memory and discovery surface. |
+| Map source and refinement contract | Locked for REC-249 | Featured is the sole default source and Friends is its mutually exclusive alternative. More exposes the same Category, People, and Status refinements for either source, with an explicit All option in every section. Specific values OR within a section; source and non-All sections AND together. Switching source preserves More selections, refinements only narrow the source, and a zero-result combination stays empty rather than broadening or changing source. |
 | No manual lists | Locked | Lists were explicitly removed from product direction. |
 | Trusted people, not strangers | Locked | Discovery should come from people the user follows/knows. |
 | Cross-category places | Locked | Not restaurant-only; coffee, hikes, bars, parks, restaurants, etc. |
@@ -88,6 +89,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | SF Symbols/native controls | Locked | Use native symbols instead of mock emoji chrome for structural UI. |
 | iPhone-first visual QA | Locked | Verify real simulator screenshots before calling UI accepted. |
 | Map filter selected state | Locked | Inactive chips keep the bone/sand fill; active chips add a terracotta ring and terracotta icon, with no checkmark. |
+| Map More presentation | Locked for REC-249 | More opens as a compact popover anchored to its pill, not a bottom sheet. The pin renderer and pin iconography remain unchanged by this filter release. |
 | Map place labels | M2 selected/simple labels | Show place labels on Wander pins in the local prototype, with selected/tapped state made visually explicit. Revisit clutter rules later with real density. |
 | Social proof copy | Locked | Place sheets should show who saved a place with avatars/facepile, not "`Name`'s tip" copy. |
 | Rich place profile data | Locked v0.1, revised 2026-07-12 | Expanded map place profiles use only data Wander actually has: place name/category/address/locality/coordinates, save status/visibility, notes, flexible answer attributes, social proof, friend saves, share, keyless map directions, MapKit/directly captured website or phone data, and on-demand Google Places representative photos under the REC-82 attribution/no-cache contract. Do not show empty hours/price/cuisine fields. Price can appear only as a user answer attribute. "Order" and "Reserve" are allowed only when backed by a direct provider/place URL; non-authoritative provider searches must be labeled as search/find actions. No other paid place metadata is part of this v0.1 surface. |
