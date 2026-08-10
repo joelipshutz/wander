@@ -2236,6 +2236,8 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(initialSelection.contains("let initialPlaceQuery"))
+        XCTAssertTrue(initialSelection.contains("store.visiblePlaces().first"))
+        XCTAssertTrue(initialSelection.contains("routedVisiblePlace = initialPlace"))
         XCTAssertFalse(initialSelection.contains("firstVisiblePlace"))
         XCTAssertFalse(source.contains("centerMapOnInitialPlacesIfNeeded"))
     }
