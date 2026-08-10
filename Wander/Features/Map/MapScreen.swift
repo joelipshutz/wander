@@ -8265,6 +8265,13 @@ struct PlaceActivitySection: View {
             guard auth.isSignedIn else { return }
             await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
         }
+        .task(id: engagementUserPlaceIDs) {
+            guard auth.isSignedIn else { return }
+            await store.refreshPlaceActivityEngagement(
+                userPlaceIDs: engagementUserPlaceIDs,
+                backend: backend
+            )
+        }
     }
 
     private var entries: [PlaceActivityEntry] {
@@ -8328,6 +8335,18 @@ struct PlaceActivitySection: View {
 
     private var companionVisitIDs: [String] {
         entries.compactMap { $0.visit?.serverID }.sorted()
+    }
+
+    private var engagementUserPlaceIDs: [String] {
+        Array(
+            Set(
+                saves.compactMap { summary in
+                    let serverID = summary.visiblePlace.userPlace.serverID
+                    return serverID.flatMap(UUID.init(uuidString:)) == nil ? nil : serverID
+                }
+            )
+        )
+        .sorted()
     }
 
     private func companions(for entry: PlaceActivityEntry) -> [SharedVisitCompanion] {
@@ -8508,6 +8527,12 @@ private struct PlaceActivityCard: View {
 
             addPhotoControl
 
+            ActivityEngagementActionRow(
+                context: engagementContext,
+                visiblePlace: entry.summary.visiblePlace,
+                isEngagementEnabled: isEngagementResolved
+            )
+
             if let photoError {
                 Text(photoError)
                     .font(.system(size: 12, weight: .bold))
@@ -8578,6 +8603,53 @@ private struct PlaceActivityCard: View {
 
     private var ticketAccentColor: Color {
         entry.isCurrentUser ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color
+    }
+
+    private var engagementContext: ActivityEngagementContext {
+        let visiblePlace = entry.summary.visiblePlace
+        let match = store.placeActivityEngagementMatch(
+            userPlaceID: entry.userPlace.serverID ?? entry.userPlace.id,
+            visitID: entry.visit?.serverID,
+            preferredKinds: engagementKinds
+        )
+        let location = [visiblePlace.place.locality, visiblePlace.place.region]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .joined(separator: ", ")
+        let detailParts = [visiblePlace.effectiveSubcategory ?? visiblePlace.effectiveCategory, location]
+            .filter { !$0.isEmpty }
+
+        return ActivityEngagementContext(
+            activityID: match?.activityID ?? "local-place-activity-\(entry.id)",
+            actor: store.shell(for: entry.owner),
+            placeName: visiblePlace.place.canonicalName,
+            placeServerID: visiblePlace.place.serverID ?? visiblePlace.place.id,
+            placeDetail: detailParts.joined(separator: " · "),
+            status: entry.status,
+            occurredAt: entry.timestamp
+        )
+    }
+
+    private var isEngagementResolved: Bool {
+        guard let serverID = entry.userPlace.serverID,
+              UUID(uuidString: serverID) != nil
+        else { return true }
+        return store.placeActivityEngagementMatch(
+            userPlaceID: serverID,
+            visitID: entry.visit?.serverID,
+            preferredKinds: engagementKinds
+        ) != nil
+    }
+
+    private var engagementKinds: [FeedActivityKind] {
+        switch entry.kind {
+        case .visit, .legacyBeenSummary:
+            [.placeBeen, .placeSaved]
+        case .currentWant, .historicalWant:
+            [.placeWannaGo, .placeSaved]
+        }
     }
 
     @ViewBuilder

@@ -455,6 +455,128 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
     }
 }
 
+struct RemoteActivityEngagementSummaryDTO: Codable, Equatable {
+    let activityID: String
+    let likeCount: Int
+    let commentCount: Int
+    let viewerHasLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id"
+        case likeCount = "like_count"
+        case commentCount = "comment_count"
+        case viewerHasLiked = "viewer_has_liked"
+    }
+
+    var summary: ActivityEngagementSummary {
+        ActivityEngagementSummary(
+            activityID: activityID,
+            likeCount: likeCount,
+            commentCount: commentCount,
+            viewerHasLiked: viewerHasLiked
+        )
+    }
+}
+
+struct RemotePlaceActivityEngagementDTO: Codable, Equatable {
+    let activityID: String
+    let userPlaceID: String
+    let visitID: String?
+    let eventType: String
+    let occurredAt: Date
+    let likeCount: Int
+    let commentCount: Int
+    let viewerHasLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id"
+        case userPlaceID = "user_place_id"
+        case visitID = "visit_id"
+        case eventType = "event_type"
+        case occurredAt = "occurred_at"
+        case likeCount = "like_count"
+        case commentCount = "comment_count"
+        case viewerHasLiked = "viewer_has_liked"
+    }
+
+    func match() throws -> PlaceActivityEngagementMatch {
+        guard let kind = FeedActivityKind(rawValue: eventType) else {
+            throw WanderRemoteError.invalidResponse("Unknown activity engagement event type: \(eventType)")
+        }
+        return PlaceActivityEngagementMatch(
+            activityID: activityID,
+            userPlaceID: userPlaceID,
+            visitID: visitID,
+            kind: kind,
+            occurredAt: occurredAt,
+            engagement: ActivityEngagementSummary(
+                activityID: activityID,
+                likeCount: likeCount,
+                commentCount: commentCount,
+                viewerHasLiked: viewerHasLiked
+            )
+        )
+    }
+}
+
+struct RemoteActivityCommentDTO: Codable, Equatable {
+    let id: String
+    let activityID: String
+    let author: RemoteProfileShellDTO
+    let body: String
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case activityID = "activity_id"
+        case author
+        case body
+        case createdAt = "created_at"
+    }
+
+    var comment: ActivityComment {
+        ActivityComment(
+            id: id,
+            activityID: activityID,
+            author: author.profileShell(fallbackRelationship: .nonFollower),
+            body: body,
+            createdAt: createdAt
+        )
+    }
+}
+
+struct RemoteActivityCommentsPageDTO: Codable, Equatable {
+    let comments: [RemoteActivityCommentDTO]
+    let nextCursor: String?
+    let engagement: RemoteActivityEngagementSummaryDTO
+
+    enum CodingKeys: String, CodingKey {
+        case comments
+        case nextCursor = "next_cursor"
+        case engagement
+    }
+
+    var page: ActivityCommentsPage {
+        ActivityCommentsPage(
+            comments: comments.map(\.comment),
+            nextCursor: nextCursor,
+            engagement: engagement.summary
+        )
+    }
+}
+
+struct RemoteActivityCommentPostDTO: Codable, Equatable {
+    let comment: RemoteActivityCommentDTO
+    let engagement: RemoteActivityEngagementSummaryDTO
+
+    var result: ActivityCommentPostResult {
+        ActivityCommentPostResult(
+            comment: comment.comment,
+            engagement: engagement.summary
+        )
+    }
+}
+
 struct RemotePlaceListCollaboratorDTO: Codable, Equatable {
     let userID: String
     let handle: String

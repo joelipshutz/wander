@@ -1074,6 +1074,14 @@ private struct FeedActivityModule: View {
 
                 activityThumbnailDestination
             }
+
+            if let engagementContext, let place = activity.place {
+                ActivityEngagementActionRow(
+                    context: engagementContext,
+                    visiblePlace: place
+                )
+                .padding(.top, WanderTheme.spacing1)
+            }
         }
         .padding(WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1310,6 +1318,29 @@ private struct FeedActivityModule: View {
         case .list: WanderTheme.terracotta.color
         case .saved: WanderTheme.categorySage.color
         }
+    }
+
+    private var engagementContext: ActivityEngagementContext? {
+        guard let place = activity.place else { return nil }
+        let status: PlaceStatus
+        switch activity.resolvedTicketKind {
+        case .checkIn:
+            status = .been
+        case .wanna:
+            status = .wannaGo
+        case .list, .saved:
+            return nil
+        }
+
+        return ActivityEngagementContext(
+            activityID: activity.id,
+            actor: activity.actor,
+            placeName: place.place.canonicalName,
+            placeServerID: place.place.serverID ?? place.place.id,
+            placeDetail: metadata,
+            status: status,
+            occurredAt: activity.occurredAt
+        )
     }
 }
 

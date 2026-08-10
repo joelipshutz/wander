@@ -126,6 +126,7 @@ struct AuthSessionCache {
 enum AuthGateIntent: String, Equatable, Identifiable {
     case syncPlace
     case socialSave
+    case socialActivity
     case followPeople
     case manageBlocks
     case manageNotifications
@@ -146,6 +147,13 @@ enum AuthGateIntent: String, Equatable, Identifiable {
             AuthGateCopy(
                 title: "Sign in to save from people",
                 message: "Social saves need an account so \(AppBrand.displayName) knows whose map gets the copy.",
+                primaryAction: "Sign in",
+                secondaryAction: "Keep browsing"
+            )
+        case .socialActivity:
+            AuthGateCopy(
+                title: "Sign in to join the conversation",
+                message: "Likes and comments need an account so people know they came from you.",
                 primaryAction: "Sign in",
                 secondaryAction: "Keep browsing"
             )

@@ -1594,6 +1594,15 @@ protocol FeedRepository {
 }
 
 @MainActor
+protocol ActivityEngagementRepository {
+    func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary]
+    func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch]
+    func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary
+    func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage
+    func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult
+}
+
+@MainActor
 protocol UserPlaceRepository {
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace]
     func ownWannaGoPlans() async throws -> [OwnWannaGoPlan]

@@ -234,6 +234,11 @@ final class WanderStore: ObservableObject {
     @Published private(set) var followedFeedPage: FollowedFeedPage?
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
+    @Published private(set) var activityEngagementByID: [String: ActivityEngagementSummary] = [:]
+    @Published private(set) var activityCommentsByID: [String: [ActivityComment]] = [:]
+    @Published private(set) var placeActivityEngagementMatches: [PlaceActivityEngagementMatch] = []
+    @Published private(set) var activityEngagementErrorByID: [String: String] = [:]
+    private var pendingActivityLikeIDs = Set<String>()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
@@ -934,6 +939,9 @@ final class WanderStore: ObservableObject {
             || followedFeedPage != nil
             || feedLoadState != .idle
             || lastFeedRefreshAt != nil
+            || !activityEngagementByID.isEmpty
+            || !activityCommentsByID.isEmpty
+            || !placeActivityEngagementMatches.isEmpty
             || lastRemoteError != nil
             || profiles.contains { $0.id != currentUser.id }
             || !follows.isEmpty
@@ -952,6 +960,11 @@ final class WanderStore: ObservableObject {
             followedFeedPage = nil
             feedLoadState = .idle
             lastFeedRefreshAt = nil
+            activityEngagementByID = [:]
+            activityCommentsByID = [:]
+            placeActivityEngagementMatches = []
+            activityEngagementErrorByID = [:]
+            pendingActivityLikeIDs = []
             lastRemoteError = nil
             profiles = []
             follows = []
@@ -1213,6 +1226,11 @@ final class WanderStore: ObservableObject {
         followedFeedPage = nil
         feedLoadState = .idle
         lastFeedRefreshAt = nil
+        activityEngagementByID = [:]
+        activityCommentsByID = [:]
+        placeActivityEngagementMatches = []
+        activityEngagementErrorByID = [:]
+        pendingActivityLikeIDs = []
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         lastDiscoverParseSource = .deterministic
@@ -1332,6 +1350,10 @@ final class WanderStore: ObservableObject {
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
                 lastRemoteError = nil
+                await refreshActivityEngagement(
+                    activityIDs: page.activity.compactMap { $0.place == nil ? nil : $0.id },
+                    backend: backend
+                )
                 return true
             } catch {
                 guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
@@ -1346,7 +1368,237 @@ final class WanderStore: ObservableObject {
         followedFeedPage = page
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
+        seedFixtureActivityEngagement(for: page.activity)
         return true
+    }
+
+    func activityEngagement(for activityID: String) -> ActivityEngagementSummary {
+        activityEngagementByID[activityID] ?? .empty(activityID: activityID)
+    }
+
+    func activityComments(for activityID: String) -> [ActivityComment] {
+        activityCommentsByID[activityID, default: []]
+    }
+
+    func activityEngagementError(for activityID: String) -> String? {
+        activityEngagementErrorByID[activityID]
+    }
+
+    func isActivityLikePending(_ activityID: String) -> Bool {
+        pendingActivityLikeIDs.contains(activityID)
+    }
+
+    func refreshActivityEngagement(activityIDs: [String], backend: WanderBackend?) async {
+        let remoteIDs = Array(Set(activityIDs.filter { UUID(uuidString: $0) != nil })).sorted()
+        guard !remoteIDs.isEmpty,
+              let repository = backend?.activityEngagementRepository
+        else { return }
+
+        do {
+            let summaries = try await repository.summaries(activityIDs: remoteIDs)
+            for summary in summaries where !pendingActivityLikeIDs.contains(summary.activityID) {
+                activityEngagementByID[summary.activityID] = summary
+                activityEngagementErrorByID[summary.activityID] = nil
+            }
+        } catch {
+            let message = remoteErrorMessage(error)
+            for activityID in remoteIDs {
+                activityEngagementErrorByID[activityID] = message
+            }
+        }
+    }
+
+    func refreshPlaceActivityEngagement(userPlaceIDs: [String], backend: WanderBackend?) async {
+        let remoteIDs = Array(Set(userPlaceIDs.filter { UUID(uuidString: $0) != nil })).sorted()
+        guard !remoteIDs.isEmpty,
+              let repository = backend?.activityEngagementRepository
+        else { return }
+
+        do {
+            let matches = try await repository.placeActivitySummaries(userPlaceIDs: remoteIDs)
+            let refreshedIDs = Set(remoteIDs)
+            placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID) }
+            placeActivityEngagementMatches.append(contentsOf: matches)
+            for match in matches where !pendingActivityLikeIDs.contains(match.activityID) {
+                activityEngagementByID[match.activityID] = match.engagement
+                activityEngagementErrorByID[match.activityID] = nil
+            }
+        } catch {
+            let message = remoteErrorMessage(error)
+            for userPlaceID in remoteIDs {
+                activityEngagementErrorByID["user-place:\(userPlaceID)"] = message
+            }
+        }
+    }
+
+    func placeActivityEngagementMatch(
+        userPlaceID: String,
+        visitID: String?,
+        preferredKinds: [FeedActivityKind]
+    ) -> PlaceActivityEngagementMatch? {
+        let candidates = placeActivityEngagementMatches.filter { match in
+            guard match.userPlaceID == userPlaceID else { return false }
+            if let visitID {
+                return match.visitID == visitID
+            }
+            return match.visitID == nil && preferredKinds.contains(match.kind)
+        }
+
+        return candidates.sorted { lhs, rhs in
+            let lhsRank = preferredKinds.firstIndex(of: lhs.kind) ?? preferredKinds.count
+            let rhsRank = preferredKinds.firstIndex(of: rhs.kind) ?? preferredKinds.count
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            if lhs.occurredAt != rhs.occurredAt { return lhs.occurredAt > rhs.occurredAt }
+            return lhs.activityID < rhs.activityID
+        }.first
+    }
+
+    @discardableResult
+    func toggleActivityLike(activityID: String, backend: WanderBackend?) async -> Bool {
+        guard !pendingActivityLikeIDs.contains(activityID) else { return false }
+        let previous = activityEngagement(for: activityID)
+        let requestedLike = !previous.viewerHasLiked
+        activityEngagementByID[activityID] = previous.settingLike(requestedLike)
+        activityEngagementErrorByID[activityID] = nil
+
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return true }
+
+        pendingActivityLikeIDs.insert(activityID)
+        defer { pendingActivityLikeIDs.remove(activityID) }
+        do {
+            activityEngagementByID[activityID] = try await repository.setLike(
+                activityID: activityID,
+                isLiked: requestedLike
+            )
+            return true
+        } catch {
+            activityEngagementByID[activityID] = previous
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return true }
+
+        do {
+            let page = try await repository.comments(activityID: activityID, before: nil, limit: 50)
+            activityCommentsByID[activityID] = page.comments.sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+                return lhs.id < rhs.id
+            }
+            if pendingActivityLikeIDs.contains(activityID) {
+                let optimistic = activityEngagement(for: activityID)
+                activityEngagementByID[activityID] = ActivityEngagementSummary(
+                    activityID: activityID,
+                    likeCount: optimistic.likeCount,
+                    commentCount: page.engagement.commentCount,
+                    viewerHasLiked: optimistic.viewerHasLiked
+                )
+            } else {
+                activityEngagementByID[activityID] = page.engagement
+            }
+            activityEngagementErrorByID[activityID] = nil
+            return true
+        } catch {
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func addActivityComment(activityID: String, body: String, backend: WanderBackend?) async -> Bool {
+        let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedBody.isEmpty, normalizedBody.count <= 1_000 else { return false }
+
+        let previousSummary = activityEngagement(for: activityID)
+        let pendingID = "pending-comment-\(UUID().uuidString.lowercased())"
+        let pending = ActivityComment(
+            id: pendingID,
+            activityID: activityID,
+            author: shell(for: currentUser),
+            body: normalizedBody,
+            createdAt: .now,
+            isPending: true
+        )
+        activityCommentsByID[activityID, default: []].append(pending)
+        activityEngagementByID[activityID] = previousSummary.addingComment()
+        activityEngagementErrorByID[activityID] = nil
+
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else {
+            activityCommentsByID[activityID] = activityComments(for: activityID).map { comment in
+                guard comment.id == pendingID else { return comment }
+                return ActivityComment(
+                    id: comment.id,
+                    activityID: comment.activityID,
+                    author: comment.author,
+                    body: comment.body,
+                    createdAt: comment.createdAt
+                )
+            }
+            return true
+        }
+
+        do {
+            let result = try await repository.addComment(activityID: activityID, body: normalizedBody)
+            activityCommentsByID[activityID] = activityComments(for: activityID)
+                .filter { $0.id != pendingID } + [result.comment]
+            activityCommentsByID[activityID]?.sort { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+                return lhs.id < rhs.id
+            }
+            activityEngagementByID[activityID] = result.engagement
+            return true
+        } catch {
+            activityCommentsByID[activityID]?.removeAll { $0.id == pendingID }
+            activityEngagementByID[activityID] = previousSummary
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    func activityBookmarkState(for visiblePlace: VisiblePlace) -> ActivityBookmarkState {
+        guard let ownPlace = currentUserVisiblePlaces.first(where: {
+            VisiblePlaceGrouping.matches($0, visiblePlace)
+        }) else { return .notSaved }
+        return ownPlace.userPlace.status == .wannaGo ? .wanna : .checkedIn
+    }
+
+    @discardableResult
+    func toggleActivityWanna(for visiblePlace: VisiblePlace, backend: WanderBackend?) async -> ActivityBookmarkState {
+        switch activityBookmarkState(for: visiblePlace) {
+        case .notSaved:
+            _ = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
+        case .wanna:
+            if let ownPlace = currentUserVisiblePlaces.first(where: {
+                VisiblePlaceGrouping.matches($0, visiblePlace)
+            }) {
+                _ = await removeSave(userPlaceID: ownPlace.userPlace.id, backend: backend)
+            }
+        case .checkedIn:
+            break
+        }
+        return activityBookmarkState(for: visiblePlace)
+    }
+
+    private func seedFixtureActivityEngagement(for activity: [FeedActivity]) {
+        let seedCounts = [(5, 2), (3, 1), (8, 3), (2, 0), (6, 1)]
+        for (index, event) in activity.filter({ $0.place != nil }).enumerated()
+            where activityEngagementByID[event.id] == nil {
+            let seed = seedCounts[index % seedCounts.count]
+            activityEngagementByID[event.id] = ActivityEngagementSummary(
+                activityID: event.id,
+                likeCount: seed.0,
+                commentCount: seed.1
+            )
+        }
     }
 
     /// Clerk may report a signed-in user slightly before its first usable
