@@ -79,7 +79,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
         XCTAssertTrue(root.contains("isSelected: selectedTab == tab"))
-        XCTAssertTrue(root.contains("isPressed: pressedTab == tab"))
         XCTAssertTrue(root.contains("isPressed ? .alwaysOriginal : .alwaysTemplate"))
     }
 
@@ -108,10 +107,13 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
-        XCTAssertTrue(root.contains("@State private var pressedTab: WanderTab?"))
         XCTAssertTrue(root.contains("WanderNativeTabTouchObserver("))
-        XCTAssertTrue(root.contains("recognizer.minimumPressDuration = 0"))
-        XCTAssertTrue(root.contains("recognizer.cancelsTouchesInView = false"))
+        XCTAssertTrue(root.contains("for: .touchDown"))
+        XCTAssertTrue(root.contains("for: .touchUpInside"))
+        XCTAssertTrue(root.contains("items[index].image = tab.tabBarImage(isSelected: false, isPressed: true)"))
+        XCTAssertFalse(root.contains("@State private var pressedTab: WanderTab?"))
+        XCTAssertFalse(root.contains("UILongPressGestureRecognizer"))
+        XCTAssertFalse(root.contains("addGestureRecognizer"))
         XCTAssertTrue(root.contains("isPressed ? .alwaysOriginal : .alwaysTemplate"))
         XCTAssertTrue(root.contains("private static var tabBarImageCache: [String: UIImage] = [:]"))
         XCTAssertFalse(root.contains("tabBar.selectedItem ="))
