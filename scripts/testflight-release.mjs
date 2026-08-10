@@ -3,6 +3,12 @@
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  entriesSha256,
+  verifyManifestSourceCurrent,
+} from "./testflight-manifest.mjs";
 
 const DEFAULTS = {
   apiBase: "https://api.appstoreconnect.apple.com/v1",
@@ -23,6 +29,8 @@ function printUsage() {
 Options:
   --build-number <n>      Build number to process. Defaults to CURRENT_PROJECT_VERSION in project.yml.
   --archive-path <path>   Optional .xcarchive path. If present, verifies/uses Xcode's uploaded build number.
+  --reconciliation-file <path>
+                           Required passing reconciliation JSON generated from the machine manifest.
   --project <path>        Project YAML path. Default: project.yml.
   --app-id <id>           App Store Connect app id. Default: ${DEFAULTS.appId}.
   --group <name>          TestFlight beta group name. Default: ${DEFAULTS.groupName}.
@@ -39,8 +47,9 @@ Options:
 
 This script assumes xcodebuild archive/export upload already succeeded. It waits for the
 uploaded build to become VALID, sets export compliance to usesNonExemptEncryption=false,
-sets optional TestFlight "What to Test" copy, attaches the build to the public
-TestFlight group, and submits external beta review.`);
+publishes the reconciled TestFlight "What to Test" copy, attaches the build to
+the public TestFlight group, and submits external beta review. All non-help runs
+require a passing reconciliation file for the exact build and current HEAD.`);
 }
 
 function parseArgs(argv) {
@@ -55,6 +64,7 @@ function parseArgs(argv) {
     pollSeconds: DEFAULTS.pollSeconds,
     projectPath: DEFAULTS.projectPath,
     publicLink: DEFAULTS.publicLink,
+    reconciliationFile: null,
     timeoutAttempts: DEFAULTS.timeoutAttempts,
     whatToTest: null,
     whatToTestFile: null,
@@ -100,6 +110,9 @@ function parseArgs(argv) {
       case "--project":
         options.projectPath = next();
         break;
+      case "--reconciliation-file":
+        options.reconciliationFile = next();
+        break;
       case "--public-link":
         options.publicLink = next();
         break;
@@ -133,6 +146,119 @@ function parseArgs(argv) {
   }
 
   return options;
+}
+
+function sha256(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+export function validateReconciliationGate({
+  gate,
+  buildNumber,
+  candidateSha,
+  whatToTest,
+}) {
+  if (gate?.gateVersion !== 2) {
+    throw new Error("Reconciliation gateVersion must be 2");
+  }
+  if (gate.ok !== true || !Array.isArray(gate.errors) || gate.errors.length > 0) {
+    throw new Error("Reconciliation report is not passing");
+  }
+  if (String(gate.buildNumber) !== String(buildNumber)) {
+    throw new Error(
+      `Reconciliation build ${gate.buildNumber ?? "<missing>"} does not match requested build ${buildNumber}`,
+    );
+  }
+  if (gate.candidateSha !== candidateSha) {
+    throw new Error(
+      `Reconciliation candidate ${gate.candidateSha ?? "<missing>"} does not match current HEAD ${candidateSha}`,
+    );
+  }
+  if (!Array.isArray(gate.commits) || !Array.isArray(gate.entries)) {
+    throw new Error("Reconciliation report must include commits and entries");
+  }
+  if (gate.commits.length === 0 || gate.entries.length !== gate.commits.length) {
+    throw new Error("Reconciliation report does not classify every release-range commit");
+  }
+  if (!Array.isArray(gate.shipped) || gate.shipped.length === 0) {
+    throw new Error("Reconciliation report has no shipped tester payload");
+  }
+
+  const commitShas = new Set(gate.commits.map((commit) => commit.sha));
+  const entryShas = new Set(gate.entries.map((entry) => entry.commit));
+  const shaPattern = /^[0-9a-f]{40}$/;
+  if (
+    commitShas.size !== gate.commits.length
+    || entryShas.size !== gate.entries.length
+    || [...commitShas].some((sha) => !shaPattern.test(sha))
+    || [...entryShas].some((sha) => !shaPattern.test(sha))
+    || [...commitShas].some((sha) => !entryShas.has(sha))
+  ) {
+    throw new Error("Reconciliation commit and classification sets do not match");
+  }
+
+  const dispositions = new Set(["ship", "exclude", "release-operation"]);
+  if (gate.entries.some((entry) => !dispositions.has(entry.disposition))) {
+    throw new Error("Reconciliation report contains an invalid commit disposition");
+  }
+  if (
+    gate.manifestSource?.kind !== "github-issue"
+    || !gate.manifestSource.repository
+    || !Number.isInteger(gate.manifestSource.issueNumber)
+    || !gate.manifestSource.issueUrl
+    || gate.manifestSource.baselineTag !== gate.baseRef
+    || gate.manifestSource.baselineSha !== gate.baselineSha
+    || gate.manifestSource.candidateSha !== gate.candidateSha
+  ) {
+    throw new Error("Reconciliation must identify its GitHub issue manifest source");
+  }
+  if (gate.manifestSource.entriesSha256 !== entriesSha256(gate.entries)) {
+    throw new Error("Reconciliation manifest source hash does not match its classifications");
+  }
+  const shippedEntryShas = new Set(
+    gate.entries
+      .filter((entry) => entry.disposition === "ship")
+      .map((entry) => entry.commit),
+  );
+  const shippedReportShas = new Set(gate.shipped.map((entry) => entry.commit));
+  if (
+    shippedEntryShas.size !== shippedReportShas.size
+    || [...shippedEntryShas].some((sha) => !shippedReportShas.has(sha))
+  ) {
+    throw new Error("Reconciliation shipped payload set does not match its classifications");
+  }
+
+  if (!whatToTest) {
+    throw new Error("Passing reconciled TestFlight What to Test copy is required");
+  }
+  const actualHash = sha256(whatToTest.trim());
+  if (gate.whatToTestSha256 !== actualHash) {
+    throw new Error("What to Test copy does not match the reconciled manifest output");
+  }
+
+  return gate;
+}
+
+function readReconciliationGate(options, whatToTest) {
+  if (!options.reconciliationFile) {
+    throw new Error(
+      "--reconciliation-file is required; generate it with scripts/testflight-manifest.mjs snapshot",
+    );
+  }
+  if (!fs.existsSync(options.reconciliationFile)) {
+    throw new Error(`Reconciliation file not found: ${options.reconciliationFile}`);
+  }
+
+  const gate = JSON.parse(fs.readFileSync(options.reconciliationFile, "utf8"));
+  const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+  return validateReconciliationGate({
+    gate,
+    buildNumber: options.buildNumber,
+    candidateSha,
+    whatToTest,
+  });
 }
 
 function loadEnv(path) {
@@ -571,6 +697,11 @@ async function main() {
   }
   resolveUploadedBuildNumber(options);
   const whatToTest = readWhatToTest(options);
+  const reconciliation = readReconciliationGate(options, whatToTest);
+  const manifestVerification = await verifyManifestSourceCurrent({
+    source: reconciliation.manifestSource,
+    commits: reconciliation.commits,
+  });
 
   loadEnv(options.envPath);
 
@@ -584,6 +715,14 @@ async function main() {
     pollSeconds: options.pollSeconds,
     projectPath: options.projectPath,
     publicLink: options.publicLink,
+    reconciliation: {
+      baseline: reconciliation.baseRef,
+      baselineSha: reconciliation.baselineSha,
+      candidateSha: reconciliation.candidateSha,
+      classifiedCommits: reconciliation.entries.length,
+      manifestIssue: manifestVerification.issueUrl,
+      shippedPayloads: reconciliation.shipped.length,
+    },
     timeoutAttempts: options.timeoutAttempts,
     whatToTest: whatToTest ? `${whatToTest.length} chars` : null,
   };
@@ -617,8 +756,13 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  if (error.body) console.error(JSON.stringify(error.body, null, 2));
-  process.exitCode = 1;
-});
+const isMain = process.argv[1]
+  && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+
+if (isMain) {
+  main().catch((error) => {
+    console.error(error.message);
+    if (error.body) console.error(JSON.stringify(error.body, null, 2));
+    process.exitCode = 1;
+  });
+}

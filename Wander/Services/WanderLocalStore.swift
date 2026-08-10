@@ -45,6 +45,31 @@ struct RemoveSaveResult: Equatable {
     let syncState: SyncState
 }
 
+struct LocalVisitPhotoInput: Equatable {
+    let localAssetRef: String?
+    let contentType: String
+    let byteSize: Int
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+
+    init(
+        localAssetRef: String?,
+        contentType: String,
+        byteSize: Int,
+        width: Int?,
+        height: Int?,
+        capturedAt: Date? = nil
+    ) {
+        self.localAssetRef = localAssetRef
+        self.contentType = contentType
+        self.byteSize = byteSize
+        self.width = width
+        self.height = height
+        self.capturedAt = capturedAt
+    }
+}
+
 private struct LocalRemoveSaveChange {
     let userPlaceID: String
     let removedUserPlaceIDs: [String]
@@ -197,6 +222,11 @@ final class WanderStore: ObservableObject {
 
     private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
     private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
+    private var visitPhotoUploadTask: (
+        id: UUID,
+        userID: String,
+        task: Task<Int, Never>
+    )?
     private var sharedVisitInboxTask: (
         id: UUID,
         userID: String,
@@ -519,6 +549,10 @@ final class WanderStore: ObservableObject {
         let snapshot = WanderStoreSnapshot(store: self)
         WanderDebugLog.endPerformanceInterval("Snapshot Build", id: snapshotSignpostID)
         persistence.save(snapshot)
+    }
+
+    func flushPersistence() {
+        persistence?.flush()
     }
 
     private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
@@ -858,21 +892,66 @@ final class WanderStore: ObservableObject {
     func retryPendingVisitPhotoUploads(backend: WanderBackend?) async -> Int {
         guard let backend else { return 0 }
         let uploadUserID = currentUser.id
-        let pendingPhotos = visitPhotos.filter {
-            $0.deletedAt == nil
-                && $0.uploadState != .uploaded
-                && $0.localAssetRef?.isEmpty == false
-                && currentUserVisit(matching: $0.visitID) != nil
-        }
-        var uploadedCount = 0
 
-        for photo in pendingPhotos {
-            guard currentUser.id == uploadUserID else { break }
-            guard let data = VisitPhotoLocalFileStore.data(from: photo.localAssetRef) else { continue }
-            let result = await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
-            guard currentUser.id == uploadUserID else { break }
-            if result?.uploadState == .uploaded && result?.syncState == .synced {
-                uploadedCount += 1
+        if let visitPhotoUploadTask,
+           visitPhotoUploadTask.userID == uploadUserID {
+            return await visitPhotoUploadTask.task.value
+        }
+
+        visitPhotoUploadTask?.task.cancel()
+        let uploadID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return 0 }
+            defer {
+                if self.visitPhotoUploadTask?.id == uploadID {
+                    self.visitPhotoUploadTask = nil
+                }
+            }
+            return await self.performPendingVisitPhotoUploads(
+                userID: uploadUserID,
+                backend: backend
+            )
+        }
+        visitPhotoUploadTask = (uploadID, uploadUserID, task)
+        return await task.value
+    }
+
+    private func performPendingVisitPhotoUploads(
+        userID uploadUserID: String,
+        backend: WanderBackend
+    ) async -> Int {
+        var uploadedCount = 0
+        var attemptedPhotoIDs: Set<String> = []
+
+        while currentUser.id == uploadUserID, !Task.isCancelled {
+            let pendingPhotos = visitPhotos.filter {
+                !attemptedPhotoIDs.contains($0.id)
+                    && $0.deletedAt == nil
+                    && $0.syncState != .synced
+                    && $0.syncState != .serverDenied
+                    && $0.syncState != .tombstoned
+                    && (
+                        ($0.uploadState == .uploaded && $0.remoteURLString?.isEmpty == false)
+                            || $0.localAssetRef?.isEmpty == false
+                    )
+                    && currentUserVisit(matching: $0.visitID) != nil
+            }
+            guard !pendingPhotos.isEmpty else { break }
+
+            for photo in pendingPhotos {
+                guard currentUser.id == uploadUserID, !Task.isCancelled else { break }
+                attemptedPhotoIDs.insert(photo.id)
+                let isAlreadyUploaded = photo.uploadState == .uploaded
+                    && photo.remoteURLString?.isEmpty == false
+                let data = isAlreadyUploaded
+                    ? nil
+                    : VisitPhotoLocalFileStore.data(from: photo.localAssetRef)
+                guard data != nil || isAlreadyUploaded else { continue }
+                let result = await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
+                guard currentUser.id == uploadUserID, !Task.isCancelled else { break }
+                if result?.uploadState == .uploaded && result?.syncState == .synced {
+                    uploadedCount += 1
+                }
             }
         }
         return uploadedCount
@@ -923,6 +1002,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func clearSessionScopedRemoteState() {
+        cancelVisitPhotoUploadTask()
         cancelCurrentUserCalendarRefresh()
         authoritativeCalendarUserID = nil
 
@@ -1185,6 +1265,7 @@ final class WanderStore: ObservableObject {
         individualPlaceListSyncTasks.values.forEach { $0.task.cancel() }
         placeListSyncTask = nil
         individualPlaceListSyncTasks.removeAll()
+        cancelVisitPhotoUploadTask()
         cancelCurrentUserCalendarRefresh()
         authoritativeCalendarUserID = nil
 
@@ -3588,6 +3669,26 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
+    func createVisitPhotos(
+        visitID: String,
+        inputs: [LocalVisitPhotoInput]
+    ) -> [LocalVisitPhoto] {
+        withDeferredPersistence {
+            inputs.compactMap { input in
+                createVisitPhoto(
+                    visitID: visitID,
+                    localAssetRef: input.localAssetRef,
+                    contentType: input.contentType,
+                    byteSize: input.byteSize,
+                    width: input.width,
+                    height: input.height,
+                    capturedAt: input.capturedAt
+                )
+            }
+        }
+    }
+
+    @discardableResult
     func createVisitPhoto(
         visitID: String,
         data: Data,
@@ -3610,11 +3711,12 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
-        guard backend != nil else {
+        guard let backend else {
             return photo
         }
 
-        return await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
+        _ = await retryPendingVisitPhotoUploads(backend: backend)
+        return currentUserPhoto(matching: photo.id)
     }
 
     @discardableResult
@@ -4691,7 +4793,7 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func uploadVisitPhoto(photoID: String, data: Data, backend: WanderBackend?) async -> LocalVisitPhoto? {
+    func uploadVisitPhoto(photoID: String, data: Data?, backend: WanderBackend?) async -> LocalVisitPhoto? {
         guard let backend,
               let photo = currentUserPhoto(matching: photoID),
               let visit = currentUserVisit(matching: photo.visitID)
@@ -4711,21 +4813,52 @@ final class WanderStore: ObservableObject {
         let remotePhotoID = photo.serverID ?? UUID().uuidString.lowercased()
         let contentType = photo.contentType ?? "image/jpeg"
         let storagePath = "\(currentUser.id)/\(remoteVisitID)/\(remotePhotoID).\(fileExtension(forContentType: contentType))"
+        let alreadyUploaded = photo.uploadState == .uploaded
+            && photo.remoteURLString?.isEmpty == false
         markVisitPhoto(
             localOrServerID: photo.id,
             serverID: remotePhotoID,
             visitID: remoteVisitID,
             storagePath: storagePath,
-            syncState: .pendingCreate,
-            uploadState: .pendingUpload
+            syncState: alreadyUploaded ? .pendingUpdate : .pendingCreate,
+            uploadState: alreadyUploaded ? .uploaded : .pendingUpload
         )
 
-        guard let pendingDraft = visitPhotoDraft(for: photo.id, uploadState: .pendingUpload) else {
-            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing visit photo draft")
-            return photo
-        }
-
         do {
+            if alreadyUploaded {
+                guard let uploadedDraft = visitPhotoDraft(for: photo.id, uploadState: .uploaded) else {
+                    markVisitPhoto(
+                        localOrServerID: photo.id,
+                        syncState: .failed,
+                        uploadState: .uploaded,
+                        error: "Missing uploaded visit photo draft"
+                    )
+                    return photo
+                }
+                let result = try await backend.upsertVisitPhotoMetadata(uploadedDraft)
+                markVisitPhoto(
+                    localOrServerID: photo.id,
+                    syncState: .synced,
+                    uploadState: result.uploadState,
+                    result: result
+                )
+                lastRemoteError = nil
+                return photo
+            }
+
+            guard let data else {
+                markVisitPhoto(
+                    localOrServerID: photo.id,
+                    syncState: .failed,
+                    uploadState: .failed,
+                    error: "Missing local visit photo data"
+                )
+                return photo
+            }
+            guard let pendingDraft = visitPhotoDraft(for: photo.id, uploadState: .pendingUpload) else {
+                markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing visit photo draft")
+                return photo
+            }
             _ = try await backend.upsertVisitPhotoMetadata(pendingDraft)
             markVisitPhoto(localOrServerID: photo.id, syncState: .pendingUpdate, uploadState: .uploading)
             let remoteURL = try await backend.uploadVisitPhotoData(
@@ -4747,7 +4880,17 @@ final class WanderStore: ObservableObject {
             lastRemoteError = nil
         } catch {
             let message = remoteErrorMessage(error)
-            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: message)
+            let latestPhoto = currentUserPhoto(matching: photo.id)
+            let uploadState: VisitPhotoUploadState = latestPhoto?.uploadState == .uploaded
+                && latestPhoto?.remoteURLString?.isEmpty == false
+                ? .uploaded
+                : .failed
+            markVisitPhoto(
+                localOrServerID: photo.id,
+                syncState: .failed,
+                uploadState: uploadState,
+                error: message
+            )
             lastRemoteError = message
         }
 
@@ -6320,6 +6463,11 @@ final class WanderStore: ObservableObject {
     private func cancelSharedVisitInboxTask() {
         sharedVisitInboxTask?.task.cancel()
         sharedVisitInboxTask = nil
+    }
+
+    private func cancelVisitPhotoUploadTask() {
+        visitPhotoUploadTask?.task.cancel()
+        visitPhotoUploadTask = nil
     }
 
     private func normalizedSessionHandle(from session: AuthSession) -> String {

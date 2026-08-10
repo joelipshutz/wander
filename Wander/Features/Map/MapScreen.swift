@@ -4276,17 +4276,51 @@ func persistVisitPhotoAttachments(
 ) async {
     guard let visit, !attachments.isEmpty else { return }
 
-    for attachment in attachments {
-        guard let data = attachment.data() else { continue }
-        _ = await store.createVisitPhoto(
-            visitID: visit.id,
-            data: data,
+    let inputs = attachments.compactMap { attachment -> LocalVisitPhotoInput? in
+        guard attachment.localAssetRef?.isEmpty == false else { return nil }
+        return LocalVisitPhotoInput(
             localAssetRef: attachment.localAssetRef,
             contentType: attachment.contentType,
+            byteSize: attachment.byteSize,
             width: attachment.width,
-            height: attachment.height,
-            backend: backend
+            height: attachment.height
         )
+    }
+    guard !inputs.isEmpty else { return }
+    _ = store.createVisitPhotos(visitID: visit.id, inputs: inputs)
+    store.flushPersistence()
+
+    if let backend {
+        Task { @MainActor [weak store] in
+            _ = await store?.retryPendingVisitPhotoUploads(backend: backend)
+        }
+    }
+}
+
+struct MapPlaceSaveQuestionBlocksCache {
+    struct Key: Equatable {
+        let primaryCategory: String
+        let subcategory: String?
+        let cuisine: String?
+        let status: PlaceStatus
+    }
+
+    private(set) var key: Key?
+    private(set) var blocks: [AddQuestionBlock]
+
+    init(initialBlocks: [AddQuestionBlock]) {
+        blocks = initialBlocks
+    }
+
+    @discardableResult
+    mutating func refresh(
+        for nextKey: Key,
+        load: () -> [AddQuestionBlock]
+    ) -> Bool {
+        guard key != nextKey else { return false }
+        key = nextKey
+        blocks = load()
+        return true
     }
 }
 
@@ -4483,6 +4517,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var selectedRatingScore: Double
     @State private var selectedAnswers: [String: Set<String>]
     @State private var unifiedTags: Set<String>
+    @State private var questionBlocksCache: MapPlaceSaveQuestionBlocksCache
     @State private var lastUnifiedTagOptions: [String]
     @State private var lastQuestionOptions: [String: [String]]
     @State private var selectedCuisine: String?
@@ -4553,6 +4588,9 @@ struct MapPlaceSaveFlowSheet: View {
         _selectedRatingScore = State(initialValue: initialRatingScore)
         _selectedAnswers = State(initialValue: initialAnswers)
         _unifiedTags = State(initialValue: initialUnifiedTags)
+        _questionBlocksCache = State(
+            initialValue: MapPlaceSaveQuestionBlocksCache(initialBlocks: initialQuestionBlocks)
+        )
         _lastUnifiedTagOptions = State(
             initialValue: initialQuestionBlocks.first(where: { Self.isUnifiedTagKey($0.key) })?.options ?? []
         )
@@ -4610,13 +4648,7 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var questionBlocks: [AddQuestionBlock] {
-        AddQuestionTemplates.blocks(
-            primaryCategory: selectedAssignment.primaryCategory,
-            subcategory: selectedAssignment.subcategory,
-            cuisine: selectedCuisine,
-            status: selectedStatus,
-            localTagOptions: localCustomTagOptions()
-        )
+        questionBlocksCache.blocks
     }
 
     private var selectedCandidate: PlaceCandidate {
@@ -4698,6 +4730,7 @@ struct MapPlaceSaveFlowSheet: View {
                         selectedVisibility = .selfOnly
                     }
                     if step == .details {
+                        refreshQuestionBlocksIfNeeded()
                         syncAnswersForCurrentQuestions()
                     }
                 }
@@ -4948,9 +4981,7 @@ struct MapPlaceSaveFlowSheet: View {
 
             VStack(spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        isShowingPlannedDatePicker.toggle()
-                    }
+                    isShowingPlannedDatePicker.toggle()
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar.badge.clock")
@@ -4985,6 +5016,7 @@ struct MapPlaceSaveFlowSheet: View {
                             .font(.system(size: 12, weight: .black))
                             .foregroundStyle(WanderTheme.terracotta.color)
                             .rotationEffect(.degrees(isShowingPlannedDatePicker ? 180 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: isShowingPlannedDatePicker)
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: 58)
@@ -5101,14 +5133,10 @@ struct MapPlaceSaveFlowSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Button {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        isShowingOptionalDetails = true
-                    }
+                    isShowingOptionalDetails = true
                     walkthroughs.perform(.saveMoreOptions)
                 } else {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        isShowingOptionalDetails.toggle()
-                    }
+                    isShowingOptionalDetails.toggle()
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
@@ -5128,6 +5156,7 @@ struct MapPlaceSaveFlowSheet: View {
                         .font(.system(size: 13, weight: .black))
                         .foregroundStyle(WanderTheme.terracotta.color)
                         .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
+                        .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -5193,9 +5222,7 @@ struct MapPlaceSaveFlowSheet: View {
 
             VStack(spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        isShowingCheckInDatePicker.toggle()
-                    }
+                    isShowingCheckInDatePicker.toggle()
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar")
@@ -5215,6 +5242,7 @@ struct MapPlaceSaveFlowSheet: View {
                             .font(.system(size: 12, weight: .black))
                             .foregroundStyle(WanderTheme.terracotta.color)
                             .rotationEffect(.degrees(isShowingCheckInDatePicker ? 180 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: isShowingCheckInDatePicker)
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: 58)
@@ -5237,9 +5265,7 @@ struct MapPlaceSaveFlowSheet: View {
                                     from: selection,
                                     currentDate: visitedAt
                                 )
-                                withAnimation(.easeInOut(duration: 0.22)) {
-                                    isShowingCheckInDatePicker = false
-                                }
+                                isShowingCheckInDatePicker = false
                             }
                         ),
                         in: ..<Date.now
@@ -5428,6 +5454,7 @@ struct MapPlaceSaveFlowSheet: View {
         if resolvedContext.id != context.id {
             applyDefaults(from: resolvedContext)
         }
+        refreshQuestionBlocksIfNeeded()
         syncAnswersForCurrentQuestions()
         errorMessage = nil
         step = .details
@@ -5463,6 +5490,7 @@ struct MapPlaceSaveFlowSheet: View {
                 .filter { !Self.isUnifiedTagKey($0.key) }
                 .map { ($0.key, $0.options) }
         )
+        questionBlocksCache = MapPlaceSaveQuestionBlocksCache(initialBlocks: initialQuestionBlocks)
 
         note = nextContext.initialNote
         visitedAt = nextContext.editedVisit?.visitedAt ?? .now
@@ -5506,7 +5534,26 @@ struct MapPlaceSaveFlowSheet: View {
             selectedCuisine = nil
         }
 
+        refreshQuestionBlocksIfNeeded()
         syncAnswersForCurrentQuestions()
+    }
+
+    private func refreshQuestionBlocksIfNeeded() {
+        let key = MapPlaceSaveQuestionBlocksCache.Key(
+            primaryCategory: selectedAssignment.primaryCategory,
+            subcategory: selectedAssignment.subcategory,
+            cuisine: selectedCuisine,
+            status: selectedStatus
+        )
+        questionBlocksCache.refresh(for: key) {
+            AddQuestionTemplates.blocks(
+                primaryCategory: selectedAssignment.primaryCategory,
+                subcategory: selectedAssignment.subcategory,
+                cuisine: selectedCuisine,
+                status: selectedStatus,
+                localTagOptions: localCustomTagOptions()
+            )
+        }
     }
 
     private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   readFileSync,
@@ -20,6 +21,10 @@ function fail(message) {
 
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+export function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function stringList(value) {
@@ -73,8 +78,8 @@ function validateShipEntry(entry, label) {
   if (!nonEmptyString(entry.issue)) {
     fail(`${label} must name its Linear issue.`);
   }
-  if (!Number.isInteger(entry.pr) || entry.pr <= 0) {
-    fail(`${label} must name its pull request number.`);
+  if (entry.pr !== null && (!Number.isInteger(entry.pr) || entry.pr <= 0)) {
+    fail(`${label} pull request must be a positive integer or null for an explicitly recorded direct push.`);
   }
   if (!nonEmptyString(entry.testerFacingChange)) {
     fail(`${label} must include testerFacingChange.`);
@@ -275,7 +280,7 @@ export function buildReleaseArtifacts({ report, buildNumber, status }) {
   }
 
   const payloadRows = report.shipped.map(
-    (entry) => `- ${entry.issue} / PR #${entry.pr} / \`${entry.commit}\` — ${entry.testerFacingChange.trim()}`,
+    (entry) => `- ${entry.issue} / ${entry.pr ? `PR #${entry.pr}` : "direct push"} / \`${entry.commit}\` — ${entry.testerFacingChange.trim()}`,
   );
   const excludedRows = report.excluded.map(
     (entry) => `- PR #${entry.pr ?? "n/a"} / \`${entry.commit}\` — ${entry.reason.trim()}`,
@@ -315,15 +320,15 @@ export function sortTestFlightTags(tags) {
   });
 }
 
-function runGit(args, cwd) {
+export function runGit(args, cwd) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
-function resolveCommit(ref, cwd) {
+export function resolveCommit(ref, cwd) {
   return runGit(["rev-parse", `${ref}^{commit}`], cwd);
 }
 
-function collectCommits(baseRef, headRef, cwd) {
+export function collectCommits(baseRef, headRef, cwd) {
   try {
     runGit(["merge-base", "--is-ancestor", baseRef, headRef], cwd);
   } catch {
@@ -390,7 +395,14 @@ function auditSha(shaRef, cwd) {
   };
 }
 
-function writeArtifacts({ directory, buildNumber, report, artifacts, force }) {
+export function writeArtifacts({
+  directory,
+  buildNumber,
+  report,
+  artifacts,
+  force,
+  manifestSource = null,
+}) {
   mkdirSync(directory, { recursive: true });
   const prefix = `testflight-build-${buildNumber}`;
   const files = {
@@ -400,7 +412,14 @@ function writeArtifacts({ directory, buildNumber, report, artifacts, force }) {
     releaseRecord: resolve(directory, `${prefix}-release-record.md`),
   };
   const flag = force ? "w" : "wx";
-  writeFileSync(files.reconciliation, `${JSON.stringify(report, null, 2)}\n`, { flag });
+  const lockedReport = {
+    ...report,
+    gateVersion: manifestSource ? 2 : 1,
+    buildNumber,
+    whatToTestSha256: sha256(artifacts.whatToTest.trim()),
+    ...(manifestSource ? { manifestSource } : {}),
+  };
+  writeFileSync(files.reconciliation, `${JSON.stringify(lockedReport, null, 2)}\n`, { flag });
   writeFileSync(files.whatToTest, `${artifacts.whatToTest}\n`, { flag });
   writeFileSync(files.slack, `${artifacts.slack}\n`, { flag });
   writeFileSync(files.releaseRecord, `${artifacts.releaseRecord}\n`, { flag });

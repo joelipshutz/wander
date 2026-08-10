@@ -156,3 +156,21 @@ test("TestFlight tags sort by numeric build for cumulative ancestry audits", () 
     ["testflight/build-99", "testflight/build-122", "testflight/build-124"],
   );
 });
+
+test("an explicitly recorded direct push can carry a shipped payload", () => {
+  const sha = "d".repeat(40);
+  const report = reconcileManifest({
+    commits: [{ sha, subject: "REC-500: emergency direct fix", pr: null, issue: "REC-500" }],
+    manifest: {
+      schemaVersion: 1,
+      baselineTag: "testflight/build-1",
+      baselineSha: "b".repeat(40),
+      candidateSha: sha,
+      entries: [ship(sha, null, "REC-500", "Emergency direct fix ships safely.")],
+    },
+    baseRef: "testflight/build-1",
+    resolvedBaseSha: "b".repeat(40),
+    resolvedHeadSha: sha,
+  });
+  assert.equal(report.ok, true, report.errors.join("\n"));
+});

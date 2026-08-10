@@ -69,10 +69,11 @@ During and after work:
 - Add a Linear comment with validation, TestFlight/build links, known follow-up,
   or blocker details when the work is meaningful enough that future agents
   would otherwise have to reconstruct it from chat.
-- For an app-code, UI, schema, testable-behavior, or QA-relevant merge, add the
-  merged issue and its release payload to the rolling `Next TestFlight` Linear
-  issue as part of merge completion. Docs/process-only work does not enter that
-  manifest.
+- Every PR must include one valid hidden `recme-testflight-payload` JSON block:
+  `ship`, `exclude`, or `release-operation`. After merge, require the main-push
+  manifest workflow to classify the exact commit in the machine-owned GitHub
+  issue. Keep the rolling `Next TestFlight` Linear issue as the human status
+  mirror; it is not the uploader's data source.
 
 ## Collaboration And Git Workflow
 
@@ -352,47 +353,53 @@ build. Examples include "push the TestFlight build", "upload the TF build",
 means merge, update Linear and `Next TestFlight`, then stop.
 
 `main` must remain releasable. If work should not appear in the next TestFlight,
-do not merge it or keep it behind a disabled feature flag. The rolling
-`Next TestFlight` Linear issue is a manifest of releasable changes already on
-`main`; it is not a second approval queue and cannot select a subset of compiled
-code from `main`.
+do not merge it or keep it behind a disabled feature flag. The open GitHub issue
+titled `[machine] Next TestFlight manifest` is the machine-owned queue of
+changes already on `main`; it is not an approval queue and cannot select a
+subset of compiled code from `main`. The rolling `Next TestFlight` Linear issue
+is its human-readable status/relation mirror.
 
-At merge time, add every app-code, UI, schema, testable-behavior, or QA-relevant
-change to the one open `Next TestFlight` issue with a structured comment:
+Before merge, every PR must contain one hidden `recme-testflight-payload` JSON
+block. The standard PR template includes the marker. A `ship` payload requires:
 
-- linked Linear issue, PR, and merge SHA
+- linked Linear issue (the updater supplies PR number and exact merge SHA)
 - tester-facing summary
 - concrete "what to test" item
 - release operation or migration, or `none`
 - validation already completed
 
-Capture this once while implementation context is fresh. Do not add docs-only,
-process-only, or backend-only changes that do not affect the iOS binary or its
-required release operations. Explain any non-obvious exclusion on the merged
-implementation issue.
+Docs/process-only work uses `exclude` with a reason. Build metadata uses
+`release-operation` with a reason. On every push to `main`,
+`.github/workflows/testflight-manifest.yml` sweeps the complete range after the
+last immutable TestFlight tag, resolves every merged PR payload, and upserts the
+exact commits into the machine issue. A direct push or invalid/missing payload
+becomes a red `unclassified` blocker. The updater check fails and a later push
+re-sweeps the whole pending range, so missed updater runs are self-healing.
+Correct a merged PR's payload and rerun the workflow, or explicitly classify a
+true direct push with
+`node scripts/testflight-manifest.mjs record --commit <sha> --entry-file <payload.json> --head origin/main`.
 
-The Linear manifest is required release context, but Git is authoritative for
-what the binary contains. Before a build-number bump and again after the exact
-candidate lands, export the manifest to a temporary JSON file conforming to
-`scripts/testflight-manifest.schema.json` and run:
+Git is authoritative for what the binary contains and the GitHub issue is the
+machine metadata source. Before a build-number bump and again after the exact
+candidate lands, read and reconcile the same issue directly:
 
 ```bash
-node scripts/reconcile-testflight-manifest.mjs \
+node scripts/testflight-manifest.mjs snapshot \
   --base testflight/build-<previous> \
   --head <cutoff-or-exact-candidate> \
-  --manifest <manifest.json> \
   --build <next-build> \
   --status candidate \
   --write-dir <temporary-output-directory>
 ```
 
 Every first-parent commit in the range must appear exactly once as `ship`,
-`exclude`, or `release-operation`. The command fails on missing, stale,
-duplicate, or mismatched entries. Do not bump, archive, upload, or publish
-tester copy while it fails. The final post-bump run must classify the
-build-number PR and any fix that entered after the initial cutoff. Attach the
-reconciliation JSON to the Linear release record and use the generated
-TestFlight and Slack files; do not hand-maintain a second release-note list.
+`exclude`, or `release-operation`. The snapshot first refreshes the issue from
+GitHub, then fails on missing, unclassified, stale, duplicate, or mismatched
+entries. Do not bump, archive, upload, or publish tester copy while it fails.
+The final post-bump run must classify the build-number PR and any fix that
+entered after the initial cutoff. Attach the generated reconciliation JSON to
+the Linear release record and use the generated TestFlight and Slack files; do
+not hand-maintain another release-note list.
 
 For a cumulative ancestry question such as "what about this older commit?",
 audit it separately from the current release delta:
@@ -405,13 +412,13 @@ Any `main` update that is intended to ship to App Store Connect or TestFlight mu
 
 Required release workflow:
 
-- Move the rolling `Next TestFlight` issue to `In Progress` and freeze the
-  intended `origin/main` cutoff SHA. Reconcile its manifest mechanically against
+- Move the rolling Linear mirror to `In Progress` and freeze the intended
+  `origin/main` cutoff SHA. Snapshot the machine issue mechanically against
   commits since the latest immutable `testflight/build-<n>` tag with
-  `scripts/reconcile-testflight-manifest.mjs`. Correct missing or stale entries,
+  `scripts/testflight-manifest.mjs snapshot`. Correct missing or stale entries,
   but do not re-triage already accepted product work. The command must pass
   before the build-number PR begins.
-- Rename it `TestFlight build <n>` and briefly hold other app-code merges while
+- Create/rename the Linear release record `TestFlight build <n>` and briefly hold other app-code merges while
   the build-number PR lands. This cutoff-to-candidate hold prevents unmanifested
   code from slipping into the build.
 - Start a short-lived release branch from that cutoff.
@@ -419,36 +426,42 @@ Required release workflow:
 - Run `xcodegen generate` so `Wander.xcodeproj/project.pbxproj` reflects the new build number.
 - Commit both `project.yml` and `Wander.xcodeproj/project.pbxproj`, open the
   release PR, and merge it through the normal gate.
-- Record the exact merged release-candidate commit, then immediately create the
-  fresh `Next TestFlight` issue with that candidate as its provisional baseline
-  and release the short merge hold. Later merges accumulate there and do not
-  enter the active build. Update the locked JSON with the release-only commit
-  and rerun reconciliation against the exact candidate; attach the passing
-  report and generated copy to the release issue. Run the full relevant
+- Record the exact merged release-candidate commit and release the short merge
+  hold. Later merges accumulate in the same machine issue but fall after the
+  locked candidate and do not enter the active build. Rerun the snapshot against
+  the exact candidate; attach the passing report and generated copy to the
+  Linear release issue. Run the full relevant
   `xcodebuild` test/build gate and archive that exact commit from an isolated or
   detached worktree, even if `main` advances afterward.
 - Upload the binary with the incremented build number. The export options plist
   must set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently
   upload a different build number.
-- Set/confirm export compliance and attach the uploaded build to the public TestFlight group by running `node scripts/testflight-release.mjs --archive-path <archive>` after upload succeeds. Passing the archive path lets the helper detect and process the actual uploaded build number if App Store Connect reports a different one.
+- Set/confirm export compliance and attach the uploaded build to the public
+  TestFlight group by running
+  `node scripts/testflight-release.mjs --archive-path <archive> --reconciliation-file <generated-reconciliation.json> --what-to-test-file <generated-what-to-test.md>`
+  after upload succeeds. The helper refuses to mutate App Store Connect unless
+  the reconciliation is passing, matches the requested build and current exact
+  candidate, classifies every commit, and hashes to the supplied What to Test
+  copy. Passing the archive path also lets the helper detect and process the
+  actual uploaded build number if App Store Connect reports a different one.
 - When the build is available, create and push the immutable annotated tag
   `testflight/build-<n>` at the exact archived commit. Never move or reuse a
-  TestFlight tag.
+  TestFlight tag. Then advance the same machine queue with
+  `node scripts/testflight-manifest.mjs finalize --build <n> --candidate <sha> --tag testflight/build-<n> --head origin/main`.
 - Update `TestFlight build <n>` with the build/tag, tests,
   upload/approval status, tester-note link, known issues, and final release
   evidence, then move it to `Done`.
-- Replace the fresh `Next TestFlight` issue's provisional baseline with build
-  `<n>` and its immutable tag/commit. Do not open a follow-up repo PR just to
-  record the completed release.
+- Update the rolling Linear mirror from the finalized machine baseline. Do not
+  open a follow-up repo PR just to record the completed release.
 - Only after archive/upload has completed should an agent post a tester-facing Slack note. If the binary is still processing or not yet externally approved, the Slack note must say that plainly.
 - If the build is attached to TestFlight or confirmed available, follow the Slack release-note rules below and state the live/approved status.
 
 If upload or App Store Connect processing is blocked after the build-number PR
 merges, keep the rolling release issue `In Progress` and put the exact candidate
 commit, build number, validation, blocker, and continuation commands there. Do
-not create the immutable release tag until the release completes. The fresh
-`Next TestFlight` issue may collect later merges, but its baseline stays clearly
-provisional until the blocked build completes.
+not create the immutable release tag or finalize the machine baseline until the
+release completes. The machine issue may collect later merges; the locked
+candidate SHA keeps them outside the blocked build.
 
 Docs-only or process-only commits to `main` do not need a build-number bump
 unless they happen to be present in a later explicitly requested app release.
@@ -483,18 +496,30 @@ explicitly requests one.
 
 ## TestFlight Helper
 
-Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `rec.me Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary. Prefer passing `--archive-path <archive>` so the helper can verify Xcode's uploaded build number before touching TestFlight.
+Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive`
+upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by
+default, requires the version-2 reconciliation generated from the machine
+GitHub issue and its generated What to Test file, verifies the live issue still
+matches the locked classification hash, waits for the uploaded build to become `VALID`, sets
+`usesNonExemptEncryption=false`, attaches the build to `rec.me Alpha`, submits
+external beta review, and prints the App Store Connect/TestFlight summary.
+Always pass `--archive-path <archive>` so the helper can verify Xcode's uploaded
+build number before touching TestFlight.
 
 ```bash
-node scripts/testflight-release.mjs
+node scripts/testflight-release.mjs \
+  --archive-path <archive> \
+  --reconciliation-file <generated-reconciliation.json> \
+  --what-to-test-file <generated-what-to-test.md>
 ```
 
 Useful overrides:
 
 - `--build-number <n>` to process a specific build instead of the current `project.yml` value.
 - `--archive-path <path>` to read Xcode's archive upload metadata and process the actual uploaded build number when it differs from the requested build number.
-- `--dry-run` to verify the resolved app id, group, and build number without calling App Store Connect.
-- `--what-to-test "<copy>"` or `--what-to-test-file <path>` to set the TestFlight "What to Test" description for the build.
+- `--reconciliation-file <path>` is required and must be the passing JSON generated by `scripts/testflight-manifest.mjs snapshot` for the exact build/candidate.
+- `--dry-run` to verify the reconciliation, resolved app id, group, and build number without calling App Store Connect. The reconciliation and generated What to Test inputs remain required.
+- `--what-to-test-file <path>` is required in normal use and must be the file generated alongside the reconciliation JSON. Inline `--what-to-test` is accepted only when its exact content hash matches that generated output.
 - `--locale <locale>` to set a non-default TestFlight beta build localization. Default: `en-US`.
 - `--timeout-attempts <n>` and `--poll-seconds <n>` if App Store Connect indexing is slow.
 

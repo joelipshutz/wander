@@ -7086,6 +7086,201 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(uploadedPhoto?.remoteURLString?.hasPrefix("https://example.supabase.co/storage/v1/object/public/visit-photos/"), true)
     }
 
+    func testVisitPhotoBatchFlushesAllLocalReferencesBeforeReturning() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("visit-photo-batch-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let persistence = WanderStorePersistence.coalescingFile(
+            url: directory.appendingPathComponent("store.json")
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_photo_batch",
+                name: "Batch Photo Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "four photos",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        let inputs = (1...4).map { index in
+            LocalVisitPhotoInput(
+                localAssetRef: "local_file:photo-\(index).jpg",
+                contentType: "image/jpeg",
+                byteSize: index * 1_000,
+                width: 1200,
+                height: 900
+            )
+        }
+
+        let photos = store.createVisitPhotos(visitID: visit.id, inputs: inputs)
+        store.flushPersistence()
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        let relaunchedVisit = try XCTUnwrap(relaunchedStore.visits(for: result.userPlaceID).first)
+        XCTAssertEqual(photos.count, 4)
+        XCTAssertEqual(
+            relaunchedStore.photos(for: relaunchedVisit.id).compactMap(\.localAssetRef),
+            inputs.compactMap(\.localAssetRef)
+        )
+    }
+
+    func testVisitPhotoRetryFinalizesUploadedBytesWithoutUploadingAgain() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_remote_photo_retry",
+                syncState: .synced,
+                placeID: "place_remote_photo_retry"
+            )
+        )
+        let visitRepository = FakeVisitRepository(failingPhotoMetadataCallNumbers: [2])
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            visitRepository: visitRepository
+        )
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_photo_finalize_retry",
+                name: "Finalize Retry Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "retry final metadata",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        _ = await store.syncPendingVisits(backend: backend)
+        let photo = try XCTUnwrap(
+            store.createVisitPhoto(
+                visitID: visit.id,
+                localAssetRef: "local_file:finalize-retry.jpg",
+                contentType: "image/jpeg",
+                byteSize: 3,
+                width: 12,
+                height: 9
+            )
+        )
+
+        _ = await store.uploadVisitPhoto(
+            photoID: photo.id,
+            data: Data([0xFF, 0xD8, 0xFF]),
+            backend: backend
+        )
+
+        XCTAssertEqual(photo.uploadState, .uploaded)
+        XCTAssertEqual(photo.syncState, .failed)
+        XCTAssertEqual(visitRepository.uploads.count, 1)
+
+        visitRepository.clearPhotoMetadataFailures()
+        let retriedCount = await store.retryPendingVisitPhotoUploads(backend: backend)
+
+        XCTAssertEqual(retriedCount, 1)
+        XCTAssertEqual(photo.uploadState, .uploaded)
+        XCTAssertEqual(photo.syncState, .synced)
+        XCTAssertEqual(visitRepository.uploads.count, 1, "Finalization retry must not upload the same bytes twice")
+        XCTAssertEqual(
+            visitRepository.photoEvents,
+            ["metadata:pending_upload", "upload", "metadata:uploaded", "metadata:uploaded"]
+        )
+    }
+
+    func testConcurrentVisitPhotoRetriesShareSingleFlightAndDrainNewPhotos() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_remote_photo_single_flight",
+                syncState: .synced,
+                placeID: "place_remote_photo_single_flight"
+            )
+        )
+        let visitRepository = FakeVisitRepository(isPhotoMetadataSuspended: true)
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            visitRepository: visitRepository
+        )
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_photo_single_flight",
+                name: "Single Flight Photo Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "one upload task",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        _ = await store.syncPendingVisits(backend: backend)
+        let photo = try XCTUnwrap(
+            store.createVisitPhoto(
+                visitID: visit.id,
+                remoteURLString: "https://example.supabase.co/visit-photos/already-uploaded.jpg",
+                contentType: "image/jpeg",
+                byteSize: 3,
+                width: 12,
+                height: 9
+            )
+        )
+
+        let first = Task { @MainActor in
+            await store.retryPendingVisitPhotoUploads(backend: backend)
+        }
+        for _ in 0..<20 where visitRepository.upsertedPhotoDrafts.isEmpty {
+            await Task.yield()
+        }
+        XCTAssertEqual(visitRepository.upsertedPhotoDrafts.count, 1)
+
+        let secondPhoto = try XCTUnwrap(
+            store.createVisitPhoto(
+                visitID: visit.id,
+                remoteURLString: "https://example.supabase.co/visit-photos/queued-during-upload.jpg",
+                contentType: "image/jpeg",
+                byteSize: 3,
+                width: 12,
+                height: 9
+            )
+        )
+
+        let second = Task { @MainActor in
+            await store.retryPendingVisitPhotoUploads(backend: backend)
+        }
+        for _ in 0..<5 {
+            await Task.yield()
+        }
+        XCTAssertEqual(visitRepository.upsertedPhotoDrafts.count, 1)
+
+        visitRepository.finishPhotoMetadata()
+        let firstCount = await first.value
+        let secondCount = await second.value
+
+        XCTAssertEqual(firstCount, 2)
+        XCTAssertEqual(secondCount, 2)
+        XCTAssertEqual(photo.syncState, .synced)
+        XCTAssertEqual(secondPhoto.syncState, .synced)
+        XCTAssertEqual(visitRepository.upsertedPhotoDrafts.count, 2)
+        XCTAssertTrue(visitRepository.uploads.isEmpty)
+    }
+
     func testRemoteOwnPlaceSaveRefreshesVisiblePlaceCache() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -8957,6 +9152,8 @@ private final class FakeVisitRepository: VisitRepository {
     private let error: Error?
     private let failingUserPlaceIDs: Set<String>
     private var suspendedUserPlaceIDs: Set<String>
+    private var failingPhotoMetadataCallNumbers: Set<Int>
+    private var isPhotoMetadataSuspended: Bool
     private(set) var visitRequests: [String] = []
     private(set) var upsertedVisitDrafts: [PlaceVisitDraft] = []
     private(set) var deletedVisitIDs: [String] = []
@@ -8970,12 +9167,16 @@ private final class FakeVisitRepository: VisitRepository {
         visitsByUserPlaceID: [String: [PlaceVisitResult]] = [:],
         error: Error? = nil,
         failingUserPlaceIDs: Set<String> = [],
-        suspendedUserPlaceIDs: Set<String> = []
+        suspendedUserPlaceIDs: Set<String> = [],
+        failingPhotoMetadataCallNumbers: Set<Int> = [],
+        isPhotoMetadataSuspended: Bool = false
     ) {
         self.visitsByUserPlaceID = visitsByUserPlaceID
         self.error = error
         self.failingUserPlaceIDs = failingUserPlaceIDs
         self.suspendedUserPlaceIDs = suspendedUserPlaceIDs
+        self.failingPhotoMetadataCallNumbers = failingPhotoMetadataCallNumbers
+        self.isPhotoMetadataSuspended = isPhotoMetadataSuspended
     }
 
     func visits(for userPlaceID: String) async throws -> [PlaceVisitResult] {
@@ -9030,6 +9231,13 @@ private final class FakeVisitRepository: VisitRepository {
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
         upsertedPhotoDrafts.append(draft)
         photoEvents.append("metadata:\(draft.uploadState.rawValue)")
+        let callNumber = upsertedPhotoDrafts.count
+        while isPhotoMetadataSuspended {
+            await Task.yield()
+        }
+        if failingPhotoMetadataCallNumbers.contains(callNumber) {
+            throw error ?? TestError.expected
+        }
         if let error {
             throw error
         }
@@ -9047,6 +9255,14 @@ private final class FakeVisitRepository: VisitRepository {
             sortOrder: draft.sortOrder,
             uploadState: draft.uploadState
         )
+    }
+
+    func clearPhotoMetadataFailures() {
+        failingPhotoMetadataCallNumbers = []
+    }
+
+    func finishPhotoMetadata() {
+        isPhotoMetadataSuspended = false
     }
 
     func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
