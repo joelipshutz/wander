@@ -2772,6 +2772,49 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [collaboratorListID, collaboratorItem.rows[0].item_id],
     /place_list_not_found_or_forbidden/,
   );
+  await expectQuery(
+    client,
+    "collaborator can leave shared list",
+    "select public.leave_place_list($1::uuid) as result",
+    [collaboratorListID],
+    () => true,
+  );
+  await expectQuery(
+    client,
+    "former collaborator sees follower-visible list as a friend list",
+    "select exists(select 1 from public.visible_place_lists() where id = $1::uuid) as visible",
+    [collaboratorListID],
+    (result) => result.rows[0]?.visible === true,
+  );
+  await expectQuery(
+    client,
+    "former collaborator can load follower-visible list detail",
+    "select public.place_list_detail($1::uuid) as detail",
+    [collaboratorListID],
+    (result) => result.rows[0]?.detail !== null,
+  );
+  await expectQuery(
+    client,
+    "former collaborator is removed from list collaborators",
+    `
+      select not exists (
+        select 1
+        from jsonb_array_elements(
+          coalesce(public.place_list_detail($1::uuid)->'collaborators', '[]'::jsonb)
+        ) collaborator
+        where collaborator->>'id' = $2
+      ) as removed
+    `,
+    [collaboratorListID, collaboratorUserID],
+    (result) => result.rows[0]?.removed === true,
+  );
+  await expectQueryFailure(
+    client,
+    "collaborator cannot leave the same list twice",
+    "select public.leave_place_list($1::uuid)",
+    [collaboratorListID],
+    /place_list_not_found_or_forbidden/,
+  );
 
   await setAuthenticatedUser(client, strangerUserID);
   await expectQuery(
@@ -3433,6 +3476,7 @@ async function assertPlaceListRPCMetadata(client) {
     "public.place_list_detail(uuid)",
     "public.upsert_place_list(jsonb)",
     "public.delete_place_list(uuid)",
+    "public.leave_place_list(uuid)",
     "public.set_place_list_collaborators(uuid,text[])",
     "public.add_place_list_item(uuid,uuid,uuid,uuid)",
     "public.remove_place_list_item(uuid,uuid)",
@@ -3502,6 +3546,7 @@ async function assertPlaceListRPCMetadata(client) {
     "can_read_place_list",
     "upsert_place_list",
     "delete_place_list",
+    "leave_place_list",
     "set_place_list_collaborators",
     "add_place_list_item",
     "remove_place_list_item",
@@ -3520,6 +3565,26 @@ async function assertPlaceListRPCMetadata(client) {
     `,
     [securityDefinerFunctions],
     (result) => result.rows[0]?.count === securityDefinerFunctions.length,
+  );
+  await expectQuery(
+    client,
+    "leave-list boundary keeps its definer, invoker, search_path, and grant posture",
+    `
+      select
+        app_proc.prosecdef as app_security_definer,
+        'search_path=public, app' = any(coalesce(app_proc.proconfig, array[]::text[])) as app_search_path,
+        not public_proc.prosecdef as public_security_invoker,
+        'search_path=app, public' = any(coalesce(public_proc.proconfig, array[]::text[])) as public_search_path,
+        has_function_privilege('authenticated', app_proc.oid, 'execute') as app_authenticated_execute,
+        has_function_privilege('authenticated', public_proc.oid, 'execute') as public_authenticated_execute,
+        not has_function_privilege('anon', public_proc.oid, 'execute') as public_anon_denied
+      from pg_proc app_proc
+      cross join pg_proc public_proc
+      where app_proc.oid = 'app.leave_place_list(uuid)'::regprocedure
+        and public_proc.oid = 'public.leave_place_list(uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
   );
   await expectQuery(
     client,
