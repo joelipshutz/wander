@@ -29,6 +29,246 @@ enum PlaceImportItemState: String, Codable, Equatable {
     case dismissed
 }
 
+enum PlaceImportReviewSurface: String, Equatable {
+    case resolving
+    case quickAdd
+    case duplicate
+    case compact
+    case batch
+    case recovery
+    case complete
+}
+
+enum PlaceImportBulkStatusAction {
+    static let idleSelectionID = "bulk_status_action_idle"
+
+    static func status(for selectionID: String) -> PlaceStatus? {
+        PlaceStatus(rawValue: selectionID)
+    }
+}
+
+struct PlaceImportReviewPlan: Equatable {
+    let surface: PlaceImportReviewSurface
+    let totalCount: Int
+    let selectedCount: Int
+    let processingCount: Int
+    let readyCount: Int
+    let duplicateCount: Int
+    let needsHelpCount: Int
+    let selectedReadyCount: Int
+    let selectedDuplicateCount: Int
+    let selectedNeedsHelpCount: Int
+    private let quickAddStatus: PlaceStatus?
+
+    init(items: [PlaceImportItem]) {
+        let activeItems = items.filter { ![.saved, .dismissed].contains($0.state) }
+        let selectedItems = activeItems.filter(\.isSelectedForImport)
+        totalCount = activeItems.count
+        selectedCount = selectedItems.count
+        processingCount = activeItems.filter { [.queued, .resolving].contains($0.state) }.count
+        readyCount = activeItems.filter { $0.state == .ready && $0.selectedCandidate != nil }.count
+        duplicateCount = activeItems.filter {
+            $0.state == .duplicate && $0.duplicateUserPlaceID != nil
+        }.count
+        needsHelpCount = activeItems.filter {
+            [.ambiguous, .needsHelp, .failed].contains($0.state)
+        }.count
+        selectedReadyCount = selectedItems.filter {
+            $0.state == .ready && $0.selectedCandidate != nil
+        }.count
+        selectedDuplicateCount = selectedItems.filter {
+            $0.state == .duplicate && $0.duplicateUserPlaceID != nil
+        }.count
+        selectedNeedsHelpCount = selectedItems.filter {
+            [.ambiguous, .needsHelp, .failed].contains($0.state)
+        }.count
+        quickAddStatus = activeItems.count == 1 && selectedItems.count == 1
+            ? selectedItems.first?.stagedStatus
+            : nil
+
+        if totalCount == 0 {
+            surface = .complete
+        } else if processingCount > 0 {
+            surface = .resolving
+        } else if totalCount == 1, readyCount == 1 {
+            surface = .quickAdd
+        } else if totalCount == 1, duplicateCount == 1 {
+            surface = .duplicate
+        } else if readyCount == 0, duplicateCount == 0 {
+            surface = .recovery
+        } else if totalCount <= 5 {
+            surface = .compact
+        } else {
+            surface = .batch
+        }
+    }
+
+    var committableCount: Int {
+        selectedReadyCount + selectedDuplicateCount
+    }
+
+    var primaryActionTitle: String? {
+        guard processingCount == 0, committableCount > 0 else { return nil }
+        if surface == .quickAdd {
+            return quickAddStatus == .been ? "Add as Been" : "Add as Wanna"
+        }
+        if surface == .duplicate {
+            return "Add to imported list"
+        }
+        if selectedNeedsHelpCount > 0 {
+            let denominatorNoun = selectedCount == 1 ? "place" : "places"
+            return "Add \(committableCount) of \(selectedCount) \(denominatorNoun)"
+        }
+        let noun = committableCount == 1 ? "place" : "places"
+        return "Add \(committableCount) \(noun)"
+    }
+}
+
+enum PlaceImportReceiptPresentationPolicy {
+    static func canUseStoredReceipt(activeItemCount: Int) -> Bool {
+        activeItemCount == 0
+    }
+}
+
+enum PlaceImportCommitAuthorization {
+    static func isValid(
+        expectedUserID: String,
+        authUserID: String?,
+        currentUserID: String,
+        isCancelled: Bool
+    ) -> Bool {
+        !isCancelled
+            && authUserID == expectedUserID
+            && currentUserID == expectedUserID
+    }
+}
+
+enum PlaceImportReceiptOutcome: String, Codable, Equatable {
+    case added
+    case existing
+    case needsReview = "needs_review"
+    case failed
+}
+
+struct PlaceImportReceiptEntry: Codable, Equatable, Identifiable {
+    let id: String
+    let itemID: String
+    let displayName: String
+    let displayArea: String?
+    let statusRaw: String?
+    let outcome: PlaceImportReceiptOutcome
+    let userPlaceID: String?
+
+    init(
+        id: String = UUID().uuidString.lowercased(),
+        itemID: String,
+        displayName: String,
+        displayArea: String?,
+        status: PlaceStatus?,
+        outcome: PlaceImportReceiptOutcome,
+        userPlaceID: String?
+    ) {
+        self.id = id
+        self.itemID = itemID
+        self.displayName = displayName
+        self.displayArea = displayArea
+        statusRaw = status?.rawValue
+        self.outcome = outcome
+        self.userPlaceID = userPlaceID
+    }
+
+    var status: PlaceStatus? {
+        statusRaw.flatMap(PlaceStatus.init(rawValue:))
+    }
+}
+
+struct PlaceImportReceipt: Codable, Equatable, Identifiable {
+    let id: String
+    let batchID: String
+    let sourceName: String?
+    let createdAt: Date
+    let entries: [PlaceImportReceiptEntry]
+    let destinationListID: String?
+    var presentedAt: Date?
+
+    init(
+        id: String = UUID().uuidString.lowercased(),
+        batchID: String,
+        sourceName: String?,
+        createdAt: Date = .now,
+        entries: [PlaceImportReceiptEntry],
+        destinationListID: String?,
+        presentedAt: Date? = nil
+    ) {
+        self.id = id
+        self.batchID = batchID
+        self.sourceName = sourceName
+        self.createdAt = createdAt
+        self.entries = entries
+        self.destinationListID = destinationListID
+        self.presentedAt = presentedAt
+    }
+
+    var addedCount: Int {
+        entries.filter { $0.outcome == .added }.count
+    }
+
+    var existingCount: Int {
+        entries.filter { $0.outcome == .existing }.count
+    }
+
+    var needsReviewCount: Int {
+        entries.filter { $0.outcome == .needsReview }.count
+    }
+}
+
+enum PlaceImportDestinationListName {
+    static let maximumUnicodeScalarCount = 96
+
+    static func normalized(_ sourceName: String?) -> String {
+        let source = sourceName ?? ""
+        let withoutControls = source.unicodeScalars.filter {
+            $0.properties.generalCategory != .control
+        }
+        let collapsed = String(String.UnicodeScalarView(withoutControls))
+            .precomposedStringWithCanonicalMapping
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        let fallback = collapsed.isEmpty ? "Google Maps Import" : collapsed
+
+        var output = ""
+        for character in fallback {
+            let proposed = output + String(character)
+            guard proposed.unicodeScalars.count <= maximumUnicodeScalarCount else { break }
+            output = proposed
+        }
+        return output.isEmpty ? "Google Maps Import" : output
+    }
+
+    static func unique(_ sourceName: String?, existingNames: Set<String>) -> String {
+        let base = normalized(sourceName)
+        guard !existingNames.contains(base) else {
+            var suffixIndex = 1
+            while true {
+                let suffix = suffixIndex == 1 ? " — Google Maps" : " — Google Maps \(suffixIndex)"
+                let availableScalars = maximumUnicodeScalarCount - suffix.unicodeScalars.count
+                var truncatedBase = ""
+                for character in base {
+                    let proposed = truncatedBase + String(character)
+                    guard proposed.unicodeScalars.count <= availableScalars else { break }
+                    truncatedBase = proposed
+                }
+                let candidate = truncatedBase + suffix
+                if !existingNames.contains(candidate) {
+                    return candidate
+                }
+                suffixIndex += 1
+            }
+        }
+        return base
+    }
+}
+
 struct PlaceImportSeed: Codable, Equatable, Identifiable {
     let id: String
     let rawText: String
@@ -40,6 +280,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
     let longitude: Double?
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
+    let socialCaptionHint: String?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -51,7 +292,8 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         latitude: Double? = nil,
         longitude: Double? = nil,
         sourceProvider: String? = nil,
-        sourceProviderPlaceID: String? = nil
+        sourceProviderPlaceID: String? = nil,
+        socialCaptionHint: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -63,6 +305,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         self.longitude = longitude
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.socialCaptionHint = socialCaptionHint
     }
 }
 
@@ -76,6 +319,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var state: PlaceImportBatchState
     var totalCount: Int
     var processedCount: Int
+    var destinationListID: String?
+    var receipt: PlaceImportReceipt?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -86,7 +331,9 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         updatedAt: Date = .now,
         state: PlaceImportBatchState = .queued,
         totalCount: Int,
-        processedCount: Int = 0
+        processedCount: Int = 0,
+        destinationListID: String? = nil,
+        receipt: PlaceImportReceipt? = nil
     ) {
         self.id = id
         self.source = source
@@ -97,11 +344,13 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.state = state
         self.totalCount = totalCount
         self.processedCount = processedCount
+        self.destinationListID = destinationListID
+        self.receipt = receipt
     }
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
-    static let currentResolverVersion = 7
+    static let currentResolverVersion = 8
 
     let id: String
     let batchID: String
@@ -115,6 +364,11 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
     var duplicateUserPlaceID: String?
     var resolverVersion: Int?
     var pendingManualSearch: Bool?
+    var stagedStatusRaw: String?
+    var stagedNote: String?
+    var stagedRatingScore: Double?
+    var stagedVisitedAt: Date?
+    var isIncludedInImport: Bool?
     let createdAt: Date
     var updatedAt: Date
 
@@ -131,6 +385,11 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         duplicateUserPlaceID: String? = nil,
         resolverVersion: Int? = PlaceImportItem.currentResolverVersion,
         pendingManualSearch: Bool? = nil,
+        stagedStatus: PlaceStatus? = nil,
+        stagedNote: String? = nil,
+        stagedRatingScore: Double? = nil,
+        stagedVisitedAt: Date? = nil,
+        isIncludedInImport: Bool? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -146,8 +405,18 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         self.duplicateUserPlaceID = duplicateUserPlaceID
         self.resolverVersion = resolverVersion
         self.pendingManualSearch = pendingManualSearch
+        stagedStatusRaw = stagedStatus?.rawValue
+        self.stagedNote = stagedNote
+        self.stagedRatingScore = stagedRatingScore
+        self.stagedVisitedAt = stagedVisitedAt
+        self.isIncludedInImport = isIncludedInImport
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    var isSelectedForImport: Bool {
+        get { isIncludedInImport ?? true }
+        set { isIncludedInImport = newValue }
     }
 
     var selectedCandidate: PlaceCandidate? {
@@ -156,6 +425,17 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
             return selected
         }
         return state == .ready && candidates.count == 1 ? candidates[0] : nil
+    }
+
+    var stagedStatus: PlaceStatus {
+        get { stagedStatusRaw.flatMap(PlaceStatus.init(rawValue:)) ?? .wannaGo }
+        set {
+            stagedStatusRaw = newValue.rawValue
+            if newValue == .wannaGo {
+                stagedRatingScore = nil
+                stagedVisitedAt = nil
+            }
+        }
     }
 
     var displayName: String {
@@ -167,6 +447,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         return selectedCandidate?.name
             ?? seed.nameHint
             ?? candidates.first?.name
+            ?? socialSourceFallbackName
             ?? sourceURLHost
             ?? "Imported place"
     }
@@ -192,24 +473,35 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         return host.replacingOccurrences(of: "www.", with: "")
     }
 
+    private var socialSourceFallbackName: String? {
+        switch source {
+        case .instagram: "Instagram post"
+        case .tiktok: "TikTok post"
+        case .googleMaps, .textNotes: nil
+        }
+    }
+
     private var sourceURLString: String? {
         seed.sourceURLString
     }
 }
 
 struct PlaceImportSnapshot: Codable, Equatable {
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     let version: Int
+    var ownerUserID: String?
     var batches: [PlaceImportBatch]
     var items: [PlaceImportItem]
 
     init(
         version: Int = PlaceImportSnapshot.currentVersion,
+        ownerUserID: String? = nil,
         batches: [PlaceImportBatch] = [],
         items: [PlaceImportItem] = []
     ) {
         self.version = version
+        self.ownerUserID = ownerUserID
         self.batches = batches
         self.items = items
     }

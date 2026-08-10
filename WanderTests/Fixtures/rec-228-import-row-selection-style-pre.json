@@ -1,0 +1,20 @@
+{
+  "bug": "Adaptive import rows cannot be explicitly included or excluded, and their status controls read as oversized dashboard pills instead of the rec.me selection-list pattern",
+  "reported_on": "2026-08-07",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "pre_fix_evidence": {
+    "source": "Joe's physical-device review plus the deterministic -WanderPlaceImportAdaptiveMockup simulator state",
+    "screenshot": "/private/tmp/rec227-adaptive-16plus.png",
+    "selection": "rows have no persistent include/exclude control, so every ready match is committed",
+    "status": "Wanna and check-in use separate large colored pills that compete with the place hierarchy",
+    "visual": "white floating cards, heavy black type, shadows, and a rectangular CTA do not match the app's bone list rows, native editorial typography, glass segmented switches, or capsule primary action"
+  },
+  "expected": {
+    "selection": "every active row has an obvious 44-point check control; checked rows are included and unchecked rows are excluded from the commit",
+    "count": "the primary action updates immediately from the checked subset and excluded unresolved rows stop inflating Add N of T",
+    "status": "each ready checked row exposes a one-tap Wanna/Been segmented choice without opening optional details",
+    "bulk": "multi-place review keeps lightweight select-all and apply-to-selected affordances",
+    "visual": "the screen reuses rec.me color, typography, spacing, bone-row, glass-control, border, and capsule-button components",
+    "completion": "excluded rows are dismissed when the user confirms and are never silently saved"
+  }
+}

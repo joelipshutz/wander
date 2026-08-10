@@ -21,10 +21,35 @@ struct SharedPlaceImportEnvelopeItem: Codable, Equatable, Sendable {
     let text: String?
     let relativeFilePath: String?
     let contentTypeIdentifier: String?
+    let sourceURLString: String?
+    let contextText: String?
+
+    init(
+        kind: SharedPlaceImportPayloadKind,
+        source: SharedPlaceImportSource,
+        contentHash: String,
+        suggestedName: String?,
+        text: String?,
+        relativeFilePath: String?,
+        contentTypeIdentifier: String?,
+        sourceURLString: String? = nil,
+        contextText: String? = nil
+    ) {
+        self.kind = kind
+        self.source = source
+        self.contentHash = contentHash
+        self.suggestedName = suggestedName
+        self.text = text
+        self.relativeFilePath = relativeFilePath
+        self.contentTypeIdentifier = contentTypeIdentifier
+        self.sourceURLString = sourceURLString
+        self.contextText = contextText
+    }
 }
 
 struct SharedPlaceImportEnvelope: Codable, Equatable, Sendable {
-    static let currentVersion = 1
+    static let currentVersion = 2
+    static let supportedVersions = 1...currentVersion
 
     let version: Int
     let deliveryID: String
@@ -46,7 +71,18 @@ struct SharedPlaceImportEnvelope: Codable, Equatable, Sendable {
 
 enum SharedPlaceImportCaptureInput: Equatable, Sendable {
     case text(String, suggestedName: String?)
+    case sharedLink(URL, contextText: String?, suggestedName: String?)
     case file(Data, fileName: String, contentTypeIdentifier: String?)
+}
+
+enum SharedPlaceImportPayloadBudget {
+    static func adding(_ nextBytes: Int, to currentBytes: Int) throws -> Int {
+        let (total, overflowed) = currentBytes.addingReportingOverflow(nextBytes)
+        guard !overflowed, total <= SharedPlaceImportInbox.maximumTotalBytes else {
+            throw SharedPlaceImportInboxError.totalPayloadTooLarge
+        }
+        return total
+    }
 }
 
 struct SharedPlaceImportInboxEntry: Equatable, Sendable {
@@ -99,7 +135,7 @@ enum SharedPlaceImportSourceDetector {
     static func source(for text: String, fileName: String? = nil) -> SharedPlaceImportSource {
         for url in webURLs(in: text) {
             guard let host = url.host?.lowercased() else { continue }
-            if host == "instagram.com" || host.hasSuffix(".instagram.com") {
+            if host == "instagram.com" || host.hasSuffix(".instagram.com") || host == "instagr.am" {
                 return .instagram
             }
             if host == "tiktok.com" || host.hasSuffix(".tiktok.com") {
@@ -204,10 +240,10 @@ struct SharedPlaceImportInbox: Sendable {
                     guard data.count <= Self.maximumTextBytes else {
                         throw SharedPlaceImportInboxError.textTooLarge
                     }
-                    totalBytes += data.count
-                    guard totalBytes <= Self.maximumTotalBytes else {
-                        throw SharedPlaceImportInboxError.totalPayloadTooLarge
-                    }
+                    totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                        data.count,
+                        to: totalBytes
+                    )
                     let contentHash = Self.sha256(data)
                     guard seenContentHashes.insert(contentHash).inserted else { continue }
                     envelopeItems.append(
@@ -225,14 +261,50 @@ struct SharedPlaceImportInbox: Sendable {
                         )
                     )
 
+                case .sharedLink(let rawURL, let rawContextText, let suggestedName):
+                    guard let scheme = rawURL.scheme?.lowercased(),
+                          ["http", "https"].contains(scheme),
+                          rawURL.host?.isEmpty == false
+                    else {
+                        throw SharedPlaceImportInboxError.noSupportedContent
+                    }
+                    let urlString = rawURL.absoluteString
+                    let contextText = Self.normalizedName(rawContextText)
+                    let content = [urlString, contextText]
+                        .compactMap { $0 }
+                        .joined(separator: "\n")
+                    let data = Data(content.utf8)
+                    guard data.count <= Self.maximumTextBytes else {
+                        throw SharedPlaceImportInboxError.textTooLarge
+                    }
+                    totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                        data.count,
+                        to: totalBytes
+                    )
+                    let contentHash = Self.sha256(data)
+                    guard seenContentHashes.insert(contentHash).inserted else { continue }
+                    envelopeItems.append(
+                        SharedPlaceImportEnvelopeItem(
+                            kind: .text,
+                            source: SharedPlaceImportSourceDetector.source(for: content),
+                            contentHash: contentHash,
+                            suggestedName: Self.normalizedName(suggestedName),
+                            text: urlString,
+                            relativeFilePath: nil,
+                            contentTypeIdentifier: nil,
+                            sourceURLString: urlString,
+                            contextText: contextText
+                        )
+                    )
+
                 case .file(let data, let rawFileName, let contentTypeIdentifier):
                     guard data.count <= Self.maximumFileBytes else {
                         throw SharedPlaceImportInboxError.fileTooLarge
                     }
-                    totalBytes += data.count
-                    guard totalBytes <= Self.maximumTotalBytes else {
-                        throw SharedPlaceImportInboxError.totalPayloadTooLarge
-                    }
+                    totalBytes = try SharedPlaceImportPayloadBudget.adding(
+                        data.count,
+                        to: totalBytes
+                    )
                     let fileName = Self.safeFileName(rawFileName)
                     guard Self.supportedFileExtensions.contains(
                         URL(fileURLWithPath: fileName).pathExtension.lowercased()
@@ -321,7 +393,7 @@ struct SharedPlaceImportInbox: Sendable {
                     SharedPlaceImportEnvelope.self,
                     from: Data(contentsOf: url)
                 )
-                guard envelope.version == SharedPlaceImportEnvelope.currentVersion,
+                guard SharedPlaceImportEnvelope.supportedVersions.contains(envelope.version),
                       Self.isValidDeliveryID(envelope.deliveryID),
                       !envelope.items.isEmpty,
                       envelope.items.count <= Self.maximumItemCount

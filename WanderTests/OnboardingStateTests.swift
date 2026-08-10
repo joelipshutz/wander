@@ -54,6 +54,32 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testInteractiveWalkthroughRootOnlyFollowsCompletedAccountOnboarding() {
+        let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
+
+        XCTAssertEqual(
+            AppEntryStateResolver.signedInState(
+                session: session,
+                localState: .fresh,
+                remoteProfile: nil
+            ),
+            .onboarding(session: session, step: .identity)
+        )
+
+        XCTAssertEqual(
+            AppEntryStateResolver.signedInState(
+                session: session,
+                localState: OnboardingLocalState(
+                    nextStep: .notifications,
+                    isComplete: true,
+                    needsServerCompletion: false
+                ),
+                remoteProfile: nil
+            ),
+            .ready(session: session)
+        )
+    }
+
     func testCompletedUserRoutesToCachedMapWhenSessionValidationIsOffline() {
         let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
         let local = OnboardingLocalState(

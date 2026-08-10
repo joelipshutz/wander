@@ -65,6 +65,10 @@ struct WanderApp: App {
                 PlacePhotoCarouselMockupRoot(page: carouselMockupPage)
             } else if let activityMockupPage = PlaceActivityMockupPage.resolved() {
                 PlaceActivityMockupRoot(page: activityMockupPage)
+            } else if PlaceImportAdaptiveMockupPage.isPresented {
+                PlaceImportAdaptiveMockupRoot()
+                    .environmentObject(auth)
+                    .environmentObject(backend)
             } else if PlaceImportCandidateMockupPage.isPresented {
                 PlaceImportCandidateMockupRoot()
                     .environmentObject(auth)

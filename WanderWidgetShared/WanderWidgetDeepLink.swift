@@ -67,6 +67,7 @@ struct WanderCalendarDate: Equatable, Hashable, Sendable {
 
 enum WanderDeepLinkRoute: Equatable, Sendable {
     case quickCapture
+    case addSearch(query: String)
     case map
     case quickSearch(query: String?)
     case nearbyPlace(candidateID: String)
@@ -81,6 +82,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         switch self {
         case .quickCapture:
             WanderWidgetConstants.quickCaptureURL
+        case .addSearch(let query):
+            Self.addSearchURL(query: query)
         case .map:
             WanderWidgetConstants.mapURL
         case .quickSearch(let query):
@@ -134,6 +137,12 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         case ("add", ["here-now"]):
             guard hasNoQuery(in: components) else { return nil }
             return .quickCapture
+
+        case ("add", ["search"]):
+            guard let wrappedQuery = searchQuery(in: components),
+                  let query = wrappedQuery
+            else { return nil }
+            return .addSearch(query: query)
 
         case ("map", []):
             guard hasNoQuery(in: components) else { return nil }
@@ -268,6 +277,13 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         var components = baseComponents(host: "map", path: "/search")
         components.queryItems = [URLQueryItem(name: "q", value: query)]
         return components.url!
+    }
+
+    private static func addSearchURL(query: String) -> URL? {
+        guard let query = normalizedQuery(query) else { return nil }
+        var components = baseComponents(host: "add", path: "/search")
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        return components.url
     }
 
     private static func profileCalendarDateURL(_ date: WanderCalendarDate) -> URL {

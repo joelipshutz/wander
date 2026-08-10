@@ -717,6 +717,12 @@ enum WalkthroughHelpDestination {
     static let extensions = URL(string: "https://getrec.me/extensions")!
 }
 
+enum ImportWalkthroughContent {
+    static let title = "Bring every saved place with you"
+    static let message = "Paste one place, a few links, or a whole list from Maps, Instagram, TikTok, or Notes. Choose what to keep and mark each Check In or Wanna before anything reaches your map."
+    static let actionTitle = "Open Import From"
+}
+
 private struct ImportWalkthroughOverlay: View {
     let onOpenImport: () -> Void
 
@@ -733,16 +739,16 @@ private struct ImportWalkthroughOverlay: View {
                     .background(WanderTheme.terracotta.color, in: Circle())
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Bring your saved places with you")
+                    Text(ImportWalkthroughContent.title)
                         .font(.system(.title2, design: .rounded, weight: .black))
                         .foregroundStyle(WanderTheme.textInk.color)
-                    Text("Import links, shared posts, and place notes into one review queue. Nothing reaches your map until you approve it.")
+                    Text(ImportWalkthroughContent.message)
                         .font(.system(.subheadline, design: .rounded, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Button("Open Import From", action: onOpenImport)
+                Button(ImportWalkthroughContent.actionTitle, action: onOpenImport)
                     .font(.system(size: 16, weight: .black))
                     .foregroundStyle(WanderTheme.textOnAction.color)
                     .frame(maxWidth: .infinity, minHeight: 52)
@@ -809,6 +815,12 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                         systemImage: "square.grid.2x2.fill",
                         title: "Home & Lock Screen widgets",
                         instruction: "Long-press your screen, tap Edit or +, search rec.me, then choose Quick Add, Search, Activity, or Nearby."
+                    )
+
+                    DeviceFeatureInstruction(
+                        systemImage: "square.and.arrow.up.fill",
+                        title: "Share into rec.me",
+                        instruction: "From Maps, Instagram, TikTok, or Safari, tap Share → rec.me. Your captures open in a private review where you choose what to keep."
                     )
 
                     Link(destination: WalkthroughHelpDestination.extensions) {

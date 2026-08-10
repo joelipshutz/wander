@@ -305,6 +305,13 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(fourthLaunch.isPresentingLaunchLesson)
     }
 
+    func testImportLessonMatchesTheAdaptiveBuild124ReviewFlow() {
+        XCTAssertEqual(ImportWalkthroughContent.actionTitle, "Open Import From")
+        XCTAssertTrue(ImportWalkthroughContent.message.contains("one place, a few links, or a whole list"))
+        XCTAssertTrue(ImportWalkthroughContent.message.contains("Check In or Wanna"))
+        XCTAssertTrue(ImportWalkthroughContent.message.contains("before anything reaches your map"))
+    }
+
     func testForcedLaunchLessonsSupportVisualTesting() throws {
         let defaults = try makeDefaults()
         let importCoordinator = FirstVisitWalkthroughCoordinator(

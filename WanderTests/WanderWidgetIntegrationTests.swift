@@ -134,6 +134,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
     func testColdStartDeepLinkInboxRetainsEveryWidgetRouteUntilSessionValidation() throws {
         let routes: [WanderDeepLinkRoute] = [
             .quickCapture,
+            .addSearch(query: "Bavel"),
             .map,
             .quickSearch(query: nil),
             .quickSearch(query: "coffee"),
