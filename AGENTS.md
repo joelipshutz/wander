@@ -430,7 +430,14 @@ Required release workflow:
 - Upload the binary with the incremented build number. The export options plist
   must set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently
   upload a different build number.
-- Set/confirm export compliance and attach the uploaded build to the public TestFlight group by running `node scripts/testflight-release.mjs --archive-path <archive>` after upload succeeds. Passing the archive path lets the helper detect and process the actual uploaded build number if App Store Connect reports a different one.
+- Set/confirm export compliance and attach the uploaded build to the public
+  TestFlight group by running
+  `node scripts/testflight-release.mjs --archive-path <archive> --reconciliation-file <generated-reconciliation.json> --what-to-test-file <generated-what-to-test.md>`
+  after upload succeeds. The helper refuses to mutate App Store Connect unless
+  the reconciliation is passing, matches the requested build and current exact
+  candidate, classifies every commit, and hashes to the supplied What to Test
+  copy. Passing the archive path also lets the helper detect and process the
+  actual uploaded build number if App Store Connect reports a different one.
 - When the build is available, create and push the immutable annotated tag
   `testflight/build-<n>` at the exact archived commit. Never move or reuse a
   TestFlight tag.
@@ -483,18 +490,29 @@ explicitly requests one.
 
 ## TestFlight Helper
 
-Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive` upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by default, waits for the uploaded build to become `VALID`, sets `usesNonExemptEncryption=false`, can set TestFlight "What to Test" copy, attaches the build to `rec.me Alpha`, submits external beta review, and prints the App Store Connect/TestFlight summary. Prefer passing `--archive-path <archive>` so the helper can verify Xcode's uploaded build number before touching TestFlight.
+Use `scripts/testflight-release.mjs` after a successful `xcodebuild -exportArchive`
+upload. The helper reads `CURRENT_PROJECT_VERSION` from `project.yml` by
+default, requires the passing reconciliation JSON and its generated What to
+Test file, waits for the uploaded build to become `VALID`, sets
+`usesNonExemptEncryption=false`, attaches the build to `rec.me Alpha`, submits
+external beta review, and prints the App Store Connect/TestFlight summary.
+Always pass `--archive-path <archive>` so the helper can verify Xcode's uploaded
+build number before touching TestFlight.
 
 ```bash
-node scripts/testflight-release.mjs
+node scripts/testflight-release.mjs \
+  --archive-path <archive> \
+  --reconciliation-file <generated-reconciliation.json> \
+  --what-to-test-file <generated-what-to-test.md>
 ```
 
 Useful overrides:
 
 - `--build-number <n>` to process a specific build instead of the current `project.yml` value.
 - `--archive-path <path>` to read Xcode's archive upload metadata and process the actual uploaded build number when it differs from the requested build number.
-- `--dry-run` to verify the resolved app id, group, and build number without calling App Store Connect.
-- `--what-to-test "<copy>"` or `--what-to-test-file <path>` to set the TestFlight "What to Test" description for the build.
+- `--reconciliation-file <path>` is required and must be the passing JSON generated for the exact build/candidate.
+- `--dry-run` to verify the reconciliation, resolved app id, group, and build number without calling App Store Connect. The reconciliation and generated What to Test inputs remain required.
+- `--what-to-test-file <path>` is required in normal use and must be the file generated alongside the reconciliation JSON. Inline `--what-to-test` is accepted only when its exact content hash matches that generated output.
 - `--locale <locale>` to set a non-default TestFlight beta build localization. Default: `en-US`.
 - `--timeout-attempts <n>` and `--poll-seconds <n>` if App Store Connect indexing is slow.
 

@@ -266,10 +266,12 @@ explicit release.
 3. Archive and upload that exact commit. Set
    `manageAppVersionAndBuildNumber=false` in export options.
 4. Run:
-   `node scripts/testflight-release.mjs --build-number <n> --archive-path <archive> --what-to-test-file <path>`
+   `node scripts/testflight-release.mjs --build-number <n> --archive-path <archive> --reconciliation-file <generated-reconciliation.json> --what-to-test-file <generated-what-to-test.md>`
    Always pass the archive path so the helper can detect Xcode build-number
-   drift. If description update fails, continue the release and reuse the same
-   copy in Slack.
+   drift. The helper must refuse App Store Connect mutations when the gate file
+   is missing, failing, for another build/candidate, incomplete, or does not
+   hash to the supplied What to Test file. If description update fails after
+   the gate passes, continue the release and reuse the same copy in Slack.
 5. When upload/attachment is confirmed, create and push the immutable annotated
    tag `testflight/build-<n>` at the exact candidate. Never move or reuse it.
 6. Post one top-level tester-facing announcement to `#release-notes`

@@ -444,7 +444,15 @@ Current status as of 2026-06-16:
 - Increment `CURRENT_PROJECT_VERSION` in `project.yml` before each additional TestFlight upload, then run `xcodegen generate`.
 - When creating the export options plist for App Store Connect upload, set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently upload a different build number than the archive.
 - If Xcode Accounts cannot be used for upload, pass the local App Store Connect API key to `xcodebuild -exportArchive` with `-authenticationKeyPath`, `-authenticationKeyID`, and `-authenticationKeyIssuerID`.
-- After `xcodebuild -exportArchive` reports `Uploaded Wander`, run `node scripts/testflight-release.mjs --archive-path <archive>`. It waits for the uploaded build to become `VALID`, sets export compliance, attaches the build to `rec.me Alpha`, submits external beta review, and prints the final TestFlight summary. Passing `--archive-path` lets the helper detect Xcode upload build-number drift before attaching the wrong TestFlight build. Use `--dry-run` before upload to verify the resolved build number and App Store Connect config.
+- After `xcodebuild -exportArchive` reports `Uploaded Wander`, run
+  `node scripts/testflight-release.mjs --archive-path <archive> --reconciliation-file <generated-reconciliation.json> --what-to-test-file <generated-what-to-test.md>`.
+  It refuses to touch App Store Connect unless reconciliation passed for the
+  exact build/current candidate, every release-range commit is classified, and
+  the What to Test copy matches the generated manifest output. It then waits
+  for the uploaded build to become `VALID`, sets export compliance, attaches
+  the build to `rec.me Alpha`, submits external beta review, and prints the
+  final TestFlight summary. Use `--dry-run` with the same required gate/copy
+  files before upload to verify the resolved build number and configuration.
 
 ## Main Files To Read First
 
