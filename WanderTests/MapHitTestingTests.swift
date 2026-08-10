@@ -56,66 +56,101 @@ final class MapCoordinateCandidateTests: XCTestCase {
 }
 
 final class MapFilterSelectionTests: XCTestCase {
-    func testFilterPillsMirrorPinOwnershipAndStatusGrammar() {
-        XCTAssertEqual(MapFilter.you.title, "You")
-        XCTAssertEqual(MapFilter.social.title, "Social")
-        XCTAssertEqual(MapFilter.been.title, "Check-ins")
-        XCTAssertEqual(MapFilter.wanna.title, "Wanna")
-
-        XCTAssertEqual(MapFilter.you.systemImage, "person.fill")
-        XCTAssertEqual(MapFilter.social.systemImage, "person.2.fill")
-        XCTAssertEqual(MapFilter.been.systemImage, "circle.fill")
-        XCTAssertEqual(MapFilter.wanna.systemImage, "circle.dotted")
-
-        XCTAssertEqual(MapFilter.you.trimStyle(isSelected: true).dash, [])
-        XCTAssertEqual(MapFilter.social.trimStyle(isSelected: true).dash, [])
-        XCTAssertEqual(MapFilter.been.trimStyle(isSelected: true).dash, [])
-        XCTAssertEqual(
-            MapFilter.wanna.trimStyle(isSelected: true).dash,
-            MapPinVisualMetrics.wannaDashPattern
-        )
-        XCTAssertEqual(MapFilter.you.trimStyle(isSelected: true).lineWidth, 2)
-        XCTAssertEqual(MapFilter.you.trimStyle(isSelected: false).lineWidth, 1.25)
+    func testSourcePillsUseFeaturedAndFriendsContract() {
+        XCTAssertEqual(MapSource.allCases, [.featured, .friends])
+        XCTAssertEqual(MapSource.featured.title, "Featured")
+        XCTAssertEqual(MapSource.friends.title, "Friends")
+        XCTAssertEqual(MapSource.featured.systemImage, "sparkles")
+        XCTAssertEqual(MapSource.friends.systemImage, "person.2.fill")
     }
 
-    func testNoOwnerFiltersSelectedProducesNoPlaceFilters() {
-        XCTAssertNil(
-            MapFilterSelection.placeFilters(
-                selectedFilters: [.been, .wanna],
-                selectedSocialOwnerID: nil
+    func testFeaturedIsTheOnlyDefaultSourceAndMoreDefaultsToAll() {
+        let state = MapFilterState()
+
+        XCTAssertEqual(state.source, .featured)
+        XCTAssertTrue(state.more.categories.isEmpty)
+        XCTAssertTrue(state.more.people.isEmpty)
+        XCTAssertEqual(state.more.status, .all)
+        XCTAssertEqual(state.more.activeSectionCount, 0)
+    }
+
+    func testAllInEveryMoreSectionAddsNoRefinement() {
+        let filters = MapFilterSelection.placeFilters(for: MapFilterState())
+
+        XCTAssertTrue(filters.ownerScopes.isEmpty)
+        XCTAssertTrue(filters.statuses.isEmpty)
+        XCTAssertTrue(filters.categories.isEmpty)
+        XCTAssertTrue(filters.ownerIDs.isEmpty)
+    }
+
+    func testFriendsSourceAndMoreSelectionsCombineAsIntersections() {
+        let state = MapFilterState(
+            source: .friends,
+            more: MapMoreFilterSelection(
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                people: ["user_ben", "user_juana"],
+                status: .checkIns
+            )
+        )
+        let filters = MapFilterSelection.placeFilters(for: state)
+
+        XCTAssertEqual(filters.ownerScopes, Set(["friends"]))
+        XCTAssertEqual(filters.statuses, Set([.been]))
+        XCTAssertEqual(filters.categories, Set([WanderPlaceCategory.coffeeTeaSweets]))
+        XCTAssertEqual(filters.ownerIDs, Set(["user_ben", "user_juana"]))
+    }
+
+    func testSpecificMoreOptionsAreOrWithinASectionAndAndAcrossSections() {
+        let selection = MapMoreFilterSelection(
+            categories: [WanderPlaceCategory.coffeeTeaSweets, WanderPlaceCategory.barsNightlife],
+            people: ["user_ben", "user_juana"],
+            status: .wanna
+        )
+
+        XCTAssertTrue(
+            MapFilterSelection.matches(
+                status: .wannaGo,
+                category: WanderPlaceCategory.coffeeTeaSweets,
+                ownerID: "user_juana",
+                selection: selection
+            )
+        )
+        XCTAssertFalse(
+            MapFilterSelection.matches(
+                status: .been,
+                category: WanderPlaceCategory.coffeeTeaSweets,
+                ownerID: "user_juana",
+                selection: selection
+            )
+        )
+        XCTAssertFalse(
+            MapFilterSelection.matches(
+                status: .wannaGo,
+                category: WanderPlaceCategory.coffeeTeaSweets,
+                ownerID: "user_ryan",
+                selection: selection
             )
         )
     }
 
-    func testNoStatusFiltersSelectedProducesNoPlaceFilters() {
-        XCTAssertNil(
-            MapFilterSelection.placeFilters(
-                selectedFilters: [.you, .social],
-                selectedSocialOwnerID: nil
-            )
-        )
-    }
+    func testAllClearsOnlyItsOwnSectionAndSourceSwitchPreservesMore() {
+        var state = MapFilterState()
+        state.more.toggleCategory(WanderPlaceCategory.coffeeTeaSweets)
+        state.more.togglePerson("user_ben")
+        state.more.status = .checkIns
 
-    func testAllOwnerAndStatusFiltersSelectedKeepsUnrestrictedGroups() {
-        let filters = MapFilterSelection.placeFilters(
-            selectedFilters: [.you, .social, .been, .wanna],
-            selectedSocialOwnerID: nil
-        )
+        XCTAssertEqual(state.more.activeSectionCount, 3)
 
-        XCTAssertEqual(filters?.ownerScopes, Set(["you", "social"]))
-        XCTAssertEqual(filters?.statuses, Set<PlaceStatus>())
-        XCTAssertEqual(filters?.ownerIDs, Set<String>())
-    }
+        state.more.selectAllCategories()
+        XCTAssertTrue(state.more.categories.isEmpty)
+        XCTAssertEqual(state.more.people, Set(["user_ben"]))
+        XCTAssertEqual(state.more.status, .checkIns)
+        XCTAssertEqual(state.more.activeSectionCount, 2)
 
-    func testSingleStatusAndSocialOwnerSelectionBuildsNarrowFilters() {
-        let filters = MapFilterSelection.placeFilters(
-            selectedFilters: [.social, .wanna],
-            selectedSocialOwnerID: "user_maya"
-        )
-
-        XCTAssertEqual(filters?.ownerScopes, Set(["social"]))
-        XCTAssertEqual(filters?.statuses, Set([.wannaGo]))
-        XCTAssertEqual(filters?.ownerIDs, Set(["user_maya"]))
+        state.source = .friends
+        XCTAssertEqual(state.source, .friends)
+        XCTAssertEqual(state.more.people, Set(["user_ben"]))
+        XCTAssertEqual(state.more.status, .checkIns)
     }
 }
 
