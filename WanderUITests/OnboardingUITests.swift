@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
-    func testTabActivatesOnTouchDownBeforeNativeSelectionCommits() {
+    func testPrimaryTabTapNavigatesToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -16,9 +16,9 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(feedTab.waitForExistence(timeout: 2))
         XCTAssertTrue(mapTab.isSelected)
 
-        // The extended press makes the touch-down state visible in simulator
-        // recordings before the standard TabView commits selection on release.
-        feedTab.press(forDuration: 1.5)
+        // Navigation is a touch-up contract. Immediate touch-down icon feedback
+        // is covered deterministically by NavigationContractTests.
+        feedTab.tap()
 
         XCTAssertTrue(feedTab.isSelected)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 4))
