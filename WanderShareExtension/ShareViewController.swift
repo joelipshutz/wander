@@ -1,27 +1,30 @@
 import UIKit
-import UniformTypeIdentifiers
 
 final class ShareViewController: UIViewController {
+    private let errorContent = UIStackView()
+    private let successContent = UIStackView()
+    private let captureTitleLabel = UILabel()
+    private let captureDetailLabel = UILabel()
     private let statusLabel = UILabel()
-    private let captureButton = UIButton(type: .system)
+    private let retryButton = UIButton(type: .system)
     private var inputs: [SharedPlaceImportCaptureInput] = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        configureView()
-        loadSharedItems()
+        view.backgroundColor = .clear
+        loadAndCaptureSharedItems()
     }
 
-    private func configureView() {
-        view.backgroundColor = UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1)
+    private func configureErrorViewIfNeeded() {
+        guard errorContent.superview == nil else { return }
 
-        let icon = UIImageView(image: UIImage(systemName: "mappin.and.ellipse"))
-        icon.tintColor = UIColor(red: 0.78, green: 0.29, blue: 0.18, alpha: 1)
+        let icon = UIImageView(image: UIImage(systemName: "exclamationmark.circle.fill"))
+        icon.tintColor = UIColor(red: 0.66, green: 0.17, blue: 0.13, alpha: 1)
         icon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 30, weight: .bold)
         icon.setContentHuggingPriority(.required, for: .horizontal)
 
         let titleLabel = UILabel()
-        titleLabel.text = "Save places to rec.me"
+        titleLabel.text = "Couldn’t save to rec.me"
         titleLabel.font = .systemFont(ofSize: 22, weight: .black)
         titleLabel.textColor = UIColor(red: 0.15, green: 0.13, blue: 0.11, alpha: 1)
         titleLabel.adjustsFontForContentSizeCategory = true
@@ -31,30 +34,28 @@ final class ShareViewController: UIViewController {
         header.alignment = .center
         header.spacing = 12
 
-        statusLabel.text = "Checking what was shared…"
         statusLabel.font = .preferredFont(forTextStyle: .body)
-        statusLabel.textColor = UIColor(red: 0.36, green: 0.33, blue: 0.29, alpha: 1)
+        statusLabel.textColor = UIColor(red: 0.66, green: 0.17, blue: 0.13, alpha: 1)
         statusLabel.numberOfLines = 0
         statusLabel.adjustsFontForContentSizeCategory = true
         statusLabel.accessibilityIdentifier = "share-extension-status"
 
-        captureButton.configuration = .filled()
-        captureButton.configuration?.title = "Add to rec.me"
-        captureButton.configuration?.image = UIImage(systemName: "arrow.down.doc.fill")
-        captureButton.configuration?.imagePadding = 8
-        captureButton.configuration?.baseBackgroundColor = UIColor(
+        retryButton.configuration = .filled()
+        retryButton.configuration?.title = "Try again"
+        retryButton.configuration?.image = UIImage(systemName: "arrow.clockwise")
+        retryButton.configuration?.imagePadding = 8
+        retryButton.configuration?.baseBackgroundColor = UIColor(
             red: 0.78,
             green: 0.29,
             blue: 0.18,
             alpha: 1
         )
-        captureButton.configuration?.baseForegroundColor = .white
-        captureButton.configuration?.cornerStyle = .capsule
-        captureButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
-        captureButton.isEnabled = false
-        captureButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
-        captureButton.addTarget(self, action: #selector(captureSharedItems), for: .touchUpInside)
-        captureButton.accessibilityIdentifier = "share-extension-capture"
+        retryButton.configuration?.baseForegroundColor = .white
+        retryButton.configuration?.cornerStyle = .capsule
+        retryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .bold)
+        retryButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 50).isActive = true
+        retryButton.addTarget(self, action: #selector(retryCapture), for: .touchUpInside)
+        retryButton.accessibilityIdentifier = "share-extension-primary"
 
         let cancelButton = UIButton(type: .system)
         cancelButton.setTitle("Cancel", for: .normal)
@@ -63,27 +64,97 @@ final class ShareViewController: UIViewController {
         cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         cancelButton.addTarget(self, action: #selector(cancelShare), for: .touchUpInside)
 
-        let actions = UIStackView(arrangedSubviews: [captureButton, cancelButton])
+        let actions = UIStackView(arrangedSubviews: [retryButton, cancelButton])
         actions.axis = .vertical
         actions.spacing = 8
 
-        let content = UIStackView(arrangedSubviews: [header, statusLabel, actions])
-        content.translatesAutoresizingMaskIntoConstraints = false
-        content.axis = .vertical
-        content.spacing = 20
-        content.setCustomSpacing(28, after: statusLabel)
-        view.addSubview(content)
+        errorContent.addArrangedSubview(header)
+        errorContent.addArrangedSubview(statusLabel)
+        errorContent.addArrangedSubview(actions)
+        errorContent.translatesAutoresizingMaskIntoConstraints = false
+        errorContent.axis = .vertical
+        errorContent.spacing = 16
+        errorContent.setCustomSpacing(20, after: statusLabel)
+        view.addSubview(errorContent)
 
         NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
-            content.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
-            content.topAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
-            content.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-            content.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor)
+            errorContent.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
+            errorContent.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
+            errorContent.topAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            errorContent.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            errorContent.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor)
         ])
     }
 
-    private func loadSharedItems() {
+    private func configureSuccessViewIfNeeded() {
+        guard successContent.superview == nil else { return }
+
+        let icon = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
+        icon.tintColor = UIColor(red: 0.20, green: 0.56, blue: 0.39, alpha: 1)
+        icon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 31, weight: .bold)
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+
+        let titleLabel = UILabel()
+        titleLabel.text = "Captured for rec.me"
+        titleLabel.font = .systemFont(ofSize: 22, weight: .black)
+        titleLabel.textColor = UIColor(red: 0.15, green: 0.13, blue: 0.11, alpha: 1)
+        titleLabel.adjustsFontForContentSizeCategory = true
+
+        let header = UIStackView(arrangedSubviews: [icon, titleLabel])
+        header.axis = .horizontal
+        header.alignment = .center
+        header.spacing = 12
+
+        captureTitleLabel.font = .systemFont(ofSize: 16, weight: .bold)
+        captureTitleLabel.textColor = UIColor(red: 0.15, green: 0.13, blue: 0.11, alpha: 1)
+        captureTitleLabel.numberOfLines = 2
+        captureTitleLabel.adjustsFontForContentSizeCategory = true
+
+        captureDetailLabel.font = .preferredFont(forTextStyle: .subheadline)
+        captureDetailLabel.textColor = UIColor(red: 0.36, green: 0.33, blue: 0.29, alpha: 1)
+        captureDetailLabel.numberOfLines = 3
+        captureDetailLabel.adjustsFontForContentSizeCategory = true
+
+        let preview = UIStackView(arrangedSubviews: [captureTitleLabel, captureDetailLabel])
+        preview.axis = .vertical
+        preview.spacing = 5
+        preview.isLayoutMarginsRelativeArrangement = true
+        preview.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)
+        preview.backgroundColor = .white
+        preview.layer.cornerRadius = 14
+        preview.layer.borderWidth = 1
+        preview.layer.borderColor = UIColor(red: 0.86, green: 0.82, blue: 0.75, alpha: 1).cgColor
+
+        let footer = UILabel()
+        footer.text = "Open rec.me to review the match before anything is saved."
+        footer.font = .preferredFont(forTextStyle: .footnote)
+        footer.textColor = UIColor(red: 0.36, green: 0.33, blue: 0.29, alpha: 1)
+        footer.numberOfLines = 0
+        footer.adjustsFontForContentSizeCategory = true
+
+        successContent.addArrangedSubview(header)
+        successContent.addArrangedSubview(preview)
+        successContent.addArrangedSubview(footer)
+        successContent.translatesAutoresizingMaskIntoConstraints = false
+        successContent.axis = .vertical
+        successContent.spacing = 16
+        successContent.accessibilityIdentifier = "share-extension-captured"
+        view.addSubview(successContent)
+
+        NSLayoutConstraint.activate([
+            successContent.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
+            successContent.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
+            successContent.topAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            successContent.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            successContent.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor)
+        ])
+    }
+
+    private func loadAndCaptureSharedItems() {
+        errorContent.isHidden = true
+        successContent.isHidden = true
+        view.backgroundColor = .clear
+
         guard let extensionContext else {
             showError(SharedPlaceImportInboxError.noSupportedContent.localizedDescription)
             return
@@ -94,8 +165,7 @@ final class ShareViewController: UIViewController {
                 switch result {
                 case .success(let inputs):
                     self.inputs = inputs
-                    self.statusLabel.text = Self.readyMessage(for: inputs)
-                    self.captureButton.isEnabled = true
+                    self.captureSharedItems()
                 case .failure(let error):
                     self.showError(
                         (error as? LocalizedError)?.errorDescription
@@ -106,27 +176,23 @@ final class ShareViewController: UIViewController {
         }
     }
 
-    @objc
     private func captureSharedItems() {
-        captureButton.isEnabled = false
-        statusLabel.text = "Adding this to your import inbox…"
-
         do {
             let inbox = try SharedPlaceImportInbox.live()
             try inbox.capture(inputs)
-            statusLabel.text = "Added. Open rec.me to match and review your places."
-            captureButton.configuration?.title = "Added to rec.me"
-            captureButton.configuration?.image = UIImage(systemName: "checkmark.circle.fill")
-            UIAccessibility.post(notification: .announcement, argument: statusLabel.text)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
-                self?.extensionContext?.completeRequest(returningItems: nil)
-            }
+            showCaptured()
         } catch {
             showError(
                 (error as? LocalizedError)?.errorDescription
                     ?? "rec.me could not save this share. Try again."
             )
         }
+    }
+
+    @objc
+    private func retryCapture() {
+        retryButton.isEnabled = false
+        loadAndCaptureSharedItems()
     }
 
     @objc
@@ -140,217 +206,55 @@ final class ShareViewController: UIViewController {
     }
 
     private func showError(_ message: String) {
+        view.backgroundColor = UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1)
+        configureErrorViewIfNeeded()
         statusLabel.text = message
-        statusLabel.textColor = UIColor(red: 0.66, green: 0.17, blue: 0.13, alpha: 1)
-        captureButton.isEnabled = false
+        retryButton.isEnabled = true
+        errorContent.isHidden = false
         UIAccessibility.post(notification: .announcement, argument: message)
     }
 
-    private static func readyMessage(for inputs: [SharedPlaceImportCaptureInput]) -> String {
-        let fileCount = inputs.filter {
-            if case .file = $0 { return true }
-            return false
-        }.count
-        let textCount = inputs.count - fileCount
-        if fileCount > 0, textCount > 0 {
-            return "\(textCount) link or text item\(textCount == 1 ? "" : "s") and \(fileCount) file\(fileCount == 1 ? "" : "s") are ready."
-        }
-        if fileCount > 0 {
-            return "\(fileCount) supported file\(fileCount == 1 ? " is" : "s are") ready."
-        }
-        return "\(textCount) link or text item\(textCount == 1 ? " is" : "s are") ready."
-    }
-}
-
-private enum ShareExtensionItemLoader {
-    private final class Callback<Value>: @unchecked Sendable {
-        let call: (Value) -> Void
-
-        init(_ call: @escaping (Value) -> Void) {
-            self.call = call
+    private func showCaptured() {
+        configureSuccessViewIfNeeded()
+        let summary = captureSummary
+        captureTitleLabel.text = summary.title
+        captureDetailLabel.text = summary.detail
+        errorContent.isHidden = true
+        successContent.isHidden = false
+        view.backgroundColor = UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1)
+        UIAccessibility.post(
+            notification: .announcement,
+            argument: "Captured for rec.me. Open rec.me to review before saving."
+        )
+        let delay = UIAccessibility.isVoiceOverRunning ? 3.5 : 1.4
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.extensionContext?.completeRequest(returningItems: nil)
         }
     }
 
-    static func load(
-        from contextItems: [Any],
-        completion: @escaping (Result<[SharedPlaceImportCaptureInput], Error>) -> Void
-    ) {
-        let providers = contextItems
-            .compactMap { $0 as? NSExtensionItem }
-            .flatMap { $0.attachments ?? [] }
-        guard !providers.isEmpty else {
-            completion(.failure(SharedPlaceImportInboxError.noSupportedContent))
-            return
-        }
-        guard providers.count <= SharedPlaceImportInbox.maximumItemCount else {
-            completion(.failure(SharedPlaceImportInboxError.tooManyItems))
-            return
-        }
-        load(providers: providers, at: 0, accumulated: [], completion: completion)
-    }
-
-    private static func load(
-        providers: [NSItemProvider],
-        at index: Int,
-        accumulated: [SharedPlaceImportCaptureInput],
-        completion: @escaping (Result<[SharedPlaceImportCaptureInput], Error>) -> Void
-    ) {
-        guard index < providers.count else {
-            guard !accumulated.isEmpty else {
-                completion(.failure(SharedPlaceImportInboxError.noSupportedContent))
-                return
-            }
-            completion(.success(accumulated))
-            return
-        }
-
-        load(provider: providers[index]) { result in
-            switch result {
-            case .success(let input):
-                load(
-                    providers: providers,
-                    at: index + 1,
-                    accumulated: input.map { accumulated + [$0] } ?? accumulated,
-                    completion: completion
-                )
-            case .failure(let error):
-                completion(.failure(error))
-            }
-        }
-    }
-
-    private static func load(
-        provider: NSItemProvider,
-        completion: @escaping (Result<SharedPlaceImportCaptureInput?, Error>) -> Void
-    ) {
-        let callback = Callback(completion)
-        let suggestedName = provider.suggestedName
-
-        if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-            provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, error in
-                if let error {
-                    callback.call(.failure(error))
-                    return
-                }
-                guard let url = Self.url(from: item) else {
-                    callback.call(.success(nil))
-                    return
-                }
-                if url.isFileURL {
-                    callback.call(Self.fileInput(from: url, fileName: suggestedName))
-                } else {
-                    callback.call(
-                        .success(
-                            .text(url.absoluteString, suggestedName: suggestedName)
-                        )
-                    )
-                }
-            }
-            return
-        }
-
-        if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-            provider.loadItem(
-                forTypeIdentifier: UTType.plainText.identifier,
-                options: nil
-            ) { item, error in
-                if let error {
-                    callback.call(.failure(error))
-                    return
-                }
-                guard let text = Self.text(from: item) else {
-                    callback.call(.success(nil))
-                    return
-                }
-                callback.call(.success(.text(text, suggestedName: suggestedName)))
-            }
-            return
-        }
-
-        guard let typeIdentifier = supportedFileTypeIdentifier(for: provider) else {
-            callback.call(.success(nil))
-            return
-        }
-        provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, error in
-            if let error {
-                callback.call(.failure(error))
-                return
-            }
-            guard let url else {
-                callback.call(.failure(SharedPlaceImportInboxError.missingAttachment))
-                return
-            }
-            callback.call(
-                Self.fileInput(
-                    from: url,
-                    fileName: suggestedName,
-                    contentTypeIdentifier: typeIdentifier
-                )
+    private var captureSummary: (title: String, detail: String) {
+        guard inputs.count == 1, let input = inputs.first else {
+            return (
+                "\(inputs.count) items captured",
+                "They’ll appear together for review when you open rec.me."
             )
         }
-    }
-
-    private static func supportedFileTypeIdentifier(for provider: NSItemProvider) -> String? {
-        let supportedTypes: [UTType] = [
-            .commaSeparatedText,
-            .json,
-            .plainText,
-            .rtf,
-            UTType(filenameExtension: "md") ?? .plainText
-        ]
-        return provider.registeredTypeIdentifiers.first { identifier in
-            guard let type = UTType(identifier) else { return false }
-            return supportedTypes.contains(where: { type.conforms(to: $0) })
-        }
-    }
-
-    private static func fileInput(
-        from url: URL,
-        fileName: String?,
-        contentTypeIdentifier: String? = nil
-    ) -> Result<SharedPlaceImportCaptureInput?, Error> {
-        do {
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey])
-            if let fileSize = values?.fileSize,
-               fileSize > SharedPlaceImportInbox.maximumFileBytes {
-                throw SharedPlaceImportInboxError.fileTooLarge
-            }
-            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
-            return .success(
-                .file(
-                    data,
-                    fileName: fileName ?? url.lastPathComponent,
-                    contentTypeIdentifier: contentTypeIdentifier
-                )
+        switch input {
+        case .sharedLink(let url, let contextText, _):
+            let host = url.host?.lowercased() ?? ""
+            let source = host.contains("instagram")
+                ? "Instagram post"
+                : (host.contains("tiktok") ? "TikTok post" : "Shared link")
+            return (
+                source,
+                contextText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                    ? contextText!
+                    : "We captured the public link and will match its place in rec.me."
             )
-        } catch {
-            return .failure(error)
+        case .text(let text, _):
+            return ("Shared places", text)
+        case .file(_, let fileName, _):
+            return (fileName, "The file is ready to review in rec.me.")
         }
-    }
-
-    private static func url(from item: NSSecureCoding?) -> URL? {
-        if let url = item as? URL {
-            return url
-        }
-        if let url = item as? NSURL {
-            return url as URL
-        }
-        if let string = item as? String {
-            return URL(string: string)
-        }
-        return nil
-    }
-
-    private static func text(from item: NSSecureCoding?) -> String? {
-        if let string = item as? String {
-            return string
-        }
-        if let attributed = item as? NSAttributedString {
-            return attributed.string
-        }
-        if let data = item as? Data {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
     }
 }

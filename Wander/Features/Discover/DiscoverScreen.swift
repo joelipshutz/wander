@@ -171,7 +171,7 @@ struct DiscoverScreen: View {
                 ),
                 DiscoverEvidenceItem(
                     kind: .category,
-                    displayValue: primary.effectiveCategoryDisplay.compactTitle,
+                    displayValue: primary.effectiveCompactType,
                     sourceOwnerID: primary.owner.id
                 )
             ]
@@ -1888,7 +1888,7 @@ private struct DiscoverPlaceResultCard: View {
                             .foregroundStyle(WanderTheme.textInk.color)
                             .lineLimit(2)
 
-                        Text(visiblePlace.effectiveCategoryDisplay.compactTitle)
+                        Text(visiblePlace.effectiveCompactType)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -2110,7 +2110,7 @@ private struct LatestActivityRow: View {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
-            visiblePlace.effectiveCategoryDisplay.compactTitle
+            visiblePlace.effectiveCompactType
         ]
             .compactMap { value in
                 let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)

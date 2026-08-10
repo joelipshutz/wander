@@ -1353,6 +1353,100 @@ enum SocialPlaceHintExtractor {
     }
 }
 
+/// Turns raw caption/OCR hints into one reviewable evidence set. The extractor
+/// intentionally stays generous; this planner is the boundary that removes
+/// source chrome and collapses aliases before any MapKit work is scheduled.
+enum SocialImportEvidencePlanner {
+    static func reviewHints(_ hints: [SocialPlaceSearchHint]) -> [SocialPlaceSearchHint] {
+        var result: [SocialPlaceSearchHint] = []
+        for hint in hints where !isSourceChrome(hint.name) {
+            if let index = result.firstIndex(where: { hintsAreAliases($0, hint) }) {
+                result[index] = preferred(result[index], hint)
+            } else {
+                result.append(hint)
+            }
+        }
+        return result
+    }
+
+    private static func preferred(
+        _ lhs: SocialPlaceSearchHint,
+        _ rhs: SocialPlaceSearchHint
+    ) -> SocialPlaceSearchHint {
+        let lhsHasVenueDesignator = hasVenueDesignator(lhs.name)
+        let rhsHasVenueDesignator = hasVenueDesignator(rhs.name)
+        if lhsHasVenueDesignator != rhsHasVenueDesignator {
+            return rhsHasVenueDesignator ? rhs : lhs
+        }
+        if lhs.evidence.trustRank != rhs.evidence.trustRank {
+            return rhs.evidence.trustRank > lhs.evidence.trustRank ? rhs : lhs
+        }
+        if (lhs.area == nil) != (rhs.area == nil) {
+            return rhs.area != nil ? rhs : lhs
+        }
+        return normalizedWords(rhs.name).count > normalizedWords(lhs.name).count ? rhs : lhs
+    }
+
+    private static func hintsAreAliases(
+        _ lhs: SocialPlaceSearchHint,
+        _ rhs: SocialPlaceSearchHint
+    ) -> Bool {
+        if let lhsArea = lhs.area,
+           let rhsArea = rhs.area,
+           normalizedWords(lhsArea) != normalizedWords(rhsArea) {
+            return false
+        }
+        let first = normalizedWords(lhs.name)
+        let second = normalizedWords(rhs.name)
+        guard !first.isEmpty, !second.isEmpty else { return false }
+        return first == second
+            || isContiguousSubsequence(first, of: second)
+            || isContiguousSubsequence(second, of: first)
+    }
+
+    private static func isContiguousSubsequence(_ shorter: [String], of longer: [String]) -> Bool {
+        guard shorter.count < longer.count, shorter.count <= longer.count else { return false }
+        for start in 0...(longer.count - shorter.count) {
+            if Array(longer[start..<(start + shorter.count)]) == shorter {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func hasVenueDesignator(_ value: String) -> Bool {
+        !Set(normalizedWords(value)).isDisjoint(with: venueDesignators)
+    }
+
+    private static func isSourceChrome(_ value: String) -> Bool {
+        let compact = value.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+        .filter { $0.isLetter || $0.isNumber }
+        return compact.isEmpty
+            || compact.contains("instagramcom")
+            || compact.contains("instagr.am")
+            || compact.contains("tiktokcom")
+            || compact.hasPrefix("http")
+            || compact == "instagram"
+            || compact == "tiktok"
+    }
+
+    private static func normalizedWords(_ value: String) -> [String] {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+    }
+
+    private static let venueDesignators: Set<String> = [
+        "aquarium", "bakery", "bar", "beach", "brewery", "cafe", "coffee",
+        "deli", "gallery", "garden", "hotel", "kitchen", "market", "museum",
+        "park", "restaurant", "shop", "store", "theater", "theatre", "trail", "zoo"
+    ]
+}
+
 private func cgImageOrientation(for orientation: UIImage.Orientation) -> CGImagePropertyOrientation {
     switch orientation {
     case .up: .up

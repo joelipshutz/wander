@@ -1730,7 +1730,7 @@ private func initials(for name: String) -> String {
 
 private func placeDetail(for place: VisiblePlace) -> String {
     [
-        place.effectiveCategoryDisplay.compactTitle,
+        place.effectiveCompactType,
         place.place.locality,
         place.place.region
     ]

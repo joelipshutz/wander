@@ -2077,7 +2077,7 @@ private enum PlaceProfileCopy {
     }
 
     static func categoryDisplay(for place: PlaceSheetPlace) -> String? {
-        let display = WanderPlaceCategory.display(for: place.categoryAssignment).compactTitle
+        let display = place.compactPlaceType
         guard let display = trimmed(display), place.primaryCategory != "place" else { return nil }
         return display
     }

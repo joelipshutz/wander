@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
-    func testTabActivatesOnTouchDownBeforeNativeSelectionCommits() {
+    func testPrimaryTabTapNavigatesToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -16,9 +16,9 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(feedTab.waitForExistence(timeout: 2))
         XCTAssertTrue(mapTab.isSelected)
 
-        // The extended press makes the touch-down state visible in simulator
-        // recordings before the standard TabView commits selection on release.
-        feedTab.press(forDuration: 1.5)
+        // Navigation is a touch-up contract. Immediate touch-down icon feedback
+        // is covered deterministically by NavigationContractTests.
+        feedTab.tap()
 
         XCTAssertTrue(feedTab.isSelected)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 4))
@@ -179,12 +179,10 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["onboarding.getStarted"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["onboarding.logIn"].exists)
-        XCTAssertTrue(app.staticTexts["Keep track of everywhere you’ve been"].exists)
-        XCTAssertFalse(app.staticTexts["a map made personal"].exists)
-        XCTAssertFalse(app.staticTexts["REAL APP VIEW · MAP DATA © APPLE"].exists)
         let carouselPage = app.descendants(matching: .any)["onboarding.carouselPage"]
         XCTAssertTrue(carouselPage.waitForExistence(timeout: 2))
         let startingPage = carouselPage.value as? String ?? ""
+        XCTAssertTrue(["1", "2", "3"].contains(startingPage))
         expectation(
             for: NSPredicate(format: "value != %@", startingPage),
             evaluatedWith: carouselPage

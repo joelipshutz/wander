@@ -9,7 +9,7 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: Y7TVK75RZ8
     MARKETING_VERSION: "0.1"
-    CURRENT_PROJECT_VERSION: "122"
+    CURRENT_PROJECT_VERSION: "124"
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
 packages:

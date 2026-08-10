@@ -76,7 +76,7 @@ private struct RemoveSaveEditMockup: View {
             MockupSection(title: "place type") {
                 MockupDetailRow(title: "category", value: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood)
                 Divider().background(WanderTheme.borderHairline.color)
-                MockupDetailRow(title: "cuisine", value: "Thai", systemImage: "fork.knife.circle.fill")
+                MockupDetailRow(title: "food type", value: "Thai", systemImage: "fork.knife.circle.fill")
             }
 
             MockupSection(title: "save as") {
@@ -173,8 +173,20 @@ private struct PrimaryCategoryMock: Identifiable {
 
 private enum CategoryTaxonomyMockData {
     static let primaryCategories: [PrimaryCategoryMock] = [
-        PrimaryCategoryMock(id: "restaurants_food", title: "Restaurants & Food", detail: "Restaurants, cuisines, quick bites", color: WanderTheme.terracotta.color, count: 132),
-        PrimaryCategoryMock(id: "coffee_tea_sweets", title: "Coffee, Tea, & Sweets", detail: "Coffee, tea, bakeries", color: WanderTheme.categorySun.color, count: 25),
+        PrimaryCategoryMock(
+            id: "restaurants_food",
+            title: "Restaurants & Food",
+            detail: "Restaurants, food types, quick bites",
+            color: WanderTheme.terracotta.color,
+            count: WanderPlaceCategory.restaurantCuisineOptions.count
+        ),
+        PrimaryCategoryMock(
+            id: "coffee_tea_sweets",
+            title: "Coffee, Tea, & Sweets",
+            detail: "Coffee, tea, bakeries",
+            color: WanderTheme.categorySun.color,
+            count: WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets).count
+        ),
         PrimaryCategoryMock(id: "bars_nightlife", title: "Bars & Nightlife", detail: "Bars, lounges, clubs", color: WanderTheme.terracottaDark.color, count: 26),
         PrimaryCategoryMock(id: "outdoors_nature", title: "Outdoors & Nature", detail: "Parks, trails, water", color: WanderTheme.categoryMoss.color, count: 41),
         PrimaryCategoryMock(id: "things_to_do", title: "Things To Do", detail: "Attractions, arts, venues", color: WanderTheme.avatarSofia.color, count: 52),
@@ -204,7 +216,7 @@ private enum CategoryTaxonomyMockData {
         ),
         (
             "Bakeries & sweets",
-            ["Bakery", "Dessert shop", "Ice cream shop", "Donut shop", "Chocolate shop", "Juice bar"]
+            ["Bakery", "Dessert shop", "Ice cream shop", "Gelato", "Donut shop", "Chocolate shop", "Juice bar"]
         ),
         (
             "Markets & specialty food",
@@ -243,7 +255,7 @@ private struct CategoryTaxonomyEditMockup: View {
             MockupSection(title: "place type") {
                 MockupDetailRow(title: "category", value: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood)
                 Divider().background(WanderTheme.borderHairline.color)
-                MockupDetailRow(title: "cuisine", value: "Thai", systemImage: "fork.knife.circle.fill")
+                MockupDetailRow(title: "food type", value: "Thai", systemImage: "fork.knife.circle.fill")
             }
 
             MockupSection(title: "save as") {
@@ -287,7 +299,7 @@ private struct CategoryTaxonomyEditMockup: View {
                 Text("5233 Sunset Blvd")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                Text("Thai - Restaurants & Food")
+                Text("Thai")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
             }
@@ -344,10 +356,10 @@ private struct CategoryTaxonomySubcategoryPickerMockup: View {
 private struct CategoryTaxonomyCuisinePickerMockup: View {
     var body: some View {
         CategoryTaxonomyMockupScreen(
-            title: "choose cuisine",
-            subtitle: "Restaurants & Food - \(WanderPlaceCategory.restaurantCuisineOptions.count) cuisines"
+            title: "choose food type",
+            subtitle: "Restaurants & Food - \(WanderPlaceCategory.restaurantCuisineOptions.count) food types"
         ) {
-            MockupSearchField(text: "Search cuisines")
+            MockupSearchField(text: "Search food types")
 
             HStack(spacing: WanderTheme.spacing2) {
                 CategoryPickerModePill(title: "Restaurants & Food", category: WanderPlaceCategory.restaurantsFood, isSelected: true)
@@ -384,7 +396,7 @@ private struct CuisineSmartPickerMockup: View {
                 selectedCuisine = "Thai"
             }
 
-            MockupSearchField(text: "Search 173 cuisines")
+            MockupSearchField(text: "Search \(WanderPlaceCategory.restaurantCuisineOptions.count) food types")
 
             MockupSection(title: "quick picks") {
                 MockupChipGrid(
@@ -412,10 +424,10 @@ private struct CuisineDirectoryPickerMockup: View {
 
     var body: some View {
         CategoryTaxonomyMockupScreen(
-            title: "choose cuisine",
+            title: "choose food type",
             subtitle: "Fast, familiar, and easy to scan."
         ) {
-            MockupSearchField(text: "Search cuisines")
+            MockupSearchField(text: "Search food types")
 
             MockupSection(title: "suggested for Jitlada") {
                 CuisineChoiceRow(
@@ -716,7 +728,7 @@ private struct CuisineSelectionFooter: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("CUISINE")
+                Text("FOOD TYPE")
                     .font(.system(size: 10, weight: .black))
                     .foregroundStyle(WanderTheme.textMuted.color)
                 Text(cuisine)
@@ -762,7 +774,7 @@ private struct CategoryTaxonomyLabelsMockup: View {
             MockupSection(title: "saved summary") {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     MockupSummaryLine(label: "category", value: "Restaurants & Food")
-                    MockupSummaryLine(label: "cuisine", value: "Thai")
+                    MockupSummaryLine(label: "food type", value: "Thai")
                     MockupSummaryLine(label: "tags", value: "spicy, good for groups, date-night room")
                     MockupSummaryLine(label: "my labels", value: "LA favorite, Joe rec, birthday list")
                 }
@@ -839,10 +851,10 @@ private struct CategoryEmojiGalleryMockup: View {
     var body: some View {
         CategoryTaxonomyMockupScreen(
             title: "place icons",
-            subtitle: "Production category, subtype, and cuisine resolver"
+            subtitle: "Production category, subtype, and food type resolver"
         ) {
             gallerySection(title: "health, beauty, and fitness", items: healthAndBeauty)
-            gallerySection(title: "coffee, sweets, and cuisines", items: coffeeAndFood)
+            gallerySection(title: "coffee, sweets, and food types", items: coffeeAndFood)
         }
     }
 
@@ -1109,7 +1121,7 @@ private struct PrimaryCategoryTile: View {
                 .frame(height: 30, alignment: .topLeading)
 
             Text(
-                "\(category.count) \(category.id == WanderPlaceCategory.restaurantsFood ? "cuisines" : "types")"
+                "\(category.count) \(category.id == WanderPlaceCategory.restaurantsFood ? "food types" : "types")"
             )
                 .font(.system(size: 11, weight: .black))
                 .foregroundStyle(WanderTheme.terracotta.color)

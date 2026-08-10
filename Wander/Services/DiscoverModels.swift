@@ -242,6 +242,10 @@ struct VisiblePlaceCategoryPresentation {
     let display: PlaceCategoryDisplay
     let restaurantCuisine: String?
     let emoji: String
+
+    var compactType: String {
+        display.compactType(foodType: restaurantCuisine)
+    }
 }
 
 private final class BoundedMemoizationCache<Key: Hashable, Value>: @unchecked Sendable {
@@ -369,6 +373,7 @@ private enum VisiblePlaceCategoryPresentationResolver {
             }
 
             let restaurantCuisine = decodedRestaurantCuisine(from: cuisineValueJSON)
+                ?? inferredRestaurantCuisine(for: assignment, place: place)
             return VisiblePlaceCategoryPresentation(
                 assignment: assignment,
                 display: WanderPlaceCategory.display(for: assignment),
@@ -390,6 +395,19 @@ private enum VisiblePlaceCategoryPresentationResolver {
             return value
         }
         return (try? JSONDecoder().decode([String].self, from: data))?.first
+    }
+
+    private static func inferredRestaurantCuisine(
+        for assignment: PlaceCategoryAssignment,
+        place: LocalPlace
+    ) -> String? {
+        guard assignment.primaryCategory == WanderPlaceCategory.restaurantsFood else { return nil }
+        return WanderPlaceCategory.restaurantCuisineInference(
+            name: place.canonicalName,
+            rawProviderType: place.rawProviderType,
+            subcategory: assignment.subcategory,
+            category: assignment.primaryCategory
+        )?.cuisine
     }
 }
 
@@ -443,6 +461,10 @@ struct VisiblePlace: Identifiable {
 
     var restaurantCuisine: String? {
         categoryPresentation.restaurantCuisine
+    }
+
+    var effectiveCompactType: String {
+        categoryPresentation.compactType
     }
 
     var categoryEmoji: String {
