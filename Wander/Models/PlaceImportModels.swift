@@ -39,6 +39,14 @@ enum PlaceImportReviewSurface: String, Equatable {
     case complete
 }
 
+enum PlaceImportBulkStatusAction {
+    static let idleSelectionID = "bulk_status_action_idle"
+
+    static func status(for selectionID: String) -> PlaceStatus? {
+        PlaceStatus(rawValue: selectionID)
+    }
+}
+
 struct PlaceImportReviewPlan: Equatable {
     let surface: PlaceImportReviewSurface
     let totalCount: Int

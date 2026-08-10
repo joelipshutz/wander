@@ -938,14 +938,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
     private var bulkStatusSelection: Binding<String> {
         Binding(
-            get: {
-                guard let first = selectedReadyItems.first?.stagedStatus,
-                      selectedReadyItems.allSatisfy({ $0.stagedStatus == first })
-                else { return "mixed" }
-                return first.rawValue
-            },
+            get: { PlaceImportBulkStatusAction.idleSelectionID },
             set: { rawValue in
-                guard let status = PlaceStatus(rawValue: rawValue) else { return }
+                guard let status = PlaceImportBulkStatusAction.status(for: rawValue) else { return }
                 withAnimation(.easeInOut(duration: 0.16)) {
                     for item in selectedReadyItems {
                         importStore.setStagedStatus(status, itemID: item.id)

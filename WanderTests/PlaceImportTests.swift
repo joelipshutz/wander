@@ -3,6 +3,32 @@ import Foundation
 import XCTest
 @testable import Wander
 
+final class PlaceImportBulkStatusActionTests: XCTestCase {
+    func testBulkStatusControlIsAnActionInsteadOfARowStateMirror() {
+        XCTAssertNotEqual(
+            PlaceImportBulkStatusAction.idleSelectionID,
+            PlaceStatus.wannaGo.rawValue
+        )
+        XCTAssertNotEqual(
+            PlaceImportBulkStatusAction.idleSelectionID,
+            PlaceStatus.been.rawValue
+        )
+        XCTAssertNil(
+            PlaceImportBulkStatusAction.status(
+                for: PlaceImportBulkStatusAction.idleSelectionID
+            )
+        )
+        XCTAssertEqual(
+            PlaceImportBulkStatusAction.status(for: PlaceStatus.wannaGo.rawValue),
+            .wannaGo
+        )
+        XCTAssertEqual(
+            PlaceImportBulkStatusAction.status(for: PlaceStatus.been.rawValue),
+            .been
+        )
+    }
+}
+
 final class PlaceImportParserTests: XCTestCase {
     func testParsesAndDeduplicatesTextNotes() throws {
         let seeds = try PlaceImportParser.parse(

@@ -1280,6 +1280,13 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testAdaptiveImportReviewUsesSelectableNativeRows() throws {
+        let fixtureURL = projectRoot.appendingPathComponent(
+            "WanderTests/Fixtures/ios-fix/rec-228-bulk-status-coupling-pre.json"
+        )
+        let fixtureData = try Data(contentsOf: fixtureURL)
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
         let importViews = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
         )
@@ -1291,9 +1298,15 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
+        XCTAssertEqual(fixture["issue"] as? String, "REC-228")
+        XCTAssertEqual(fixture["pre_fix_bulk_selection"] as? String, "wanna_go")
+        XCTAssertEqual(fixture["expected_bulk_selection"] as? String, "neutral_action")
         XCTAssertTrue(adaptiveReview.contains("setIncludedInImport"))
         XCTAssertTrue(adaptiveReview.contains("checkmark.circle.fill"))
         XCTAssertTrue(adaptiveReview.contains("WanderGlassSegmentedSwitch("))
+        XCTAssertTrue(adaptiveReview.contains("get: { PlaceImportBulkStatusAction.idleSelectionID }"))
+        XCTAssertFalse(adaptiveReview.contains("selectedReadyItems.first?.stagedStatus"))
+        XCTAssertFalse(adaptiveReview.contains("selectedReadyItems.allSatisfy"))
         XCTAssertTrue(adaptiveReview.contains("WanderTypography.editorialNamedContent"))
         XCTAssertTrue(adaptiveReview.contains("WanderPrimaryButton("))
         XCTAssertTrue(adaptiveReview.contains("let excludedItems = activeItems.filter { !$0.isSelectedForImport }"))
