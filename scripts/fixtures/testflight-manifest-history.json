@@ -1,0 +1,25 @@
+{
+  "build122": {
+    "baselineTag": "testflight/build-121",
+    "baselineSha": "84652847af3d4e6c1bfcf15cab6aefff0cbb06f0",
+    "candidateSha": "37e2a539a48563dbdbdcde938f4f8555237716ca",
+    "commits": [
+      "c555a2d57c708071b54897da1511730778725dc6\tREC-225: unify trusted-place search (#327)",
+      "403cc688c6d1f0b39ba31ea3ecb66f72d4ae33f4\tdocs: approve adaptive place import flows (#325)",
+      "b6a2c09ecf35bcf558df6f19bc460484865547c9\tfeat: activate tab icons on touch down (#329)",
+      "0444c132fa286980e4f8561d7435291e1aabbc33\t[REC-224] Add reusable contact invite framework (#323)",
+      "37e2a539a48563dbdbdcde938f4f8555237716ca\tchore: prepare TestFlight build 122 (#331)"
+    ]
+  },
+  "build124": {
+    "baselineTag": "testflight/build-123",
+    "baselineSha": "88cf5511d3e81d695806a7cc86ea73bd121dd3e5",
+    "candidateSha": "27427a3095f64a2b351227f58feac70a0b912e35",
+    "commits": [
+      "9c24a65460da4458f3a1495a322523fc583f993b\tREC-228: Selectable adaptive import review (#328)",
+      "81a2748210980e20a5b60f16ecb34aadd17ceafd\tREC-227: Rebuild social capture and Instagram extraction (#330)",
+      "a574564f4f2f082f9c55fc280f5c91d189e432bb\tchore: prepare TestFlight build 124 (#335)",
+      "27427a3095f64a2b351227f58feac70a0b912e35\tfix: preserve native tab navigation (#336)"
+    ]
+  }
+}

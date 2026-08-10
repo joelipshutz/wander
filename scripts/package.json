@@ -2,6 +2,10 @@
   "name": "recme-backend-smoke-tools",
   "private": true,
   "type": "module",
+  "scripts": {
+    "audit:testflight-manifest": "node reconcile-testflight-manifest.mjs",
+    "test:testflight-manifest": "node --test reconcile-testflight-manifest.test.mjs"
+  },
   "dependencies": {
     "pg": "8.22.0"
   }

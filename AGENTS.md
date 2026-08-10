@@ -371,14 +371,46 @@ process-only, or backend-only changes that do not affect the iOS binary or its
 required release operations. Explain any non-obvious exclusion on the merged
 implementation issue.
 
+The Linear manifest is required release context, but Git is authoritative for
+what the binary contains. Before a build-number bump and again after the exact
+candidate lands, export the manifest to a temporary JSON file conforming to
+`scripts/testflight-manifest.schema.json` and run:
+
+```bash
+node scripts/reconcile-testflight-manifest.mjs \
+  --base testflight/build-<previous> \
+  --head <cutoff-or-exact-candidate> \
+  --manifest <manifest.json> \
+  --build <next-build> \
+  --status candidate \
+  --write-dir <temporary-output-directory>
+```
+
+Every first-parent commit in the range must appear exactly once as `ship`,
+`exclude`, or `release-operation`. The command fails on missing, stale,
+duplicate, or mismatched entries. Do not bump, archive, upload, or publish
+tester copy while it fails. The final post-bump run must classify the
+build-number PR and any fix that entered after the initial cutoff. Attach the
+reconciliation JSON to the Linear release record and use the generated
+TestFlight and Slack files; do not hand-maintain a second release-note list.
+
+For a cumulative ancestry question such as "what about this older commit?",
+audit it separately from the current release delta:
+
+```bash
+node scripts/reconcile-testflight-manifest.mjs --audit-sha <sha>
+```
+
 Any `main` update that is intended to ship to App Store Connect or TestFlight must increment the App Store build number before upload. Do not reuse a build number for the same marketing version; App Store Connect requires monotonically increasing build numbers.
 
 Required release workflow:
 
 - Move the rolling `Next TestFlight` issue to `In Progress` and freeze the
   intended `origin/main` cutoff SHA. Reconcile its manifest mechanically against
-  commits since the latest immutable `testflight/build-<n>` tag. Correct missing
-  or stale entries, but do not re-triage already accepted product work.
+  commits since the latest immutable `testflight/build-<n>` tag with
+  `scripts/reconcile-testflight-manifest.mjs`. Correct missing or stale entries,
+  but do not re-triage already accepted product work. The command must pass
+  before the build-number PR begins.
 - Rename it `TestFlight build <n>` and briefly hold other app-code merges while
   the build-number PR lands. This cutoff-to-candidate hold prevents unmanifested
   code from slipping into the build.
@@ -390,7 +422,9 @@ Required release workflow:
 - Record the exact merged release-candidate commit, then immediately create the
   fresh `Next TestFlight` issue with that candidate as its provisional baseline
   and release the short merge hold. Later merges accumulate there and do not
-  enter the active build. Run the full relevant
+  enter the active build. Update the locked JSON with the release-only commit
+  and rerun reconciliation against the exact candidate; attach the passing
+  report and generated copy to the release issue. Run the full relevant
   `xcodebuild` test/build gate and archive that exact commit from an isolated or
   detached worktree, even if `main` advances afterward.
 - Upload the binary with the incremented build number. The export options plist
