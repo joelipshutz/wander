@@ -41,8 +41,8 @@ select ok(
   'anonymous callers cannot leave lists'
 );
 select ok(
-  not has_function_privilege('authenticated', 'app.leave_place_list(uuid)', 'execute'),
-  'authenticated callers cannot bypass the public wrapper'
+  has_function_privilege('authenticated', 'app.leave_place_list(uuid)', 'execute'),
+  'the authenticated security-invoker wrapper can invoke its app implementation'
 );
 
 insert into public.profiles (id, handle, display_name)
@@ -83,6 +83,7 @@ select ok(
 
 select public.leave_place_list('ce3845a9-4794-459c-b368-22dc34199349');
 
+reset role;
 select ok(
   exists (
     select 1
@@ -93,6 +94,11 @@ select ok(
   ),
   'leaving tombstones only the current collaborator membership'
 );
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_leave_list_collaborator', true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
 select ok(
   not app.can_read_place_list(
     'ce3845a9-4794-459c-b368-22dc34199349',

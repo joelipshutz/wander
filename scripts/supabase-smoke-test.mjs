@@ -3560,7 +3560,7 @@ async function assertPlaceListRPCMetadata(client) {
         'search_path=public, app' = any(coalesce(app_proc.proconfig, array[]::text[])) as app_search_path,
         not public_proc.prosecdef as public_security_invoker,
         'search_path=app, public' = any(coalesce(public_proc.proconfig, array[]::text[])) as public_search_path,
-        not has_function_privilege('authenticated', app_proc.oid, 'execute') as app_authenticated_denied,
+        has_function_privilege('authenticated', app_proc.oid, 'execute') as app_authenticated_execute,
         has_function_privilege('authenticated', public_proc.oid, 'execute') as public_authenticated_execute,
         not has_function_privilege('anon', public_proc.oid, 'execute') as public_anon_denied
       from pg_proc app_proc
