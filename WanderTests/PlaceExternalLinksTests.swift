@@ -240,6 +240,64 @@ final class PlaceExternalLinksTests: XCTestCase {
         XCTAssertEqual(action.url.host, "www.opentable.com")
     }
 
+    func testReservationActionAcceptsCurrentOpenTableRestaurantSlug() throws {
+        let action = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.opentable.com/gjelina")
+            )
+        )
+
+        XCTAssertEqual(action.url.absoluteString, "https://www.opentable.com/gjelina")
+    }
+
+    func testReservationActionRejectsOpenTableDiscoveryPages() {
+        XCTAssertNil(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.opentable.com/los-angeles-restaurants")
+            )
+        )
+        XCTAssertNil(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.opentable.com/s?covers=2&metroId=6")
+            )
+        )
+    }
+
+    func testReservationActionAcceptsDirectNatureReservationProviders() throws {
+        let recreation = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.recreation.gov/camping/campgrounds/232446")
+            )
+        )
+        let reserveCalifornia = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.reservecalifornia.com/Web/#!park/705/638")
+            )
+        )
+        let reserveAmerica = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.reserveamerica.com/explore/example-state-park/CA/120052/overview")
+            )
+        )
+
+        XCTAssertEqual(recreation.url.host, "www.recreation.gov")
+        XCTAssertEqual(reserveCalifornia.url.host, "www.reservecalifornia.com")
+        XCTAssertEqual(reserveAmerica.url.host, "www.reserveamerica.com")
+    }
+
+    func testReservationActionRejectsGenericNatureSearchPages() {
+        XCTAssertNil(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.recreation.gov/search?q=Yosemite")
+            )
+        )
+        XCTAssertNil(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.reserveamerica.com/")
+            )
+        )
+    }
+
     func testReservationDiscoveryFindsDirectResyVenueOnOfficialWebsite() async throws {
         let html = """
         <html><body>
@@ -281,6 +339,153 @@ final class PlaceExternalLinksTests: XCTestCase {
         )
 
         XCTAssertEqual(action?.url.absoluteString, "https://www.opentable.com/r/example-restaurant")
+    }
+
+    func testReservationDiscoveryPrefersTheProviderLinkMatchingThePlaceLocality() async throws {
+        let html = """
+        <section>
+          <h2>Gjelina Venice</h2><p>1429 Abbot Kinney Blvd, Venice CA</p>
+          <a href="https://www.opentable.com/booking/restref/availability?restRef=76651">Reserve Venice</a>
+        </section>
+        <section>
+          <h2>Gjelina New York</h2><p>45 Bond Street, New York NY</p>
+          <a href="https://www.opentable.com/r/gjelina-new-york">Reserve New York</a>
+        </section>
+        """
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://gjelina.example",
+            placeName: "Gjelina",
+            locality: "Venice",
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertEqual(
+            action?.url.absoluteString,
+            "https://www.opentable.com/booking/restref/availability?restRef=76651"
+        )
+    }
+
+    func testReservationDiscoveryUsesCuratedLinkWhenOfficialWebsiteIsStale() async throws {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://stale.example",
+            placeName: "Gjelina",
+            locality: "Venice",
+            region: "CA",
+            pageLoader: { _ in
+                XCTFail("A curated venue should not need a website request")
+                throw URLError(.badURL)
+            }
+        )
+
+        XCTAssertEqual(action?.url.absoluteString, "https://www.opentable.com/gjelina")
+    }
+
+    func testCuratedReservationLinkDoesNotCrossRegions() async {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: nil,
+            placeName: "Gjelina",
+            locality: "New York",
+            region: "NY"
+        )
+
+        XCTAssertNil(action)
+    }
+
+    func testReservationDiscoveryFindsRecreationGovCampgroundFromOfficialParkWebsite() async throws {
+        let html = #"<a href="https://www.recreation.gov/camping/campgrounds/234015">Reserve a campsite</a>"#
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://www.nps.gov/pinn/planyourvisit/campgrounds.htm",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertEqual(
+            action?.url.absoluteString,
+            "https://www.recreation.gov/camping/campgrounds/234015"
+        )
+    }
+
+    func testNatureDiscoveryFallsBackToOfficialReservationPageOnlyForNaturePlaces() async throws {
+        let homeHTML = #"<a href="/camping/reservations">Campground reservations</a>"#
+        let loader: PlaceExternalLinks.ReservationPageLoader = { request in
+            if request.url?.path == "/camping/reservations" {
+                return (Data("Official booking instructions".utf8), request.url)
+            }
+            return (Data(homeHTML.utf8), request.url)
+        }
+
+        let natureAction = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://parks.example.gov",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: loader
+        )
+        let restaurantAction = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://restaurant.example",
+            pageLoader: loader
+        )
+
+        XCTAssertEqual(natureAction?.url.absoluteString, "https://parks.example.gov/camping/reservations")
+        XCTAssertNil(restaurantAction)
+    }
+
+    func testNatureDiscoveryUsesTrustedProviderPortalLinkedByOfficialPark() async throws {
+        let html = #"<a href="https://www.recreation.gov/">Reserve on Recreation.gov</a>"#
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://www.nps.gov/example/campground",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertEqual(action?.url.absoluteString, "https://www.recreation.gov/")
+    }
+
+    func testNatureDiscoveryDoesNotTreatStaticAssetsAsReservationPages() async {
+        let html = #"<a href="/assets/icons.svg#campground">Campground icon</a>"#
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://www.nps.gov/example/campground",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertNil(action)
+    }
+
+    func testReservationDiscoveryUpgradesHTTPOfficialWebsiteBeforeLoading() async throws {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "http://example-restaurant.com",
+            pageLoader: { request in
+                guard request.url?.scheme == "https" else {
+                    throw URLError(.secureConnectionFailed)
+                }
+                return (
+                    Data(#"<a href="https://www.opentable.com/gjelina">Reserve</a>"#.utf8),
+                    request.url
+                )
+            }
+        )
+
+        XCTAssertEqual(action?.url.absoluteString, "https://www.opentable.com/gjelina")
     }
 
     func testReservationDiscoveryRejectsSearchAndGoogleLinksFromOfficialWebsite() async {

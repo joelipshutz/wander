@@ -149,10 +149,20 @@ enum PlaceExternalLinks {
     static func discoverReservationAction(
         actionLinksJSON: String?,
         websiteURLString: String?,
+        placeName: String? = nil,
+        locality: String? = nil,
+        region: String? = nil,
+        allowsOfficialReservationPageFallback: Bool = false,
         pageLoader: ReservationPageLoader? = nil
     ) async -> PlaceExternalAction? {
         if let knownAction = reservationAction(actionLinksJSON: actionLinksJSON) {
             return knownAction
+        }
+        if let catalogAction = curatedReservationAction(
+            placeName: placeName,
+            region: region
+        ) {
+            return catalogAction
         }
 
         guard let websiteURL = safeReservationDiscoveryWebsite(from: websiteURLString) else {
@@ -172,19 +182,37 @@ enum PlaceExternalLinks {
         }
 
         let homeHTML = decodedHTML(from: homePage.0)
-        if let providerAction = firstDirectReservationAction(in: homeHTML, relativeTo: homePageURL) {
+        if let providerAction = firstDirectReservationAction(
+            in: homeHTML,
+            relativeTo: homePageURL,
+            placeName: placeName,
+            locality: locality,
+            region: region
+        ) {
             return providerAction
         }
+        var naturePortalFallback = allowsOfficialReservationPageFallback
+            ? firstNatureReservationPortalAction(in: homeHTML, relativeTo: homePageURL)
+            : nil
 
-        let reservationPages = linkedURLs(in: homeHTML, relativeTo: homePageURL)
+        let reservationPages = reservationPageURLs(
+            in: homeHTML,
+            relativeTo: homePageURL,
+            includeNatureTerms: allowsOfficialReservationPageFallback
+        )
             .filter {
                 $0.scheme?.lowercased() == "https"
                     && isSameWebsite($0, as: homePageURL)
-                    && looksLikeReservationPage($0)
             }
-            .prefix(2)
+            .prefix(3)
+
+        var officialReservationFallback: PlaceExternalAction?
 
         for reservationPageURL in reservationPages {
+            if allowsOfficialReservationPageFallback,
+               officialReservationFallback == nil {
+                officialReservationFallback = officialReservationAction(url: reservationPageURL)
+            }
             guard !Task.isCancelled,
                   let reservationPage = try? await loader(reservationRequest(for: reservationPageURL))
             else {
@@ -195,12 +223,25 @@ enum PlaceExternalLinks {
                 return redirectedAction
             }
             let reservationHTML = decodedHTML(from: reservationPage.0)
-            if let providerAction = firstDirectReservationAction(in: reservationHTML, relativeTo: finalURL) {
+            if let providerAction = firstDirectReservationAction(
+                in: reservationHTML,
+                relativeTo: finalURL,
+                placeName: placeName,
+                locality: locality,
+                region: region
+            ) {
                 return providerAction
+            }
+            if allowsOfficialReservationPageFallback,
+               naturePortalFallback == nil {
+                naturePortalFallback = firstNatureReservationPortalAction(
+                    in: reservationHTML,
+                    relativeTo: finalURL
+                )
             }
         }
 
-        return nil
+        return naturePortalFallback ?? officialReservationFallback
     }
 
     static func reservationAction(url: URL?) -> PlaceExternalAction? {
@@ -243,7 +284,7 @@ enum PlaceExternalLinks {
         case (.order, .exact):
             return PlaceExternalAction(kind: .order, title: actionTitle(link.title, fallback: "Order"), systemImage: "bag.fill", url: url)
         case (.reserve, .exact):
-            return PlaceExternalAction(kind: .reserve, title: actionTitle(link.title, fallback: "Reserve"), systemImage: "calendar.badge.plus", url: url)
+            return reservationAction(url: url)
         case (.menu, .exact):
             return PlaceExternalAction(kind: .menu, title: actionTitle(link.title, fallback: "Menu"), systemImage: "menucard.fill", url: url)
         case (.deliverySearch, _), (.order, .search):
@@ -276,16 +317,17 @@ enum PlaceExternalLinks {
     }
 
     private static func reservationRequest(for url: URL) -> URLRequest {
-        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 6)
+        var request = URLRequest(url: url, cachePolicy: .reloadRevalidatingCacheData, timeoutInterval: 6)
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
         request.setValue("rec.me reservation link resolver", forHTTPHeaderField: "User-Agent")
         return request
     }
 
     private static func safeReservationDiscoveryWebsite(from rawValue: String?) -> URL? {
-        guard let url = websiteURL(from: rawValue),
-              url.scheme?.lowercased() == "https",
-              let host = url.host?.lowercased(),
+        guard let rawURL = websiteURL(from: rawValue),
+              var components = URLComponents(url: rawURL, resolvingAgainstBaseURL: false),
+              ["http", "https"].contains(components.scheme?.lowercased() ?? ""),
+              let host = rawURL.host?.lowercased(),
               !host.isEmpty,
               host != "localhost",
               !host.hasSuffix(".local"),
@@ -293,6 +335,9 @@ enum PlaceExternalLinks {
         else {
             return nil
         }
+
+        components.scheme = "https"
+        guard let url = components.url else { return nil }
 
         let hostParts = host.split(separator: ".")
         let isIPv4Address = hostParts.count == 4 && hostParts.allSatisfy { Int($0) != nil }
@@ -311,12 +356,194 @@ enum PlaceExternalLinks {
 
     private static func firstDirectReservationAction(
         in html: String,
+        relativeTo baseURL: URL,
+        placeName: String? = nil,
+        locality: String? = nil,
+        region: String? = nil
+    ) -> PlaceExternalAction? {
+        linkedURLCandidates(in: html, relativeTo: baseURL)
+            .compactMap { candidate -> (PlaceExternalAction, Int)? in
+                guard let action = reservationAction(url: candidate.url) else { return nil }
+                return (
+                    action,
+                    reservationCandidateScore(
+                        candidate,
+                        placeName: placeName,
+                        locality: locality,
+                        region: region
+                    )
+                )
+            }
+            .max { lhs, rhs in lhs.1 < rhs.1 }?
+            .0
+    }
+
+    private struct LinkedURLCandidate {
+        let url: URL
+        let context: String
+    }
+
+    private static func linkedURLCandidates(in html: String, relativeTo baseURL: URL) -> [LinkedURLCandidate] {
+        let patterns = [
+            #"(?i)\bhref\s*=\s*[\"']([^\"']+)[\"']"#,
+            #"(?i)https?://[^\s\"'<>]+"#
+        ]
+        let htmlNSString = html as NSString
+        var candidates: [LinkedURLCandidate] = []
+
+        for pattern in patterns {
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(location: 0, length: htmlNSString.length)
+            for match in expression.matches(in: html, range: range) {
+                let captureIndex = match.numberOfRanges > 1 ? 1 : 0
+                let rawRange = match.range(at: captureIndex)
+                guard rawRange.location != NSNotFound else { continue }
+                let rawValue = htmlNSString.substring(with: rawRange)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "()[]{}.,;"))
+                guard let url = URL(string: rawValue, relativeTo: baseURL)?.absoluteURL,
+                      ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                      url.host?.isEmpty == false
+                else { continue }
+
+                let contextStart = max(0, match.range.location - 220)
+                let contextEnd = min(htmlNSString.length, NSMaxRange(match.range) + 220)
+                let context = htmlNSString
+                    .substring(with: NSRange(location: contextStart, length: contextEnd - contextStart))
+                    .replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+                candidates.append(LinkedURLCandidate(url: url, context: context))
+            }
+        }
+        return candidates
+    }
+
+    private static func reservationCandidateScore(
+        _ candidate: LinkedURLCandidate,
+        placeName: String?,
+        locality: String?,
+        region: String?
+    ) -> Int {
+        let value = normalizedMatchText("\(candidate.url.absoluteString) \(candidate.context)")
+        var score = 0
+
+        if let locality = normalizedMatchPhrase(locality), value.contains(locality) {
+            score += 100
+        }
+        if let region = normalizedMatchPhrase(region), region.count >= 3, value.contains(region) {
+            score += 30
+        }
+
+        let nameTokens = significantMatchTokens(placeName)
+        let matchingNameTokens = nameTokens.filter { value.contains($0) }
+        score += matchingNameTokens.count * 5
+        if !nameTokens.isEmpty, matchingNameTokens.count == nameTokens.count {
+            score += 20
+        }
+        return score
+    }
+
+    private static func normalizedMatchPhrase(_ value: String?) -> String? {
+        let normalized = normalizedMatchText(value ?? "")
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private static func normalizedMatchText(_ value: String) -> String {
+        value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private static func significantMatchTokens(_ value: String?) -> [String] {
+        let stopWords: Set<String> = ["and", "bar", "cafe", "restaurant", "the"]
+        return normalizedMatchText(value ?? "")
+            .split(separator: " ")
+            .map(String.init)
+            .filter { $0.count >= 3 && !stopWords.contains($0) }
+    }
+
+    private struct CuratedReservationLink {
+        let names: Set<String>
+        let regions: Set<String>
+        let urlString: String
+    }
+
+    private static let curatedReservationLinks: [CuratedReservationLink] = [
+        CuratedReservationLink(
+            names: ["gjelina"],
+            regions: ["ca", "california"],
+            urlString: "https://www.opentable.com/gjelina"
+        ),
+        CuratedReservationLink(
+            names: ["rvr"],
+            regions: ["ca", "california"],
+            urlString: "https://resy.com/cities/los-angeles-ca/venues/rvr"
+        ),
+        CuratedReservationLink(
+            names: ["bestia"],
+            regions: ["ca", "california"],
+            urlString: "https://www.opentable.com/r/bestia-reservations-los-angeles"
+        ),
+        CuratedReservationLink(
+            names: ["bavel"],
+            regions: ["ca", "california"],
+            urlString: "https://www.opentable.com/r/bavel-reservations-los-angeles"
+        ),
+        CuratedReservationLink(
+            names: ["girl the goat", "girl and the goat"],
+            regions: ["ca", "california"],
+            urlString: "https://www.opentable.com/r/girl-and-the-goat-la-reservations-los-angeles"
+        ),
+        CuratedReservationLink(
+            names: ["mother wolf"],
+            regions: ["ca", "california"],
+            urlString: "https://resy.com/cities/la/mother-wolf"
+        ),
+        CuratedReservationLink(
+            names: ["wawona campground"],
+            regions: ["ca", "california"],
+            urlString: "https://www.recreation.gov/camping/campgrounds/232446"
+        ),
+        CuratedReservationLink(
+            names: ["pinnacles campground"],
+            regions: ["ca", "california"],
+            urlString: "https://www.recreation.gov/camping/campgrounds/234015"
+        ),
+        CuratedReservationLink(
+            names: ["convict lake campground"],
+            regions: ["ca", "california"],
+            urlString: "https://www.recreation.gov/camping/campgrounds/234311"
+        )
+    ]
+
+    private static func curatedReservationAction(
+        placeName: String?,
+        region: String?
+    ) -> PlaceExternalAction? {
+        guard let name = normalizedMatchPhrase(placeName),
+              let region = normalizedMatchPhrase(region),
+              let match = curatedReservationLinks.first(where: {
+                  $0.names.contains(name) && $0.regions.contains(region)
+              }),
+              let url = URL(string: match.urlString)
+        else { return nil }
+
+        return reservationAction(url: url)
+    }
+
+    private static func firstNatureReservationPortalAction(
+        in html: String,
         relativeTo baseURL: URL
     ) -> PlaceExternalAction? {
         for url in linkedURLs(in: html, relativeTo: baseURL) {
-            if let action = reservationAction(url: url) {
-                return action
-            }
+            guard let secureURL = secureNatureReservationPortalURL(from: url) else { continue }
+            return PlaceExternalAction(
+                kind: .reserve,
+                title: "Reservation",
+                systemImage: "calendar",
+                url: secureURL
+            )
         }
         return nil
     }
@@ -352,6 +579,46 @@ enum PlaceExternalLinks {
         return urls
     }
 
+    private static func reservationPageURLs(
+        in html: String,
+        relativeTo baseURL: URL,
+        includeNatureTerms: Bool
+    ) -> [URL] {
+        var urls = linkedURLs(in: html, relativeTo: baseURL).filter {
+            isLikelyHTMLPageURL($0)
+                && looksLikeReservationPage($0, includeNatureTerms: includeNatureTerms)
+        }
+        var seen = Set(urls.map { $0.absoluteString.lowercased() })
+
+        let anchorPattern = #"(?is)<a\b[^>]*href\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>"#
+        guard let expression = try? NSRegularExpression(pattern: anchorPattern) else {
+            return urls
+        }
+
+        let range = NSRange(html.startIndex..<html.endIndex, in: html)
+        for match in expression.matches(in: html, range: range) {
+            guard let hrefRange = Range(match.range(at: 1), in: html),
+                  let textRange = Range(match.range(at: 2), in: html)
+            else { continue }
+
+            let linkText = String(html[textRange])
+                .replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+                .lowercased()
+            guard containsReservationLanguage(linkText, includeNatureTerms: includeNatureTerms),
+                  let url = URL(string: String(html[hrefRange]), relativeTo: baseURL)?.absoluteURL,
+                  ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                  url.host?.isEmpty == false
+            else { continue }
+
+            let key = url.absoluteString.lowercased()
+            if seen.insert(key).inserted {
+                urls.append(url)
+            }
+        }
+
+        return urls
+    }
+
     private static func isSameWebsite(_ lhs: URL, as rhs: URL) -> Bool {
         normalizedWebsiteHost(lhs.host) == normalizedWebsiteHost(rhs.host)
     }
@@ -364,13 +631,20 @@ enum PlaceExternalLinks {
         return host
     }
 
-    private static func looksLikeReservationPage(_ url: URL) -> Bool {
+    private static func looksLikeReservationPage(_ url: URL, includeNatureTerms: Bool) -> Bool {
         let value = [url.path, url.query, url.fragment]
             .compactMap { $0 }
             .joined(separator: " ")
             .lowercased()
-        return ["reservation", "reserve", "booking", "book-a-table", "bookatable"]
-            .contains { value.contains($0) }
+        return containsReservationLanguage(value, includeNatureTerms: includeNatureTerms)
+    }
+
+    private static func containsReservationLanguage(_ value: String, includeNatureTerms: Bool) -> Bool {
+        var terms = ["reservation", "reserve", "booking", "book-a-table", "bookatable", "book-now"]
+        if includeNatureTerms {
+            terms.append(contentsOf: ["camping", "campground", "permit", "timed-entry", "tickets"])
+        }
+        return terms.contains { value.contains($0) }
     }
 
     private static func isDirectReservationProviderURL(_ url: URL) -> Bool {
@@ -407,27 +681,144 @@ enum PlaceExternalLinks {
             "opentable.co.uk",
             "opentable.com.au",
             "opentable.de",
+            "opentable.es",
+            "opentable.fr",
+            "opentable.hk",
             "opentable.ie",
+            "opentable.it",
             "opentable.jp",
-            "opentable.nl"
+            "opentable.nl",
+            "opentable.sg",
+            "opentable.ae",
+            "opentable.co.th",
+            "opentable.com.mx",
+            "opentable.com.tw"
         ]
-        guard openTableDomains.contains(where: { matches(host: host, domain: $0) }) else {
+        if openTableDomains.contains(where: { matches(host: host, domain: $0) }) {
+            if pathComponents.first == "r", pathComponents.count >= 2 {
+                return true
+            }
+
+            guard pathComponents.first != "s",
+                  pathComponents.first != "search",
+                  let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            else { return false }
+
+            if components.queryItems?.contains(where: { item in
+                item.name.caseInsensitiveCompare("rid") == .orderedSame
+                    || item.name.caseInsensitiveCompare("restref") == .orderedSame
+            }) == true {
+                return true
+            }
+
+            if pathComponents.count == 1,
+               let restaurantSlug = pathComponents.first?.lowercased() {
+                let nonRestaurantPaths: Set<String> = [
+                    "about", "affiliate", "blog", "business", "concierge", "events",
+                    "home", "login", "open", "private-dining", "restaurants",
+                    "restaurant-solutions", "s", "search", "start"
+                ]
+                return restaurantSlug.count >= 2
+                    && !nonRestaurantPaths.contains(restaurantSlug)
+                    && !restaurantSlug.hasSuffix("-restaurants")
+            }
+
             return false
         }
 
-        if pathComponents.first == "r", pathComponents.count >= 2 {
-            return true
+        return isDirectNatureReservationProviderURL(url)
+    }
+
+    private static func isDirectNatureReservationProviderURL(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        let path = url.path.lowercased()
+        let fragment = url.fragment?.lowercased() ?? ""
+        let query = url.query?.lowercased() ?? ""
+
+        if matches(host: host, domain: "recreation.gov") {
+            let directPrefixes = [
+                "/camping/campgrounds/", "/permits/", "/ticket/facility/",
+                "/timed-entry/", "/lottery/", "/tree-permits/"
+            ]
+            return directPrefixes.contains { path.hasPrefix($0) && path.count > $0.count }
         }
 
-        guard pathComponents.first != "s",
-              pathComponents.first != "search",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        else { return false }
+        if matches(host: host, domain: "reserveamerica.com") {
+            return path.contains("/camping/")
+                || path.contains("/explore/")
+                || path.contains("campgrounddetails.do")
+                || path.contains("facilitydetails.do")
+                || query.contains("parkid=")
+        }
 
-        return components.queryItems?.contains { item in
-            item.name.caseInsensitiveCompare("rid") == .orderedSame
-                || item.name.caseInsensitiveCompare("restref") == .orderedSame
-        } == true
+        if matches(host: host, domain: "reservecalifornia.com")
+            || matches(host: host, domain: "goingtocamp.com") {
+            let route = "\(path) \(fragment) \(query)"
+            return ["park/", "campground", "facility", "reservation", "reserve"]
+                .contains { route.contains($0) }
+        }
+
+        let stateReservationDomains = [
+            "camping.hawaii.gov",
+            "reserve.floridastateparks.org",
+            "reservations.gooutdoorsflorida.com"
+        ]
+        guard stateReservationDomains.contains(where: { matches(host: host, domain: $0) }) else {
+            return false
+        }
+        let route = "\(path) \(fragment) \(query)"
+        return !route.trimmingCharacters(in: .whitespaces).isEmpty
+            && !route.contains("search")
+    }
+
+    private static func officialReservationAction(url: URL) -> PlaceExternalAction? {
+        guard url.scheme?.lowercased() == "https",
+              isLikelyHTMLPageURL(url),
+              looksLikeReservationPage(url, includeNatureTerms: true)
+        else { return nil }
+        return PlaceExternalAction(
+            kind: .reserve,
+            title: "Reservation",
+            systemImage: "calendar",
+            url: url
+        )
+    }
+
+    private static func secureNatureReservationPortalURL(from url: URL) -> URL? {
+        guard let host = url.host?.lowercased(),
+              isNatureReservationProviderHost(host),
+              isLikelyHTMLPageURL(url),
+              !url.path.lowercased().contains("search")
+        else { return nil }
+
+        if url.scheme?.lowercased() == "https" {
+            return url
+        }
+        guard url.scheme?.lowercased() == "http",
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.scheme = "https"
+        return components.url
+    }
+
+    private static func isLikelyHTMLPageURL(_ url: URL) -> Bool {
+        let rejectedExtensions: Set<String> = [
+            "css", "gif", "ico", "jpeg", "jpg", "js", "json", "pdf", "png",
+            "svg", "webp", "xml", "zip"
+        ]
+        return !rejectedExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    private static func isNatureReservationProviderHost(_ host: String) -> Bool {
+        [
+            "recreation.gov",
+            "reserveamerica.com",
+            "reservecalifornia.com",
+            "goingtocamp.com",
+            "camping.hawaii.gov",
+            "reserve.floridastateparks.org",
+            "reservations.gooutdoorsflorida.com"
+        ].contains(where: { matches(host: host, domain: $0) })
     }
 
     private static func secureReservationProviderURL(from url: URL) -> URL? {
@@ -452,9 +843,25 @@ enum PlaceExternalLinks {
             "opentable.co.uk",
             "opentable.com.au",
             "opentable.de",
+            "opentable.es",
+            "opentable.fr",
+            "opentable.hk",
             "opentable.ie",
+            "opentable.it",
             "opentable.jp",
-            "opentable.nl"
+            "opentable.nl",
+            "opentable.sg",
+            "opentable.ae",
+            "opentable.co.th",
+            "opentable.com.mx",
+            "opentable.com.tw",
+            "recreation.gov",
+            "reserveamerica.com",
+            "reservecalifornia.com",
+            "goingtocamp.com",
+            "camping.hawaii.gov",
+            "reserve.floridastateparks.org",
+            "reservations.gooutdoorsflorida.com"
         ].contains(where: { matches(host: host, domain: $0) })
     }
 

@@ -887,16 +887,42 @@ private struct PlaceProfileFullView: View {
     }
 
     private var reservationLookupKey: String {
-        [place.id, place.websiteURLString, place.actionLinksJSON]
+        [
+            place.id,
+            place.name,
+            place.locality,
+            place.region,
+            place.websiteURLString,
+            place.actionLinksJSON,
+            place.category,
+            place.primaryCategory,
+            place.subcategory,
+            place.rawProviderType
+        ]
             .compactMap { $0 }
             .joined(separator: "|")
+    }
+
+    private var allowsOfficialNatureReservationPageFallback: Bool {
+        if place.primaryCategory == WanderPlaceCategory.outdoorsNature {
+            return true
+        }
+        let classification = [place.category, place.subcategory, place.rawProviderType]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        return ["campground", "camping", "national park", "state park", "rv park"]
+            .contains { classification.contains($0) }
     }
 
     private func resolveReservationAction() async {
         discoveredReservationAction = nil
         let action = await PlaceExternalLinks.discoverReservationAction(
             actionLinksJSON: place.actionLinksJSON,
-            websiteURLString: place.websiteURLString
+            websiteURLString: place.websiteURLString,
+            placeName: place.name,
+            locality: place.locality,
+            region: place.region,
+            allowsOfficialReservationPageFallback: allowsOfficialNatureReservationPageFallback
         )
         guard !Task.isCancelled else { return }
         discoveredReservationAction = action
