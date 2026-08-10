@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   readFileSync,
@@ -20,6 +21,10 @@ function fail(message) {
 
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function stringList(value) {
@@ -400,7 +405,13 @@ function writeArtifacts({ directory, buildNumber, report, artifacts, force }) {
     releaseRecord: resolve(directory, `${prefix}-release-record.md`),
   };
   const flag = force ? "w" : "wx";
-  writeFileSync(files.reconciliation, `${JSON.stringify(report, null, 2)}\n`, { flag });
+  const lockedReport = {
+    ...report,
+    gateVersion: 1,
+    buildNumber,
+    whatToTestSha256: sha256(artifacts.whatToTest.trim()),
+  };
+  writeFileSync(files.reconciliation, `${JSON.stringify(lockedReport, null, 2)}\n`, { flag });
   writeFileSync(files.whatToTest, `${artifacts.whatToTest}\n`, { flag });
   writeFileSync(files.slack, `${artifacts.slack}\n`, { flag });
   writeFileSync(files.releaseRecord, `${artifacts.releaseRecord}\n`, { flag });
