@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import UIKit
 
@@ -314,7 +315,7 @@ private final class CoalescingPlaceSaveDraftWriter: @unchecked Sendable {
 
 @MainActor
 final class PlaceSaveDraftStore: ObservableObject {
-    @Published private(set) var draft: PlaceSaveDraft?
+    private(set) var draft: PlaceSaveDraft?
 
     private let persistence: PlaceSaveDraftPersistence
 
@@ -325,6 +326,9 @@ final class PlaceSaveDraftStore: ObservableObject {
     @discardableResult
     func restore(ownerUserID: String, now: Date = .now) -> PlaceSaveDraftRestoreOutcome {
         guard let persisted = persistence.load() else {
+            if draft != nil {
+                objectWillChange.send()
+            }
             draft = nil
             return .none
         }
@@ -333,11 +337,17 @@ final class PlaceSaveDraftStore: ObservableObject {
             return .discarded
         }
 
+        if draft?.id != persisted.id {
+            objectWillChange.send()
+        }
         draft = persisted
         return .restored(persisted)
     }
 
     func begin(_ draft: PlaceSaveDraft) {
+        if self.draft?.id != draft.id {
+            objectWillChange.send()
+        }
         self.draft = draft
         persistence.save(draft)
     }
@@ -369,6 +379,9 @@ final class PlaceSaveDraftStore: ObservableObject {
     }
 
     func clear() {
+        if draft != nil {
+            objectWillChange.send()
+        }
         draft = nil
         persistence.save(nil)
     }
