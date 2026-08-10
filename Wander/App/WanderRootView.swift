@@ -30,10 +30,10 @@ private struct SharedPlaceImportDrainNotice: Identifiable {
     var title: String {
         if report.importedOrDuplicateBatchCount > 0,
            report.failedEnvelopeCount + report.quarantinedEnvelopeCount + report.expiredEnvelopeCount > 0 {
-            return "Some shared places were added"
+            return "Some shared places were captured"
         }
         if report.importedOrDuplicateBatchCount > 0 {
-            return "Shared places added"
+            return "Shared places captured"
         }
         return "Shared import needs attention"
     }
@@ -42,12 +42,12 @@ private struct SharedPlaceImportDrainNotice: Identifiable {
         var parts: [String] = []
         if report.importedBatchCount > 0 {
             parts.append(
-                "\(report.importedBatchCount) import\(report.importedBatchCount == 1 ? "" : "s") added to your inbox."
+                "\(report.importedBatchCount) import\(report.importedBatchCount == 1 ? " is" : "s are") ready to review."
             )
         }
         if report.duplicateBatchCount > 0 {
             parts.append(
-                "\(report.duplicateBatchCount) import\(report.duplicateBatchCount == 1 ? " was" : "s were") already in your inbox."
+                "\(report.duplicateBatchCount) import\(report.duplicateBatchCount == 1 ? " was" : "s were") already captured."
             )
         }
         let unavailableCount = report.failedEnvelopeCount
@@ -565,6 +565,9 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            if let userID = auth.state.session?.userID {
+                importStore.bind(to: userID)
+            }
             restorePlaceSaveDraftIfNeeded()
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
@@ -616,6 +619,9 @@ struct WanderRootView: View {
             routeNotification(request)
         }
         .onChange(of: auth.state) { _, state in
+            if let userID = state.session?.userID {
+                importStore.bind(to: userID)
+            }
             if !state.isSignedIn {
                 placeSaveDraftStore.clear()
                 restoredPlaceSaveDraftOwnerID = nil
@@ -714,7 +720,7 @@ struct WanderRootView: View {
         .modifier(
             SharedPlaceImportAlertModifier(
                 notice: $sharedPlaceImportNotice,
-                onReview: presentSharedPlaceImportReview
+                onReview: presentSharedPlaceImportReviewFromNotice
             )
         )
         .alert(
@@ -858,13 +864,23 @@ struct WanderRootView: View {
         )
         guard report.hasUserVisibleResult else { return }
         reconcilePlaceImports()
-        sharedPlaceImportNotice = SharedPlaceImportDrainNotice(report: report)
+        if !report.batchIDs.isEmpty {
+            presentSharedPlaceImportReview(batchIDs: report.batchIDs)
+        } else {
+            sharedPlaceImportNotice = SharedPlaceImportDrainNotice(report: report)
+        }
     }
 
-    private func presentSharedPlaceImportReview() {
+    private func presentSharedPlaceImportReviewFromNotice() {
+        guard let notice = sharedPlaceImportNotice else { return }
+        presentSharedPlaceImportReview(batchIDs: notice.report.batchIDs)
+    }
+
+    private func presentSharedPlaceImportReview(batchIDs: [String]) {
+        guard !batchIDs.isEmpty else { return }
         addTabResetToken = UUID()
         addSheetDetent = .large
-        addLaunchRequest = WanderAddLaunchRequest(destination: .importInbox)
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importReview(batchIDs: batchIDs))
         isPresentingAdd = true
     }
 
@@ -1183,6 +1199,13 @@ struct WanderRootView: View {
             store.saveFlowDidPresent(.addSheet)
             addTabResetToken = UUID()
             addLaunchRequest = WanderAddLaunchRequest(destination: .hereNow)
+            addSheetDetent = .large
+            isPresentingAdd = true
+        case .addSearch(let query):
+            selectedTab = .map
+            store.saveFlowDidPresent(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = WanderAddLaunchRequest(destination: .search(query: query))
             addSheetDetent = .large
             isPresentingAdd = true
         case .map:

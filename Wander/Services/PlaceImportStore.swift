@@ -707,6 +707,7 @@ final class PlaceImportStore: ObservableObject {
 
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
+    private var ownerUserID: String?
     private var processingTasks: [String: Task<Void, Never>] = [:]
     private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
 
@@ -719,6 +720,7 @@ final class PlaceImportStore: ObservableObject {
         do {
             let snapshot = try persistence.load()
             let upgrade = Self.upgradedLoadedItems(snapshot.items)
+            ownerUserID = snapshot.ownerUserID
             batches = snapshot.batches
             items = upgrade.items
             replacedSocialItemsByPlaceholderID = upgrade.replacedSocialItemsByPlaceholderID
@@ -726,6 +728,7 @@ final class PlaceImportStore: ObservableObject {
         } catch {
             batches = []
             items = []
+            ownerUserID = nil
             replacedSocialItemsByPlaceholderID = [:]
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
@@ -807,6 +810,23 @@ final class PlaceImportStore: ObservableObject {
             duplicateCount: inboxItems.filter { $0.state == .duplicate }.count,
             savedCount: inboxItems.filter { $0.state == .saved }.count
         )
+    }
+
+    var latestUnpresentedReceipt: PlaceImportReceipt? {
+        batches
+            .compactMap(\.receipt)
+            .filter { $0.presentedAt == nil }
+            .max { $0.createdAt < $1.createdAt }
+    }
+
+    func reviewPlan(batchID: String? = nil) -> PlaceImportReviewPlan {
+        let reviewItems: [PlaceImportItem]
+        if let batchID {
+            reviewItems = items(for: batchID)
+        } else {
+            reviewItems = items
+        }
+        return PlaceImportReviewPlan(items: reviewItems)
     }
 
     @discardableResult
@@ -911,6 +931,97 @@ final class PlaceImportStore: ObservableObject {
         items[index].helpMessage = nil
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
+    }
+
+    func setStagedStatus(_ status: PlaceStatus, itemID: String) {
+        setStagedStatus(status, itemIDs: [itemID])
+    }
+
+    func setStagedStatus(_ status: PlaceStatus, itemIDs: [String]) {
+        let ids = Set(itemIDs)
+        guard !ids.isEmpty else { return }
+        var didChange = false
+        for index in items.indices where ids.contains(items[index].id) && items[index].state == .ready {
+            items[index].stagedStatus = status
+            items[index].updatedAt = .now
+            didChange = true
+        }
+        if didChange { persist() }
+    }
+
+    func setIncludedInImport(_ isIncluded: Bool, itemID: String) {
+        setIncludedInImport(isIncluded, itemIDs: [itemID])
+    }
+
+    func setIncludedInImport(_ isIncluded: Bool, itemIDs: [String]) {
+        let ids = Set(itemIDs)
+        guard !ids.isEmpty else { return }
+        var didChange = false
+        for index in items.indices
+        where ids.contains(items[index].id) && ![.saved, .dismissed].contains(items[index].state) {
+            items[index].isSelectedForImport = isIncluded
+            items[index].updatedAt = .now
+            didChange = true
+        }
+        if didChange { persist() }
+    }
+
+    /// Claims the local import snapshot for the authenticated account. A snapshot
+    /// owned by another account is cleared before any capture can be reviewed or saved.
+    func bind(to userID: String) {
+        guard ownerUserID != userID else { return }
+        processingTasks.values.forEach { $0.cancel() }
+        processingTasks.removeAll()
+        batches = []
+        items = []
+        replacedSocialItemsByPlaceholderID = [:]
+        ownerUserID = userID
+        persist()
+    }
+
+    func setStagedNote(_ note: String?, itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].state == .ready
+        else { return }
+        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        items[index].stagedNote = trimmed?.isEmpty == false ? trimmed : nil
+        items[index].updatedAt = .now
+        persist()
+    }
+
+    func setStagedRatingScore(_ score: Double?, itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].state == .ready,
+              items[index].stagedStatus == .been
+        else { return }
+        items[index].stagedRatingScore = score
+        items[index].updatedAt = .now
+        persist()
+    }
+
+    func setStagedVisitedAt(_ date: Date?, itemID: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemID }),
+              items[index].state == .ready,
+              items[index].stagedStatus == .been
+        else { return }
+        items[index].stagedVisitedAt = date
+        items[index].updatedAt = .now
+        persist()
+    }
+
+    func applyStagedStatus(_ status: PlaceStatus, batchID: String? = nil) {
+        var changed = false
+        for index in items.indices where items[index].state == .ready {
+            guard batchID == nil || items[index].batchID == batchID else { continue }
+            if items[index].stagedStatus != status {
+                items[index].stagedStatus = status
+                items[index].updatedAt = .now
+                changed = true
+            }
+        }
+        if changed {
+            persist()
+        }
     }
 
     func retry(itemID: String) {
@@ -1092,6 +1203,38 @@ final class PlaceImportStore: ObservableObject {
         items[index].helpMessage = nil
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
+    }
+
+    func recordReceipt(
+        batchID: String,
+        entries: [PlaceImportReceiptEntry],
+        destinationListID: String?
+    ) {
+        guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        let receipt = PlaceImportReceipt(
+            batchID: batchID,
+            sourceName: batches[index].sourceName,
+            entries: entries,
+            destinationListID: destinationListID
+        )
+        batches[index].destinationListID = destinationListID
+        batches[index].receipt = receipt
+        batches[index].updatedAt = .now
+        persist()
+    }
+
+    func setDestinationListID(_ destinationListID: String, batchID: String) {
+        guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        batches[index].destinationListID = destinationListID
+        batches[index].updatedAt = .now
+        persist()
+    }
+
+    func markReceiptPresented(receiptID: String) {
+        guard let index = batches.firstIndex(where: { $0.receipt?.id == receiptID }) else { return }
+        batches[index].receipt?.presentedAt = .now
+        batches[index].updatedAt = .now
+        persist()
     }
 
     func dismiss(itemID: String) {
@@ -1404,7 +1547,13 @@ final class PlaceImportStore: ObservableObject {
             let durableItems = items.flatMap { item in
                 replacedSocialItemsByPlaceholderID[item.id] ?? [item]
             }
-            try persistence.save(PlaceImportSnapshot(batches: batches, items: durableItems))
+            try persistence.save(
+                PlaceImportSnapshot(
+                    ownerUserID: ownerUserID,
+                    batches: batches,
+                    items: durableItems
+                )
+            )
             persistenceError = nil
         } catch {
             persistenceError = "Import progress could not be saved. Keep rec.me open and try again."

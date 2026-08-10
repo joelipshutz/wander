@@ -179,6 +179,7 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
 
         XCTAssertEqual(first.importedBatchCount, 2)
         XCTAssertEqual(first.duplicateBatchCount, 0)
+        XCTAssertEqual(first.batchIDs, store.batches.map(\.id))
         XCTAssertEqual(store.batches.count, 2)
         XCTAssertEqual(store.batches.map(\.source), [.googleMaps, .instagram])
         XCTAssertEqual(
@@ -191,6 +192,7 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
 
         XCTAssertEqual(second.importedBatchCount, 0)
         XCTAssertEqual(second.duplicateBatchCount, 2)
+        XCTAssertEqual(second.batchIDs, store.batches.map(\.id))
         XCTAssertEqual(store.batches.count, 2)
         XCTAssertTrue(try inbox.scan().entries.isEmpty)
     }

@@ -3,6 +3,32 @@ import Foundation
 import XCTest
 @testable import Wander
 
+final class PlaceImportBulkStatusActionTests: XCTestCase {
+    func testBulkStatusControlIsAnActionInsteadOfARowStateMirror() {
+        XCTAssertNotEqual(
+            PlaceImportBulkStatusAction.idleSelectionID,
+            PlaceStatus.wannaGo.rawValue
+        )
+        XCTAssertNotEqual(
+            PlaceImportBulkStatusAction.idleSelectionID,
+            PlaceStatus.been.rawValue
+        )
+        XCTAssertNil(
+            PlaceImportBulkStatusAction.status(
+                for: PlaceImportBulkStatusAction.idleSelectionID
+            )
+        )
+        XCTAssertEqual(
+            PlaceImportBulkStatusAction.status(for: PlaceStatus.wannaGo.rawValue),
+            .wannaGo
+        )
+        XCTAssertEqual(
+            PlaceImportBulkStatusAction.status(for: PlaceStatus.been.rawValue),
+            .been
+        )
+    }
+}
+
 final class PlaceImportParserTests: XCTestCase {
     func testParsesAndDeduplicatesTextNotes() throws {
         let seeds = try PlaceImportParser.parse(
@@ -123,8 +149,420 @@ final class GoogleMapsSharedListImporterTests: XCTestCase {
     }
 }
 
+final class PlaceImportReviewPlanTests: XCTestCase {
+    func testAdaptiveRoutingUsesTotalCandidateBoundaries() {
+        XCTAssertEqual(plan(ready: 1).surface, .quickAdd)
+        XCTAssertEqual(plan(duplicates: 1).surface, .duplicate)
+        XCTAssertEqual(plan(ready: 2).surface, .compact)
+        XCTAssertEqual(plan(ready: 5).surface, .compact)
+        XCTAssertEqual(plan(ready: 6).surface, .batch)
+    }
+
+    func testExceptionHeavyBatchKeepsTheDenominatorInTheAction() {
+        let review = plan(ready: 1, needsHelp: 99)
+
+        XCTAssertEqual(review.surface, .batch)
+        XCTAssertEqual(review.committableCount, 1)
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 of 100 places")
+    }
+
+    func testProcessingItemsSuppressCommitUntilTheWholeCaptureFinishesResolving() {
+        let candidate = placeImportCandidate(name: "Ready")
+        let ready = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: candidate.name,
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id
+        )
+        let resolving = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Resolving",
+                nameHint: "Resolving",
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 1
+            ),
+            state: .resolving
+        )
+
+        let review = PlaceImportReviewPlan(items: [ready, resolving])
+
+        XCTAssertEqual(review.surface, .resolving)
+        XCTAssertEqual(review.committableCount, 1)
+        XCTAssertNil(review.primaryActionTitle)
+    }
+
+    func testStoredReceiptIsTerminalOnlyAfterNoActiveItemsRemain() {
+        XCTAssertFalse(
+            PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(activeItemCount: 1)
+        )
+        XCTAssertTrue(
+            PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(activeItemCount: 0)
+        )
+    }
+
+    func testCommitAuthorizationStopsOnCancellationOrAccountChange() {
+        XCTAssertTrue(
+            PlaceImportCommitAuthorization.isValid(
+                expectedUserID: "account-a",
+                authUserID: "account-a",
+                currentUserID: "account-a",
+                isCancelled: false
+            )
+        )
+        XCTAssertFalse(
+            PlaceImportCommitAuthorization.isValid(
+                expectedUserID: "account-a",
+                authUserID: "account-b",
+                currentUserID: "account-b",
+                isCancelled: false
+            )
+        )
+        XCTAssertFalse(
+            PlaceImportCommitAuthorization.isValid(
+                expectedUserID: "account-a",
+                authUserID: "account-a",
+                currentUserID: "account-a",
+                isCancelled: true
+            )
+        )
+    }
+
+    func testZeroReadyRoutesToRecoveryWithoutAnAddZeroAction() {
+        let review = plan(needsHelp: 3)
+
+        XCTAssertEqual(review.surface, .recovery)
+        XCTAssertNil(review.primaryActionTitle)
+    }
+
+    func testUnlinkedDuplicateDoesNotOfferAnActionThatCannotCommit() {
+        let candidate = placeImportCandidate(name: "Unlinked")
+        let item = PlaceImportItem(
+            batchID: "batch",
+            source: .googleMaps,
+            seed: PlaceImportSeed(
+                rawText: candidate.name,
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .duplicate,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id
+        )
+
+        let review = PlaceImportReviewPlan(items: [item])
+
+        XCTAssertEqual(review.surface, .recovery)
+        XCTAssertEqual(review.committableCount, 0)
+        XCTAssertNil(review.primaryActionTitle)
+    }
+
+    func testSingleNewCandidateUsesExplicitWannaAction() {
+        XCTAssertEqual(plan(ready: 1).primaryActionTitle, "Add as Wanna")
+    }
+
+    func testCheckedSubsetControlsCommitCountWithoutChangingBatchSurface() {
+        let firstCandidate = placeImportCandidate(name: "First")
+        let secondCandidate = placeImportCandidate(name: "Second")
+        let first = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: firstCandidate.name,
+                nameHint: firstCandidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [firstCandidate],
+            selectedCandidateID: firstCandidate.id
+        )
+        let second = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: secondCandidate.name,
+                nameHint: secondCandidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 1
+            ),
+            state: .ready,
+            candidates: [secondCandidate],
+            selectedCandidateID: secondCandidate.id,
+            isIncludedInImport: false
+        )
+        let recovery = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Needs help",
+                nameHint: "Needs help",
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 2
+            ),
+            state: .needsHelp,
+            isIncludedInImport: false
+        )
+
+        let review = PlaceImportReviewPlan(items: [first, second, recovery])
+
+        XCTAssertEqual(review.surface, .compact)
+        XCTAssertEqual(review.totalCount, 3)
+        XCTAssertEqual(review.selectedCount, 1)
+        XCTAssertEqual(review.committableCount, 1)
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 place")
+    }
+
+    func testCheckedUnresolvedRowsRemainInTheSelectedDenominator() {
+        let candidate = placeImportCandidate(name: "Ready")
+        let ready = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: candidate.name,
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id
+        )
+        let recovery = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "Needs help",
+                nameHint: "Needs help",
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 1
+            ),
+            state: .needsHelp
+        )
+
+        let review = PlaceImportReviewPlan(items: [ready, recovery])
+
+        XCTAssertEqual(review.selectedCount, 2)
+        XCTAssertEqual(review.committableCount, 1)
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 of 2 places")
+    }
+
+    func testSingleBeenCandidateUsesExplicitBeenAction() {
+        let candidate = placeImportCandidate(name: "Visited")
+        let item = PlaceImportItem(
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: candidate.name,
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            stagedStatus: .been
+        )
+
+        XCTAssertEqual(PlaceImportReviewPlan(items: [item]).primaryActionTitle, "Add as Been")
+    }
+
+    func testDestinationListNameNormalizesBoundsAndCollisionsWithoutSplittingGraphemes() {
+        XCTAssertEqual(
+            PlaceImportDestinationListName.normalized("  LA\n\t Spots  "),
+            "LA Spots"
+        )
+        XCTAssertEqual(PlaceImportDestinationListName.normalized("\n\t"), "Google Maps Import")
+
+        let family = "👨‍👩‍👧‍👦"
+        let longName = String(repeating: family, count: 30)
+        let normalized = PlaceImportDestinationListName.normalized(longName)
+        XCTAssertLessThanOrEqual(normalized.unicodeScalars.count, 96)
+        XCTAssertTrue(normalized.allSatisfy { String($0) == family })
+
+        XCTAssertEqual(
+            PlaceImportDestinationListName.unique(
+                "LA Spots",
+                existingNames: ["LA Spots", "LA Spots — Google Maps"]
+            ),
+            "LA Spots — Google Maps 2"
+        )
+    }
+
+    private func plan(
+        ready: Int = 0,
+        duplicates: Int = 0,
+        needsHelp: Int = 0
+    ) -> PlaceImportReviewPlan {
+        var items: [PlaceImportItem] = []
+        for index in 0..<ready {
+            let candidate = placeImportCandidate(name: "Ready \(index)")
+            items.append(
+                PlaceImportItem(
+                    batchID: "batch",
+                    source: .googleMaps,
+                    seed: PlaceImportSeed(
+                        rawText: candidate.name,
+                        nameHint: candidate.name,
+                        areaHint: nil,
+                        sourceURLString: nil,
+                        sourceLine: index
+                    ),
+                    state: .ready,
+                    candidates: [candidate],
+                    selectedCandidateID: candidate.id
+                )
+            )
+        }
+        for index in 0..<duplicates {
+            let candidate = placeImportCandidate(name: "Existing \(index)")
+            items.append(
+                PlaceImportItem(
+                    batchID: "batch",
+                    source: .googleMaps,
+                    seed: PlaceImportSeed(
+                        rawText: candidate.name,
+                        nameHint: candidate.name,
+                        areaHint: nil,
+                        sourceURLString: nil,
+                        sourceLine: ready + index
+                    ),
+                    state: .duplicate,
+                    candidates: [candidate],
+                    selectedCandidateID: candidate.id,
+                    duplicateUserPlaceID: "existing-\(index)"
+                )
+            )
+        }
+        for index in 0..<needsHelp {
+            items.append(
+                PlaceImportItem(
+                    batchID: "batch",
+                    source: .googleMaps,
+                    seed: PlaceImportSeed(
+                        rawText: "Needs help \(index)",
+                        nameHint: "Needs help \(index)",
+                        areaHint: nil,
+                        sourceURLString: nil,
+                        sourceLine: ready + duplicates + index
+                    ),
+                    state: .needsHelp
+                )
+            )
+        }
+        return PlaceImportReviewPlan(items: items)
+    }
+}
+
 @MainActor
 final class PlaceImportStoreTests: XCTestCase {
+    func testBindingASecondAccountClearsTheFirstAccountsImportSnapshot() throws {
+        let candidate = placeImportCandidate(name: "Private caption place")
+        let firstAccountItem = PlaceImportItem(
+            batchID: "account-a-batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: "private caption",
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: "https://www.instagram.com/reel/example/",
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id
+        )
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(
+                ownerUserID: "account-a",
+                batches: [
+                    PlaceImportBatch(
+                        id: "account-a-batch",
+                        source: .instagram,
+                        sourceName: "Instagram",
+                        totalCount: 1
+                    )
+                ],
+                items: [firstAccountItem]
+            )
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+
+        store.bind(to: "account-b")
+
+        XCTAssertTrue(store.batches.isEmpty)
+        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertEqual(persistence.snapshot.ownerUserID, "account-b")
+        XCTAssertTrue(persistence.snapshot.items.isEmpty)
+    }
+
+    func testBulkMutationsPersistTheSnapshotOncePerUserAction() throws {
+        let candidate = placeImportCandidate(name: "Ready")
+        let items = (0..<50).map { index in
+            PlaceImportItem(
+                batchID: "batch",
+                source: .googleMaps,
+                seed: PlaceImportSeed(
+                    rawText: "Ready \(index)",
+                    nameHint: "Ready \(index)",
+                    areaHint: nil,
+                    sourceURLString: nil,
+                    sourceLine: index
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id
+            )
+        }
+        let persistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(
+                batches: [
+                    PlaceImportBatch(
+                        id: "batch",
+                        source: .googleMaps,
+                        sourceName: "Google Maps",
+                        totalCount: items.count
+                    )
+                ],
+                items: items
+            )
+        )
+        let store = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let itemIDs = items.map(\.id)
+
+        store.setIncludedInImport(false, itemIDs: itemIDs)
+        XCTAssertEqual(persistence.saveCount, 1)
+        XCTAssertTrue(store.items.allSatisfy { !$0.isSelectedForImport })
+
+        store.setStagedStatus(PlaceStatus.been, itemIDs: itemIDs)
+        XCTAssertEqual(persistence.saveCount, 2)
+        XCTAssertTrue(store.items.allSatisfy { $0.stagedStatus == PlaceStatus.been })
+    }
+
     func testUnifiedImportRoutesMixedSourcesWithoutSourceSelection() throws {
         let store = PlaceImportStore(
             persistence: InMemoryPlaceImportPersistence(),
@@ -165,6 +603,108 @@ final class PlaceImportStoreTests: XCTestCase {
         XCTAssertFalse(store.summary.hasPendingImports)
         XCTAssertTrue(store.summary.hasImports)
         XCTAssertEqual(store.summary.savedCount, 1)
+    }
+
+    func testReadyImportsDefaultToWannaAndStagedStatusSurvivesReload() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try XCTUnwrap(store).enqueue(
+            source: .textNotes,
+            text: "Ready, Los Angeles"
+        )
+        await store?.waitForProcessing(batchID: batchID)
+        let itemID = try XCTUnwrap(store?.items(for: batchID).first?.id)
+
+        XCTAssertEqual(store?.item(id: itemID)?.stagedStatus, .wannaGo)
+        store?.setStagedStatus(.been, itemID: itemID)
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+
+        XCTAssertEqual(store?.item(id: itemID)?.stagedStatus, .been)
+    }
+
+    func testImportSelectionDefaultsOnAndSurvivesReload() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try XCTUnwrap(store).enqueue(
+            source: .textNotes,
+            text: "Ready, Los Angeles"
+        )
+        await store?.waitForProcessing(batchID: batchID)
+        let itemID = try XCTUnwrap(store?.items(for: batchID).first?.id)
+
+        XCTAssertEqual(store?.item(id: itemID)?.isSelectedForImport, true)
+        store?.setIncludedInImport(false, itemID: itemID)
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+
+        XCTAssertEqual(store?.item(id: itemID)?.isSelectedForImport, false)
+    }
+
+    func testOptionalImportDetailsPersistAndWannaClearsCheckInOnlyFields() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try XCTUnwrap(store).enqueue(
+            source: .textNotes,
+            text: "Ready, Los Angeles"
+        )
+        await store?.waitForProcessing(batchID: batchID)
+        let itemID = try XCTUnwrap(store?.items(for: batchID).first?.id)
+        let visitDate = Date(timeIntervalSince1970: 1_774_000_000)
+
+        store?.setStagedStatus(.been, itemID: itemID)
+        store?.setStagedNote("  Great patio  ", itemID: itemID)
+        store?.setStagedRatingScore(4, itemID: itemID)
+        store?.setStagedVisitedAt(visitDate, itemID: itemID)
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+
+        XCTAssertEqual(store?.item(id: itemID)?.stagedNote, "Great patio")
+        XCTAssertEqual(store?.item(id: itemID)?.stagedRatingScore, 4)
+        XCTAssertEqual(store?.item(id: itemID)?.stagedVisitedAt, visitDate)
+
+        store?.setStagedStatus(.wannaGo, itemID: itemID)
+
+        XCTAssertEqual(store?.item(id: itemID)?.stagedStatus, .wannaGo)
+        XCTAssertEqual(store?.item(id: itemID)?.stagedNote, "Great patio")
+        XCTAssertNil(store?.item(id: itemID)?.stagedRatingScore)
+        XCTAssertNil(store?.item(id: itemID)?.stagedVisitedAt)
+    }
+
+    func testReceiptPersistsUntilPresented() async throws {
+        let persistence = InMemoryPlaceImportPersistence()
+        var store: PlaceImportStore? = PlaceImportStore(
+            persistence: persistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let batchID = try XCTUnwrap(store).enqueue(
+            source: .textNotes,
+            text: "Ready, Los Angeles"
+        )
+        await store?.waitForProcessing(batchID: batchID)
+        let item = try XCTUnwrap(store?.items(for: batchID).first)
+        let entry = PlaceImportReceiptEntry(
+            itemID: item.id,
+            displayName: item.displayName,
+            displayArea: item.displayArea,
+            status: .wannaGo,
+            outcome: .added,
+            userPlaceID: "user-place"
+        )
+        store?.recordReceipt(batchID: batchID, entries: [entry], destinationListID: "list")
+        let receiptID = try XCTUnwrap(store?.latestUnpresentedReceipt?.id)
+
+        store = PlaceImportStore(persistence: persistence, resolver: FakePlaceImportResolver())
+        XCTAssertEqual(store?.latestUnpresentedReceipt?.id, receiptID)
+        store?.markReceiptPresented(receiptID: receiptID)
+
+        XCTAssertNil(store?.latestUnpresentedReceipt)
     }
 
     func testProcessingProducesReviewStatesAndSaveProgress() async throws {
@@ -2893,6 +3433,7 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
 
 private final class InMemoryPlaceImportPersistence: PlaceImportPersisting {
     var snapshot: PlaceImportSnapshot
+    private(set) var saveCount = 0
 
     init(snapshot: PlaceImportSnapshot = PlaceImportSnapshot()) {
         self.snapshot = snapshot
@@ -2904,6 +3445,7 @@ private final class InMemoryPlaceImportPersistence: PlaceImportPersisting {
 
     func save(_ snapshot: PlaceImportSnapshot) throws {
         self.snapshot = snapshot
+        saveCount += 1
     }
 }
 

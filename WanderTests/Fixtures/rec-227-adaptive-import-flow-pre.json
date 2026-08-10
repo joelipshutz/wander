@@ -1,0 +1,18 @@
+{
+  "bug": "A newly shared Instagram post is silently captured, mixed into the historical import inbox, partially auto-saved, and followed by a second stacked receipt screen",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "pre_fix_evidence": {
+    "source": "physical iPhone screenshots supplied by Joe on 2026-08-05",
+    "extension": "no acknowledgement appeared after sharing from Instagram",
+    "first_app_screen": "legacy Import Review showed 3 waiting across 2 sources, 1 duplicate, and unresolved rows for Presidio National Park, Presidio, and instagram.com",
+    "second_app_screen": "a separate Import saved sheet appeared for The Mart Collective after one place had already been committed"
+  },
+  "expected": {
+    "scope": "opening the app reviews only the place candidates produced by the newly captured post or paste; historical imports never appear in the active flow",
+    "commit": "nothing is saved before the user taps the explicit Add action",
+    "status": "Wanna is the visible default and Check-in is an equally clear alternative",
+    "details": "rating, visit date, and note are optional and hidden behind each place disclosure",
+    "completion": "the same capture-scoped surface transitions from review to saved confirmation without stacking a second sheet",
+    "extraction": "instagram.com and other source-domain fragments never become place candidates"
+  }
+}
