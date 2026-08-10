@@ -273,6 +273,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @State private var rescueItem: PlaceImportItem?
     @State private var completedReceipt: PlaceImportReceipt?
     @State private var isSaving = false
+    @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -355,6 +356,18 @@ struct PlaceImportAdaptiveReviewScreen: View {
         .onChange(of: displayedReceipt?.id) { _, _ in
             markDisplayedReceiptsPresented()
         }
+        .onChange(of: auth.state) { _, _ in
+            guard isSaving else { return }
+            saveTask?.cancel()
+            saveTask = nil
+            isSaving = false
+        }
+        .onDisappear {
+            saveTask?.cancel()
+            saveTask = nil
+            isSaving = false
+        }
+        .interactiveDismissDisabled(isSaving)
     }
 
     @ViewBuilder
@@ -1041,22 +1054,27 @@ struct PlaceImportAdaptiveReviewScreen: View {
             dismiss()
             return
         }
-        guard auth.isSignedIn else {
+        guard let expectedUserID = auth.state.session?.userID,
+              expectedUserID == store.currentUser.id
+        else {
             auth.presentGate(for: .syncPlace)
             return
         }
         isSaving = true
-        Task { @MainActor in
-            await commitScopedImports()
+        saveTask = Task { @MainActor in
+            await commitScopedImports(expectedUserID: expectedUserID)
+            isSaving = false
+            saveTask = nil
         }
     }
 
     @MainActor
-    private func commitScopedImports() async {
+    private func commitScopedImports(expectedUserID: String) async {
         var allEntries: [PlaceImportReceiptEntry] = []
         var destinationListID: String?
 
         for batch in scopedBatches {
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             let activeItems = importStore.items(for: batch.id)
                 .filter { ![.saved, .dismissed].contains($0.state) }
             let excludedItems = activeItems.filter { !$0.isSelectedForImport }
@@ -1080,6 +1098,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             var entries: [PlaceImportReceiptEntry] = []
 
             for item in ready {
+                guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                 guard let candidate = item.selectedCandidate else { continue }
                 let existedBeforeCommit = MapPlaceSaveContext.currentUserSave(
                     matching: candidate,
@@ -1096,7 +1115,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     visitedAt: status == .been ? (item.stagedVisitedAt ?? .now) : .now,
                     backend: remoteBackend
                 )
+                guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                 await add(userPlaceID: result.userPlaceID, to: destination, backend: remoteBackend)
+                guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                 importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
                 entries.append(
                     PlaceImportReceiptEntry(
@@ -1111,9 +1132,11 @@ struct PlaceImportAdaptiveReviewScreen: View {
             }
 
             for item in duplicates {
+                guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                 guard let userPlaceID = item.duplicateUserPlaceID else { continue }
                 let visiblePlace = store.currentUserVisiblePlaces.first { $0.userPlace.id == userPlaceID }
                 await add(visiblePlace: visiblePlace, to: destination, backend: remoteBackend)
+                guard canContinueCommit(expectedUserID: expectedUserID) else { return }
                 importStore.markSaved(itemID: item.id, userPlaceID: userPlaceID)
                 entries.append(
                     PlaceImportReceiptEntry(
@@ -1138,6 +1161,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 )
             })
 
+            guard canContinueCommit(expectedUserID: expectedUserID) else { return }
             importStore.recordReceipt(
                 batchID: batch.id,
                 entries: entries,
@@ -1147,7 +1171,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             destinationListID = destination?.id ?? destinationListID
         }
 
-        isSaving = false
+        guard canContinueCommit(expectedUserID: expectedUserID) else { return }
         guard !allEntries.isEmpty else { return }
         let receipt = PlaceImportReceipt(
             batchID: scopedBatches.count == 1 ? scopedBatches[0].id : "combined",
@@ -1157,6 +1181,15 @@ struct PlaceImportAdaptiveReviewScreen: View {
         )
         completedReceipt = receipt
         markDisplayedReceiptsPresented()
+    }
+
+    private func canContinueCommit(expectedUserID: String) -> Bool {
+        PlaceImportCommitAuthorization.isValid(
+            expectedUserID: expectedUserID,
+            authUserID: auth.state.session?.userID,
+            currentUserID: store.currentUser.id,
+            isCancelled: Task.isCancelled
+        )
     }
 
     private func destinationList(for batch: PlaceImportBatch, itemCount: Int) -> LocalPlaceList? {

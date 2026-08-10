@@ -130,6 +130,19 @@ enum PlaceImportReceiptPresentationPolicy {
     }
 }
 
+enum PlaceImportCommitAuthorization {
+    static func isValid(
+        expectedUserID: String,
+        authUserID: String?,
+        currentUserID: String,
+        isCancelled: Bool
+    ) -> Bool {
+        !isCancelled
+            && authUserID == expectedUserID
+            && currentUserID == expectedUserID
+    }
+}
+
 enum PlaceImportReceiptOutcome: String, Codable, Equatable {
     case added
     case existing

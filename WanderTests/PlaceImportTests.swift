@@ -211,6 +211,33 @@ final class PlaceImportReviewPlanTests: XCTestCase {
         )
     }
 
+    func testCommitAuthorizationStopsOnCancellationOrAccountChange() {
+        XCTAssertTrue(
+            PlaceImportCommitAuthorization.isValid(
+                expectedUserID: "account-a",
+                authUserID: "account-a",
+                currentUserID: "account-a",
+                isCancelled: false
+            )
+        )
+        XCTAssertFalse(
+            PlaceImportCommitAuthorization.isValid(
+                expectedUserID: "account-a",
+                authUserID: "account-b",
+                currentUserID: "account-b",
+                isCancelled: false
+            )
+        )
+        XCTAssertFalse(
+            PlaceImportCommitAuthorization.isValid(
+                expectedUserID: "account-a",
+                authUserID: "account-a",
+                currentUserID: "account-a",
+                isCancelled: true
+            )
+        )
+    }
+
     func testZeroReadyRoutesToRecoveryWithoutAnAddZeroAction() {
         let review = plan(needsHelp: 3)
 
