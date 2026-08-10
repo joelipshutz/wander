@@ -707,6 +707,7 @@ final class PlaceImportStore: ObservableObject {
 
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
+    private var ownerUserID: String?
     private var processingTasks: [String: Task<Void, Never>] = [:]
     private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
 
@@ -719,6 +720,7 @@ final class PlaceImportStore: ObservableObject {
         do {
             let snapshot = try persistence.load()
             let upgrade = Self.upgradedLoadedItems(snapshot.items)
+            ownerUserID = snapshot.ownerUserID
             batches = snapshot.batches
             items = upgrade.items
             replacedSocialItemsByPlaceholderID = upgrade.replacedSocialItemsByPlaceholderID
@@ -726,6 +728,7 @@ final class PlaceImportStore: ObservableObject {
         } catch {
             batches = []
             items = []
+            ownerUserID = nil
             replacedSocialItemsByPlaceholderID = [:]
             persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
@@ -931,20 +934,48 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func setStagedStatus(_ status: PlaceStatus, itemID: String) {
-        guard let index = items.firstIndex(where: { $0.id == itemID }),
-              items[index].state == .ready
-        else { return }
-        items[index].stagedStatus = status
-        items[index].updatedAt = .now
-        persist()
+        setStagedStatus(status, itemIDs: [itemID])
+    }
+
+    func setStagedStatus(_ status: PlaceStatus, itemIDs: [String]) {
+        let ids = Set(itemIDs)
+        guard !ids.isEmpty else { return }
+        var didChange = false
+        for index in items.indices where ids.contains(items[index].id) && items[index].state == .ready {
+            items[index].stagedStatus = status
+            items[index].updatedAt = .now
+            didChange = true
+        }
+        if didChange { persist() }
     }
 
     func setIncludedInImport(_ isIncluded: Bool, itemID: String) {
-        guard let index = items.firstIndex(where: { $0.id == itemID }),
-              ![.saved, .dismissed].contains(items[index].state)
-        else { return }
-        items[index].isSelectedForImport = isIncluded
-        items[index].updatedAt = .now
+        setIncludedInImport(isIncluded, itemIDs: [itemID])
+    }
+
+    func setIncludedInImport(_ isIncluded: Bool, itemIDs: [String]) {
+        let ids = Set(itemIDs)
+        guard !ids.isEmpty else { return }
+        var didChange = false
+        for index in items.indices
+        where ids.contains(items[index].id) && ![.saved, .dismissed].contains(items[index].state) {
+            items[index].isSelectedForImport = isIncluded
+            items[index].updatedAt = .now
+            didChange = true
+        }
+        if didChange { persist() }
+    }
+
+    /// Claims the local import snapshot for the authenticated account. A snapshot
+    /// owned by another account is cleared before any capture can be reviewed or saved.
+    func bind(to userID: String) {
+        guard ownerUserID != userID else { return }
+        processingTasks.values.forEach { $0.cancel() }
+        processingTasks.removeAll()
+        batches = []
+        items = []
+        replacedSocialItemsByPlaceholderID = [:]
+        ownerUserID = userID
         persist()
     }
 
@@ -1516,7 +1547,13 @@ final class PlaceImportStore: ObservableObject {
             let durableItems = items.flatMap { item in
                 replacedSocialItemsByPlaceholderID[item.id] ?? [item]
             }
-            try persistence.save(PlaceImportSnapshot(batches: batches, items: durableItems))
+            try persistence.save(
+                PlaceImportSnapshot(
+                    ownerUserID: ownerUserID,
+                    batches: batches,
+                    items: durableItems
+                )
+            )
             persistenceError = nil
         } catch {
             persistenceError = "Import progress could not be saved. Keep rec.me open and try again."

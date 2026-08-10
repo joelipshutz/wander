@@ -908,6 +908,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
     }
 
     private var bottomActionTitle: String? {
+        guard reviewPlan.processingCount == 0 else { return nil }
         if reviewPlan.committableCount > 0 {
             return reviewPlan.primaryActionTitle
         }
@@ -942,9 +943,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             set: { rawValue in
                 guard let status = PlaceImportBulkStatusAction.status(for: rawValue) else { return }
                 withAnimation(.easeInOut(duration: 0.16)) {
-                    for item in selectedReadyItems {
-                        importStore.setStagedStatus(status, itemID: item.id)
-                    }
+                    importStore.setStagedStatus(status, itemIDs: selectedReadyItems.map(\.id))
                 }
             }
         )
@@ -962,9 +961,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
     private func setAllIncluded(_ isIncluded: Bool) {
         withAnimation(.easeInOut(duration: 0.16)) {
-            for item in scopedItems {
-                importStore.setIncludedInImport(isIncluded, itemID: item.id)
-            }
+            importStore.setIncludedInImport(isIncluded, itemIDs: scopedItems.map(\.id))
         }
     }
 
@@ -973,6 +970,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
     }
 
     private var combinedStoredReceipt: PlaceImportReceipt? {
+        guard PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(
+            activeItemCount: scopedItems.count
+        ) else { return nil }
         let receipts = scopedBatches.compactMap(\.receipt)
         guard !receipts.isEmpty,
               receipts.count == scopedBatches.count

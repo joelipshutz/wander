@@ -565,6 +565,9 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            if let userID = auth.state.session?.userID {
+                importStore.bind(to: userID)
+            }
             restorePlaceSaveDraftIfNeeded()
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
@@ -616,6 +619,9 @@ struct WanderRootView: View {
             routeNotification(request)
         }
         .onChange(of: auth.state) { _, state in
+            if let userID = state.session?.userID {
+                importStore.bind(to: userID)
+            }
             if !state.isSignedIn {
                 placeSaveDraftStore.clear()
                 restoredPlaceSaveDraftOwnerID = nil

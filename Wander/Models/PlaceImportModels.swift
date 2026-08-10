@@ -108,7 +108,7 @@ struct PlaceImportReviewPlan: Equatable {
     }
 
     var primaryActionTitle: String? {
-        guard committableCount > 0 else { return nil }
+        guard processingCount == 0, committableCount > 0 else { return nil }
         if surface == .quickAdd {
             return quickAddStatus == .been ? "Add as Been" : "Add as Wanna"
         }
@@ -121,6 +121,12 @@ struct PlaceImportReviewPlan: Equatable {
         }
         let noun = committableCount == 1 ? "place" : "places"
         return "Add \(committableCount) \(noun)"
+    }
+}
+
+enum PlaceImportReceiptPresentationPolicy {
+    static func canUseStoredReceipt(activeItemCount: Int) -> Bool {
+        activeItemCount == 0
     }
 }
 
@@ -456,18 +462,21 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
 }
 
 struct PlaceImportSnapshot: Codable, Equatable {
-    static let currentVersion = 1
+    static let currentVersion = 2
 
     let version: Int
+    var ownerUserID: String?
     var batches: [PlaceImportBatch]
     var items: [PlaceImportItem]
 
     init(
         version: Int = PlaceImportSnapshot.currentVersion,
+        ownerUserID: String? = nil,
         batches: [PlaceImportBatch] = [],
         items: [PlaceImportItem] = []
     ) {
         self.version = version
+        self.ownerUserID = ownerUserID
         self.batches = batches
         self.items = items
     }
