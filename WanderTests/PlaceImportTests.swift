@@ -2165,6 +2165,30 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertEqual(placeResolver.manualInputs.first?.name, "mendocino farms")
     }
 
+    func testUsesCaptionCapturedByTheExtensionWhenInstagramMetadataIsUnavailable() async throws {
+        let candidate = placeImportCandidate(name: "Mendocino Farms")
+        let placeResolver = FakeDevicePlaceResolver(candidates: [candidate])
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: placeResolver,
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: nil),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/reel/example/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1,
+            socialCaptionHint: "Lunch at @mendocinofarms restaurant in Los Angeles."
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        XCTAssertEqual(resolution, .candidates([candidate], selectedCandidateID: candidate.id))
+        XCTAssertEqual(placeResolver.manualInputs.first?.name, "mendocino farms")
+    }
+
     func testUsesCoverFrameTextWhenTheSocialCaptionHasNoPlaceName() async throws {
         let candidate = placeImportCandidate(name: "Mendocino Farms")
         let metadata = SocialImportMetadata(
@@ -2224,6 +2248,61 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
 @MainActor
 final class SocialPlaceImportMetadataTests: XCTestCase {
+    func testEvidencePlannerRejectsSourceChromeAndCollapsesNestedAliases() {
+        let hints = [
+            SocialPlaceSearchHint(
+                name: "instagram.com",
+                area: nil,
+                evidence: .imageText
+            ),
+            SocialPlaceSearchHint(
+                name: "Presidio",
+                area: "San Francisco",
+                evidence: .explicitLocation
+            ),
+            SocialPlaceSearchHint(
+                name: "Presidio National Park",
+                area: "San Francisco",
+                evidence: .imageText
+            )
+        ]
+
+        let planned = SocialImportEvidencePlanner.reviewHints(hints)
+
+        XCTAssertEqual(planned.map(\.name), ["Presidio National Park"])
+    }
+
+    func testSeveralUnmatchedCaptionHintsProduceOneHonestRecoveryItem() async throws {
+        let metadata = SocialImportMetadata(
+            title: "Wyoming itinerary",
+            caption: "Stop at Fremont Lake! Base camp at Half Moon Lake Lodge!",
+            authorName: "Creator",
+            thumbnailURL: nil
+        )
+        let resolver = DevicePlaceImportResolver(
+            placeResolver: RoutingDevicePlaceResolver(routes: [:]),
+            metadataProvider: FakeSocialImportMetadataProvider(metadata: metadata),
+            thumbnailRecognizer: FakeSocialThumbnailTextRecognizer()
+        )
+        let sourceURL = "https://www.instagram.com/p/unmatched-itinerary/"
+        let seed = PlaceImportSeed(
+            rawText: sourceURL,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: sourceURL,
+            sourceLine: 1
+        )
+
+        let resolution = try await resolver.resolve(seed: seed, source: .instagram)
+
+        guard case .expandedResolved(let entries, _) = resolution else {
+            return XCTFail("Expected one recovery entry, got \(resolution)")
+        }
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.seed.nameHint, "Half Moon Lake Lodge")
+        XCTAssertTrue(entries.first?.candidates.isEmpty == true)
+    }
+
     func testDenseGuideParserReconstructsWrappedNamesAndCountries() {
         let observations = [
             SocialTextObservation(

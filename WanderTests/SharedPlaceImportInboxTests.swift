@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 import XCTest
 @testable import Wander
 
@@ -55,6 +56,20 @@ final class SharedPlaceImportSourceDetectorTests: XCTestCase {
 }
 
 final class SharedPlaceImportInboxTests: XCTestCase {
+    func testPayloadBudgetRejectsAggregateShareBeforeAnotherProviderLoads() throws {
+        let nearlyFull = SharedPlaceImportInbox.maximumTotalBytes - 4
+
+        XCTAssertEqual(
+            try SharedPlaceImportPayloadBudget.adding(4, to: nearlyFull),
+            SharedPlaceImportInbox.maximumTotalBytes
+        )
+        XCTAssertThrowsError(
+            try SharedPlaceImportPayloadBudget.adding(5, to: nearlyFull)
+        ) { error in
+            XCTAssertEqual(error as? SharedPlaceImportInboxError, .totalPayloadTooLarge)
+        }
+    }
+
     func testCaptureWritesEnvelopeAndAttachmentThenAcknowledgeRemovesBoth() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -128,6 +143,32 @@ final class SharedPlaceImportInboxTests: XCTestCase {
         }
     }
 
+    func testCapturePersistsASocialLinkAndItsSharedCaptionTogether() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+        let url = try XCTUnwrap(URL(string: "https://www.instagram.com/reel/example/"))
+
+        let envelope = try inbox.capture(
+            [
+                .sharedLink(
+                    url,
+                    contextText: "Lunch at @mendocinofarms in Los Angeles.",
+                    suggestedName: "Instagram"
+                )
+            ],
+            deliveryID: "caption-delivery"
+        )
+
+        XCTAssertEqual(envelope.version, 2)
+        XCTAssertEqual(envelope.items.first?.source, .instagram)
+        XCTAssertEqual(envelope.items.first?.sourceURLString, url.absoluteString)
+        XCTAssertEqual(
+            envelope.items.first?.contextText,
+            "Lunch at @mendocinofarms in Los Angeles."
+        )
+    }
+
     func testScanQuarantinesCorruptAndExpiresOldEnvelopes() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -152,9 +193,75 @@ final class SharedPlaceImportInboxTests: XCTestCase {
         XCTAssertEqual(scan.quarantinedCount, 1)
     }
 
+    func testScanKeepsVersionOneSharesQueuedBeforeTheUpgrade() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+        _ = try inbox.capture(
+            [.text("Maru Coffee, Los Angeles", suggestedName: nil)],
+            deliveryID: "version-one"
+        )
+        let envelopeURL = root
+            .appendingPathComponent("Library/Application Support/rec-me-share-imports/inbox")
+            .appendingPathComponent("version-one.json")
+        let data = try Data(contentsOf: envelopeURL)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object["version"] = 1
+        if var items = object["items"] as? [[String: Any]] {
+            for index in items.indices {
+                items[index].removeValue(forKey: "sourceURLString")
+                items[index].removeValue(forKey: "contextText")
+            }
+            object["items"] = items
+        }
+        try JSONSerialization.data(withJSONObject: object).write(to: envelopeURL)
+
+        let scan = try inbox.scan()
+
+        XCTAssertEqual(scan.entries.map(\.envelope.version), [1])
+        XCTAssertEqual(scan.quarantinedCount, 0)
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("SharedPlaceImportInboxTests-\(UUID().uuidString)", isDirectory: true)
+    }
+}
+
+final class ShareExtensionItemLoaderTests: XCTestCase {
+    func testLoaderKeepsTopLevelCaptionWithInstagramURLInsteadOfDroppingIt() throws {
+        let url = try XCTUnwrap(URL(string: "https://www.instagram.com/reel/example/"))
+        let item = NSExtensionItem()
+        item.attributedContentText = NSAttributedString(
+            string: "Lunch at @mendocinofarms in Los Angeles."
+        )
+        let provider = NSItemProvider(
+            item: url as NSURL,
+            typeIdentifier: UTType.url.identifier
+        )
+        item.attachments = [provider]
+        let loaded = expectation(description: "loaded share payload")
+        var result: Result<[SharedPlaceImportCaptureInput], Error>?
+
+        ShareExtensionItemLoader.load(from: [item]) {
+            result = $0
+            loaded.fulfill()
+        }
+
+        wait(for: [loaded], timeout: 2)
+        let inputs = try XCTUnwrap(result).get()
+        XCTAssertEqual(
+            inputs,
+            [
+                .sharedLink(
+                    url,
+                    contextText: "Lunch at @mendocinofarms in Los Angeles",
+                    suggestedName: nil
+                )
+            ]
+        )
     }
 }
 
@@ -197,6 +304,60 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
         XCTAssertTrue(try inbox.scan().entries.isEmpty)
     }
 
+    func testDrainKeepsCapturedSocialCaptionForScopedAppReview() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SharedPlaceImportDrainerCaptionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+        let store = PlaceImportStore(
+            persistence: SharedImportTestPersistence(),
+            resolver: SharedImportTestResolver()
+        )
+        let url = try XCTUnwrap(URL(string: "https://www.instagram.com/reel/example/"))
+        _ = try inbox.capture(
+            [
+                .sharedLink(
+                    url,
+                    contextText: "Lunch at @mendocinofarms in Los Angeles.",
+                    suggestedName: "Instagram"
+                )
+            ],
+            deliveryID: "caption"
+        )
+
+        let report = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: store)
+
+        XCTAssertEqual(report.importedBatchCount, 1)
+        XCTAssertEqual(report.batchIDs, store.batches.map(\.id))
+        XCTAssertNil(store.batches.first?.receipt)
+        XCTAssertNil(store.items.first?.seed.nameHint)
+        XCTAssertEqual(
+            store.items.first?.seed.socialCaptionHint,
+            "Lunch at @mendocinofarms in Los Angeles."
+        )
+    }
+
+    func testDrainPolicyHoldsSharesUntilSessionValidationAndSignIn() {
+        XCTAssertFalse(
+            SharedPlaceImportDrainPolicy.canDrain(
+                isSessionValidated: false,
+                isSignedIn: true
+            )
+        )
+        XCTAssertFalse(
+            SharedPlaceImportDrainPolicy.canDrain(
+                isSessionValidated: true,
+                isSignedIn: false
+            )
+        )
+        XCTAssertTrue(
+            SharedPlaceImportDrainPolicy.canDrain(
+                isSessionValidated: true,
+                isSignedIn: true
+            )
+        )
+    }
+
     func testProjectEmbedsOneUniversalShareExtensionWithTheSharedAppGroup() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -211,6 +372,11 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
         let entitlements = try propertyList(
             projectRoot.appendingPathComponent(
                 "WanderShareExtension/WanderShareExtension.entitlements"
+            )
+        )
+        let shareController = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "WanderShareExtension/ShareViewController.swift"
             )
         )
 
@@ -237,6 +403,9 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
             entitlements["com.apple.security.application-groups"] as? [String],
             [SharedPlaceImportInbox.appGroupIdentifier]
         )
+        XCTAssertTrue(shareController.contains("Captured for rec.me"))
+        XCTAssertTrue(shareController.contains("review the match before anything is saved"))
+        XCTAssertFalse(shareController.contains("Saving to rec.me"))
     }
 
     private func propertyList(_ url: URL) throws -> [String: Any] {

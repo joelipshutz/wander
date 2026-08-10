@@ -1,5 +1,11 @@
 import Foundation
 
+enum SharedPlaceImportDrainPolicy {
+    static func canDrain(isSessionValidated: Bool, isSignedIn: Bool) -> Bool {
+        isSessionValidated && isSignedIn
+    }
+}
+
 struct SharedPlaceImportDrainReport: Equatable {
     let batchIDs: [String]
     let importedBatchCount: Int
@@ -60,13 +66,26 @@ enum SharedPlaceImportInboxDrainer {
                 for (index, item) in entry.envelope.items.enumerated() {
                     let deliveryID = "\(entry.envelope.deliveryID):\(index)"
                     let wasAlreadyImported = store.batch(captureDeliveryID: deliveryID) != nil
-                    let contents = try contents(for: item, inbox: inbox)
-                    let batchID = try store.enqueue(
-                        source: PlaceImportSource(rawValue: item.source.rawValue) ?? .textNotes,
-                        text: contents.text,
-                        sourceName: contents.fileName,
-                        captureDeliveryID: deliveryID
-                    )
+                    let source = PlaceImportSource(rawValue: item.source.rawValue) ?? .textNotes
+                    let batchID: String
+                    if [.instagram, .tiktok].contains(source),
+                       let sourceURLString = item.sourceURLString {
+                        batchID = try store.enqueueSharedSocialLink(
+                            source: source,
+                            urlString: sourceURLString,
+                            caption: item.contextText,
+                            sourceName: item.suggestedName,
+                            captureDeliveryID: deliveryID
+                        )
+                    } else {
+                        let contents = try contents(for: item, inbox: inbox)
+                        batchID = try store.enqueue(
+                            source: source,
+                            text: contents.text,
+                            sourceName: contents.fileName,
+                            captureDeliveryID: deliveryID
+                        )
+                    }
                     if !batchIDs.contains(batchID) {
                         batchIDs.append(batchID)
                     }

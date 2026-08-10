@@ -3102,6 +3102,142 @@ enum PlaceImportCandidateMockupPage {
     }
 }
 
+enum PlaceImportAdaptiveMockupPage {
+    static var isPresented: Bool {
+        ProcessInfo.processInfo.arguments.contains("-WanderPlaceImportAdaptiveMockup")
+    }
+}
+
+@MainActor
+struct PlaceImportAdaptiveMockupRoot: View {
+    @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
+    @StateObject private var importStore: PlaceImportStore
+
+    init() {
+        _importStore = StateObject(
+            wrappedValue: PlaceImportStore(
+                persistence: PlaceImportAdaptiveMockupPersistence(snapshot: Self.snapshot),
+                resolver: PlaceImportAdaptiveMockupResolver()
+            )
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            PlaceImportAdaptiveReviewScreen(
+                importStore: importStore,
+                batchIDs: [Self.batchID],
+                onViewMap: {}
+            )
+        }
+        .environmentObject(store)
+        .preferredColorScheme(.light)
+    }
+
+    private static let batchID = "rec-227-adaptive-mockup"
+    private static let snapshot = PlaceImportSnapshot(
+        batches: [
+            PlaceImportBatch(
+                id: batchID,
+                source: .instagram,
+                sourceName: "Instagram",
+                state: .ready,
+                totalCount: 3,
+                processedCount: 3
+            )
+        ],
+        items: [
+            item(
+                id: "mart-collective",
+                name: "The Mart Collective",
+                area: "Venice, CA",
+                category: "antique store"
+            ),
+            item(
+                id: "gjusta",
+                name: "Gjusta",
+                area: "Venice, CA",
+                category: "bakery",
+                status: .been,
+                isIncluded: false
+            ),
+            PlaceImportItem(
+                id: "manual-match",
+                batchID: batchID,
+                source: .instagram,
+                seed: PlaceImportSeed(
+                    rawText: "Instagram post",
+                    nameHint: "Little lunch spot",
+                    areaHint: "Los Angeles",
+                    sourceURLString: "https://www.instagram.com/p/recme-mockup/",
+                    sourceLine: 3
+                ),
+                state: .needsHelp,
+                helpMessage: "We found the name in the post, but need your help choosing the place."
+            )
+        ]
+    )
+
+    private static func item(
+        id: String,
+        name: String,
+        area: String,
+        category: String,
+        status: PlaceStatus = .wannaGo,
+        isIncluded: Bool = true
+    ) -> PlaceImportItem {
+        let candidate = PlaceCandidate(
+            id: "candidate-\(id)",
+            name: name,
+            category: category,
+            address: area,
+            locality: area.components(separatedBy: ",").first,
+            region: "CA",
+            country: "United States",
+            latitude: 33.99,
+            longitude: -118.46,
+            sourceProvider: "apple_maps",
+            sourceProviderPlaceID: "mock-\(id)",
+            confidence: 0.96
+        )
+        return PlaceImportItem(
+            id: id,
+            batchID: batchID,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: name,
+                nameHint: name,
+                areaHint: area,
+                sourceURLString: "https://www.instagram.com/p/recme-mockup/",
+                sourceLine: status == .been ? 2 : 1
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            stagedStatus: status,
+            isIncludedInImport: isIncluded
+        )
+    }
+}
+
+private final class PlaceImportAdaptiveMockupPersistence: PlaceImportPersisting {
+    private var snapshot: PlaceImportSnapshot
+
+    init(snapshot: PlaceImportSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    func load() throws -> PlaceImportSnapshot { snapshot }
+    func save(_ snapshot: PlaceImportSnapshot) throws { self.snapshot = snapshot }
+}
+
+@MainActor
+private final class PlaceImportAdaptiveMockupResolver: PlaceImportResolving {
+    func resolve(seed _: PlaceImportSeed, source _: PlaceImportSource) async throws -> PlaceImportResolution {
+        .needsHelp("Search for the place.")
+    }
+}
+
 struct PlaceImportCandidateMockupRoot: View {
     @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
 

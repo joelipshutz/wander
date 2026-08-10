@@ -81,6 +81,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         let emptyOrFailedCount: Int
     }
 
+    private struct SocialRecoveryHint {
+        let hint: SocialPlaceSearchHint
+        let helpMessage: String
+    }
+
     private let placeResolver: any PlaceCandidateResolving
     private let metadataProvider: any SocialImportMetadataProviding
     private let googleListLoader: any GoogleMapsSharedListLoading
@@ -176,16 +181,21 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
     ) async throws -> PlaceImportResolution {
         let fetchedMetadata = await metadataProvider.metadata(for: url, source: source)
         try Task.checkCancellation()
-        guard let metadata = fetchedMetadata else {
+        guard let metadata = socialMetadata(
+            fetched: fetchedMetadata,
+            capturedCaption: seed.socialCaptionHint
+        ) else {
             return .needsHelp(
                 "This public post did not expose a caption or cover image. Check the link and retry automatic matching."
             )
         }
         let recognition = try await recognizeSocialMedia(in: metadata)
-        let hints = SocialPlaceHintExtractor.hints(
-            from: metadata,
-            recognizedTexts: recognition.recognizedTexts,
-            limit: Self.maximumExtractedSocialHints
+        let hints = SocialImportEvidencePlanner.reviewHints(
+            SocialPlaceHintExtractor.hints(
+                from: metadata,
+                recognizedTexts: recognition.recognizedTexts,
+                limit: Self.maximumExtractedSocialHints
+            )
         )
 
         let durableHints = hints.filter(\.evidence.shouldRemainVisibleWithoutCandidates)
@@ -220,6 +230,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         var lowConfidenceCount = 0
         var rejectedHintCount = 0
         var lookupFailureCount = 0
+        var recoveryHints: [SocialRecoveryHint] = []
         for hint in hints {
             try Task.checkCancellation()
             let fetchedCandidates: [PlaceCandidate]
@@ -232,16 +243,15 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             } catch {
                 try Task.checkCancellation()
                 lookupFailureCount += 1
-                if !appendUnresolvedSocialHint(
-                    hint,
-                    originalSeed: seed,
-                    to: &entries,
-                    seenHints: &seenPlausibleHints,
-                    helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
-                ) {
-                    rejectedHintCount += 1
+                if hint.evidence.shouldRemainVisibleWithoutCandidates {
+                    recoveryHints.append(
+                        SocialRecoveryHint(
+                            hint: hint,
+                            helpMessage: "This place was named in the post, but Apple Maps was temporarily unavailable. Retry this item later."
+                        )
+                    )
                 } else {
-                    unresolvedCount += 1
+                    rejectedHintCount += 1
                 }
                 continue
             }
@@ -252,15 +262,15 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             )
             guard !candidates.isEmpty else {
                 noCandidateCount += 1
-                if !appendUnresolvedSocialHint(
-                    hint,
-                    originalSeed: seed,
-                    to: &entries,
-                    seenHints: &seenPlausibleHints
-                ) {
-                    rejectedHintCount += 1
+                if hint.evidence.shouldRemainVisibleWithoutCandidates {
+                    recoveryHints.append(
+                        SocialRecoveryHint(
+                            hint: hint,
+                            helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+                        )
+                    )
                 } else {
-                    unresolvedCount += 1
+                    rejectedHintCount += 1
                 }
                 continue
             }
@@ -310,20 +320,34 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 }
             } else {
                 lowConfidenceCount += 1
-                if !appendUnresolvedSocialHint(
-                    hint,
-                    originalSeed: seed,
-                    to: &entries,
-                    seenHints: &seenPlausibleHints
-                ) {
-                    rejectedHintCount += 1
+                if hint.evidence.shouldRemainVisibleWithoutCandidates {
+                    recoveryHints.append(
+                        SocialRecoveryHint(
+                            hint: hint,
+                            helpMessage: "This place was named in the post, but Apple Maps needs your help matching it."
+                        )
+                    )
                 } else {
-                    unresolvedCount += 1
+                    rejectedHintCount += 1
                 }
             }
             if match.bestScore > (strongest?.bestScore ?? 0) {
                 strongest = match
             }
+        }
+
+        if let recovery = bestRecoveryHint(recoveryHints),
+           appendUnresolvedSocialHint(
+               recovery.hint,
+               originalSeed: seed,
+               to: &entries,
+               seenHints: &seenPlausibleHints,
+               helpMessage: recovery.helpMessage
+           ) {
+            unresolvedCount += 1
+            rejectedHintCount += max(0, recoveryHints.count - 1)
+        } else {
+            rejectedHintCount += recoveryHints.count
         }
 
         let discoveredMediaCount = metadata.mediaItems.isEmpty
@@ -355,6 +379,49 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         return .needsHelp(
             "No confident place match was found from this post's caption or cover image. Retry automatic matching."
         )
+    }
+
+    private func socialMetadata(
+        fetched: SocialImportMetadata?,
+        capturedCaption: String?
+    ) -> SocialImportMetadata? {
+        let capturedCaption = normalized(capturedCaption)
+        guard fetched != nil || capturedCaption != nil else { return nil }
+        guard let fetched else {
+            return SocialImportMetadata(
+                title: nil,
+                caption: capturedCaption,
+                authorName: nil,
+                thumbnailURL: nil
+            )
+        }
+        var seen = Set<String>()
+        let caption = [capturedCaption, fetched.caption]
+            .compactMap { normalized($0) }
+            .filter { seen.insert($0).inserted }
+            .joined(separator: "\n")
+        return SocialImportMetadata(
+            title: fetched.title,
+            caption: caption.isEmpty ? nil : caption,
+            authorName: fetched.authorName,
+            thumbnailURL: fetched.thumbnailURL,
+            mediaItems: fetched.mediaItems
+        )
+    }
+
+    private func bestRecoveryHint(_ hints: [SocialRecoveryHint]) -> SocialRecoveryHint? {
+        hints.enumerated().max { lhs, rhs in
+            if lhs.element.hint.evidence.trustRank != rhs.element.hint.evidence.trustRank {
+                return lhs.element.hint.evidence.trustRank < rhs.element.hint.evidence.trustRank
+            }
+            if (lhs.element.hint.area == nil) != (rhs.element.hint.area == nil) {
+                return lhs.element.hint.area == nil
+            }
+            if lhs.element.hint.name.count != rhs.element.hint.name.count {
+                return lhs.element.hint.name.count < rhs.element.hint.name.count
+            }
+            return lhs.offset > rhs.offset
+        }?.element
     }
 
     private func recognizeSocialMedia(in metadata: SocialImportMetadata) async throws -> SocialMediaRecognition {
@@ -584,7 +651,8 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             latitude: candidate?.latitude,
             longitude: candidate?.longitude,
             sourceProvider: candidate?.sourceProvider,
-            sourceProviderPlaceID: candidate?.sourceProviderPlaceID
+            sourceProviderPlaceID: candidate?.sourceProviderPlaceID,
+            socialCaptionHint: original.socialCaptionHint
         )
     }
 
@@ -767,7 +835,8 @@ final class PlaceImportStore: ObservableObject {
                     nameHint: nil,
                     areaHint: nil,
                     sourceURLString: sourceURLString,
-                    sourceLine: item.seed.sourceLine
+                    sourceLine: item.seed.sourceLine,
+                    socialCaptionHint: item.seed.socialCaptionHint
                 )
             }
 
@@ -851,6 +920,48 @@ final class PlaceImportStore: ObservableObject {
         items.append(contentsOf: seeds.map { seed in
             PlaceImportItem(batchID: batch.id, source: source, seed: seed)
         })
+        persist()
+        startProcessing(batchID: batch.id)
+        return batch.id
+    }
+
+    @discardableResult
+    func enqueueSharedSocialLink(
+        source: PlaceImportSource,
+        urlString: String,
+        caption: String?,
+        sourceName: String?,
+        captureDeliveryID: String
+    ) throws -> String {
+        if let existingBatch = batches.first(where: { $0.captureDeliveryID == captureDeliveryID }) {
+            return existingBatch.id
+        }
+        guard [.instagram, .tiktok].contains(source),
+              let url = URL(string: urlString),
+              ["http", "https"].contains(url.scheme?.lowercased()),
+              url.host?.isEmpty == false
+        else {
+            throw PlaceImportParsingError.noPlacesFound
+        }
+        let trimmedCaption = caption?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCaption = trimmedCaption?.isEmpty == false ? trimmedCaption : nil
+        let batch = PlaceImportBatch(
+            source: source,
+            sourceName: sourceName,
+            captureDeliveryID: captureDeliveryID,
+            totalCount: 1
+        )
+        let seed = PlaceImportSeed(
+            rawText: url.absoluteString,
+            nameHint: nil,
+            areaHint: nil,
+            sourceURLString: url.absoluteString,
+            sourceLine: 1,
+            socialCaptionHint: normalizedCaption
+        )
+        batches.append(batch)
+        items.append(PlaceImportItem(batchID: batch.id, source: source, seed: seed))
         persist()
         startProcessing(batchID: batch.id)
         return batch.id
@@ -1093,7 +1204,8 @@ final class PlaceImportStore: ObservableObject {
             latitude: existingSeed.latitude,
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
-            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
+            socialCaptionHint: existingSeed.socialCaptionHint
         )
 
         do {
@@ -1150,7 +1262,8 @@ final class PlaceImportStore: ObservableObject {
             latitude: existingSeed.latitude,
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
-            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
+            socialCaptionHint: existingSeed.socialCaptionHint
         )
         items[index].pendingManualSearch = nil
         items[index].candidates = candidates
@@ -1178,7 +1291,8 @@ final class PlaceImportStore: ObservableObject {
             latitude: existingSeed.latitude,
             longitude: existingSeed.longitude,
             sourceProvider: existingSeed.sourceProvider,
-            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID
+            sourceProviderPlaceID: existingSeed.sourceProviderPlaceID,
+            socialCaptionHint: existingSeed.socialCaptionHint
         )
         items[index].candidates = []
         items[index].selectedCandidateID = nil

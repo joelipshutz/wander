@@ -627,6 +627,9 @@ struct WanderRootView: View {
                 restoredPlaceSaveDraftOwnerID = nil
             }
             applyAuthStateIfNeeded(state)
+            if state.isSignedIn {
+                drainSharedPlaceImports()
+            }
             publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: state)
@@ -857,6 +860,10 @@ struct WanderRootView: View {
     }
 
     private func drainSharedPlaceImports() {
+        guard SharedPlaceImportDrainPolicy.canDrain(
+            isSessionValidated: isSessionValidated,
+            isSignedIn: auth.isSignedIn
+        ) else { return }
         guard let inbox = try? SharedPlaceImportInbox.live() else { return }
         let report = SharedPlaceImportInboxDrainer.drain(
             inbox: inbox,

@@ -280,6 +280,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
     let longitude: Double?
     let sourceProvider: String?
     let sourceProviderPlaceID: String?
+    let socialCaptionHint: String?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -291,7 +292,8 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         latitude: Double? = nil,
         longitude: Double? = nil,
         sourceProvider: String? = nil,
-        sourceProviderPlaceID: String? = nil
+        sourceProviderPlaceID: String? = nil,
+        socialCaptionHint: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -303,6 +305,7 @@ struct PlaceImportSeed: Codable, Equatable, Identifiable {
         self.longitude = longitude
         self.sourceProvider = sourceProvider
         self.sourceProviderPlaceID = sourceProviderPlaceID
+        self.socialCaptionHint = socialCaptionHint
     }
 }
 
@@ -347,7 +350,7 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
 }
 
 struct PlaceImportItem: Codable, Equatable, Identifiable {
-    static let currentResolverVersion = 7
+    static let currentResolverVersion = 8
 
     let id: String
     let batchID: String
@@ -444,6 +447,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
         return selectedCandidate?.name
             ?? seed.nameHint
             ?? candidates.first?.name
+            ?? socialSourceFallbackName
             ?? sourceURLHost
             ?? "Imported place"
     }
@@ -467,6 +471,14 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
               let host = URL(string: sourceURLString)?.host
         else { return nil }
         return host.replacingOccurrences(of: "www.", with: "")
+    }
+
+    private var socialSourceFallbackName: String? {
+        switch source {
+        case .instagram: "Instagram post"
+        case .tiktok: "TikTok post"
+        case .googleMaps, .textNotes: nil
+        }
     }
 
     private var sourceURLString: String? {
