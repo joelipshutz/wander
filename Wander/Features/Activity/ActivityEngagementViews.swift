@@ -4,11 +4,12 @@ struct ActivityEngagementActionRow: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
     let context: ActivityEngagementContext
-    let visiblePlace: VisiblePlace
+    let visiblePlace: VisiblePlace?
     var showsCommentButton = true
     var isEngagementEnabled = true
-    @State private var commentsContext: ActivityEngagementContext?
+    @State private var wannaSaveContext: MapPlaceSaveContext?
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
@@ -25,14 +26,20 @@ struct ActivityEngagementActionRow: View {
             bookmarkButton
         }
         .frame(minHeight: 44)
-        .fullScreenCover(item: $commentsContext) { selectedContext in
-            ActivityCommentsScreen(
-                context: selectedContext,
-                visiblePlace: visiblePlace
-            )
-            .environmentObject(store)
-            .environmentObject(auth)
-            .environmentObject(backend)
+        .sheet(item: $wannaSaveContext, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { saveContext in
+            MapPlaceSaveFlowSheet(context: saveContext) { submission in
+                await persistNewPlaceSaveSubmission(
+                    submission,
+                    store: store,
+                    backend: auth.isSignedIn ? backend : nil
+                )
+            } onRemove: { _ in
+                false
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -41,7 +48,7 @@ struct ActivityEngagementActionRow: View {
     }
 
     private var bookmarkState: ActivityBookmarkState {
-        store.activityBookmarkState(for: visiblePlace)
+        visiblePlace.map(store.activityBookmarkState(for:)) ?? .notSaved
     }
 
     private var likeButton: some View {
@@ -82,7 +89,10 @@ struct ActivityEngagementActionRow: View {
     private var commentButton: some View {
         Button {
             auth.requireSignIn(for: .socialActivity) {
-                commentsContext = context
+                activityNavigation.openComments(
+                    context: context,
+                    visiblePlace: visiblePlace
+                )
             }
         } label: {
             HStack(spacing: 5) {
@@ -108,7 +118,7 @@ struct ActivityEngagementActionRow: View {
     private var shareButton: some View {
         WanderShareButton(
             content: .activity(
-                placeServerID: context.placeServerID,
+                activityID: context.activityID,
                 placeName: context.placeName,
                 message: context.shareMessage
             )
@@ -123,27 +133,42 @@ struct ActivityEngagementActionRow: View {
     }
 
     private var bookmarkButton: some View {
-        Button {
-            guard bookmarkState != .checkedIn else { return }
-            auth.requireSignIn(for: .socialSave) {
-                Task {
-                    _ = await store.toggleActivityWanna(
-                        for: visiblePlace,
-                        backend: auth.isSignedIn ? backend : nil
-                    )
+        Group {
+            if let visiblePlace {
+                Button {
+                    guard bookmarkState != .checkedIn else { return }
+                    auth.requireSignIn(for: .socialSave) {
+                        switch bookmarkState {
+                        case .notSaved:
+                            store.saveFlowDidPresent(.saveSheet)
+                            wannaSaveContext = .addWannaVisiblePlace(
+                                visiblePlace,
+                                defaultVisibility: store.effectiveDefaultVisibility
+                            )
+                        case .wanna:
+                            Task {
+                                _ = await store.removeActivityWanna(
+                                    for: visiblePlace,
+                                    backend: auth.isSignedIn ? backend : nil
+                                )
+                            }
+                        case .checkedIn:
+                            break
+                        }
+                    }
+                } label: {
+                    Image(systemName: bookmarkState == .notSaved ? "bookmark" : "bookmark.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(bookmarkState == .wanna ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(bookmarkState == .wanna ? "Remove from Wanna" : "Add to Wanna")
+                .accessibilityValue(bookmarkState.accessibilityValue)
+                .accessibilityHint(bookmarkState == .checkedIn ? "This place is already in your check-ins." : "")
             }
-        } label: {
-            Image(systemName: bookmarkState == .notSaved ? "bookmark" : "bookmark.fill")
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(bookmarkState == .wanna ? WanderTheme.terracotta.color : WanderTheme.textInk.color)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(bookmarkState == .wanna ? "Remove from Wanna" : "Add to Wanna")
-        .accessibilityValue(bookmarkState.accessibilityValue)
-        .accessibilityHint(bookmarkState == .checkedIn ? "This place is already in your check-ins." : "")
     }
 }
 
@@ -153,7 +178,7 @@ struct ActivityCommentsScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     let context: ActivityEngagementContext
-    let visiblePlace: VisiblePlace
+    let visiblePlace: VisiblePlace?
     @State private var draft = ""
     @State private var isLoading = true
     @State private var isPosting = false
@@ -272,13 +297,22 @@ struct ActivityCommentsScreen: View {
         .padding(WanderTheme.spacing3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .checkInTicketSurface(
-            accent: context.status == .been ? WanderTheme.pinSocial.color : WanderTheme.stateWarning.color,
+            accent: ticketAccent,
             surface: WanderTheme.surfaceBone.color,
             surroundingSurface: WanderTheme.canvasWarm.color,
             notchEdges: .trailing,
             castsShadow: false,
             borderWidth: 1.5
         )
+    }
+
+    private var ticketAccent: Color {
+        switch context.ticketKind {
+        case .checkIn: WanderTheme.pinSocial.color
+        case .wanna: WanderTheme.stateWarning.color
+        case .list: WanderTheme.terracotta.color
+        case .saved: WanderTheme.categorySage.color
+        }
     }
 
     private var emptyState: some View {

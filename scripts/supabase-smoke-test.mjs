@@ -2629,6 +2629,60 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [detailListID],
     (result) => result.rows[0]?.detail !== null,
   );
+  const activityEvent = await expectQuery(
+    client,
+    "resolve list activity fixture",
+    `
+      select id::text
+      from public.feed_events
+      where list_id = $1::uuid
+        and event_type = 'list_created'
+      order by occurred_at desc, id desc
+      limit 1
+    `,
+    [detailListID],
+    (result) => typeof result.rows[0]?.id === "string",
+  );
+  const activityID = activityEvent.rows[0].id;
+  await expectQuery(
+    client,
+    "owner resolves exact activity detail",
+    "select public.activity_detail($1::uuid) as activity",
+    [activityID],
+    (result) => result.rows[0]?.activity?.id === activityID
+      && result.rows[0]?.activity?.event_type === "list_created"
+      && result.rows[0]?.activity?.list?.id === detailListID,
+  );
+  await expectQuery(
+    client,
+    "owner loads activity engagement summary",
+    "select public.activity_engagement_summaries(array[$1::uuid]) as engagement",
+    [activityID],
+    (result) => result.rows[0]?.engagement?.[0]?.activity_id === activityID,
+  );
+  await expectQuery(
+    client,
+    "owner likes list activity",
+    "select public.set_activity_like($1::uuid, true) as engagement",
+    [activityID],
+    (result) => result.rows[0]?.engagement?.viewer_has_liked === true,
+  );
+  await expectQuery(
+    client,
+    "owner comments on list activity",
+    "select public.add_activity_comment($1::uuid, $2) as result",
+    [activityID, "Smoke-tested list activity."],
+    (result) => result.rows[0]?.result?.comment?.body === "Smoke-tested list activity.",
+  );
+  await expectQuery(
+    client,
+    "owner reloads list activity comments",
+    "select public.activity_comments($1::uuid, null, 50) as page",
+    [activityID],
+    (result) => result.rows[0]?.page?.comments?.some(
+      (comment) => comment.body === "Smoke-tested list activity.",
+    ) === true,
+  );
 
   const collaboratorListID = await createSmokeList(client, "Codex smoke collaborator check");
   await expectQuery(

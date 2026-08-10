@@ -415,6 +415,14 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
         self.rpc = rpc
     }
 
+    func activity(id: String) async throws -> FeedActivity {
+        let response: RemoteFeedActivityDTO = try await rpc.call(
+            "activity_detail",
+            params: ActivityDetailParams(activityID: id)
+        )
+        return try response.activity()
+    }
+
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
         let rows: [RemoteActivityEngagementSummaryDTO] = try await rpc.call(
             "activity_engagement_summaries",
@@ -2389,6 +2397,14 @@ private struct ActivityEngagementSummariesParams: Encodable {
 
     enum CodingKeys: String, CodingKey {
         case activityIDs = "input_activity_ids"
+    }
+}
+
+private struct ActivityDetailParams: Encodable {
+    let activityID: String
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
     }
 }
 

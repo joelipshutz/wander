@@ -95,6 +95,13 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(resolved, visitActivity)
         XCTAssertEqual(store.activityEngagement(for: visitActivity.activityID).likeCount, 5)
         XCTAssertEqual(store.activityEngagement(for: visitActivity.activityID).commentCount, 2)
+
+        let resolvedWithoutMaterializedVisit = store.placeActivityEngagementMatch(
+            userPlaceID: userPlaceID,
+            visitID: nil,
+            preferredKinds: [.placeBeen]
+        )
+        XCTAssertEqual(resolvedWithoutMaterializedVisit, visitActivity)
     }
 
     func testEngagementContextUsesCheckInAndWannaLanguage() {
@@ -129,6 +136,31 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(wanna.actionTitle, "added to Wanna")
         XCTAssertTrue(checkIn.shareMessage.contains("Judy's check-in at Ada Street"))
         XCTAssertTrue(wanna.shareMessage.contains("Judy's Wanna pick Ada Street"))
+
+        let list = ActivityEngagementContext(
+            activityID: "list",
+            actor: actor,
+            placeName: "Best of Chicago",
+            placeServerID: nil,
+            placeDetail: "12 places",
+            ticketKind: .list,
+            occurredAt: .now
+        )
+        XCTAssertEqual(list.actionTitle, "saved to")
+        XCTAssertTrue(list.shareMessage.contains("list activity"))
+    }
+
+    func testActivityNavigationKeepsExactTicketIdentityUntilDismissal() {
+        let coordinator = ActivityNavigationCoordinator()
+        let activityID = "40000000-0000-0000-0000-000000000001"
+
+        coordinator.openComments(activityID: activityID)
+        let requestID = coordinator.commentsRoute?.id
+        XCTAssertEqual(coordinator.commentsRoute?.activityID, activityID)
+        XCTAssertNil(coordinator.commentsRoute?.context)
+
+        coordinator.dismiss(requestID: try! XCTUnwrap(requestID))
+        XCTAssertNil(coordinator.commentsRoute)
     }
 }
 

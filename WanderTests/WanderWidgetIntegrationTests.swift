@@ -143,6 +143,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
             .profileCalendarDate(
                 try XCTUnwrap(WanderCalendarDate(year: 2026, month: 7, day: 28))
             ),
+            .sharedActivity(activityID: "42000000-0000-0000-0000-000000000001"),
         ]
 
         for route in routes {

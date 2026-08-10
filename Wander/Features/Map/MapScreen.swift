@@ -3706,6 +3706,30 @@ struct MapPlaceSaveContext: Identifiable {
         )
     }
 
+    /// A bookmark is an intent to create the viewer's own Wanna memory. It
+    /// deliberately starts blank instead of inheriting another person's note,
+    /// tags, rating, visibility, or check-in status.
+    static func addWannaVisiblePlace(
+        _ visiblePlace: VisiblePlace,
+        defaultVisibility: PlaceVisibility
+    ) -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: candidate(from: visiblePlace),
+            mode: .add(.socialSave),
+            requiresStatusConfirmation: false,
+            hasPriorCheckIn: false,
+            initialStatus: .wannaGo,
+            initialVisibility: defaultVisibility,
+            initialRatingScore: nil,
+            initialNote: "",
+            initialPlannedDate: nil,
+            initialAnswers: [:],
+            initialPersonalLabels: [],
+            initialCuisine: nil,
+            initialPhotoAttachments: []
+        )
+    }
+
     static func addVisitVisiblePlace(
         _ visiblePlace: VisiblePlace,
         attributes: [LocalPlaceAttribute],

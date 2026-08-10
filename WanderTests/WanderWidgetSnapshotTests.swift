@@ -178,6 +178,10 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
                 "https://getrec.me/places/40000000-0000-0000-0000-000000000001"
             ),
             (
+                .sharedActivity(activityID: "42000000-0000-0000-0000-000000000001"),
+                "https://getrec.me/activities/42000000-0000-0000-0000-000000000001"
+            ),
+            (
                 .sharedList(listID: "44000000-0000-0000-0000-000000000001"),
                 "https://getrec.me/lists/44000000-0000-0000-0000-000000000001"
             ),
@@ -220,6 +224,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             "https://getrec.me/profiles/user/extra",
             "https://getrec.me/profiles/user?q=private",
             "https://getrec.me/places/not-a-uuid",
+            "https://getrec.me/activities/not-a-uuid",
             "https://getrec.me/lists/not-a-uuid",
             "https://getrec.me/invites/too-short"
         ]

@@ -1351,7 +1351,7 @@ final class WanderStore: ObservableObject {
                 lastFeedRefreshAt = page.fetchedAt
                 lastRemoteError = nil
                 await refreshActivityEngagement(
-                    activityIDs: page.activity.compactMap { $0.place == nil ? nil : $0.id },
+                    activityIDs: page.activity.map(\.id),
                     backend: backend
                 )
                 return true
@@ -1374,6 +1374,36 @@ final class WanderStore: ObservableObject {
 
     func activityEngagement(for activityID: String) -> ActivityEngagementSummary {
         activityEngagementByID[activityID] ?? .empty(activityID: activityID)
+    }
+
+    @MainActor
+    func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
+        if let existing = followedFeedPage?.activity.first(where: { $0.id == activityID }) {
+            return existing
+        }
+
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return nil }
+
+        do {
+            let activity = try await repository.activity(id: activityID)
+            let currentPage = followedFeedPage
+            let mergedActivity = FeedPresentation.newestFirst(
+                [activity] + (currentPage?.activity ?? []).filter { $0.id != activity.id }
+            )
+            followedFeedPage = FollowedFeedPage(
+                activity: mergedActivity,
+                featuredPlaces: currentPage?.featuredPlaces ?? [],
+                nextCursor: currentPage?.nextCursor,
+                fetchedAt: currentPage?.fetchedAt ?? .now
+            )
+            await refreshActivityEngagement(activityIDs: [activityID], backend: backend)
+            return activity
+        } catch {
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return nil
+        }
     }
 
     func activityComments(for activityID: String) -> [ActivityComment] {
@@ -1441,7 +1471,11 @@ final class WanderStore: ObservableObject {
             if let visitID {
                 return match.visitID == visitID
             }
-            return match.visitID == nil && preferredKinds.contains(match.kind)
+            // Remote place projections may not have materialized the explicit
+            // visit locally yet. In that case the immutable event is still the
+            // authority; choose the newest compatible event below instead of
+            // disabling engagement on a valid history card.
+            return preferredKinds.contains(match.kind)
         }
 
         return candidates.sorted { lhs, rhs in
@@ -1572,19 +1606,15 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func toggleActivityWanna(for visiblePlace: VisiblePlace, backend: WanderBackend?) async -> ActivityBookmarkState {
-        switch activityBookmarkState(for: visiblePlace) {
-        case .notSaved:
-            _ = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
-        case .wanna:
-            if let ownPlace = currentUserVisiblePlaces.first(where: {
-                VisiblePlaceGrouping.matches($0, visiblePlace)
-            }) {
-                _ = await removeSave(userPlaceID: ownPlace.userPlace.id, backend: backend)
-            }
-        case .checkedIn:
-            break
+    func removeActivityWanna(for visiblePlace: VisiblePlace, backend: WanderBackend?) async -> ActivityBookmarkState {
+        guard let ownPlace = currentUserVisiblePlaces.first(where: {
+            VisiblePlaceGrouping.matches($0, visiblePlace)
+                && $0.userPlace.status == .wannaGo
+        }) else {
+            return activityBookmarkState(for: visiblePlace)
         }
+
+        _ = await removeSave(userPlaceID: ownPlace.userPlace.id, backend: backend)
         return activityBookmarkState(for: visiblePlace)
     }
 

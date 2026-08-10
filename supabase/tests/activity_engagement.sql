@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(40);
+select plan(48);
 
 select has_table('public', 'activity_likes', 'activity likes table exists');
 select has_table('public', 'activity_comments', 'activity comments table exists');
@@ -64,6 +64,7 @@ select ok(
 );
 
 select has_function('public', 'activity_engagement_summaries', array['uuid[]']);
+select has_function('public', 'activity_detail', array['uuid']);
 select has_function('public', 'place_activity_engagement_summaries', array['uuid[]']);
 select has_function('public', 'set_activity_like', array['uuid', 'boolean']);
 select has_function('public', 'activity_comments', array['uuid', 'text', 'integer']);
@@ -75,6 +76,7 @@ select ok(
     from pg_proc
     where oid in (
       'public.activity_engagement_summaries(uuid[])'::regprocedure,
+      'public.activity_detail(uuid)'::regprocedure,
       'public.place_activity_engagement_summaries(uuid[])'::regprocedure,
       'public.set_activity_like(uuid,boolean)'::regprocedure,
       'public.activity_comments(uuid,text,integer)'::regprocedure,
@@ -89,6 +91,7 @@ select ok(
     from pg_proc
     where oid in (
       'public.activity_engagement_summaries(uuid[])'::regprocedure,
+      'public.activity_detail(uuid)'::regprocedure,
       'public.place_activity_engagement_summaries(uuid[])'::regprocedure,
       'public.set_activity_like(uuid,boolean)'::regprocedure,
       'public.activity_comments(uuid,text,integer)'::regprocedure,
@@ -99,6 +102,7 @@ select ok(
 );
 select ok(
   has_function_privilege('authenticated', 'public.activity_engagement_summaries(uuid[])', 'execute')
+    and has_function_privilege('authenticated', 'public.activity_detail(uuid)', 'execute')
     and has_function_privilege('authenticated', 'public.place_activity_engagement_summaries(uuid[])', 'execute')
     and has_function_privilege('authenticated', 'public.set_activity_like(uuid,boolean)', 'execute')
     and has_function_privilege('authenticated', 'public.activity_comments(uuid,text,integer)', 'execute')
@@ -107,6 +111,7 @@ select ok(
 );
 select ok(
   not has_function_privilege('anon', 'public.activity_engagement_summaries(uuid[])', 'execute')
+    and not has_function_privilege('anon', 'public.activity_detail(uuid)', 'execute')
     and not has_function_privilege('anon', 'public.place_activity_engagement_summaries(uuid[])', 'execute')
     and not has_function_privilege('anon', 'public.set_activity_like(uuid,boolean)', 'execute')
     and not has_function_privilege('anon', 'public.activity_comments(uuid,text,integer)', 'execute')
@@ -159,6 +164,15 @@ values (
   'manual'
 );
 
+insert into public.place_lists (id, owner_user_id, name, description, visibility)
+values (
+  'a1200000-0000-0000-0000-000000000001',
+  'engagement_owner',
+  'Engagement Favorites',
+  'A visible engagement test list',
+  'followers'
+);
+
 select set_config('request.jwt.claim.sub', 'engagement_viewer', true);
 
 select is(
@@ -187,6 +201,54 @@ select is(
   )::integer,
   0,
   'new activity starts with zero comments'
+);
+select is(
+  jsonb_array_length(
+    public.activity_engagement_summaries(
+      array[(select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created')]
+    )
+  ),
+  1,
+  'list activity receives an engagement summary'
+);
+select is(
+  (
+    public.set_activity_like(
+      (select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created'),
+      true
+    )->>'viewer_has_liked'
+  )::boolean,
+  true,
+  'viewer can like visible list activity'
+);
+select is(
+  public.add_activity_comment(
+    (select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created'),
+    'Great list.'
+  )->'comment'->>'body',
+  'Great list.',
+  'viewer can comment on visible list activity'
+);
+select is(
+  public.activity_detail(
+    (select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created')
+  )->>'event_type',
+  'list_created',
+  'activity detail returns the immutable list event kind'
+);
+select is(
+  public.activity_detail(
+    (select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created')
+  )->'list'->>'name',
+  'Engagement Favorites',
+  'activity detail returns the visible list projection'
+);
+select is(
+  public.activity_detail(
+    (select id from public.feed_events where user_place_id = 'a1100000-0000-0000-0000-000000000001' order by occurred_at desc limit 1)
+  )->'place'->>'canonical_name',
+  'Engagement Cafe',
+  'activity detail returns the visible place projection'
 );
 select is(
   (
@@ -314,6 +376,16 @@ select throws_ok(
   'P0001',
   'activity_not_visible',
   'a stranger cannot comment on hidden activity'
+);
+select throws_ok(
+  $$
+    select public.activity_detail(
+      (select id from public.feed_events where user_place_id = 'a1100000-0000-0000-0000-000000000001' order by occurred_at desc limit 1)
+    )
+  $$,
+  'P0001',
+  'activity_not_visible',
+  'a stranger cannot resolve hidden activity detail'
 );
 
 insert into public.blocks (blocker_user_id, blocked_user_id)

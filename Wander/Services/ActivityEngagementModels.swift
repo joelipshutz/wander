@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 struct ActivityEngagementSummary: Equatable {
@@ -109,18 +110,123 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     let placeName: String
     let placeServerID: String?
     let placeDetail: String
-    let status: PlaceStatus
+    let ticketKind: FeedTicketKind
     let occurredAt: Date
+
+    init(
+        activityID: String,
+        actor: ProfileShell,
+        placeName: String,
+        placeServerID: String?,
+        placeDetail: String,
+        status: PlaceStatus,
+        occurredAt: Date
+    ) {
+        self.init(
+            activityID: activityID,
+            actor: actor,
+            placeName: placeName,
+            placeServerID: placeServerID,
+            placeDetail: placeDetail,
+            ticketKind: status == .been ? .checkIn : .wanna,
+            occurredAt: occurredAt
+        )
+    }
+
+    init(
+        activityID: String,
+        actor: ProfileShell,
+        placeName: String,
+        placeServerID: String?,
+        placeDetail: String,
+        ticketKind: FeedTicketKind,
+        occurredAt: Date
+    ) {
+        self.activityID = activityID
+        self.actor = actor
+        self.placeName = placeName
+        self.placeServerID = placeServerID
+        self.placeDetail = placeDetail
+        self.ticketKind = ticketKind
+        self.occurredAt = occurredAt
+    }
 
     var id: String { activityID }
 
     var actionTitle: String {
-        status == .been ? "checked in at" : "added to Wanna"
+        switch ticketKind {
+        case .checkIn: "checked in at"
+        case .wanna: "added to Wanna"
+        case .list: "saved to"
+        case .saved: "saved"
+        }
     }
 
     var shareMessage: String {
-        status == .been
-            ? "See \(actor.displayName)'s check-in at \(placeName) on rec.me"
-            : "See \(actor.displayName)'s Wanna pick \(placeName) on rec.me"
+        switch ticketKind {
+        case .checkIn:
+            "See \(actor.displayName)'s check-in at \(placeName) on rec.me"
+        case .wanna:
+            "See \(actor.displayName)'s Wanna pick \(placeName) on rec.me"
+        case .list:
+            "See \(actor.displayName)'s list activity for \(placeName) on rec.me"
+        case .saved:
+            "See \(actor.displayName)'s save for \(placeName) on rec.me"
+        }
+    }
+}
+
+struct ActivityCommentsRoute: Identifiable {
+    let id: UUID
+    let activityID: String
+    var context: ActivityEngagementContext?
+    var visiblePlace: VisiblePlace?
+
+    init(
+        id: UUID = UUID(),
+        activityID: String,
+        context: ActivityEngagementContext? = nil,
+        visiblePlace: VisiblePlace? = nil
+    ) {
+        self.id = id
+        self.activityID = activityID
+        self.context = context
+        self.visiblePlace = visiblePlace
+    }
+}
+
+@MainActor
+final class ActivityNavigationCoordinator: ObservableObject {
+    @Published private(set) var commentsRoute: ActivityCommentsRoute?
+
+    func openComments(
+        context: ActivityEngagementContext,
+        visiblePlace: VisiblePlace?
+    ) {
+        commentsRoute = ActivityCommentsRoute(
+            activityID: context.activityID,
+            context: context,
+            visiblePlace: visiblePlace
+        )
+    }
+
+    func openComments(activityID: String) {
+        commentsRoute = ActivityCommentsRoute(activityID: activityID)
+    }
+
+    func resolve(
+        requestID: UUID,
+        context: ActivityEngagementContext,
+        visiblePlace: VisiblePlace?
+    ) {
+        guard var route = commentsRoute, route.id == requestID else { return }
+        route.context = context
+        route.visiblePlace = visiblePlace
+        commentsRoute = route
+    }
+
+    func dismiss(requestID: UUID) {
+        guard commentsRoute?.id == requestID else { return }
+        commentsRoute = nil
     }
 }

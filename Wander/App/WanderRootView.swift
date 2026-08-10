@@ -326,6 +326,7 @@ struct WanderRootView: View {
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @StateObject private var activityNavigation = ActivityNavigationCoordinator()
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
@@ -435,6 +436,12 @@ struct WanderRootView: View {
         }
         .environmentObject(store)
         .environmentObject(walkthroughs)
+        .environmentObject(activityNavigation)
+        .onChange(of: activityNavigation.commentsRoute?.id) { _, requestID in
+            if requestID != nil {
+                selectedTab = .discover
+            }
+        }
         .overlay(alignment: .bottom) {
             Color.clear
                 .frame(height: walkthroughTabBarTargetHeight)
@@ -1431,6 +1438,9 @@ struct WanderRootView: View {
         case .sharedPlace(let placeID):
             selectedTab = .map
             pushNotifications.route(to: .place(id: placeID))
+        case .sharedActivity(let activityID):
+            selectedTab = .discover
+            activityNavigation.openComments(activityID: activityID)
         case .sharedList(let listID):
             selectedTab = .lists
             pushNotifications.route(to: .list(id: listID))

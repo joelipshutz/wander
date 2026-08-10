@@ -6,12 +6,14 @@ struct FeedScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
     @State private var isShowingSearch = ProcessInfo.processInfo.arguments.contains("-WanderOpenDiscoverSearch")
     @State private var selectedProfile: FeedProfileRoute?
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
+    @State private var focusedActivityID: String?
     @State private var selectedSurface: FeedSurface
     private let onAdd: () -> Void
 
@@ -101,25 +103,48 @@ struct FeedScreen: View {
                 }
             }
         }
+        .fullScreenCover(item: resolvedCommentsRouteBinding) { route in
+            if let context = route.context {
+                ActivityCommentsScreen(
+                    context: context,
+                    visiblePlace: route.visiblePlace
+                )
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
+                .environmentObject(activityNavigation)
+            }
+        }
+        .task(id: activityNavigation.commentsRoute?.id) {
+            await resolveCommentsRouteIfNeeded()
+        }
     }
 
     private var placesSurface: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                FeedSearchLauncher(placeholders: tickerSuggestions) {
-                    walkthroughs.activate(.feedSearch)
-                    isShowingSearch = true
-                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    FeedSearchLauncher(placeholders: tickerSuggestions) {
+                        walkthroughs.activate(.feedSearch)
+                        isShowingSearch = true
+                    }
 
-                content
+                    content
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing16)
             }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing3)
-            .padding(.bottom, WanderTheme.spacing16)
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable {
-            await refresh()
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable {
+                await refresh()
+            }
+            .onChange(of: focusedActivityID, initial: true) { _, activityID in
+                scrollToFocusedActivity(activityID, proxy: proxy)
+            }
+            .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
+                scrollToFocusedActivity(focusedActivityID, proxy: proxy)
+            }
         }
     }
 
@@ -184,6 +209,54 @@ struct FeedScreen: View {
         _ = await store.refreshFollowedFeed(backend: auth.isSignedIn ? backend : nil)
         guard store.followedFeedPage?.activity.isEmpty != false else { return }
         await store.refreshDiscoverPeopleRecommendations(backend: auth.isSignedIn ? backend : nil)
+    }
+
+    private var resolvedCommentsRouteBinding: Binding<ActivityCommentsRoute?> {
+        Binding(
+            get: {
+                guard let route = activityNavigation.commentsRoute,
+                      route.context != nil
+                else { return nil }
+                return route
+            },
+            set: { route in
+                guard route == nil,
+                      let requestID = activityNavigation.commentsRoute?.id
+                else { return }
+                activityNavigation.dismiss(requestID: requestID)
+            }
+        )
+    }
+
+    @MainActor
+    private func resolveCommentsRouteIfNeeded() async {
+        guard let route = activityNavigation.commentsRoute else { return }
+        focusedActivityID = route.activityID
+
+        let activity = await store.activity(
+            id: route.activityID,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        guard let context = route.context ?? activity?.activityEngagementContext else {
+            return
+        }
+        activityNavigation.resolve(
+            requestID: route.id,
+            context: context,
+            visiblePlace: route.visiblePlace ?? activity?.place
+        )
+    }
+
+    private func scrollToFocusedActivity(_ activityID: String?, proxy: ScrollViewProxy) {
+        guard let activityID,
+              page?.activity.contains(where: { $0.id == activityID }) == true
+        else { return }
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo(activityID, anchor: .center)
+            }
+        }
     }
 
     private func openProfile(_ profile: ProfileShell) {
@@ -1057,6 +1130,7 @@ private struct FeedActivityList: View {
                     openPlace: openPlace,
                     openList: openList
                 )
+                .id(event.id)
                 .walkthroughTarget(
                     event.id == activity.first?.id ? .feedActivity : nil
                 )
@@ -1107,10 +1181,10 @@ private struct FeedActivityModule: View {
                 activityThumbnailDestination
             }
 
-            if let engagementContext, let place = activity.place {
+            if let engagementContext {
                 ActivityEngagementActionRow(
                     context: engagementContext,
-                    visiblePlace: place
+                    visiblePlace: activity.place
                 )
                 .padding(.top, WanderTheme.spacing1)
             }
@@ -1353,25 +1427,37 @@ private struct FeedActivityModule: View {
     }
 
     private var engagementContext: ActivityEngagementContext? {
-        guard let place = activity.place else { return nil }
-        let status: PlaceStatus
-        switch activity.resolvedTicketKind {
-        case .checkIn:
-            status = .been
-        case .wanna:
-            status = .wannaGo
-        case .list, .saved:
+        activity.activityEngagementContext
+    }
+}
+
+private extension FeedActivity {
+    var activityEngagementContext: ActivityEngagementContext? {
+        let subjectName: String
+        let subjectServerID: String?
+        let detail: String
+
+        if let place {
+            subjectName = place.place.canonicalName
+            subjectServerID = place.place.serverID ?? place.place.id
+            detail = placeDetail(for: place)
+        } else if let list {
+            subjectName = list.name
+            subjectServerID = nil
+            let count = list.cachedItemCount ?? 0
+            detail = count == 1 ? "1 place" : "\(count) places"
+        } else {
             return nil
         }
 
         return ActivityEngagementContext(
-            activityID: activity.id,
-            actor: activity.actor,
-            placeName: place.place.canonicalName,
-            placeServerID: place.place.serverID ?? place.place.id,
-            placeDetail: metadata,
-            status: status,
-            occurredAt: activity.occurredAt
+            activityID: id,
+            actor: actor,
+            placeName: subjectName,
+            placeServerID: subjectServerID,
+            placeDetail: detail,
+            ticketKind: resolvedTicketKind,
+            occurredAt: occurredAt
         )
     }
 }
