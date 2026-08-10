@@ -34,6 +34,8 @@ The reviewed captures were produced by `OnboardingUITests` and cover:
 | Place-memory realism | Pass | A completed tutorial save is preferred. Otherwise the walkthrough presents an ordinary, fully populated check-in card rather than a detached or fake-looking map annotation. |
 | List-map place card | Pass | Opening a list map advances to a dedicated place-card lesson, focuses the tutorial-saved place when that place belongs to the list, and otherwise uses the first current-user place. Next returns to list detail for the actions lesson. |
 | Navigation continuity | Pass | Import Next dismisses Add automatically; the walkthrough routes Map → Feed → Lists → Profile and finishes back on Map with a motivating prompt. |
+| Build 124 compatibility | Pass | The walkthrough now teaches adaptive one/few/batch import, private review, per-place Check In/Wanna choices, and sharing links into rec.me. It preserves the native touch-up tab navigation shipped in Build 124. |
+| Onboarding order | Pass | Account creation, profile setup, contacts, and location onboarding still complete before the in-app walkthrough is mounted. The second-launch import lesson resumes after an interrupted launch, and the third-launch device lesson waits until import teaching is complete. |
 | Interaction discipline | Pass | Passive lessons expose Next. Required actions advance through the highlighted control, while save-detail spotlights allow the highlighted controls to remain editable. |
 | Accessibility baseline | Pass with follow-up | Existing labels and 44pt controls remain intact. Physical-device VoiceOver and large Dynamic Type verification remain outstanding. |
 
@@ -41,10 +43,11 @@ No P0 or P1 visual defect was found in the reviewed flows. The compact layout do
 
 ## Validation
 
-- Full combined suite: 979 passed, 0 failed, 0 skipped on iPhone 17 / iOS 26.5 (959 unit tests and 20 UI tests).
+- Full combined suite after merging Build 124: 1,012 passed, 0 failed on iPhone 17 / iOS 26.5 (992 unit tests and 20 UI tests).
 - Compact targeted UI pass: neutral status choice, every-tag selection followed by a successful save, native tab spotlight, and list-map place-card lesson passed on iPhone 17e / iOS 26.5.
 - Focused shared-anchor regression: Map search and final Map sendoff both passed after consolidating their context-aware target.
-- Xcode result: `DerivedData/Logs/Test/Test-Wander-2026.08.09_22-53-46--0700.xcresult`.
+- Focused launch regression: Build 124 import/share copy, account-onboarding order, and interrupted second-launch lesson resumption passed.
+- Xcode result: `DerivedData-premerge/Logs/Test/Test-Wander-2026.08.10_00-43-29--0700.xcresult`.
 
 ## Status
 
