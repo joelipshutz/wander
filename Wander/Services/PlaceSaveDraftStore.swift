@@ -165,6 +165,13 @@ struct PlaceSaveDraftPersistence {
             .appendingPathComponent("place-save-draft-v1.json")
     )
 
+    static var ephemeral: PlaceSaveDraftPersistence {
+        PlaceSaveDraftPersistence(
+            load: { nil },
+            save: { _ in }
+        )
+    }
+
     static func file(url: URL) -> PlaceSaveDraftPersistence {
         PlaceSaveDraftPersistence(
             load: { loadDraft(from: url) },

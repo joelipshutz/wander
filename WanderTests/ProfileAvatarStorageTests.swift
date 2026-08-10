@@ -29,6 +29,35 @@ final class ProfileAvatarStorageTests: XCTestCase {
         }
     }
 
+    func testImageProcessorRendersAnExplicitUserCrop() throws {
+        let sourceImage = makeImage(size: CGSize(width: 800, height: 400))
+
+        let jpegData = try WanderImageProcessor.squareJPEGData(
+            from: sourceImage,
+            cropRect: CGRect(x: 400, y: 0, width: 400, height: 400),
+            pixelSize: 96,
+            compressionQuality: 0.9
+        )
+        let outputImage = try XCTUnwrap(UIImage(data: jpegData))
+
+        XCTAssertEqual(outputImage.size.width, 96, accuracy: 0.5)
+        XCTAssertEqual(outputImage.size.height, 96, accuracy: 0.5)
+        XCTAssertGreaterThan(jpegData.count, 0)
+    }
+
+    func testImageProcessorRejectsCropOutsideImageBounds() {
+        let sourceImage = makeImage(size: CGSize(width: 800, height: 400))
+
+        XCTAssertThrowsError(
+            try WanderImageProcessor.squareJPEGData(
+                from: sourceImage,
+                cropRect: CGRect(x: 900, y: 0, width: 100, height: 100)
+            )
+        ) { error in
+            XCTAssertEqual(error as? WanderImageProcessingError, .invalidImageSize)
+        }
+    }
+
     func testProfileAvatarStorageWritesAndDeletesAvatarFile() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("profile-avatar-storage-\(UUID().uuidString)", isDirectory: true)

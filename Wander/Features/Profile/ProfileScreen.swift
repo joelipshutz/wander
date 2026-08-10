@@ -9,6 +9,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var showsSettings = false
     @State private var showsProfilePhotoMenu = false
     @State private var showsProfilePhotoLibrary = false
@@ -79,17 +80,28 @@ struct ProfileScreen: View {
                 isAvatarSaving: isProfilePhotoSaving,
                 avatarAction: toggleProfilePhotoMenu,
                 editAction: { showsEditProfile = true },
-                settingsAction: { showsSettings = true },
+                settingsAction: {
+                    walkthroughs.perform(.profileSettings)
+                    showsSettings = true
+                },
+                shareAction: {
+                    walkthroughs.perform(.profileShare)
+                },
                 relationshipAction: {},
                 backAction: nil,
                 memberActions: nil,
-                graphAction: { socialGraphTab = $0 },
+                graphAction: {
+                    walkthroughs.perform(.profileSocial)
+                    socialGraphTab = $0
+                },
                 sharedVisitInvitationsAction: { showsVisitInvitations = true },
                 recentActivity: profileActivityItems,
                 recentActivityAction: { item in
+                    walkthroughs.perform(.profileActivity)
                     selectedActivityItemID = item.id
                 },
                 allActivityAction: { filter in
+                    walkthroughs.perform(.profileActivity)
                     activityListFilter = filter
                 },
                 inCommonAction: {},
@@ -125,7 +137,9 @@ struct ProfileScreen: View {
                         }
                     }
                 }
-                .sheet(item: $socialGraphTab) { tab in
+                .sheet(item: $socialGraphTab, onDismiss: {
+                    walkthroughs.activate(.profile)
+                }) { tab in
                     ProfileSocialGraphScreen(
                         profileID: store.currentUser.id,
                         initialTab: tab,
@@ -150,6 +164,11 @@ struct ProfileScreen: View {
                     guard let item else { return }
                     Task {
                         await importProfilePhoto(from: item)
+                    }
+                }
+                .onChange(of: showsSettings) { _, isShowing in
+                    if !isShowing {
+                        walkthroughs.activate(.profile)
                     }
                 }
                 .navigationDestination(item: $savedListMode) { mode in
@@ -1053,6 +1072,7 @@ struct ProfileDetailView: View {
                             avatarAction: {},
                             editAction: {},
                             settingsAction: {},
+                            shareAction: {},
                             relationshipAction: handleRelationshipAction,
                             backAction: { dismiss() },
                             memberActions: ProfileMemberActions(

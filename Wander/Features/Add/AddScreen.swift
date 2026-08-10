@@ -42,6 +42,7 @@ struct AddScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @ObservedObject var importStore: PlaceImportStore
     @ObservedObject var placeSaveDraftStore: PlaceSaveDraftStore
     let resetToken: UUID
@@ -67,10 +68,14 @@ struct AddScreen: View {
     @State private var showsPhotoLibrary = false
     @State private var showsCamera = false
     @State private var pendingVisitPhotoAttachments: [MapPlaceSavePhotoAttachment] = []
+    @State private var closesAfterSaveFlowDismiss = false
     @State private var isImportingPhoto = false
     @State private var addSaveFlow: MapPlaceSaveContext?
-    @State private var showsImportHub = false
+    @State private var showsImportHub = ProcessInfo.processInfo.arguments.contains(
+        "-WanderOpenImportHub"
+    )
     @State private var showsImportInbox = false
+    @State private var isAutoClosingWalkthrough = false
     @State private var showsImportReview = false
     @State private var importReviewBatchIDs: [String] = []
     @FocusState private var isQuickAddFocused: Bool
@@ -131,8 +136,23 @@ struct AddScreen: View {
                 }
             }
             .wanderScreen()
+            .onAppear {
+                if ProcessInfo.processInfo.arguments.contains(
+                    "-WanderShowWalkthroughCandidateResults"
+                ) {
+                    prepareWalkthroughCandidateResults()
+                }
+                if showsImportHub {
+                    expandSheet()
+                }
+            }
             .onChange(of: resetToken) { _, _ in
                 reset()
+            }
+            .onChange(of: walkthroughs.activeSurface, initial: true) { _, activeSurface in
+                if activeSurface == .add {
+                    expandSheet()
+                }
             }
             .task(id: resetToken) {
                 await loadNearbySuggestionsIfNeeded()
@@ -160,6 +180,9 @@ struct AddScreen: View {
                 case .hereNow:
                     expandSheet()
                     await resolveCurrentLocationCandidates()
+                case .importHub:
+                    expandSheet()
+                    showsImportHub = true
                 case .search(let query):
                     expandSheet()
                     quickAddQuery = query
@@ -191,6 +214,10 @@ struct AddScreen: View {
             .sheet(item: $addSaveFlow, onDismiss: {
                 placeSaveDraftStore.clear()
                 store.saveFlowDidDismiss(.saveSheet)
+                if closesAfterSaveFlowDismiss {
+                    closesAfterSaveFlowDismiss = false
+                    onClose()
+                }
             }) { context in
                 MapPlaceSaveFlowSheet(
                     context: context,
@@ -253,6 +280,10 @@ struct AddScreen: View {
                     .environmentObject(backend)
             }
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
+        .onChange(of: walkthroughs.currentStep?.target) { _, target in
+            autoCloseAfterImportIfNeeded(target)
+        }
     }
 
     private var compactSheetContent: some View {
@@ -261,12 +292,16 @@ struct AddScreen: View {
 
             AddImportEntrySection(
                 summary: importStore.summary,
-                action: openImportHub
+                action: {
+                    walkthroughs.perform(.addImport)
+                    openImportHub()
+                }
             )
             .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing2)
             .padding(.bottom, WanderTheme.spacing3)
             .background(WanderTheme.canvasWarm.color)
+            .walkthroughTarget(.addImport)
         }
     }
 
@@ -328,7 +363,10 @@ struct AddScreen: View {
 
             Spacer()
 
-            Button(action: onClose) {
+            Button {
+                walkthroughs.perform(.addClose)
+                onClose()
+            } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
@@ -340,6 +378,15 @@ struct AddScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close add place")
+            .walkthroughTarget(.addClose)
+            .disabled(
+                walkthroughs.activeSurface == .add
+                    && walkthroughs.currentStep?.target != .addClose
+            )
+            .accessibilityHidden(
+                walkthroughs.activeSurface == .add
+                    && walkthroughs.currentStep?.target != .addClose
+            )
         }
     }
 
@@ -387,6 +434,7 @@ struct AddScreen: View {
                 showsPhotoLibrary = true
             }
         )
+        .walkthroughTarget(.addSearch)
     }
 
     private var suggestedPlaces: some View {
@@ -479,6 +527,7 @@ struct AddScreen: View {
                 candidateSaveAction
             }
         }
+        .walkthroughTarget(showsFloatingCurrentLocationAction ? nil : .addPlace)
     }
 
     private var floatingCandidateAction: some View {
@@ -498,12 +547,65 @@ struct AddScreen: View {
                 .ignoresSafeArea(edges: .bottom)
             )
             .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 8, y: 4)
+            .walkthroughTarget(.addPlace)
     }
 
     private var candidateSaveAction: some View {
         WanderPrimaryButton(title: "Save", systemImage: "arrow.right") {
             openSharedSaveFlow()
         }
+    }
+
+    private func autoCloseAfterImportIfNeeded(_ target: WalkthroughTargetID?) {
+        guard target == .addClose,
+              walkthroughs.activeSurface == .add,
+              !isAutoClosingWalkthrough
+        else { return }
+
+        isAutoClosingWalkthrough = true
+        Task { @MainActor in
+            await Task.yield()
+            guard walkthroughs.currentStep?.target == .addClose else {
+                isAutoClosingWalkthrough = false
+                return
+            }
+            walkthroughs.perform(.addClose)
+            onClose()
+        }
+    }
+
+    private func prepareWalkthroughCandidateResults() {
+        let previewCandidates = [
+            PlaceCandidate(
+                id: "walkthrough-maru",
+                name: "Maru Coffee",
+                category: "coffee",
+                address: "1936 Hillhurst Ave",
+                locality: "Los Angeles",
+                latitude: 34.1062,
+                longitude: -118.2870,
+                confidence: 0.96
+            ),
+            PlaceCandidate(
+                id: "walkthrough-dayglow",
+                name: "Dayglow Coffee",
+                category: "coffee",
+                address: "3206 Sunset Blvd",
+                locality: "Los Angeles",
+                latitude: 34.0854,
+                longitude: -118.2755,
+                confidence: 0.94
+            )
+        ]
+
+        selectedSource = .manual
+        candidates = previewCandidates
+        selectedCandidateID = previewCandidates[0].id
+        quickAddQuery = "Coffee"
+        resolutionMessage = nil
+        isShowingInlineCandidateResults = true
+        step = .source
+        expandSheet()
     }
 
     private var draftView: some View {
@@ -622,6 +724,8 @@ struct AddScreen: View {
     private func openSharedSaveFlow() {
         guard let selectedCandidate else { return }
 
+        walkthroughs.perform(.addPlace)
+        walkthroughs.activate(.saveFlow)
         presentSaveFlow(addCandidateContext(
             selectedCandidate,
             sourceType: selectedSource,
@@ -732,7 +836,7 @@ struct AddScreen: View {
         let needsSignIn = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         resetAfterSave()
-        onClose()
+        closesAfterSaveFlowDismiss = true
         if needsSignIn {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(400))
@@ -787,6 +891,9 @@ struct AddScreen: View {
             }
             isShowingInlineCandidateResults = inline
             step = inline ? .source : .confirm
+            if inline {
+                walkthroughs.perform(.addSearch)
+            }
         } catch {
             candidates = []
             selectedCandidateID = nil
@@ -1246,6 +1353,9 @@ private struct CandidateRow: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("add.candidate.\(candidate.id)")
+        .accessibilityLabel(candidate.name)
+        .accessibilityValue(isSelected ? "selected" : "not selected")
     }
 }
 
