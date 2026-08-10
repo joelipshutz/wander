@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Wander
 
@@ -174,6 +175,81 @@ final class PlaceSaveDraftStoreTests: XCTestCase {
         XCTAssertNil(store.draft?.submittedAt)
         XCTAssertEqual(store.draft?.recoveryNotice, "Try again")
         XCTAssertEqual(persisted, store.draft)
+    }
+
+    func testDraftFieldUpdatesPersistWithoutPublishingWholeStoreInvalidations() {
+        var persisted: PlaceSaveDraft?
+        let store = PlaceSaveDraftStore(
+            persistence: PlaceSaveDraftPersistence(
+                load: { persisted },
+                save: { persisted = $0 }
+            )
+        )
+        let original = makeDraft()
+        store.begin(original)
+
+        var invalidationCount = 0
+        let observation = store.objectWillChange.sink {
+            invalidationCount += 1
+        }
+        var editedForm = original.form
+        editedForm.note = "Order the conservas and anchovies"
+
+        store.update(
+            draftID: original.id,
+            form: editedForm,
+            submittedAt: nil,
+            now: now.addingTimeInterval(1)
+        )
+
+        XCTAssertEqual(invalidationCount, 0)
+        XCTAssertEqual(store.draft?.form.note, editedForm.note)
+        XCTAssertEqual(persisted?.form.note, editedForm.note)
+
+        store.clear()
+        XCTAssertEqual(invalidationCount, 1)
+        withExtendedLifetime(observation) {}
+    }
+
+    func testQuestionBlockCacheLoadsOnceForRepeatedFormRendersAndRefreshesForTaxonomyChange() {
+        let initialBlocks = AddQuestionTemplates.blocks(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Tapas Restaurant",
+            cuisine: "Spanish",
+            status: .been
+        )
+        var cache = MapPlaceSaveQuestionBlocksCache(initialBlocks: initialBlocks)
+        let initialKey = MapPlaceSaveQuestionBlocksCache.Key(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Tapas Restaurant",
+            cuisine: "Spanish",
+            status: .been
+        )
+        var loadCount = 0
+
+        XCTAssertTrue(cache.refresh(for: initialKey) {
+            loadCount += 1
+            return initialBlocks
+        })
+        for _ in 0..<100 {
+            XCTAssertFalse(cache.refresh(for: initialKey) {
+                loadCount += 1
+                return initialBlocks
+            })
+        }
+        XCTAssertEqual(loadCount, 1)
+
+        let changedKey = MapPlaceSaveQuestionBlocksCache.Key(
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Tapas Restaurant",
+            cuisine: "Basque",
+            status: .been
+        )
+        XCTAssertTrue(cache.refresh(for: changedKey) {
+            loadCount += 1
+            return initialBlocks
+        })
+        XCTAssertEqual(loadCount, 2)
     }
 
     private func temporaryURL() -> URL {
