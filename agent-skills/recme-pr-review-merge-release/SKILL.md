@@ -97,6 +97,20 @@ The `## TestFlight note` section is the source for the next build's tester copy.
 Preserve all other description content. Never create a second note heading;
 append, correct, or deduplicate entries within the existing section.
 
+At release time, the note is exported to a temporary JSON snapshot conforming
+to `scripts/testflight-manifest.schema.json`. Git remains authoritative for the
+binary; the JSON provides classification and tester context for every commit.
+Every first-parent commit must appear exactly once with one disposition:
+
+- `ship`: user/tester-facing payload with issue, PR, summary, test actions,
+  release operations, validation, and optional known limitations;
+- `exclude`: docs/process-only or otherwise non-shipping context, with a reason;
+- `release-operation`: build metadata or another release-only commit, with a
+  reason.
+
+The snapshot is release evidence, not a checked-in product artifact. Attach the
+final passing reconciliation JSON to the Linear release record.
+
 At merge time:
 
 1. Decide whether the diff affects app code, UI, schema/contracts required by
@@ -183,9 +197,22 @@ explicit release.
    the manually recorded baseline commit in the issue when no historical tag
    exists.
 2. Reconcile manifest payloads against the git range from that baseline through
-   current `origin/main`. This is a mechanical completeness check, not product
-   re-triage. Correct missing/stale payloads and identify required migrations,
-   deploys, flags, or manual QA.
+   current `origin/main`. Export the Linear payloads/classifications to a
+   temporary JSON manifest and run:
+
+   ```bash
+   node scripts/reconcile-testflight-manifest.mjs \
+     --base testflight/build-<previous> \
+     --head <pre-bump-cutoff> \
+     --manifest <manifest.json> \
+     --build <next-build> \
+     --status candidate
+   ```
+
+   This is a mechanical completeness check, not product re-triage. The command
+   must pass before the build-number PR begins. Correct missing/stale payloads
+   and identify required migrations, deploys, flags, or manual QA. A missing
+   entry is a release blocker, even when the commit is already in the binary.
 3. Choose the next monotonically increasing build number. Snapshot the current
    `## TestFlight note` into a new `TestFlight build <n>` Linear release issue,
    move that release issue to `In Progress`, and record the intended pre-bump
@@ -208,16 +235,34 @@ explicit release.
 5. Record the exact merged commit as the release candidate, then release the
    short merge hold. New merges continue appending to `Next TestFlight`, but
    their merge SHAs place them after the recorded cutoff and outside the active
-   build.
+   build. Add the build-number PR as `release-operation`, update `candidateSha`,
+   and run the reconciliation command again against the exact candidate. This
+   second run catches a post-bump fix like a navigation hotfix. Write the output
+   files to a temporary directory and attach the reconciliation JSON to the
+   Linear release issue. Do not continue while it fails.
 
 ### 3. Validate, upload, and finalize
 
 1. Check out the exact candidate in an isolated/detached worktree. Run the full
    relevant iOS test suite and generic Simulator build. Run hosted migration/
    RPC smoke verification required by any manifest payload.
-2. Build concise TestFlight "What to Test" and Slack copy directly from the
-   payload comments: tester outcomes, concrete checklist, and known/deferred
-   behavior. Keep App Store Connect copy under 4000 characters.
+2. Generate concise TestFlight "What to Test", Slack copy, and the Linear
+   release-record section from the same passing manifest:
+
+   ```bash
+   node scripts/reconcile-testflight-manifest.mjs \
+     --base testflight/build-<previous> \
+     --head <exact-candidate> \
+     --manifest <manifest.json> \
+     --build <n> \
+     --status candidate \
+     --write-dir <temporary-output-directory>
+   ```
+
+   Use those files as the only release-note source. The helper enforces the
+   4000-character App Store Connect limit and keeps excluded work out of tester
+   copy. After TestFlight state changes, regenerate with `--status processing`
+   or `--status live`; do not hand-add or drop payloads.
 3. Archive and upload that exact commit. Set
    `manageAppVersionAndBuildNumber=false` in export options.
 4. Run:
@@ -241,6 +286,11 @@ explicit release.
    completed build tag/commit. The note should say `No pending changes.` when
    nothing remains. Do not clear it on upload, processing, copy, or attachment
    failure. Do not create a release-record docs PR.
+
+For cumulative questions, never expand the current delta note by memory. Run
+`node scripts/reconcile-testflight-manifest.mjs --audit-sha <sha>` to report the
+first and all immutable TestFlight tags containing that commit. This keeps
+"first shipped in build" distinct from "changed in this build."
 
 If upload/signing/App Store Connect blocks completion, keep the active release
 issue `In Progress` and comment with build number, exact candidate, validation,

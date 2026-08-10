@@ -55,6 +55,7 @@ struct WanderPresentationResetRequest: Equatable, Identifiable {
 struct WanderAddLaunchRequest: Equatable, Identifiable {
     enum Destination: Equatable {
         case hereNow
+        case importHub
         case search(query: String)
         case importInbox
         case importReview(batchIDs: [String])

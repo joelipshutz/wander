@@ -28,4 +28,45 @@ final class ProfileIdentityDraftTests: XCTestCase {
 
         XCTAssertEqual(mapped, .handleTaken)
     }
+
+    func testOnboardingDoesNotCheckPrefilledHandleBeforeUserEdits() {
+        XCTAssertFalse(
+            OnboardingHandleAvailabilityPolicy.shouldCheck(
+                normalizedHandle: "maya",
+                originalNormalizedHandle: "maya",
+                hasUserEdited: false,
+                validationError: nil
+            )
+        )
+    }
+
+    func testOnboardingDoesNotRecheckUsersOriginalHandle() {
+        XCTAssertFalse(
+            OnboardingHandleAvailabilityPolicy.shouldCheck(
+                normalizedHandle: "maya",
+                originalNormalizedHandle: "maya",
+                hasUserEdited: true,
+                validationError: nil
+            )
+        )
+    }
+
+    func testOnboardingChecksAValidEditedHandle() {
+        XCTAssertTrue(
+            OnboardingHandleAvailabilityPolicy.shouldCheck(
+                normalizedHandle: "maya_eats",
+                originalNormalizedHandle: "maya",
+                hasUserEdited: true,
+                validationError: nil
+            )
+        )
+        XCTAssertFalse(
+            OnboardingHandleAvailabilityPolicy.shouldCheck(
+                normalizedHandle: "not valid",
+                originalNormalizedHandle: "maya",
+                hasUserEdited: true,
+                validationError: .invalidHandle
+            )
+        )
+    }
 }

@@ -321,9 +321,11 @@ struct WanderRootView: View {
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
+    @State private var didApplyWalkthroughLaunchConfiguration = false
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
+    @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
@@ -343,6 +345,7 @@ struct WanderRootView: View {
         parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
+        let launchArguments = ProcessInfo.processInfo.arguments
         self.fixtureMode = fixtureMode
         self.isSessionValidated = isSessionValidated
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
@@ -365,11 +368,22 @@ struct WanderRootView: View {
         )
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
-        _placeSaveDraftStore = StateObject(wrappedValue: PlaceSaveDraftStore())
-        _addSheetDetent = State(
-            initialValue: AddSheetLayout.restingDetent(
-                hasPendingImports: importStore.summary.hasPendingImports
+        _placeSaveDraftStore = StateObject(
+            wrappedValue: PlaceSaveDraftStore(
+                persistence: fixtureMode == .empty ? .live : .ephemeral
             )
+        )
+        _walkthroughs = StateObject(
+            wrappedValue: FirstVisitWalkthroughCoordinator(
+                isEnabled: fixtureMode == .empty || launchArguments.contains("-WanderEnableWalkthroughs")
+            )
+        )
+        _addSheetDetent = State(
+            initialValue: launchArguments.contains("-WanderOpenImportHub")
+                ? .large
+                : AddSheetLayout.restingDetent(
+                    hasPendingImports: importStore.summary.hasPendingImports
+                )
         )
     }
 
@@ -420,6 +434,21 @@ struct WanderRootView: View {
             .accessibilityHidden(true)
         }
         .environmentObject(store)
+        .environmentObject(walkthroughs)
+        .overlay(alignment: .bottom) {
+            Color.clear
+                .frame(height: walkthroughTabBarTargetHeight)
+                .offset(y: walkthroughTabBarTargetVerticalOffset)
+                .contentShape(Rectangle())
+                .allowsHitTesting(false)
+                .walkthroughTarget(.mapTabs)
+                .padding(.horizontal, walkthroughTabBarTargetHorizontalInset)
+        }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
+        .walkthroughLaunchLessonOverlay(
+            walkthroughs,
+            onOpenImport: presentWalkthroughImportHub
+        )
         .overlay {
             GeometryReader { proxy in
                 if let invitation = sharedVisitBannerInvitation {
@@ -469,6 +498,9 @@ struct WanderRootView: View {
 
     private var presentedRoot: some View {
         tabRoot
+        .walkthroughPresenterScrim(
+            isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
+        )
         .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
             WanderRootPresentationLifecycle(
                 surface: .add,
@@ -488,6 +520,7 @@ struct WanderRootView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(walkthroughs)
                     .presentationDetents(
                         AddSheetLayout.detents(
                         hasPendingImports: importStore.summary.hasPendingImports
@@ -498,6 +531,10 @@ struct WanderRootView: View {
                     .presentationCornerRadius(28)
                     .presentationBackground(WanderTheme.surfaceBone.color)
                     .presentationContentInteraction(.resizes)
+                    .interactiveDismissDisabled(
+                        walkthroughs.activeSurface == .add
+                            || walkthroughs.activeSurface == .saveFlow
+                    )
             }
         }
         .sheet(
@@ -550,6 +587,11 @@ struct WanderRootView: View {
                     .environmentObject(backend)
             }
         }
+    }
+
+    private var shouldDimBehindAddWalkthrough: Bool {
+        walkthroughs.activeSurface == .add
+            || walkthroughs.activeSurface == .saveFlow
     }
 
     private var lifecycleRoot: some View {
@@ -621,6 +663,9 @@ struct WanderRootView: View {
                 restoredPlaceSaveDraftOwnerID = nil
             }
             applyAuthStateIfNeeded(state)
+            if isSessionValidated {
+                configureWalkthroughsForCurrentUser()
+            }
             if state.isSignedIn {
                 drainSharedPlaceImports()
             }
@@ -735,6 +780,7 @@ struct WanderRootView: View {
         }
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
+                configureWalkthroughsForCurrentUser()
                 drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
                     controlNavigationCenter.pendingRequest
@@ -742,6 +788,15 @@ struct WanderRootView: View {
             } else {
                 cancelSignedInMaintenance()
             }
+        }
+        .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
+            if !isPresented {
+                walkthroughs.activate(walkthroughSurface(for: selectedTab))
+            }
+        }
+        .onChange(of: walkthroughs.requestedSurface) { _, surface in
+            guard let surface else { return }
+            routeWalkthrough(to: surface)
         }
         .onDisappear(perform: handleRootDisappear)
     }
@@ -753,12 +808,21 @@ struct WanderRootView: View {
             if newTab == .add {
                 presentAddSheet()
             } else {
+                walkthroughs.perform(.mapTabs)
                 selectedTab = newTab
+                presentLaunchLessonIfAppropriate()
+                walkthroughs.activate(walkthroughSurface(for: newTab))
             }
         }
     }
 
     private func presentAddSheet() {
+        if walkthroughs.currentStep?.target == .mapAddAgain {
+            walkthroughs.perform(.mapAddAgain)
+        } else {
+            walkthroughs.perform(.mapAdd)
+        }
+        walkthroughs.activate(.add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
@@ -1107,6 +1171,125 @@ struct WanderRootView: View {
     private func handleAddSheetDismissal() {
         placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
+        if walkthroughs.requestedSurface == .map {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(260))
+                walkthroughs.consumeRequestedSurface(.map)
+                walkthroughs.activate(.map)
+                presentLaunchLessonIfAppropriate()
+            }
+        } else {
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
+            presentLaunchLessonIfAppropriate()
+        }
+    }
+
+    private func configureWalkthroughsForCurrentUser() {
+        walkthroughs.setUserID(store.currentUser.id)
+        if !didApplyWalkthroughLaunchConfiguration {
+            didApplyWalkthroughLaunchConfiguration = true
+            if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
+                walkthroughs.resetCurrentUser()
+            }
+        }
+        walkthroughs.registerLaunch(
+            forceImportLesson: ProcessInfo.processInfo.arguments.contains(
+                "-WanderShowImportWalkthrough"
+            ),
+            forceDeviceFeaturesLesson: ProcessInfo.processInfo.arguments.contains(
+                "-WanderShowDeviceFeaturesWalkthrough"
+            )
+        )
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") {
+            let valueIndex = launchArguments.index(after: flagIndex)
+            if launchArguments.indices.contains(valueIndex),
+               let target = WalkthroughTargetID(rawValue: launchArguments[valueIndex]) {
+                walkthroughs.forceActivate(target)
+                return
+            }
+        }
+        presentLaunchLessonIfAppropriate()
+        if !walkthroughs.isPresentingLaunchLesson {
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
+        }
+    }
+
+    private func presentLaunchLessonIfAppropriate() {
+        guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil else { return }
+        walkthroughs.presentLaunchLessonIfEligible()
+    }
+
+    private func presentWalkthroughImportHub() {
+        store.saveFlowDidPresent(.addSheet)
+        addTabResetToken = UUID()
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importHub)
+        addSheetDetent = .large
+        isPresentingAdd = true
+    }
+
+    private func routeWalkthrough(to surface: WalkthroughSurface) {
+        let waitsForAddDismissal = isPresentingAdd && surface == .map
+        switch surface {
+        case .map, .sendoff:
+            selectedTab = .map
+            if !waitsForAddDismissal {
+                isPresentingAdd = false
+            }
+        case .feed:
+            selectedTab = .discover
+            isPresentingAdd = false
+        case .lists:
+            selectedTab = .lists
+            isPresentingAdd = false
+        case .profile:
+            selectedTab = .profile
+            isPresentingAdd = false
+        case .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+            break
+        }
+
+        guard !waitsForAddDismissal else { return }
+
+        Task { @MainActor in
+            if isPresentingAdd {
+                await Task.yield()
+            } else {
+                try? await Task.sleep(for: .milliseconds(220))
+            }
+            walkthroughs.consumeRequestedSurface(surface)
+            walkthroughs.activate(surface)
+        }
+    }
+
+    private func walkthroughSurface(for tab: WanderTab) -> WalkthroughSurface {
+        switch tab {
+        case .map, .add:
+            if walkthroughs.activeSurface == .sendoff
+                || walkthroughs.requestedSurface == .sendoff {
+                .sendoff
+            } else {
+                .map
+            }
+        case .discover:
+            .feed
+        case .lists:
+            .lists
+        case .profile:
+            .profile
+        }
+    }
+
+    private var walkthroughTabBarTargetHeight: CGFloat {
+        50
+    }
+
+    private var walkthroughTabBarTargetVerticalOffset: CGFloat {
+        if #available(iOS 26.0, *) { 6 } else { 2 }
+    }
+
+    private var walkthroughTabBarTargetHorizontalInset: CGFloat {
+        if #available(iOS 26.0, *) { 32 } else { 0 }
     }
 
     private func handleDeepLinkPresentationDismissal(

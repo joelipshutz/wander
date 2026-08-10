@@ -7,6 +7,7 @@ struct ListsScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     private let scenario: ListsScreenScenario
     private let scenarioList: PlaceListMock
     private let editorStartsWithFriendSearch: Bool
@@ -61,7 +62,9 @@ struct ListsScreen: View {
             .navigationDestination(item: $selectedList) { list in
                 detailScreen(for: list)
             }
-            .sheet(item: $editorPresentation) { presentation in
+            .sheet(item: $editorPresentation, onDismiss: {
+                walkthroughs.activate(selectedList == nil ? .lists : .listDetail)
+            }) { presentation in
                 ListEditorSheet(
                     presentation: presentation,
                     startsWithFriendSearch: editorStartsWithFriendSearch,
@@ -91,6 +94,13 @@ struct ListsScreen: View {
                     .presentationDetents([.medium])
                     .presentationBackground(WanderTheme.canvasWarm.color)
             }
+            .onChange(of: walkthroughs.requestedSurface) { _, surface in
+                guard surface == .lists else { return }
+                collaboratorList = nil
+                mapList = nil
+                editorPresentation = nil
+                selectedList = nil
+            }
             .fullScreenCover(item: $mapList) { list in
                 ListMapFullScreen(
                     list: list,
@@ -106,6 +116,10 @@ struct ListsScreen: View {
                 }
             }
         }
+        .walkthroughPresenterScrim(
+            isPresented: editorPresentation != nil
+                && walkthroughs.activeSurface == .listEditor
+        )
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
         }
@@ -197,6 +211,8 @@ struct ListsScreen: View {
         ListDetailScreen(
             list: list,
             onEdit: { list in
+                walkthroughs.perform(.listActions)
+                walkthroughs.activate(.listEditor)
                 editorPresentation = .edit(list)
             },
             onCollaborators: { list in
@@ -205,6 +221,7 @@ struct ListsScreen: View {
                 }
             },
             onOpenMap: { list in
+                walkthroughs.perform(.listMap)
                 mapList = list
             },
             onListChanged: { sourceListID in
@@ -351,8 +368,11 @@ struct ListsScreen: View {
                     accessibilityLabel: "New list",
                     accessibilityIdentifier: "lists.headerAdd"
                 ) {
+                    walkthroughs.perform(.listsCreate)
+                    walkthroughs.activate(.listEditor)
                     editorPresentation = .create
                 }
+                .walkthroughTarget(.listsCreate)
             }
 
             Text("save places into a plan you can actually use")
@@ -366,9 +386,18 @@ struct ListsScreen: View {
     private var scopeSwitch: some View {
         WanderGlassSegmentedSwitch(
             options: ListsScope.allCases.map { WanderSegmentOption(id: $0.rawValue, title: $0.title) },
-            selection: $selectedScopeID
+            selection: Binding(
+                get: { selectedScopeID },
+                set: { newValue in
+                    if newValue != selectedScopeID {
+                        walkthroughs.perform(.listsScope)
+                    }
+                    selectedScopeID = newValue
+                }
+            )
         )
         .accessibilityLabel("List type")
+        .walkthroughTarget(.listsScope)
     }
 
     private var emptyState: some View {
@@ -376,6 +405,8 @@ struct ListsScreen: View {
             Spacer(minLength: WanderTheme.spacing6)
 
             Button {
+                walkthroughs.perform(.listsCreate)
+                walkthroughs.activate(.listEditor)
                 editorPresentation = .create
             } label: {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -419,6 +450,7 @@ struct ListsScreen: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Create your first list")
+            .walkthroughTarget(.listsCreate)
 
             emptyHintRow
         }
@@ -478,8 +510,10 @@ struct ListsScreen: View {
             alignment: .leading,
             spacing: WanderTheme.spacing6
         ) {
-            ForEach(lists) { list in
+            ForEach(Array(lists.enumerated()), id: \.element.id) { index, list in
                 Button {
+                    walkthroughs.perform(.listsOpenPlan)
+                    walkthroughs.activate(.listDetail)
                     selectedList = list
                 } label: {
                     ListTile(list: list, showsCollaborators: selectedScope != .mine)
@@ -492,6 +526,7 @@ struct ListsScreen: View {
                         ? "Open \(list.name), collaborative list"
                         : "Open \(list.name)"
                 )
+                .walkthroughTarget(index == 0 ? .listsOpenPlan : nil)
             }
         }
     }
@@ -782,6 +817,7 @@ private struct ListPreviewMosaic: View {
 private struct ListDetailScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
     let list: PlaceListMock
     var onEdit: (PlaceListMock) -> Void
@@ -847,6 +883,7 @@ private struct ListDetailScreen: View {
 
                 if canAddPlaces {
                     Button {
+                        walkthroughs.perform(.listActions)
                         isAddingPlaces = true
                     } label: {
                         Image(systemName: "plus")
@@ -858,6 +895,7 @@ private struct ListDetailScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
+                    .walkthroughTarget(.listActions)
                 }
 
                 if canManageList {
@@ -873,6 +911,7 @@ private struct ListDetailScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Edit list")
+                    .walkthroughTarget(canAddPlaces ? nil : .listActions)
                 }
             }
         }
@@ -917,6 +956,7 @@ private struct ListDetailScreen: View {
                 dismiss()
             }
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -1025,6 +1065,7 @@ private struct ListDetailScreen: View {
         ) {
             onOpenMap(renderedList)
         }
+        .walkthroughTarget(.listMap)
     }
 
     @ViewBuilder
@@ -2642,6 +2683,7 @@ private struct ListMapFullScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let list: PlaceListMock
     @State private var position: MapCameraPosition
     @State private var visibleRegion: MKCoordinateRegion
@@ -2768,6 +2810,12 @@ private struct ListMapFullScreen: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: profilePlaceDestinationBinding) {
                 profilePlaceDestination
+            }
+        }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
+        .onChange(of: walkthroughs.currentStep?.target) { previousTarget, target in
+            if previousTarget == .listMapPlace, target == .listActions {
+                dismiss()
             }
         }
     }
@@ -2927,12 +2975,25 @@ private struct ListMapFullScreen: View {
                 ListMapPlaceRail(
                     list: list,
                     focusedPlaceID: focusedPlaceIDBinding,
+                    walkthroughPlaceID: walkthroughPlaceID,
                     bottomInset: bottomInset
                 ) { place in
                     open(place)
                 }
             }
         }
+    }
+
+    private var walkthroughPlaceID: String? {
+        if let tutorialUserPlaceID = walkthroughs.tutorialUserPlaceID,
+           let tutorialPlace = list.places.first(where: {
+               $0.visiblePlaceID == tutorialUserPlaceID
+           }) {
+            return tutorialPlace.id
+        }
+
+        return list.places.first(where: { $0.saveOwnership == .currentUser })?.id
+            ?? list.places.first?.id
     }
 
     private func applyInitialViewportFit(
@@ -3097,6 +3158,7 @@ private struct ListMapPlaceRail: View {
     @ScaledMetric(relativeTo: .body) private var railViewportHeight: CGFloat = 102
     let list: PlaceListMock
     @Binding var focusedPlaceID: String?
+    let walkthroughPlaceID: String?
     let bottomInset: CGFloat
     let onSelect: (ListPlaceMock) -> Void
 
@@ -3126,6 +3188,7 @@ private struct ListMapPlaceRail: View {
                             onSelect(place)
                         }
                         .id(place.id)
+                        .walkthroughTarget(place.id == walkthroughPlaceID ? .listMapPlace : nil)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -3146,7 +3209,7 @@ private struct ListMapPlaceRail: View {
         .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 18, x: 0, y: -5)
         .onAppear {
             if focusedPlaceID == nil {
-                focusedPlaceID = list.places.first?.id
+                focusedPlaceID = walkthroughPlaceID ?? list.places.first?.id
             }
         }
     }
@@ -3490,6 +3553,7 @@ private struct ListEditorDraft {
 
 private struct ListEditorSheet: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
     private let presentation: ListEditorPresentation
     private let onSave: (ListEditorDraft) -> Void
@@ -3502,6 +3566,8 @@ private struct ListEditorSheet: View {
     @State private var stagedCollaborators: [ListCollaboratorMock]
     @State private var isShowingFriendSearch = false
     @State private var isShowingDeleteConfirmation = false
+    @State private var walkthroughScrollPosition: String?
+    @FocusState private var focusedField: ListEditorFocus?
 
     init(
         presentation: ListEditorPresentation,
@@ -3551,7 +3617,10 @@ private struct ListEditorSheet: View {
                         TextField("LA laptop mornings", text: $title)
                             .font(.system(size: 17, weight: .bold))
                             .textInputAutocapitalization(.words)
+                            .focused($focusedField, equals: .title)
                     }
+                    .walkthroughTarget(.listEditorTitle)
+                    .id(ListEditorWalkthroughAnchor.title)
 
                     fieldBlock(title: "description") {
                         TextField("quiet tables, outlets, places worth returning to", text: $description, axis: .vertical)
@@ -3560,11 +3629,15 @@ private struct ListEditorSheet: View {
                     }
 
                     stealthToggle
+                        .id(ListEditorWalkthroughAnchor.privacy)
                     collaboratorsBlock
+                        .id(ListEditorWalkthroughAnchor.collaborators)
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing16 + WanderTheme.spacing8)
+                .scrollTargetLayout()
             }
+            .scrollPosition(id: $walkthroughScrollPosition, anchor: .center)
             .wanderScreen()
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 editorActionButtons
@@ -3607,6 +3680,15 @@ private struct ListEditorSheet: View {
             .onChange(of: store.isPrivateProfile) { _, _ in
                 enforcePrivateProfileRules()
             }
+            .onChange(of: focusedField) { _, field in
+                if field == .title {
+                    walkthroughs.perform(.listEditorTitle)
+                }
+            }
+            .onChange(of: walkthroughs.currentStep?.id, initial: true) { _, _ in
+                recoverUnavailableEditorActionIfNeeded()
+                scrollToCurrentWalkthroughAction()
+            }
             .alert("Delete List", isPresented: $isShowingDeleteConfirmation) {
                 Button("Delete List", role: .destructive) {
                     if case .edit(let list) = presentation {
@@ -3619,6 +3701,7 @@ private struct ListEditorSheet: View {
                 Text(deleteConfirmationMessage)
             }
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .listEditor)
     }
 
     private var newListBackButton: some View {
@@ -3691,6 +3774,7 @@ private struct ListEditorSheet: View {
         Binding(
             get: { store.isPrivateProfile ? true : isStealth },
             set: { newValue in
+                walkthroughs.perform(.listEditorPrivacy)
                 guard !store.isPrivateProfile else {
                     isStealth = true
                     return
@@ -3780,6 +3864,7 @@ private struct ListEditorSheet: View {
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .walkthroughTarget(.listEditorPrivacy)
     }
 
     private var collaboratorsBlock: some View {
@@ -3797,6 +3882,7 @@ private struct ListEditorSheet: View {
 
                 if canEditCollaborators {
                     Button {
+                        walkthroughs.perform(.listEditorCollaborators)
                         isShowingFriendSearch = true
                     } label: {
                         Image(systemName: "plus")
@@ -3863,6 +3949,33 @@ private struct ListEditorSheet: View {
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .walkthroughTarget(.listEditorCollaborators)
+    }
+
+    private func recoverUnavailableEditorActionIfNeeded() {
+        switch walkthroughs.currentStep?.target {
+        case .listEditorPrivacy where store.isPrivateProfile:
+            walkthroughs.recoverUnavailableTarget(.listEditorPrivacy)
+        case .listEditorCollaborators where !canEditCollaborators:
+            walkthroughs.recoverUnavailableTarget(.listEditorCollaborators)
+        default:
+            break
+        }
+    }
+
+    private func scrollToCurrentWalkthroughAction() {
+        switch walkthroughs.currentStep?.target {
+        case .listEditorTitle:
+            walkthroughScrollPosition = ListEditorWalkthroughAnchor.title
+        case .listEditorPrivacy:
+            focusedField = nil
+            walkthroughScrollPosition = ListEditorWalkthroughAnchor.privacy
+        case .listEditorCollaborators:
+            focusedField = nil
+            walkthroughScrollPosition = ListEditorWalkthroughAnchor.collaborators
+        default:
+            break
+        }
     }
 
     private func avatarURL(for collaborator: ListCollaboratorMock) -> String? {
@@ -3874,6 +3987,16 @@ private struct ListEditorSheet: View {
             profile.id == collaborator.id || profile.handle == collaborator.handle
         }?.avatarURL
     }
+}
+
+private enum ListEditorFocus: Hashable {
+    case title
+}
+
+private enum ListEditorWalkthroughAnchor {
+    static let title = "listEditor.title"
+    static let privacy = "listEditor.privacy"
+    static let collaborators = "listEditor.collaborators"
 }
 
 private struct ListDestructiveButton: View {

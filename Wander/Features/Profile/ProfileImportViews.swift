@@ -114,6 +114,8 @@ struct PlaceImportHubScreen: View {
 
                         TextEditor(text: $input)
                             .focused($isInputFocused)
+                            .accessibilityLabel("Places and links")
+                            .accessibilityIdentifier("import.input")
                             .font(.system(size: 15, weight: .medium))
                             .scrollContentBackground(.hidden)
                             .padding(WanderTheme.spacing2)
@@ -151,6 +153,7 @@ struct PlaceImportHubScreen: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canStart || isStarting)
+                .accessibilityIdentifier("import.start")
 
                 Button {
                     openURL(ImportHelpDestination.url)
@@ -378,7 +381,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
         case .quickAdd:
             heading(
                 title: "Ready to add",
-                subtitle: "Keep it checked, then choose Wanna or Been. Details are optional."
+                subtitle: "Keep it checked, then choose Check In or Wanna. Details are optional."
             )
             if let item = scopedItems.first {
                 adaptiveCard(item, prominent: true)
@@ -394,14 +397,14 @@ struct PlaceImportAdaptiveReviewScreen: View {
         case .compact:
             heading(
                 title: "Review \(scopedItems.count) places",
-                subtitle: "Uncheck anything you don’t want. Choose Wanna or Been on each place."
+                subtitle: "Uncheck anything you don’t want. Choose Check In or Wanna on each place."
             )
             batchControls
             itemStack
         case .batch:
             heading(
                 title: "Ready to import \(scopedItems.count) places",
-                subtitle: "Check the places you want, then set each one to Wanna or Been."
+                subtitle: "Check the places you want, then set each one to Check In or Wanna."
             )
             batchControls
             itemStack
@@ -604,7 +607,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         .font(WanderTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
                     Label(
-                        existing?.userPlace.status == .been ? "Already Been" : "Already in Wanna",
+                        existing?.userPlace.status == .been ? "Already checked in" : "Already in Wanna",
                         systemImage: "checkmark.seal.fill"
                     )
                     .font(WanderTypography.metadata)
@@ -938,7 +941,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
     private var importStatusOptions: [WanderSegmentOption] {
         [
             WanderSegmentOption(id: PlaceStatus.wannaGo.rawValue, title: "Wanna"),
-            WanderSegmentOption(id: PlaceStatus.been.rawValue, title: "Been")
+            WanderSegmentOption(id: PlaceStatus.been.rawValue, title: "Check In")
         ]
     }
 
