@@ -285,6 +285,27 @@ final class PlaceExternalLinksTests: XCTestCase {
         XCTAssertEqual(reserveAmerica.url.host, "www.reserveamerica.com")
     }
 
+    func testReservationActionAcceptsDirectStateReservationProvidersOutsideCalifornia() throws {
+        let providerURLs = [
+            "https://www.midnrreservations.com/FacilityDetails.aspx?facid=93",
+            "https://reserve.southcarolinaparks.com/hunting-island/camping/",
+            "https://reservevaparks.com/web/",
+            "https://campsd.com/campground/123",
+            "https://recreation.exploremoreil.com/location/244",
+            "https://tsp.itinio.com/parks/fall-creek-falls",
+            "https://camping.nj.gov/campground/123"
+        ]
+
+        for urlString in providerURLs {
+            let action = try XCTUnwrap(
+                PlaceExternalLinks.reservationAction(url: URL(string: urlString)),
+                "Expected a direct reservation action for \(urlString)"
+            )
+            XCTAssertEqual(action.kind, .reserve)
+            XCTAssertEqual(action.title, "Reservation")
+        }
+    }
+
     func testReservationActionRejectsGenericNatureSearchPages() {
         XCTAssertNil(
             PlaceExternalLinks.reservationAction(
@@ -397,6 +418,26 @@ final class PlaceExternalLinksTests: XCTestCase {
         XCTAssertNil(action)
     }
 
+    func testReservationDiscoveryUsesVerifiedTennesseeFallbackWhenOfficialSiteBlocksRequests() async throws {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://tnstateparks.com/parks/fall-creek-falls",
+            placeName: "Fall Creek Falls State Park",
+            locality: "Spencer",
+            region: "TN",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: { _ in
+                XCTFail("A verified park fallback should not need the blocked official website")
+                throw URLError(.badServerResponse)
+            }
+        )
+
+        XCTAssertEqual(
+            action?.url.absoluteString,
+            "https://tsp.itinio.com/fall-creek-falls/campsites"
+        )
+    }
+
     func testReservationDiscoveryFindsRecreationGovCampgroundFromOfficialParkWebsite() async throws {
         let html = #"<a href="https://www.recreation.gov/camping/campgrounds/234015">Reserve a campsite</a>"#
 
@@ -455,12 +496,76 @@ final class PlaceExternalLinksTests: XCTestCase {
         XCTAssertEqual(action?.url.absoluteString, "https://www.recreation.gov/")
     }
 
+    func testNatureDiscoveryUsesTrustedStatePortalRootFromOfficialPark() async throws {
+        let html = #"<a href="https://CampWithME.com/">Reserve a campsite</a>"#
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://www.maine.gov/example-state-park",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertEqual(action?.url.absoluteString, "https://CampWithME.com/")
+    }
+
+    func testNatureDiscoveryAcceptsTrustedStatePortalAsMapKitWebsite() async throws {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://camping.nj.gov/",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: { _ in
+                XCTFail("A trusted state reservation portal should not need a website request")
+                throw URLError(.badURL)
+            }
+        )
+
+        XCTAssertEqual(action?.url.absoluteString, "https://camping.nj.gov/")
+    }
+
+    func testRestaurantDoesNotUseTrustedStatePortalRootAsReservation() async {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://camping.nj.gov/",
+            pageLoader: { request in
+                (Data(), request.url)
+            }
+        )
+
+        XCTAssertNil(action)
+    }
+
+    func testStateReservationSearchPageIsNotAcceptedAsDirectAction() {
+        XCTAssertNil(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://camping.nj.gov/search?query=Liberty")
+            )
+        )
+    }
+
     func testNatureDiscoveryDoesNotTreatStaticAssetsAsReservationPages() async {
         let html = #"<a href="/assets/icons.svg#campground">Campground icon</a>"#
 
         let action = await PlaceExternalLinks.discoverReservationAction(
             actionLinksJSON: nil,
             websiteURLString: "https://www.nps.gov/example/campground",
+            allowsOfficialReservationPageFallback: true,
+            pageLoader: { request in
+                (Data(html.utf8), request.url)
+            }
+        )
+
+        XCTAssertNil(action)
+    }
+
+    func testNatureDiscoveryDoesNotTreatNaturePreserveAsReservationPage() async {
+        let html = #"<a href="/parks/adams-homestead-and-nature-preserve">Related park</a>"#
+
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://parks.example.gov/custer-state-park",
             allowsOfficialReservationPageFallback: true,
             pageLoader: { request in
                 (Data(html.utf8), request.url)

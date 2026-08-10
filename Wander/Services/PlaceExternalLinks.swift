@@ -171,6 +171,10 @@ enum PlaceExternalLinks {
         if let directAction = reservationAction(url: websiteURL) {
             return directAction
         }
+        if allowsOfficialReservationPageFallback,
+           let portalAction = natureReservationPortalAction(url: websiteURL) {
+            return portalAction
+        }
 
         let loader = pageLoader ?? loadReservationPage
         guard let homePage = try? await loader(reservationRequest(for: websiteURL)) else {
@@ -179,6 +183,10 @@ enum PlaceExternalLinks {
         let homePageURL = homePage.1 ?? websiteURL
         if let redirectedAction = reservationAction(url: homePageURL) {
             return redirectedAction
+        }
+        if allowsOfficialReservationPageFallback,
+           let portalAction = natureReservationPortalAction(url: homePageURL) {
+            return portalAction
         }
 
         let homeHTML = decodedHTML(from: homePage.0)
@@ -514,6 +522,11 @@ enum PlaceExternalLinks {
             names: ["convict lake campground"],
             regions: ["ca", "california"],
             urlString: "https://www.recreation.gov/camping/campgrounds/234311"
+        ),
+        CuratedReservationLink(
+            names: ["fall creek falls state park"],
+            regions: ["tn", "tennessee"],
+            urlString: "https://tsp.itinio.com/fall-creek-falls/campsites"
         )
     ]
 
@@ -537,15 +550,20 @@ enum PlaceExternalLinks {
         relativeTo baseURL: URL
     ) -> PlaceExternalAction? {
         for url in linkedURLs(in: html, relativeTo: baseURL) {
-            guard let secureURL = secureNatureReservationPortalURL(from: url) else { continue }
-            return PlaceExternalAction(
-                kind: .reserve,
-                title: "Reservation",
-                systemImage: "calendar",
-                url: secureURL
-            )
+            guard let action = natureReservationPortalAction(url: url) else { continue }
+            return action
         }
         return nil
+    }
+
+    private static func natureReservationPortalAction(url: URL) -> PlaceExternalAction? {
+        guard let secureURL = secureNatureReservationPortalURL(from: url) else { return nil }
+        return PlaceExternalAction(
+            kind: .reserve,
+            title: "Reservation",
+            systemImage: "calendar",
+            url: secureURL
+        )
     }
 
     private static func linkedURLs(in html: String, relativeTo baseURL: URL) -> [URL] {
@@ -640,11 +658,15 @@ enum PlaceExternalLinks {
     }
 
     private static func containsReservationLanguage(_ value: String, includeNatureTerms: Bool) -> Bool {
-        var terms = ["reservation", "reserve", "booking", "book-a-table", "bookatable", "book-now"]
+        var terms = ["reservation", "booking", "book-a-table", "bookatable", "book-now"]
         if includeNatureTerms {
             terms.append(contentsOf: ["camping", "campground", "permit", "timed-entry", "tickets"])
         }
         return terms.contains { value.contains($0) }
+            || value.range(
+                of: #"\breserve\b"#,
+                options: [.regularExpression, .caseInsensitive]
+            ) != nil
     }
 
     private static func isDirectReservationProviderURL(_ url: URL) -> Bool {
@@ -758,16 +780,16 @@ enum PlaceExternalLinks {
                 .contains { route.contains($0) }
         }
 
-        let stateReservationDomains = [
-            "camping.hawaii.gov",
-            "reserve.floridastateparks.org",
-            "reservations.gooutdoorsflorida.com"
-        ]
-        guard stateReservationDomains.contains(where: { matches(host: host, domain: $0) }) else {
+        guard dedicatedStateReservationProviderDomains.contains(where: {
+            matches(host: host, domain: $0)
+        }) else {
             return false
         }
         let route = "\(path) \(fragment) \(query)"
-        return !route.trimmingCharacters(in: .whitespaces).isEmpty
+        let hasSpecificRoute = (!path.isEmpty && path != "/")
+            || !fragment.isEmpty
+            || !query.isEmpty
+        return hasSpecificRoute
             && !route.contains("search")
     }
 
@@ -810,15 +832,7 @@ enum PlaceExternalLinks {
     }
 
     private static func isNatureReservationProviderHost(_ host: String) -> Bool {
-        [
-            "recreation.gov",
-            "reserveamerica.com",
-            "reservecalifornia.com",
-            "goingtocamp.com",
-            "camping.hawaii.gov",
-            "reserve.floridastateparks.org",
-            "reservations.gooutdoorsflorida.com"
-        ].contains(where: { matches(host: host, domain: $0) })
+        natureReservationProviderDomains.contains(where: { matches(host: host, domain: $0) })
     }
 
     private static func secureReservationProviderURL(from url: URL) -> URL? {
@@ -854,16 +868,32 @@ enum PlaceExternalLinks {
             "opentable.ae",
             "opentable.co.th",
             "opentable.com.mx",
-            "opentable.com.tw",
-            "recreation.gov",
-            "reserveamerica.com",
-            "reservecalifornia.com",
-            "goingtocamp.com",
-            "camping.hawaii.gov",
-            "reserve.floridastateparks.org",
-            "reservations.gooutdoorsflorida.com"
+            "opentable.com.tw"
         ].contains(where: { matches(host: host, domain: $0) })
+            || isNatureReservationProviderHost(host)
     }
+
+    private static let natureReservationProviderDomains = [
+        "recreation.gov",
+        "reserveamerica.com",
+        "reservecalifornia.com",
+        "goingtocamp.com"
+    ] + dedicatedStateReservationProviderDomains
+
+    private static let dedicatedStateReservationProviderDomains = [
+        "camping.hawaii.gov",
+        "camping.nj.gov",
+        "campsd.com",
+        "campwithme.com",
+        "midnrreservations.com",
+        "recreation.exploremoreil.com",
+        "reserve.floridastateparks.org",
+        "reserve.southcarolinaparks.com",
+        "reservations.gooutdoorsflorida.com",
+        "reservevaparks.com",
+        "tsp.itinio.com",
+        "tspg.itinio.com"
+    ]
 
     private static func matches(host: String, domain: String) -> Bool {
         host == domain || host.hasSuffix(".\(domain)")
