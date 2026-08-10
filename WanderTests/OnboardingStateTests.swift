@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 @testable import Wander
 
@@ -50,6 +51,32 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(
             AppEntryStateResolver.signedInState(session: session, localState: local, remoteProfile: nil),
             .onboarding(session: session, step: .contacts)
+        )
+    }
+
+    func testInteractiveWalkthroughRootOnlyFollowsCompletedAccountOnboarding() {
+        let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
+
+        XCTAssertEqual(
+            AppEntryStateResolver.signedInState(
+                session: session,
+                localState: .fresh,
+                remoteProfile: nil
+            ),
+            .onboarding(session: session, step: .identity)
+        )
+
+        XCTAssertEqual(
+            AppEntryStateResolver.signedInState(
+                session: session,
+                localState: OnboardingLocalState(
+                    nextStep: .notifications,
+                    isComplete: true,
+                    needsServerCompletion: false
+                ),
+                remoteProfile: nil
+            ),
+            .ready(session: session)
         )
     }
 
@@ -133,6 +160,63 @@ final class OnboardingStateTests: XCTestCase {
         provider.resumeRefresh()
         await refreshTask.value
         XCTAssertEqual(coordinator.state, .ready(session: session))
+    }
+
+    func testLocationPermissionPolicySkipsAlreadyAuthorizedUsers() {
+        XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.action(for: .authorizedWhenInUse),
+            .skip
+        )
+        XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.action(for: .authorizedAlways),
+            .skip
+        )
+    }
+
+    func testLocationPermissionPolicyKeepsDeniedAndRestrictedActionsUseful() {
+        XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.action(for: .notDetermined),
+            .request
+        )
+        XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.action(for: .denied),
+            .openSettings
+        )
+        XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.primaryTitle(for: .denied),
+            "Open Settings"
+        )
+        XCTAssertEqual(
+            OnboardingLocationPermissionPolicy.action(for: .restricted),
+            .continueWithoutAccess
+        )
+    }
+
+    func testApprovedLocationValueCopyIsStable() {
+        XCTAssertEqual(OnboardingLocationContent.eyebrow, "AROUND YOU")
+        XCTAssertEqual(OnboardingLocationContent.title, "Find the good stuff nearby")
+        XCTAssertEqual(
+            OnboardingLocationContent.privacyMessage,
+            "Your location is never shown to friends."
+        )
+        XCTAssertEqual(OnboardingLocationContent.selectedPlaceName, "Circuit Coffee")
+    }
+
+    func testLocationPreviewUsesNativeMapPinsAndSelectedPlaceCard() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Onboarding/OnboardingLocationMapPreview.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("Map(position: $position"))
+        XCTAssertTrue(source.contains("OnboardingLocationMapPin(pin: pin)"))
+        XCTAssertTrue(source.contains("OnboardingLocationSelectedPlaceCard()"))
+        XCTAssertTrue(source.contains("isSelected: true"))
     }
 }
 

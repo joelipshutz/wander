@@ -5,6 +5,7 @@ struct FeedScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var isShowingSearch = ProcessInfo.processInfo.arguments.contains("-WanderOpenDiscoverSearch")
     @State private var selectedProfile: FeedProfileRoute?
     @State private var selectedPlace: VisiblePlace?
@@ -33,6 +34,7 @@ struct FeedScreen: View {
             VStack(spacing: 0) {
                 HStack(spacing: WanderTheme.spacing2) {
                     FeedSurfaceTabs(selectedSurface: $selectedSurface)
+                    .walkthroughTarget(.feedSurfaceSwitch)
 
                     WanderGlassActionButton(
                         systemImage: "plus",
@@ -63,6 +65,7 @@ struct FeedScreen: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(walkthroughs)
             }
             .fullScreenCover(item: $selectedProfile) { route in
                 ProfileDetailView(profileID: route.id)
@@ -89,6 +92,14 @@ struct FeedScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
+            .onChange(of: selectedSurface) { _, _ in
+                walkthroughs.perform(.feedSurfaceSwitch)
+            }
+            .onChange(of: isShowingSearch) { _, isShowing in
+                if !isShowing {
+                    walkthroughs.activate(.feed)
+                }
+            }
         }
     }
 
@@ -96,6 +107,7 @@ struct FeedScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 FeedSearchLauncher(placeholders: tickerSuggestions) {
+                    walkthroughs.activate(.feedSearch)
                     isShowingSearch = true
                 }
 
@@ -175,14 +187,17 @@ struct FeedScreen: View {
     }
 
     private func openProfile(_ profile: ProfileShell) {
+        walkthroughs.perform(.feedActivity)
         selectedProfile = FeedProfileRoute(id: profile.id)
     }
 
     private func openPlace(_ visiblePlace: VisiblePlace) {
+        walkthroughs.perform(.feedActivity)
         selectedPlace = visiblePlace
     }
 
     private func openList(_ list: LocalPlaceList) {
+        walkthroughs.perform(.feedActivity)
         pushNotifications.route(to: .list(id: list.id))
     }
 
@@ -424,6 +439,7 @@ private struct FeedPeopleSurface: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let openProfile: (ProfileShell) -> Void
 
     @State private var memberQuery = ""
@@ -447,10 +463,13 @@ private struct FeedPeopleSurface: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 FeedPeopleSearchField(text: $memberQuery)
                     .focused($searchFieldFocused)
+                    .walkthroughTarget(.feedPeopleSearch)
 
                 InviteEntryPointButton(surface: .feedPeople) {
+                    walkthroughs.perform(.feedInvite)
                     isPresentingContactInvites = true
                 }
+                .walkthroughTarget(.feedInvite)
 
                 if isMemberSearchActive {
                     memberSearchResultsSection
@@ -473,6 +492,16 @@ private struct FeedPeopleSurface: View {
         }
         .task(id: memberQuery) {
             await refreshMembers(query: memberQuery, debounce: true)
+        }
+        .onChange(of: searchFieldFocused) { _, isFocused in
+            if isFocused {
+                walkthroughs.perform(.feedPeopleSearch)
+            }
+        }
+        .onChange(of: walkthroughs.currentStep?.target) { _, target in
+            if target == .feedInvite {
+                searchFieldFocused = false
+            }
         }
         .sheet(isPresented: $isPresentingContactInvites) {
             ContactInviteSheet(
@@ -1027,6 +1056,9 @@ private struct FeedActivityList: View {
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList
+                )
+                .walkthroughTarget(
+                    event.id == activity.first?.id ? .feedActivity : nil
                 )
             }
         }

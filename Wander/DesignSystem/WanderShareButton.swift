@@ -264,10 +264,16 @@ enum WanderShareAttachmentStore {
 
 struct WanderShareButton<Label: View>: View {
     let content: WanderShareContent
+    private let onTap: () -> Void
     private let label: () -> Label
 
-    init(content: WanderShareContent, @ViewBuilder label: @escaping () -> Label) {
+    init(
+        content: WanderShareContent,
+        onTap: @escaping () -> Void = {},
+        @ViewBuilder label: @escaping () -> Label
+    ) {
         self.content = content
+        self.onTap = onTap
         self.label = label
     }
 
@@ -280,6 +286,7 @@ struct WanderShareButton<Label: View>: View {
                 message: Text(content.message),
                 label: label
             )
+            .simultaneousGesture(TapGesture().onEnded { _ in onTap() })
         } else {
             ShareLink(
                 items: content.items,
@@ -287,6 +294,7 @@ struct WanderShareButton<Label: View>: View {
                 message: Text(content.message),
                 label: label
             )
+            .simultaneousGesture(TapGesture().onEnded { _ in onTap() })
         }
     }
 }
