@@ -28548,3 +28548,53 @@ Transition outcome:
   audits, Linear issue/relation/comment verification, and
   `scripts/install-agent-skills.sh --check` all passed. No `xcodebuild` run was
   needed because the change does not touch app/runtime code.
+## 2026-08-10 15:39 PDT - Codex - REC-249 Map Source Filters
+
+Agent: Codex
+Branch: `codex/rec-249-map-filters`
+Worktree: `/private/tmp/recme-rec249-map-filters`
+Linear: `REC-249` (`In Progress`)
+Mission Control: `e41e94ac-9f64-4007-b1b6-86f3c8df5376`
+
+Goal: replace the Map's current source/status chip row with mutually exclusive
+`Featured` and `Friends` source pills plus an anchored `More` dropdown. The
+dropdown remains identical for both sources and exposes Category, People, and
+Status with an explicit `All` option in every section. More selections persist
+when the source changes and narrow the active source using OR within a section
+and AND across sections. Do not change pin rendering or iconography.
+
+Starting status:
+
+- Clean isolated worktree from exact `origin/main` commit `eb34f54e`; Joe's
+  `joe/phone-build-latest` checkout is 149 commits behind with an untracked
+  `tmp/` directory and remains untouched.
+- Existing related issue `REC-3` was already Done for the older social-person
+  dropdown. Created REC-249 for this replacement contract and linked REC-3.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused Map filter
+  tests, `docs/decisions.md`, and this log. `MapScreen.swift` is a high-conflict
+  file, so all work is isolated here.
+
+Outcome and validation:
+
+- Replaced the prior independent owner/status chips with one required source:
+  `Featured` by default or `Friends`, plus one shared anchored `More` popover.
+- More includes explicit `All` controls for Category, People, and Status. The
+  same live People list and refinements stay selected when the source changes;
+  values OR within Category/People and every active section ANDs with the
+  selected source. Empty combinations remain empty and expose a reset action.
+- Featured projects the existing followed-feed curation; Friends projects
+  mutual-friend saves. Notification and walkthrough routes can temporarily
+  surface their exact destination without weakening the normal source contract.
+- Existing `MapPlaceMarker` / `WanderMapPin` rendering was not changed.
+- Focused filter/navigation tests: 7 passed, 0 failed.
+- Full `WanderTests` suite: 993 passed, 0 failed. Result:
+  `/private/tmp/DerivedData-rec249-focused/Logs/Test/Test-Wander-2026.08.10_15-59-15--0700.xcresult`.
+- Generic iOS Simulator build passed. Existing `WanderSupabaseClient` actor
+  warnings and traditional-headermap warnings remain unrelated.
+- Visual QA covered iPhone 16 Plus and iPhone 16e on iOS 18.6. The popover is
+  anchored to More, scrolls within its compact card, and keeps the source row
+  visible. Captures: `/private/tmp/rec249-iphone16plus-more.png` and
+  `/private/tmp/rec249-iphone16e-more.png`; the compact capture also contains
+  the simulator's unrelated first-run location prompt.
+- No schema, auth, signing, project membership, build-number, archive, upload,
+  TestFlight, or tester-Slack action was taken.

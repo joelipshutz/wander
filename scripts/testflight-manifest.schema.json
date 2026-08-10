@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getrec.me/schemas/testflight-manifest.schema.json",
+  "title": "rec.me TestFlight release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "baselineTag",
+    "baselineSha",
+    "candidateSha",
+    "entries"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "baselineTag": {
+      "type": "string",
+      "pattern": "^testflight/build-[0-9]+$"
+    },
+    "baselineSha": {
+      "$ref": "#/$defs/sha"
+    },
+    "candidateSha": {
+      "$ref": "#/$defs/sha"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/shippedEntry"
+          },
+          {
+            "$ref": "#/$defs/nonShippedEntry"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "baseEntry": {
+      "type": "object",
+      "required": ["commit", "pr", "disposition"],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/sha"
+        },
+        "pr": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "issue": {
+          "type": ["string", "null"],
+          "pattern": "^REC-[0-9]+$"
+        },
+        "disposition": {
+          "enum": ["ship", "exclude", "release-operation"]
+        }
+      }
+    },
+    "shippedEntry": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseEntry"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "pr",
+            "issue",
+            "disposition",
+            "testerFacingChange",
+            "whatToTest",
+            "releaseOperations",
+            "validation"
+          ],
+          "properties": {
+            "commit": {
+              "$ref": "#/$defs/sha"
+            },
+            "pr": {
+              "type": ["integer", "null"],
+              "minimum": 1
+            },
+            "issue": {
+              "type": "string",
+              "pattern": "^REC-[0-9]+$"
+            },
+            "disposition": {
+              "const": "ship"
+            },
+            "testerFacingChange": {
+              "type": "string",
+              "minLength": 1
+            },
+            "whatToTest": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "releaseOperations": {
+              "type": "string",
+              "minLength": 1
+            },
+            "validation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "knownLimitations": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "nonShippedEntry": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseEntry"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "pr", "disposition", "reason"],
+          "properties": {
+            "commit": {
+              "$ref": "#/$defs/sha"
+            },
+            "pr": {
+              "type": ["integer", "null"],
+              "minimum": 1
+            },
+            "issue": {
+              "type": ["string", "null"],
+              "pattern": "^REC-[0-9]+$"
+            },
+            "disposition": {
+              "enum": ["exclude", "release-operation"]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "releaseOperations": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}

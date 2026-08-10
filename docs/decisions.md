@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-05
+Last updated: 2026-08-10
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -9,6 +9,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Decision | Status | Notes |
 |---|---|---|
 | Map-first app | Locked | The map is the primary memory and discovery surface. |
+| Map source and refinement contract | Locked for REC-249 | Featured is the sole default source and Friends is its mutually exclusive alternative. More exposes the same Category, People, and Status refinements for either source, with an explicit All option in every section. Specific values OR within a section; source and non-All sections AND together. Switching source preserves More selections, refinements only narrow the source, and a zero-result combination stays empty rather than broadening or changing source. |
 | No manual lists | Locked | Lists were explicitly removed from product direction. |
 | Trusted people, not strangers | Locked | Discovery should come from people the user follows/knows. |
 | Cross-category places | Locked | Not restaurant-only; coffee, hikes, bars, parks, restaurants, etc. |
@@ -69,8 +70,8 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Decision | Status | Notes |
 |---|---|---|
 | Manual batched TestFlight releases | Locked | TestFlight remains frequent and manual, with no weekly or automatic cadence. Joe or Ryan explicitly triggers a release when enough finished features are grouped. The release packages an exact releasable `main` candidate and increments the build number once; merging alone never archives, uploads, attaches, or announces a build. |
-| Rolling `Next TestFlight` manifest | Locked | One open Linear issue titled `Next TestFlight` records each QA-relevant merge once, while implementation context is fresh: issue/PR/SHA, tester-facing summary, what to test, release operation or migration, and completed validation. It is a release manifest, not a second approval or product-triage queue. At release cutoff it becomes `TestFlight build <n>` and a fresh rolling issue opens for later merges. |
-| Releasable `main` and exact release candidates | Locked | Work merged to `main` is eligible for the next build unless disabled behind a feature flag. At an explicit release, mechanically reconcile the rolling manifest against the git range, land the build-number PR under a brief app-code merge hold, archive the exact candidate commit, and tag the completed build immutably as `testflight/build-<n>`. Do not re-triage accepted product work at release time. |
+| Rolling `Next TestFlight` manifest | Locked | One open GitHub issue titled `[machine] Next TestFlight manifest` is the machine release queue. Every PR declares `ship`, `exclude`, or `release-operation` in a validated hidden JSON payload; every push to `main` sweeps the complete pending Git range and records the exact commit, while a direct push or invalid payload becomes an `unclassified` blocker. The rolling Linear issue is a human status/relation mirror, not the uploader's data source. |
+| Releasable `main` and exact release candidates | Locked | Work merged to `main` is eligible for the next build unless disabled behind a feature flag. At an explicit release, `scripts/testflight-manifest.mjs snapshot` refreshes the same machine issue and proves that every first-parent commit since the prior immutable tag is classified exactly once. It runs before the build-number bump and again against the exact candidate, generating TestFlight, Slack, and Linear copy from the same snapshot. The uploader requires version-2 evidence and rechecks the live issue hash; successful release finalization advances its immutable tag baseline while preserving later merges. |
 | Linear completion after merge | Locked | Product issues move to `Done` once their implementation is merged to `main` and required validation passes. Waiting for a manual TestFlight batch does not keep them in `In Review`; TestFlight-specific integration QA lives on the release issue, and any discovered regression reopens or creates a focused bug. |
 | Dedicated Slack release channel | Locked | Post one top-level announcement for each TestFlight build in `#release-notes` (`C0BM5CY0GQY`). Keep `#testflight-feedback` (`C0BAA7DG2AC`) for bug reports, screenshots, repro steps, and discussion. Do not duplicate routine release notes there or in `#all-recme` unless Joe explicitly asks. |
 | Agent work log retirement | Locked | `docs/agent-log.md` is frozen historical context. Linear and PRs own current coordination and handoff; git and immutable TestFlight tags identify shipped code; App Store Connect and Slack own release/tester state. Do not create docs-only PRs that merely restate a merge or release already represented in those systems. |
@@ -88,6 +89,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | SF Symbols/native controls | Locked | Use native symbols instead of mock emoji chrome for structural UI. |
 | iPhone-first visual QA | Locked | Verify real simulator screenshots before calling UI accepted. |
 | Map filter selected state | Locked | Inactive chips keep the bone/sand fill; active chips add a terracotta ring and terracotta icon, with no checkmark. |
+| Map More presentation | Locked for REC-249 | More opens as a compact popover anchored to its pill, not a bottom sheet. The pin renderer and pin iconography remain unchanged by this filter release. |
 | Map place labels | M2 selected/simple labels | Show place labels on Wander pins in the local prototype, with selected/tapped state made visually explicit. Revisit clutter rules later with real density. |
 | Social proof copy | Locked | Place sheets should show who saved a place with avatars/facepile, not "`Name`'s tip" copy. |
 | Rich place profile data | Locked v0.1, revised 2026-07-12 | Expanded map place profiles use only data Wander actually has: place name/category/address/locality/coordinates, save status/visibility, notes, flexible answer attributes, social proof, friend saves, share, keyless map directions, MapKit/directly captured website or phone data, and on-demand Google Places representative photos under the REC-82 attribution/no-cache contract. Do not show empty hours/price/cuisine fields. Price can appear only as a user answer attribute. "Order" and "Reserve" are allowed only when backed by a direct provider/place URL; non-authoritative provider searches must be labeled as search/find actions. No other paid place metadata is part of this v0.1 surface. |

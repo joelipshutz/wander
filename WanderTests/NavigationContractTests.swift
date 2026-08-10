@@ -206,8 +206,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
         XCTAssertFalse(root.contains("Label(WanderTab.add.title"))
         XCTAssertTrue(map.contains("accessibilityIdentifier: \"map.headerAdd\""))
+        XCTAssertTrue(map.contains("struct MapSourceFilterChip"))
         XCTAssertTrue(map.contains("tone: isSelected ? .selected : .neutral"))
-        XCTAssertTrue(map.contains("filter.trimColor(isSelected: isSelected)"))
+        XCTAssertTrue(map.contains("tone: isActive ? .selected : .neutral"))
 
         XCTAssertFalse(feed.contains("WanderGlassHeader("))
         XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))
@@ -2196,17 +2197,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander", "-WanderMapSheetExpanded"]))
         XCTAssertFalse(MapScreen.resolvedInitialPlaceProfilePresentation(from: ["Wander"]))
         XCTAssertEqual(
-            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "diary"]),
-            [.you, .been]
+            MapScreen.resolvedInitialMapFilterState(from: ["Wander"]).source,
+            .featured
         )
         XCTAssertEqual(
-            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "friends"]),
-            [.social, .been, .wanna]
+            MapScreen.resolvedInitialMapFilterState(from: ["Wander", "-WanderMapCaptureMode", "friends"]).source,
+            .friends
         )
         XCTAssertEqual(
-            MapScreen.resolvedInitialMapFilters(from: ["Wander", "-WanderMapCaptureMode", "trusted"]),
-            [.social, .been]
+            MapScreen.resolvedInitialMapFilterState(from: ["Wander", "-WanderMapCaptureMode", "trusted"]).source,
+            .featured
         )
+        XCTAssertTrue(
+            MapScreen.resolvedInitialMoreFiltersPresentation(from: ["Wander", "-WanderMapMoreFiltersOpen"])
+        )
+        XCTAssertFalse(MapScreen.resolvedInitialMoreFiltersPresentation(from: ["Wander"]))
     }
 
     @MainActor
@@ -2444,6 +2449,41 @@ final class NavigationContractTests: XCTestCase {
             PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 34),
             66
         )
+    }
+
+    func testPlaceProfileActionsUseAnEqualWidthSingleLineHorizontalRail() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let actionRow = try sourceSection(
+            placeProfile,
+            after: "private var actionRow: some View {",
+            before: "private var primaryPlaceAction: some View {"
+        )
+
+        XCTAssertTrue(actionRow.contains("ScrollView(.horizontal, showsIndicators: false)"))
+        XCTAssertTrue(actionRow.contains("HStack(spacing: WanderTheme.spacing1)"))
+        XCTAssertTrue(actionRow.contains(".frame(width: 136, height: 48)"))
+        XCTAssertTrue(actionRow.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(actionRow.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
+        XCTAssertFalse(actionRow.contains("VStack("))
+        XCTAssertFalse(actionRow.contains("minimumScaleFactor"))
+    }
+
+    func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "private struct PlacePhotoGalleryViewerRoute: Identifiable {"
+        )
+
+        XCTAssertTrue(fullView.contains("@State private var discoveredReservationAction: PlaceExternalAction?"))
+        XCTAssertTrue(fullView.contains(".task(id: reservationLookupKey)"))
+        XCTAssertTrue(fullView.contains("PlaceExternalLinks.discoverReservationAction("))
+        XCTAssertTrue(fullView.contains("reservationAction: discoveredReservationAction"))
     }
 
     func testRestaurantPlaceTypeUsesCuisineInsteadOfSubcategory() throws {
