@@ -75,12 +75,21 @@ final class MapFilterSelectionTests: XCTestCase {
     }
 
     func testAllInEveryMoreSectionAddsNoRefinement() {
-        let filters = MapFilterSelection.placeFilters(for: MapFilterState())
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let stranger = profile(id: "user_stranger")
+        let ownCheckIn = visiblePlace(owner: joe, name: "Joe Been", status: .been)
+        let followedWanna = visiblePlace(owner: ben, name: "Ben Wanna", longitude: -118.24, status: .wannaGo)
+        let strangerCheckIn = visiblePlace(owner: stranger, name: "Stranger Been", longitude: -118.23, status: .been)
 
-        XCTAssertTrue(filters.ownerScopes.isEmpty)
-        XCTAssertTrue(filters.statuses.isEmpty)
-        XCTAssertTrue(filters.categories.isEmpty)
-        XCTAssertTrue(filters.ownerIDs.isEmpty)
+        let visible = MapFilterSelection.friendsPlaces(
+            from: [strangerCheckIn, followedWanna, ownCheckIn],
+            currentUserID: joe.id,
+            followedOwnerIDs: [ben.id],
+            refinements: MapMoreFilterSelection()
+        )
+
+        XCTAssertEqual(Set(visible.map(\.id)), Set([ownCheckIn.id, followedWanna.id]))
     }
 
     func testFriendsSourceAndMoreSelectionsCombineAsIntersections() {
@@ -92,12 +101,20 @@ final class MapFilterSelectionTests: XCTestCase {
                 status: .checkIns
             )
         )
-        let filters = MapFilterSelection.placeFilters(for: state)
+        let ben = profile(id: "user_ben")
+        let juana = profile(id: "user_juana")
+        let benCoffee = visiblePlace(owner: ben, name: "Ben Coffee", status: .been)
+        let juanaCoffee = visiblePlace(owner: juana, name: "Juana Coffee", longitude: -118.24, status: .been)
+        let juanaWanna = visiblePlace(owner: juana, name: "Juana Wanna", longitude: -118.23, status: .wannaGo)
 
-        XCTAssertEqual(filters.ownerScopes, Set(["friends"]))
-        XCTAssertEqual(filters.statuses, Set([.been]))
-        XCTAssertEqual(filters.categories, Set([WanderPlaceCategory.coffeeTeaSweets]))
-        XCTAssertEqual(filters.ownerIDs, Set(["user_ben", "user_juana"]))
+        let visible = MapFilterSelection.friendsPlaces(
+            from: [juanaWanna, juanaCoffee, benCoffee],
+            currentUserID: "user_joe",
+            followedOwnerIDs: [ben.id, juana.id],
+            refinements: state.more
+        )
+
+        XCTAssertEqual(Set(visible.map(\.id)), Set([benCoffee.id, juanaCoffee.id]))
     }
 
     func testSpecificMoreOptionsAreOrWithinASectionAndAndAcrossSections() {
@@ -152,6 +169,47 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(state.more.people, Set(["user_ben"]))
         XCTAssertEqual(state.more.status, .checkIns)
     }
+
+    private func profile(id: String) -> LocalProfile {
+        LocalProfile(
+            localID: "local_\(id)",
+            serverID: id,
+            handle: id,
+            displayName: id,
+            syncState: .synced
+        )
+    }
+
+    private func visiblePlace(
+        owner: LocalProfile,
+        name: String,
+        longitude: Double = -118.25,
+        status: PlaceStatus
+    ) -> VisiblePlace {
+        let providerID = name.lowercased().replacingOccurrences(of: " ", with: "_")
+        let place = LocalPlace(
+            localID: "local_place_\(owner.id)_\(providerID)",
+            serverID: "place_\(providerID)",
+            canonicalName: name,
+            category: WanderPlaceCategory.coffeeTeaSweets,
+            latitude: 34.05,
+            longitude: longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: providerID,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_\(owner.id)_\(providerID)",
+            serverID: "up_\(owner.id)_\(providerID)",
+            userID: owner.id,
+            placeID: place.id,
+            status: status,
+            visibility: .followers,
+            sourceType: "test",
+            syncState: .synced
+        )
+        return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
+    }
 }
 
 final class MapFeaturedSelectionTests: XCTestCase {
@@ -160,7 +218,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
         span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
     )
 
-    func testFeaturedUsesFollowedCommunityCheckInsOnly() {
+    func testFeaturedUsesOwnAndFollowedCheckInsOnly() {
         let joe = profile(id: "user_joe")
         let ben = profile(id: "user_ben")
         let stranger = profile(id: "user_stranger")
@@ -184,7 +242,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
             refinements: MapMoreFilterSelection()
         )
 
-        XCTAssertEqual(featured.map(\.id), [benCheckIn.id])
+        XCTAssertEqual(Set(featured.map(\.id)), Set([ownCheckIn.id, benCheckIn.id]))
         XCTAssertTrue(
             MapFeaturedSelection.places(
                 from: [benCheckIn, benWanna],
@@ -350,6 +408,32 @@ final class MapFeaturedSelectionTests: XCTestCase {
             syncState: .synced
         )
         return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
+    }
+}
+
+final class MapSocialOwnerSelectionTests: XCTestCase {
+    func testPeopleOptionsPutYouFirstThenEveryFollowedProfileAlphabetically() {
+        let joe = profile(id: "user_joe", displayName: "Joe")
+        let juana = profile(id: "user_juana", displayName: "Juana")
+        let ben = profile(id: "user_ben", displayName: "Ben")
+
+        let options = MapSocialOwnerSelection.options(
+            currentUser: joe,
+            following: [juana, joe, ben, ben]
+        )
+
+        XCTAssertEqual(options.map(\.id), [joe.id, ben.id, juana.id])
+        XCTAssertEqual(options.map(\.displayName), ["You", "Ben", "Juana"])
+    }
+
+    private func profile(id: String, displayName: String) -> LocalProfile {
+        LocalProfile(
+            localID: "local_\(id)",
+            serverID: id,
+            handle: id,
+            displayName: displayName,
+            syncState: .synced
+        )
     }
 }
 
