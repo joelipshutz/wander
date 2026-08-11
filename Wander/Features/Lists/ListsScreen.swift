@@ -846,7 +846,7 @@ private struct ListDetailScreen: View {
     @State private var autoSaveToastTask: Task<Void, Never>?
     @State private var isShowingLeaveConfirmation = false
     @State private var isLeavingList = false
-    @State private var leaveListErrorMessage: String?
+    @State private var isShowingLeaveError = false
 
     init(
         list: PlaceListMock,
@@ -1009,10 +1009,10 @@ private struct ListDetailScreen: View {
         } message: {
             Text("Are you sure? You’ll lose collaborator access. You may still see this list in Friends if the owner continues sharing it.")
         }
-        .alert("Couldn’t Leave List", isPresented: leaveListErrorBinding) {
+        .alert("Couldn't leave list", isPresented: $isShowingLeaveError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(leaveListErrorMessage ?? "Please try again.")
+            Text("Try again later")
         }
     }
 
@@ -1229,13 +1229,6 @@ private struct ListDetailScreen: View {
         sourceList.map(store.canLeave) ?? list.canLeave
     }
 
-    private var leaveListErrorBinding: Binding<Bool> {
-        Binding(
-            get: { leaveListErrorMessage != nil },
-            set: { if !$0 { leaveListErrorMessage = nil } }
-        )
-    }
-
     private var listShareContent: WanderShareContent? {
         WanderShareContent.list(
             serverID: sourceList?.serverID ?? list.sourceListID,
@@ -1276,7 +1269,7 @@ private struct ListDetailScreen: View {
             onListLeft(sourceList.id)
             dismiss()
         } else {
-            leaveListErrorMessage = store.lastRemoteError ?? "Please try again."
+            isShowingLeaveError = true
         }
     }
 

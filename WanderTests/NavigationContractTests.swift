@@ -2001,6 +2001,9 @@ final class NavigationContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(detailScreen.contains("sourceList.map(store.canLeave)"))
+        XCTAssertTrue(detailScreen.contains(".alert(\"Couldn't leave list\""))
+        XCTAssertTrue(detailScreen.contains("Text(\"Try again later\")"))
+        XCTAssertFalse(detailScreen.contains("store.lastRemoteError"))
     }
 
     func testListGridTopAlignsTilesWhileNamesGrowDownward() throws {
