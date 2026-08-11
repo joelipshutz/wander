@@ -188,6 +188,7 @@ struct ActivityEngagementActionRow: View {
 
 struct ActivityCommentsScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -276,31 +277,7 @@ struct ActivityCommentsScreen: View {
 
     private var activityHeader: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                WanderAvatar(
-                    initials: activityInitials(for: context.actor.displayName),
-                    avatarURL: context.actor.avatarURL,
-                    size: 48,
-                    color: WanderTheme.skyTint.color
-                )
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    (Text(context.actor.displayName).fontWeight(.black)
-                        + Text(" \(context.actionTitle) ")
-                        + Text(context.placeName).fontWeight(.black))
-                        .font(.system(size: 16))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(context.placeDetail)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-
-                    Text(FeedPresentation.timestampText(for: context.occurredAt))
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
-                }
-            }
+            activitySummary
 
             ActivityEngagementActionRow(
                 context: context,
@@ -318,6 +295,73 @@ struct ActivityCommentsScreen: View {
             castsShadow: false,
             borderWidth: 1.5
         )
+    }
+
+    @ViewBuilder
+    private var activitySummary: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                    activityAvatar
+                    activityCopy
+                }
+
+                if !context.media.isEmpty {
+                    HStack {
+                        Spacer(minLength: 0)
+                        ActivityCommentsMediaThumbnail(media: context.media)
+                    }
+                }
+            }
+        } else {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                activityAvatar
+                activityCopy
+
+                if !context.media.isEmpty {
+                    Spacer(minLength: WanderTheme.spacing1)
+                    ActivityCommentsMediaThumbnail(media: context.media)
+                }
+            }
+        }
+    }
+
+    private var activityAvatar: some View {
+        WanderAvatar(
+            initials: activityInitials(for: context.actor.displayName),
+            avatarURL: context.actor.avatarURL,
+            size: 48,
+            color: WanderTheme.skyTint.color
+        )
+    }
+
+    private var activityCopy: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            (Text(context.actor.displayName).fontWeight(.black)
+                + Text(" \(context.actionTitle) ")
+                + Text(context.placeName).fontWeight(.black))
+                .font(.system(size: 16))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(context.placeDetail)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            Text(FeedPresentation.timestampText(for: context.occurredAt))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WanderTheme.textFaint.color)
+
+            if let note = context.note {
+                Text("“\(note)”")
+                    .font(.system(size: 14, weight: .medium))
+                    .italic()
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Note: \(note)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var ticketAccent: Color {
@@ -407,6 +451,59 @@ struct ActivityCommentsScreen: View {
             }
             isPosting = false
             composerFocused = true
+        }
+    }
+}
+
+private struct ActivityCommentsMediaThumbnail: View {
+    let media: [ActivityEngagementMedia]
+    private let size: CGFloat = 76
+
+    var body: some View {
+        if let first = media.first {
+            ZStack(alignment: .bottomTrailing) {
+                LinearGradient(
+                    colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay {
+                    Image(systemName: "photo")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color.opacity(0.55))
+                }
+
+                if let localImage = VisitPhotoLocalFileStore.image(from: first.localAssetRef) {
+                    Image(uiImage: localImage)
+                        .resizable()
+                        .scaledToFill()
+                } else if let remoteURL = first.urlString.flatMap(URL.init(string:)) {
+                    AsyncImage(url: remoteURL) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        ProgressView()
+                            .tint(WanderTheme.terracotta.color)
+                    }
+                }
+
+                if media.count > 1 {
+                    Text("+\(media.count - 1)")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .frame(minHeight: 20)
+                        .background(Color.black.opacity(0.68))
+                        .clipShape(Capsule())
+                        .padding(4)
+                }
+            }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(first.accessibilityLabel)
+            .accessibilityValue(media.count == 1 ? "1 photo" : "\(media.count) photos")
         }
     }
 }

@@ -150,6 +150,75 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertTrue(list.shareMessage.contains("list activity"))
     }
 
+    func testCommentsContextPreservesNoteAndPhotosForEveryTicketKind() {
+        let actor = ProfileShell(
+            id: "user_friend",
+            handle: "friend",
+            displayName: "Judy",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let media = [
+            ActivityEngagementMedia(
+                id: "photo-1",
+                urlString: "https://example.com/one.jpg",
+                accessibilityLabel: "First activity photo"
+            ),
+            ActivityEngagementMedia(
+                id: "photo-2",
+                localAssetRef: "local_file:two.jpg",
+                accessibilityLabel: "Second activity photo"
+            ),
+        ]
+
+        for ticketKind in [FeedTicketKind.checkIn, .wanna, .list] {
+            let context = ActivityEngagementContext(
+                activityID: "activity-\(ticketKind)",
+                actor: actor,
+                placeName: "Ada Street",
+                placeServerID: nil,
+                placeDetail: "Restaurant · Chicago, IL",
+                ticketKind: ticketKind,
+                occurredAt: .now,
+                note: "  Found god.  ",
+                media: media
+            )
+
+            XCTAssertEqual(context.note, "Found god.")
+            XCTAssertEqual(context.media, media)
+
+            let coordinator = ActivityNavigationCoordinator()
+            coordinator.openComments(context: context, visiblePlace: nil)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.note, "Found god.")
+            XCTAssertEqual(coordinator.commentsRoute?.context?.media, media)
+        }
+    }
+
+    func testCommentsContextCollapsesMissingNoteAndPhotos() {
+        let context = ActivityEngagementContext(
+            activityID: "empty-content",
+            actor: ProfileShell(
+                id: "user_friend",
+                handle: "friend",
+                displayName: "Judy",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .follower
+            ),
+            placeName: "Ada Street",
+            placeServerID: nil,
+            placeDetail: "Restaurant · Chicago, IL",
+            ticketKind: .checkIn,
+            occurredAt: .now,
+            note: "  \n ",
+            media: []
+        )
+
+        XCTAssertNil(context.note)
+        XCTAssertTrue(context.media.isEmpty)
+    }
+
     func testActivityNavigationKeepsExactTicketIdentityUntilDismissal() {
         let coordinator = ActivityNavigationCoordinator()
         let activityID = "40000000-0000-0000-0000-000000000001"

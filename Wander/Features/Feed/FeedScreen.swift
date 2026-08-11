@@ -1453,7 +1453,15 @@ private extension FeedActivity {
             placeServerID: subjectServerID,
             placeDetail: detail,
             ticketKind: resolvedTicketKind,
-            occurredAt: occurredAt
+            occurredAt: occurredAt,
+            note: note,
+            media: media.map {
+                ActivityEngagementMedia(
+                    id: $0.id,
+                    urlString: $0.urlString,
+                    accessibilityLabel: $0.accessibilityLabel
+                )
+            }
         )
     }
 }
