@@ -848,4 +848,32 @@ final class OnboardingUITests: XCTestCase {
         waitForExpectations(timeout: 3)
         XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
     }
+
+    func testLoggedOutAuthMakesAppleThePrimaryAccountAction() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthUITest"]
+        app.launch()
+
+        let apple = app.buttons["auth.continueWithApple"]
+        let alternatives = app.buttons["auth.useOtherMethod"]
+        XCTAssertTrue(apple.waitForExistence(timeout: 4))
+        XCTAssertTrue(alternatives.exists)
+        XCTAssertTrue(apple.isHittable)
+        XCTAssertLessThan(apple.frame.minY, alternatives.frame.minY)
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let systemAlert = springboard.alerts.firstMatch
+        if systemAlert.waitForExistence(timeout: 2) {
+            let deny = systemAlert.buttons["Don’t Allow"]
+            if deny.exists {
+                deny.tap()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            }
+        }
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-259 Apple-first auth"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
 }
