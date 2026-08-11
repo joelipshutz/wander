@@ -1408,7 +1408,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("noteSection"))
         XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
         XCTAssertTrue(optionalDetails.contains("visibilitySection"))
-        XCTAssertTrue(optionalDetails.contains("note, tags & privacy"))
+        XCTAssertTrue(optionalDetails.contains("note, fit, tags & privacy"))
+        XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
         XCTAssertEqual(
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
@@ -2495,7 +2496,7 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
-    func testPlaceProfileActionsUseAnEqualWidthSingleLineHorizontalRail() throws {
+    func testPlaceProfileActionsKeepTheStandardRailAndExposeEveryWalkthroughAction() throws {
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
@@ -2506,12 +2507,15 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(actionRow.contains("ScrollView(.horizontal, showsIndicators: false)"))
-        XCTAssertTrue(actionRow.contains("HStack(spacing: WanderTheme.spacing1)"))
+        XCTAssertTrue(actionRow.contains("HStack(spacing: WanderTheme.spacing2)"))
         XCTAssertTrue(actionRow.contains(".frame(width: 136, height: 48)"))
         XCTAssertTrue(actionRow.contains(".wanderGlassCapsule()"))
         XCTAssertTrue(actionRow.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
-        XCTAssertFalse(actionRow.contains("VStack("))
-        XCTAssertFalse(actionRow.contains("minimumScaleFactor"))
+        XCTAssertTrue(actionRow.contains("walkthroughs.activeSurface == .placeDetail"))
+        XCTAssertTrue(actionRow.contains("walkthroughActionButton(item)"))
+        XCTAssertTrue(actionRow.contains(".frame(maxWidth: .infinity, minHeight: 56)"))
+        XCTAssertTrue(actionRow.contains("VStack(spacing: 3)"))
+        XCTAssertTrue(actionRow.contains("minimumScaleFactor(0.68)"))
     }
 
     func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {

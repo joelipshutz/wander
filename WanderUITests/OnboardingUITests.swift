@@ -243,7 +243,7 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
                 .waitForExistence(timeout: 4)
         )
-        XCTAssertTrue(app.buttons["Next"].isHittable)
+        XCTAssertTrue(app.buttons["Find my people"].isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-236 Feed contacts passive coach mark"
@@ -423,7 +423,7 @@ final class OnboardingUITests: XCTestCase {
         )
         app.buttons["Show more options"].tap()
 
-        for target in ["saveNote", "saveTags", "savePrivacy"] {
+        for target in ["saveNote", "saveQuestions", "saveTags", "savePrivacy"] {
             XCTAssertTrue(
                 app.descendants(matching: .any)["walkthrough.saveFlow.\(target)"]
                     .waitForExistence(timeout: 5),
@@ -476,6 +476,43 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
                 .waitForExistence(timeout: 6)
         )
+    }
+
+    func testLongAddResultsCanScrollFarEnoughToRevealTheWholeCoachCard() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["map.headerAdd"].waitForExistence(timeout: 5))
+        app.buttons["map.headerAdd"].tap()
+        let searchField = app.textFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Starbucks\n")
+
+        let coach = app.descendants(matching: .any)["walkthrough.add.addPlace"]
+        XCTAssertTrue(coach.waitForExistence(timeout: 6))
+        let save = app.buttons["Save"]
+        var attempts = 0
+        while !save.isHittable, attempts < 10 {
+            app.swipeUp()
+            attempts += 1
+        }
+        XCTAssertTrue(save.isHittable)
+
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertLessThanOrEqual(coach.frame.maxY, app.frame.maxY - 8)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-257 long result coach fully scrollable"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testWannaGoCanCompleteTheWalkthroughSaveFlow() {
@@ -541,7 +578,7 @@ final class OnboardingUITests: XCTestCase {
         )
         app.buttons["Show more options"].tap()
 
-        for target in ["saveNote", "saveTags", "savePrivacy"] {
+        for target in ["saveNote", "saveQuestions", "saveTags", "savePrivacy"] {
             XCTAssertTrue(
                 app.descendants(matching: .any)["walkthrough.saveFlow.\(target)"]
                     .waitForExistence(timeout: 5)
@@ -621,13 +658,29 @@ final class OnboardingUITests: XCTestCase {
 
         let memoryCoach = app.descendants(matching: .any)["walkthrough.map.mapMemory"]
         XCTAssertTrue(memoryCoach.waitForExistence(timeout: 6))
-        XCTAssertTrue(app.buttons["Next"].isHittable)
+        XCTAssertTrue(app.buttons["Open place"].isHittable)
         XCTAssertLessThan(memoryCoach.frame.maxY, app.buttons["Map"].frame.minY)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-236 seeded place memory fallback"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        app.buttons["Open place"].tap()
+        for target in ["placeRatings", "placeActions", "placeHistory"] {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.placeDetail.\(target)"]
+                    .waitForExistence(timeout: 6),
+                "Expected place detail walkthrough step \(target)"
+            )
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = "REC-257 place detail \(target)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            let buttonTitle = target == "placeHistory" ? "Keep going" : "Next"
+            XCTAssertTrue(app.buttons[buttonTitle].isHittable)
+            app.buttons[buttonTitle].tap()
+        }
     }
 
     func testThirdLaunchDeviceLessonIncludesExtensionsGuide() {

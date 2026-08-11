@@ -280,6 +280,9 @@ struct AddScreen: View {
                     .environmentObject(backend)
             }
         }
+        .walkthroughPresenterScrim(
+            isPresented: addSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
+        )
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
         .onChange(of: walkthroughs.currentStep?.target) { _, target in
             autoCloseAfterImportIfNeeded(target)
@@ -335,8 +338,15 @@ struct AddScreen: View {
                 }
             }
             .padding(WanderTheme.spacing4)
-            .padding(.bottom, WanderTheme.spacing8)
+            .padding(.bottom, walkthroughCandidateCoachClearance)
         }
+    }
+
+    private var walkthroughCandidateCoachClearance: CGFloat {
+        walkthroughs.activeSurface == .add
+            && walkthroughs.currentStep?.target == .addPlace
+            ? 260
+            : WanderTheme.spacing8
     }
 
     private var header: some View {

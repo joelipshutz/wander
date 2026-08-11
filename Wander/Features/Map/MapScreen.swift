@@ -42,27 +42,52 @@ enum MapWalkthroughMemoryPolicy {
             ?? visiblePlaces.first
     }
 
+    static func supportsFullPlaceCardTour(_ visiblePlace: VisiblePlace) -> Bool {
+        let place = visiblePlace.place
+        let hasExactReservation = PlaceActionLink.decode(place.actionLinksJSON).contains {
+            $0.kind == .reserve && $0.confidence == .exact
+        }
+        return place.websiteURLString != nil
+            && place.phoneNumber != nil
+            && hasExactReservation
+    }
+
     @MainActor
     static func realisticFallback(owner: LocalProfile) -> VisiblePlace {
+        let reservationLinks = PlaceActionLink.encode([
+            PlaceActionLink(
+                kind: .reserve,
+                title: "Reservation",
+                urlString: "https://www.recreation.gov/camping/campgrounds/232447",
+                source: .providerSearch,
+                confidence: .exact
+            )
+        ])
         let place = LocalPlace(
-            localID: "walkthrough_place_juniper_table",
-            canonicalName: "Juniper Table",
-            category: "restaurant",
-            address: "2106 Sunset Blvd",
-            locality: "Los Angeles",
+            localID: "walkthrough_place_kirk_creek",
+            canonicalName: "Kirk Creek Campground",
+            category: "campground",
+            primaryCategory: WanderPlaceCategory.outdoorsNature,
+            subcategory: "Campground",
+            rawProviderType: "campground",
+            address: "CA-1",
+            locality: "Big Sur",
             region: "CA",
-            latitude: 34.078,
-            longitude: -118.266,
+            latitude: 35.9907,
+            longitude: -121.4949,
             sourceProvider: "walkthrough",
+            websiteURLString: "https://www.recreation.gov/camping/campgrounds/232447",
+            phoneNumber: "+1-877-444-6777",
+            actionLinksJSON: reservationLinks,
             syncState: .localOnly
         )
         let userPlace = LocalUserPlace(
-            localID: "walkthrough_up_juniper_table",
+            localID: "walkthrough_up_kirk_creek",
             userID: owner.id,
             placeID: place.id,
             status: .been,
             visibility: .followers,
-            note: "Cozy date-night room, easy conversation, and the bar seats are the move.",
+            note: "Ocean views from camp, dramatic sunsets, and an easy launch point for a Big Sur weekend.",
             ratingScore: 4.5,
             recommendedScore: 4.5,
             recommendedCount: 1,
@@ -234,7 +259,7 @@ struct MapScreen: View {
     }
 
     private var hasSelectedProfile: Bool {
-        selectedPlace != nil || selectedSearchCandidate != nil
+        selectedPlace != nil || selectedSearchCandidate != nil || walkthroughFallbackMemory != nil
     }
 
     private var mappableSearchCandidates: [PlaceCandidate] {
@@ -559,12 +584,8 @@ struct MapScreen: View {
                 if target == .mapMemory {
                     isMapSearchFocused = false
                     presentWalkthroughPlaceMemory()
-                } else if previousTarget == .mapMemory {
-                    walkthroughFallbackMemory = nil
-                    routedVisiblePlace = nil
-                    selectedPlaceGroupKey = nil
-                    selectedSearchCandidateID = nil
-                    isPlaceProfilePresented = false
+                } else if previousTarget == .mapMemory, target == .mapTabs {
+                    presentWalkthroughPlaceDetail()
                 }
             }
             .onDisappear {
@@ -591,9 +612,13 @@ struct MapScreen: View {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
+                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
             }
             .toolbar(.hidden, for: .navigationBar)
         }
+        .walkthroughPresenterScrim(
+            isPresented: mapSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
+        )
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
         }
@@ -1171,6 +1196,31 @@ struct MapScreen: View {
         }
     }
 
+    private func presentWalkthroughPlaceDetail() {
+        let selectedMemory = selectedPlace ?? walkthroughFallbackMemory
+        if let selectedMemory,
+           !MapWalkthroughMemoryPolicy.supportsFullPlaceCardTour(selectedMemory) {
+            routedVisiblePlace = nil
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = nil
+            walkthroughFallbackMemory = MapWalkthroughMemoryPolicy.realisticFallback(
+                owner: store.currentUser
+            )
+        }
+        isPlaceProfilePresented = hasSelectedProfile
+    }
+
+    private func closeWalkthroughPlaceDetail() {
+        isPlaceProfilePresented = false
+        guard walkthroughs.activeSurface == .placeDetail
+                || walkthroughs.requestedSurface == .map
+        else { return }
+        walkthroughFallbackMemory = nil
+        routedVisiblePlace = nil
+        selectedPlaceGroupKey = nil
+        selectedSearchCandidateID = nil
+    }
+
     @ViewBuilder
     private var selectedPlaceProfileDestination: some View {
         if let selectedSearchCandidate {
@@ -1181,7 +1231,7 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedSearchCandidate),
                 onBack: {
-                    isPlaceProfilePresented = false
+                    closeWalkthroughPlaceDetail()
                 },
                 onAction: {
                     dismissPlaceProfileThen {
@@ -1200,13 +1250,28 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
                 onBack: {
-                    isPlaceProfilePresented = false
+                    closeWalkthroughPlaceDetail()
                 },
                 onAction: {
                     dismissPlaceProfileThen {
                         performAction(for: selectedPlace)
                     }
                 }
+            )
+        } else if let walkthroughFallbackMemory {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: walkthroughFallbackMemory),
+                saves: [
+                    PlaceSaveSummary(
+                        visiblePlace: walkthroughFallbackMemory,
+                        attributes: walkthroughFallbackMemory.attributes
+                    )
+                ],
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .none,
+                onBack: closeWalkthroughPlaceDetail,
+                onAction: {}
             )
         }
     }
@@ -5585,15 +5650,23 @@ struct MapPlaceSaveFlowSheet: View {
 
     @ViewBuilder
     private var questionAndLabelSections: some View {
-        ForEach(questionBlocks.filter { !Self.isUnifiedTagKey($0.key) }) { block in
-            MapSaveQuestionBlock(title: block.title, tag: block.tag) {
-                MapSaveQuestionOptions(
-                    block: block,
-                    selectedValues: selections(for: block)
-                ) { option in
-                    toggleAnswer(option, in: block)
+        let nonTagBlocks = questionBlocks.filter { !Self.isUnifiedTagKey($0.key) }
+
+        if !nonTagBlocks.isEmpty {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                ForEach(nonTagBlocks) { block in
+                    MapSaveQuestionBlock(title: block.title, tag: block.tag) {
+                        MapSaveQuestionOptions(
+                            block: block,
+                            selectedValues: selections(for: block)
+                        ) { option in
+                            toggleAnswer(option, in: block)
+                        }
+                    }
                 }
             }
+            .id(WalkthroughTargetID.saveQuestions)
+            .walkthroughTarget(.saveQuestions)
         }
 
         if let unifiedTagBlock {
@@ -5603,6 +5676,8 @@ struct MapPlaceSaveFlowSheet: View {
             ) { option in
                 toggleAnswer(option, in: unifiedTagBlock)
             }
+            .id(WalkthroughTargetID.saveTags)
+            .walkthroughTarget(.saveTags)
         }
     }
 
@@ -5674,7 +5749,7 @@ struct MapPlaceSaveFlowSheet: View {
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
-                    ? "Required for this walkthrough. Opens the optional note, tags, and privacy fields."
+                    ? "Required for this walkthrough. Opens the optional note, fit questions, tags, and privacy fields."
                     : "Optional. Continue without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)
@@ -5694,11 +5769,11 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var optionalDetailsSummary: String {
         if selectedStatus == .wannaGo, let plannedDate {
-            return "planned \(plannedDate.formatted(.dateTime.month(.abbreviated).day())) · note & privacy"
+            return "planned \(plannedDate.formatted(.dateTime.month(.abbreviated).day())) · note, fit & privacy"
         }
         return selectedStatus == .wannaGo
-            ? "date, note, tags & privacy"
-            : "note, tags & privacy"
+            ? "date, note, fit, tags & privacy"
+            : "note, fit, tags & privacy"
     }
 
     private var removeSaveSection: some View {
@@ -6279,6 +6354,7 @@ struct MapPlaceSaveFlowSheet: View {
                 .savePhotos,
                 .saveMoreOptions,
                 .saveNote,
+                .saveQuestions,
                 .saveTags,
                 .savePrivacy
               ].contains(target)
@@ -6288,7 +6364,10 @@ struct MapPlaceSaveFlowSheet: View {
             try? await Task.sleep(for: .milliseconds(120))
             guard walkthroughs.currentStep?.target == target else { return }
             withAnimation(.easeInOut(duration: 0.28)) {
-                proxy.scrollTo(target, anchor: .center)
+                proxy.scrollTo(
+                    target,
+                    anchor: target == .saveQuestions || target == .saveTags ? .top : .center
+                )
             }
         }
     }
@@ -8055,8 +8134,6 @@ private struct MapSaveUnifiedTagsSection: View {
                 .scrollDisabled(allOptions.count <= maximumVisibleTagCount)
                 .frame(height: tagPickerHeight)
                 .accessibilityIdentifier("save.tags.picker")
-                .id(WalkthroughTargetID.saveTags)
-                .walkthroughTarget(.saveTags)
 
                 customTagControl
             }

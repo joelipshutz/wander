@@ -4,8 +4,8 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithFortyOneGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 41)
+    func testApprovedWalkthroughCoversEverySurfaceWithFortyFiveGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 45)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -34,6 +34,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 .savePhotos,
                 .saveMoreOptions,
                 .saveNote,
+                .saveQuestions,
                 .saveTags,
                 .savePrivacy,
                 .saveSubmit
@@ -42,6 +43,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
             [.profileSettings, .profileSocial, .profileActivity, .profileShare]
+        )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.placeDetail]?.map(\.target),
+            [.placeRatings, .placeActions, .placeHistory]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.listDetail]?.map(\.target),
@@ -62,11 +67,15 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .saveFriends,
             .savePhotos,
             .saveNote,
+            .saveQuestions,
             .saveTags,
             .savePrivacy,
             .feedActivity,
             .feedPeopleSearch,
             .feedInvite,
+            .placeRatings,
+            .placeActions,
+            .placeHistory,
             .listMapPlace,
             .listEditorTitle,
             .listEditorPrivacy,
@@ -99,6 +108,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .saveFriends,
             .savePhotos,
             .saveNote,
+            .saveQuestions,
             .saveTags,
             .savePrivacy
         ]
@@ -111,7 +121,15 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             XCTAssertTrue(step.allowsTargetInteraction, "Expected \(target) to remain editable")
         }
 
-        for target in [WalkthroughTargetID.mapSearch, .addImport, .mapTabs, .profileActivity] {
+        for target in [
+            WalkthroughTargetID.mapSearch,
+            .addImport,
+            .mapTabs,
+            .placeRatings,
+            .placeActions,
+            .placeHistory,
+            .profileActivity
+        ] {
             let step = try XCTUnwrap(
                 FirstVisitWalkthroughContent.allSteps.first { $0.target == target }
             )
@@ -239,9 +257,50 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertTrue(firstVersion.isComplete(for: "ryan", surface: .lists))
         XCTAssertFalse(
-            FirstVisitWalkthroughStore(defaults: defaults, version: 6)
+            FirstVisitWalkthroughStore(defaults: defaults, version: 7)
                 .isComplete(for: "ryan", surface: .lists)
         )
+    }
+
+    func testBackReturnsToThePreviousPassiveCoachStep() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: FirstVisitWalkthroughStore(defaults: defaults)
+        )
+
+        coordinator.activate(.profile)
+        XCTAssertFalse(coordinator.canGoBack)
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .profileSocial)
+        XCTAssertTrue(coordinator.canGoBack)
+
+        coordinator.goBack()
+        XCTAssertEqual(coordinator.currentStep?.target, .profileSettings)
+        XCTAssertFalse(coordinator.canGoBack)
+    }
+
+    func testInviteCoachWaitsForTheContactFlowToFinish() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: FirstVisitWalkthroughStore(defaults: defaults)
+        )
+
+        coordinator.activate(.feed)
+        coordinator.advancePassiveStep()
+        coordinator.perform(.feedSurfaceSwitch)
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .feedInvite)
+
+        coordinator.advancePassiveStep()
+        XCTAssertTrue(coordinator.isRequestingContactInvite)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedInvite)
+
+        coordinator.completeContactInviteRequest()
+        XCTAssertFalse(coordinator.isRequestingContactInvite)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertEqual(coordinator.requestedSurface, .lists)
     }
 
     func testUnavailableTargetRecoveryOnlyAdvancesTheCurrentTarget() throws {
@@ -382,6 +441,13 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(coordinator.requestedSurface, .feed)
 
         coordinator.consumeRequestedSurface(.feed)
+        coordinator.activate(.placeDetail)
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.requestedSurface, .map)
+
+        coordinator.consumeRequestedSurface(.map)
         coordinator.activate(.feedSearch)
         coordinator.perform(.feedSmartSearch)
         XCTAssertEqual(coordinator.requestedSurface, .feed)
@@ -533,12 +599,21 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         let fallback = MapWalkthroughMemoryPolicy.realisticFallback(owner: owner)
 
-        XCTAssertEqual(fallback.place.canonicalName, "Juniper Table")
+        XCTAssertEqual(fallback.place.canonicalName, "Kirk Creek Campground")
+        XCTAssertEqual(fallback.place.primaryCategory, WanderPlaceCategory.outdoorsNature)
         XCTAssertEqual(fallback.userPlace.status, .been)
         XCTAssertEqual(fallback.userPlace.ratingScore, 4.5)
         XCTAssertEqual(fallback.userPlace.recommendedScore, 4.5)
         XCTAssertFalse(try XCTUnwrap(fallback.userPlace.note).isEmpty)
         XCTAssertEqual(fallback.owner.id, owner.id)
+        XCTAssertTrue(MapWalkthroughMemoryPolicy.supportsFullPlaceCardTour(fallback))
+        XCTAssertNotNil(fallback.place.websiteURLString)
+        XCTAssertNotNil(fallback.place.phoneNumber)
+        XCTAssertTrue(
+            PlaceActionLink.decode(fallback.place.actionLinksJSON).contains {
+                $0.kind == .reserve && $0.confidence == .exact
+            }
+        )
     }
 
     private func rgbaPixels(from image: CGImage) throws -> RGBAPixels {

@@ -572,12 +572,28 @@ private struct FeedPeopleSurface: View {
                 searchFieldFocused = false
             }
         }
-        .sheet(isPresented: $isPresentingContactInvites) {
+        .onChange(of: walkthroughs.isRequestingContactInvite, initial: true) { _, isRequested in
+            guard isRequested else { return }
+            searchFieldFocused = false
+            isPresentingContactInvites = true
+        }
+        .sheet(isPresented: $isPresentingContactInvites, onDismiss: {
+            walkthroughs.completeContactInviteRequest()
+        }) {
             ContactInviteSheet(
                 surface: .feedPeople,
                 contactProvider: store.contactProvider,
-                senderProfileID: store.currentUser.id
+                senderProfileID: store.currentUser.id,
+                walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
+                onPermissionDenied: walkthroughPermissionDeniedAction
             )
+        }
+    }
+
+    private var walkthroughPermissionDeniedAction: (() -> Void)? {
+        guard walkthroughs.isRequestingContactInvite else { return nil }
+        return {
+            isPresentingContactInvites = false
         }
     }
 

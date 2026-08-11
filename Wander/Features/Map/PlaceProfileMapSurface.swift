@@ -64,6 +64,7 @@ struct PlaceProfileFullScreen: View {
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
 
     init(
         place: PlaceSheetPlace,
@@ -129,6 +130,7 @@ struct PlaceProfileFullScreen: View {
     private var edgeSwipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
             .onEnded { value in
+                guard walkthroughs.activeSurface != .placeDetail else { return }
                 if Self.shouldTriggerEdgeSwipeBack(
                     startX: value.startLocation.x,
                     translation: value.translation
@@ -422,6 +424,7 @@ private struct PlaceProfileFullView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
@@ -464,6 +467,8 @@ private struct PlaceProfileFullView: View {
                             PlaceProfileTagRail(tags: displayTags, compact: false)
 
                             ratingSection
+                                .id(WalkthroughTargetID.placeRatings)
+                                .walkthroughTarget(.placeRatings)
 
                             if action != .none {
                                 primaryPlaceAction
@@ -471,12 +476,18 @@ private struct PlaceProfileFullView: View {
 
                             if !actionItems.isEmpty {
                                 actionRow
+                                    .id(WalkthroughTargetID.placeActions)
+                                    .walkthroughTarget(.placeActions)
                             }
 
                             whyItFitsSection
                             bestForSection
-                            PlaceActivitySection(saves: saves, currentUserID: currentUserID)
-                                .id(PlaceProfileScrollAnchor.activity)
+                            VStack(spacing: 0) {
+                                PlaceActivitySection(saves: saves, currentUserID: currentUserID)
+                                    .id(PlaceProfileScrollAnchor.activity)
+                            }
+                            .id(WalkthroughTargetID.placeHistory)
+                            .walkthroughTarget(.placeHistory)
                             detailsSection
                         }
                         .padding(.horizontal, WanderTheme.spacing4)
@@ -488,6 +499,9 @@ private struct PlaceProfileFullView: View {
                         await Task.yield()
                         guard !Task.isCancelled else { return }
                         scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
+                    }
+                    .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                        scrollToWalkthroughTarget(target, using: scrollProxy)
                     }
                 }
                 .background(WanderTheme.surfaceBone.color)
@@ -504,10 +518,12 @@ private struct PlaceProfileFullView: View {
         .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: onBack) {
-                    Label("Back", systemImage: "chevron.left")
-                        .labelStyle(.iconOnly)
+            if walkthroughs.activeSurface != .placeDetail {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onBack) {
+                        Label("Back", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                    }
                 }
             }
 
@@ -541,6 +557,10 @@ private struct PlaceProfileFullView: View {
                 await reloadVisibleUserPhotos()
             }
         }
+        .onChange(of: walkthroughs.requestedSurface, initial: true) { _, requestedSurface in
+            guard requestedSurface == .map else { return }
+            onBack()
+        }
         .fullScreenCover(item: $viewerRoute) { route in
             PlacePhotoGalleryViewer(
                 placeName: place.name,
@@ -554,6 +574,24 @@ private struct PlaceProfileFullView: View {
         }
     }
 
+    private func scrollToWalkthroughTarget(
+        _ target: WalkthroughTargetID?,
+        using proxy: ScrollViewProxy
+    ) {
+        guard walkthroughs.activeSurface == .placeDetail,
+              let target,
+              [WalkthroughTargetID.placeRatings, .placeActions, .placeHistory].contains(target)
+        else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard walkthroughs.currentStep?.target == target else { return }
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(target, anchor: target == .placeHistory ? .top : .center)
+            }
+        }
+    }
+
     private var galleryItems: [PlacePhotoGalleryItem] {
         PlacePhotoGalleryPresenter.items(
             providerPhoto: providerPhoto,
@@ -563,6 +601,13 @@ private struct PlaceProfileFullView: View {
     }
 
     private func reloadGallery() async {
+        if place.id.hasPrefix("walkthrough_place_") {
+            providerPhoto = nil
+            userPhotos = []
+            galleryCursor = nil
+            galleryHasMore = false
+            return
+        }
         guard !isLoadingGallery else { return }
         isLoadingGallery = true
 
@@ -740,33 +785,68 @@ private struct PlaceProfileFullView: View {
         }
     }
 
+    @ViewBuilder
     private var actionRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        if walkthroughs.activeSurface == .placeDetail {
             HStack(spacing: WanderTheme.spacing2) {
                 ForEach(actionItems) { item in
-                    Button {
-                        openURL(item.url)
-                    } label: {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            Image(systemName: iconName(for: item.kind))
-                                .font(.system(size: 15, weight: .black))
-                            Text(item.title)
-                                .font(.system(size: 13, weight: .black))
-                                .lineLimit(1)
-                        }
-                        .frame(width: 136, height: 48)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .contentShape(Capsule())
-                        .wanderGlassCapsule()
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(item.title)
+                    walkthroughActionButton(item)
                 }
             }
-            .padding(.horizontal, WanderTheme.spacing4)
             .padding(.vertical, 1)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(actionItems) { item in
+                        standardActionButton(item)
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, 1)
+            }
+            .padding(.horizontal, -WanderTheme.spacing4)
         }
-        .padding(.horizontal, -WanderTheme.spacing4)
+    }
+
+    private func standardActionButton(_ item: PlaceExternalAction) -> some View {
+        Button {
+            openURL(item.url)
+        } label: {
+            HStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: iconName(for: item.kind))
+                    .font(.system(size: 15, weight: .black))
+                Text(item.title)
+                    .font(.system(size: 13, weight: .black))
+                    .lineLimit(1)
+            }
+            .frame(width: 136, height: 48)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .contentShape(Capsule())
+            .wanderGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.title)
+    }
+
+    private func walkthroughActionButton(_ item: PlaceExternalAction) -> some View {
+        Button {
+            openURL(item.url)
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: iconName(for: item.kind))
+                    .font(.system(size: 14, weight: .black))
+                Text(item.title)
+                    .font(.system(size: 10, weight: .black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+            }
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .contentShape(Capsule())
+            .wanderGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.title)
     }
 
     private var primaryPlaceAction: some View {

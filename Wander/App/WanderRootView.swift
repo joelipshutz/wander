@@ -1252,7 +1252,7 @@ struct WanderRootView: View {
         case .profile:
             selectedTab = .profile
             isPresentingAdd = false
-        case .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+        case .placeDetail, .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
             break
         }
 

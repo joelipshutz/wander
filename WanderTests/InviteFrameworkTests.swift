@@ -169,6 +169,19 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(surface.contains("senderProfileID: store.currentUser.id"))
     }
 
+    func testFeedWalkthroughOpensContactsAndRewardsAFivePersonCircle() throws {
+        let feed = try projectSource("Wander/Features/Feed/FeedScreen.swift")
+        let sheet = try projectSource("Wander/Features/Invites/ContactInviteSheet.swift")
+
+        XCTAssertTrue(feed.contains("walkthroughs.isRequestingContactInvite"))
+        XCTAssertTrue(feed.contains("walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil"))
+        XCTAssertTrue(feed.contains("walkthroughs.completeContactInviteRequest()"))
+        XCTAssertTrue(sheet.contains("ContactInviteWalkthroughGoalBanner("))
+        XCTAssertTrue(sheet.contains("Start with five people"))
+        XCTAssertTrue(sheet.contains("Fewer is fine too"))
+        XCTAssertTrue(sheet.contains("finishWalkthroughAfterDeniedPermission()"))
+    }
+
     func testListCollaboratorPlacesContactInviteBetweenSearchAndFriends() throws {
         let source = try projectSource("Wander/Features/Lists/ListsScreen.swift")
         let content = try XCTUnwrap(source.components(separatedBy: "private struct FriendCollaboratorSearchContent: View").last)
