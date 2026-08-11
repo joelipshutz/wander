@@ -4835,6 +4835,38 @@ func persistScopedVisitOrWantSubmission(
 }
 
 @MainActor
+func persistAddPlaceSaveSubmission(
+    _ submission: MapPlaceSaveSubmission,
+    store: WanderStore,
+    backend: WanderBackend?
+) async -> SaveResult? {
+    switch submission.context.mode {
+    case .add:
+        return await persistNewPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: backend
+        )
+    case .addVisit, .editVisit, .editWant:
+        let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: backend
+        )
+        guard let result else { return nil }
+        await persistVisitPhotoAttachments(
+            submission.photoAttachments,
+            to: targetVisit,
+            store: store,
+            backend: backend
+        )
+        return result
+    case .sharedVisit:
+        return nil
+    }
+}
+
+@MainActor
 func persistVisitPhotoAttachments(
     _ attachments: [MapPlaceSavePhotoAttachment],
     to visit: LocalPlaceVisit?,
@@ -5707,7 +5739,10 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var optionalDetailsDisclosure: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        let isWalkthroughTarget = walkthroughs.activeSurface == .saveFlow
+            && walkthroughs.currentStep?.target == .saveMoreOptions
+
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Button {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
                     isShowingOptionalDetails = true
@@ -5737,12 +5772,28 @@ struct MapPlaceSaveFlowSheet: View {
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
+                .background(
+                    isWalkthroughTarget
+                        ? WanderTheme.sunTint.color
+                        : WanderTheme.surfaceBone.color
+                )
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color)
+                        .stroke(
+                            isWalkthroughTarget
+                                ? WanderTheme.categorySun.color
+                                : WanderTheme.borderHairline.color,
+                            lineWidth: isWalkthroughTarget ? 3 : 1
+                        )
+                        .shadow(
+                            color: isWalkthroughTarget
+                                ? WanderTheme.categorySun.color.opacity(0.55)
+                                : .clear,
+                            radius: isWalkthroughTarget ? 7 : 0
+                        )
                 )
+                .animation(.easeInOut(duration: 0.2), value: isWalkthroughTarget)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")

@@ -500,6 +500,10 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.saveFlow.saveMoreOptions"]
                 .waitForExistence(timeout: 5)
         )
+        let moreOptionsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        moreOptionsScreenshot.name = "REC-257 highlighted More Options disclosure"
+        moreOptionsScreenshot.lifetime = .keepAlways
+        add(moreOptionsScreenshot)
         app.buttons["Show more options"].tap()
 
         for target in ["saveNote", "saveQuestions", "saveTags", "savePrivacy"] {

@@ -836,7 +836,7 @@ struct AddScreen: View {
 
     @MainActor
     private func saveSharedSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {
-        guard let result = await persistNewPlaceSaveSubmission(
+        guard let result = await persistAddPlaceSaveSubmission(
             submission,
             store: store,
             backend: auth.isSignedIn ? backend : nil

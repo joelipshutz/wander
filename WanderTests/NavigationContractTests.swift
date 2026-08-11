@@ -1150,7 +1150,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(addScreen.contains("MapPlaceSaveFlowSheet("))
         XCTAssertTrue(addScreen.contains("context: context"))
-        XCTAssertTrue(addScreen.contains("persistNewPlaceSaveSubmission("))
+        XCTAssertTrue(addScreen.contains("persistAddPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))
         XCTAssertTrue(addScreen.contains("Text(\"Suggested\")"))
@@ -1411,7 +1411,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
         XCTAssertTrue(optionalDetails.contains("visibilitySection"))
         XCTAssertTrue(optionalDetails.contains("note, fit, tags & privacy"))
-        XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
+        XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
+        XCTAssertTrue(optionalDetails.contains("WanderTheme.sunTint.color"))
+        XCTAssertTrue(optionalDetails.contains("WanderTheme.categorySun.color"))
+        XCTAssertTrue(optionalDetails.contains("lineWidth: isWalkthroughTarget ? 3 : 1"))
         XCTAssertEqual(
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
