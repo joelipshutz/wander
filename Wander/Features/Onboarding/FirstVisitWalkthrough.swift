@@ -722,10 +722,13 @@ enum WalkthroughHelpDestination {
 enum ImportWalkthroughContent {
     static let title = "Bring every saved place with you"
     static let message = "Paste one place, a few links, or a whole list from Maps, Instagram, TikTok, or Notes. Choose what to keep and mark each Check In or Wanna before anything reaches your map."
-    static let actionTitle = "Open Import From"
+    static let actionTitle = "Open import form"
+    static let helpURL = ImportHelpDestination.url
 }
 
 private struct ImportWalkthroughOverlay: View {
+    @Environment(\.openURL) private var openURL
+
     let onOpenImport: () -> Void
 
     var body: some View {
@@ -734,11 +737,28 @@ private struct ImportWalkthroughOverlay: View {
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                Image(systemName: "square.and.arrow.down.fill")
-                    .font(.system(size: 23, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(width: 52, height: 52)
-                    .background(WanderTheme.terracotta.color, in: Circle())
+                HStack(alignment: .center) {
+                    Image(systemName: "square.and.arrow.down.fill")
+                        .font(.system(size: 23, weight: .black))
+                        .foregroundStyle(WanderTheme.textOnAction.color)
+                        .frame(width: 52, height: 52)
+                        .background(WanderTheme.terracotta.color, in: Circle())
+
+                    Spacer()
+
+                    Button {
+                        openURL(ImportWalkthroughContent.helpURL)
+                    } label: {
+                        Image(systemName: "questionmark")
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .frame(width: 44, height: 44)
+                            .background(WanderTheme.surfaceSand.color, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Import help")
+                    .accessibilityHint("Opens import help on getrec.me")
+                }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(ImportWalkthroughContent.title)

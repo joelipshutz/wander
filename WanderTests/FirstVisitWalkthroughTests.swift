@@ -335,7 +335,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
     }
 
     func testImportLessonMatchesTheAdaptiveBuild124ReviewFlow() {
-        XCTAssertEqual(ImportWalkthroughContent.actionTitle, "Open Import From")
+        XCTAssertEqual(ImportWalkthroughContent.actionTitle, "Open import form")
+        XCTAssertEqual(
+            ImportWalkthroughContent.helpURL.absoluteString,
+            "https://getrec.me/import-help"
+        )
         XCTAssertTrue(ImportWalkthroughContent.message.contains("one place, a few links, or a whole list"))
         XCTAssertTrue(ImportWalkthroughContent.message.contains("Check In or Wanna"))
         XCTAssertTrue(ImportWalkthroughContent.message.contains("before anything reaches your map"))

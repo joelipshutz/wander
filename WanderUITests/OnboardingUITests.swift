@@ -14,9 +14,10 @@ final class OnboardingUITests: XCTestCase {
         app.launch()
 
         let lesson = app.descendants(matching: .any)["walkthrough.importLesson"]
-        let openImport = app.buttons["Open Import From"]
+        let openImport = app.buttons["Open import form"]
         XCTAssertTrue(lesson.waitForExistence(timeout: 5))
         XCTAssertTrue(openImport.isHittable)
+        XCTAssertTrue(app.buttons["Import help"].exists)
 
         let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         promptScreenshot.name = "REC-236 second-launch Import From prompt"
