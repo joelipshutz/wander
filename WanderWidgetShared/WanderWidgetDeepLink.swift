@@ -75,6 +75,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     case profileCalendarDate(WanderCalendarDate)
     case sharedProfile(profileID: String)
     case sharedPlace(placeID: String)
+    case sharedActivity(activityID: String)
     case sharedList(listID: String)
     case listInvite(token: String)
 
@@ -98,6 +99,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             Self.sharedEntityURL(root: "profiles", identifier: profileID)
         case .sharedPlace(let placeID):
             Self.sharedEntityURL(root: "places", identifier: placeID)
+        case .sharedActivity(let activityID):
+            Self.sharedEntityURL(root: "activities", identifier: activityID)
         case .sharedList(let listID):
             Self.sharedEntityURL(root: "lists", identifier: listID)
         case .listInvite(let token):
@@ -202,6 +205,19 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             }
             return .sharedPlace(placeID: placeID)
 
+        case ("activities", let segments):
+            guard segments.count == 1,
+                  let activityID = segments.first,
+                  isValidSharedIdentifier(
+                    activityID,
+                    root: "activities",
+                    components: components
+                  )
+            else {
+                return nil
+            }
+            return .sharedActivity(activityID: activityID)
+
         case ("lists", let segments):
             guard segments.count == 1,
                   let listID = segments.first,
@@ -254,6 +270,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             return .sharedProfile(profileID: identifier)
         case "places":
             return .sharedPlace(placeID: identifier)
+        case "activities":
+            return .sharedActivity(activityID: identifier)
         case "lists":
             return .sharedList(listID: identifier)
         case "invites":
@@ -371,7 +389,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
         switch root {
         case "profiles":
             return true
-        case "places", "lists":
+        case "places", "activities", "lists":
             return UUID(uuidString: identifier) != nil
         case "invites":
             return identifier.range(

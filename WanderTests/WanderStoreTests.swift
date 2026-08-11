@@ -6651,6 +6651,48 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(context.initialPersonalLabels.isEmpty)
     }
 
+    func testActivityBookmarkStartsABlankViewerOwnedWannaForm() throws {
+        let store = makeStore()
+        let socialPlace = try XCTUnwrap(
+            store.visiblePlaces().first { $0.owner.id != store.currentUser.id }
+        )
+
+        let context = MapPlaceSaveContext.addWannaVisiblePlace(
+            socialPlace,
+            defaultVisibility: .followers
+        )
+
+        XCTAssertEqual(context.initialStatus, .wannaGo)
+        XCTAssertFalse(context.requiresStatusConfirmation)
+        XCTAssertEqual(context.initialNote, "")
+        XCTAssertNil(context.initialRatingScore)
+        XCTAssertNil(context.initialPlannedDate)
+        XCTAssertTrue(context.initialAnswers.isEmpty)
+        XCTAssertTrue(context.initialPersonalLabels.isEmpty)
+        XCTAssertNil(context.initialCuisine)
+    }
+
+    func testRemovingActivityWannaOnlyDeletesTheViewerOwnedRecord() async throws {
+        let store = makeStore()
+        let socialPlace = try XCTUnwrap(
+            store.visiblePlaces().first { $0.owner.id != store.currentUser.id }
+        )
+        let sourceUserPlaceID = socialPlace.userPlace.id
+        let sourceOwnerID = socialPlace.owner.id
+        let ownSave = store.saveVisiblePlace(socialPlace, status: .wannaGo)
+
+        XCTAssertEqual(store.activityBookmarkState(for: socialPlace), .wanna)
+        _ = await store.removeActivityWanna(for: socialPlace, backend: nil)
+
+        XCTAssertEqual(store.activityBookmarkState(for: socialPlace), .notSaved)
+        XCTAssertTrue(store.visiblePlaces().contains {
+            $0.userPlace.id == sourceUserPlaceID && $0.owner.id == sourceOwnerID
+        })
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains {
+            $0.userPlace.id == ownSave.userPlaceID
+        })
+    }
+
     func testRemoteOwnPlaceSaveMarksLocalRowsSynced() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

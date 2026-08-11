@@ -58,6 +58,21 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(item: item, subject: name, message: message)
     }
 
+    static func activity(
+        activityID: String,
+        placeName: String,
+        message: String
+    ) -> WanderShareContent? {
+        guard UUID(uuidString: activityID) != nil,
+              let activityURL = WanderDeepLinkRoute.sharedActivity(activityID: activityID).url
+        else { return nil }
+        return WanderShareContent(
+            item: activityURL,
+            subject: placeName,
+            message: message
+        )
+    }
+
     static func list(serverID: String?, name: String) -> WanderShareContent? {
         guard let serverID,
               UUID(uuidString: serverID) != nil,

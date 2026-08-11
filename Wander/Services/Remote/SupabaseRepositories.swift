@@ -408,6 +408,66 @@ struct SupabaseFeedRepository: FeedRepository {
     }
 }
 
+struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func activity(id: String) async throws -> FeedActivity {
+        let response: RemoteFeedActivityDTO = try await rpc.call(
+            "activity_detail",
+            params: ActivityDetailParams(activityID: id)
+        )
+        return try response.activity()
+    }
+
+    func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
+        let rows: [RemoteActivityEngagementSummaryDTO] = try await rpc.call(
+            "activity_engagement_summaries",
+            params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
+        )
+        return rows.map(\.summary)
+    }
+
+    func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {
+        let rows: [RemotePlaceActivityEngagementDTO] = try await rpc.call(
+            "place_activity_engagement_summaries",
+            params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
+        )
+        return try rows.map { try $0.match() }
+    }
+
+    func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary {
+        let response: RemoteActivityEngagementSummaryDTO = try await rpc.call(
+            "set_activity_like",
+            params: SetActivityLikeParams(activityID: activityID, isLiked: isLiked)
+        )
+        return response.summary
+    }
+
+    func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
+        let response: RemoteActivityCommentsPageDTO = try await rpc.call(
+            "activity_comments",
+            params: ActivityCommentsParams(
+                activityID: activityID,
+                before: before,
+                limit: min(max(limit, 1), 100)
+            )
+        )
+        return response.page
+    }
+
+    func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
+        let response: RemoteActivityCommentPostDTO = try await rpc.call(
+            "add_activity_comment",
+            params: AddActivityCommentParams(activityID: activityID, body: body)
+        )
+        return response.result
+    }
+}
+
 struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository {
     private let rpc: RemoteProcedureCalling
 
@@ -2336,6 +2396,62 @@ private struct FollowedFeedParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case before = "input_before"
         case limit = "input_limit"
+    }
+}
+
+private struct ActivityEngagementSummariesParams: Encodable {
+    let activityIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case activityIDs = "input_activity_ids"
+    }
+}
+
+private struct ActivityDetailParams: Encodable {
+    let activityID: String
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+    }
+}
+
+private struct PlaceActivityEngagementSummariesParams: Encodable {
+    let userPlaceIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case userPlaceIDs = "input_user_place_ids"
+    }
+}
+
+private struct SetActivityLikeParams: Encodable {
+    let activityID: String
+    let isLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+        case isLiked = "input_is_liked"
+    }
+}
+
+private struct ActivityCommentsParams: Encodable {
+    let activityID: String
+    let before: String?
+    let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+        case before = "input_before"
+        case limit = "input_limit"
+    }
+}
+
+private struct AddActivityCommentParams: Encodable {
+    let activityID: String
+    let body: String
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+        case body = "input_body"
     }
 }
 
