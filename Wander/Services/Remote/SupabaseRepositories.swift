@@ -404,15 +404,17 @@ struct SupabaseFeedRepository: FeedRepository {
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
-        return try response.followedFeedPage()
+        return try await response.followedFeedPage()
     }
 }
 
 struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     private let rpc: RemoteProcedureCalling
+    private let storage: (any RemoteStorageCalling)?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
         self.rpc = rpc
+        self.storage = storage ?? (rpc as? any RemoteStorageCalling)
     }
 
     func activity(id: String) async throws -> FeedActivity {
@@ -420,7 +422,14 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
             "activity_detail",
             params: ActivityDetailParams(activityID: id)
         )
-        return try response.activity()
+        let mediaRows: [RemoteActivityMediaDTO] = (try? await rpc.call(
+            "activity_media",
+            params: ActivityEngagementSummariesParams(activityIDs: [id])
+        )) ?? []
+        return try await response.activity(
+            storage: storage,
+            mediaOverride: mediaRows.first(where: { $0.activityID == id })?.media
+        )
     }
 
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {

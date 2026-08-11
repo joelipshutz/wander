@@ -325,6 +325,63 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(retriedResolution?.id, activityID)
         XCTAssertNil(store.activityEngagementError(for: activityID))
     }
+
+    func testExactActivityRefreshesCachedFeedTicketToLoadPhotos() async {
+        let activityID = "40000000-0000-0000-0000-000000000004"
+        let actor = ProfileShell(
+            id: "user_friend",
+            handle: "friend",
+            displayName: "Friend",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let cachedActivity = FeedActivity(
+            id: activityID,
+            kind: .placeBeen,
+            actor: actor,
+            occurredAt: .now,
+            note: "A cached note",
+            media: []
+        )
+        let exactActivity = FeedActivity(
+            id: activityID,
+            kind: .placeBeen,
+            actor: actor,
+            occurredAt: cachedActivity.occurredAt,
+            note: cachedActivity.note,
+            media: [
+                FeedMediaPreview(
+                    id: "photo_1",
+                    urlString: "https://example.com/signed-photo.jpg",
+                    accessibilityLabel: "Activity photo"
+                )
+            ]
+        )
+        let feedRepository = SuspendedActivityFeedRepository(
+            page: FollowedFeedPage(
+                activity: [cachedActivity],
+                featuredPlaces: [],
+                nextCursor: nil,
+                fetchedAt: .now
+            )
+        )
+        feedRepository.finish()
+        let activityRepository = ActivityEngagementRepositoryStub(activityResult: exactActivity)
+        let backend = WanderBackend(
+            feedRepository: feedRepository,
+            activityEngagementRepository: activityRepository
+        )
+        let store = WanderStore(fixtures: .empty())
+        let didRefresh = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        let resolved = await store.activity(id: activityID, backend: backend)
+
+        XCTAssertEqual(resolved?.media.map(\.id), ["photo_1"])
+        XCTAssertEqual(store.followedFeedPage?.activity.first?.media.map(\.id), ["photo_1"])
+        XCTAssertEqual(activityRepository.activityRequestCount, 1)
+    }
 }
 
 private enum ActivityEngagementTestError: Error {
@@ -335,6 +392,7 @@ private enum ActivityEngagementTestError: Error {
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
     let setLikeError: Error?
+    private(set) var activityRequestCount = 0
     private var activityResponses: [Result<FeedActivity, Error>]
 
     init(
@@ -351,6 +409,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func activity(id: String) async throws -> FeedActivity {
+        activityRequestCount += 1
         guard !activityResponses.isEmpty else {
             throw ActivityEngagementTestError.expected
         }

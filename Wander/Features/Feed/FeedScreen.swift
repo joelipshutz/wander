@@ -233,7 +233,7 @@ struct FeedScreen: View {
             id: route.activityID,
             backend: auth.isSignedIn ? backend : nil
         )
-        guard let context = route.context ?? activity?.activityEngagementContext else {
+        guard let context = activity?.activityEngagementContext ?? route.context else {
             return
         }
         activityNavigation.resolve(
