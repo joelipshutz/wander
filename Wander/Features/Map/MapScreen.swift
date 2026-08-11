@@ -112,6 +112,11 @@ struct MapScreen: View {
     @State private var isMoreFiltersPresented: Bool
     @State private var routedVisiblePlace: VisiblePlace?
     @State private var currentSearchRegion = Self.defaultRegion
+    @State private var featuredRankingRegion = Self.defaultRegion
+    @State private var featuredViewportPlaces: [VisiblePlace]?
+    @State private var loadedFeaturedViewport: MapViewport?
+    @State private var featuredViewportRefreshTask: Task<Void, Never>?
+    @State private var isLoadingMapSources = true
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
@@ -139,10 +144,12 @@ struct MapScreen: View {
     private var baseVisiblePlaces: [VisiblePlace] {
         switch mapFilterState.source {
         case .featured:
-            let curatedPlaces = store.followedFeedPage?.featuredPlaces.map(\.visiblePlace) ?? []
-            return MapFilterSelection.applying(
-                mapFilterState.more,
-                to: curatedPlaces
+            return MapFeaturedSelection.places(
+                from: featuredViewportPlaces ?? store.visiblePlaces(),
+                currentUserID: store.currentUser.id,
+                eligibleOwnerIDs: Set(store.following(of: store.currentUser.id).map(\.id)),
+                in: featuredRankingRegion,
+                refinements: mapFilterState.more
             )
         case .friends:
             return store.visiblePlaces(filters: mapPlaceFilters)
@@ -201,7 +208,7 @@ struct MapScreen: View {
 
     private var socialOwnerOptions: [MapSocialOwnerOption] {
         let socialPlaces = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"]))
-        let featuredPlaces = store.followedFeedPage?.featuredPlaces.map(\.visiblePlace) ?? []
+        let featuredPlaces = featuredViewportPlaces ?? []
         var seen = Set<String>()
         return (socialPlaces + featuredPlaces).compactMap { visiblePlace in
             let owner = visiblePlace.owner
@@ -244,21 +251,22 @@ struct MapScreen: View {
               visiblePlaces.isEmpty
         else { return nil }
 
+        if mapFilterState.source == .featured, isLoadingMapSources {
+            return nil
+        }
         if mapFilterState.more.activeSectionCount > 0 {
             return "No \(mapFilterState.source.title.lowercased()) places match these filters."
         }
         switch mapFilterState.source {
         case .featured:
-            return store.feedLoadState == .idle || store.feedLoadState == .loading
-                ? nil
-                : "Nothing featured yet."
+            return "No featured check-ins here yet."
         case .friends:
             return "No friends’ places yet."
         }
     }
 
-    private var currentViewport: MapViewport {
-        MapViewport(minLatitude: 33.95, minLongitude: -118.45, maxLatitude: 34.2, maxLongitude: -118.12)
+    private static var initialRemoteViewport: MapViewport {
+        MapViewportRefreshPolicy.prefetchedViewport(for: defaultRegion)
     }
 
     private var shouldShowTypeahead: Bool {
@@ -336,6 +344,7 @@ struct MapScreen: View {
                     }
                     .onMapCameraChange(frequency: .onEnd) { context in
                         currentSearchRegion = context.region
+                        handleFeaturedCameraChange(context.region)
                     }
                     .onTapGesture(coordinateSpace: .local) { point in
                         handleMapTap(at: point, proxy: proxy)
@@ -500,18 +509,23 @@ struct MapScreen: View {
                 await handleMapSearchLaunchRequest(searchLaunchRequest)
             }
             .task {
-                await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
-                await store.refreshFollowedFeed(backend: auth.isSignedIn ? backend : nil)
+                await refreshInitialMapSources()
                 if auth.isSignedIn {
                     await store.refreshSharedVisitInbox(backend: backend)
                 }
                 resolveInitialSelection()
             }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
-                guard isSignedIn else { return }
+                guard isSignedIn else {
+                    featuredViewportRefreshTask?.cancel()
+                    featuredViewportPlaces = store.visiblePlaces()
+                    loadedFeaturedViewport = nil
+                    featuredRankingRegion = currentSearchRegion
+                    isLoadingMapSources = false
+                    return
+                }
                 Task {
-                    await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
-                    await store.refreshFollowedFeed(backend: backend)
+                    await refreshInitialMapSources()
                     await store.refreshSharedVisitInbox(backend: backend)
                     await handleNotificationRoute(pushNotifications.navigationRequest)
                     resolveInitialSelection()
@@ -557,6 +571,7 @@ struct MapScreen: View {
                 typeaheadTask?.cancel()
                 mapFeatureResolutionTask?.cancel()
                 mapSearchTask?.cancel()
+                featuredViewportRefreshTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -897,6 +912,64 @@ struct MapScreen: View {
         selectVisiblePlace(initialPlace)
         center(on: initialPlace)
         didResolveInitialCamera = true
+    }
+
+    private func refreshInitialMapSources() async {
+        featuredViewportRefreshTask?.cancel()
+        isLoadingMapSources = true
+
+        let requestedViewport = Self.initialRemoteViewport
+        await store.refreshRemoteSocialSurfaces(
+            in: requestedViewport,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        guard !Task.isCancelled else { return }
+
+        featuredViewportPlaces = store.visiblePlaces()
+        loadedFeaturedViewport = requestedViewport
+        featuredRankingRegion = currentSearchRegion
+        isLoadingMapSources = false
+        handleFeaturedCameraChange(currentSearchRegion)
+    }
+
+    private func handleFeaturedCameraChange(_ region: MKCoordinateRegion) {
+        featuredViewportRefreshTask?.cancel()
+
+        guard !isLoadingMapSources,
+              auth.isSignedIn,
+              backend.placeRepository != nil
+        else {
+            featuredRankingRegion = region
+            return
+        }
+
+        guard MapViewportRefreshPolicy.shouldRefresh(
+            visibleRegion: region,
+            loadedViewport: loadedFeaturedViewport
+        ) else {
+            featuredRankingRegion = region
+            return
+        }
+
+        let requestedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: region)
+        featuredViewportRefreshTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let places = await store.fetchRemoteViewportPlaces(
+                      in: requestedViewport,
+                      backend: backend
+                  ),
+                  !Task.isCancelled
+            else { return }
+
+            featuredViewportPlaces = places
+            loadedFeaturedViewport = requestedViewport
+            featuredRankingRegion = region
+        }
     }
 
     private func centerMapOnCurrentCityIfNeeded() async {
@@ -2492,6 +2565,125 @@ struct MapMoreFilterSelection: Equatable {
 struct MapFilterState: Equatable {
     var source: MapSource = .featured
     var more = MapMoreFilterSelection()
+}
+
+enum MapViewportRefreshPolicy {
+    private static let prefetchScale = 2.0
+    private static let minimumPrefetchSpan = 0.04
+
+    static func viewport(for region: MKCoordinateRegion) -> MapViewport {
+        bounds(
+            center: region.center,
+            latitudeSpan: region.span.latitudeDelta,
+            longitudeSpan: region.span.longitudeDelta
+        )
+    }
+
+    static func prefetchedViewport(for region: MKCoordinateRegion) -> MapViewport {
+        bounds(
+            center: region.center,
+            latitudeSpan: max(region.span.latitudeDelta * prefetchScale, minimumPrefetchSpan),
+            longitudeSpan: max(region.span.longitudeDelta * prefetchScale, minimumPrefetchSpan)
+        )
+    }
+
+    static func shouldRefresh(
+        visibleRegion: MKCoordinateRegion,
+        loadedViewport: MapViewport?
+    ) -> Bool {
+        guard let loadedViewport else { return true }
+        let visibleViewport = viewport(for: visibleRegion)
+        return visibleViewport.minLatitude < loadedViewport.minLatitude
+            || visibleViewport.minLongitude < loadedViewport.minLongitude
+            || visibleViewport.maxLatitude > loadedViewport.maxLatitude
+            || visibleViewport.maxLongitude > loadedViewport.maxLongitude
+    }
+
+    static func contains(_ place: VisiblePlace, in viewport: MapViewport) -> Bool {
+        place.place.latitude >= viewport.minLatitude
+            && place.place.latitude <= viewport.maxLatitude
+            && place.place.longitude >= viewport.minLongitude
+            && place.place.longitude <= viewport.maxLongitude
+    }
+
+    private static func bounds(
+        center: CLLocationCoordinate2D,
+        latitudeSpan: CLLocationDegrees,
+        longitudeSpan: CLLocationDegrees
+    ) -> MapViewport {
+        let latitudeRadius = min(180, abs(latitudeSpan)) / 2
+        let longitudeRadius = min(360, abs(longitudeSpan)) / 2
+        return MapViewport(
+            minLatitude: max(-90, center.latitude - latitudeRadius),
+            minLongitude: max(-180, center.longitude - longitudeRadius),
+            maxLatitude: min(90, center.latitude + latitudeRadius),
+            maxLongitude: min(180, center.longitude + longitudeRadius)
+        )
+    }
+}
+
+enum MapFeaturedSelection {
+    static let maximumPlaceGroupCount = 24
+
+    static func places(
+        from candidates: [VisiblePlace],
+        currentUserID: String,
+        eligibleOwnerIDs: Set<String>,
+        in region: MKCoordinateRegion,
+        refinements: MapMoreFilterSelection,
+        limit: Int = maximumPlaceGroupCount
+    ) -> [VisiblePlace] {
+        guard limit > 0, !eligibleOwnerIDs.isEmpty else { return [] }
+
+        let viewport = MapViewportRefreshPolicy.viewport(for: region)
+        let communityCheckIns = candidates.filter { visiblePlace in
+            visiblePlace.owner.id != currentUserID
+                && eligibleOwnerIDs.contains(visiblePlace.owner.id)
+                && visiblePlace.userPlace.status == .been
+                && MapViewportRefreshPolicy.contains(visiblePlace, in: viewport)
+        }
+        let refinedPlaces = MapFilterSelection.applying(refinements, to: communityCheckIns)
+        let rankedGroups = VisiblePlaceGrouping.groups(
+            from: refinedPlaces,
+            currentUserID: currentUserID
+        )
+        .sorted(by: ranksBefore)
+
+        return rankedGroups.prefix(limit).flatMap(\.places)
+    }
+
+    private static func ranksBefore(_ lhs: VisiblePlaceGroup, _ rhs: VisiblePlaceGroup) -> Bool {
+        let lhsSupport = supportCount(for: lhs)
+        let rhsSupport = supportCount(for: rhs)
+        if lhsSupport != rhsSupport {
+            return lhsSupport > rhsSupport
+        }
+
+        let lhsScore = lhs.recommendedScore ?? -.infinity
+        let rhsScore = rhs.recommendedScore ?? -.infinity
+        if lhsScore != rhsScore {
+            return lhsScore > rhsScore
+        }
+
+        let lhsRecency = recency(for: lhs)
+        let rhsRecency = recency(for: rhs)
+        if lhsRecency != rhsRecency {
+            return lhsRecency > rhsRecency
+        }
+
+        return lhs.key < rhs.key
+    }
+
+    private static func supportCount(for group: VisiblePlaceGroup) -> Int {
+        max(Set(group.places.map(\.owner.id)).count, group.recommendedCount)
+    }
+
+    private static func recency(for group: VisiblePlaceGroup) -> Date {
+        group.places
+            .map { $0.userPlace.visitedAt ?? $0.userPlace.savedAt }
+            .max()
+            ?? .distantPast
+    }
 }
 
 enum MapFilterSelection {

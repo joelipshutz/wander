@@ -154,6 +154,205 @@ final class MapFilterSelectionTests: XCTestCase {
     }
 }
 
+final class MapFeaturedSelectionTests: XCTestCase {
+    private let losAngelesRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
+        span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
+    )
+
+    func testFeaturedUsesFollowedCommunityCheckInsOnly() {
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let stranger = profile(id: "user_stranger")
+        let benCheckIn = visiblePlace(owner: ben, name: "Ben Been", status: .been)
+        let benWanna = visiblePlace(owner: ben, name: "Ben Wanna", longitude: -118.24, status: .wannaGo)
+        let ownCheckIn = visiblePlace(owner: joe, name: "Joe Been", longitude: -118.23, status: .been)
+        let strangerCheckIn = visiblePlace(owner: stranger, name: "Stranger Been", longitude: -118.22, status: .been)
+        let outsideCheckIn = visiblePlace(
+            owner: ben,
+            name: "Outside Been",
+            latitude: 35,
+            longitude: -118.21,
+            status: .been
+        )
+
+        let featured = MapFeaturedSelection.places(
+            from: [benWanna, ownCheckIn, strangerCheckIn, outsideCheckIn, benCheckIn],
+            currentUserID: joe.id,
+            eligibleOwnerIDs: [ben.id],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection()
+        )
+
+        XCTAssertEqual(featured.map(\.id), [benCheckIn.id])
+        XCTAssertTrue(
+            MapFeaturedSelection.places(
+                from: [benCheckIn, benWanna],
+                currentUserID: joe.id,
+                eligibleOwnerIDs: [ben.id],
+                in: losAngelesRegion,
+                refinements: MapMoreFilterSelection(status: .wanna)
+            ).isEmpty
+        )
+    }
+
+    func testFeaturedRanksCommunitySupportBeforeRatingAndRecency() {
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let juana = profile(id: "user_juana")
+        let olderDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let newerDate = Date(timeIntervalSince1970: 1_710_000_000)
+        let communityOne = visiblePlace(
+            owner: ben,
+            name: "Community Pick",
+            providerID: "community_pick",
+            status: .been,
+            ratingScore: 3,
+            visitedAt: olderDate
+        )
+        let communityTwo = visiblePlace(
+            owner: juana,
+            name: "Community Pick",
+            providerID: "community_pick",
+            status: .been,
+            ratingScore: 3,
+            visitedAt: olderDate
+        )
+        let soloFavorite = visiblePlace(
+            owner: ben,
+            name: "Solo Favorite",
+            longitude: -118.23,
+            providerID: "solo_favorite",
+            status: .been,
+            ratingScore: 5,
+            visitedAt: newerDate
+        )
+
+        let featured = MapFeaturedSelection.places(
+            from: [soloFavorite, communityOne, communityTwo],
+            currentUserID: joe.id,
+            eligibleOwnerIDs: [ben.id, juana.id],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection()
+        )
+        let groups = VisiblePlaceGrouping.groups(from: featured, currentUserID: joe.id)
+
+        XCTAssertEqual(groups.map { $0.primary.place.canonicalName }, ["Community Pick", "Solo Favorite"])
+        XCTAssertEqual(groups.first?.saveCount, 2)
+    }
+
+    func testFeaturedCapsDensityByPlaceGroup() {
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let candidates = (0..<30).map { index in
+            visiblePlace(
+                owner: ben,
+                name: "Place \(index)",
+                latitude: 34.0 + Double(index) * 0.001,
+                longitude: -118.25,
+                providerID: "place_\(index)",
+                status: .been
+            )
+        }
+
+        let featured = MapFeaturedSelection.places(
+            from: candidates,
+            currentUserID: joe.id,
+            eligibleOwnerIDs: [ben.id],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection()
+        )
+
+        XCTAssertEqual(
+            VisiblePlaceGrouping.groups(from: featured, currentUserID: joe.id).count,
+            MapFeaturedSelection.maximumPlaceGroupCount
+        )
+    }
+
+    func testViewportRefreshWaitsUntilCameraLeavesPrefetchBuffer() {
+        let initialRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34, longitude: -118),
+            span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.2)
+        )
+        let loadedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: initialRegion)
+        let insideRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.04, longitude: -117.95),
+            span: initialRegion.span
+        )
+        let outsideRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.08, longitude: -117.95),
+            span: initialRegion.span
+        )
+
+        XCTAssertEqual(loadedViewport.minLatitude, 33.9, accuracy: 0.000_001)
+        XCTAssertEqual(loadedViewport.maxLatitude, 34.1, accuracy: 0.000_001)
+        XCTAssertEqual(loadedViewport.minLongitude, -118.2, accuracy: 0.000_001)
+        XCTAssertEqual(loadedViewport.maxLongitude, -117.8, accuracy: 0.000_001)
+        XCTAssertFalse(
+            MapViewportRefreshPolicy.shouldRefresh(
+                visibleRegion: insideRegion,
+                loadedViewport: loadedViewport
+            )
+        )
+        XCTAssertTrue(
+            MapViewportRefreshPolicy.shouldRefresh(
+                visibleRegion: outsideRegion,
+                loadedViewport: loadedViewport
+            )
+        )
+    }
+
+    private func profile(id: String) -> LocalProfile {
+        LocalProfile(
+            localID: "local_\(id)",
+            serverID: id,
+            handle: id,
+            displayName: id,
+            syncState: .synced
+        )
+    }
+
+    private func visiblePlace(
+        owner: LocalProfile,
+        name: String,
+        latitude: Double = 34.05,
+        longitude: Double = -118.25,
+        providerID: String? = nil,
+        status: PlaceStatus,
+        ratingScore: Double? = nil,
+        visitedAt: Date? = nil
+    ) -> VisiblePlace {
+        let providerID = providerID ?? name.lowercased().replacingOccurrences(of: " ", with: "_")
+        let place = LocalPlace(
+            localID: "local_place_\(owner.id)_\(providerID)",
+            serverID: "place_\(providerID)",
+            canonicalName: name,
+            category: WanderPlaceCategory.restaurantsFood,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: providerID,
+            syncState: .synced
+        )
+        let userPlace = LocalUserPlace(
+            localID: "local_up_\(owner.id)_\(providerID)_\(status.rawValue)",
+            serverID: "up_\(owner.id)_\(providerID)_\(status.rawValue)",
+            userID: owner.id,
+            placeID: place.id,
+            status: status,
+            visibility: .followers,
+            ratingScore: ratingScore,
+            recommendedScore: ratingScore,
+            recommendedCount: ratingScore == nil ? 0 : 1,
+            visitedAt: visitedAt,
+            savedAt: visitedAt ?? .now,
+            sourceType: "test",
+            syncState: .synced
+        )
+        return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
+    }
+}
+
 final class MapPinOutlineBuilderTests: XCTestCase {
     func testPersonalBeenSaveProducesOneSolidPersonalOutline() {
         let outlines = MapPinOutlineBuilder.outlines(
