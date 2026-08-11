@@ -1903,6 +1903,7 @@ final class RemoteRepositoryTests: XCTestCase {
             )
         )
         try await repository.removeItem(listID: listID, itemID: itemID)
+        try await repository.leave(listID: listID)
         try await repository.delete(listID: listID)
 
         XCTAssertEqual(createdListID, listID)
@@ -1914,6 +1915,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 "set_place_list_collaborators",
                 "add_place_list_item",
                 "remove_place_list_item",
+                "leave_place_list",
                 "delete_place_list"
             ]
         )
@@ -1926,6 +1928,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[2].body["input_owner_user_place_id"] as? String, userPlaceID)
         XCTAssertEqual(rpc.calls[3].body["input_item_id"] as? String, itemID)
         XCTAssertEqual(rpc.calls[4].body["input_list_id"] as? String, listID)
+        XCTAssertEqual(rpc.calls[5].body["input_list_id"] as? String, listID)
     }
 
     func testPlaceListRepositoryUsesConsentBasedInviteRPCs() async throws {

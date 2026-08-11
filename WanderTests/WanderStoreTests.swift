@@ -1653,6 +1653,41 @@ final class WanderStoreTests: XCTestCase {
         WanderStore(fixtures: WanderFixtures.seed())
     }
 
+    private func makeRemoteCollaboratorListStore() -> (WanderStore, LocalPlaceList) {
+        let seed = WanderFixtures.seed()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let list = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Shared follower list",
+            description: "The former collaborator should see this through normal friend visibility.",
+            visibility: .followers,
+            syncState: .synced
+        )
+        let store = WanderStore(fixtures: WanderFixtures(
+            currentUser: seed.currentUser,
+            profiles: seed.profiles,
+            places: [],
+            userPlaces: [],
+            placeAttributes: [],
+            follows: seed.follows,
+            blocks: [],
+            placeLists: [list],
+            placeListMembers: [
+                LocalPlaceListMember(
+                    localID: "remote_list_member_\(listID)_user_joe",
+                    listID: listID,
+                    userID: seed.currentUser.id,
+                    role: .collaborator
+                )
+            ],
+            placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        ))
+        return (store, store.placeLists[0])
+    }
+
     private func makeSharedVisitInvitation(
         participantID: String = "participant-1",
         generation: Int = 1,
@@ -8040,6 +8075,61 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.collaborators(for: collabList).map(\.id), [store.currentUser.id])
     }
 
+    func testOnlyCollaboratorCanLeaveSharedListLocally() async {
+        let store = makeStore()
+        let collaboratorList = store.placeLists.first { $0.id == "list_launch" }!
+        let ownedList = store.placeLists.first { $0.id == "list_laptop" }!
+        let friendList = store.placeLists.first { $0.id == "list_maya_sunset" }!
+
+        XCTAssertTrue(store.canLeave(collaboratorList))
+        XCTAssertFalse(store.canLeave(ownedList))
+        XCTAssertFalse(store.canLeave(friendList))
+
+        let didLeave = await store.leavePlaceList(collaboratorList, backend: nil)
+
+        XCTAssertTrue(didLeave)
+
+        XCTAssertFalse(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == collaboratorList.id })
+        XCTAssertNotNil(
+            store.placeListMembers.first {
+                $0.listID == collaboratorList.id && $0.userID == store.currentUser.id
+            }?.deletedAt
+        )
+    }
+
+    func testRemoteCollaboratorLeaveUsesBackendAndMovesFollowerVisibleListToFriends() async {
+        let (store, collaboratorList) = makeRemoteCollaboratorListStore()
+        let repository = FakePlaceListRepository()
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let didLeave = await store.leavePlaceList(collaboratorList, backend: backend)
+
+        XCTAssertTrue(didLeave)
+        XCTAssertEqual(repository.leftListIDs, [collaboratorList.id])
+        XCTAssertTrue(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == collaboratorList.id })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .friends).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.canLeave(collaboratorList))
+        XCTAssertFalse(store.canAddPlaces(to: collaboratorList))
+        XCTAssertNil(store.lastRemoteError)
+    }
+
+    func testFailedRemoteCollaboratorLeaveKeepsListVisible() async {
+        let (store, collaboratorList) = makeRemoteCollaboratorListStore()
+        let repository = FakePlaceListRepository(leaveError: TestError.expected)
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let didLeave = await store.leavePlaceList(collaboratorList, backend: backend)
+
+        XCTAssertFalse(didLeave)
+        XCTAssertEqual(repository.leftListIDs, [collaboratorList.id])
+        XCTAssertTrue(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertNotNil(store.lastRemoteError)
+    }
+
     func testListPersistenceRestoresListsAndAutoSaveSetting() {
         let fixture = makeTemporaryPersistence()
         let firstStore = WanderStore(fixtures: WanderFixtures.seed(), persistence: fixture.persistence)
@@ -9482,10 +9572,12 @@ private final class FakePlaceListRepository: PlaceListRepository {
     private let upsertResults: [String]
     private let itemResult: String
     private let upsertDelayNanoseconds: UInt64
+    private let leaveError: Error?
     private(set) var visibleListRequestCount = 0
     private(set) var detailListIDs: [String] = []
     private(set) var upsertedDrafts: [PlaceListUpsertDraft] = []
     private(set) var deletedListIDs: [String] = []
+    private(set) var leftListIDs: [String] = []
     private(set) var collaboratorRequests: [CollaboratorRequest] = []
     private(set) var itemRequests: [ItemRequest] = []
     private(set) var removedItems: [(listID: String, itemID: String)] = []
@@ -9497,7 +9589,8 @@ private final class FakePlaceListRepository: PlaceListRepository {
         upsertResult: String = "11111111-1111-4111-8111-111111111111",
         upsertResults: [String]? = nil,
         itemResult: String = "22222222-2222-4222-8222-222222222222",
-        upsertDelayNanoseconds: UInt64 = 0
+        upsertDelayNanoseconds: UInt64 = 0,
+        leaveError: Error? = nil
     ) {
         self.visibleListsResult = visibleLists
         self.detailsByListID = details
@@ -9505,6 +9598,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
         self.upsertResults = upsertResults ?? [upsertResult]
         self.itemResult = itemResult
         self.upsertDelayNanoseconds = upsertDelayNanoseconds
+        self.leaveError = leaveError
     }
 
     func setVisibleLists(_ visibleLists: [RemotePlaceListSummary]) {
@@ -9534,6 +9628,13 @@ private final class FakePlaceListRepository: PlaceListRepository {
 
     func delete(listID: String) async throws {
         deletedListIDs.append(listID)
+    }
+
+    func leave(listID: String) async throws {
+        leftListIDs.append(listID)
+        if let leaveError {
+            throw leaveError
+        }
     }
 
     func setCollaborators(listID: String, userIDs: [String]) async throws {

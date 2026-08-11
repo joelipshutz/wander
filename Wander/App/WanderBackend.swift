@@ -614,6 +614,14 @@ final class WanderBackend: ObservableObject {
         try await placeListRepository.delete(listID: listID)
     }
 
+    func leavePlaceList(listID: String) async throws {
+        guard let placeListRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        try await placeListRepository.leave(listID: listID)
+    }
+
     func setPlaceListCollaborators(listID: String, userIDs: [String]) async throws {
         guard let placeListRepository else {
             throw WanderRemoteError.notConfigured

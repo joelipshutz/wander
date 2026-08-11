@@ -1980,6 +1980,32 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
     }
 
+    func testCollaboratorsLeaveListsFromNativeOverflowConfirmation() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let detailScreen = try sourceSection(
+            source,
+            after: "private struct ListDetailScreen: View",
+            before: "private struct ListSuggestionsSection: View"
+        )
+
+        XCTAssertTrue(detailScreen.contains("if canLeaveList"))
+        XCTAssertTrue(detailScreen.contains("Menu {"))
+        XCTAssertTrue(detailScreen.contains("Button(role: .destructive)"))
+        XCTAssertTrue(detailScreen.contains("Label(\"Leave List\""))
+        XCTAssertTrue(detailScreen.contains(".alert(\"Leave List?\""))
+        XCTAssertTrue(
+            detailScreen.contains(
+                "Are you sure? You’ll lose collaborator access. You may still see this list in Friends if the owner continues sharing it."
+            )
+        )
+        XCTAssertTrue(detailScreen.contains("sourceList.map(store.canLeave)"))
+        XCTAssertTrue(detailScreen.contains(".alert(\"Couldn't leave list\""))
+        XCTAssertTrue(detailScreen.contains("Text(\"Try again later\")"))
+        XCTAssertFalse(detailScreen.contains("store.lastRemoteError"))
+    }
+
     func testListGridTopAlignsTilesWhileNamesGrowDownward() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
@@ -2236,6 +2262,8 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(initialSelection.contains("let initialPlaceQuery"))
+        XCTAssertTrue(initialSelection.contains("store.visiblePlaces().first"))
+        XCTAssertTrue(initialSelection.contains("routedVisiblePlace = initialPlace"))
         XCTAssertFalse(initialSelection.contains("firstVisiblePlace"))
         XCTAssertFalse(source.contains("centerMapOnInitialPlacesIfNeeded"))
     }

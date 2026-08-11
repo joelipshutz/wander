@@ -887,12 +887,13 @@ struct MapScreen: View {
         else { return }
 
         let normalized = initialPlaceQuery.lowercased()
-        guard let initialPlace = visiblePlaces.first(where: { visiblePlace in
+        guard let initialPlace = store.visiblePlaces().first(where: { visiblePlace in
             visiblePlace.id.lowercased().contains(normalized)
                 || visiblePlace.place.id.lowercased().contains(normalized)
                 || visiblePlace.place.canonicalName.lowercased().contains(normalized)
         }) else { return }
 
+        routedVisiblePlace = initialPlace
         selectVisiblePlace(initialPlace)
         center(on: initialPlace)
         didResolveInitialCamera = true

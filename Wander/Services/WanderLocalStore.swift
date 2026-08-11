@@ -1903,6 +1903,10 @@ final class WanderStore: ObservableObject {
         list.ownerUserID == currentUser.id
     }
 
+    func canLeave(_ list: LocalPlaceList) -> Bool {
+        !canManage(list) && isMember(of: list, userID: currentUser.id)
+    }
+
     func canAddPlaces(to list: LocalPlaceList) -> Bool {
         canManage(list) || isMember(of: list, userID: currentUser.id)
     }
@@ -2246,6 +2250,30 @@ final class WanderStore: ObservableObject {
         }
         persist()
         return true
+    }
+
+    @discardableResult
+    func leavePlaceList(_ list: LocalPlaceList, backend: WanderBackend?) async -> Bool {
+        guard canLeave(list) else { return false }
+
+        guard let remoteListID = remoteID(list.serverID ?? list.id),
+              let backend,
+              backend.placeListRepository != nil
+        else {
+            markCurrentUserAsHavingLeft(list)
+            lastRemoteError = nil
+            return true
+        }
+
+        do {
+            try await backend.leavePlaceList(listID: remoteListID)
+            markCurrentUserAsHavingLeft(list)
+            lastRemoteError = nil
+            return true
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+            return false
+        }
     }
 
     @discardableResult
@@ -2626,6 +2654,18 @@ final class WanderStore: ObservableObject {
         return placeListMembers.contains { member in
             listIDs.contains(member.listID) && member.userID == userID && member.deletedAt == nil
         }
+    }
+
+    private func markCurrentUserAsHavingLeft(_ list: LocalPlaceList) {
+        let listIDs = listReferenceIDs(for: list)
+        let now = Date.now
+        for memberIndex in placeListMembers.indices where
+            listIDs.contains(placeListMembers[memberIndex].listID)
+                && placeListMembers[memberIndex].userID == currentUser.id
+                && placeListMembers[memberIndex].deletedAt == nil {
+            placeListMembers[memberIndex].deletedAt = now
+        }
+        persist()
     }
 
     private func listItems(for list: LocalPlaceList) -> [LocalPlaceListItem] {
