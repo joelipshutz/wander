@@ -454,10 +454,12 @@ struct MapScreen: View {
                                             )
                                         }
                                         .buttonStyle(.plain)
+                                        .walkthroughTarget(
+                                            source == .featured ? .mapFeatured : .mapFriends
+                                        )
                                     }
 
                                     Button {
-                                        walkthroughs.perform(.mapFilters)
                                         isMoreFiltersPresented.toggle()
                                     } label: {
                                         MapMoreFilterChip(
@@ -466,6 +468,7 @@ struct MapScreen: View {
                                         )
                                     }
                                     .buttonStyle(.plain)
+                                    .walkthroughTarget(.mapMoreFilters)
                                     .popover(
                                         isPresented: $isMoreFiltersPresented,
                                         attachmentAnchor: .rect(.bounds),
@@ -483,7 +486,6 @@ struct MapScreen: View {
                                 .padding(.vertical, WanderTheme.spacing1)
                             }
                             .frame(height: 48)
-                            .walkthroughTarget(.mapFilters)
 
                             if let mapFilterEmptyMessage {
                                 MapFilterEmptyNotice(
@@ -558,7 +560,6 @@ struct MapScreen: View {
             }
             .onChange(of: mapFilterState.more) { _, _ in
                 routedVisiblePlace = nil
-                walkthroughs.perform(.mapFilters)
             }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
@@ -794,7 +795,6 @@ struct MapScreen: View {
     }
 
     private func selectMapSource(_ source: MapSource) {
-        walkthroughs.perform(.mapFilters)
         routedVisiblePlace = nil
         mapFilterState.source = source
     }

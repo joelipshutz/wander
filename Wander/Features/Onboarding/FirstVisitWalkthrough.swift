@@ -17,7 +17,9 @@ enum WalkthroughSurface: String, CaseIterable, Codable, Sendable {
 enum WalkthroughTargetID: String, Codable, Sendable {
     case mapAdd
     case mapAddAgain
-    case mapFilters
+    case mapFeatured
+    case mapFriends
+    case mapMoreFilters
     case mapSearch
     case mapMemory
     case mapTabs
@@ -43,6 +45,8 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case feedSurfaceSwitch
     case feedPeopleSearch
     case feedInvite
+    case feedDiscoverSearch
+    case feedSearchField
     case feedSmartSearch
     case placeRatings
     case placeActions
@@ -94,7 +98,7 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 7
+    static let version = 8
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
@@ -102,9 +106,25 @@ enum FirstVisitWalkthroughContent {
             step(.map, .mapAddAgain, "One more shortcut", "Tap + again and we’ll show you where imports live."),
             step(
                 .map,
-                .mapFilters,
-                "Shape your map",
-                "Filter to the people and moments you trust: your saves, check-ins, Wanna places, and friends.",
+                .mapFeatured,
+                "Start with the standouts",
+                "Featured ranks strong, recent check-ins from people you follow in the map area you’re viewing.",
+                advance: .next,
+                coachTheme: .map
+            ),
+            step(
+                .map,
+                .mapFriends,
+                "See your friends’ map",
+                "Friends shows the Check Ins and Wanna places shared by people in your trusted circle.",
+                advance: .next,
+                coachTheme: .social
+            ),
+            step(
+                .map,
+                .mapMoreFilters,
+                "Narrow in with More",
+                "Category chooses the kind of place. People picks whose saves you see. Status switches between All, Check Ins, and Wanna.",
                 advance: .next,
                 coachTheme: .map
             ),
@@ -274,10 +294,31 @@ enum FirstVisitWalkthroughContent {
                 advance: .next,
                 nextButtonTitle: "Find my people",
                 coachTheme: .social
+            ),
+            step(
+                .feed,
+                .feedDiscoverSearch,
+                "Ask your circle for a place",
+                "Tap search to open Discover and find places through the context your people saved.",
+                coachTheme: .map
             )
         ],
         .feedSearch: [
-            step(.feedSearch, .feedSmartSearch, "Search the way you think", "Try a moment, mood, or need—not just a place name.")
+            step(
+                .feedSearch,
+                .feedSearchField,
+                "Search with the details you remember",
+                "Try a place name, category, neighborhood, person or @handle—or a saved tag like date night or work-friendly.",
+                advance: .next,
+                coachTheme: .map
+            ),
+            step(
+                .feedSearch,
+                .feedSmartSearch,
+                "Search the way you think",
+                "Tap an example to turn a natural-language need into filters and trusted results.",
+                coachTheme: .map
+            )
         ],
         .lists: [
             step(.lists, .listsCreate, "Make a list", "Tap + to turn saved places into a plan you can use."),
@@ -742,13 +783,13 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         case .add, .saveFlow:
             .map
         case .feed:
-            .lists
+            .feedSearch
         case .listEditor:
             .lists
         case .listDetail:
             .profile
         case .feedSearch:
-            .feed
+            .lists
         case .lists:
             nil
         case .profile:
@@ -1208,9 +1249,11 @@ private struct FirstVisitWalkthroughOverlay: View {
 
                     if onBack != nil || step.advance == .next {
                         HStack(spacing: WanderTheme.spacing2) {
+                            Spacer(minLength: 0)
+
                             if let onBack {
                                 Button(action: onBack) {
-                                    Image(systemName: "chevron.left")
+                                    Image(systemName: "arrow.left")
                                         .font(.system(size: 13, weight: .black))
                                         .foregroundStyle(WanderTheme.textInk.color)
                                         .frame(width: 44, height: 44)
@@ -1222,22 +1265,17 @@ private struct FirstVisitWalkthroughOverlay: View {
                                 .accessibilityIdentifier("walkthrough.back.\(step.id)")
                             }
 
-                            Spacer(minLength: 0)
-
                             if step.advance == .next {
                                 Button(action: onNext) {
-                                    HStack(spacing: WanderTheme.spacing1) {
-                                        Text(step.nextButtonTitle)
-                                        Image(systemName: "arrow.right")
-                                    }
-                                    .font(.system(size: 14, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                                    .frame(minWidth: 92, minHeight: 44)
-                                    .padding(.horizontal, WanderTheme.spacing2)
-                                    .contentShape(Capsule())
-                                    .wanderGlassCapsule(tone: .accent)
+                                    Image(systemName: "arrow.right")
+                                        .font(.system(size: 14, weight: .black))
+                                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Circle())
+                                        .wanderGlassCapsule(tone: .accent)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(step.nextButtonTitle)
                                 .accessibilityIdentifier("walkthrough.next.\(step.id)")
                             }
                         }

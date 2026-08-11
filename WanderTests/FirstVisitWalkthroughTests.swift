@@ -4,15 +4,24 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithFortyFiveGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 45)
+    func testApprovedWalkthroughCoversEverySurfaceWithFortyNineGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 49)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.map]?.map(\.target),
-            [.mapAdd, .mapAddAgain, .mapFilters, .mapSearch, .mapMemory, .mapTabs]
+            [
+                .mapAdd,
+                .mapAddAgain,
+                .mapFeatured,
+                .mapFriends,
+                .mapMoreFilters,
+                .mapSearch,
+                .mapMemory,
+                .mapTabs
+            ]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.sendoff]?.map(\.target),
@@ -41,6 +50,14 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             ]
         )
         XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.feed]?.map(\.target),
+            [.feedActivity, .feedSurfaceSwitch, .feedPeopleSearch, .feedInvite, .feedDiscoverSearch]
+        )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.feedSearch]?.map(\.target),
+            [.feedSearchField, .feedSmartSearch]
+        )
+        XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
             [.profileSettings, .profileSocial, .profileActivity, .profileShare]
         )
@@ -56,7 +73,9 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
     func testRequestedExplanationStepsAdvanceWithNext() throws {
         let passiveTargets: [WalkthroughTargetID] = [
-            .mapFilters,
+            .mapFeatured,
+            .mapFriends,
+            .mapMoreFilters,
             .mapSearch,
             .mapMemory,
             .mapTabs,
@@ -73,6 +92,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .feedActivity,
             .feedPeopleSearch,
             .feedInvite,
+            .feedSearchField,
             .placeRatings,
             .placeActions,
             .placeHistory,
@@ -123,6 +143,9 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         for target in [
             WalkthroughTargetID.mapSearch,
+            .mapFeatured,
+            .mapFriends,
+            .mapMoreFilters,
             .addImport,
             .mapTabs,
             .placeRatings,
@@ -160,6 +183,32 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
     }
 
+    func testMapFilterAndDiscoverSearchLessonsMatchSupportedBehavior() throws {
+        let featured = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapFeatured }
+        )
+        let friends = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapFriends }
+        )
+        let more = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapMoreFilters }
+        )
+        let searchField = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .feedSearchField }
+        )
+
+        XCTAssertTrue(featured.message.contains("people you follow"))
+        XCTAssertTrue(featured.message.contains("map area"))
+        XCTAssertTrue(friends.message.contains("Check Ins and Wanna"))
+        XCTAssertTrue(more.message.contains("Category"))
+        XCTAssertTrue(more.message.contains("People"))
+        XCTAssertTrue(more.message.contains("Status"))
+        XCTAssertTrue(searchField.message.contains("category"))
+        XCTAssertTrue(searchField.message.contains("neighborhood"))
+        XCTAssertTrue(searchField.message.contains("@handle"))
+        XCTAssertTrue(searchField.message.contains("saved tag"))
+    }
+
     func testOnlyTheHighlightedActionAdvancesTheWalkthrough() throws {
         let defaults = try makeDefaults()
         let coordinator = FirstVisitWalkthroughCoordinator(
@@ -180,11 +229,15 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(coordinator.currentStep?.target, .mapAddAgain)
 
         coordinator.perform(.mapAddAgain)
-        XCTAssertEqual(coordinator.currentStep?.target, .mapFilters)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFeatured)
 
-        coordinator.perform(.mapFilters)
-        XCTAssertEqual(coordinator.currentStep?.target, .mapFilters)
+        coordinator.perform(.mapFeatured)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFeatured)
 
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .mapMoreFilters)
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.currentStep?.target, .mapSearch)
     }
@@ -242,6 +295,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
 
         coordinator.activate(.feedSearch)
+        coordinator.advancePassiveStep()
         coordinator.perform(.feedSmartSearch)
         XCTAssertNil(coordinator.activeSurface)
 
@@ -257,7 +311,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertTrue(firstVersion.isComplete(for: "ryan", surface: .lists))
         XCTAssertFalse(
-            FirstVisitWalkthroughStore(defaults: defaults, version: 7)
+            FirstVisitWalkthroughStore(defaults: defaults, version: 8)
                 .isComplete(for: "ryan", surface: .lists)
         )
     }
@@ -299,8 +353,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         coordinator.completeContactInviteRequest()
         XCTAssertFalse(coordinator.isRequestingContactInvite)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedDiscoverSearch)
+
+        coordinator.perform(.feedDiscoverSearch)
         XCTAssertNil(coordinator.activeSurface)
-        XCTAssertEqual(coordinator.requestedSurface, .lists)
+        XCTAssertEqual(coordinator.requestedSurface, .feedSearch)
     }
 
     func testUnavailableTargetRecoveryOnlyAdvancesTheCurrentTarget() throws {
@@ -438,6 +495,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
+        coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.requestedSurface, .feed)
 
         coordinator.consumeRequestedSurface(.feed)
@@ -449,10 +508,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         coordinator.consumeRequestedSurface(.map)
         coordinator.activate(.feedSearch)
+        coordinator.advancePassiveStep()
         coordinator.perform(.feedSmartSearch)
-        XCTAssertEqual(coordinator.requestedSurface, .feed)
+        XCTAssertEqual(coordinator.requestedSurface, .lists)
 
-        coordinator.consumeRequestedSurface(.feed)
+        coordinator.consumeRequestedSurface(.lists)
         coordinator.activate(.listEditor)
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()

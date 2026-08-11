@@ -159,7 +159,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Dayglow Coffee"].exists)
     }
 
-    func testMapFilterAndSearchExplanationsUseNextWithFullScrim() {
+    func testMapFilterLessonsExplainEveryFilterBeforeMapSearch() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -167,16 +167,36 @@ final class OnboardingUITests: XCTestCase {
             "-WanderEnableWalkthroughs",
             "-WanderResetWalkthroughs",
             "-WanderWalkthroughTarget",
-            "mapFilters"
+            "mapFeatured"
         ]
         app.launch()
 
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.map.mapFilters"]
-                .waitForExistence(timeout: 5)
-        )
-        XCTAssertTrue(app.buttons["Next"].isHittable)
-        app.buttons["Next"].tap()
+        let filterSteps = [
+            ("mapFeatured", "map.filter.featured", "REC-257 Featured filter lesson"),
+            ("mapFriends", "map.filter.friends", "REC-257 Friends filter lesson"),
+            ("mapMoreFilters", "map.filter.more", "REC-257 More filters lesson")
+        ]
+
+        for (target, control, screenshotName) in filterSteps {
+            XCTAssertTrue(
+                app.descendants(matching: .any)["walkthrough.map.\(target)"]
+                    .waitForExistence(timeout: 5)
+            )
+            XCTAssertTrue(
+                app.descendants(matching: .any)[control]
+                    .waitForExistence(timeout: 2)
+            )
+            let nextButton = app.buttons["Next"]
+            XCTAssertTrue(nextButton.isHittable)
+            XCTAssertLessThanOrEqual(nextButton.frame.width, 52)
+
+            let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            screenshot.name = screenshotName
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+
+            nextButton.tap()
+        }
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.map.mapSearch"]
@@ -188,6 +208,65 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-236 full scrim around Map search"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testFeedWalkthroughOpensDiscoverAndExplainsSupportedSearches() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderWalkthroughTarget",
+            "feedDiscoverSearch"
+        ]
+        app.launch()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
+                .waitForExistence(timeout: 6)
+        )
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.isHittable)
+        launcher.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.textFields["discover.placesSearchField"].exists)
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+
+        let fieldScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        fieldScreenshot.name = "REC-257 Discover search field lesson"
+        fieldScreenshot.lifetime = .keepAlways
+        add(fieldScreenshot)
+
+        let nextButton = app.buttons["Next"]
+        XCTAssertTrue(nextButton.isHittable)
+        XCTAssertLessThanOrEqual(nextButton.frame.width, 52)
+        nextButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSmartSearch"]
+                .waitForExistence(timeout: 4)
+        )
+        let suggestedSearch = app.buttons["Search coffee worth crossing town for"]
+        XCTAssertTrue(suggestedSearch.isHittable)
+
+        let examplesScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        examplesScreenshot.name = "REC-257 natural-language search examples lesson"
+        examplesScreenshot.lifetime = .keepAlways
+        add(examplesScreenshot)
+
+        suggestedSearch.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.lists.listsCreate"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Lists"].isSelected)
     }
 
     func testFeedActivityExplanationUsesNext() {

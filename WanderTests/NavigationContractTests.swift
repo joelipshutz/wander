@@ -148,7 +148,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
         XCTAssertFalse(feed.contains("ToolbarItem(placement: .topBarTrailing)"))
         XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
-        XCTAssertTrue(feed.contains("FeedSearchLauncher(placeholders: tickerSuggestions)"))
+        XCTAssertTrue(feed.contains("FeedSearchLauncher("))
+        XCTAssertTrue(feed.contains("placeholders: tickerSuggestions"))
         XCTAssertTrue(feed.contains("isShowingSearch = true"))
         XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search trusted places\")"))
         XCTAssertTrue(feed.contains(".accessibilityIdentifier(\"feed.searchLauncher\")"))
@@ -939,7 +940,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(typography.contains("size:"))
 
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
-        XCTAssertTrue(feed.contains("FeedSearchLauncher(placeholders: tickerSuggestions)"))
+        XCTAssertTrue(feed.contains("FeedSearchLauncher("))
+        XCTAssertTrue(feed.contains("placeholders: tickerSuggestions"))
         XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
         XCTAssertFalse(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
 

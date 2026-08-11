@@ -250,6 +250,7 @@ struct DiscoverScreen: View {
                     )
                 }
                 if isPlaceSearchPresented,
+                   walkthroughs.activeSurface != .feedSearch,
                    !ProcessInfo.processInfo.arguments.contains("-WanderDisableSearchAutofocus") {
                     await Task.yield()
                     searchFieldFocused = true
@@ -307,6 +308,11 @@ struct DiscoverScreen: View {
             .onChange(of: searchFieldFocused) { _, isFocused in
                 if isFocused, selectedMode == .places, !isPlaceSearchPresented {
                     activatePlaceSearch()
+                }
+            }
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                if target == .feedSearchField || target == .feedSmartSearch {
+                    searchFieldFocused = false
                 }
             }
             .task(id: visiblePlaceSignature) {
@@ -710,6 +716,7 @@ struct DiscoverScreen: View {
                 onClear: clearPlaceSearch
             )
             .focused($searchFieldFocused)
+            .walkthroughTarget(.feedSearchField)
         }
     }
 

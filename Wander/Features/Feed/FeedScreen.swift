@@ -97,6 +97,11 @@ struct FeedScreen: View {
             .onChange(of: selectedSurface) { _, _ in
                 walkthroughs.perform(.feedSurfaceSwitch)
             }
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                if target == .feedDiscoverSearch {
+                    selectedSurface = .places
+                }
+            }
             .onChange(of: isShowingSearch) { _, isShowing in
                 if !isShowing {
                     walkthroughs.activate(.feed)
@@ -122,10 +127,11 @@ struct FeedScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    FeedSearchLauncher(placeholders: tickerSuggestions) {
-                        walkthroughs.activate(.feedSearch)
-                        isShowingSearch = true
-                    }
+                    FeedSearchLauncher(
+                        placeholders: tickerSuggestions,
+                        action: openDiscoverSearch
+                    )
+                    .walkthroughTarget(.feedDiscoverSearch)
 
                     content
                 }
@@ -144,6 +150,15 @@ struct FeedScreen: View {
                 scrollToFocusedActivity(focusedActivityID, proxy: proxy)
             }
         }
+    }
+
+    private func openDiscoverSearch() {
+        if walkthroughs.currentStep?.target == .feedDiscoverSearch {
+            walkthroughs.perform(.feedDiscoverSearch)
+            walkthroughs.consumeRequestedSurface(.feedSearch)
+        }
+        walkthroughs.activate(.feedSearch)
+        isShowingSearch = true
     }
 
     @ViewBuilder
