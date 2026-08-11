@@ -5665,6 +5665,28 @@ final class WanderStore: ObservableObject {
         await refreshRemoteWannaGoPlans(backend: backend)
     }
 
+    /// Fetches one Map viewport without replacing the store's profile-wide
+    /// social cache. Map uses this lightweight path after camera gestures so a
+    /// pan does not re-run the full social snapshot or Wanna plan refresh.
+    func fetchRemoteViewportPlaces(
+        in viewport: MapViewport,
+        backend: WanderBackend?
+    ) async -> [VisiblePlace]? {
+        guard let backend, backend.placeRepository != nil else { return nil }
+        let requestUserID = currentUser.id
+
+        do {
+            let visiblePlaces = try await backend.visiblePlaces(in: viewport)
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            lastRemoteError = nil
+            return visiblePlaces
+        } catch {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            lastRemoteError = remoteErrorMessage(error)
+            return nil
+        }
+    }
+
     func refreshRemoteWannaGoPlans(backend: WanderBackend?) async {
         guard let backend, backend.userPlaceRepository != nil else {
             return

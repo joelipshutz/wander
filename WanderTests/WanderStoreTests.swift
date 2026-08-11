@@ -6247,6 +6247,26 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.attributes(for: "up_remote_maya_maru")[0].valueJSON, "\"yes\"")
     }
 
+    func testRemoteViewportFetchReturnsPlacesWithoutReplacingProfileWideCache() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let remotePlace = try XCTUnwrap(store.visiblePlaces().first)
+        let placeRepository = FakePlaceRepository(places: [remotePlace])
+        let backend = WanderBackend(placeRepository: placeRepository)
+        let viewport = MapViewport(
+            minLatitude: 33.9,
+            minLongitude: -118.4,
+            maxLatitude: 34.2,
+            maxLongitude: -118.1
+        )
+        let originalCacheIDs = store.remoteVisiblePlaceCache.map(\.id)
+
+        let places = await store.fetchRemoteViewportPlaces(in: viewport, backend: backend)
+
+        XCTAssertEqual(places?.map(\.id), [remotePlace.id])
+        XCTAssertEqual(placeRepository.viewports, [viewport])
+        XCTAssertEqual(store.remoteVisiblePlaceCache.map(\.id), originalCacheIDs)
+    }
+
     func testRemoteSocialGraphHydratesFollowEdgesAndRelationships() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
