@@ -162,6 +162,100 @@ final class ActivityEngagementTests: XCTestCase {
         coordinator.dismiss(requestID: try! XCTUnwrap(requestID))
         XCTAssertNil(coordinator.commentsRoute)
     }
+
+    func testFeedRefreshPreservesAnExactActivityLoadedForComments() async {
+        let exactActivityID = "40000000-0000-0000-0000-000000000001"
+        let pageActivityID = "40000000-0000-0000-0000-000000000002"
+        let actor = ProfileShell(
+            id: "user_friend",
+            handle: "friend",
+            displayName: "Friend",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let exactActivity = FeedActivity(
+            id: exactActivityID,
+            kind: .placeBeen,
+            actor: actor,
+            occurredAt: Date(timeIntervalSince1970: 100)
+        )
+        let refreshedActivity = FeedActivity(
+            id: pageActivityID,
+            kind: .placeWannaGo,
+            actor: actor,
+            occurredAt: Date(timeIntervalSince1970: 200)
+        )
+        let feedRepository = SuspendedActivityFeedRepository(
+            page: FollowedFeedPage(
+                activity: [refreshedActivity],
+                featuredPlaces: [],
+                nextCursor: nil,
+                fetchedAt: Date(timeIntervalSince1970: 300)
+            )
+        )
+        let activityRepository = ActivityEngagementRepositoryStub(activityResult: exactActivity)
+        let backend = WanderBackend(
+            feedRepository: feedRepository,
+            activityEngagementRepository: activityRepository
+        )
+        let store = WanderStore(fixtures: .empty())
+
+        let refresh = Task { @MainActor in
+            await store.refreshFollowedFeed(
+                backend: backend,
+                preservingActivityID: exactActivityID
+            )
+        }
+        for _ in 0..<20 where feedRepository.requestCount == 0 {
+            await Task.yield()
+        }
+        XCTAssertEqual(feedRepository.requestCount, 1)
+
+        let resolvedActivity = await store.activity(id: exactActivityID, backend: backend)
+        XCTAssertEqual(resolvedActivity?.id, exactActivityID)
+
+        feedRepository.finish()
+        let didRefresh = await refresh.value
+        XCTAssertTrue(didRefresh)
+        XCTAssertEqual(
+            store.followedFeedPage?.activity.map(\.id),
+            [pageActivityID, exactActivityID]
+        )
+    }
+
+    func testExactActivityResolutionCanRetryAfterATransientFailure() async {
+        let activityID = "40000000-0000-0000-0000-000000000003"
+        let activity = FeedActivity(
+            id: activityID,
+            kind: .placeBeen,
+            actor: ProfileShell(
+                id: "user_friend",
+                handle: "friend",
+                displayName: "Friend",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .follower
+            ),
+            occurredAt: .now
+        )
+        let repository = ActivityEngagementRepositoryStub(
+            activityResponses: [
+                .failure(ActivityEngagementTestError.expected),
+                .success(activity)
+            ]
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let store = WanderStore(fixtures: .empty())
+
+        let firstResolution = await store.activity(id: activityID, backend: backend)
+        XCTAssertNil(firstResolution)
+        XCTAssertNotNil(store.activityEngagementError(for: activityID))
+
+        let retriedResolution = await store.activity(id: activityID, backend: backend)
+        XCTAssertEqual(retriedResolution?.id, activityID)
+        XCTAssertNil(store.activityEngagementError(for: activityID))
+    }
 }
 
 private enum ActivityEngagementTestError: Error {
@@ -172,13 +266,28 @@ private enum ActivityEngagementTestError: Error {
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
     let setLikeError: Error?
+    private var activityResponses: [Result<FeedActivity, Error>]
 
     init(
         placeMatches: [PlaceActivityEngagementMatch] = [],
-        setLikeError: Error? = nil
+        setLikeError: Error? = nil,
+        activityResult: FeedActivity? = nil,
+        activityResponses: [Result<FeedActivity, Error>]? = nil
     ) {
         self.placeMatches = placeMatches
         self.setLikeError = setLikeError
+        self.activityResponses = activityResponses
+            ?? activityResult.map { [.success($0)] }
+            ?? []
+    }
+
+    func activity(id: String) async throws -> FeedActivity {
+        guard !activityResponses.isEmpty else {
+            throw ActivityEngagementTestError.expected
+        }
+        let activityResult = try activityResponses.removeFirst().get()
+        guard activityResult.id == id else { throw ActivityEngagementTestError.expected }
+        return activityResult
     }
 
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
@@ -225,5 +334,28 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
             comment: comment,
             engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
         )
+    }
+}
+
+@MainActor
+private final class SuspendedActivityFeedRepository: FeedRepository {
+    private let page: FollowedFeedPage
+    private var isSuspended = true
+    private(set) var requestCount = 0
+
+    init(page: FollowedFeedPage) {
+        self.page = page
+    }
+
+    func followedFeed(before: String?, limit: Int) async throws -> FollowedFeedPage {
+        requestCount += 1
+        while isSuspended {
+            await Task.yield()
+        }
+        return page
+    }
+
+    func finish() {
+        isSuspended = false
     }
 }

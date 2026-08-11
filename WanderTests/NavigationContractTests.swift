@@ -539,6 +539,7 @@ final class NavigationContractTests: XCTestCase {
     @MainActor
     func testPlaceListAndInviteSharesUseCanonicalGetRecMeURLs() throws {
         let placeID = "40000000-0000-0000-0000-000000000001"
+        let activityID = "41000000-0000-0000-0000-000000000001"
         let listID = "44000000-0000-0000-0000-000000000001"
         let inviteToken = String(repeating: "ab", count: 24)
 
@@ -549,6 +550,14 @@ final class NavigationContractTests: XCTestCase {
                 message: "Worth remembering"
             )?.item.absoluteString,
             "https://getrec.me/places/\(placeID)"
+        )
+        XCTAssertEqual(
+            WanderShareContent.activity(
+                activityID: activityID,
+                placeName: "Ggiata",
+                message: "See this check-in"
+            )?.item.absoluteString,
+            "https://getrec.me/activities/\(activityID)"
         )
         XCTAssertEqual(
             WanderShareContent.list(
@@ -563,6 +572,13 @@ final class NavigationContractTests: XCTestCase {
                 name: "Saturday plan"
             )?.item.absoluteString,
             "https://getrec.me/invites/\(inviteToken)"
+        )
+        XCTAssertNil(
+            WanderShareContent.activity(
+                activityID: "local-activity",
+                placeName: "Unsynced",
+                message: "Not shareable yet"
+            )
         )
         XCTAssertNil(
             WanderShareContent.place(

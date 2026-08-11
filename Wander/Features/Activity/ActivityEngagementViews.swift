@@ -115,21 +115,35 @@ struct ActivityEngagementActionRow: View {
         .accessibilityValue("\(engagement.commentCount) comments")
     }
 
+    @ViewBuilder
     private var shareButton: some View {
-        WanderShareButton(
-            content: .activity(
+        if isEngagementEnabled,
+           let content = WanderShareContent.activity(
                 activityID: context.activityID,
                 placeName: context.placeName,
                 message: context.shareMessage
-            )
-        ) {
-            Image(systemName: "paperplane")
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-                .accessibilityLabel("Share activity")
+           ) {
+            WanderShareButton(content: content) {
+                shareLabel
+            }
+        } else {
+            Button(action: {}) {
+                shareLabel
+            }
+            .buttonStyle(.plain)
+            .disabled(true)
+            .opacity(0.45)
+            .accessibilityHint("Available when this activity finishes loading.")
         }
+    }
+
+    private var shareLabel: some View {
+        Image(systemName: "paperplane")
+            .font(.system(size: 21, weight: .semibold))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Share activity")
     }
 
     private var bookmarkButton: some View {
@@ -393,6 +407,98 @@ struct ActivityCommentsScreen: View {
             }
             isPosting = false
             composerFocused = true
+        }
+    }
+}
+
+struct ActivityCommentsRouteScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
+    let requestID: UUID
+    let retry: @MainActor () async -> Void
+    @State private var isRetrying = false
+
+    var body: some View {
+        Group {
+            if let route = currentRoute, let context = route.context {
+                ActivityCommentsScreen(
+                    context: context,
+                    visiblePlace: route.visiblePlace
+                )
+            } else {
+                resolutionState
+            }
+        }
+    }
+
+    private var currentRoute: ActivityCommentsRoute? {
+        guard let route = activityNavigation.commentsRoute, route.id == requestID else { return nil }
+        return route
+    }
+
+    private var resolutionError: String? {
+        guard let activityID = currentRoute?.activityID else { return nil }
+        return store.activityEngagementError(for: activityID)
+    }
+
+    private var resolutionState: some View {
+        NavigationStack {
+            VStack(spacing: WanderTheme.spacing4) {
+                if resolutionError == nil || isRetrying {
+                    ProgressView("Opening activity…")
+                        .tint(WanderTheme.terracotta.color)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                } else {
+                    Image(systemName: "exclamationmark.bubble")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+
+                    Text("This activity couldn’t load")
+                        .font(WanderTypography.editorialCardTitle)
+                        .foregroundStyle(WanderTheme.textInk.color)
+
+                    Text("Check your connection and try again.")
+                        .font(.system(size: 14, weight: .medium))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+
+                    Button("Try again") {
+                        Task { @MainActor in
+                            isRetrying = true
+                            await retry()
+                            isRetrying = false
+                        }
+                    }
+                    .font(.system(size: 15, weight: .black))
+                    .foregroundStyle(WanderTheme.surfaceRaised.color)
+                    .frame(minWidth: 132, minHeight: 44)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(Capsule())
+                    .disabled(isRetrying)
+                }
+            }
+            .padding(WanderTheme.spacing6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+            .navigationTitle("comments")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        activityNavigation.dismiss(requestID: requestID)
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 19, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Back")
+                }
+            }
         }
     }
 }

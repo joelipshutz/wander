@@ -62,12 +62,12 @@ struct WanderShareContent: Equatable {
         activityID: String,
         placeName: String,
         message: String
-    ) -> WanderShareContent {
-        let activityURL = UUID(uuidString: activityID).flatMap { _ in
-            WanderDeepLinkRoute.sharedActivity(activityID: activityID).url
-        }
+    ) -> WanderShareContent? {
+        guard UUID(uuidString: activityID) != nil,
+              let activityURL = WanderDeepLinkRoute.sharedActivity(activityID: activityID).url
+        else { return nil }
         return WanderShareContent(
-            item: activityURL ?? publicTestFlightURL,
+            item: activityURL,
             subject: placeName,
             message: message
         )

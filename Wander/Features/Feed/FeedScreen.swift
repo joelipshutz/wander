@@ -103,17 +103,15 @@ struct FeedScreen: View {
                 }
             }
         }
-        .fullScreenCover(item: resolvedCommentsRouteBinding) { route in
-            if let context = route.context {
-                ActivityCommentsScreen(
-                    context: context,
-                    visiblePlace: route.visiblePlace
-                )
-                .environmentObject(store)
-                .environmentObject(auth)
-                .environmentObject(backend)
-                .environmentObject(activityNavigation)
-            }
+        .fullScreenCover(item: commentsRouteBinding) { route in
+            ActivityCommentsRouteScreen(
+                requestID: route.id,
+                retry: resolveCommentsRouteIfNeeded
+            )
+            .environmentObject(store)
+            .environmentObject(auth)
+            .environmentObject(backend)
+            .environmentObject(activityNavigation)
         }
         .task(id: activityNavigation.commentsRoute?.id) {
             await resolveCommentsRouteIfNeeded()
@@ -206,19 +204,17 @@ struct FeedScreen: View {
     }
 
     private func refresh() async {
-        _ = await store.refreshFollowedFeed(backend: auth.isSignedIn ? backend : nil)
+        _ = await store.refreshFollowedFeed(
+            backend: auth.isSignedIn ? backend : nil,
+            preservingActivityID: activityNavigation.commentsRoute?.activityID ?? focusedActivityID
+        )
         guard store.followedFeedPage?.activity.isEmpty != false else { return }
         await store.refreshDiscoverPeopleRecommendations(backend: auth.isSignedIn ? backend : nil)
     }
 
-    private var resolvedCommentsRouteBinding: Binding<ActivityCommentsRoute?> {
+    private var commentsRouteBinding: Binding<ActivityCommentsRoute?> {
         Binding(
-            get: {
-                guard let route = activityNavigation.commentsRoute,
-                      route.context != nil
-                else { return nil }
-                return route
-            },
+            get: { activityNavigation.commentsRoute },
             set: { route in
                 guard route == nil,
                       let requestID = activityNavigation.commentsRoute?.id

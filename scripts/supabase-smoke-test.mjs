@@ -2629,6 +2629,10 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [detailListID],
     (result) => result.rows[0]?.detail !== null,
   );
+  // feed_events is intentionally unavailable to authenticated clients. Resolve
+  // the fixture as the privileged smoke-test session, then restore the owner
+  // claims before exercising the public activity RPCs below.
+  await client.query("reset role");
   const activityEvent = await expectQuery(
     client,
     "resolve list activity fixture",
@@ -2644,6 +2648,7 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     (result) => typeof result.rows[0]?.id === "string",
   );
   const activityID = activityEvent.rows[0].id;
+  await setAuthenticatedUser(client, smokeUserID);
   await expectQuery(
     client,
     "owner resolves exact activity detail",

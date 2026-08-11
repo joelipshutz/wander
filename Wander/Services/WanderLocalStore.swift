@@ -1417,7 +1417,10 @@ final class WanderStore: ObservableObject {
     /// available. Production data is supplied by the server-side event
     /// projection; the fixture keeps demo and visual-QA launches deterministic.
     @discardableResult
-    func refreshFollowedFeed(backend: WanderBackend?) async -> Bool {
+    func refreshFollowedFeed(
+        backend: WanderBackend?,
+        preservingActivityID: String? = nil
+    ) async -> Bool {
         let requestUserID = currentUser.id
         feedLoadState = followedFeedPage == nil ? .loading : .stale
 
@@ -1427,12 +1430,16 @@ final class WanderStore: ObservableObject {
             do {
                 let page = try await loadFollowedFeed(from: repository)
                 guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
-                followedFeedPage = page
+                let resolvedPage = mergingPinnedActivity(
+                    into: page,
+                    activityID: preservingActivityID
+                )
+                followedFeedPage = resolvedPage
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
                 lastRemoteError = nil
                 await refreshActivityEngagement(
-                    activityIDs: page.activity.map(\.id),
+                    activityIDs: resolvedPage.activity.map(\.id),
                     backend: backend
                 )
                 return true
@@ -1446,11 +1453,31 @@ final class WanderStore: ObservableObject {
 
         guard currentUser.id == requestUserID else { return false }
         let page = fixtureFollowedFeedPage(relativeTo: .now)
-        followedFeedPage = page
+        followedFeedPage = mergingPinnedActivity(
+            into: page,
+            activityID: preservingActivityID
+        )
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
         seedFixtureActivityEngagement(for: page.activity)
         return true
+    }
+
+    private func mergingPinnedActivity(
+        into refreshedPage: FollowedFeedPage,
+        activityID: String?
+    ) -> FollowedFeedPage {
+        guard let activityID,
+              !refreshedPage.activity.contains(where: { $0.id == activityID }),
+              let pinnedActivity = followedFeedPage?.activity.first(where: { $0.id == activityID })
+        else { return refreshedPage }
+
+        return FollowedFeedPage(
+            activity: FeedPresentation.newestFirst(refreshedPage.activity + [pinnedActivity]),
+            featuredPlaces: refreshedPage.featuredPlaces,
+            nextCursor: refreshedPage.nextCursor,
+            fetchedAt: refreshedPage.fetchedAt
+        )
     }
 
     func activityEngagement(for activityID: String) -> ActivityEngagementSummary {

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(48);
+select plan(51);
 
 select has_table('public', 'activity_likes', 'activity likes table exists');
 select has_table('public', 'activity_comments', 'activity comments table exists');
@@ -243,6 +243,48 @@ select is(
   'Engagement Favorites',
   'activity detail returns the visible list projection'
 );
+
+update public.profiles
+set is_private_profile = true
+where id = 'engagement_owner';
+
+select is(
+  jsonb_array_length(
+    public.activity_engagement_summaries(
+      array[(select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created')]
+    )
+  ),
+  0,
+  'private profiles immediately hide list activity from followers'
+);
+select throws_ok(
+  $$
+    select public.activity_detail(
+      (select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created')
+    )
+  $$,
+  'P0001',
+  'activity_not_visible',
+  'followers cannot resolve an old list activity link after the actor becomes private'
+);
+
+select set_config('request.jwt.claim.sub', 'engagement_owner', true);
+select is(
+  public.activity_detail(
+    (select id from public.feed_events where list_id = 'a1200000-0000-0000-0000-000000000001' and event_type = 'list_created')
+  )->>'event_type',
+  'list_created',
+  'private actors retain access to their own activity'
+);
+
+update public.profiles
+set is_private_profile = false
+where id = 'engagement_owner';
+update public.user_places
+set visibility = 'followers'
+where id = 'a1100000-0000-0000-0000-000000000001';
+select set_config('request.jwt.claim.sub', 'engagement_viewer', true);
+
 select is(
   public.activity_detail(
     (select id from public.feed_events where user_place_id = 'a1100000-0000-0000-0000-000000000001' order by occurred_at desc limit 1)
