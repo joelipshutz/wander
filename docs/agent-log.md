@@ -19680,6 +19680,19 @@ Checkpoint, 2026-08-12 00:10 PDT:
 - Deleted only this task's temporary 1.8 GB DerivedData cache after validation
   because the volume reached 126 MB free; screenshots remain in `/private/tmp`.
 
+Handoff, 2026-08-12 00:13 PDT:
+
+- Opened ready PR #365: https://github.com/joelipshutz/wander/pull/365.
+  Its required TestFlight `ship` payload validates successfully and records no
+  release operation in this PR.
+- Linear REC-270 is `In Review` with the PR, validation, visual QA, and known
+  unrelated UI-test harness failure documented.
+- The branch is rebased onto exact current `origin/main` commit `ec53ce77`; the
+  intervening Apple-first authentication change did not overlap this diff.
+- No merge, build-number change, TestFlight upload, or Slack release note was
+  performed. Next: review/merge PR #365, then include it in the next explicitly
+  requested TestFlight batch.
+
 REC-133 production implementation restart, 2026-07-23 11:22 PDT:
 
 - Agent/tool: Codex. Goal: convert the approved debug-only place-photo carousel
