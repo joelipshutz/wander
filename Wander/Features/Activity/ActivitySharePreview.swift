@@ -111,6 +111,12 @@ struct ActivitySharePreviewScreen: View {
                 isPreparing: isPreparingArtwork,
                 action: handleDestination
             )
+            .background(alignment: .bottom) {
+                WanderTheme.surfaceBone.color
+                    .frame(height: WanderTheme.spacing12)
+                    .offset(y: WanderTheme.spacing12)
+                    .ignoresSafeArea(edges: .bottom)
+            }
         }
         .sheet(item: $systemSharePresentation) { presentation in
             WanderShareSheet(content: presentation.content)
@@ -528,10 +534,6 @@ private struct ActivityShareDestinationTray: View {
 
     var body: some View {
         VStack(spacing: WanderTheme.spacing3) {
-            Capsule()
-                .fill(WanderTheme.borderStrong.color)
-                .frame(width: 42, height: 5)
-
             Text("share this ticket")
                 .font(.system(size: 20, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
@@ -551,7 +553,7 @@ private struct ActivityShareDestinationTray: View {
             .frame(height: 104)
             .scrollIndicators(.hidden)
         }
-        .padding(.top, WanderTheme.spacing2)
+        .padding(.top, WanderTheme.spacing4)
         .padding(.bottom, WanderTheme.spacing2)
         .frame(maxWidth: .infinity)
         .background(WanderTheme.surfaceBone.color)
