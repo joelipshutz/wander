@@ -2,6 +2,9 @@ import MessageUI
 import Photos
 import SwiftUI
 import UIKit
+#if canImport(TikTokOpenShareSDK)
+import TikTokOpenShareSDK
+#endif
 
 enum ActivityShareDestination: String, CaseIterable, Identifiable {
     case messages
@@ -32,7 +35,10 @@ enum ActivityShareDestination: String, CaseIterable, Identifiable {
         switch self {
         case .messages: .messages
         case .copyLink: .copyLink
-        case .instagramStory, .instagramPost, .tikTok, .snapchat: .socialShareFallback
+        case .instagramStory: .instagramStory
+        case .instagramPost: .instagramPost
+        case .tikTok: .tikTok
+        case .snapchat: .snapchat
         case .save: .savePhoto
         case .more: .systemShare
         }
@@ -42,7 +48,10 @@ enum ActivityShareDestination: String, CaseIterable, Identifiable {
 enum ActivityShareDestinationRoute: Equatable {
     case messages
     case copyLink
-    case socialShareFallback
+    case instagramStory
+    case instagramPost
+    case tikTok
+    case snapchat
     case savePhoto
     case systemShare
 }
@@ -86,10 +95,7 @@ struct ActivitySharePreviewScreen: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ActivityShareArtwork(
-                context: context,
-                topInset: WanderTheme.spacing12 + WanderTheme.tapMinimum + WanderTheme.spacing6
-            )
+            ActivityShareArtwork(context: context)
                 .ignoresSafeArea()
 
             topBar
@@ -192,7 +198,15 @@ struct ActivitySharePreviewScreen: View {
             showConfirmation("link copied")
         case .messages:
             Task { await presentMessages() }
-        case .socialShareFallback, .systemShare:
+        case .instagramStory:
+            Task { await presentInstagramStory() }
+        case .instagramPost:
+            Task { await presentInstagramPost() }
+        case .tikTok:
+            Task { await presentTikTok() }
+        case .snapchat:
+            Task { await presentSnapchat() }
+        case .systemShare:
             Task { await presentSystemShare() }
         case .savePhoto:
             Task { await saveArtworkToPhotos() }
@@ -248,9 +262,91 @@ struct ActivitySharePreviewScreen: View {
     }
 
     @MainActor
+    private func presentInstagramStory() async {
+        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard await ActivityShareProviderLauncher.openInstagramStory(
+            image: renderedImage,
+            contentURL: content.item
+        ) else {
+            await presentSystemShare()
+            return
+        }
+    }
+
+    @MainActor
+    private func presentInstagramPost() async {
+        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard ActivityShareProviderLauncher.canOpenInstagram else {
+            await presentSystemShare()
+            return
+        }
+        guard await ensurePhotoLibraryAccess() else { return }
+
+        do {
+            let localIdentifier = try await ActivitySharePhotoWriter.save(renderedImage)
+            guard await ActivityShareProviderLauncher.openInstagramPost(
+                localIdentifier: localIdentifier
+            ) else {
+                await presentSystemShare()
+                return
+            }
+        } catch {
+            isShowingExportError = true
+        }
+    }
+
+    @MainActor
+    private func presentTikTok() async {
+        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard ActivityShareProviderLauncher.canOpenTikTok else {
+            await presentSystemShare()
+            return
+        }
+        guard await ensurePhotoLibraryAccess() else { return }
+
+        let localIdentifier: String
+        do {
+            localIdentifier = try await ActivitySharePhotoWriter.save(renderedImage)
+        } catch {
+            isShowingExportError = true
+            return
+        }
+        guard await ActivityShareProviderLauncher.openTikTok(
+            localIdentifier: localIdentifier
+        ) else {
+            await presentSystemShare()
+            return
+        }
+    }
+
+    @MainActor
+    private func presentSnapchat() async {
+        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        guard await ActivityShareProviderLauncher.openSnapchatPreview(
+            image: renderedImage,
+            contentURL: content.item
+        ) else {
+            await presentSystemShare()
+            return
+        }
+    }
+
+    @MainActor
     private func saveArtworkToPhotos() async {
         guard await prepareArtworkIfNeeded(), let renderedImage else { return }
 
+        guard await ensurePhotoLibraryAccess() else { return }
+
+        do {
+            _ = try await ActivitySharePhotoWriter.save(renderedImage)
+            showConfirmation("saved to photos")
+        } catch {
+            isShowingExportError = true
+        }
+    }
+
+    @MainActor
+    private func ensurePhotoLibraryAccess() async -> Bool {
         let currentStatus = PHPhotoLibrary.authorizationStatus(for: .addOnly)
         let status: PHAuthorizationStatus
         switch ActivitySharePhotoPermissionPolicy.action(for: currentStatus) {
@@ -260,20 +356,14 @@ struct ActivitySharePreviewScreen: View {
             status = currentStatus
         case .showSettings:
             isShowingPhotoSettingsAlert = true
-            return
+            return false
         }
 
         guard ActivitySharePhotoPermissionPolicy.action(for: status) == .save else {
             isShowingPhotoSettingsAlert = true
-            return
+            return false
         }
-
-        do {
-            try await ActivitySharePhotoWriter.save(renderedImage)
-            showConfirmation("saved to photos")
-        } catch {
-            isShowingExportError = true
-        }
+        return true
     }
 
     @MainActor
@@ -293,41 +383,25 @@ struct ActivitySharePreviewScreen: View {
 
 private struct ActivityShareArtwork: View {
     let context: ActivityEngagementContext
-    var topInset = WanderTheme.spacing12
 
     var body: some View {
         ZStack {
             ActivityShareBackdrop()
 
             VStack(spacing: 0) {
-                HStack {
-                    Text("rec.me")
-                        .font(WanderTypography.editorialMasthead)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                Spacer(minLength: WanderTheme.spacing12)
 
-                    Spacer()
+                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                    ActivityShareTicket(context: context)
 
                     Text("a place worth remembering")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(WanderTheme.textInk.color.opacity(0.78))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, WanderTheme.spacing6)
-                .padding(.top, topInset)
 
-                Spacer(minLength: WanderTheme.spacing8)
-
-                ActivityShareTicket(context: context)
-                    .padding(.horizontal, WanderTheme.spacing6)
-
-                Spacer(minLength: WanderTheme.spacing8)
-
-                HStack(spacing: WanderTheme.spacing2) {
-                    Image(systemName: "mappin.and.ellipse")
-                    Text("open on getrec.me")
-                }
-                .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color.opacity(0.78))
-                .padding(.bottom, WanderTheme.spacing8)
+                Spacer(minLength: WanderTheme.spacing12)
             }
         }
         .accessibilityElement(children: .combine)
@@ -339,28 +413,7 @@ private struct ActivityShareArtwork: View {
 
 private struct ActivityShareBackdrop: View {
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    WanderTheme.terracottaTint.color,
-                    WanderTheme.canvasWarm.color,
-                    WanderTheme.terracotta.color.opacity(0.48),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            Circle()
-                .fill(WanderTheme.surfaceBone.color.opacity(0.38))
-                .frame(width: 260, height: 260)
-                .blur(radius: 2)
-                .offset(x: 150, y: -260)
-
-            Circle()
-                .fill(WanderTheme.terracottaDark.color.opacity(0.10))
-                .frame(width: 340, height: 340)
-                .offset(x: -170, y: 300)
-        }
+        WanderTheme.terracotta.color
     }
 }
 
@@ -566,32 +619,52 @@ private struct ActivityShareDestinationButton: View {
                         .foregroundStyle(WanderTheme.textInk.color)
                 }
         case .instagramStory:
-            instagramIcon(systemImage: "plus.square.on.square")
+            instagramIcon(showsStoryBadge: true)
         case .instagramPost:
-            instagramIcon(systemImage: "camera")
+            instagramIcon(showsStoryBadge: false)
         case .tikTok:
             Circle()
                 .fill(Color.black)
                 .overlay {
                     ZStack {
-                        Image(systemName: "music.note")
-                            .offset(x: -2, y: 1)
+                        Image("BrandTikTok")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .offset(x: -1.5, y: 1.5)
                             .foregroundStyle(Color.cyan)
-                        Image(systemName: "music.note")
-                            .offset(x: 2, y: -1)
+                        Image("BrandTikTok")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .offset(x: 1.5, y: -1.5)
                             .foregroundStyle(Color(red: 1, green: 0.18, blue: 0.42))
-                        Image(systemName: "music.note")
+                        Image("BrandTikTok")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
                             .foregroundStyle(.white)
                     }
-                    .font(.system(size: 26, weight: .black))
+                    .padding(15)
                 }
         case .snapchat:
             Circle()
-                .fill(Color(red: 1, green: 0.91, blue: 0.08))
+                .fill(Color(red: 1, green: 0.99, blue: 0))
                 .overlay {
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 25, weight: .bold))
-                        .foregroundStyle(.black)
+                    ZStack {
+                        Image("BrandSnapchat")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .foregroundStyle(.black)
+                        Image("BrandSnapchat")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .scaleEffect(0.87)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(13)
                 }
         case .save:
             Circle()
@@ -612,23 +685,37 @@ private struct ActivityShareDestinationButton: View {
         }
     }
 
-    private func instagramIcon(systemImage: String) -> some View {
+    private func instagramIcon(showsStoryBadge: Bool) -> some View {
         Circle()
             .fill(
-                AngularGradient(
+                LinearGradient(
                     colors: [
-                        Color(red: 0.35, green: 0.20, blue: 0.78),
+                        Color(red: 0.28, green: 0.22, blue: 0.78),
                         Color(red: 0.85, green: 0.12, blue: 0.49),
                         Color(red: 1, green: 0.66, blue: 0.20),
-                        Color(red: 0.35, green: 0.20, blue: 0.78),
                     ],
-                    center: .center
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
             )
             .overlay {
-                Image(systemName: systemImage)
-                    .font(.system(size: 24, weight: .bold))
+                Image("BrandInstagram")
+                    .resizable()
+                    .renderingMode(.template)
+                    .scaledToFit()
                     .foregroundStyle(.white)
+                    .padding(15)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if showsStoryBadge {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(.white)
+                        .frame(width: 21, height: 21)
+                        .background(Color(red: 0.20, green: 0.48, blue: 0.96))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                }
             }
     }
 
@@ -636,7 +723,10 @@ private struct ActivityShareDestinationButton: View {
         switch destination.route {
         case .messages: "Opens Messages with the ticket image and rec.me link."
         case .copyLink: "Copies the rec.me link."
-        case .socialShareFallback: "Opens iOS sharing options with the ticket image and rec.me link."
+        case .instagramStory: "Opens the Instagram Story composer with the ticket image."
+        case .instagramPost: "Opens the Instagram post composer with the ticket image."
+        case .tikTok: "Shares the ticket image to TikTok when Share Kit is configured."
+        case .snapchat: "Opens the Snapchat preview editor with the ticket image when Creative Kit is configured."
         case .savePhoto: "Saves the ticket image to Photos."
         case .systemShare: "Opens the standard iOS share sheet."
         }
@@ -679,22 +769,153 @@ private enum ActivityShareArtworkRenderer {
     }
 }
 
+enum ActivityShareProviderConfiguration {
+    static var metaAppID: String? { configuredValue(for: "WANDER_META_APP_ID") }
+    static var snapClientID: String? { configuredValue(for: "WANDER_SNAPCHAT_CLIENT_ID") }
+    static var tikTokClientKey: String? { configuredValue(for: "TikTokClientKey") }
+    static let tikTokRedirectURI = "https://getrec.me/share/tiktok"
+
+    static func configuredValue(for key: String, bundle: Bundle = .main) -> String? {
+        normalizedValue(bundle.object(forInfoDictionaryKey: key) as? String)
+    }
+
+    static func normalizedValue(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains("$("),
+              !trimmed.hasSuffix("-unconfigured")
+        else { return nil }
+        return trimmed
+    }
+}
+
+@MainActor
+enum ActivityShareProviderLauncher {
+    #if canImport(TikTokOpenShareSDK)
+    private static var retainedTikTokRequest: TikTokShareRequest?
+    #endif
+
+    static var canOpenInstagram: Bool {
+        guard let url = URL(string: "instagram://app") else { return false }
+        return UIApplication.shared.canOpenURL(url)
+    }
+
+    static var canOpenTikTok: Bool {
+        guard ActivityShareProviderConfiguration.tikTokClientKey != nil,
+              let url = URL(string: "tiktoksharesdk://")
+        else { return false }
+        return UIApplication.shared.canOpenURL(url)
+    }
+
+    static func openInstagramStory(image: UIImage, contentURL: URL) async -> Bool {
+        guard let pngData = image.pngData(),
+              var components = URLComponents(string: "instagram-stories://share")
+        else { return false }
+
+        if let appID = ActivityShareProviderConfiguration.metaAppID {
+            components.queryItems = [URLQueryItem(name: "source_application", value: appID)]
+        }
+        guard let shareURL = components.url, UIApplication.shared.canOpenURL(shareURL) else {
+            return false
+        }
+
+        setExpiringPasteboardItems([[
+            "com.instagram.sharedSticker.backgroundImage": pngData,
+            "com.instagram.sharedSticker.contentURL": contentURL.absoluteString,
+        ]])
+        return await open(shareURL)
+    }
+
+    static func openInstagramPost(localIdentifier: String) async -> Bool {
+        guard var components = URLComponents(string: "instagram://library") else { return false }
+        components.queryItems = [URLQueryItem(name: "LocalIdentifier", value: localIdentifier)]
+        guard let shareURL = components.url, UIApplication.shared.canOpenURL(shareURL) else {
+            return false
+        }
+        return await open(shareURL)
+    }
+
+    static func openTikTok(localIdentifier: String) async -> Bool {
+        #if canImport(TikTokOpenShareSDK)
+        guard canOpenTikTok else { return false }
+        let request = TikTokShareRequest(
+            localIdentifiers: [localIdentifier],
+            mediaType: .image,
+            redirectURI: ActivityShareProviderConfiguration.tikTokRedirectURI
+        )
+        retainedTikTokRequest = request
+        request.send { _ in
+            Task { @MainActor in retainedTikTokRequest = nil }
+        }
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    static func openSnapchatPreview(image: UIImage, contentURL: URL) async -> Bool {
+        guard let clientID = ActivityShareProviderConfiguration.snapClientID,
+              let pngData = image.pngData(),
+              var components = URLComponents(string: "snapchat://creativekit/preview/1"),
+              let baseURL = components.url,
+              UIApplication.shared.canOpenURL(baseURL)
+        else { return false }
+
+        setExpiringPasteboardItems([[
+            "com.snapchat.creativekit.clientID": clientID,
+            "com.snapchat.creativekit.backgroundImage": pngData,
+            "com.snapchat.creativekit.attachmentURL": contentURL.absoluteString,
+            "com.snapchat.creativekit.appName": "rec.me",
+        ]])
+
+        components.queryItems = [
+            URLQueryItem(name: "checkcount", value: String(UIPasteboard.general.changeCount)),
+            URLQueryItem(name: "clientId", value: clientID),
+            URLQueryItem(name: "appDisplayName", value: "rec.me"),
+        ]
+        guard let shareURL = components.url else { return false }
+        return await open(shareURL)
+    }
+
+    private static func setExpiringPasteboardItems(_ items: [[String: Any]]) {
+        UIPasteboard.general.setItems(
+            items,
+            options: [.expirationDate: Date().addingTimeInterval(5 * 60)]
+        )
+    }
+
+    private static func open(_ url: URL) async -> Bool {
+        await withCheckedContinuation { continuation in
+            UIApplication.shared.open(url, options: [:]) { didOpen in
+                continuation.resume(returning: didOpen)
+            }
+        }
+    }
+}
+
 private enum ActivitySharePhotoWriter {
-    static func save(_ image: UIImage) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+    static func save(_ image: UIImage) async throws -> String {
+        let identifierBox = ActivitySharePhotoIdentifierBox()
+        return try await withCheckedThrowingContinuation { continuation in
             PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAsset(from: image)
+                let request = PHAssetChangeRequest.creationRequestForAsset(from: image)
+                identifierBox.value = request.placeholderForCreatedAsset?.localIdentifier
             } completionHandler: { didSave, error in
                 if let error {
                     continuation.resume(throwing: error)
-                } else if didSave {
-                    continuation.resume()
+                } else if didSave, let localIdentifier = identifierBox.value {
+                    continuation.resume(returning: localIdentifier)
                 } else {
                     continuation.resume(throwing: ActivitySharePhotoWriterError.saveFailed)
                 }
             }
         }
     }
+}
+
+private final class ActivitySharePhotoIdentifierBox: @unchecked Sendable {
+    var value: String?
 }
 
 private enum ActivitySharePhotoWriterError: Error {

@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+#if canImport(TikTokOpenSDKCore)
+import TikTokOpenSDKCore
+#endif
 
 struct AppEntryForegroundRefreshPolicy {
     static let graceInterval: TimeInterval = 30
@@ -182,6 +185,11 @@ struct AppEntryView: View {
     }
 
     private func receiveIncomingURL(_ url: URL) {
+        #if canImport(TikTokOpenSDKCore)
+        if TikTokURLHandler.handleOpenURL(url) {
+            return
+        }
+        #endif
         if WanderRootView.sharedProfileRoute(for: url) != nil {
             if case .ready = coordinator.state {
                 deepLinkInbox.receive(url)

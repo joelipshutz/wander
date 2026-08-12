@@ -104,6 +104,7 @@
 		6F22AE424BA53E5AC8514E7A /* ProfileRedesignMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 466618F8405CE4321114C0D7 /* ProfileRedesignMockups.swift */; };
 		6F668123D0C7E8B6F5C67F64 /* rec-106-guide-observations.tsv in Resources */ = {isa = PBXBuildFile; fileRef = 637A48049D6DE931A43B8009 /* rec-106-guide-observations.tsv */; };
 		70B6FF7ED9FD6570F2F975DA /* WanderNearbyWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6EA4D0DC023461D682C8A3 /* WanderNearbyWidget.swift */; };
+		72DF41336AAFFA3F9C658D66 /* TikTokOpenShareSDK in Frameworks */ = {isa = PBXBuildFile; productRef = FEB190222523019A1DF721A0 /* TikTokOpenShareSDK */; };
 		73924B066BD7D0F8917C6F09 /* WanderPlaceCategoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */; };
 		74A35271B61D71C5E6823428 /* DiscoverParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */; };
 		74AAAADD6470333A4F1A1508 /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
@@ -466,6 +467,7 @@
 				DF7751B0E499B150900F2027 /* ClerkKit in Frameworks */,
 				3DA817E338E98E7ED70B1A67 /* ClerkKitUI in Frameworks */,
 				2FCACFADB44361B7435C5793 /* Supabase in Frameworks */,
+				72DF41336AAFFA3F9C658D66 /* TikTokOpenShareSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1066,6 +1068,7 @@
 				8988486B1914A6E2FBB405A6 /* ClerkKit */,
 				F81D752928A4F01332482548 /* ClerkKitUI */,
 				9166766790578B44B8D3597A /* Supabase */,
+				FEB190222523019A1DF721A0 /* TikTokOpenShareSDK */,
 			);
 			productName = Wander;
 			productReference = 7A02BE0AE86E482916C8F103 /* Wander.app */;
@@ -1114,6 +1117,7 @@
 				4DAE0591BAF858C9B2A7D697 /* XCRemoteSwiftPackageReference "clerk-ios" */,
 				E38B95811738BE0E0051BBBF /* XCRemoteSwiftPackageReference "posthog-ios" */,
 				82400502D061751C471C0A3D /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				22BD851D3E5C4C5866B1BBFA /* XCRemoteSwiftPackageReference "tiktok-opensdk-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F2F4ECD0469D370B01FDE9BB /* Products */;
@@ -1540,6 +1544,7 @@
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
+				WANDER_TIKTOK_CLIENT_KEY = "recme-tiktok-unconfigured";
 			};
 			name = Release;
 		};
@@ -1554,6 +1559,7 @@
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
+				WANDER_TIKTOK_CLIENT_KEY = "recme-tiktok-unconfigured";
 			};
 			name = Debug;
 		};
@@ -1744,6 +1750,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		22BD851D3E5C4C5866B1BBFA /* XCRemoteSwiftPackageReference "tiktok-opensdk-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tiktok/tiktok-opensdk-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.0;
+			};
+		};
 		4DAE0591BAF858C9B2A7D697 /* XCRemoteSwiftPackageReference "clerk-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/clerk/clerk-ios";
@@ -1790,6 +1804,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4DAE0591BAF858C9B2A7D697 /* XCRemoteSwiftPackageReference "clerk-ios" */;
 			productName = ClerkKitUI;
+		};
+		FEB190222523019A1DF721A0 /* TikTokOpenShareSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 22BD851D3E5C4C5866B1BBFA /* XCRemoteSwiftPackageReference "tiktok-opensdk-ios" */;
+			productName = TikTokOpenShareSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

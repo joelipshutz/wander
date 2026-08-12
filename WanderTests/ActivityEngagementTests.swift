@@ -20,10 +20,10 @@ final class ActivityEngagementTests: XCTestCase {
         )
         XCTAssertEqual(ActivityShareDestination.messages.route, .messages)
         XCTAssertEqual(ActivityShareDestination.copyLink.route, .copyLink)
-        XCTAssertEqual(ActivityShareDestination.instagramStory.route, .socialShareFallback)
-        XCTAssertEqual(ActivityShareDestination.instagramPost.route, .socialShareFallback)
-        XCTAssertEqual(ActivityShareDestination.tikTok.route, .socialShareFallback)
-        XCTAssertEqual(ActivityShareDestination.snapchat.route, .socialShareFallback)
+        XCTAssertEqual(ActivityShareDestination.instagramStory.route, .instagramStory)
+        XCTAssertEqual(ActivityShareDestination.instagramPost.route, .instagramPost)
+        XCTAssertEqual(ActivityShareDestination.tikTok.route, .tikTok)
+        XCTAssertEqual(ActivityShareDestination.snapchat.route, .snapchat)
         XCTAssertEqual(ActivityShareDestination.save.route, .savePhoto)
         XCTAssertEqual(ActivityShareDestination.more.route, .systemShare)
     }
@@ -48,6 +48,25 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(
             ActivitySharePhotoPermissionPolicy.action(for: .restricted),
             .showSettings
+        )
+    }
+
+    func testShareProviderConfigurationRejectsMissingBuildSettingPlaceholders() {
+        XCTAssertNil(ActivityShareProviderConfiguration.normalizedValue(nil))
+        XCTAssertNil(ActivityShareProviderConfiguration.normalizedValue("   "))
+        XCTAssertNil(
+            ActivityShareProviderConfiguration.normalizedValue("$(WANDER_TIKTOK_CLIENT_KEY)")
+        )
+        XCTAssertNil(
+            ActivityShareProviderConfiguration.normalizedValue("recme-tiktok-unconfigured")
+        )
+        XCTAssertEqual(
+            ActivityShareProviderConfiguration.normalizedValue("  provider-client-key  "),
+            "provider-client-key"
+        )
+        XCTAssertEqual(
+            ActivityShareProviderConfiguration.tikTokRedirectURI,
+            "https://getrec.me/share/tiktok"
         )
     }
 

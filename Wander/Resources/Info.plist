@@ -30,9 +30,28 @@
 				<string>recme</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.grayline.wander.tiktok</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(WANDER_TIKTOK_CLIENT_KEY)</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram</string>
+		<string>instagram-stories</string>
+		<string>snapchat</string>
+		<string>tiktoksharesdk</string>
+		<string>snssdk1180</string>
+		<string>snssdk1233</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>rec.me uses the camera only when you choose to take a photo in the app.</string>
 	<key>NSContactsUsageDescription</key>
@@ -40,7 +59,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>rec.me saves a share card to your photo library only when you tap Save.</string>
+	<string>rec.me saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.</string>
+	<key>TikTokClientKey</key>
+	<string>$(WANDER_TIKTOK_CLIENT_KEY)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>
@@ -53,10 +74,14 @@
 	<string>$(WANDER_CLERK_FRONTEND_API)</string>
 	<key>WANDER_CLERK_PUBLISHABLE_KEY</key>
 	<string>$(WANDER_CLERK_PUBLISHABLE_KEY)</string>
+	<key>WANDER_META_APP_ID</key>
+	<string>$(WANDER_META_APP_ID)</string>
 	<key>WANDER_POSTHOG_HOST</key>
 	<string>$(WANDER_POSTHOG_HOST)</string>
 	<key>WANDER_POSTHOG_PROJECT_TOKEN</key>
 	<string>$(WANDER_POSTHOG_PROJECT_TOKEN)</string>
+	<key>WANDER_SNAPCHAT_CLIENT_ID</key>
+	<string>$(WANDER_SNAPCHAT_CLIENT_ID)</string>
 	<key>WANDER_SUPABASE_PUBLISHABLE_KEY</key>
 	<string>$(WANDER_SUPABASE_PUBLISHABLE_KEY)</string>
 	<key>WANDER_SUPABASE_URL</key>
