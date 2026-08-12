@@ -64,12 +64,34 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapSource.friends.systemImage, "person.2.fill")
     }
 
-    func testSourceTransitionStaysInsideTheMicroInteractionBudget() {
-        XCTAssertEqual(MapSourceTransitionStyle.duration, 0.16, accuracy: 0.001)
-        XCTAssertGreaterThanOrEqual(MapSourceTransitionStyle.deselectedScale, 0.98)
-        XCTAssertLessThan(MapSourceTransitionStyle.deselectedScale, 1)
-        XCTAssertNil(MapSourceTransitionStyle.animation(reduceMotion: true))
-        XCTAssertNotNil(MapSourceTransitionStyle.animation(reduceMotion: false))
+    func testPinFilterTransitionStaysInsideTheMicroInteractionBudget() {
+        XCTAssertEqual(MapPinFilterTransitionStyle.duration, 0.16, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(MapPinFilterTransitionStyle.hiddenScale, 0.90)
+        XCTAssertLessThan(MapPinFilterTransitionStyle.hiddenScale, 1)
+        XCTAssertLessThan(MapPinFilterTransitionStyle.fadeOutDuration, MapPinFilterTransitionStyle.fadeInDuration)
+    }
+
+    func testFilterTransitionIsScopedToPinsAndKeepsLiquidGlass() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let theme = try String(
+            contentsOf: root.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let filterChipSource = try XCTUnwrap(
+            map.components(separatedBy: "private struct MapSourceFilterChip: View {").last?
+                .components(separatedBy: "private struct MapMoreFilterChip: View {").first
+        )
+
+        XCTAssertFalse(filterChipSource.contains(".scaleEffect("))
+        XCTAssertTrue(map.contains("visibleTransitionGroupKeys?.contains(group.key)"))
+        XCTAssertTrue(map.contains("MapPinFilterTransitionStyle.hiddenScale"))
+        XCTAssertFalse(map.contains("incomingGroups + departingGroups"))
+        XCTAssertTrue(theme.contains("if #available(iOS 26.0, *) {"))
+        XCTAssertFalse(theme.contains("isElevated"))
     }
 
     func testFeaturedIsTheOnlyDefaultSourceAndMoreDefaultsToAll() {
