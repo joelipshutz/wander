@@ -58,6 +58,25 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["WANDER_SUPABASE_URL"] as? String, "$(WANDER_SUPABASE_URL)")
     }
 
+    func testInstagramSharingUsesRegisteredMetaApp() throws {
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        let generatedProject = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj")
+        )
+        let plistData = try Data(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist")
+        )
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+        let querySchemes = try XCTUnwrap(plist["LSApplicationQueriesSchemes"] as? [String])
+
+        XCTAssertTrue(project.contains(#"WANDER_META_APP_ID: "1056841943950470""#))
+        XCTAssertTrue(generatedProject.contains("WANDER_META_APP_ID = 1056841943950470;"))
+        XCTAssertEqual(plist["WANDER_META_APP_ID"] as? String, "$(WANDER_META_APP_ID)")
+        XCTAssertTrue(querySchemes.contains("instagram-stories"))
+    }
+
     func testInfoPlistRegistersProfileShareURLScheme() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(

@@ -11,6 +11,7 @@ settings:
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "135"
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
+    WANDER_META_APP_ID: "1056841943950470"
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
     WANDER_TIKTOK_CLIENT_KEY: sbawa5efdmmcvrudh7
 packages:
