@@ -142,17 +142,24 @@ struct MapScreen: View {
     private let onAdd: () -> Void
 
     private var baseVisiblePlaces: [VisiblePlace] {
+        let followedOwnerIDs = Set(store.following(of: store.currentUser.id).map(\.id))
+
         switch mapFilterState.source {
         case .featured:
             return MapFeaturedSelection.places(
                 from: featuredViewportPlaces ?? store.visiblePlaces(),
                 currentUserID: store.currentUser.id,
-                eligibleOwnerIDs: Set(store.following(of: store.currentUser.id).map(\.id)),
+                eligibleOwnerIDs: followedOwnerIDs,
                 in: featuredRankingRegion,
                 refinements: mapFilterState.more
             )
         case .friends:
-            return store.visiblePlaces(filters: mapPlaceFilters)
+            return MapFilterSelection.friendsPlaces(
+                from: store.visiblePlaces(),
+                currentUserID: store.currentUser.id,
+                followedOwnerIDs: followedOwnerIDs,
+                refinements: mapFilterState.more
+            )
         }
     }
 
@@ -202,25 +209,11 @@ struct MapScreen: View {
         visiblePlaceGroups.map(\.key)
     }
 
-    private var mapPlaceFilters: PlaceFilters {
-        MapFilterSelection.placeFilters(for: mapFilterState)
-    }
-
     private var socialOwnerOptions: [MapSocialOwnerOption] {
-        let socialPlaces = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"]))
-        let featuredPlaces = featuredViewportPlaces ?? []
-        var seen = Set<String>()
-        return (socialPlaces + featuredPlaces).compactMap { visiblePlace in
-            let owner = visiblePlace.owner
-            guard owner.id != store.currentUser.id, !seen.contains(owner.id) else { return nil }
-            seen.insert(owner.id)
-            return MapSocialOwnerOption(
-                id: owner.id,
-                displayName: owner.displayName,
-                handle: owner.handle
-            )
-        }
-        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        MapSocialOwnerSelection.options(
+            currentUser: store.currentUser,
+            following: store.following(of: store.currentUser.id)
+        )
     }
 
     private var selectedPlace: VisiblePlace? {
@@ -2637,8 +2630,7 @@ enum MapFeaturedSelection {
 
         let viewport = MapViewportRefreshPolicy.viewport(for: region)
         let communityCheckIns = candidates.filter { visiblePlace in
-            visiblePlace.owner.id != currentUserID
-                && eligibleOwnerIDs.contains(visiblePlace.owner.id)
+            (visiblePlace.owner.id == currentUserID || eligibleOwnerIDs.contains(visiblePlace.owner.id))
                 && visiblePlace.userPlace.status == .been
                 && MapViewportRefreshPolicy.contains(visiblePlace, in: viewport)
         }
@@ -2687,16 +2679,17 @@ enum MapFeaturedSelection {
 }
 
 enum MapFilterSelection {
-    static func placeFilters(for state: MapFilterState) -> PlaceFilters {
-        var filters = PlaceFilters(
-            statuses: statuses(for: state.more.status),
-            categories: state.more.categories,
-            ownerIDs: state.more.people
+    static func friendsPlaces(
+        from candidates: [VisiblePlace],
+        currentUserID: String,
+        followedOwnerIDs: Set<String>,
+        refinements: MapMoreFilterSelection
+    ) -> [VisiblePlace] {
+        let eligibleOwnerIDs = followedOwnerIDs.union([currentUserID])
+        return applying(
+            refinements,
+            to: candidates.filter { eligibleOwnerIDs.contains($0.owner.id) }
         )
-        if state.source == .friends {
-            filters.ownerScopes = ["friends"]
-        }
-        return filters
     }
 
     static func applying(
@@ -2819,13 +2812,41 @@ private struct MapSearchSuggestion: Identifiable {
     }
 }
 
-private struct MapSocialOwnerOption: Identifiable, Equatable {
+struct MapSocialOwnerOption: Identifiable, Equatable {
     let id: String
     let displayName: String
     let handle: String
 
     var menuTitle: String {
         handle.isEmpty ? displayName : "\(displayName) @\(handle)"
+    }
+}
+
+enum MapSocialOwnerSelection {
+    static func options(
+        currentUser: LocalProfile,
+        following: [LocalProfile]
+    ) -> [MapSocialOwnerOption] {
+        var seen = Set<String>()
+        let followedOptions = following.compactMap { profile -> MapSocialOwnerOption? in
+            guard profile.id != currentUser.id, seen.insert(profile.id).inserted else { return nil }
+            return MapSocialOwnerOption(
+                id: profile.id,
+                displayName: profile.displayName,
+                handle: profile.handle
+            )
+        }
+        .sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+
+        return [
+            MapSocialOwnerOption(
+                id: currentUser.id,
+                displayName: "You",
+                handle: currentUser.handle
+            )
+        ] + followedOptions
     }
 }
 
@@ -3242,6 +3263,7 @@ private struct MapMoreFiltersPopover: View {
                             ) {
                                 selection.togglePerson(person.id)
                             }
+                            .accessibilityIdentifier("map.more.person.\(person.id)")
                         }
                     }
 
