@@ -41,6 +41,15 @@ struct ActivityEngagementSummary: Equatable {
             viewerHasLiked: viewerHasLiked
         )
     }
+
+    func removingComment() -> ActivityEngagementSummary {
+        ActivityEngagementSummary(
+            activityID: activityID,
+            likeCount: likeCount,
+            commentCount: commentCount - 1,
+            viewerHasLiked: viewerHasLiked
+        )
+    }
 }
 
 struct ActivityComment: Identifiable, Equatable {
