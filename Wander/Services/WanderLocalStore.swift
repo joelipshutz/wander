@@ -1486,13 +1486,11 @@ final class WanderStore: ObservableObject {
 
     @MainActor
     func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
-        if let existing = followedFeedPage?.activity.first(where: { $0.id == activityID }) {
-            return existing
-        }
+        let existing = followedFeedPage?.activity.first(where: { $0.id == activityID })
 
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
-        else { return nil }
+        else { return existing }
 
         do {
             let activity = try await repository.activity(id: activityID)
@@ -1510,7 +1508,7 @@ final class WanderStore: ObservableObject {
             return activity
         } catch {
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
-            return nil
+            return existing
         }
     }
 

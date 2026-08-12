@@ -1048,6 +1048,14 @@ struct WanderRootView: View {
             beginDeepLinkHandoff(to: .sharedProfile(profileID: profileID))
             return
         }
+        if case .activityComments(let activityID) = request.destination {
+            isPresentingAdd = false
+            initialPresentation = nil
+            selectedTab = .discover
+            activityNavigation.openComments(activityID: activityID)
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            return
+        }
 
         isPresentingAdd = false
         initialPresentation = nil
@@ -1092,6 +1100,7 @@ struct WanderRootView: View {
         case .people, .drafts: .profile
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
+        case .activityComments: .discover
         case .discover: .discover
         }
     }
@@ -1252,7 +1261,7 @@ struct WanderRootView: View {
         case .profile:
             selectedTab = .profile
             isPresentingAdd = false
-        case .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+        case .placeDetail, .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
             break
         }
 
@@ -1292,7 +1301,7 @@ struct WanderRootView: View {
     }
 
     private var walkthroughTabBarTargetVerticalOffset: CGFloat {
-        if #available(iOS 26.0, *) { 6 } else { 2 }
+        if #available(iOS 26.0, *) { 12 } else { 8 }
     }
 
     private var walkthroughTabBarTargetHorizontalInset: CGFloat {

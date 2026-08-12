@@ -35,7 +35,7 @@ const aliasRules: Array<{ category: PlaceCategory; patterns: RegExp[] }> = [
   {
     category: "bars_nightlife",
     patterns: [
-      /\b(bar|nightlife|cocktail|pub|sports\s+bar|wine\s+bar|gastropub|bar\s+and\s+grill|dance\s+hall|club|disco|lounge|hookah|beer\s+garden|jazz\s+club|brewery|brewpub|distillery|winery|vineyard|nightclub|karaoke|live\s+music|comedy\s+club|casino)\b/,
+      /\b(bar|nightlife|cocktail|pub|sports\s+bar|wine\s+bar|cider\s+bar|sake\s+bar|game\s+bar|gastropub|bar\s+and\s+grill|dance\s+hall|club|disco|lounge|hookah|beer\s+garden|jazz\s+club|brewery|brewpub|distillery|winery|vineyard|nightclub|karaoke|live\s+music|comedy\s+club|casino)\b/,
     ],
   },
   {
