@@ -56,7 +56,6 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case listsOpenPlan
     case listMap
     case listMapPlace
-    case listActions
     case listEditorTitle
     case listEditorPrivacy
     case listEditorCollaborators
@@ -91,10 +90,12 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
     let message: String
     let advance: WalkthroughAdvance
     let allowsTargetInteraction: Bool
+    let allowsBackNavigation: Bool
     let nextButtonTitle: String
     let coachTheme: WalkthroughCoachTheme
 
     var id: String { "\(surface.rawValue).\(target.rawValue)" }
+    var automaticallyRecoversWhenTargetIsMissing: Bool { advance == .action }
 }
 
 enum FirstVisitWalkthroughContent {
@@ -300,6 +301,7 @@ enum FirstVisitWalkthroughContent {
                 .feedDiscoverSearch,
                 "Ask your circle for a place",
                 "Tap search to open Discover and find places through the context your people saved.",
+                allowsBackNavigation: false,
                 coachTheme: .map
             )
         ],
@@ -334,8 +336,7 @@ enum FirstVisitWalkthroughContent {
                 "The focused card keeps the place type, who saved it, and whether it’s a Check In or Wanna Go together.",
                 advance: .next,
                 coachTheme: .lists
-            ),
-            step(.listDetail, .listActions, "Keep the plan moving", "Add a place or edit the list whenever plans change.")
+            )
         ],
         .listEditor: [
             step(
@@ -347,16 +348,16 @@ enum FirstVisitWalkthroughContent {
             ),
             step(
                 .listEditor,
-                .listEditorPrivacy,
-                "Choose who can see it",
-                "Keep it private or make it visible to the people who follow you.",
+                .listEditorCollaborators,
+                "Plan it together",
+                "Add collaborators so everyone can keep the list current.",
                 advance: .next
             ),
             step(
                 .listEditor,
-                .listEditorCollaborators,
-                "Plan it together",
-                "Add collaborators so everyone can keep the list current.",
+                .listEditorPrivacy,
+                "Choose who can see it",
+                "Stealth is the final choice: keep the list private or share it with people who follow you.",
                 advance: .next
             )
         ],
@@ -432,6 +433,7 @@ enum FirstVisitWalkthroughContent {
         _ message: String,
         advance: WalkthroughAdvance = .action,
         allowsTargetInteraction: Bool? = nil,
+        allowsBackNavigation: Bool = true,
         nextButtonTitle: String = "Next",
         coachTheme: WalkthroughCoachTheme = .standard
     ) -> WalkthroughStep {
@@ -442,6 +444,7 @@ enum FirstVisitWalkthroughContent {
             message: message,
             advance: advance,
             allowsTargetInteraction: allowsTargetInteraction ?? (advance == .action),
+            allowsBackNavigation: allowsBackNavigation,
             nextButtonTitle: nextButtonTitle,
             coachTheme: coachTheme
         )
@@ -1099,7 +1102,9 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                                 step: step,
                                 targetFrame: targetFrame,
                                 containerSize: proxy.size,
-                                onBack: coordinator.canGoBack ? { coordinator.goBack() } : nil,
+                                onBack: step.allowsBackNavigation && coordinator.canGoBack
+                                    ? { coordinator.goBack() }
+                                    : nil,
                                 onNext: coordinator.advancePassiveStep
                             )
                             .transition(.opacity)
@@ -1125,6 +1130,7 @@ private struct MissingWalkthroughTargetResolver: View {
         Color.clear
             .allowsHitTesting(false)
             .task(id: step.id) {
+                guard step.automaticallyRecoversWhenTargetIsMissing else { return }
                 try? await Task.sleep(for: .milliseconds(2_500))
                 guard !Task.isCancelled else { return }
                 coordinator.recoverUnavailableTarget(step.target)

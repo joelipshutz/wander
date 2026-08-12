@@ -230,6 +230,7 @@ final class OnboardingUITests: XCTestCase {
         )
         let launcher = app.buttons["feed.searchLauncher"]
         XCTAssertTrue(launcher.isHittable)
+        XCTAssertFalse(app.buttons["Previous walkthrough step"].exists)
         launcher.tap()
 
         XCTAssertTrue(
@@ -384,6 +385,31 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testWalkthroughInviteIsOptionalUntilAContactIsSelected() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderInviteMockup", "walkthroughContacts"]
+        app.launch()
+
+        let primaryAction = app.buttons["invite.primaryAction"]
+        XCTAssertTrue(primaryAction.waitForExistence(timeout: 5))
+        XCTAssertEqual(primaryAction.label, "Next")
+        XCTAssertTrue(primaryAction.isHittable)
+
+        let firstContact = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Maya")
+        ).firstMatch
+        XCTAssertTrue(firstContact.waitForExistence(timeout: 3))
+        firstContact.tap()
+
+        XCTAssertEqual(primaryAction.label, "Invite")
+        XCTAssertTrue(primaryAction.isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-257 optional walkthrough invite after one selection"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testListCreationExplanationsUseNext() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -400,22 +426,32 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        for target in ["listEditorTitle", "listEditorPrivacy", "listEditorCollaborators"] {
-            XCTAssertTrue(
-                app.descendants(matching: .any)["walkthrough.listEditor.\(target)"]
-                    .waitForExistence(timeout: 6)
-            )
-            XCTAssertTrue(app.buttons["Next"].isHittable)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.listEditor.listEditorTitle"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        app.buttons["Next"].tap()
 
-            if target == "listEditorCollaborators" {
-                let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-                screenshot.name = "REC-236 List creation passive coach mark"
-                screenshot.lifetime = .keepAlways
-                add(screenshot)
-            }
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.listEditor.listEditorCollaborators"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        app.buttons["Next"].tap()
 
-            app.buttons["Next"].tap()
-        }
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.listEditor.listEditorPrivacy"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 List creation passive coach mark"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["Next"].tap()
 
         XCTAssertTrue(app.buttons["lists.headerAdd"].waitForExistence(timeout: 6))
     }
@@ -558,7 +594,9 @@ final class OnboardingUITests: XCTestCase {
         moreOptionsScreenshot.name = "REC-257 highlighted More Options disclosure"
         moreOptionsScreenshot.lifetime = .keepAlways
         add(moreOptionsScreenshot)
-        app.buttons["Show more options"].tap()
+        let moreOptions = app.buttons["Show more options"]
+        XCTAssertTrue(moreOptions.waitForExistence(timeout: 3))
+        moreOptions.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
 
         for target in ["saveNote", "saveQuestions", "saveTags", "savePrivacy"] {
             XCTAssertTrue(
@@ -713,7 +751,9 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.saveFlow.saveMoreOptions"]
                 .waitForExistence(timeout: 5)
         )
-        app.buttons["Show more options"].tap()
+        let moreOptions = app.buttons["Show more options"]
+        XCTAssertTrue(moreOptions.waitForExistence(timeout: 3))
+        moreOptions.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.5)).tap()
 
         for target in ["saveNote", "saveQuestions", "saveTags", "savePrivacy"] {
             XCTAssertTrue(
@@ -738,7 +778,7 @@ final class OnboardingUITests: XCTestCase {
         )
     }
 
-    func testListMapWalkthroughHighlightsTheFocusedPlaceCardThenReturnsToActions() {
+    func testListMapWalkthroughWaitsOnTheFocusedPlaceCardThenOpensProfile() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -769,6 +809,9 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Next"].isHittable)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Circuit Coffee")).firstMatch.exists)
 
+        RunLoop.current.run(until: Date().addingTimeInterval(3.0))
+        XCTAssertTrue(placeCoach.exists, "The place lesson must wait for an explicit Next tap")
+
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-236 list map focused place-card lesson"
         screenshot.lifetime = .keepAlways
@@ -776,7 +819,7 @@ final class OnboardingUITests: XCTestCase {
 
         app.buttons["Next"].tap()
         XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.listDetail.listActions"]
+            app.descendants(matching: .any)["walkthrough.profile.profileSettings"]
                 .waitForExistence(timeout: 6)
         )
     }

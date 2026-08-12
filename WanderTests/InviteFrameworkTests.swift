@@ -182,6 +182,28 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("finishWalkthroughAfterDeniedPermission()"))
     }
 
+    func testWalkthroughInviteCanContinueWithoutSelectionAndInvitesAfterSelection() {
+        let empty = ContactInvitePrimaryActionState.resolve(
+            selectionCount: 0,
+            walkthroughSelectionGoal: 5,
+            defaultTitle: "Invite"
+        )
+        let selected = ContactInvitePrimaryActionState.resolve(
+            selectionCount: 1,
+            walkthroughSelectionGoal: 5,
+            defaultTitle: "Invite"
+        )
+        let ordinaryEmpty = ContactInvitePrimaryActionState.resolve(
+            selectionCount: 0,
+            walkthroughSelectionGoal: nil,
+            defaultTitle: "Invite"
+        )
+
+        XCTAssertEqual(empty, ContactInvitePrimaryActionState(title: "Next", isEnabled: true, isSubdued: true))
+        XCTAssertEqual(selected, ContactInvitePrimaryActionState(title: "Invite", isEnabled: true, isSubdued: false))
+        XCTAssertEqual(ordinaryEmpty, ContactInvitePrimaryActionState(title: "Invite", isEnabled: false, isSubdued: true))
+    }
+
     func testListCollaboratorPlacesContactInviteBetweenSearchAndFriends() throws {
         let source = try projectSource("Wander/Features/Lists/ListsScreen.swift")
         let content = try XCTUnwrap(source.components(separatedBy: "private struct FriendCollaboratorSearchContent: View").last)

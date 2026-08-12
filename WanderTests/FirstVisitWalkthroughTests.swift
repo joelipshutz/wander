@@ -4,8 +4,8 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testApprovedWalkthroughCoversEverySurfaceWithFortyNineGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 49)
+    func testApprovedWalkthroughCoversEverySurfaceWithFortyEightGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 48)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -67,7 +67,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.listDetail]?.map(\.target),
-            [.listMap, .listMapPlace, .listActions]
+            [.listMap, .listMapPlace]
+        )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.listEditor]?.map(\.target),
+            [.listEditorTitle, .listEditorCollaborators, .listEditorPrivacy]
         )
     }
 
@@ -334,6 +338,28 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(coordinator.canGoBack)
     }
 
+    func testDiscoverLauncherRequiresTheSearchTapWithoutOfferingBack() throws {
+        let step = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .feedDiscoverSearch }
+        )
+
+        XCTAssertEqual(step.advance, .action)
+        XCTAssertTrue(step.allowsTargetInteraction)
+        XCTAssertFalse(step.allowsBackNavigation)
+    }
+
+    func testMissingPassiveTargetCannotAdvanceWithoutNext() throws {
+        let placeCardStep = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .listMapPlace }
+        )
+        let mapOpenStep = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .listMap }
+        )
+
+        XCTAssertFalse(placeCardStep.automaticallyRecoversWhenTargetIsMissing)
+        XCTAssertTrue(mapOpenStep.automaticallyRecoversWhenTargetIsMissing)
+    }
+
     func testInviteCoachWaitsForTheContactFlowToFinish() throws {
         let defaults = try makeDefaults()
         let coordinator = FirstVisitWalkthroughCoordinator(
@@ -524,7 +550,6 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.perform(.listMap)
         XCTAssertEqual(coordinator.currentStep?.target, .listMapPlace)
         coordinator.advancePassiveStep()
-        coordinator.perform(.listActions)
         XCTAssertEqual(coordinator.requestedSurface, .profile)
 
         coordinator.consumeRequestedSurface(.profile)

@@ -1301,7 +1301,7 @@ struct WanderRootView: View {
     }
 
     private var walkthroughTabBarTargetVerticalOffset: CGFloat {
-        if #available(iOS 26.0, *) { 6 } else { 2 }
+        if #available(iOS 26.0, *) { 12 } else { 8 }
     }
 
     private var walkthroughTabBarTargetHorizontalInset: CGFloat {

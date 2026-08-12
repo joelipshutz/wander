@@ -129,6 +129,7 @@ struct FeedScreen: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     FeedSearchLauncher(
                         placeholders: tickerSuggestions,
+                        isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
                         action: openDiscoverSearch
                     )
                     .walkthroughTarget(.feedDiscoverSearch)
@@ -987,9 +988,12 @@ private struct FeedProfileRoute: Identifiable {
 }
 
 private struct FeedSearchLauncher: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let placeholders: [String]
+    let isWalkthroughTarget: Bool
     let action: () -> Void
     @State private var placeholderIndex = 0
+    @State private var isPulsing = false
 
     private var placeholder: String {
         guard !placeholders.isEmpty else { return "Search trusted places" }
@@ -1020,6 +1024,34 @@ private struct FeedSearchLauncher: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Search trusted places")
         .accessibilityIdentifier("feed.searchLauncher")
+        .overlay {
+            if isWalkthroughTarget {
+                Capsule()
+                    .stroke(WanderTheme.terracotta.color, lineWidth: 2)
+                    .padding(-2)
+            }
+        }
+        .scaleEffect(
+            isWalkthroughTarget && !reduceMotion && isPulsing ? 1.025 : 1
+        )
+        .shadow(
+            color: isWalkthroughTarget
+                ? WanderTheme.terracotta.color.opacity(isPulsing ? 0.55 : 0.2)
+                : .clear,
+            radius: isWalkthroughTarget && isPulsing ? 12 : 3
+        )
+        .task(id: isWalkthroughTarget) {
+            isPulsing = false
+            guard isWalkthroughTarget, !reduceMotion else { return }
+            await Task.yield()
+            isPulsing = true
+        }
+        .animation(
+            isWalkthroughTarget && !reduceMotion
+                ? .easeInOut(duration: 1.15).repeatForever(autoreverses: true)
+                : .easeOut(duration: 0.2),
+            value: isPulsing
+        )
         .task {
             guard placeholders.count > 1 else { return }
             while !Task.isCancelled {

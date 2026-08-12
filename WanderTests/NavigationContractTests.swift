@@ -1430,7 +1430,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
         XCTAssertTrue(optionalDetails.contains("WanderTheme.sunTint.color"))
         XCTAssertTrue(optionalDetails.contains("WanderTheme.categorySun.color"))
-        XCTAssertTrue(optionalDetails.contains("lineWidth: isWalkthroughTarget ? 3 : 1"))
+        XCTAssertTrue(optionalDetails.contains(".walkthroughTarget(.saveMoreOptions)"))
+        XCTAssertTrue(optionalDetails.contains("isMoreOptionsArrowPulsing"))
+        let moreOptionsTarget = try XCTUnwrap(
+            optionalDetails.range(of: ".walkthroughTarget(.saveMoreOptions)")
+        )
+        let chevron = try XCTUnwrap(optionalDetails.range(of: "Image(systemName: \"chevron.down\")"))
+        let buttonEnd = try XCTUnwrap(optionalDetails.range(of: ".buttonStyle(.plain)"))
+        XCTAssertGreaterThan(moreOptionsTarget.lowerBound, chevron.lowerBound)
+        XCTAssertLessThan(moreOptionsTarget.lowerBound, buttonEnd.lowerBound)
         XCTAssertEqual(
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
@@ -1928,6 +1936,37 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(backButton.contains(".accessibilityLabel(\"Back to lists\")"))
         XCTAssertTrue(backButton.contains("Button {\n            dismiss()"))
         XCTAssertFalse(backButton.contains(".background("), "The native back chevron should not draw a custom background")
+    }
+
+    func testListEditorKeepsStealthSectionBelowCollaborators() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let editor = try sourceSection(
+            source,
+            after: "private struct ListEditorSheet: View",
+            before: "private struct ListDestructiveButton: View"
+        )
+        let form = try sourceSection(
+            editor,
+            after: "VStack(alignment: .leading, spacing: WanderTheme.spacing6) {",
+            before: "                }\n                .padding(WanderTheme.spacing4)"
+        )
+        let endingLines = form
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        XCTAssertEqual(
+            Array(endingLines.suffix(4)),
+            [
+                "collaboratorsBlock",
+                ".id(ListEditorWalkthroughAnchor.collaborators)",
+                "stealthToggle",
+                ".id(ListEditorWalkthroughAnchor.privacy)"
+            ],
+            "Collaborators should precede stealth, and stealth should remain the final list-editor section"
+        )
     }
 
     func testListMapVisualQAScenariosResolveDeterministically() {

@@ -5120,6 +5120,7 @@ enum CheckInDatePickerSelection {
 }
 
 struct MapPlaceSaveFlowSheet: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
@@ -5159,6 +5160,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var sharedVisitInviteesError: String?
     @State private var errorMessage: String?
     @State private var isShowingOptionalDetails = false
+    @State private var isMoreOptionsArrowPulsing = false
     @State private var saveAttemptedAt: Date?
 
     init(
@@ -5786,36 +5788,50 @@ struct MapPlaceSaveFlowSheet: View {
 
                     Spacer()
 
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
-                        .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
+                    ZStack {
+                        Circle()
+                            .fill(
+                                isWalkthroughTarget
+                                    ? WanderTheme.sunTint.color
+                                    : .clear
+                            )
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
+                    }
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .overlay {
+                        if isWalkthroughTarget {
+                            Circle()
+                                .stroke(WanderTheme.categorySun.color, lineWidth: 3)
+                        }
+                    }
+                    .scaleEffect(
+                        isWalkthroughTarget && !reduceMotion && isMoreOptionsArrowPulsing
+                            ? 1.08
+                            : 1
+                    )
+                    .shadow(
+                        color: isWalkthroughTarget
+                            ? WanderTheme.categorySun.color.opacity(
+                                isMoreOptionsArrowPulsing ? 0.72 : 0.34
+                            )
+                            : .clear,
+                        radius: isWalkthroughTarget && isMoreOptionsArrowPulsing ? 11 : 4
+                    )
+                    .walkthroughTarget(.saveMoreOptions)
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
-                .background(
-                    isWalkthroughTarget
-                        ? WanderTheme.sunTint.color
-                        : WanderTheme.surfaceBone.color
-                )
+                .background(WanderTheme.surfaceBone.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(
-                            isWalkthroughTarget
-                                ? WanderTheme.categorySun.color
-                                : WanderTheme.borderHairline.color,
-                            lineWidth: isWalkthroughTarget ? 3 : 1
-                        )
-                        .shadow(
-                            color: isWalkthroughTarget
-                                ? WanderTheme.categorySun.color.opacity(0.55)
-                                : .clear,
-                            radius: isWalkthroughTarget ? 7 : 0
-                        )
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
                 )
-                .animation(.easeInOut(duration: 0.2), value: isWalkthroughTarget)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
@@ -5826,7 +5842,18 @@ struct MapPlaceSaveFlowSheet: View {
                     : "Optional. Continue without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)
-            .walkthroughTarget(.saveMoreOptions)
+            .task(id: isWalkthroughTarget) {
+                isMoreOptionsArrowPulsing = false
+                guard isWalkthroughTarget, !reduceMotion else { return }
+                await Task.yield()
+                isMoreOptionsArrowPulsing = true
+            }
+            .animation(
+                isWalkthroughTarget && !reduceMotion
+                    ? .easeInOut(duration: 1.05).repeatForever(autoreverses: true)
+                    : .easeOut(duration: 0.2),
+                value: isMoreOptionsArrowPulsing
+            )
 
             if isShowingOptionalDetails {
                 noteSection

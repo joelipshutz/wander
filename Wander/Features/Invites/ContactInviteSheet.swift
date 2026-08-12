@@ -13,6 +13,32 @@ enum ContactInvitePresentationState: Equatable {
     case completed
 }
 
+struct ContactInvitePrimaryActionState: Equatable {
+    let title: String
+    let isEnabled: Bool
+    let isSubdued: Bool
+
+    static func resolve(
+        selectionCount: Int,
+        walkthroughSelectionGoal: Int?,
+        defaultTitle: String
+    ) -> ContactInvitePrimaryActionState {
+        if selectionCount == 0 {
+            return ContactInvitePrimaryActionState(
+                title: walkthroughSelectionGoal == nil ? defaultTitle : "Next",
+                isEnabled: walkthroughSelectionGoal != nil,
+                isSubdued: true
+            )
+        }
+
+        return ContactInvitePrimaryActionState(
+            title: defaultTitle,
+            isEnabled: selectionCount > 0,
+            isSubdued: false
+        )
+    }
+}
+
 struct InviteEntryPointButton: View {
     let surface: InviteSurface
     let action: () -> Void
@@ -139,6 +165,14 @@ struct ContactInviteSheet: View {
         InviteContactSection.sections(for: contacts, query: query)
     }
 
+    private var primaryActionState: ContactInvitePrimaryActionState {
+        ContactInvitePrimaryActionState.resolve(
+            selectionCount: selection.count,
+            walkthroughSelectionGoal: walkthroughSelectionGoal,
+            defaultTitle: surface.primaryActionTitle
+        )
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             WanderTheme.canvasWarm.color
@@ -232,20 +266,43 @@ struct ContactInviteSheet: View {
 
                 if presentationState == .choosing && accessState == .authorized {
                     Button {
-                        guard selection.count > 0 else { return }
-                        beginInviteDelivery()
+                        if walkthroughSelectionGoal != nil, selection.count == 0 {
+                            if canDismiss { dismiss() }
+                        } else {
+                            beginInviteDelivery()
+                        }
                     } label: {
-                        Text(surface.primaryActionTitle)
+                        Text(primaryActionState.title)
                             .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(selection.count == 0 ? WanderTheme.textFaint.color : WanderTheme.textOnAction.color)
+                            .foregroundStyle(
+                                primaryActionState.isSubdued
+                                    ? WanderTheme.textMuted.color
+                                    : WanderTheme.textOnAction.color
+                            )
                             .padding(.horizontal, WanderTheme.spacing3)
                             .frame(minWidth: 64, minHeight: WanderTheme.tapMinimum)
-                            .background(selection.count == 0 ? WanderTheme.surfaceSand.color : WanderTheme.terracotta.color)
+                            .background(
+                                primaryActionState.isSubdued
+                                    ? WanderTheme.surfaceSand.color
+                                    : WanderTheme.terracotta.color
+                            )
                             .clipShape(Capsule())
+                            .overlay {
+                                if primaryActionState.isSubdued {
+                                    Capsule()
+                                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                                }
+                            }
                     }
                     .buttonStyle(.plain)
-                    .disabled(selection.count == 0)
-                    .accessibilityLabel("\(surface.primaryActionTitle) selected people")
+                    .disabled(!primaryActionState.isEnabled)
+                    .accessibilityIdentifier("invite.primaryAction")
+                    .accessibilityLabel(primaryActionState.title)
+                    .accessibilityHint(
+                        primaryActionState.isSubdued
+                            ? "Continues without inviting anyone"
+                            : "Invites the selected people"
+                    )
                 } else {
                     Color.clear.frame(width: 64, height: WanderTheme.tapMinimum)
                 }
