@@ -77,6 +77,41 @@ enum ActivitySharePhotoPermissionPolicy {
     }
 }
 
+enum ActivityShareMessageCompletionAction: Equatable {
+    case dismiss
+    case openSystemShare
+}
+
+enum ActivityShareMessagePresentationPolicy {
+    static func shouldBeginPresentation(isPending: Bool) -> Bool {
+        !isPending
+    }
+
+    static func completionAction(
+        for result: MessageComposeResult
+    ) -> ActivityShareMessageCompletionAction {
+        result == .failed ? .openSystemShare : .dismiss
+    }
+}
+
+struct ActivitySharePreviewPresentation: Identifiable, Equatable {
+    let id: UUID
+    let context: ActivityEngagementContext
+    let content: WanderShareContent
+
+    init?(id: UUID = UUID(), context: ActivityEngagementContext) {
+        guard let content = WanderShareContent.activity(
+            activityID: context.activityID,
+            placeName: context.placeName,
+            message: context.shareMessage
+        ) else { return nil }
+
+        self.id = id
+        self.context = context
+        self.content = content
+    }
+}
+
 struct ActivitySharePreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -90,6 +125,8 @@ struct ActivitySharePreviewScreen: View {
     @State private var isPreparingArtwork = false
     @State private var systemSharePresentation: ActivityShareSystemPresentation?
     @State private var messagePresentation: ActivityShareMessagePresentation?
+    @State private var isMessagePresentationPending = false
+    @State private var shouldOpenSystemShareAfterMessagesDismiss = false
     @State private var isShowingPhotoSettingsAlert = false
     @State private var isShowingExportError = false
     @State private var confirmationMessage: String?
@@ -112,7 +149,7 @@ struct ActivitySharePreviewScreen: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ActivityShareDestinationTray(
-                isPreparing: isPreparingArtwork,
+                isPreparing: isPreparingArtwork || isMessagePresentationPending,
                 action: handleDestination
             )
             .background(alignment: .bottom) {
@@ -126,12 +163,18 @@ struct ActivitySharePreviewScreen: View {
             WanderShareSheet(content: presentation.content)
                 .presentationDetents([.medium, .large])
         }
-        .sheet(item: $messagePresentation) { presentation in
+        .sheet(item: $messagePresentation, onDismiss: {
+            messagePresentation = nil
+            isMessagePresentationPending = false
+            guard shouldOpenSystemShareAfterMessagesDismiss else { return }
+            shouldOpenSystemShareAfterMessagesDismiss = false
+            Task { await presentSystemShare() }
+        }) { presentation in
             ActivityShareMessageComposer(
                 body: presentation.content.messageBody,
                 image: presentation.image
-            ) { _ in
-                messagePresentation = nil
+            ) { result in
+                handleMessageCompletion(result)
             }
         }
         .alert("Allow rec.me to access your photos", isPresented: $isShowingPhotoSettingsAlert) {
@@ -207,7 +250,7 @@ struct ActivitySharePreviewScreen: View {
             UIPasteboard.general.url = content.item
             showConfirmation("link copied")
         case .messages:
-            Task { await presentMessages() }
+            startMessagesPresentation()
         case .instagramStory:
             Task { await presentInstagramStory() }
         case .instagramPost:
@@ -221,6 +264,16 @@ struct ActivitySharePreviewScreen: View {
         case .savePhoto:
             Task { await saveArtworkToPhotos() }
         }
+    }
+
+    @MainActor
+    private func startMessagesPresentation() {
+        guard ActivityShareMessagePresentationPolicy.shouldBeginPresentation(
+            isPending: isMessagePresentationPending
+        ) else { return }
+
+        isMessagePresentationPending = true
+        Task { await presentMessages() }
     }
 
     @MainActor
@@ -262,8 +315,12 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func presentMessages() async {
-        guard let shareContent = await preparedShareContent(), let renderedImage else { return }
+        guard let shareContent = await preparedShareContent(), let renderedImage else {
+            isMessagePresentationPending = false
+            return
+        }
         guard MFMessageComposeViewController.canSendText() else {
+            isMessagePresentationPending = false
             systemSharePresentation = ActivityShareSystemPresentation(content: shareContent)
             return
         }
@@ -271,6 +328,13 @@ struct ActivitySharePreviewScreen: View {
             content: shareContent,
             image: renderedImage
         )
+    }
+
+    @MainActor
+    private func handleMessageCompletion(_ result: MessageComposeResult) {
+        let action = ActivityShareMessagePresentationPolicy.completionAction(for: result)
+        shouldOpenSystemShareAfterMessagesDismiss = action == .openSystemShare
+        messagePresentation = nil
     }
 
     @MainActor
@@ -1010,7 +1074,8 @@ private struct ActivityShareMessageComposer: UIViewControllerRepresentable {
         context: Context
     ) {}
 
-    final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
+    @MainActor
+    final class Coordinator: NSObject, @preconcurrency MFMessageComposeViewControllerDelegate {
         let onFinish: (MessageComposeResult) -> Void
 
         init(onFinish: @escaping (MessageComposeResult) -> Void) {
@@ -1021,6 +1086,7 @@ private struct ActivityShareMessageComposer: UIViewControllerRepresentable {
             _ controller: MFMessageComposeViewController,
             didFinishWith result: MessageComposeResult
         ) {
+            controller.dismiss(animated: true)
             onFinish(result)
         }
     }

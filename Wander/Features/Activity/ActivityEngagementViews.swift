@@ -9,8 +9,9 @@ struct ActivityEngagementActionRow: View {
     let visiblePlace: VisiblePlace?
     var showsCommentButton = true
     var isEngagementEnabled = true
+    var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
     @State private var wannaSaveContext: MapPlaceSaveContext?
-    @State private var isPresentingSharePreview = false
+    @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
@@ -42,13 +43,12 @@ struct ActivityEngagementActionRow: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        .fullScreenCover(isPresented: $isPresentingSharePreview) {
-            if let content = activityShareContent {
-                ActivitySharePreviewScreen(
-                    context: context,
-                    content: content
-                )
-            }
+        .fullScreenCover(item: $sharePreviewPresentation) { presentation in
+            ActivitySharePreviewScreen(
+                context: presentation.context,
+                content: presentation.content
+            )
+            .id(presentation.id)
         }
     }
 
@@ -128,7 +128,15 @@ struct ActivityEngagementActionRow: View {
     private var shareButton: some View {
         if isEngagementEnabled, activityShareContent != nil {
             Button {
-                isPresentingSharePreview = true
+                guard let presentation = ActivitySharePreviewPresentation(context: context) else {
+                    return
+                }
+
+                if let onSharePreviewPresentation {
+                    onSharePreviewPresentation(presentation)
+                } else {
+                    sharePreviewPresentation = presentation
+                }
             } label: {
                 shareLabel
             }
@@ -214,6 +222,7 @@ struct ActivityCommentsScreen: View {
     @State private var isPosting = false
     @State private var commentError: String?
     @State private var photoViewerRoute: ActivityCommentsPhotoViewerRoute?
+    @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -311,6 +320,13 @@ struct ActivityCommentsScreen: View {
                 initialMediaID: route.mediaID
             )
         }
+        .fullScreenCover(item: $sharePreviewPresentation) { presentation in
+            ActivitySharePreviewScreen(
+                context: presentation.context,
+                content: presentation.content
+            )
+            .id(presentation.id)
+        }
     }
 
     private var comments: [ActivityComment] {
@@ -344,7 +360,10 @@ struct ActivityCommentsScreen: View {
             ActivityEngagementActionRow(
                 context: context,
                 visiblePlace: visiblePlace,
-                showsCommentButton: false
+                showsCommentButton: false,
+                onSharePreviewPresentation: { presentation in
+                    sharePreviewPresentation = presentation
+                }
             )
         }
         .padding(WanderTheme.spacing3)
