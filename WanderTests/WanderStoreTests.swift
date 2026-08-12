@@ -5431,6 +5431,65 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visiblePlace.userPlace.sourceType, AddSourceType.manual.rawValue)
     }
 
+    @MainActor
+    func testCanonicalAddPlaceSubmissionCreatesAnotherVisitForExistingCheckIn() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_add_tab_repeat_visit",
+            name: "Repeat Visit Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let firstSave = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4,
+            visitedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let existingPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
+        )
+        let existingVisit = try XCTUnwrap(store.visits(for: firstSave.userPlaceID).first)
+        let context = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers,
+            currentUserSave: existingPlace,
+            latestVisit: existingVisit
+        ).resolvingExistingSave(selection: .been)
+        let submission = MapPlaceSaveSubmission(
+            context: context,
+            candidate: candidate,
+            status: .been,
+            visibility: .followers,
+            ratingScore: 5,
+            note: "tutorial revisit",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false,
+            visitedAt: Date(timeIntervalSince1970: 1_700_086_400)
+        )
+        let visitCountBeforeSave = store.visits(for: firstSave.userPlaceID).count
+
+        let result = await persistAddPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: nil
+        )
+
+        XCTAssertEqual(result?.userPlaceID, firstSave.userPlaceID)
+        XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
+        XCTAssertEqual(store.visits(for: firstSave.userPlaceID).count, visitCountBeforeSave + 1)
+        XCTAssertEqual(store.visits(for: firstSave.userPlaceID).first?.note, "tutorial revisit")
+    }
+
     func testFollowersAndFollowingUseGraphEdges() {
         let store = makeStore()
 

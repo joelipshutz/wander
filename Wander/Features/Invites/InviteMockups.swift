@@ -7,6 +7,7 @@ enum InviteMockupPage: String, CaseIterable {
     case listCollaboratorEntry
     case permission
     case contacts
+    case walkthroughContacts
     case selected
     case empty
     case denied
@@ -46,6 +47,13 @@ struct InviteMockupRoot: View {
                     surface: .sharedVisit(placeName: "Gjelina"),
                     contacts: InviteMockupData.contacts,
                     canDismiss: false
+                )
+            case .walkthroughContacts:
+                ContactInviteSheet(
+                    surface: .feedPeople,
+                    contacts: InviteMockupData.contacts,
+                    canDismiss: true,
+                    walkthroughSelectionGoal: 5
                 )
             case .selected:
                 ContactInviteSheet(

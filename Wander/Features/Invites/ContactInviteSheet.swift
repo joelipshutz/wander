@@ -13,6 +13,32 @@ enum ContactInvitePresentationState: Equatable {
     case completed
 }
 
+struct ContactInvitePrimaryActionState: Equatable {
+    let title: String
+    let isEnabled: Bool
+    let isSubdued: Bool
+
+    static func resolve(
+        selectionCount: Int,
+        walkthroughSelectionGoal: Int?,
+        defaultTitle: String
+    ) -> ContactInvitePrimaryActionState {
+        if selectionCount == 0 {
+            return ContactInvitePrimaryActionState(
+                title: walkthroughSelectionGoal == nil ? defaultTitle : "Next",
+                isEnabled: walkthroughSelectionGoal != nil,
+                isSubdued: true
+            )
+        }
+
+        return ContactInvitePrimaryActionState(
+            title: defaultTitle,
+            isEnabled: selectionCount > 0,
+            isSubdued: false
+        )
+    }
+}
+
 struct InviteEntryPointButton: View {
     let surface: InviteSurface
     let action: () -> Void
@@ -70,6 +96,8 @@ struct ContactInviteSheet: View {
     let contactProvider: (any ContactProvider)?
     let senderProfileID: String?
     let canDismiss: Bool
+    let walkthroughSelectionGoal: Int?
+    let onPermissionDenied: (() -> Void)?
 
     @State private var contacts: [InviteContact]
     @State private var accessState: ContactInviteAccessState
@@ -85,6 +113,7 @@ struct ContactInviteSheet: View {
     @State private var deliveryErrorMessage: String?
     @State private var completionHeadline: String?
     @State private var completionDetail: String?
+    @State private var didHandleWalkthroughPermissionDenial = false
 
     init(
         surface: InviteSurface,
@@ -94,12 +123,16 @@ struct ContactInviteSheet: View {
         selectedContactIDs: Set<String> = [],
         query: String = "",
         senderProfileID: String? = nil,
-        canDismiss: Bool = true
+        canDismiss: Bool = true,
+        walkthroughSelectionGoal: Int? = nil,
+        onPermissionDenied: (() -> Void)? = nil
     ) {
         self.surface = surface
         contactProvider = nil
         self.senderProfileID = senderProfileID
         self.canDismiss = canDismiss
+        self.walkthroughSelectionGoal = walkthroughSelectionGoal
+        self.onPermissionDenied = onPermissionDenied
         _contacts = State(initialValue: contacts)
         _accessState = State(initialValue: accessState)
         _presentationState = State(initialValue: presentationState)
@@ -111,12 +144,16 @@ struct ContactInviteSheet: View {
         surface: InviteSurface,
         contactProvider: any ContactProvider,
         senderProfileID: String? = nil,
-        canDismiss: Bool = true
+        canDismiss: Bool = true,
+        walkthroughSelectionGoal: Int? = nil,
+        onPermissionDenied: (() -> Void)? = nil
     ) {
         self.surface = surface
         self.contactProvider = contactProvider
         self.senderProfileID = senderProfileID
         self.canDismiss = canDismiss
+        self.walkthroughSelectionGoal = walkthroughSelectionGoal
+        self.onPermissionDenied = onPermissionDenied
         _contacts = State(initialValue: [])
         _accessState = State(initialValue: .primer)
         _presentationState = State(initialValue: .choosing)
@@ -126,6 +163,14 @@ struct ContactInviteSheet: View {
 
     private var sections: [InviteContactSection] {
         InviteContactSection.sections(for: contacts, query: query)
+    }
+
+    private var primaryActionState: ContactInvitePrimaryActionState {
+        ContactInvitePrimaryActionState.resolve(
+            selectionCount: selection.count,
+            walkthroughSelectionGoal: walkthroughSelectionGoal,
+            defaultTitle: surface.primaryActionTitle
+        )
     }
 
     var body: some View {
@@ -195,7 +240,7 @@ struct ContactInviteSheet: View {
                     .font(.system(size: 17, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
                 if presentationState == .choosing && accessState == .authorized {
-                    Text("\(selection.count)/\(InviteSelection.maximumCount)")
+                    Text("\(selection.count)/\(walkthroughSelectionGoal ?? InviteSelection.maximumCount)")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .monospacedDigit()
@@ -221,20 +266,43 @@ struct ContactInviteSheet: View {
 
                 if presentationState == .choosing && accessState == .authorized {
                     Button {
-                        guard selection.count > 0 else { return }
-                        beginInviteDelivery()
+                        if walkthroughSelectionGoal != nil, selection.count == 0 {
+                            if canDismiss { dismiss() }
+                        } else {
+                            beginInviteDelivery()
+                        }
                     } label: {
-                        Text(surface.primaryActionTitle)
+                        Text(primaryActionState.title)
                             .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(selection.count == 0 ? WanderTheme.textFaint.color : WanderTheme.textOnAction.color)
+                            .foregroundStyle(
+                                primaryActionState.isSubdued
+                                    ? WanderTheme.textMuted.color
+                                    : WanderTheme.textOnAction.color
+                            )
                             .padding(.horizontal, WanderTheme.spacing3)
                             .frame(minWidth: 64, minHeight: WanderTheme.tapMinimum)
-                            .background(selection.count == 0 ? WanderTheme.surfaceSand.color : WanderTheme.terracotta.color)
+                            .background(
+                                primaryActionState.isSubdued
+                                    ? WanderTheme.surfaceSand.color
+                                    : WanderTheme.terracotta.color
+                            )
                             .clipShape(Capsule())
+                            .overlay {
+                                if primaryActionState.isSubdued {
+                                    Capsule()
+                                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                                }
+                            }
                     }
                     .buttonStyle(.plain)
-                    .disabled(selection.count == 0)
-                    .accessibilityLabel("\(surface.primaryActionTitle) selected people")
+                    .disabled(!primaryActionState.isEnabled)
+                    .accessibilityIdentifier("invite.primaryAction")
+                    .accessibilityLabel(primaryActionState.title)
+                    .accessibilityHint(
+                        primaryActionState.isSubdued
+                            ? "Continues without inviting anyone"
+                            : "Invites the selected people"
+                    )
                 } else {
                     Color.clear.frame(width: 64, height: WanderTheme.tapMinimum)
                 }
@@ -247,6 +315,15 @@ struct ContactInviteSheet: View {
 
     private var contactsContent: some View {
         VStack(spacing: 0) {
+            if let walkthroughSelectionGoal {
+                ContactInviteWalkthroughGoalBanner(
+                    selectedCount: selection.count,
+                    goal: walkthroughSelectionGoal
+                )
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing3)
+            }
+
             searchField
 
             if isLoadingContacts {
@@ -353,6 +430,11 @@ struct ContactInviteSheet: View {
 
     private func contactRow(_ contact: InviteContact) -> some View {
         Button {
+            if !selection.contains(contact.id),
+               let walkthroughSelectionGoal,
+               selection.count >= walkthroughSelectionGoal {
+                return
+            }
             withAnimation(.easeInOut(duration: 0.15)) {
                 _ = selection.toggle(contact.id)
             }
@@ -407,7 +489,10 @@ struct ContactInviteSheet: View {
                             .foregroundStyle(WanderTheme.textOnAction.color)
                     }
                 }
-                .frame(width: 25, height: 25)
+                .frame(
+                    width: walkthroughSelectionGoal == nil ? 25 : 32,
+                    height: walkthroughSelectionGoal == nil ? 25 : 32
+                )
             }
             .frame(minHeight: 56)
             .contentShape(Rectangle())
@@ -791,6 +876,7 @@ struct ContactInviteSheet: View {
             await loadContacts()
         case .denied:
             accessState = .denied
+            finishWalkthroughAfterDeniedPermission()
         }
     }
 
@@ -815,7 +901,15 @@ struct ContactInviteSheet: View {
         case .denied:
             accessState = .denied
             isLoadingContacts = false
+            finishWalkthroughAfterDeniedPermission()
         }
+    }
+
+    private func finishWalkthroughAfterDeniedPermission() {
+        guard onPermissionDenied != nil, !didHandleWalkthroughPermissionDenial else { return }
+        didHandleWalkthroughPermissionDenial = true
+        onPermissionDenied?()
+        dismiss()
     }
 
     @MainActor
@@ -828,6 +922,103 @@ struct ContactInviteSheet: View {
             contacts = try await contactProvider.matches().map(InviteContact.init(contactMatch:))
         } catch {
             didFailLoadingContacts = true
+        }
+    }
+}
+
+private struct ContactInviteWalkthroughGoalBanner: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isCelebrating = false
+
+    let selectedCount: Int
+    let goal: Int
+
+    private var completedCount: Int {
+        min(selectedCount, goal)
+    }
+
+    private var isComplete: Bool {
+        completedCount >= goal
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isComplete ? "Your circle is ready" : "Start with five people")
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text(
+                        isComplete
+                            ? "Nice. Their saves can make every search more useful."
+                            : "Pick up to five people whose taste you already trust. Fewer is fine too."
+                    )
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: WanderTheme.spacing2)
+
+                if isComplete {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(WanderTheme.stateSuccess.color)
+                        .scaleEffect(reduceMotion ? 1 : (isCelebrating ? 1.12 : 0.92))
+                }
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(0..<goal, id: \.self) { index in
+                    ZStack {
+                        Circle()
+                            .fill(
+                                index < completedCount
+                                    ? WanderTheme.stateSuccess.color
+                                    : WanderTheme.surfaceRaised.color
+                            )
+                        Circle()
+                            .stroke(
+                                index < completedCount
+                                    ? WanderTheme.stateSuccess.color
+                                    : WanderTheme.borderStrong.color,
+                                lineWidth: 2
+                            )
+                        if index < completedCount {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .black))
+                                .foregroundStyle(WanderTheme.textOnAction.color)
+                        }
+                    }
+                    .frame(width: 34, height: 34)
+                    .accessibilityHidden(true)
+                }
+            }
+        }
+        .padding(WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            isComplete
+                ? WanderTheme.stateSuccess.color.opacity(0.12)
+                : WanderTheme.terracottaTint.color.opacity(0.72)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(
+                    isComplete
+                        ? WanderTheme.stateSuccess.color.opacity(0.55)
+                        : WanderTheme.terracotta.color.opacity(0.3),
+                    lineWidth: 1
+                )
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(completedCount) of \(goal) people selected")
+        .onChange(of: isComplete, initial: true) { _, complete in
+            guard complete, !reduceMotion else { return }
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.62)) {
+                isCelebrating = true
+            }
         }
     }
 }

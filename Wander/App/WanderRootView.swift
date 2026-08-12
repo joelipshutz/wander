@@ -1261,7 +1261,7 @@ struct WanderRootView: View {
         case .profile:
             selectedTab = .profile
             isPresentingAdd = false
-        case .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+        case .placeDetail, .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
             break
         }
 
@@ -1301,7 +1301,7 @@ struct WanderRootView: View {
     }
 
     private var walkthroughTabBarTargetVerticalOffset: CGFloat {
-        if #available(iOS 26.0, *) { 6 } else { 2 }
+        if #available(iOS 26.0, *) { 12 } else { 8 }
     }
 
     private var walkthroughTabBarTargetHorizontalInset: CGFloat {
