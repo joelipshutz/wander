@@ -1,0 +1,14 @@
+{
+  "issue": "REC-270",
+  "capture_source": "build 132 iPhone 16e / iOS 26.2 simulator screenshot plus exact released source",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "screenshot": "rec-270-liquid-glass-pin-transition-pre.png",
+  "screenshot_sha256": "a24e5218d57718873d45a982eca80e0a246dbe5719d0ccf3f011bb22f0a3be33",
+  "corrected_screenshot": "rec-270-liquid-glass-pin-transition-post.png",
+  "corrected_screenshot_sha256": "dfe7cf3b706153f05fe2d306f75ddd373611f12d5581c179bc160a99ff294c0e",
+  "reported_problem": "the filter transition was applied to the Featured and Friends pills, while the flat Map control option bypassed iOS 26 Liquid Glass entirely",
+  "expected_filter_behavior": "Featured, Friends, and More keep their existing Liquid Glass appearance and selection behavior with no scale animation",
+  "expected_pin_behavior": "only pins entering or leaving after a source or More refinement change receive a 160 ms opacity and small-scale spring with low bounce; Reduce Motion skips it",
+  "performance_contract": "reuse the already-rendered outgoing annotation groups, rank/filter the incoming set once, never retain outgoing and incoming sets together, swap sets only while hidden, animate only opacity and scale, cancel superseded transitions, and discard transition state after 160 ms",
+  "release_impact": "the regression shipped in TestFlight build 132; build 133 is the corrective release"
+}
