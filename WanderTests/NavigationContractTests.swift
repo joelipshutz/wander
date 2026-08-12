@@ -1924,6 +1924,37 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(backButton.contains(".background("), "The native back chevron should not draw a custom background")
     }
 
+    func testListEditorKeepsStealthSectionBelowCollaborators() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let editor = try sourceSection(
+            source,
+            after: "private struct ListEditorSheet: View",
+            before: "private struct ListDestructiveButton: View"
+        )
+        let form = try sourceSection(
+            editor,
+            after: "VStack(alignment: .leading, spacing: WanderTheme.spacing6) {",
+            before: "                }\n                .padding(WanderTheme.spacing4)"
+        )
+        let endingLines = form
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        XCTAssertEqual(
+            Array(endingLines.suffix(4)),
+            [
+                "collaboratorsBlock",
+                ".id(ListEditorWalkthroughAnchor.collaborators)",
+                "stealthToggle",
+                ".id(ListEditorWalkthroughAnchor.privacy)"
+            ],
+            "Collaborators should precede stealth, and stealth should remain the final list-editor section"
+        )
+    }
+
     func testListMapVisualQAScenariosResolveDeterministically() {
         let scenarios: [(argument: String, expected: ListsScreenScenario)] = [
             ("mapEmpty", .mapEmpty),

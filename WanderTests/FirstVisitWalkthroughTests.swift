@@ -47,6 +47,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             FirstVisitWalkthroughContent.stepsBySurface[.listDetail]?.map(\.target),
             [.listMap, .listMapPlace, .listActions]
         )
+        XCTAssertEqual(
+            FirstVisitWalkthroughContent.stepsBySurface[.listEditor]?.map(\.target),
+            [.listEditorTitle, .listEditorCollaborators, .listEditorPrivacy]
+        )
     }
 
     func testRequestedExplanationStepsAdvanceWithNext() throws {
@@ -69,8 +73,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .feedInvite,
             .listMapPlace,
             .listEditorTitle,
-            .listEditorPrivacy,
             .listEditorCollaborators,
+            .listEditorPrivacy,
             .profileSettings,
             .profileSocial,
             .profileActivity,

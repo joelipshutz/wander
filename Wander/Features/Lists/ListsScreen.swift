@@ -3705,10 +3705,10 @@ private struct ListEditorSheet: View {
                             .lineLimit(3...5)
                     }
 
-                    stealthToggle
-                        .id(ListEditorWalkthroughAnchor.privacy)
                     collaboratorsBlock
                         .id(ListEditorWalkthroughAnchor.collaborators)
+                    stealthToggle
+                        .id(ListEditorWalkthroughAnchor.privacy)
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing16 + WanderTheme.spacing8)
