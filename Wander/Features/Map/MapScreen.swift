@@ -107,6 +107,7 @@ enum MapWalkthroughMemoryPolicy {
 
 struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -411,6 +412,7 @@ struct MapScreen: View {
                                     systemImage: "plus",
                                     accessibilityLabel: "Add a place",
                                     accessibilityIdentifier: "map.headerAdd",
+                                    isElevated: false,
                                     action: onAdd
                                 )
                                 .walkthroughTarget(
@@ -788,8 +790,11 @@ struct MapScreen: View {
     }
 
     private func selectMapSource(_ source: MapSource) {
+        guard mapFilterState.source != source else { return }
         routedVisiblePlace = nil
-        mapFilterState.source = source
+        withAnimation(MapSourceTransitionStyle.animation(reduceMotion: reduceMotion)) {
+            mapFilterState.source = source
+        }
     }
 
     private func clearMapSelection() {
@@ -2560,6 +2565,15 @@ enum MapSource: String, CaseIterable, Identifiable {
     }
 }
 
+enum MapSourceTransitionStyle {
+    static let duration: TimeInterval = 0.16
+    static let deselectedScale: CGFloat = 0.98
+
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: duration)
+    }
+}
+
 enum MapStatusFilter: String, CaseIterable, Identifiable {
     case all
     case checkIns
@@ -2961,7 +2975,7 @@ private struct SearchBar: View {
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: 48)
         .contentShape(Capsule())
-        .wanderGlassCapsule()
+        .wanderGlassCapsule(isElevated: false)
     }
 
     @MainActor
@@ -2992,7 +3006,7 @@ private struct MapSearchCancelButton: View {
                 .foregroundStyle(WanderTheme.textInk.color)
                 .frame(minWidth: 64, minHeight: 44)
                 .contentShape(Capsule())
-                .wanderGlassCapsule()
+                .wanderGlassCapsule(isElevated: false)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("map.searchCancel")
@@ -3198,6 +3212,7 @@ private struct MapFilterEmptyNotice: View {
 }
 
 private struct MapSourceFilterChip: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let source: MapSource
     let isSelected: Bool
 
@@ -3215,7 +3230,13 @@ private struct MapSourceFilterChip: View {
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isSelected ? .selected : .neutral,
-            showsBorder: true
+            showsBorder: true,
+            isElevated: false
+        )
+        .scaleEffect(isSelected ? 1 : MapSourceTransitionStyle.deselectedScale)
+        .animation(
+            MapSourceTransitionStyle.animation(reduceMotion: reduceMotion),
+            value: isSelected
         )
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -3256,7 +3277,8 @@ private struct MapMoreFilterChip: View {
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isActive ? .selected : .neutral,
-            showsBorder: true
+            showsBorder: true,
+            isElevated: false
         )
         .accessibilityLabel("More map filters")
         .accessibilityValue(
