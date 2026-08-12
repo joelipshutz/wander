@@ -64,6 +64,14 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapSource.friends.systemImage, "person.2.fill")
     }
 
+    func testSourceTransitionStaysInsideTheMicroInteractionBudget() {
+        XCTAssertEqual(MapSourceTransitionStyle.duration, 0.16, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(MapSourceTransitionStyle.deselectedScale, 0.98)
+        XCTAssertLessThan(MapSourceTransitionStyle.deselectedScale, 1)
+        XCTAssertNil(MapSourceTransitionStyle.animation(reduceMotion: true))
+        XCTAssertNotNil(MapSourceTransitionStyle.animation(reduceMotion: false))
+    }
+
     func testFeaturedIsTheOnlyDefaultSourceAndMoreDefaultsToAll() {
         let state = MapFilterState()
 
