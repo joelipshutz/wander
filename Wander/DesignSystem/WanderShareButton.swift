@@ -68,6 +68,7 @@ struct WanderShareContent: Equatable {
         else { return nil }
         return WanderShareContent(
             item: activityURL,
+            additionalItems: [publicTestFlightURL],
             subject: placeName,
             message: message
         )
@@ -110,7 +111,17 @@ struct WanderShareContent: Equatable {
     }
 
     var messageBody: String {
-        ([message] + items.map(\.absoluteString)).joined(separator: "\n\n")
+        ([message] + items.filter { !$0.isFileURL }.map(\.absoluteString)).joined(separator: "\n\n")
+    }
+
+    func attachingPNG(at fileURL: URL) -> WanderShareContent? {
+        guard fileURL.isFileURL, fileURL.pathExtension.lowercased() == "png" else { return nil }
+        return WanderShareContent(
+            item: item,
+            additionalItems: additionalItems + [fileURL],
+            subject: subject,
+            message: message
+        )
     }
 
     private init(item: URL, additionalItems: [URL] = [], subject: String, message: String) {

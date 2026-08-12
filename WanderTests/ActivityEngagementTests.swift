@@ -1,8 +1,77 @@
+import Photos
 import XCTest
 @testable import Wander
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    func testShareDestinationTrayUsesTheRequestedOrderAndRoutes() {
+        XCTAssertEqual(
+            ActivityShareDestination.allCases,
+            [
+                .messages,
+                .copyLink,
+                .instagramStory,
+                .instagramPost,
+                .tikTok,
+                .snapchat,
+                .save,
+                .more,
+            ]
+        )
+        XCTAssertEqual(ActivityShareDestination.messages.route, .messages)
+        XCTAssertEqual(ActivityShareDestination.copyLink.route, .copyLink)
+        XCTAssertEqual(ActivityShareDestination.instagramStory.route, .socialShareFallback)
+        XCTAssertEqual(ActivityShareDestination.instagramPost.route, .socialShareFallback)
+        XCTAssertEqual(ActivityShareDestination.tikTok.route, .socialShareFallback)
+        XCTAssertEqual(ActivityShareDestination.snapchat.route, .socialShareFallback)
+        XCTAssertEqual(ActivityShareDestination.save.route, .savePhoto)
+        XCTAssertEqual(ActivityShareDestination.more.route, .systemShare)
+    }
+
+    func testSharePhotoPermissionPolicyRequestsOnceThenSavesOrRoutesToSettings() {
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .notDetermined),
+            .requestAuthorization
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .authorized),
+            .save
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .limited),
+            .save
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .denied),
+            .showSettings
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .restricted),
+            .showSettings
+        )
+    }
+
+    func testActivitySharePNGAttachmentKeepsCanonicalLinkOutOfTheLocalMessagePath() throws {
+        let activityID = "41000000-0000-0000-0000-000000000001"
+        let fileURL = URL(fileURLWithPath: "/tmp/recme-activity-share.png")
+        let content = try XCTUnwrap(
+            WanderShareContent.activity(
+                activityID: activityID,
+                placeName: "Ada Street",
+                message: "See Judy's check-in"
+            )?.attachingPNG(at: fileURL)
+        )
+
+        XCTAssertEqual(content.items, [
+            URL(string: "https://getrec.me/activities/\(activityID)")!,
+            WanderShareContent.publicTestFlightURL,
+            fileURL,
+        ])
+        XCTAssertTrue(content.messageBody.contains("https://getrec.me/activities/\(activityID)"))
+        XCTAssertTrue(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
+        XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
+    }
+
     func testLikeMutationUpdatesTheVisibleCountAndCanUndo() async {
         let store = WanderStore(fixtures: .empty())
         let activityID = "local-activity"

@@ -96,6 +96,7 @@
 		6712A5DB0502DBFBC02CA966 /* WanderWidgetConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */; };
 		67FF75306EB46B96D5524215 /* ProfilePhotoCropView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 942065A6D7C4B33E392B50F5 /* ProfilePhotoCropView.swift */; };
 		6B10E1C7F7DBA21983734B9E /* PlaceImportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C4A6BBFEC984756BBE9A7E5 /* PlaceImportStore.swift */; };
+		6B5A7B5AFFD37945E2831C05 /* ActivitySharePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBC33DCB35C37A5C6742CF56 /* ActivitySharePreview.swift */; };
 		6BA93655CF0B8C26582726FC /* PlaceImportModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD54264608BDFD2478F5DFE2 /* PlaceImportModels.swift */; };
 		6C035ED0288DBF6D7F44666C /* WanderStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */; };
 		6DD4FB880BABD14154A14AC1 /* rec-106-manual-place-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */; };
@@ -435,6 +436,7 @@
 		E5C2A2ADEB522DD9B634F1EF /* SharedPlaceImportInboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInboxTests.swift; sourceTree = "<group>"; };
 		E635EA909370EB6D597D27AC /* WanderDebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderDebugLog.swift; sourceTree = "<group>"; };
 		E850341A28B18117631F62F5 /* WanderBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackend.swift; sourceTree = "<group>"; };
+		EBC33DCB35C37A5C6742CF56 /* ActivitySharePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivitySharePreview.swift; sourceTree = "<group>"; };
 		ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverModels.swift; sourceTree = "<group>"; };
 		EFBB1E0FFAE279FBB7C42FEF /* VisibilityPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisibilityPolicy.swift; sourceTree = "<group>"; };
 		EFD316F9E6EBA0B705EA7867 /* OnboardingFriendSuggestionsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFriendSuggestionsModel.swift; sourceTree = "<group>"; };
@@ -781,6 +783,7 @@
 			isa = PBXGroup;
 			children = (
 				981D76A8E140702A7FD7AFB7 /* ActivityEngagementViews.swift */,
+				EBC33DCB35C37A5C6742CF56 /* ActivitySharePreview.swift */,
 			);
 			path = Activity;
 			sourceTree = "<group>";
@@ -1175,6 +1178,7 @@
 			files = (
 				D43B1F7D234DF0F60BB44306 /* ActivityEngagementModels.swift in Sources */,
 				F773AA7B35A1E5A2C15A5707 /* ActivityEngagementViews.swift in Sources */,
+				6B5A7B5AFFD37945E2831C05 /* ActivitySharePreview.swift in Sources */,
 				2EC61D518D9913AD24235D5B /* AddQuestionTemplates.swift in Sources */,
 				7EAAF1336D42DE0DB9D236F9 /* AddScreen.swift in Sources */,
 				6E92ECEF915365AE40170F7E /* AnalyticsEvent.swift in Sources */,

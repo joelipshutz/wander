@@ -10,6 +10,7 @@ struct ActivityEngagementActionRow: View {
     var showsCommentButton = true
     var isEngagementEnabled = true
     @State private var wannaSaveContext: MapPlaceSaveContext?
+    @State private var isPresentingSharePreview = false
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
@@ -40,6 +41,14 @@ struct ActivityEngagementActionRow: View {
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+        }
+        .fullScreenCover(isPresented: $isPresentingSharePreview) {
+            if let content = activityShareContent {
+                ActivitySharePreviewScreen(
+                    context: context,
+                    content: content
+                )
+            }
         }
     }
 
@@ -117,15 +126,13 @@ struct ActivityEngagementActionRow: View {
 
     @ViewBuilder
     private var shareButton: some View {
-        if isEngagementEnabled,
-           let content = WanderShareContent.activity(
-                activityID: context.activityID,
-                placeName: context.placeName,
-                message: context.shareMessage
-           ) {
-            WanderShareButton(content: content) {
+        if isEngagementEnabled, activityShareContent != nil {
+            Button {
+                isPresentingSharePreview = true
+            } label: {
                 shareLabel
             }
+            .buttonStyle(.plain)
         } else {
             Button(action: {}) {
                 shareLabel
@@ -135,6 +142,14 @@ struct ActivityEngagementActionRow: View {
             .opacity(0.45)
             .accessibilityHint("Available when this activity finishes loading.")
         }
+    }
+
+    private var activityShareContent: WanderShareContent? {
+        WanderShareContent.activity(
+            activityID: context.activityID,
+            placeName: context.placeName,
+            message: context.shareMessage
+        )
     }
 
     private var shareLabel: some View {
