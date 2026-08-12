@@ -205,6 +205,25 @@ Core rules:
 - Link/photo capture in M2 is an honest unresolved-draft shell until backend extraction jobs exist.
 - Native Contacts permission is planned later; M2 uses `FakeContactProvider` plus username search.
 
+## NUX And Onboarding Parity
+
+Treat the new-user experience (NUX) and first-visit walkthroughs as part of the
+production surface, not as follow-up documentation.
+
+- Every UI or functionality change must inspect the affected walkthrough steps
+  in `Wander/Features/Onboarding/FirstVisitWalkthrough.swift` and their tests.
+- When a change affects a user-visible control, flow order, copy, navigation,
+  permission, empty state, action, or product behavior taught by the NUX, update
+  the corresponding walkthrough in the same branch and PR.
+- Keep spotlight targets and anchors, coach-mark copy, action gates, fixtures,
+  unavailable-target recovery, persistence/versioning, accessibility behavior,
+  and walkthrough tests aligned with the production experience.
+- Record the NUX validation in the PR and Linear issue. If no walkthrough change
+  is needed, state that the NUX was reviewed and why the changed surface is not
+  represented or affected.
+- Do not call a user-facing change complete while the NUX still teaches stale
+  UI or behavior.
+
 ## Supabase Schema, RLS, And RPC Policy
 
 Supabase migrations are app behavior, not incidental backend plumbing. Treat
