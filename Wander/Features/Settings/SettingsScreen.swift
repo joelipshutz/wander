@@ -424,6 +424,11 @@ struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.followedActivityEnabled) { NotificationPreferencesUpdate(followedActivityEnabled: $0) }
                         )
                         notificationToggle(
+                            title: "Likes and comments",
+                            systemImage: "heart.text.bubble",
+                            binding: preferenceBinding(\.engagementEnabled) { NotificationPreferencesUpdate(engagementEnabled: $0) }
+                        )
+                        notificationToggle(
                             title: "Capture ready",
                             systemImage: "sparkles",
                             binding: preferenceBinding(\.captureEnabled) { NotificationPreferencesUpdate(captureEnabled: $0) }

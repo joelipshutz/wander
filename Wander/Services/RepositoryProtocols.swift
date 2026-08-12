@@ -1176,6 +1176,7 @@ struct NotificationPreferences: Equatable {
     var captureEnabled: Bool = false
     var discoveryDigestEnabled: Bool = false
     var followedActivityEnabled: Bool = false
+    var engagementEnabled: Bool = false
     var wannaGoRemindersEnabled: Bool = false
 
     static let allEnabled = NotificationPreferences(
@@ -1187,6 +1188,7 @@ struct NotificationPreferences: Equatable {
         captureEnabled: true,
         discoveryDigestEnabled: true,
         followedActivityEnabled: true,
+        engagementEnabled: true,
         wannaGoRemindersEnabled: true
     )
 
@@ -1199,6 +1201,7 @@ struct NotificationPreferences: Equatable {
         captureEnabled: false,
         discoveryDigestEnabled: false,
         followedActivityEnabled: false,
+        engagementEnabled: false,
         wannaGoRemindersEnabled: false
     )
 }
@@ -1212,6 +1215,7 @@ struct NotificationPreferencesUpdate: Equatable {
     var captureEnabled: Bool?
     var discoveryDigestEnabled: Bool?
     var followedActivityEnabled: Bool?
+    var engagementEnabled: Bool?
     var wannaGoRemindersEnabled: Bool?
 
     init(
@@ -1223,6 +1227,7 @@ struct NotificationPreferencesUpdate: Equatable {
         captureEnabled: Bool? = nil,
         discoveryDigestEnabled: Bool? = nil,
         followedActivityEnabled: Bool? = nil,
+        engagementEnabled: Bool? = nil,
         wannaGoRemindersEnabled: Bool? = nil
     ) {
         self.pushEnabled = pushEnabled
@@ -1233,6 +1238,7 @@ struct NotificationPreferencesUpdate: Equatable {
         self.captureEnabled = captureEnabled
         self.discoveryDigestEnabled = discoveryDigestEnabled
         self.followedActivityEnabled = followedActivityEnabled
+        self.engagementEnabled = engagementEnabled
         self.wannaGoRemindersEnabled = wannaGoRemindersEnabled
     }
 
@@ -1245,6 +1251,7 @@ struct NotificationPreferencesUpdate: Equatable {
         captureEnabled: true,
         discoveryDigestEnabled: true,
         followedActivityEnabled: true,
+        engagementEnabled: true,
         wannaGoRemindersEnabled: true
     )
 
@@ -1257,6 +1264,7 @@ struct NotificationPreferencesUpdate: Equatable {
         captureEnabled: false,
         discoveryDigestEnabled: false,
         followedActivityEnabled: false,
+        engagementEnabled: false,
         wannaGoRemindersEnabled: false
     )
 }

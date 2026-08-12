@@ -1796,12 +1796,14 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     `
       select (
         public.update_notification_preferences(
-          '{"push_enabled":true,"social_graph_enabled":true,"shared_lists_enabled":true,"shared_visits_enabled":true,"recommendations_enabled":true,"capture_enabled":true,"discovery_digest_enabled":true,"followed_activity_enabled":true,"wanna_go_reminders_enabled":true}'::jsonb
+          '{"push_enabled":true,"social_graph_enabled":true,"shared_lists_enabled":true,"shared_visits_enabled":true,"recommendations_enabled":true,"capture_enabled":true,"discovery_digest_enabled":true,"followed_activity_enabled":true,"wanna_go_reminders_enabled":true,"engagement_enabled":true}'::jsonb
         )
-      ).wanna_go_reminders_enabled as enabled
+      ).wanna_go_reminders_enabled as wanna_enabled,
+      (public.get_notification_preferences()).engagement_enabled as engagement_enabled
     `,
     [],
-    (result) => result.rows[0]?.enabled === true,
+    (result) => result.rows[0]?.wanna_enabled === true
+      && result.rows[0]?.engagement_enabled === true,
   );
 
   await client.query("reset role");
