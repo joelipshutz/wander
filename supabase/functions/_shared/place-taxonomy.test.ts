@@ -42,6 +42,9 @@ Deno.test("place taxonomy normalizes provider subcategories to primary categorie
     ["wellness studio", "wellness_fitness"],
     ["gym", "wellness_fitness"],
     ["craft distillery", "bars_nightlife"],
+    ["cider bar", "bars_nightlife"],
+    ["sake bar", "bars_nightlife"],
+    ["game bar", "bars_nightlife"],
     ["beauty service", "services_errands"],
   ];
 

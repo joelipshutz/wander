@@ -918,7 +918,10 @@ enum DiscoverCategoryAliasLexicon {
     static let aliases: [String: [String]] = [
         "restaurants_food": ["restaurant", "restaurants", "food", "fast food", "noodle", "noodles", "dinner", "lunch", "brunch", "sushi", "thai", "taco", "pizza"],
         "coffee_tea_sweets": ["coffee", "cafe", "cafes", "work from", "tea", "bakery", "dessert", "ice cream", "juice", "smoothie"],
-        "bars_nightlife": ["bar", "bars", "drink", "drinks", "patio", "cocktail", "pub", "brewery", "wine bar", "nightlife", "club"],
+        "bars_nightlife": [
+            "bar", "bars", "drink", "drinks", "patio", "cocktail", "pub", "brewery", "wine bar",
+            "cider bar", "sake bar", "game bar", "nightlife", "club"
+        ],
         "outdoors_nature": ["hike", "hikes", "trail", "trails", "park", "parks", "beach", "waterfall"],
         "things_to_do": ["museum", "gallery", "movie", "concert", "venue", "arcade", "tourist attraction", "landmark", "bowling", "zoo"],
         "shopping": ["shop", "shops", "store", "stores", "boutique", "market"],

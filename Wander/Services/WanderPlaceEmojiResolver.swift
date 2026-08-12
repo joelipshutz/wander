@@ -304,6 +304,9 @@ enum WanderPlaceEmojiResolver {
             ])
         ],
         WanderPlaceCategory.barsNightlife: [
+            Rule(emoji: "🍎", terms: ["cider bar"]),
+            Rule(emoji: "🍶", terms: ["sake bar"]),
+            Rule(emoji: "🎮", terms: ["game bar"]),
             Rule(emoji: "🎱", terms: ["billiards", "pool hall"]),
             Rule(emoji: "🍻", terms: ["sports bar"]),
             Rule(emoji: "🍷", terms: ["wine bar", "winery", "vineyard"]),
