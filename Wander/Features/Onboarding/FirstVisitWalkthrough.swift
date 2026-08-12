@@ -508,6 +508,12 @@ struct FirstVisitWalkthroughStore {
         defaults.set(true, forKey: deviceFeaturesCompletionKey(userID: userID))
     }
 
+    func hasCompletedEntireWalkthrough(for userID: String) -> Bool {
+        WalkthroughSurface.allCases.allSatisfy { isComplete(for: userID, surface: $0) }
+            && hasCompletedImportLesson(for: userID)
+            && hasCompletedDeviceFeaturesLesson(for: userID)
+    }
+
     private func progressKey(userID: String, surface: WalkthroughSurface) -> String {
         "wander.walkthrough.v\(version).\(userID).\(surface.rawValue).progress"
     }
@@ -544,16 +550,20 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     private var registeredLaunchUserID: String?
     private var isImportLessonEligible = false
     private var isDeviceFeaturesLessonEligible = false
+    private var didNotifyCompletion = false
+    private let onCompleted: () -> Void
     let isEnabled: Bool
 
     init(
         userID: String = "local-user",
         store: FirstVisitWalkthroughStore = FirstVisitWalkthroughStore(),
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        onCompleted: @escaping () -> Void = {}
     ) {
         self.userID = userID
         self.store = store
         self.isEnabled = isEnabled
+        self.onCompleted = onCompleted
     }
 
     var currentStep: WalkthroughStep? {
@@ -595,6 +605,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isPresentingDeviceFeaturesLesson = false
         tutorialUserPlaceID = nil
         isRequestingContactInvite = false
+        didNotifyCompletion = false
     }
 
     func registerLaunch(
@@ -628,6 +639,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             isPresentingImportLesson = false
             isPresentingDeviceFeaturesLesson = true
         }
+        notifyCompletionIfNeeded()
     }
 
     func activate(_ surface: WalkthroughSurface) {
@@ -724,6 +736,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isPresentingDeviceFeaturesLesson = false
         tutorialUserPlaceID = nil
         isRequestingContactInvite = false
+        didNotifyCompletion = false
     }
 
     func presentLaunchLessonIfEligible() {
@@ -746,6 +759,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         store.markImportLessonComplete(for: userID)
         isImportLessonEligible = false
         isPresentingImportLesson = false
+        notifyCompletionIfNeeded()
     }
 
     func completeDeviceFeaturesLesson() {
@@ -753,6 +767,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         store.markDeviceFeaturesLessonComplete(for: userID)
         isDeviceFeaturesLessonEligible = false
         isPresentingDeviceFeaturesLesson = false
+        notifyCompletionIfNeeded()
     }
 
     func consumeRequestedSurface(_ surface: WalkthroughSurface) {
@@ -770,6 +785,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             activeSurface = nil
             currentStepIndex = 0
             requestedSurface = destination(after: surface)
+            notifyCompletionIfNeeded()
         } else {
             currentStepIndex = nextIndex
         }
@@ -798,6 +814,14 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         case .profile:
             .sendoff
         }
+    }
+
+    private func notifyCompletionIfNeeded() {
+        guard !didNotifyCompletion,
+              store.hasCompletedEntireWalkthrough(for: userID)
+        else { return }
+        didNotifyCompletion = true
+        onCompleted()
     }
 }
 

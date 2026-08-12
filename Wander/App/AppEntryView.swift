@@ -94,11 +94,15 @@ struct AppEntryView: View {
                     saveProgress: { coordinator.saveProgress($0, for: session) },
                     complete: { coordinator.completeOnboarding(for: session, serverConfirmed: $0) }
                 )
-            case .ready(let session):
+            case .ready(let session, let firstVisitWalkthroughEligible):
                 WanderRootView(
                     initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
                     initialSession: session,
                     isSessionValidated: auth.isSessionValidated,
+                    isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible,
+                    onFirstVisitWalkthroughCompleted: {
+                        coordinator.completeFirstVisitWalkthrough(for: session)
+                    },
                     deepLinkLaunchRequest: deepLinkInbox.request(
                         ifSessionValidated: auth.isSessionValidated
                     ),
