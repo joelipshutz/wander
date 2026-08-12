@@ -712,9 +712,36 @@ enum VisiblePlaceGrouping {
         return orderedKeys.compactMap { key in
             guard let places = grouped[key], !places.isEmpty else { return nil }
             let sortedPlaces = places.sorted { lhs, rhs in
-                if lhs.owner.id == currentUserID { return true }
-                if rhs.owner.id == currentUserID { return false }
-                return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
+                let lhsIsCurrentUser = lhs.owner.id == currentUserID
+                let rhsIsCurrentUser = rhs.owner.id == currentUserID
+                if lhsIsCurrentUser != rhsIsCurrentUser {
+                    return lhsIsCurrentUser
+                }
+
+                if lhs.owner.id == rhs.owner.id {
+                    let lhsIsActive = lhs.userPlace.deletedAt == nil
+                    let rhsIsActive = rhs.userPlace.deletedAt == nil
+                    if lhsIsActive != rhsIsActive {
+                        return lhsIsActive
+                    }
+                    if lhs.userPlace.updatedAt != rhs.userPlace.updatedAt {
+                        return lhs.userPlace.updatedAt > rhs.userPlace.updatedAt
+                    }
+                    if lhs.userPlace.savedAt != rhs.userPlace.savedAt {
+                        return lhs.userPlace.savedAt > rhs.userPlace.savedAt
+                    }
+                }
+
+                let displayNameOrder = lhs.owner.displayName.localizedCaseInsensitiveCompare(
+                    rhs.owner.displayName
+                )
+                if displayNameOrder != .orderedSame {
+                    return displayNameOrder == .orderedAscending
+                }
+                if lhs.owner.id != rhs.owner.id {
+                    return lhs.owner.id < rhs.owner.id
+                }
+                return lhs.userPlace.id < rhs.userPlace.id
             }
             let primary = sortedPlaces.first { $0.owner.id == currentUserID } ?? sortedPlaces[0]
             let primaryKey = Self.key(for: primary)

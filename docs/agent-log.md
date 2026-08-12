@@ -28662,3 +28662,107 @@ Outcome and validation:
   the simulator's unrelated first-run location prompt.
 - No schema, auth, signing, project membership, build-number, archive, upload,
   TestFlight, or tester-Slack action was taken.
+
+## 2026-08-12 01:45 PDT - Codex - Jade Rabbit Save/Activity Triage
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher` and
+`recme-linear-log-triage`
+Branch: `codex/rec-103-jade-rabbit`
+Worktree: `/private/tmp/recme-jade-rabbit-triage`
+Linear: new issue creation blocked by the workspace free-issue limit; using
+related open issue `REC-103` for evidence unless the diagnosis proves a
+separate existing issue is a better fit
+
+Goal: investigate Joe's report that a just-saved Jade Rabbit place is absent
+from the Joe Lipshutz account and Profile Recent activity while another user
+can see it.
+
+Starting status:
+
+- Started clean from exact `origin/main` / TestFlight build-132 commit
+  `8d6ad9ee`; Joe's `joe/phone-build-latest` checkout is 175 commits behind
+  with untracked `tmp/` and remains untouched.
+- No exact Jade Rabbit Linear issue exists. Related history includes REC-103
+  (social-save retry/account attribution), REC-206 (stale Profile activity),
+  REC-87 (transactional remote-save failure), and REC-152 (Profile Recent
+  activity).
+- Mission Control task creation was attempted but `localhost:4000` is not
+  running.
+- Evidence plan: resolve Joe by hosted profile handle/display name, inspect the
+  Jade Rabbit owner/save/activity rows and narrow non-PII PostHog events around
+  the report time. Do not log notes, email, tokens, or coordinates.
+- No implementation decision has been made. Any auth/sync/account-attribution,
+  RLS, RPC, schema, or cross-screen change requires the engineering review gate
+  before coding.
+- Expected files during triage: this log only. Hosted data remains read-only.
+
+Checkpoint — root cause reproduced and patch authorized:
+
+- Hosted Supabase evidence shows the new Jade Rabbit save and visit on Joe's
+  account at the report time. The write is present; this is not an auth,
+  account-attribution, RLS, or RPC failure.
+- Joe has two active same-place Jade Rabbit `user_places`. The calendar RPC
+  returns the newer row first, but `VisiblePlaceGrouping.groups` uses a
+  non-strict sort comparator when both aliases belong to the current user.
+  Swift may reverse the pair and choose the stale row as the representative.
+- `ProfileActivityPresenter` and `CurrentUserCalendarProjection.profileStats`
+  then inspect visits only for that representative. The newer visit disappears
+  from Profile even though another user's event/feed projection can show it.
+- The exact debug snapshot route from the iOS fix workflow is unavailable: this
+  repo has no StateServer/DebugBridge contract. The reproducing artifact is the
+  read-only hosted row shape, translated into a deterministic unit regression.
+- Engineering gate: local presentation/data-projection fix only. Reuse
+  `VisiblePlaceGrouping`, aggregate same-owner visits within each physical-place
+  group, deduplicate by visit identity, and align Profile stats. No new service,
+  schema, RPC, auth, migration, UI design, or hosted-data mutation is needed.
+- Linear REC-103 is now In Progress. A detailed evidence comment was rejected
+  by the connector's privacy guard, so the account-level evidence remains in
+  this local coordination log rather than being posted externally.
+- Expected implementation files are now
+  `Wander/Services/DiscoverModels.swift`,
+  `Wander/Features/Profile/ProfileOwnerHome.swift`,
+  `Wander/Services/WanderLocalStore.swift`, and focused Profile tests.
+
+Checkpoint — implementation and focused validation:
+
+- Replaced the invalid same-current-user comparator with a strict deterministic
+  order: current owner first, active before deleted, then newest update/save,
+  followed by stable owner and user-place identity tie-breakers.
+- Profile activity now aggregates active same-owner Been aliases in one
+  physical-place group, deduplicates visits by visit identity, uses one legacy
+  fallback only when the group has no visit rows, and avoids emitting a stale
+  Wanna record over an existing Been record.
+- Profile summary counts use the same group semantics: one Been place, every
+  distinct check-in, and Wanna only when the group has no active Been record.
+- Added a deterministic Jade Rabbit regression with two same-owner place rows
+  and three visits split across them. It asserts newest-primary selection,
+  reverse-chronological activity, and `been: 1 / checkIns: 3 / wanna: 0`.
+- Focused `ProfileInsightsPresenterTests`: 19 passed, 0 failed. Result:
+  `/private/tmp/DerivedData-rec103-jade-rabbit/Logs/Test/Test-Wander-2026.08.12_02-07-13--0700.xcresult`.
+- The first sandboxed test attempt could not access CoreSimulator or GitHub;
+  the required elevated rerun compiled and executed successfully. Existing
+  `WanderSupabaseClient` actor-isolation warnings remain unrelated.
+
+Checkpoint — full validation and PR readiness (2026-08-12 02:34 PDT):
+
+- The full `WanderTests` unit/integration target completed with 1,089 tests
+  passed and 0 failures. Result bundle:
+  `/private/tmp/DerivedData-rec103-jade-rabbit/Logs/Test/Test-Wander-2026.08.12_02-15-33--0700.xcresult`.
+- The enclosing scheme continued into UI smoke tests and hit the unrelated
+  `OnboardingUITests.testFirstAddActionGuidesThroughSaveBeforeReturningToMap`
+  failure: the app returned to logged-out onboarding instead of the expected
+  save-details walkthrough. Another agent's focused xcodebuild owned the same
+  simulator concurrently, so the already-non-green UI run was interrupted
+  rather than treating that unrelated state collision as a Jade Rabbit failure.
+- A separate generic-simulator build first exhausted the machine's temporary
+  disk while compiling a second dependency cache. After removing only this
+  task's failed 2.1 GB cache, the elevated retry compiled the touched app files
+  without source errors but was interrupted to avoid continued contention with
+  another concurrent rec.me build. The focused and full unit/integration runs
+  had already built and exercised the patched code successfully.
+- `git diff --check` passed. No visual layout changed, so simulator screenshot
+  QA was not applicable. No schema, RPC, RLS, auth, hosted-data, build-number,
+  TestFlight, or tester-Slack action was taken.
+- Rebased cleanly onto latest `origin/main` at TestFlight build-133 commit
+  `0c1d54ac`; the intervening changes were Map-only plus the build-number bump
+  and did not overlap this patch.
