@@ -12,6 +12,7 @@ settings:
     CURRENT_PROJECT_VERSION: "131"
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
+    WANDER_TIKTOK_CLIENT_KEY: recme-tiktok-unconfigured
 packages:
   posthog-ios:
     url: https://github.com/PostHog/posthog-ios.git
@@ -22,6 +23,9 @@ packages:
   supabase-swift:
     url: https://github.com/supabase/supabase-swift.git
     from: 2.46.0
+  tiktok-opensdk-ios:
+    url: https://github.com/tiktok/tiktok-opensdk-ios
+    from: 2.5.0
 schemes:
   Wander:
     build:
@@ -64,8 +68,11 @@ targets:
         WANDER_CLERK_PUBLISHABLE_KEY: $(WANDER_CLERK_PUBLISHABLE_KEY)
         WANDER_POSTHOG_HOST: $(WANDER_POSTHOG_HOST)
         WANDER_POSTHOG_PROJECT_TOKEN: $(WANDER_POSTHOG_PROJECT_TOKEN)
+        WANDER_META_APP_ID: $(WANDER_META_APP_ID)
+        WANDER_SNAPCHAT_CLIENT_ID: $(WANDER_SNAPCHAT_CLIENT_ID)
         WANDER_SUPABASE_PUBLISHABLE_KEY: $(WANDER_SUPABASE_PUBLISHABLE_KEY)
         WANDER_SUPABASE_URL: $(WANDER_SUPABASE_URL)
+        TikTokClientKey: $(WANDER_TIKTOK_CLIENT_KEY)
         CFBundleDisplayName: rec.me
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -74,9 +81,21 @@ targets:
             CFBundleURLName: com.grayline.wander.profile
             CFBundleURLSchemes:
               - recme
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.grayline.wander.tiktok
+            CFBundleURLSchemes:
+              - $(WANDER_TIKTOK_CLIENT_KEY)
+        LSApplicationQueriesSchemes:
+          - instagram
+          - instagram-stories
+          - snapchat
+          - tiktoksharesdk
+          - snssdk1180
+          - snssdk1233
         NSCameraUsageDescription: rec.me uses the camera only when you choose to take a photo in the app.
         NSContactsUsageDescription: rec.me uses contacts only to help you find people you already know. It never messages anyone.
         NSLocationWhenInUseUsageDescription: rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.
+        NSPhotoLibraryAddUsageDescription: rec.me saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.
         UILaunchScreen: {}
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
@@ -112,6 +131,8 @@ targets:
         product: ClerkKitUI
       - package: supabase-swift
         product: Supabase
+      - package: tiktok-opensdk-ios
+        product: TikTokOpenShareSDK
       - target: WanderWidgets
         embed: true
         link: false

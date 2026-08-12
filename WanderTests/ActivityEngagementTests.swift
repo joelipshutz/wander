@@ -1,8 +1,133 @@
+import Photos
+import UIKit
 import XCTest
 @testable import Wander
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    func testShareDestinationTrayUsesTheRequestedOrderAndRoutes() {
+        XCTAssertEqual(
+            ActivityShareDestination.allCases,
+            [
+                .messages,
+                .copyLink,
+                .instagramStory,
+                .instagramPost,
+                .tikTok,
+                .snapchat,
+                .save,
+                .more,
+            ]
+        )
+        XCTAssertEqual(ActivityShareDestination.messages.route, .messages)
+        XCTAssertEqual(ActivityShareDestination.copyLink.route, .copyLink)
+        XCTAssertEqual(ActivityShareDestination.instagramStory.route, .instagramStory)
+        XCTAssertEqual(ActivityShareDestination.instagramPost.route, .instagramPost)
+        XCTAssertEqual(ActivityShareDestination.tikTok.route, .tikTok)
+        XCTAssertEqual(ActivityShareDestination.snapchat.route, .snapchat)
+        XCTAssertEqual(ActivityShareDestination.save.route, .savePhoto)
+        XCTAssertEqual(ActivityShareDestination.more.route, .systemShare)
+    }
+
+    func testSharePhotoPermissionPolicyRequestsOnceThenSavesOrRoutesToSettings() {
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .notDetermined),
+            .requestAuthorization
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .authorized),
+            .save
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .limited),
+            .save
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .denied),
+            .showSettings
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .restricted),
+            .showSettings
+        )
+    }
+
+    func testShareProviderConfigurationRejectsMissingBuildSettingPlaceholders() {
+        XCTAssertNil(ActivityShareProviderConfiguration.normalizedValue(nil))
+        XCTAssertNil(ActivityShareProviderConfiguration.normalizedValue("   "))
+        XCTAssertNil(
+            ActivityShareProviderConfiguration.normalizedValue("$(WANDER_TIKTOK_CLIENT_KEY)")
+        )
+        XCTAssertNil(
+            ActivityShareProviderConfiguration.normalizedValue("recme-tiktok-unconfigured")
+        )
+        XCTAssertEqual(
+            ActivityShareProviderConfiguration.normalizedValue("  provider-client-key  "),
+            "provider-client-key"
+        )
+        XCTAssertEqual(
+            ActivityShareProviderConfiguration.tikTokRedirectURI,
+            "https://getrec.me/share/tiktok"
+        )
+    }
+
+    func testActivitySharePNGAttachmentKeepsCanonicalLinkOutOfTheLocalMessagePath() throws {
+        let activityID = "41000000-0000-0000-0000-000000000001"
+        let fileURL = URL(fileURLWithPath: "/tmp/recme-activity-share.png")
+        let content = try XCTUnwrap(
+            WanderShareContent.activity(
+                activityID: activityID,
+                placeName: "Ada Street",
+                message: "See Judy's check-in"
+            )?.attachingPNG(at: fileURL)
+        )
+
+        XCTAssertEqual(content.items, [
+            URL(string: "https://getrec.me/activities/\(activityID)")!,
+            WanderShareContent.publicTestFlightURL,
+            fileURL,
+        ])
+        XCTAssertTrue(content.messageBody.contains("https://getrec.me/activities/\(activityID)"))
+        XCTAssertTrue(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
+        XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
+    }
+
+    func testShareArtworkRendererUsesTheResolvedAvatarImage() throws {
+        let context = ActivityEngagementContext(
+            activityID: "41000000-0000-0000-0000-000000000002",
+            actor: ProfileShell(
+                id: "user_friend",
+                handle: "friend",
+                displayName: "Judy",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .follower
+            ),
+            placeName: "Ada Street",
+            placeServerID: nil,
+            placeDetail: "Restaurant · Chicago, IL",
+            status: .been,
+            occurredAt: .now
+        )
+        let avatarImage = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 12)).image {
+            UIColor.systemBlue.setFill()
+            $0.fill(CGRect(origin: .zero, size: CGSize(width: 12, height: 12)))
+        }
+
+        let fallbackArtwork = try XCTUnwrap(
+            ActivityShareArtworkRenderer.render(context: context)
+        )
+        let avatarArtwork = try XCTUnwrap(
+            ActivityShareArtworkRenderer.render(
+                context: context,
+                avatarImage: avatarImage
+            )
+        )
+
+        XCTAssertNotEqual(fallbackArtwork.pngData(), avatarArtwork.pngData())
+        XCTAssertEqual(avatarArtwork.size, CGSize(width: 360, height: 640))
+    }
+
     func testLikeMutationUpdatesTheVisibleCountAndCanUndo() async {
         let store = WanderStore(fixtures: .empty())
         let activityID = "local-activity"
