@@ -2094,6 +2094,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let captureEnabled: Bool
     let discoveryDigestEnabled: Bool
     let followedActivityEnabled: Bool
+    let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -2105,6 +2106,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 
@@ -2118,6 +2120,7 @@ private struct NotificationPreferencesResponse: Decodable {
             captureEnabled: captureEnabled,
             discoveryDigestEnabled: discoveryDigestEnabled,
             followedActivityEnabled: followedActivityEnabled,
+            engagementEnabled: engagementEnabled ?? false,
             wannaGoRemindersEnabled: wannaGoRemindersEnabled ?? false
         )
     }
@@ -2144,6 +2147,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let captureEnabled: Bool?
     let discoveryDigestEnabled: Bool?
     let followedActivityEnabled: Bool?
+    let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
 
     init(update: NotificationPreferencesUpdate) {
@@ -2155,6 +2159,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.captureEnabled = update.captureEnabled
         self.discoveryDigestEnabled = update.discoveryDigestEnabled
         self.followedActivityEnabled = update.followedActivityEnabled
+        self.engagementEnabled = update.engagementEnabled
         self.wannaGoRemindersEnabled = update.wannaGoRemindersEnabled
     }
 
@@ -2167,6 +2172,7 @@ private struct NotificationPreferencesPatch: Encodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 }
