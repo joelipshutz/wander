@@ -312,16 +312,48 @@ struct RemotePlaceAttributeDTO: Codable, Equatable {
 struct RemoteFeedMediaDTO: Codable, Equatable {
     let id: String
     let urlString: String?
+    let storageBucket: String?
+    let storagePath: String?
     let accessibilityLabel: String
 
     enum CodingKeys: String, CodingKey {
         case id
         case urlString = "url"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
         case accessibilityLabel = "accessibility_label"
     }
 
-    var preview: FeedMediaPreview {
-        FeedMediaPreview(id: id, urlString: urlString, accessibilityLabel: accessibilityLabel)
+    @MainActor
+    func preview(storage: (any RemoteStorageCalling)?) async -> FeedMediaPreview {
+        var resolvedURLString = urlString
+        if resolvedURLString == nil,
+           let storage,
+           let storageBucket,
+           let storagePath {
+            if let signedURL = try? await storage.signedObjectURL(
+                bucket: storageBucket,
+                path: storagePath,
+                expiresIn: 3_600
+            ) {
+                resolvedURLString = signedURL.absoluteString
+            }
+        }
+        return FeedMediaPreview(
+            id: id,
+            urlString: resolvedURLString,
+            accessibilityLabel: accessibilityLabel
+        )
+    }
+}
+
+struct RemoteActivityMediaDTO: Codable, Equatable {
+    let activityID: String
+    let media: [RemoteFeedMediaDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id"
+        case media
     }
 }
 
@@ -385,9 +417,19 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
         case media
     }
 
-    func activity() throws -> FeedActivity {
+    @MainActor
+    func activity(
+        storage: (any RemoteStorageCalling)? = nil,
+        mediaOverride: [RemoteFeedMediaDTO]? = nil
+    ) async throws -> FeedActivity {
         guard let kind = FeedActivityKind(rawValue: eventType) else {
             throw WanderRemoteError.invalidResponse("Unknown Feed event type: \(eventType)")
+        }
+        var renderedMedia: [FeedMediaPreview] = []
+        let sourceMedia = mediaOverride ?? media
+        renderedMedia.reserveCapacity(sourceMedia.count)
+        for item in sourceMedia {
+            renderedMedia.append(await item.preview(storage: storage))
         }
         return FeedActivity(
             id: id,
@@ -398,7 +440,7 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
             occurredAt: occurredAt,
             note: note,
             rating: rating,
-            media: media.map(\.preview)
+            media: renderedMedia
         )
     }
 }
@@ -437,8 +479,13 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
         case fetchedAt = "fetched_at"
     }
 
-    func followedFeedPage() throws -> FollowedFeedPage {
-        let renderedActivity = try activity.map { try $0.activity() }
+    @MainActor
+    func followedFeedPage() async throws -> FollowedFeedPage {
+        var renderedActivity: [FeedActivity] = []
+        renderedActivity.reserveCapacity(activity.count)
+        for item in activity {
+            renderedActivity.append(try await item.activity())
+        }
         let actorsByID = Dictionary(
             renderedActivity.map { ($0.actor.id, $0.actor) },
             uniquingKeysWith: { current, _ in current }

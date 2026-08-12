@@ -2986,6 +2986,31 @@ async function runSurfaceSnapshotSmokeChecks(
 ) {
   await expectQuery(
     client,
+    "activity media RPC metadata",
+    `
+      select
+        p.prosecdef as security_definer,
+        'search_path=pg_catalog, public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'activity_media'
+        and pg_get_function_identity_arguments(p.oid) = 'input_activity_ids uuid[]'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_definer === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
+  await expectQuery(
+    client,
     "surface snapshot RPC metadata",
     `
       select
@@ -3223,12 +3248,13 @@ async function runFirstVisiblePlacePhotoChecks(
         0,
         'uploaded'
       from ids
-      returning id
+      returning id, visit_id
     `,
     [smokeUserPlaceID, smokeUserID],
     (result) => result.rows.length === 1,
   );
   const expectedPhotoID = photoFixture.rows[0].id;
+  const expectedVisitID = photoFixture.rows[0].visit_id;
   const collaboratorPhotoFixture = await expectQuery(
     client,
     "create rolled-back collaborator list-cover photo fixture",
@@ -3270,6 +3296,31 @@ async function runFirstVisiblePlacePhotoChecks(
   );
 
   await setAuthenticatedUser(client, smokeUserID);
+  await client.query("reset role");
+  const activityFixture = await expectQuery(
+    client,
+    "resolve rolled-back activity media fixture",
+    `
+      select id
+      from public.feed_events
+      where visit_id = $1::uuid
+      order by occurred_at desc, id desc
+      limit 1
+    `,
+    [expectedVisitID],
+    (result) => result.rows.length === 1,
+  );
+  const expectedActivityID = activityFixture.rows[0].id;
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner activity media returns the exact uploaded visit photo",
+    "select * from public.activity_media(array[$1::uuid])",
+    [expectedActivityID],
+    (result) => result.rows[0]?.activity_id === expectedActivityID
+      && result.rows[0]?.media?.[0]?.id === expectedPhotoID
+      && result.rows[0]?.media?.[0]?.storage_bucket === "visit-photos",
+  );
   await expectQuery(
     client,
     "owner can resolve first visible place photo",

@@ -601,6 +601,55 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
     }
 
+    func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        rpc.responses["activity_detail"] = """
+        {
+          "id": "event_with_photo",
+          "event_type": "place_been",
+          "occurred_at": "2026-08-09T20:00:00Z",
+          "actor": {
+            "id": "user_joe",
+            "handle": "jolipshutz",
+            "display_name": "Joe Lipshutz",
+            "avatar_url": null,
+            "relationship": "follower"
+          },
+          "place": null,
+          "list": null,
+          "note": "Great art.",
+          "rating": null,
+          "media": []
+        }
+        """.data(using: .utf8)
+        rpc.responses["activity_media"] = """
+        [
+          {
+            "activity_id": "event_with_photo",
+            "media": [
+              {
+                "id": "photo_1",
+                "url": null,
+                "storage_bucket": "visit-photos",
+                "storage_path": "user_joe/visit_1/photo_1.jpg",
+                "accessibility_label": "Activity photo"
+              }
+            ]
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseActivityEngagementRepository(rpc: rpc, storage: storage)
+
+        let activity = try await repository.activity(id: "event_with_photo")
+
+        XCTAssertEqual(activity.media.first?.id, "photo_1")
+        XCTAssertEqual(
+            storage.signedURLs,
+            [.init(bucket: "visit-photos", path: "user_joe/visit_1/photo_1.jpg")]
+        )
+    }
+
     func testFollowedFeedFeaturedPlacesKeepTheActivityActorAvatar() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = """

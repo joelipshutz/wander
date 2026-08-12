@@ -9420,7 +9420,16 @@ private struct PlaceActivityCard: View {
             placeServerID: visiblePlace.place.serverID ?? visiblePlace.place.id,
             placeDetail: detailParts.joined(separator: " · "),
             status: entry.status,
-            occurredAt: entry.timestamp
+            occurredAt: entry.timestamp,
+            note: entry.note,
+            media: photos.map {
+                ActivityEngagementMedia(
+                    id: $0.id,
+                    urlString: $0.metadata.remoteURLString,
+                    localAssetRef: $0.metadata.localAssetRef,
+                    accessibilityLabel: "Photo from \(entry.displayName)'s activity at \(visiblePlace.place.canonicalName)"
+                )
+            }
         )
     }
 
