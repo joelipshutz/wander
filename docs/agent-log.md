@@ -28766,3 +28766,14 @@ Checkpoint — full validation and PR readiness (2026-08-12 02:34 PDT):
 - Rebased cleanly onto latest `origin/main` at TestFlight build-133 commit
   `0c1d54ac`; the intervening changes were Map-only plus the build-number bump
   and did not overlap this patch.
+
+Handoff:
+
+- Implementation commit: `3fbcaa7e` (`fix: show activity across duplicate
+  place records`).
+- Ready PR: https://github.com/joelipshutz/wander/pull/373
+- Linked PR #373 and a non-PII validation summary on Linear REC-103. Kept the
+  broader issue In Progress because this patch addresses its duplicate-place
+  Profile projection symptom rather than closing the entire issue.
+- Next step: review and merge PR #373. A later explicit TestFlight release
+  should package it with the then-latest `main`; this task did not release it.
