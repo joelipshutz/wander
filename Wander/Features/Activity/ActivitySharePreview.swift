@@ -5,6 +5,9 @@ import UIKit
 #if canImport(TikTokOpenShareSDK)
 import TikTokOpenShareSDK
 #endif
+#if canImport(TikTokOpenSDKCore)
+import TikTokOpenSDKCore
+#endif
 
 enum ActivityShareDestination: String, CaseIterable, Identifiable {
     case messages
@@ -77,6 +80,47 @@ enum ActivitySharePhotoPermissionPolicy {
     }
 }
 
+enum ActivityShareTikTokOutcome: Equatable, Sendable {
+    case shared
+    case savedAsDraft
+    case cancelled
+    case failed(message: String)
+}
+
+enum ActivityShareTikTokOutcomePolicy {
+    static func outcome(errorCode: Int, shareState: Int) -> ActivityShareTikTokOutcome {
+        if errorCode == -2 || shareState == 20_013 {
+            return .cancelled
+        }
+        if errorCode == 0, shareState == 20_000 {
+            return .shared
+        }
+        if shareState == 20_015 {
+            return .savedAsDraft
+        }
+
+        let message = switch shareState {
+        case 20_003:
+            "TikTok did not grant this account permission to share."
+        case 20_004, 22_001:
+            "Sign in to the TikTok account enabled for this rec.me sandbox, then try again."
+        case 20_005:
+            "TikTok needs Photos access to import this share ticket."
+        case 20_006:
+            "TikTok could not connect. Check your connection and try again."
+        case 20_008:
+            "TikTok rejected the share image resolution."
+        case 20_019:
+            "TikTok is not installed on this iPhone."
+        case 22_000:
+            "Update TikTok, then try sharing again."
+        default:
+            "TikTok could not finish this share. Try again or use More to share another way."
+        }
+        return .failed(message: message)
+    }
+}
+
 enum ActivityShareMessageCompletionAction: Equatable {
     case dismiss
     case openSystemShare
@@ -118,6 +162,7 @@ struct ActivitySharePreviewScreen: View {
 
     let context: ActivityEngagementContext
     let content: WanderShareContent
+    var initiallyVisibleDestination: ActivityShareDestination? = nil
 
     @State private var renderedImage: UIImage?
     @State private var renderedImageURL: URL?
@@ -129,6 +174,7 @@ struct ActivitySharePreviewScreen: View {
     @State private var shouldOpenSystemShareAfterMessagesDismiss = false
     @State private var isShowingPhotoSettingsAlert = false
     @State private var isShowingExportError = false
+    @State private var tikTokFailureMessage: String?
     @State private var confirmationMessage: String?
 
     var body: some View {
@@ -150,6 +196,7 @@ struct ActivitySharePreviewScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ActivityShareDestinationTray(
                 isPreparing: isPreparingArtwork || isMessagePresentationPending,
+                initiallyVisibleDestination: initiallyVisibleDestination,
                 action: handleDestination
             )
             .background(alignment: .bottom) {
@@ -190,6 +237,21 @@ struct ActivitySharePreviewScreen: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Try sharing this ticket again.")
+        }
+        .alert(
+            "Couldn't share to TikTok",
+            isPresented: Binding(
+                get: { tikTokFailureMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        tikTokFailureMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tikTokFailureMessage ?? "TikTok could not finish this share.")
         }
         .task(id: context.activityID) {
             _ = await prepareArtworkIfNeeded()
@@ -394,10 +456,25 @@ struct ActivitySharePreviewScreen: View {
             return
         }
         guard await ActivityShareProviderLauncher.openTikTok(
-            localIdentifier: localIdentifier
+            localIdentifier: localIdentifier,
+            onCompletion: handleTikTokOutcome
         ) else {
             await presentSystemShare()
             return
+        }
+    }
+
+    @MainActor
+    private func handleTikTokOutcome(_ outcome: ActivityShareTikTokOutcome) {
+        switch outcome {
+        case .shared:
+            showConfirmation("shared to TikTok")
+        case .savedAsDraft:
+            showConfirmation("saved as a TikTok draft")
+        case .cancelled:
+            showConfirmation("TikTok share canceled")
+        case .failed(let message):
+            tikTokFailureMessage = message
         }
     }
 
@@ -624,6 +701,7 @@ private struct ActivityShareTicket: View {
 
 private struct ActivityShareDestinationTray: View {
     let isPreparing: Bool
+    let initiallyVisibleDestination: ActivityShareDestination?
     let action: (ActivityShareDestination) -> Void
 
     var body: some View {
@@ -632,20 +710,27 @@ private struct ActivityShareDestinationTray: View {
                 .font(.system(size: 20, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
 
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: WanderTheme.spacing2) {
-                    ForEach(ActivityShareDestination.allCases) { destination in
-                        ActivityShareDestinationButton(destination: destination) {
-                            action(destination)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                        ForEach(ActivityShareDestination.allCases) { destination in
+                            ActivityShareDestinationButton(destination: destination) {
+                                action(destination)
+                            }
+                            .id(destination)
+                            .disabled(isPreparing && destination != .copyLink)
+                            .opacity(isPreparing && destination != .copyLink ? 0.58 : 1)
                         }
-                        .disabled(isPreparing && destination != .copyLink)
-                        .opacity(isPreparing && destination != .copyLink ? 0.58 : 1)
                     }
+                    .padding(.horizontal, WanderTheme.spacing4)
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
+                .frame(height: 104)
+                .scrollIndicators(.hidden)
+                .onAppear {
+                    guard let initiallyVisibleDestination else { return }
+                    proxy.scrollTo(initiallyVisibleDestination, anchor: .center)
+                }
             }
-            .frame(height: 104)
-            .scrollIndicators(.hidden)
         }
         .padding(.top, WanderTheme.spacing4)
         .padding(.bottom, WanderTheme.spacing2)
@@ -946,7 +1031,10 @@ enum ActivityShareProviderLauncher {
         return await open(shareURL)
     }
 
-    static func openTikTok(localIdentifier: String) async -> Bool {
+    static func openTikTok(
+        localIdentifier: String,
+        onCompletion: @escaping @MainActor (ActivityShareTikTokOutcome) -> Void
+    ) async -> Bool {
         #if canImport(TikTokOpenShareSDK)
         guard canOpenTikTok else { return false }
         let request = TikTokShareRequest(
@@ -955,8 +1043,22 @@ enum ActivityShareProviderLauncher {
             redirectURI: ActivityShareProviderConfiguration.tikTokRedirectURI
         )
         retainedTikTokRequest = request
-        let didSend = request.send { _ in
-            Task { @MainActor in retainedTikTokRequest = nil }
+        let didSend = request.send { response in
+            let outcome: ActivityShareTikTokOutcome
+            if let shareResponse = response as? TikTokShareResponse {
+                outcome = ActivityShareTikTokOutcomePolicy.outcome(
+                    errorCode: shareResponse.errorCode.rawValue,
+                    shareState: shareResponse.shareState.rawValue
+                )
+            } else {
+                outcome = .failed(
+                    message: "TikTok could not finish this share. Try again or use More to share another way."
+                )
+            }
+            Task { @MainActor in
+                retainedTikTokRequest = nil
+                onCompletion(outcome)
+            }
         }
         if !didSend {
             retainedTikTokRequest = nil
@@ -1118,8 +1220,23 @@ struct ActivitySharePreviewMockupRoot: View {
             placeName: context.placeName,
             message: context.shareMessage
         ) {
-            ActivitySharePreviewScreen(context: context, content: content)
+            ActivitySharePreviewScreen(
+                context: context,
+                content: content,
+                initiallyVisibleDestination: .tikTok
+            )
+                .onOpenURL(perform: handleTikTokCallback)
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard let url = activity.webpageURL else { return }
+                    handleTikTokCallback(url)
+                }
         }
+    }
+
+    private func handleTikTokCallback(_ url: URL) {
+        #if canImport(TikTokOpenSDKCore)
+        _ = TikTokURLHandler.handleOpenURL(url)
+        #endif
     }
 }
 #endif

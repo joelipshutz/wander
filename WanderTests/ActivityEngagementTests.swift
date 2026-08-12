@@ -71,6 +71,45 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
+    func testTikTokOutcomePolicyReportsSuccessDraftCancellationAndProviderFailures() {
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_000),
+            .shared
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_015),
+            .savedAsDraft
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_015),
+            .savedAsDraft
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -2, shareState: 20_001),
+            .cancelled
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_013),
+            .cancelled
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_008),
+            .failed(message: "TikTok rejected the share image resolution.")
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_004),
+            .failed(
+                message: "Sign in to the TikTok account enabled for this rec.me sandbox, then try again."
+            )
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_001),
+            .failed(
+                message: "TikTok could not finish this share. Try again or use More to share another way."
+            )
+        )
+    }
+
     func testActivitySharePNGAttachmentKeepsCanonicalLinkOutOfTheLocalMessagePath() throws {
         let activityID = "41000000-0000-0000-0000-000000000001"
         let fileURL = URL(fileURLWithPath: "/tmp/recme-activity-share.png")
