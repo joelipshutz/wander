@@ -143,6 +143,9 @@ struct MapScreen: View {
     @State private var loadedFeaturedViewport: MapViewport?
     @State private var featuredViewportRefreshTask: Task<Void, Never>?
     @State private var isLoadingMapSources = true
+    @State private var transitioningAnnotationGroups: [VisiblePlaceGroup]?
+    @State private var visibleTransitionGroupKeys: Set<String>?
+    @State private var mapPinTransitionTask: Task<Void, Never>?
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
@@ -296,9 +299,15 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        let annotationGroups = Self.orderedAnnotationGroups(
-            visiblePlaceGroups,
-            selectedGroupKey: selectedPlaceGroupKey
+        let annotationGroups = transitioningAnnotationGroups ?? orderedVisiblePlaceGroups()
+        let moreFilterSelection = Binding(
+            get: { mapFilterState.more },
+            set: { selection in
+                setMoreFilterSelection(
+                    selection,
+                    from: annotationGroups
+                )
+            }
         )
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -309,6 +318,7 @@ struct MapScreen: View {
                         }
 
                         ForEach(annotationGroups) { group in
+                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -328,6 +338,13 @@ struct MapScreen: View {
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
+                                .opacity(isTransitionVisible ? 1 : 0)
+                                .scaleEffect(
+                                    isTransitionVisible
+                                        ? 1
+                                        : MapPinFilterTransitionStyle.hiddenScale
+                                )
+                                .allowsHitTesting(isTransitionVisible)
                                 .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
                             }
                         }
@@ -412,7 +429,6 @@ struct MapScreen: View {
                                     systemImage: "plus",
                                     accessibilityLabel: "Add a place",
                                     accessibilityIdentifier: "map.headerAdd",
-                                    isElevated: false,
                                     action: onAdd
                                 )
                                 .walkthroughTarget(
@@ -441,7 +457,10 @@ struct MapScreen: View {
                                 HStack(spacing: WanderTheme.spacing1) {
                                     ForEach(MapSource.allCases) { source in
                                         Button {
-                                            selectMapSource(source)
+                                            selectMapSource(
+                                                source,
+                                                from: annotationGroups
+                                            )
                                         } label: {
                                             MapSourceFilterChip(
                                                 source: source,
@@ -470,7 +489,7 @@ struct MapScreen: View {
                                         arrowEdge: .top
                                     ) {
                                         MapMoreFiltersPopover(
-                                            selection: $mapFilterState.more,
+                                            selection: moreFilterSelection,
                                             peopleOptions: socialOwnerOptions,
                                             dismiss: { isMoreFiltersPresented = false }
                                         )
@@ -486,7 +505,12 @@ struct MapScreen: View {
                                 MapFilterEmptyNotice(
                                     message: mapFilterEmptyMessage,
                                     canReset: mapFilterState.more.activeSectionCount > 0,
-                                    reset: { mapFilterState.more = MapMoreFilterSelection() }
+                                    reset: {
+                                        setMoreFilterSelection(
+                                            MapMoreFilterSelection(),
+                                            from: annotationGroups
+                                        )
+                                    }
                                 )
                                 .padding(.horizontal, WanderTheme.spacing3)
                                 .padding(.top, WanderTheme.spacing1)
@@ -589,6 +613,7 @@ struct MapScreen: View {
                 mapFeatureResolutionTask?.cancel()
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
+                mapPinTransitionTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -789,11 +814,75 @@ struct MapScreen: View {
         currentSearchRegion = region
     }
 
-    private func selectMapSource(_ source: MapSource) {
+    private func selectMapSource(
+        _ source: MapSource,
+        from outgoingGroups: [VisiblePlaceGroup]
+    ) {
         guard mapFilterState.source != source else { return }
         routedVisiblePlace = nil
-        withAnimation(MapSourceTransitionStyle.animation(reduceMotion: reduceMotion)) {
-            mapFilterState.source = source
+        mapFilterState.source = source
+        transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
+    }
+
+    private func setMoreFilterSelection(
+        _ selection: MapMoreFilterSelection,
+        from outgoingGroups: [VisiblePlaceGroup]
+    ) {
+        guard mapFilterState.more != selection else { return }
+        routedVisiblePlace = nil
+        mapFilterState.more = selection
+        transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
+    }
+
+    private func orderedVisiblePlaceGroups() -> [VisiblePlaceGroup] {
+        Self.orderedAnnotationGroups(
+            visiblePlaceGroups,
+            selectedGroupKey: selectedPlaceGroupKey
+        )
+    }
+
+    private func transitionMapPins(
+        from outgoingGroups: [VisiblePlaceGroup],
+        to incomingGroups: [VisiblePlaceGroup]
+    ) {
+        mapPinTransitionTask?.cancel()
+
+        let outgoingKeys = Set(outgoingGroups.map(\.key))
+        let incomingKeys = Set(incomingGroups.map(\.key))
+        guard outgoingKeys != incomingKeys, !reduceMotion else {
+            transitioningAnnotationGroups = nil
+            visibleTransitionGroupKeys = nil
+            return
+        }
+
+        transitioningAnnotationGroups = outgoingGroups
+        visibleTransitionGroupKeys = outgoingKeys
+
+        mapPinTransitionTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+
+            withAnimation(MapPinFilterTransitionStyle.fadeOutAnimation) {
+                visibleTransitionGroupKeys = []
+            }
+
+            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeOutDuration))
+            guard !Task.isCancelled else { return }
+
+            transitioningAnnotationGroups = incomingGroups
+            visibleTransitionGroupKeys = []
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+
+            withAnimation(MapPinFilterTransitionStyle.fadeInAnimation) {
+                visibleTransitionGroupKeys = incomingKeys
+            }
+
+            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeInDuration))
+            guard !Task.isCancelled else { return }
+            transitioningAnnotationGroups = nil
+            visibleTransitionGroupKeys = nil
+            mapPinTransitionTask = nil
         }
     }
 
@@ -2565,13 +2654,13 @@ enum MapSource: String, CaseIterable, Identifiable {
     }
 }
 
-enum MapSourceTransitionStyle {
-    static let duration: TimeInterval = 0.16
-    static let deselectedScale: CGFloat = 0.98
-
-    static func animation(reduceMotion: Bool) -> Animation? {
-        reduceMotion ? nil : .easeInOut(duration: duration)
-    }
+enum MapPinFilterTransitionStyle {
+    static let fadeOutDuration: TimeInterval = 0.06
+    static let fadeInDuration: TimeInterval = 0.10
+    static let duration = fadeOutDuration + fadeInDuration
+    static let hiddenScale: CGFloat = 0.92
+    static let fadeOutAnimation = Animation.easeOut(duration: fadeOutDuration)
+    static let fadeInAnimation = Animation.spring(duration: fadeInDuration, bounce: 0.14)
 }
 
 enum MapStatusFilter: String, CaseIterable, Identifiable {
@@ -2975,7 +3064,7 @@ private struct SearchBar: View {
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: 48)
         .contentShape(Capsule())
-        .wanderGlassCapsule(isElevated: false)
+        .wanderGlassCapsule()
     }
 
     @MainActor
@@ -3006,7 +3095,7 @@ private struct MapSearchCancelButton: View {
                 .foregroundStyle(WanderTheme.textInk.color)
                 .frame(minWidth: 64, minHeight: 44)
                 .contentShape(Capsule())
-                .wanderGlassCapsule(isElevated: false)
+                .wanderGlassCapsule()
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("map.searchCancel")
@@ -3212,7 +3301,6 @@ private struct MapFilterEmptyNotice: View {
 }
 
 private struct MapSourceFilterChip: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let source: MapSource
     let isSelected: Bool
 
@@ -3230,13 +3318,7 @@ private struct MapSourceFilterChip: View {
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isSelected ? .selected : .neutral,
-            showsBorder: true,
-            isElevated: false
-        )
-        .scaleEffect(isSelected ? 1 : MapSourceTransitionStyle.deselectedScale)
-        .animation(
-            MapSourceTransitionStyle.animation(reduceMotion: reduceMotion),
-            value: isSelected
+            showsBorder: true
         )
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -3277,8 +3359,7 @@ private struct MapMoreFilterChip: View {
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isActive ? .selected : .neutral,
-            showsBorder: true,
-            isElevated: false
+            showsBorder: true
         )
         .accessibilityLabel("More map filters")
         .accessibilityValue(

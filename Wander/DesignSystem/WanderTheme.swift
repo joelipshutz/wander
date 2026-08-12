@@ -379,11 +379,10 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
     let tone: WanderGlassTone
     let isInteractive: Bool
     let showsBorder: Bool
-    let isElevated: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *), isElevated {
+        if #available(iOS 26.0, *) {
             content
                 .glassEffect(
                     .regular
@@ -410,16 +409,12 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                         )
                 }
                 .shadow(
-                    color: isElevated
-                        ? (
-                            tone == .darkOverlay
-                                ? Color.black.opacity(0.34)
-                                : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12)
-                        )
-                        : Color.clear,
-                    radius: isElevated ? 10 : 0,
+                    color: tone == .darkOverlay
+                        ? Color.black.opacity(0.34)
+                        : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
+                    radius: 10,
                     x: 0,
-                    y: isElevated ? 5 : 0
+                    y: 5
                 )
         }
     }
@@ -471,15 +466,13 @@ extension View {
     func wanderGlassCapsule(
         tone: WanderGlassTone = .neutral,
         interactive: Bool = true,
-        showsBorder: Bool = true,
-        isElevated: Bool = true
+        showsBorder: Bool = true
     ) -> some View {
         modifier(
             WanderGlassCapsuleModifier(
                 tone: tone,
                 isInteractive: interactive,
-                showsBorder: showsBorder,
-                isElevated: isElevated
+                showsBorder: showsBorder
             )
         )
     }
@@ -494,7 +487,6 @@ struct WanderGlassActionButton: View {
     let accessibilityLabel: String
     var accessibilityIdentifier: String?
     var tone: WanderGlassTone = .accent
-    var isElevated = true
     let action: () -> Void
 
     var body: some View {
@@ -504,7 +496,7 @@ struct WanderGlassActionButton: View {
                 .frame(width: 44, height: 44)
                 .foregroundStyle(tone.foregroundStyle)
                 .contentShape(Circle())
-                .wanderGlassCapsule(tone: tone, isElevated: isElevated)
+                .wanderGlassCapsule(tone: tone)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
