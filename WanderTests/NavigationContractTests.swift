@@ -45,6 +45,23 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("guard isSessionValidated,"))
     }
 
+    func testNativeAuthPresentsAppleBeforeClerkManagedAlternatives() throws {
+        let authView = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Auth/AuthGateSheet.swift"
+            )
+        )
+
+        let appleCTA = try XCTUnwrap(authView.range(of: "auth.continueWithApple"))
+        let alternativesCTA = try XCTUnwrap(authView.range(of: "auth.useOtherMethod"))
+
+        XCTAssertLessThan(appleCTA.lowerBound, alternativesCTA.lowerBound)
+        XCTAssertTrue(authView.contains("await auth.signInWithApple()"))
+        XCTAssertTrue(authView.contains("ASAuthorizationAppleIDButton"))
+        XCTAssertTrue(authView.contains("Use email or Google"))
+        XCTAssertTrue(authView.contains("AuthView(mode: clerkMode"))
+    }
+
     func testNavigationModelRetainsAddRouteWhileHeaderExperimentOwnsVisibleEntryPoint() throws {
         XCTAssertEqual(WanderTab.allCases, [.map, .discover, .add, .lists, .profile])
 

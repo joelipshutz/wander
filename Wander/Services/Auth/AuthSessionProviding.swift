@@ -201,6 +201,8 @@ enum AuthSessionError: Error, Equatable {
     case notSignedIn
     case notConfigured
     case tokenUnavailable
+    case cancelled
+    case appleSessionUnavailable
 }
 
 enum NativeAuthMode: String, Equatable {
@@ -209,12 +211,18 @@ enum NativeAuthMode: String, Equatable {
     case signUp
 }
 
+enum NativeAppleAuthOutcome: Equatable {
+    case completed
+    case requiresClerkContinuation
+}
+
 @MainActor
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
     var canPresentNativeAuth: Bool { get }
     func sessionChanges() -> AsyncStream<AuthState>
     func refreshSession() async
+    func signInWithApple(mode: NativeAuthMode) async throws -> NativeAppleAuthOutcome
     func signOut() async throws
     func deleteAccount() async throws
     func supabaseAccessToken() async throws -> String
@@ -222,6 +230,10 @@ protocol AuthSessionProviding: AnyObject {
 }
 
 extension AuthSessionProviding {
+    func signInWithApple(mode: NativeAuthMode) async throws -> NativeAppleAuthOutcome {
+        throw AuthSessionError.notConfigured
+    }
+
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
     }
@@ -240,6 +252,8 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published var activeGate: AuthGateRequest?
     @Published var isPresentingNativeAuth = false
     @Published private(set) var activeNativeAuthMode: NativeAuthMode = .signInOrUp
+    @Published private(set) var isSigningInWithApple = false
+    @Published private(set) var appleSignInError: String?
     @Published private(set) var isSigningOut = false
     @Published private(set) var signOutError: String?
     @Published private(set) var isSessionValidated = false
@@ -314,6 +328,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     func beginSignIn(mode: NativeAuthMode = .signInOrUp) {
         activeGate = nil
+        appleSignInError = nil
         if provider.canPresentNativeAuth {
             activeNativeAuthMode = mode
             isNativeAuthAttemptActive = true
@@ -327,6 +342,43 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     func nativeAuthDidDismiss() {
         isNativeAuthAttemptActive = false
         isPresentingNativeAuth = false
+        isSigningInWithApple = false
+        appleSignInError = nil
+    }
+
+    @discardableResult
+    func signInWithApple() async -> NativeAppleAuthOutcome? {
+        guard provider.canPresentNativeAuth else {
+            appleSignInError = "Apple sign-in is not available in this build."
+            return nil
+        }
+
+        appleSignInError = nil
+        isNativeAuthAttemptActive = true
+        isSigningInWithApple = true
+        defer { isSigningInWithApple = false }
+
+        do {
+            let outcome = try await provider.signInWithApple(mode: activeNativeAuthMode)
+            if outcome == .completed {
+                synchronizeState(provider.state)
+                guard state.isSignedIn else {
+                    appleSignInError = "Apple sign-in didn’t finish. Try again or use another method."
+                    return nil
+                }
+            }
+            return outcome
+        } catch AuthSessionError.cancelled, is CancellationError {
+            return nil
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error(
+                "apple sign-in failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            appleSignInError = "Apple sign-in didn’t finish. Try again or use another method."
+            return nil
+        }
     }
 
     func supabaseAccessToken() async throws -> String {
@@ -425,15 +477,30 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     let canPresentNativeAuth: Bool
     private let token: String?
     private let signOutError: Error?
+    private let appleSignInOutcome: NativeAppleAuthOutcome
+    private let appleSignInSession: AuthSession?
+    private let appleSignInFailure: Error?
     private let sessionChangeStream: AsyncStream<AuthState>
     private let sessionChangeContinuation: AsyncStream<AuthState>.Continuation
+    private(set) var requestedAppleAuthModes: [NativeAuthMode] = []
 
-    init(state: AuthState = .signedOut, canPresentNativeAuth: Bool = false, token: String? = nil, signOutError: Error? = nil) {
+    init(
+        state: AuthState = .signedOut,
+        canPresentNativeAuth: Bool = false,
+        token: String? = nil,
+        signOutError: Error? = nil,
+        appleSignInOutcome: NativeAppleAuthOutcome = .completed,
+        appleSignInSession: AuthSession? = nil,
+        appleSignInFailure: Error? = nil
+    ) {
         let (stream, continuation) = AsyncStream<AuthState>.makeStream()
         self.state = state
         self.canPresentNativeAuth = canPresentNativeAuth
         self.token = token
         self.signOutError = signOutError
+        self.appleSignInOutcome = appleSignInOutcome
+        self.appleSignInSession = appleSignInSession
+        self.appleSignInFailure = appleSignInFailure
         self.sessionChangeStream = stream
         self.sessionChangeContinuation = continuation
     }
@@ -450,6 +517,18 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     func sessionChanges() -> AsyncStream<AuthState> { sessionChangeStream }
 
     func refreshSession() async {}
+
+    func signInWithApple(mode: NativeAuthMode) async throws -> NativeAppleAuthOutcome {
+        requestedAppleAuthModes.append(mode)
+        if let appleSignInFailure {
+            throw appleSignInFailure
+        }
+        if appleSignInOutcome == .completed, let appleSignInSession {
+            state = .signedIn(appleSignInSession)
+            sessionChangeContinuation.yield(state)
+        }
+        return appleSignInOutcome
+    }
 
     func signOut() async throws {
         if let signOutError {

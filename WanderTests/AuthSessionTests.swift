@@ -101,6 +101,81 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertFalse(store.isPresentingNativeAuth)
     }
 
+    func testAppleSignUpCompletesSessionAndClosesNativeAuth() async {
+        let session = AuthSession(userID: "user_apple", displayName: "Apple User", handle: nil)
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInSession: session
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signUp)
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertEqual(outcome, .completed)
+        XCTAssertEqual(provider.requestedAppleAuthModes, [.signUp])
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertTrue(store.isSessionValidated)
+        XCTAssertFalse(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSigningInWithApple)
+        XCTAssertNil(store.appleSignInError)
+    }
+
+    func testAppleCancellationKeepsAuthOpenWithoutShowingAnError() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInFailure: AuthSessionError.cancelled
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertNil(outcome)
+        XCTAssertEqual(provider.requestedAppleAuthModes, [.signIn])
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSigningInWithApple)
+        XCTAssertNil(store.appleSignInError)
+    }
+
+    func testAppleFailureKeepsAuthOpenWithRecoverableCopy() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInFailure: AuthSessionError.tokenUnavailable
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn()
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertNil(outcome)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertEqual(
+            store.appleSignInError,
+            "Apple sign-in didn’t finish. Try again or use another method."
+        )
+    }
+
+    func testIncompleteAppleFlowHandsOffToClerkWithoutClosingAuth() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInOutcome: .requiresClerkContinuation
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signInOrUp)
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertEqual(outcome, .requiresClerkContinuation)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSigningInWithApple)
+        XCTAssertNil(store.appleSignInError)
+    }
+
     func testClerkAuthServiceDoesNotPresentNativeAuthWhenSDKConfigureReturnsUnconfiguredClient() {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
