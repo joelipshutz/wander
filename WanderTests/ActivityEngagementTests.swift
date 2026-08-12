@@ -92,6 +92,30 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
     }
 
+    func testMessagesPresentationPolicyBlocksAReentrantLaunch() {
+        XCTAssertTrue(
+            ActivityShareMessagePresentationPolicy.shouldBeginPresentation(isPending: false)
+        )
+        XCTAssertFalse(
+            ActivityShareMessagePresentationPolicy.shouldBeginPresentation(isPending: true)
+        )
+    }
+
+    func testMessagesPresentationPolicyFallsBackOnlyWhenMessageUIFails() {
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .cancelled),
+            .dismiss
+        )
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .sent),
+            .dismiss
+        )
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .failed),
+            .openSystemShare
+        )
+    }
+
     func testShareArtworkRendererUsesTheResolvedAvatarImage() throws {
         let context = ActivityEngagementContext(
             activityID: "41000000-0000-0000-0000-000000000002",
