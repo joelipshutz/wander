@@ -340,6 +340,8 @@ struct WanderRootView: View {
         initialSharedProfileRoute: SharedProfileRoute? = nil,
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
+        isFirstVisitWalkthroughEligible: Bool = false,
+        onFirstVisitWalkthroughCompleted: @escaping () -> Void = {},
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
@@ -376,7 +378,10 @@ struct WanderRootView: View {
         )
         _walkthroughs = StateObject(
             wrappedValue: FirstVisitWalkthroughCoordinator(
-                isEnabled: fixtureMode == .empty || launchArguments.contains("-WanderEnableWalkthroughs")
+                isEnabled: (
+                    fixtureMode == .empty && isFirstVisitWalkthroughEligible
+                ) || launchArguments.contains("-WanderEnableWalkthroughs"),
+                onCompleted: onFirstVisitWalkthroughCompleted
             )
         )
         _addSheetDetent = State(

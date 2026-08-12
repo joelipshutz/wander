@@ -246,6 +246,54 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(coordinator.currentStep?.target, .mapSearch)
     }
 
+    func testIneligibleAccountCannotStartAnyFirstVisitLesson() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "existing-user",
+            store: FirstVisitWalkthroughStore(defaults: defaults),
+            isEnabled: false
+        )
+
+        coordinator.registerLaunch(
+            forceImportLesson: true,
+            forceDeviceFeaturesLesson: true
+        )
+        coordinator.activate(.map)
+        coordinator.forceActivate(.mapAdd)
+        coordinator.presentLaunchLessonIfEligible()
+
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.currentStep)
+        XCTAssertFalse(coordinator.isPresentingLaunchLesson)
+        XCTAssertEqual(
+            defaults.integer(
+                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).existing-user.authenticatedLaunchCount"
+            ),
+            0
+        )
+    }
+
+    func testCompletedEntireNuxRetiresAccountEligibility() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        for surface in WalkthroughSurface.allCases {
+            store.markComplete(for: "new-user", surface: surface)
+        }
+        store.markImportLessonComplete(for: "new-user")
+        store.markDeviceFeaturesLessonComplete(for: "new-user")
+        var completionCount = 0
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "new-user",
+            store: store,
+            onCompleted: { completionCount += 1 }
+        )
+
+        coordinator.registerLaunch()
+        coordinator.registerLaunch()
+
+        XCTAssertEqual(completionCount, 1)
+    }
+
     func testPassiveStepOnlyAdvancesThroughNext() throws {
         let defaults = try makeDefaults()
         let coordinator = FirstVisitWalkthroughCoordinator(
