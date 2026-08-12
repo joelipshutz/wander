@@ -116,6 +116,42 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
+    func testSharePreviewPresentationCapturesAnImmutableRouteAtTapTime() throws {
+        let context = ActivityEngagementContext(
+            activityID: "41000000-0000-0000-0000-000000000274",
+            actor: ProfileShell(
+                id: "user_joe",
+                handle: "joelipshutz",
+                displayName: "Joe Lipshutz",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .owner
+            ),
+            placeName: "Jade Rabbit",
+            placeServerID: "40000000-0000-0000-0000-000000000274",
+            placeDetail: "Chinese · Santa Monica · CA",
+            ticketKind: .checkIn,
+            occurredAt: Date(timeIntervalSince1970: 1_775_520_000),
+            note: "Did it again"
+        )
+        let routeID = UUID(uuidString: "51000000-0000-0000-0000-000000000274")!
+
+        let presentation = try XCTUnwrap(
+            ActivitySharePreviewPresentation(id: routeID, context: context)
+        )
+        let expectedContent = try XCTUnwrap(
+            WanderShareContent.activity(
+                activityID: context.activityID,
+                placeName: context.placeName,
+                message: context.shareMessage
+            )
+        )
+
+        XCTAssertEqual(presentation.id, routeID)
+        XCTAssertEqual(presentation.context, context)
+        XCTAssertEqual(presentation.content, expectedContent)
+    }
+
     func testShareArtworkRendererUsesTheResolvedAvatarImage() throws {
         let context = ActivityEngagementContext(
             activityID: "41000000-0000-0000-0000-000000000002",

@@ -41,6 +41,7 @@
 		1B5F7AE1882A1C2C51D99E92 /* WanderBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = E850341A28B18117631F62F5 /* WanderBackend.swift */; };
 		1B7020D5DE060F6868A92ED9 /* DiscoverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECAA1872AD66E4F03247D987 /* DiscoverModels.swift */; };
 		1C59AF053BAE53C75405C6A7 /* ClerkAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02D27520DAC65997D04CDE1B /* ClerkAuthService.swift */; };
+		1CC229F1DBD13EA63FA6EE21 /* rec-270-liquid-glass-pin-transition-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */; };
 		1EE3B1F3E6390358B764C2BE /* ProfileOwnerHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37422B8F2E5F0D4CBE2C20BA /* ProfileOwnerHome.swift */; };
 		1F0CFA9D6277F7F19F5DE064 /* PlaceSaveDraftStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D3419D22C8CE6E132FBBA5 /* PlaceSaveDraftStore.swift */; };
 		1F0D588284A12A308B3E26A4 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = CF6EFF560365043CF67F3324 /* PostHog */; };
@@ -146,9 +147,11 @@
 		9C15BF59C16941E63DE71FF0 /* MapRegionFitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3697512B32B506276A012FE2 /* MapRegionFitterTests.swift */; };
 		9D71E27C136BBB3AAE7D7C6E /* rec-228-import-row-selection-style-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 61E0DC7340E8C6EA795815B7 /* rec-228-import-row-selection-style-pre.json */; };
 		9FAF2FA32C9F0E7323C9A507 /* SocialPlaceImportMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */; };
+		9FB326CCA609385EEEED194B /* rec-270-liquid-glass-pin-transition-pre.png in Resources */ = {isa = PBXBuildFile; fileRef = 94C2EEFCBA5E32F70E1FDDD6 /* rec-270-liquid-glass-pin-transition-pre.png */; };
 		9FBB0F26F26D0A3C74556000 /* PlaceProfilePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCCB983B40D252D8030F830 /* PlaceProfilePresentation.swift */; };
 		A0E777BC5BD09083BC4EC80C /* LoggedOutCarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D96BEEE61A9DCDDE5E75B5A /* LoggedOutCarouselView.swift */; };
 		A1AAA9299EEBA57A4F855D7E /* rec-228-bulk-status-coupling-post.png in Resources */ = {isa = PBXBuildFile; fileRef = 1BE0E4CCA52C155A2EFB2465 /* rec-228-bulk-status-coupling-post.png */; };
+		A2FD2C362D9DAB53792C8B06 /* rec-274-comments-message-dismissal-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 2FCD985E8B3B2DF9E8EF2BAD /* rec-274-comments-message-dismissal-pre.json */; };
 		A336C5CBD69909715BC3730D /* PlaceProfileMapSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71C4596873A503C9978BFC8 /* PlaceProfileMapSurface.swift */; };
 		A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F89709D2B0AA70D438C03C /* AuthSessionProviding.swift */; };
 		A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */; };
@@ -178,6 +181,7 @@
 		C9E6447EAE389755DA5BF2DB /* InviteFramework.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C5F62A98A3826F6DD6332C /* InviteFramework.swift */; };
 		CDE989C7F726EC820478464B /* FeedModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 840B49067A7E0AB076EEBB23 /* FeedModelsTests.swift */; };
 		CE09B8314A8C8030E6644CBC /* FirstVisitWalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6F6858FAB55D4C03CB7BC2 /* FirstVisitWalkthroughTests.swift */; };
+		CE0E108A9243224B04BDAD02 /* rec-270-liquid-glass-pin-transition-post.png in Resources */ = {isa = PBXBuildFile; fileRef = D63FACD1E1CF46C5272B0344 /* rec-270-liquid-glass-pin-transition-post.png */; };
 		D127EAD44B01688CDA0D55D2 /* WanderShareButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */; };
 		D19890A5F55C39BB31669E89 /* ProfilePhotoCropStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E46C27751B250A584CB654D8 /* ProfilePhotoCropStateTests.swift */; };
 		D308F93EA22C89FAB562DE2B /* WanderNearbyWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */; };
@@ -288,6 +292,7 @@
 		159538D8F8224999DF1BB697 /* WanderWidgetSnapshotPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetSnapshotPublisher.swift; sourceTree = "<group>"; };
 		16C5F62A98A3826F6DD6332C /* InviteFramework.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFramework.swift; sourceTree = "<group>"; };
 		17F89709D2B0AA70D438C03C /* AuthSessionProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionProviding.swift; sourceTree = "<group>"; };
+		19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-270-liquid-glass-pin-transition-pre.json"; sourceTree = "<group>"; };
 		1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingUITests.swift; sourceTree = "<group>"; };
 		1A5ECEBF4A96DE53803D3C56 /* SocialPlaceImportMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialPlaceImportMetadata.swift; sourceTree = "<group>"; };
 		1B3AB5F19E8F9650C9E32C1B /* WanderTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderTheme.swift; sourceTree = "<group>"; };
@@ -308,6 +313,7 @@
 		2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderStoreTests.swift; sourceTree = "<group>"; };
 		2F6E53AF7F6E50A969880C4C /* ProfileEditScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEditScreen.swift; sourceTree = "<group>"; };
 		2F7C135DE60BED317B033C7E /* PhotoPlaceTextExtractorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPlaceTextExtractorTests.swift; sourceTree = "<group>"; };
+		2FCD985E8B3B2DF9E8EF2BAD /* rec-274-comments-message-dismissal-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-274-comments-message-dismissal-pre.json"; sourceTree = "<group>"; };
 		317CB1CBE1C6774523775204 /* WanderTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WanderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		32385DF4A2C769C69C78156B /* ProfileInsightsPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileInsightsPresenter.swift; sourceTree = "<group>"; };
 		3483D9CDDB48DA65E279CFF8 /* WanderActionButtonControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderActionButtonControlTests.swift; sourceTree = "<group>"; };
@@ -379,6 +385,7 @@
 		92B51226DAD7E3D05BC0BE52 /* rec-225-trusted-place-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-225-trusted-place-search-pre.json"; sourceTree = "<group>"; };
 		93E2F4FC5143D3528581AAB5 /* CountryCanonicalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CountryCanonicalizer.swift; sourceTree = "<group>"; };
 		942065A6D7C4B33E392B50F5 /* ProfilePhotoCropView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePhotoCropView.swift; sourceTree = "<group>"; };
+		94C2EEFCBA5E32F70E1FDDD6 /* rec-270-liquid-glass-pin-transition-pre.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-270-liquid-glass-pin-transition-pre.png"; sourceTree = "<group>"; };
 		981D76A8E140702A7FD7AFB7 /* ActivityEngagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityEngagementViews.swift; sourceTree = "<group>"; };
 		9C22D299879CD27950355753 /* MapKitPlaceResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapKitPlaceResolver.swift; sourceTree = "<group>"; };
 		9E5C022AA603520F5AFAA348 /* OnboardingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingState.swift; sourceTree = "<group>"; };
@@ -427,6 +434,7 @@
 		D5665DF2A481AC9A45CE315E /* ContactProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactProvider.swift; sourceTree = "<group>"; };
 		D5A0C8AFCFBDE5C371CED21E /* PhotoPlaceTextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPlaceTextExtractor.swift; sourceTree = "<group>"; };
 		D63987ED78C8738917AB869B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D63FACD1E1CF46C5272B0344 /* rec-270-liquid-glass-pin-transition-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-270-liquid-glass-pin-transition-post.png"; sourceTree = "<group>"; };
 		D6A18F74DCFE0F295B598171 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D8130F094346B277D53F8733 /* WanderNearbyWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WanderNearbyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackendConfiguration.swift; sourceTree = "<group>"; };
@@ -565,6 +573,10 @@
 				7C1FAD2B72A87F4F90201955 /* rec-228-bulk-status-coupling-pre.json */,
 				0FEB786FE1F5CAD432194B30 /* rec-228-bulk-status-coupling-pre.png */,
 				53269BFD9AB143F47A3DDAC7 /* rec-268-comment-delete-photo-back-pre.json */,
+				D63FACD1E1CF46C5272B0344 /* rec-270-liquid-glass-pin-transition-post.png */,
+				19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */,
+				94C2EEFCBA5E32F70E1FDDD6 /* rec-270-liquid-glass-pin-transition-pre.png */,
+				2FCD985E8B3B2DF9E8EF2BAD /* rec-274-comments-message-dismissal-pre.json */,
 				B4CFACA664252A3BBDF70791 /* rec-274-messages-composer-dismissal-pre.json */,
 			);
 			path = "ios-fix";
@@ -1177,6 +1189,10 @@
 				18D6E77C3054DE54444A24BD /* rec-228-bulk-status-coupling-pre.png in Resources */,
 				9D71E27C136BBB3AAE7D7C6E /* rec-228-import-row-selection-style-pre.json in Resources */,
 				9A6DFD48687FBB95DD158E3C /* rec-268-comment-delete-photo-back-pre.json in Resources */,
+				CE0E108A9243224B04BDAD02 /* rec-270-liquid-glass-pin-transition-post.png in Resources */,
+				1CC229F1DBD13EA63FA6EE21 /* rec-270-liquid-glass-pin-transition-pre.json in Resources */,
+				9FB326CCA609385EEEED194B /* rec-270-liquid-glass-pin-transition-pre.png in Resources */,
+				A2FD2C362D9DAB53792C8B06 /* rec-274-comments-message-dismissal-pre.json in Resources */,
 				93E16EB26DD015377F5B2D9A /* rec-274-messages-composer-dismissal-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

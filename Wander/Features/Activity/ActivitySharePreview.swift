@@ -94,6 +94,24 @@ enum ActivityShareMessagePresentationPolicy {
     }
 }
 
+struct ActivitySharePreviewPresentation: Identifiable, Equatable {
+    let id: UUID
+    let context: ActivityEngagementContext
+    let content: WanderShareContent
+
+    init?(id: UUID = UUID(), context: ActivityEngagementContext) {
+        guard let content = WanderShareContent.activity(
+            activityID: context.activityID,
+            placeName: context.placeName,
+            message: context.shareMessage
+        ) else { return nil }
+
+        self.id = id
+        self.context = context
+        self.content = content
+    }
+}
+
 struct ActivitySharePreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
