@@ -86,6 +86,7 @@ struct ActivitySharePreviewScreen: View {
 
     @State private var renderedImage: UIImage?
     @State private var renderedImageURL: URL?
+    @State private var resolvedAvatarImage: UIImage?
     @State private var isPreparingArtwork = false
     @State private var systemSharePresentation: ActivityShareSystemPresentation?
     @State private var messagePresentation: ActivityShareMessagePresentation?
@@ -95,7 +96,10 @@ struct ActivitySharePreviewScreen: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ActivityShareArtwork(context: context)
+            ActivityShareArtwork(
+                context: context,
+                avatarImage: resolvedAvatarImage
+            )
                 .ignoresSafeArea()
 
             topBar
@@ -229,7 +233,15 @@ struct ActivitySharePreviewScreen: View {
         isPreparingArtwork = true
         defer { isPreparingArtwork = false }
 
-        guard let image = ActivityShareArtworkRenderer.render(context: context),
+        let avatarImage = await ActivityShareArtworkRenderer.resolveAvatarImage(
+            avatarURL: context.actor.avatarURL
+        )
+        resolvedAvatarImage = avatarImage
+
+        guard let image = ActivityShareArtworkRenderer.render(
+            context: context,
+            avatarImage: avatarImage
+        ),
               let pngData = image.pngData(),
               let fileURL = await WanderShareAttachmentStore.preparePNG(pngData)
         else {
@@ -389,6 +401,7 @@ struct ActivitySharePreviewScreen: View {
 
 private struct ActivityShareArtwork: View {
     let context: ActivityEngagementContext
+    let avatarImage: UIImage?
 
     var body: some View {
         ZStack {
@@ -398,7 +411,10 @@ private struct ActivityShareArtwork: View {
                 Spacer(minLength: WanderTheme.spacing12)
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    ActivityShareTicket(context: context)
+                    ActivityShareTicket(
+                        context: context,
+                        avatarImage: avatarImage
+                    )
 
                     Text("a place worth remembering")
                         .font(.system(size: 11, weight: .bold))
@@ -425,16 +441,12 @@ private struct ActivityShareBackdrop: View {
 
 private struct ActivityShareTicket: View {
     let context: ActivityEngagementContext
+    let avatarImage: UIImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                WanderAvatar(
-                    initials: initials,
-                    avatarURL: context.actor.avatarURL,
-                    size: 54,
-                    color: WanderTheme.terracotta.color
-                )
+                avatar
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(context.actor.displayName)
@@ -507,6 +519,24 @@ private struct ActivityShareTicket: View {
             .map(String.init)
             .joined()
             .uppercased()
+    }
+
+    private var avatar: some View {
+        Group {
+            if let avatarImage {
+                Image(uiImage: avatarImage)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Text(initials)
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+            }
+        }
+        .frame(width: 54, height: 54)
+        .background(WanderTheme.terracotta.color)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
     }
 
     private var ticketIcon: String {
@@ -756,14 +786,29 @@ private struct ActivityShareChromeButton: View {
 }
 
 @MainActor
-private enum ActivityShareArtworkRenderer {
+enum ActivityShareArtworkRenderer {
     static let pointSize = CGSize(width: 360, height: 640)
 
-    static func render(context: ActivityEngagementContext) -> UIImage? {
-        let renderer = ImageRenderer(
-            content: ActivityShareArtwork(context: context)
-                .frame(width: pointSize.width, height: pointSize.height)
+    static func resolveAvatarImage(avatarURL: String?) async -> UIImage? {
+        guard let request = WanderAvatarImageRequest(
+            avatarURL: avatarURL,
+            targetPixelSize: 162
+        ) else {
+            return nil
+        }
+        return await WanderAvatarImagePipeline.shared.image(for: request)?.image
+    }
+
+    static func render(
+        context: ActivityEngagementContext,
+        avatarImage: UIImage? = nil
+    ) -> UIImage? {
+        let artwork = ActivityShareArtwork(
+            context: context,
+            avatarImage: avatarImage
         )
+            .frame(width: pointSize.width, height: pointSize.height)
+        let renderer = ImageRenderer(content: artwork)
         renderer.proposedSize = ProposedViewSize(pointSize)
         renderer.scale = 3
         renderer.isOpaque = true
@@ -811,13 +856,12 @@ enum ActivityShareProviderLauncher {
     }
 
     static func openInstagramStory(image: UIImage, contentURL: URL) async -> Bool {
-        guard let pngData = image.pngData(),
+        guard let appID = ActivityShareProviderConfiguration.metaAppID,
+              let pngData = image.pngData(),
               var components = URLComponents(string: "instagram-stories://share")
         else { return false }
 
-        if let appID = ActivityShareProviderConfiguration.metaAppID {
-            components.queryItems = [URLQueryItem(name: "source_application", value: appID)]
-        }
+        components.queryItems = [URLQueryItem(name: "source_application", value: appID)]
         guard let shareURL = components.url, UIApplication.shared.canOpenURL(shareURL) else {
             return false
         }
@@ -847,10 +891,13 @@ enum ActivityShareProviderLauncher {
             redirectURI: ActivityShareProviderConfiguration.tikTokRedirectURI
         )
         retainedTikTokRequest = request
-        request.send { _ in
+        let didSend = request.send { _ in
             Task { @MainActor in retainedTikTokRequest = nil }
         }
-        return true
+        if !didSend {
+            retainedTikTokRequest = nil
+        }
+        return didSend
         #else
         return false
         #endif

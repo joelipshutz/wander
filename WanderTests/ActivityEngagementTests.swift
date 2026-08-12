@@ -1,4 +1,5 @@
 import Photos
+import UIKit
 import XCTest
 @testable import Wander
 
@@ -89,6 +90,42 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertTrue(content.messageBody.contains("https://getrec.me/activities/\(activityID)"))
         XCTAssertTrue(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
         XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
+    }
+
+    func testShareArtworkRendererUsesTheResolvedAvatarImage() throws {
+        let context = ActivityEngagementContext(
+            activityID: "41000000-0000-0000-0000-000000000002",
+            actor: ProfileShell(
+                id: "user_friend",
+                handle: "friend",
+                displayName: "Judy",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .follower
+            ),
+            placeName: "Ada Street",
+            placeServerID: nil,
+            placeDetail: "Restaurant · Chicago, IL",
+            status: .been,
+            occurredAt: .now
+        )
+        let avatarImage = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 12)).image {
+            UIColor.systemBlue.setFill()
+            $0.fill(CGRect(origin: .zero, size: CGSize(width: 12, height: 12)))
+        }
+
+        let fallbackArtwork = try XCTUnwrap(
+            ActivityShareArtworkRenderer.render(context: context)
+        )
+        let avatarArtwork = try XCTUnwrap(
+            ActivityShareArtworkRenderer.render(
+                context: context,
+                avatarImage: avatarImage
+            )
+        )
+
+        XCTAssertNotEqual(fallbackArtwork.pngData(), avatarArtwork.pngData())
+        XCTAssertEqual(avatarArtwork.size, CGSize(width: 360, height: 640))
     }
 
     func testLikeMutationUpdatesTheVisibleCountAndCanUndo() async {
