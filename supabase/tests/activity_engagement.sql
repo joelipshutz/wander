@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(51);
+select plan(55);
 
 select has_table('public', 'activity_likes', 'activity likes table exists');
 select has_table('public', 'activity_comments', 'activity comments table exists');
@@ -69,6 +69,7 @@ select has_function('public', 'place_activity_engagement_summaries', array['uuid
 select has_function('public', 'set_activity_like', array['uuid', 'boolean']);
 select has_function('public', 'activity_comments', array['uuid', 'text', 'integer']);
 select has_function('public', 'add_activity_comment', array['uuid', 'text']);
+select has_function('public', 'delete_own_activity_comment', array['uuid']);
 
 select ok(
   (
@@ -80,7 +81,8 @@ select ok(
       'public.place_activity_engagement_summaries(uuid[])'::regprocedure,
       'public.set_activity_like(uuid,boolean)'::regprocedure,
       'public.activity_comments(uuid,text,integer)'::regprocedure,
-      'public.add_activity_comment(uuid,text)'::regprocedure
+      'public.add_activity_comment(uuid,text)'::regprocedure,
+      'public.delete_own_activity_comment(uuid)'::regprocedure
     )
   ),
   'all public activity RPCs are security definer'
@@ -95,7 +97,8 @@ select ok(
       'public.place_activity_engagement_summaries(uuid[])'::regprocedure,
       'public.set_activity_like(uuid,boolean)'::regprocedure,
       'public.activity_comments(uuid,text,integer)'::regprocedure,
-      'public.add_activity_comment(uuid,text)'::regprocedure
+      'public.add_activity_comment(uuid,text)'::regprocedure,
+      'public.delete_own_activity_comment(uuid)'::regprocedure
     )
   ),
   'all public activity RPCs pin search_path'
@@ -106,7 +109,8 @@ select ok(
     and has_function_privilege('authenticated', 'public.place_activity_engagement_summaries(uuid[])', 'execute')
     and has_function_privilege('authenticated', 'public.set_activity_like(uuid,boolean)', 'execute')
     and has_function_privilege('authenticated', 'public.activity_comments(uuid,text,integer)', 'execute')
-    and has_function_privilege('authenticated', 'public.add_activity_comment(uuid,text)', 'execute'),
+    and has_function_privilege('authenticated', 'public.add_activity_comment(uuid,text)', 'execute')
+    and has_function_privilege('authenticated', 'public.delete_own_activity_comment(uuid)', 'execute'),
   'authenticated can execute each public activity RPC'
 );
 select ok(
@@ -115,7 +119,8 @@ select ok(
     and not has_function_privilege('anon', 'public.place_activity_engagement_summaries(uuid[])', 'execute')
     and not has_function_privilege('anon', 'public.set_activity_like(uuid,boolean)', 'execute')
     and not has_function_privilege('anon', 'public.activity_comments(uuid,text,integer)', 'execute')
-    and not has_function_privilege('anon', 'public.add_activity_comment(uuid,text)', 'execute'),
+    and not has_function_privilege('anon', 'public.add_activity_comment(uuid,text)', 'execute')
+    and not has_function_privilege('anon', 'public.delete_own_activity_comment(uuid)', 'execute'),
   'anonymous callers cannot execute activity RPCs'
 );
 
@@ -384,6 +389,34 @@ select throws_ok(
   'P0001',
   'invalid_comment_body',
   'empty comments are rejected'
+);
+
+select set_config('request.jwt.claim.sub', 'engagement_stranger', true);
+select throws_ok(
+  $$
+    select public.delete_own_activity_comment(
+      (select id from public.activity_comments where body = 'Meet me on the patio.' limit 1)
+    )
+  $$,
+  'P0001',
+  'comment_not_found_or_not_owned',
+  'another user cannot delete the viewer comment'
+);
+
+select set_config('request.jwt.claim.sub', 'engagement_viewer', true);
+select is(
+  (
+    public.delete_own_activity_comment(
+      (select id from public.activity_comments where body = 'Meet me on the patio.' limit 1)
+    )->>'comment_count'
+  )::integer,
+  0,
+  'comment author can delete their own comment and receives the synchronized count'
+);
+select is(
+  (select count(*)::integer from public.activity_comments where body = 'Meet me on the patio.'),
+  0,
+  'comment deletion removes the owned row'
 );
 
 select set_config('request.jwt.claim.sub', 'engagement_stranger', true);

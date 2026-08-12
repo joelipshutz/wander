@@ -1,0 +1,10 @@
+{
+  "issue": "REC-268",
+  "capture_source": "user TestFlight report plus deterministic ActivityCommentsScreen source state",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "reported_photo_viewer_problem": "the full-screen photo back button shading does not maintain clear contrast over the photo",
+  "reported_comment_problem": "comments have no owner-only delete affordance",
+  "expected_photo_viewer_behavior": "a white chevron sits on a dark translucent glass fill with a light border and shadow",
+  "expected_comment_behavior": "the author can swipe their comment left and explicitly tap Delete; other users cannot delete it",
+  "destructive_gesture_policy": "full-swipe deletion is disabled"
+}

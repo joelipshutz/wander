@@ -88,6 +88,25 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(associatedDomains.contains("applinks:getrec.me"))
     }
 
+    func testAppEntitlementsEnableSignInWithApple() throws {
+        let entitlementsData = try Data(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Resources/Wander.entitlements"
+            )
+        )
+        let entitlements = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: entitlementsData,
+                format: nil
+            ) as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            entitlements["com.apple.developer.applesignin"] as? [String],
+            ["Default"]
+        )
+    }
+
     func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(

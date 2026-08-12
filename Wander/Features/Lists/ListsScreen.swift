@@ -211,7 +211,6 @@ struct ListsScreen: View {
         ListDetailScreen(
             list: list,
             onEdit: { list in
-                walkthroughs.perform(.listActions)
                 walkthroughs.activate(.listEditor)
                 editorPresentation = .edit(list)
             },
@@ -900,7 +899,6 @@ private struct ListDetailScreen: View {
 
                 if canAddPlaces {
                     Button {
-                        walkthroughs.perform(.listActions)
                         isAddingPlaces = true
                     } label: {
                         Image(systemName: "plus")
@@ -912,7 +910,6 @@ private struct ListDetailScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
-                    .walkthroughTarget(.listActions)
                 }
 
                 if canManageList {
@@ -928,7 +925,6 @@ private struct ListDetailScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Edit list")
-                    .walkthroughTarget(canAddPlaces ? nil : .listActions)
                 }
 
                 if canLeaveList {
@@ -2891,7 +2887,7 @@ private struct ListMapFullScreen: View {
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
         .onChange(of: walkthroughs.currentStep?.target) { previousTarget, target in
-            if previousTarget == .listMapPlace, target == .listActions {
+            if previousTarget == .listMapPlace, target == nil {
                 dismiss()
             }
         }
@@ -3684,7 +3680,7 @@ private struct ListEditorSheet: View {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(isEditing ? "edit list" : "new list")
                             .font(.system(size: 30, weight: .black, design: .rounded))
-                        Text(isEditing ? "Keep the name, privacy, and collaborators current." : "Name the plan, decide who can see it, then add places.")
+                        Text(isEditing ? "Keep the name, collaborators, and privacy current." : "Name the plan, invite collaborators, then choose privacy.")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -3705,10 +3701,10 @@ private struct ListEditorSheet: View {
                             .lineLimit(3...5)
                     }
 
-                    stealthToggle
-                        .id(ListEditorWalkthroughAnchor.privacy)
                     collaboratorsBlock
                         .id(ListEditorWalkthroughAnchor.collaborators)
+                    stealthToggle
+                        .id(ListEditorWalkthroughAnchor.privacy)
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing16 + WanderTheme.spacing8)

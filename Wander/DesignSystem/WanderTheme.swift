@@ -315,6 +315,7 @@ enum WanderGlassTone: Equatable {
     case neutral
     case selected
     case accent
+    case darkOverlay
 
     var tint: Color? {
         switch self {
@@ -324,6 +325,8 @@ enum WanderGlassTone: Equatable {
             WanderTheme.terracotta.color.opacity(0.18)
         case .accent:
             WanderTheme.terracotta.color.opacity(0.28)
+        case .darkOverlay:
+            Color.black.opacity(0.46)
         }
     }
 
@@ -333,6 +336,8 @@ enum WanderGlassTone: Equatable {
             WanderTheme.textInk.color
         case .selected, .accent:
             WanderTheme.terracottaDark.color
+        case .darkOverlay:
+            .white
         }
     }
 
@@ -344,6 +349,8 @@ enum WanderGlassTone: Equatable {
             WanderTheme.terracottaTint.color.opacity(0.72)
         case .accent:
             WanderTheme.terracottaTint.color.opacity(0.78)
+        case .darkOverlay:
+            Color.black.opacity(0.64)
         }
     }
 
@@ -353,12 +360,14 @@ enum WanderGlassTone: Equatable {
             WanderTheme.surfaceRaised.color.opacity(0.72)
         case .selected, .accent:
             WanderTheme.terracotta.color
+        case .darkOverlay:
+            Color.white.opacity(0.42)
         }
     }
 
     var borderWidth: CGFloat {
         switch self {
-        case .neutral:
+        case .neutral, .darkOverlay:
             1
         case .selected, .accent:
             2
@@ -400,7 +409,9 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                         )
                 }
                 .shadow(
-                    color: WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
+                    color: tone == .darkOverlay
+                        ? Color.black.opacity(0.34)
+                        : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
                     radius: 10,
                     x: 0,
                     y: 5

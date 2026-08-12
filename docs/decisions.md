@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -38,6 +38,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Native iOS | Locked | SwiftUI, iOS 17+, iPhone-first. |
 | XcodeGen | Locked | `project.yml` is source of truth. |
 | Clerk + Supabase | Locked | Clerk for identity/account, Supabase for data/RLS/PostGIS/storage/functions. |
+| Apple-first Clerk auth | Locked for REC-259 | The existing auth sheet opens on a rec.me-owned native Sign in with Apple CTA. Clerk remains the identity/session owner and handles Apple sign-in/sign-up transfer. Email, Google, verification, recovery, and any incomplete Apple continuation stay in Clerk's prebuilt `AuthView` behind **Use email or Google**; do not build a second independent account system or duplicate those flows. |
 | Clerk user id mapping | Locked | Store Clerk user ids as text `profiles.id` / owner fields. Supabase RLS reads the Clerk session token subject through `auth.jwt()->>'sub'`, with a local-test fallback to `request.jwt.claim.sub`. |
 | SwiftData local-first | Locked | Local cache, guest-local records, sync queue. |
 | Offline identity and own-map cache | Locked for REC-196 | After a transient Clerk refresh failure, the last confirmed identity may open only that user’s protected, locally cached own-map slice on the same device. The state is locally identified but not remotely validated: Supabase tokens, maintenance, push work, and deep links remain blocked until Clerk validates again. Confirmed sign-out, account deletion, or account switch clears the session-scoped cache. Social-map rows are not persisted by this contract; save retry and follow intent remain in REC-197 and REC-198. |

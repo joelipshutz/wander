@@ -650,6 +650,32 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testDeleteActivityCommentCallsOwnerScopedRPCAndDecodesEngagement() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["delete_own_activity_comment"] = """
+        {
+          "activity_id": "40000000-0000-0000-0000-000000000201",
+          "like_count": 3,
+          "comment_count": 1,
+          "viewer_has_liked": true
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseActivityEngagementRepository(rpc: rpc)
+
+        let summary = try await repository.deleteComment(
+            commentID: "50000000-0000-0000-0000-000000000201"
+        )
+
+        XCTAssertEqual(summary.commentCount, 1)
+        XCTAssertEqual(summary.likeCount, 3)
+        XCTAssertTrue(summary.viewerHasLiked)
+        XCTAssertEqual(rpc.calls.map(\.name), ["delete_own_activity_comment"])
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_comment_id"] as? String,
+            "50000000-0000-0000-0000-000000000201"
+        )
+    }
+
     func testFollowedFeedFeaturedPlacesKeepTheActivityActorAvatar() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = """

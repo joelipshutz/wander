@@ -179,6 +179,91 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(store.activityComments(for: activityID).first).isPending)
     }
 
+    func testDeletingOwnCommentOptimisticallyRemovesItAndUsesRemoteCount() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = "40000000-0000-0000-0000-000000000101"
+        let comment = activityComment(
+            id: "50000000-0000-0000-0000-000000000101",
+            activityID: activityID,
+            authorID: store.currentUser.id,
+            relationship: .owner
+        )
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(
+                comments: [comment],
+                nextCursor: nil,
+                engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+            ),
+            deleteResult: .empty(activityID: activityID)
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let didRefresh = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        let didDelete = await store.deleteActivityComment(comment, backend: backend)
+
+        XCTAssertTrue(didDelete)
+        XCTAssertTrue(store.activityComments(for: activityID).isEmpty)
+        XCTAssertEqual(store.activityEngagement(for: activityID).commentCount, 0)
+        XCTAssertEqual(repository.deletedCommentIDs, [comment.id])
+    }
+
+    func testFailedRemoteCommentDeleteRestoresRowAndCount() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = "40000000-0000-0000-0000-000000000102"
+        let comment = activityComment(
+            id: "50000000-0000-0000-0000-000000000102",
+            activityID: activityID,
+            authorID: store.currentUser.id,
+            relationship: .owner
+        )
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(
+                comments: [comment],
+                nextCursor: nil,
+                engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+            ),
+            deleteError: ActivityEngagementTestError.expected
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let didRefresh = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        let didDelete = await store.deleteActivityComment(comment, backend: backend)
+
+        XCTAssertFalse(didDelete)
+        XCTAssertEqual(store.activityComments(for: activityID), [comment])
+        XCTAssertEqual(store.activityEngagement(for: activityID).commentCount, 1)
+        XCTAssertNotNil(store.activityEngagementError(for: activityID))
+    }
+
+    func testCommentDeleteIsUnavailableForAnotherAuthor() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = "40000000-0000-0000-0000-000000000103"
+        let comment = activityComment(
+            id: "50000000-0000-0000-0000-000000000103",
+            activityID: activityID,
+            authorID: "user_friend",
+            relationship: .follower
+        )
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(
+                comments: [comment],
+                nextCursor: nil,
+                engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+            )
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let didRefresh = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        XCTAssertFalse(store.canDeleteActivityComment(comment))
+        let didDelete = await store.deleteActivityComment(comment, backend: backend)
+        XCTAssertFalse(didDelete)
+        XCTAssertEqual(store.activityComments(for: activityID), [comment])
+        XCTAssertTrue(repository.deletedCommentIDs.isEmpty)
+    }
+
     func testPlaceHistoryResolvesExplicitVisitBeforeParentEvent() async {
         let userPlaceID = "a0959fde-2e2b-40ae-9969-88d0983a5bc8"
         let visitID = "a940b2a4-605d-48d3-a5cd-b23d230b00ce"
@@ -507,6 +592,28 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(store.followedFeedPage?.activity.first?.media.map(\.id), ["photo_1"])
         XCTAssertEqual(activityRepository.activityRequestCount, 1)
     }
+
+    private func activityComment(
+        id: String,
+        activityID: String,
+        authorID: String,
+        relationship: ViewerRelationship
+    ) -> ActivityComment {
+        ActivityComment(
+            id: id,
+            activityID: activityID,
+            author: ProfileShell(
+                id: authorID,
+                handle: "commenter",
+                displayName: "Commenter",
+                avatarURL: nil,
+                bio: nil,
+                relationship: relationship
+            ),
+            body: "Worth remembering.",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+    }
 }
 
 private enum ActivityEngagementTestError: Error {
@@ -517,17 +624,27 @@ private enum ActivityEngagementTestError: Error {
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
     let setLikeError: Error?
+    let commentsPage: ActivityCommentsPage?
+    let deleteResult: ActivityEngagementSummary?
+    let deleteError: Error?
     private(set) var activityRequestCount = 0
+    private(set) var deletedCommentIDs: [String] = []
     private var activityResponses: [Result<FeedActivity, Error>]
 
     init(
         placeMatches: [PlaceActivityEngagementMatch] = [],
         setLikeError: Error? = nil,
+        commentsPage: ActivityCommentsPage? = nil,
+        deleteResult: ActivityEngagementSummary? = nil,
+        deleteError: Error? = nil,
         activityResult: FeedActivity? = nil,
         activityResponses: [Result<FeedActivity, Error>]? = nil
     ) {
         self.placeMatches = placeMatches
         self.setLikeError = setLikeError
+        self.commentsPage = commentsPage
+        self.deleteResult = deleteResult
+        self.deleteError = deleteError
         self.activityResponses = activityResponses
             ?? activityResult.map { [.success($0)] }
             ?? []
@@ -561,7 +678,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
-        ActivityCommentsPage(
+        commentsPage ?? ActivityCommentsPage(
             comments: [],
             nextCursor: nil,
             engagement: .empty(activityID: activityID)
@@ -587,6 +704,13 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
             comment: comment,
             engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
         )
+    }
+
+    func deleteComment(commentID: String) async throws -> ActivityEngagementSummary {
+        deletedCommentIDs.append(commentID)
+        if let deleteError { throw deleteError }
+        guard let deleteResult else { throw ActivityEngagementTestError.expected }
+        return deleteResult
     }
 }
 
