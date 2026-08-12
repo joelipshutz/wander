@@ -265,16 +265,16 @@ enum FirstVisitWalkthroughContent {
             ),
             step(
                 .listEditor,
-                .listEditorPrivacy,
-                "Choose who can see it",
-                "Keep it private or make it visible to the people who follow you.",
+                .listEditorCollaborators,
+                "Plan it together",
+                "Add collaborators so everyone can keep the list current.",
                 advance: .next
             ),
             step(
                 .listEditor,
-                .listEditorCollaborators,
-                "Plan it together",
-                "Add collaborators so everyone can keep the list current.",
+                .listEditorPrivacy,
+                "Choose who can see it",
+                "Keep it private or make it visible to the people who follow you.",
                 advance: .next
             )
         ],
