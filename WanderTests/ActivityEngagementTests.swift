@@ -71,6 +71,14 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
+    func testInstagramFeedUsesMetasDocumentInteractionContract() {
+        XCTAssertEqual(ActivityShareInstagramFeedContract.fileExtension, "igo")
+        XCTAssertEqual(
+            ActivityShareInstagramFeedContract.uniformTypeIdentifier,
+            "com.instagram.exclusivegram"
+        )
+    }
+
     func testTikTokOutcomePolicyReportsSuccessDraftCancellationAndProviderFailures() {
         XCTAssertEqual(
             ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_000),

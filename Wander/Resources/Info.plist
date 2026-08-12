@@ -45,7 +45,6 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
-		<string>instagram</string>
 		<string>instagram-stories</string>
 		<string>snapchat</string>
 		<string>tiktoksharesdk</string>
@@ -59,7 +58,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>rec.me saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.</string>
+	<string>rec.me saves a share ticket to your photo library when you choose Save or TikTok.</string>
 	<key>TikTokClientKey</key>
 	<string>$(WANDER_TIKTOK_CLIENT_KEY)</string>
 	<key>UILaunchScreen</key>

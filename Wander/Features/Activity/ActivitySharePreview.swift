@@ -170,8 +170,10 @@ struct ActivitySharePreviewScreen: View {
     @State private var isPreparingArtwork = false
     @State private var systemSharePresentation: ActivityShareSystemPresentation?
     @State private var messagePresentation: ActivityShareMessagePresentation?
+    @State private var instagramPostPresentation: ActivityShareInstagramPostPresentation?
     @State private var isMessagePresentationPending = false
     @State private var shouldOpenSystemShareAfterMessagesDismiss = false
+    @State private var shouldOpenSystemShareAfterInstagramDismiss = false
     @State private var isShowingPhotoSettingsAlert = false
     @State private var isShowingExportError = false
     @State private var tikTokFailureMessage: String?
@@ -222,6 +224,18 @@ struct ActivitySharePreviewScreen: View {
                 image: presentation.image
             ) { result in
                 handleMessageCompletion(result)
+            }
+        }
+        .sheet(item: $instagramPostPresentation, onDismiss: {
+            guard shouldOpenSystemShareAfterInstagramDismiss else { return }
+            shouldOpenSystemShareAfterInstagramDismiss = false
+            Task { await presentSystemShare() }
+        }) { presentation in
+            ActivityShareInstagramPostComposer(fileURL: presentation.fileURL) { result in
+                if result == .unavailable {
+                    shouldOpenSystemShareAfterInstagramDismiss = true
+                }
+                instagramPostPresentation = nil
             }
         }
         .alert("Allow rec.me to access your photos", isPresented: $isShowingPhotoSettingsAlert) {
@@ -420,20 +434,9 @@ struct ActivitySharePreviewScreen: View {
     @MainActor
     private func presentInstagramPost() async {
         guard await prepareArtworkIfNeeded(), let renderedImage else { return }
-        guard ActivityShareProviderLauncher.canOpenInstagram else {
-            await presentSystemShare()
-            return
-        }
-        guard await ensurePhotoLibraryAccess() else { return }
-
         do {
-            let localIdentifier = try await ActivitySharePhotoWriter.save(renderedImage)
-            guard await ActivityShareProviderLauncher.openInstagramPost(
-                localIdentifier: localIdentifier
-            ) else {
-                await presentSystemShare()
-                return
-            }
+            let fileURL = try ActivityShareInstagramFeedFile.prepare(renderedImage)
+            instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
         } catch {
             isShowingExportError = true
         }
@@ -992,11 +995,6 @@ enum ActivityShareProviderLauncher {
     private static var retainedTikTokRequest: TikTokShareRequest?
     #endif
 
-    static var canOpenInstagram: Bool {
-        guard let url = URL(string: "instagram://app") else { return false }
-        return UIApplication.shared.canOpenURL(url)
-    }
-
     static var canOpenTikTok: Bool {
         guard ActivityShareProviderConfiguration.tikTokClientKey != nil,
               let url = URL(string: "tiktoksharesdk://")
@@ -1019,15 +1017,6 @@ enum ActivityShareProviderLauncher {
             "com.instagram.sharedSticker.backgroundImage": pngData,
             "com.instagram.sharedSticker.contentURL": contentURL.absoluteString,
         ]])
-        return await open(shareURL)
-    }
-
-    static func openInstagramPost(localIdentifier: String) async -> Bool {
-        guard var components = URLComponents(string: "instagram://library") else { return false }
-        components.queryItems = [URLQueryItem(name: "LocalIdentifier", value: localIdentifier)]
-        guard let shareURL = components.url, UIApplication.shared.canOpenURL(shareURL) else {
-            return false
-        }
         return await open(shareURL)
     }
 
@@ -1137,9 +1126,112 @@ private enum ActivitySharePhotoWriterError: Error {
     case saveFailed
 }
 
+enum ActivityShareInstagramFeedContract {
+    static let fileExtension = "igo"
+    static let uniformTypeIdentifier = "com.instagram.exclusivegram"
+}
+
+private enum ActivityShareInstagramFeedFile {
+    static func prepare(_ image: UIImage) throws -> URL {
+        guard let data = image.jpegData(compressionQuality: 0.95) else {
+            throw ActivityShareInstagramFeedFileError.encodingFailed
+        }
+
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("recme-instagram-\(UUID().uuidString)")
+            .appendingPathExtension(ActivityShareInstagramFeedContract.fileExtension)
+        try data.write(to: fileURL, options: .atomic)
+        return fileURL
+    }
+}
+
+private enum ActivityShareInstagramFeedFileError: Error {
+    case encodingFailed
+}
+
 private struct ActivityShareSystemPresentation: Identifiable {
     let id = UUID()
     let content: WanderShareContent
+}
+
+private struct ActivityShareInstagramPostPresentation: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
+private enum ActivityShareInstagramPostResult: Equatable {
+    case dismissed
+    case unavailable
+}
+
+private struct ActivityShareInstagramPostComposer: UIViewControllerRepresentable {
+    let fileURL: URL
+    let onFinish: (ActivityShareInstagramPostResult) -> Void
+
+    func makeUIViewController(context: Context) -> ActivityShareInstagramPostHostController {
+        ActivityShareInstagramPostHostController(fileURL: fileURL, onFinish: onFinish)
+    }
+
+    func updateUIViewController(
+        _ uiViewController: ActivityShareInstagramPostHostController,
+        context: Context
+    ) {}
+}
+
+@MainActor
+private final class ActivityShareInstagramPostHostController: UIViewController,
+    @preconcurrency UIDocumentInteractionControllerDelegate
+{
+    private let fileURL: URL
+    private let onFinish: (ActivityShareInstagramPostResult) -> Void
+    private var documentController: UIDocumentInteractionController?
+    private var hasPresented = false
+    private var hasFinished = false
+
+    init(fileURL: URL, onFinish: @escaping (ActivityShareInstagramPostResult) -> Void) {
+        self.fileURL = fileURL
+        self.onFinish = onFinish
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !hasPresented else { return }
+        hasPresented = true
+
+        let controller = UIDocumentInteractionController(url: fileURL)
+        controller.uti = ActivityShareInstagramFeedContract.uniformTypeIdentifier
+        controller.delegate = self
+        documentController = controller
+
+        guard controller.presentOpenInMenu(from: view.bounds, in: view, animated: true) else {
+            finish(.unavailable)
+            return
+        }
+    }
+
+    func documentInteractionControllerDidDismissOpenInMenu(
+        _ controller: UIDocumentInteractionController
+    ) {
+        finish(.dismissed)
+    }
+
+    private func finish(_ result: ActivityShareInstagramPostResult) {
+        guard !hasFinished else { return }
+        hasFinished = true
+        try? FileManager.default.removeItem(at: fileURL)
+        onFinish(result)
+    }
 }
 
 private struct ActivityShareMessagePresentation: Identifiable {
