@@ -186,6 +186,10 @@ struct AppEntryView: View {
         .onOpenURL { url in
             receiveIncomingURL(url)
         }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            receiveIncomingURL(url)
+        }
     }
 
     private func receiveIncomingURL(_ url: URL) {

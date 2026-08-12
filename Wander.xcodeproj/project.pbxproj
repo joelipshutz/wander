@@ -1548,7 +1548,7 @@
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
-				WANDER_TIKTOK_CLIENT_KEY = "recme-tiktok-unconfigured";
+				WANDER_TIKTOK_CLIENT_KEY = sbawa5efdmmcvrudh7;
 			};
 			name = Release;
 		};
@@ -1563,7 +1563,7 @@
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
-				WANDER_TIKTOK_CLIENT_KEY = "recme-tiktok-unconfigured";
+				WANDER_TIKTOK_CLIENT_KEY = sbawa5efdmmcvrudh7;
 			};
 			name = Debug;
 		};
