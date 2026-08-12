@@ -2674,7 +2674,7 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [activityID],
     (result) => result.rows[0]?.engagement?.viewer_has_liked === true,
   );
-  await expectQuery(
+  const activityCommentResult = await expectQuery(
     client,
     "owner comments on list activity",
     "select public.add_activity_comment($1::uuid, $2) as result",
@@ -2689,6 +2689,33 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     (result) => result.rows[0]?.page?.comments?.some(
       (comment) => comment.body === "Smoke-tested list activity.",
     ) === true,
+  );
+  const activityCommentID = activityCommentResult.rows[0].result.comment.id;
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQueryFailure(
+    client,
+    "another user cannot delete the owner's activity comment",
+    "select public.delete_own_activity_comment($1::uuid) as engagement",
+    [activityCommentID],
+    /comment_not_found_or_not_owned/,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner deletes their own activity comment",
+    "select public.delete_own_activity_comment($1::uuid) as engagement",
+    [activityCommentID],
+    (result) => result.rows[0]?.engagement?.activity_id === activityID
+      && result.rows[0]?.engagement?.comment_count === 0,
+  );
+  await expectQuery(
+    client,
+    "deleted activity comment stays deleted",
+    "select public.activity_comments($1::uuid, null, 50) as page",
+    [activityID],
+    (result) => result.rows[0]?.page?.comments?.some(
+      (comment) => comment.id === activityCommentID,
+    ) === false,
   );
 
   const collaboratorListID = await createSmokeList(client, "Codex smoke collaborator check");

@@ -269,6 +269,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeActivityEngagementMatches: [PlaceActivityEngagementMatch] = []
     @Published private(set) var activityEngagementErrorByID: [String: String] = [:]
     private var pendingActivityLikeIDs = Set<String>()
+    private var pendingActivityCommentDeletionIDs = Set<String>()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
@@ -1045,6 +1046,7 @@ final class WanderStore: ObservableObject {
             placeActivityEngagementMatches = []
             activityEngagementErrorByID = [:]
             pendingActivityLikeIDs = []
+            pendingActivityCommentDeletionIDs = []
             lastRemoteError = nil
             profiles = []
             follows = []
@@ -1312,6 +1314,7 @@ final class WanderStore: ObservableObject {
         placeActivityEngagementMatches = []
         activityEngagementErrorByID = [:]
         pendingActivityLikeIDs = []
+        pendingActivityCommentDeletionIDs = []
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         lastDiscoverParseSource = .deterministic
@@ -1520,6 +1523,12 @@ final class WanderStore: ObservableObject {
         activityEngagementErrorByID[activityID]
     }
 
+    func canDeleteActivityComment(_ comment: ActivityComment) -> Bool {
+        comment.author.id == currentUser.id
+            && !comment.isPending
+            && !pendingActivityCommentDeletionIDs.contains(comment.id)
+    }
+
     func isActivityLikePending(_ activityID: String) -> Bool {
         pendingActivityLikeIDs.contains(activityID)
     }
@@ -1628,20 +1637,28 @@ final class WanderStore: ObservableObject {
 
         do {
             let page = try await repository.comments(activityID: activityID, before: nil, limit: 50)
-            activityCommentsByID[activityID] = page.comments.sorted { lhs, rhs in
+            let pendingDeletedComments = page.comments.filter {
+                pendingActivityCommentDeletionIDs.contains($0.id)
+            }
+            activityCommentsByID[activityID] = page.comments.filter {
+                !pendingActivityCommentDeletionIDs.contains($0.id)
+            }.sorted { lhs, rhs in
                 if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
                 return lhs.id < rhs.id
+            }
+            let refreshedEngagement = pendingDeletedComments.reduce(page.engagement) { summary, _ in
+                summary.removingComment()
             }
             if pendingActivityLikeIDs.contains(activityID) {
                 let optimistic = activityEngagement(for: activityID)
                 activityEngagementByID[activityID] = ActivityEngagementSummary(
                     activityID: activityID,
                     likeCount: optimistic.likeCount,
-                    commentCount: page.engagement.commentCount,
+                    commentCount: refreshedEngagement.commentCount,
                     viewerHasLiked: optimistic.viewerHasLiked
                 )
             } else {
-                activityEngagementByID[activityID] = page.engagement
+                activityEngagementByID[activityID] = refreshedEngagement
             }
             activityEngagementErrorByID[activityID] = nil
             return true
@@ -1700,6 +1717,39 @@ final class WanderStore: ObservableObject {
             activityCommentsByID[activityID]?.removeAll { $0.id == pendingID }
             activityEngagementByID[activityID] = previousSummary
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteActivityComment(_ comment: ActivityComment, backend: WanderBackend?) async -> Bool {
+        guard canDeleteActivityComment(comment),
+              let previousIndex = activityComments(for: comment.activityID).firstIndex(where: { $0.id == comment.id })
+        else { return false }
+
+        let previousSummary = activityEngagement(for: comment.activityID)
+        activityCommentsByID[comment.activityID]?.remove(at: previousIndex)
+        activityEngagementByID[comment.activityID] = previousSummary.removingComment()
+        activityEngagementErrorByID[comment.activityID] = nil
+
+        guard UUID(uuidString: comment.id) != nil,
+              UUID(uuidString: comment.activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return true }
+
+        pendingActivityCommentDeletionIDs.insert(comment.id)
+        defer { pendingActivityCommentDeletionIDs.remove(comment.id) }
+        do {
+            activityEngagementByID[comment.activityID] = try await repository.deleteComment(commentID: comment.id)
+            return true
+        } catch {
+            var restoredComments = activityComments(for: comment.activityID)
+            if !restoredComments.contains(where: { $0.id == comment.id }) {
+                restoredComments.insert(comment, at: min(previousIndex, restoredComments.count))
+            }
+            activityCommentsByID[comment.activityID] = restoredComments
+            activityEngagementByID[comment.activityID] = previousSummary
+            activityEngagementErrorByID[comment.activityID] = remoteErrorMessage(error)
             return false
         }
     }

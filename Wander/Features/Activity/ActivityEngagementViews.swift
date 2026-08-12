@@ -204,35 +204,55 @@ struct ActivityCommentsScreen: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                        activityHeader
+                List {
+                    activityHeader
+                        .listRowInsets(
+                            EdgeInsets(
+                                top: WanderTheme.spacing3,
+                                leading: WanderTheme.spacing4,
+                                bottom: WanderTheme.spacing2,
+                                trailing: WanderTheme.spacing4
+                            )
+                        )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
 
-                        if isLoading, comments.isEmpty {
-                            ProgressView("Loading comments…")
-                                .tint(WanderTheme.terracotta.color)
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                                .frame(maxWidth: .infinity, minHeight: 140)
-                        } else if comments.isEmpty {
-                            emptyState
-                        } else {
-                            ForEach(comments) { comment in
-                                ActivityCommentRow(comment: comment)
-                                    .id(comment.id)
-                            }
-                        }
-
-                        if let commentError {
-                            Text(commentError)
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(WanderTheme.terracottaDark.color)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                    if isLoading, comments.isEmpty {
+                        ProgressView("Loading comments…")
+                            .tint(WanderTheme.terracotta.color)
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .frame(maxWidth: .infinity, minHeight: 140)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    } else if comments.isEmpty {
+                        emptyState
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(comments) { comment in
+                            commentRow(comment)
+                                .id(comment.id)
+                                .padding(.horizontal, WanderTheme.spacing4)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                         }
                     }
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing8)
+
+                    if let commentError {
+                        Text(commentError)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, WanderTheme.spacing4)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .contentMargins(.bottom, WanderTheme.spacing8, for: .scrollContent)
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: comments.map(\.id)) { _, commentIDs in
                     guard let newestID = commentIDs.last else { return }
@@ -280,6 +300,26 @@ struct ActivityCommentsScreen: View {
 
     private var comments: [ActivityComment] {
         store.activityComments(for: context.activityID)
+    }
+
+    @ViewBuilder
+    private func commentRow(_ comment: ActivityComment) -> some View {
+        if store.canDeleteActivityComment(comment) {
+            ActivityCommentRow(comment: comment)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        delete(comment)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .accessibilityLabel("Delete comment")
+                }
+                .accessibilityAction(named: "Delete comment") {
+                    delete(comment)
+                }
+        } else {
+            ActivityCommentRow(comment: comment)
+        }
     }
 
     private var activityHeader: some View {
@@ -466,6 +506,19 @@ struct ActivityCommentsScreen: View {
             composerFocused = true
         }
     }
+
+    private func delete(_ comment: ActivityComment) {
+        commentError = nil
+        Task {
+            let didDelete = await store.deleteActivityComment(
+                comment,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            if !didDelete {
+                commentError = "Your comment couldn't be deleted. Try again."
+            }
+        }
+    }
 }
 
 private struct ActivityCommentsMediaThumbnail: View {
@@ -568,7 +621,7 @@ private struct ActivityCommentsPhotoViewer: View {
             WanderGlassActionButton(
                 systemImage: "chevron.left",
                 accessibilityLabel: "Back",
-                tone: .neutral,
+                tone: .darkOverlay,
                 action: dismiss.callAsFunction
             )
             .padding(.leading, WanderTheme.spacing4)

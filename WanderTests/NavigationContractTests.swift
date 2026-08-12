@@ -198,12 +198,21 @@ final class NavigationContractTests: XCTestCase {
     }
 
     func testActivityCommentsPhotoPreviewOpensSwipeableFullScreenViewer() throws {
+        let fixtureURL = projectRoot.appendingPathComponent(
+            "WanderTests/Fixtures/ios-fix/rec-268-comment-delete-photo-back-pre.json"
+        )
+        let fixtureData = try Data(contentsOf: fixtureURL)
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: String]
+        )
         let activityViews = try String(
             contentsOf: projectRoot.appendingPathComponent(
                 "Wander/Features/Activity/ActivityEngagementViews.swift"
             )
         )
 
+        XCTAssertEqual(fixture["issue"], "REC-268")
+        XCTAssertEqual(fixture["destructive_gesture_policy"], "full-swipe deletion is disabled")
         XCTAssertTrue(activityViews.contains("Button {\n                onOpen(first.id)"))
         XCTAssertTrue(activityViews.contains(".padding(.bottom, 9)"))
         XCTAssertTrue(activityViews.contains(".fullScreenCover(item: $photoViewerRoute)"))
@@ -211,6 +220,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityViews.contains(".tabViewStyle(.page(indexDisplayMode: .automatic))"))
         XCTAssertTrue(activityViews.contains("WanderGlassActionButton("))
         XCTAssertTrue(activityViews.contains("accessibilityLabel: \"Back\""))
+        XCTAssertTrue(activityViews.contains("tone: .darkOverlay"))
+        XCTAssertTrue(activityViews.contains(".swipeActions(edge: .trailing, allowsFullSwipe: false)"))
+        XCTAssertTrue(activityViews.contains("store.canDeleteActivityComment(comment)"))
     }
 
     func testPrimarySurfacesShareLiquidGlassHeaderNavigationWithoutLosingFilterState() throws {

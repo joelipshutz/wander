@@ -475,6 +475,14 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
         )
         return response.result
     }
+
+    func deleteComment(commentID: String) async throws -> ActivityEngagementSummary {
+        let response: RemoteActivityEngagementSummaryDTO = try await rpc.call(
+            "delete_own_activity_comment",
+            params: DeleteActivityCommentParams(commentID: commentID)
+        )
+        return response.summary
+    }
 }
 
 struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository {
@@ -2467,6 +2475,14 @@ private struct AddActivityCommentParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case activityID = "input_activity_id"
         case body = "input_body"
+    }
+}
+
+private struct DeleteActivityCommentParams: Encodable {
+    let commentID: String
+
+    enum CodingKeys: String, CodingKey {
+        case commentID = "input_comment_id"
     }
 }
 

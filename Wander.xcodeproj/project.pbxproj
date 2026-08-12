@@ -136,6 +136,7 @@
 		9800E02122FDAD2796619FC8 /* WanderLocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24FC798DA90E577118B4BAA /* WanderLocalStore.swift */; };
 		99630B9D3D4662F901C150FB /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
 		9A2B61C3874341AE3A94072F /* SharedVisitComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34E2861127F5EE79AF8571A /* SharedVisitComponents.swift */; };
+		9A6DFD48687FBB95DD158E3C /* rec-268-comment-delete-photo-back-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 53269BFD9AB143F47A3DDAC7 /* rec-268-comment-delete-photo-back-pre.json */; };
 		9B51E6EC8F138E5DA3ACC16C /* AuthGateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BCB996310F4905E98BAAFE /* AuthGateSheet.swift */; };
 		9B649999DC81D7A85B0A478F /* ProfileSettingsViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B89937E9DB59F5F45ECC5375 /* ProfileSettingsViews.swift */; };
 		9BDDE72CA80B33CAFC0EFD17 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D6A18F74DCFE0F295B598171 /* Assets.xcassets */; };
@@ -324,6 +325,7 @@
 		466618F8405CE4321114C0D7 /* ProfileRedesignMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRedesignMockups.swift; sourceTree = "<group>"; };
 		46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgets.swift; sourceTree = "<group>"; };
 		50BCB996310F4905E98BAAFE /* AuthGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateSheet.swift; sourceTree = "<group>"; };
+		53269BFD9AB143F47A3DDAC7 /* rec-268-comment-delete-photo-back-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-268-comment-delete-photo-back-pre.json"; sourceTree = "<group>"; };
 		55E1982754D8F9C0128D97CB /* AppEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEntryView.swift; sourceTree = "<group>"; };
 		56F0D3D160FF8337D43E3C2F /* PlaceExternalLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceExternalLinks.swift; sourceTree = "<group>"; };
 		58182EF60912B97691F7340A /* PlacePhotoGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoGalleryTests.swift; sourceTree = "<group>"; };
@@ -556,6 +558,7 @@
 				1BE0E4CCA52C155A2EFB2465 /* rec-228-bulk-status-coupling-post.png */,
 				7C1FAD2B72A87F4F90201955 /* rec-228-bulk-status-coupling-pre.json */,
 				0FEB786FE1F5CAD432194B30 /* rec-228-bulk-status-coupling-pre.png */,
+				53269BFD9AB143F47A3DDAC7 /* rec-268-comment-delete-photo-back-pre.json */,
 			);
 			path = "ios-fix";
 			sourceTree = "<group>";
@@ -1163,6 +1166,7 @@
 				268207FAA4721BCE51516935 /* rec-228-bulk-status-coupling-pre.json in Resources */,
 				18D6E77C3054DE54444A24BD /* rec-228-bulk-status-coupling-pre.png in Resources */,
 				9D71E27C136BBB3AAE7D7C6E /* rec-228-import-row-selection-style-pre.json in Resources */,
+				9A6DFD48687FBB95DD158E3C /* rec-268-comment-delete-photo-back-pre.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

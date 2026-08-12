@@ -1609,6 +1609,7 @@ protocol ActivityEngagementRepository {
     func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult
+    func deleteComment(commentID: String) async throws -> ActivityEngagementSummary
 }
 
 extension ActivityEngagementRepository {
