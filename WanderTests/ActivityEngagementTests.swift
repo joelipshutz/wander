@@ -81,6 +81,10 @@ final class ActivityEngagementTests: XCTestCase {
             .savedAsDraft
         )
         XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_015),
+            .savedAsDraft
+        )
+        XCTAssertEqual(
             ActivityShareTikTokOutcomePolicy.outcome(errorCode: -2, shareState: 20_001),
             .cancelled
         )

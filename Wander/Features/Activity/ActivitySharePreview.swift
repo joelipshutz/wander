@@ -95,7 +95,7 @@ enum ActivityShareTikTokOutcomePolicy {
         if errorCode == 0, shareState == 20_000 {
             return .shared
         }
-        if errorCode == 0, shareState == 20_015 {
+        if shareState == 20_015 {
             return .savedAsDraft
         }
 
@@ -127,6 +127,7 @@ struct ActivitySharePreviewScreen: View {
 
     let context: ActivityEngagementContext
     let content: WanderShareContent
+    var initiallyVisibleDestination: ActivityShareDestination? = nil
 
     @State private var renderedImage: UIImage?
     @State private var renderedImageURL: URL?
@@ -158,6 +159,7 @@ struct ActivitySharePreviewScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             ActivityShareDestinationTray(
                 isPreparing: isPreparingArtwork,
+                initiallyVisibleDestination: initiallyVisibleDestination,
                 action: handleDestination
             )
             .background(alignment: .bottom) {
@@ -635,6 +637,7 @@ private struct ActivityShareTicket: View {
 
 private struct ActivityShareDestinationTray: View {
     let isPreparing: Bool
+    let initiallyVisibleDestination: ActivityShareDestination?
     let action: (ActivityShareDestination) -> Void
 
     var body: some View {
@@ -643,20 +646,27 @@ private struct ActivityShareDestinationTray: View {
                 .font(.system(size: 20, weight: .black))
                 .foregroundStyle(WanderTheme.textInk.color)
 
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: WanderTheme.spacing2) {
-                    ForEach(ActivityShareDestination.allCases) { destination in
-                        ActivityShareDestinationButton(destination: destination) {
-                            action(destination)
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                        ForEach(ActivityShareDestination.allCases) { destination in
+                            ActivityShareDestinationButton(destination: destination) {
+                                action(destination)
+                            }
+                            .id(destination)
+                            .disabled(isPreparing && destination != .copyLink)
+                            .opacity(isPreparing && destination != .copyLink ? 0.58 : 1)
                         }
-                        .disabled(isPreparing && destination != .copyLink)
-                        .opacity(isPreparing && destination != .copyLink ? 0.58 : 1)
                     }
+                    .padding(.horizontal, WanderTheme.spacing4)
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
+                .frame(height: 104)
+                .scrollIndicators(.hidden)
+                .onAppear {
+                    guard let initiallyVisibleDestination else { return }
+                    proxy.scrollTo(initiallyVisibleDestination, anchor: .center)
+                }
             }
-            .frame(height: 104)
-            .scrollIndicators(.hidden)
         }
         .padding(.top, WanderTheme.spacing4)
         .padding(.bottom, WanderTheme.spacing2)
@@ -1144,7 +1154,11 @@ struct ActivitySharePreviewMockupRoot: View {
             placeName: context.placeName,
             message: context.shareMessage
         ) {
-            ActivitySharePreviewScreen(context: context, content: content)
+            ActivitySharePreviewScreen(
+                context: context,
+                content: content,
+                initiallyVisibleDestination: .tikTok
+            )
                 .onOpenURL(perform: handleTikTokCallback)
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     guard let url = activity.webpageURL else { return }
