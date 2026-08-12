@@ -269,6 +269,60 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Lists"].isSelected)
     }
 
+    func testMapMorePeopleIncludesYouAndPersistsAcrossSourceSwitch() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderMapMoreFiltersOpen"
+        ]
+        app.launch()
+
+        let popover = app.scrollViews.firstMatch
+        XCTAssertTrue(popover.waitForExistence(timeout: 5))
+
+        let expectedPeople = [
+            (id: "user_joe", name: "You"),
+            (id: "user_demo", name: "Demo"),
+            (id: "user_maya", name: "Maya"),
+            (id: "user_ryan", name: "Ryan")
+        ]
+        let you = app.buttons["map.more.person.user_joe"]
+        for _ in 0..<5 where !you.exists {
+            popover.swipeUp()
+        }
+
+        for person in expectedPeople {
+            let button = app.buttons["map.more.person.\(person.id)"]
+            XCTAssertTrue(button.exists, "Expected More → People to include \(person.name)")
+            XCTAssertTrue(button.label.contains(person.name))
+        }
+
+        you.tap()
+        XCTAssertEqual(you.value as? String, "Selected")
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-261 More People includes You and follows"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let done = app.buttons["Done"]
+        for _ in 0..<5 where !done.isHittable {
+            popover.swipeDown()
+        }
+        XCTAssertTrue(done.isHittable)
+        done.tap()
+
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Friends map source")).firstMatch.tap()
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "More map filters")).firstMatch.tap()
+        XCTAssertTrue(popover.waitForExistence(timeout: 3))
+        for _ in 0..<5 where !you.exists {
+            popover.swipeUp()
+        }
+
+        XCTAssertEqual(you.value as? String, "Selected")
+    }
+
     func testFeedActivityExplanationUsesNext() {
         let app = XCUIApplication()
         app.launchArguments = [

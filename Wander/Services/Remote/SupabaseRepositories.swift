@@ -404,15 +404,17 @@ struct SupabaseFeedRepository: FeedRepository {
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
-        return try response.followedFeedPage()
+        return try await response.followedFeedPage()
     }
 }
 
 struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     private let rpc: RemoteProcedureCalling
+    private let storage: (any RemoteStorageCalling)?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
         self.rpc = rpc
+        self.storage = storage ?? (rpc as? any RemoteStorageCalling)
     }
 
     func activity(id: String) async throws -> FeedActivity {
@@ -420,7 +422,14 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
             "activity_detail",
             params: ActivityDetailParams(activityID: id)
         )
-        return try response.activity()
+        let mediaRows: [RemoteActivityMediaDTO] = (try? await rpc.call(
+            "activity_media",
+            params: ActivityEngagementSummariesParams(activityIDs: [id])
+        )) ?? []
+        return try await response.activity(
+            storage: storage,
+            mediaOverride: mediaRows.first(where: { $0.activityID == id })?.media
+        )
     }
 
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
@@ -2085,6 +2094,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let captureEnabled: Bool
     let discoveryDigestEnabled: Bool
     let followedActivityEnabled: Bool
+    let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -2096,6 +2106,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 
@@ -2109,6 +2120,7 @@ private struct NotificationPreferencesResponse: Decodable {
             captureEnabled: captureEnabled,
             discoveryDigestEnabled: discoveryDigestEnabled,
             followedActivityEnabled: followedActivityEnabled,
+            engagementEnabled: engagementEnabled ?? false,
             wannaGoRemindersEnabled: wannaGoRemindersEnabled ?? false
         )
     }
@@ -2135,6 +2147,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let captureEnabled: Bool?
     let discoveryDigestEnabled: Bool?
     let followedActivityEnabled: Bool?
+    let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
 
     init(update: NotificationPreferencesUpdate) {
@@ -2146,6 +2159,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.captureEnabled = update.captureEnabled
         self.discoveryDigestEnabled = update.discoveryDigestEnabled
         self.followedActivityEnabled = update.followedActivityEnabled
+        self.engagementEnabled = update.engagementEnabled
         self.wannaGoRemindersEnabled = update.wannaGoRemindersEnabled
     }
 
@@ -2158,6 +2172,7 @@ private struct NotificationPreferencesPatch: Encodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 }

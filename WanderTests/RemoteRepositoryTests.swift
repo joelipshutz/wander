@@ -601,6 +601,55 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
     }
 
+    func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        rpc.responses["activity_detail"] = """
+        {
+          "id": "event_with_photo",
+          "event_type": "place_been",
+          "occurred_at": "2026-08-09T20:00:00Z",
+          "actor": {
+            "id": "user_joe",
+            "handle": "jolipshutz",
+            "display_name": "Joe Lipshutz",
+            "avatar_url": null,
+            "relationship": "follower"
+          },
+          "place": null,
+          "list": null,
+          "note": "Great art.",
+          "rating": null,
+          "media": []
+        }
+        """.data(using: .utf8)
+        rpc.responses["activity_media"] = """
+        [
+          {
+            "activity_id": "event_with_photo",
+            "media": [
+              {
+                "id": "photo_1",
+                "url": null,
+                "storage_bucket": "visit-photos",
+                "storage_path": "user_joe/visit_1/photo_1.jpg",
+                "accessibility_label": "Activity photo"
+              }
+            ]
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseActivityEngagementRepository(rpc: rpc, storage: storage)
+
+        let activity = try await repository.activity(id: "event_with_photo")
+
+        XCTAssertEqual(activity.media.first?.id, "photo_1")
+        XCTAssertEqual(
+            storage.signedURLs,
+            [.init(bucket: "visit-photos", path: "user_joe/visit_1/photo_1.jpg")]
+        )
+    }
+
     func testFollowedFeedFeaturedPlacesKeepTheActivityActorAvatar() async throws {
         let rpc = RecordingRPC()
         rpc.responses["followed_feed"] = """
@@ -2373,6 +2422,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "capture_enabled": true,
           "discovery_digest_enabled": false,
           "followed_activity_enabled": true,
+          "engagement_enabled": true,
           "wanna_go_reminders_enabled": false
         }
         """.data(using: .utf8)
@@ -2386,6 +2436,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "capture_enabled": true,
           "discovery_digest_enabled": true,
           "followed_activity_enabled": false,
+          "engagement_enabled": false,
           "wanna_go_reminders_enabled": true
         }
         """.data(using: .utf8)
@@ -2397,6 +2448,7 @@ final class RemoteRepositoryTests: XCTestCase {
             NotificationPreferencesUpdate(
                 discoveryDigestEnabled: true,
                 followedActivityEnabled: false,
+                engagementEnabled: false,
                 wannaGoRemindersEnabled: true
             )
         )
@@ -2410,10 +2462,12 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertTrue(preferences.socialGraphEnabled)
         XCTAssertTrue(preferences.sharedVisitsEnabled)
         XCTAssertTrue(preferences.followedActivityEnabled)
+        XCTAssertTrue(preferences.engagementEnabled)
         XCTAssertFalse(preferences.discoveryDigestEnabled)
         XCTAssertFalse(preferences.wannaGoRemindersEnabled)
         XCTAssertTrue(updated.discoveryDigestEnabled)
         XCTAssertFalse(updated.followedActivityEnabled)
+        XCTAssertFalse(updated.engagementEnabled)
         XCTAssertTrue(updated.wannaGoRemindersEnabled)
         XCTAssertEqual(tokenID, "token-row-id")
         XCTAssertEqual(
@@ -2429,6 +2483,7 @@ final class RemoteRepositoryTests: XCTestCase {
         let updatePayload = rpc.rawBodies[1]["input_preferences"] as? [String: Any]
         XCTAssertEqual(updatePayload?["discovery_digest_enabled"] as? Bool, true)
         XCTAssertEqual(updatePayload?["followed_activity_enabled"] as? Bool, false)
+        XCTAssertEqual(updatePayload?["engagement_enabled"] as? Bool, false)
         XCTAssertEqual(updatePayload?["wanna_go_reminders_enabled"] as? Bool, true)
 
         XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
@@ -2721,6 +2776,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 captureEnabled: true,
                 discoveryDigestEnabled: true,
                 followedActivityEnabled: true,
+                engagementEnabled: true,
                 wannaGoRemindersEnabled: true
             )
         )
@@ -2733,6 +2789,7 @@ final class RemoteRepositoryTests: XCTestCase {
             captureEnabled: false,
             discoveryDigestEnabled: false,
             followedActivityEnabled: false,
+            engagementEnabled: false,
             wannaGoRemindersEnabled: false
         ))
     }
@@ -2754,6 +2811,10 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000001")!),
             .place(id: "40000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: URL(string: "https://getrec.me/activities/41000000-0000-0000-0000-000000000001")!),
+            .activityComments(id: "41000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "https://getrec.me/invites/\(inviteToken)")!),
@@ -2806,6 +2867,8 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(destination("list_place_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("place_saved_from_your_map", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(destination("followed_place_visit", data: ["place_id": "place-1"]), .place(id: "place-1"))
+        XCTAssertEqual(destination("activity_liked", data: ["activity_id": "activity-1"]), .activityComments(id: "activity-1"))
+        XCTAssertEqual(destination("activity_commented", data: ["activity_id": "activity-2"]), .activityComments(id: "activity-2"))
         XCTAssertEqual(destination("wanna_go_reminder", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(
             destination(

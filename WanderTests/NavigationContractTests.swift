@@ -180,6 +180,22 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
     }
 
+    func testActivityCommentsPhotoPreviewOpensSwipeableFullScreenViewer() throws {
+        let activityViews = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Activity/ActivityEngagementViews.swift"
+            )
+        )
+
+        XCTAssertTrue(activityViews.contains("Button {\n                onOpen(first.id)"))
+        XCTAssertTrue(activityViews.contains(".padding(.bottom, 9)"))
+        XCTAssertTrue(activityViews.contains(".fullScreenCover(item: $photoViewerRoute)"))
+        XCTAssertTrue(activityViews.contains("TabView(selection: $selectedMediaID)"))
+        XCTAssertTrue(activityViews.contains(".tabViewStyle(.page(indexDisplayMode: .automatic))"))
+        XCTAssertTrue(activityViews.contains("WanderGlassActionButton("))
+        XCTAssertTrue(activityViews.contains("accessibilityLabel: \"Back\""))
+    }
+
     func testPrimarySurfacesShareLiquidGlassHeaderNavigationWithoutLosingFilterState() throws {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
@@ -1809,6 +1825,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(WanderRootView.notificationTab(for: .list(id: "list-1")), .lists)
         XCTAssertEqual(WanderRootView.notificationTab(for: .listInvite(token: "invite-1")), .lists)
         XCTAssertEqual(WanderRootView.notificationTab(for: .place(id: "place-1")), .map)
+        XCTAssertEqual(WanderRootView.notificationTab(for: .activityComments(id: "activity-1")), .discover)
         XCTAssertEqual(
             WanderRootView.notificationTab(for: .sharedVisit(participantID: "participant-1", generation: 2)),
             .map

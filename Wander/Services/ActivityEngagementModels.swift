@@ -112,6 +112,8 @@ struct ActivityEngagementContext: Identifiable, Equatable {
     let placeDetail: String
     let ticketKind: FeedTicketKind
     let occurredAt: Date
+    let note: String?
+    let media: [ActivityEngagementMedia]
 
     init(
         activityID: String,
@@ -120,7 +122,9 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         placeServerID: String?,
         placeDetail: String,
         status: PlaceStatus,
-        occurredAt: Date
+        occurredAt: Date,
+        note: String? = nil,
+        media: [ActivityEngagementMedia] = []
     ) {
         self.init(
             activityID: activityID,
@@ -129,7 +133,9 @@ struct ActivityEngagementContext: Identifiable, Equatable {
             placeServerID: placeServerID,
             placeDetail: placeDetail,
             ticketKind: status == .been ? .checkIn : .wanna,
-            occurredAt: occurredAt
+            occurredAt: occurredAt,
+            note: note,
+            media: media
         )
     }
 
@@ -140,7 +146,9 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         placeServerID: String?,
         placeDetail: String,
         ticketKind: FeedTicketKind,
-        occurredAt: Date
+        occurredAt: Date,
+        note: String? = nil,
+        media: [ActivityEngagementMedia] = []
     ) {
         self.activityID = activityID
         self.actor = actor
@@ -149,6 +157,9 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         self.placeDetail = placeDetail
         self.ticketKind = ticketKind
         self.occurredAt = occurredAt
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.note = trimmedNote?.isEmpty == false ? trimmedNote : nil
+        self.media = media
     }
 
     var id: String { activityID }
@@ -173,6 +184,25 @@ struct ActivityEngagementContext: Identifiable, Equatable {
         case .saved:
             "See \(actor.displayName)'s save for \(placeName) on rec.me"
         }
+    }
+}
+
+struct ActivityEngagementMedia: Identifiable, Equatable {
+    let id: String
+    let urlString: String?
+    let localAssetRef: String?
+    let accessibilityLabel: String
+
+    init(
+        id: String,
+        urlString: String? = nil,
+        localAssetRef: String? = nil,
+        accessibilityLabel: String
+    ) {
+        self.id = id
+        self.urlString = urlString
+        self.localAssetRef = localAssetRef
+        self.accessibilityLabel = accessibilityLabel
     }
 }
 

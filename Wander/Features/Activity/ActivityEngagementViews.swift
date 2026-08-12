@@ -188,6 +188,7 @@ struct ActivityEngagementActionRow: View {
 
 struct ActivityCommentsScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -197,6 +198,7 @@ struct ActivityCommentsScreen: View {
     @State private var isLoading = true
     @State private var isPosting = false
     @State private var commentError: String?
+    @State private var photoViewerRoute: ActivityCommentsPhotoViewerRoute?
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -268,6 +270,12 @@ struct ActivityCommentsScreen: View {
                 isLoading = false
             }
         }
+        .fullScreenCover(item: $photoViewerRoute) { route in
+            ActivityCommentsPhotoViewer(
+                media: context.media,
+                initialMediaID: route.mediaID
+            )
+        }
     }
 
     private var comments: [ActivityComment] {
@@ -276,31 +284,7 @@ struct ActivityCommentsScreen: View {
 
     private var activityHeader: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                WanderAvatar(
-                    initials: activityInitials(for: context.actor.displayName),
-                    avatarURL: context.actor.avatarURL,
-                    size: 48,
-                    color: WanderTheme.skyTint.color
-                )
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    (Text(context.actor.displayName).fontWeight(.black)
-                        + Text(" \(context.actionTitle) ")
-                        + Text(context.placeName).fontWeight(.black))
-                        .font(.system(size: 16))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(context.placeDetail)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-
-                    Text(FeedPresentation.timestampText(for: context.occurredAt))
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
-                }
-            }
+            activitySummary
 
             ActivityEngagementActionRow(
                 context: context,
@@ -318,6 +302,79 @@ struct ActivityCommentsScreen: View {
             castsShadow: false,
             borderWidth: 1.5
         )
+    }
+
+    @ViewBuilder
+    private var activitySummary: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                    activityAvatar
+                    activityCopy
+                }
+
+                if !context.media.isEmpty {
+                    HStack {
+                        Spacer(minLength: 0)
+                        activityMediaThumbnail
+                    }
+                }
+            }
+        } else {
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                activityAvatar
+                activityCopy
+
+                if !context.media.isEmpty {
+                    Spacer(minLength: WanderTheme.spacing1)
+                    activityMediaThumbnail
+                }
+            }
+        }
+    }
+
+    private var activityMediaThumbnail: some View {
+        ActivityCommentsMediaThumbnail(media: context.media) { mediaID in
+            photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: mediaID)
+        }
+    }
+
+    private var activityAvatar: some View {
+        WanderAvatar(
+            initials: activityInitials(for: context.actor.displayName),
+            avatarURL: context.actor.avatarURL,
+            size: 48,
+            color: WanderTheme.skyTint.color
+        )
+    }
+
+    private var activityCopy: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            (Text(context.actor.displayName).fontWeight(.black)
+                + Text(" \(context.actionTitle) ")
+                + Text(context.placeName).fontWeight(.black))
+                .font(.system(size: 16))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(context.placeDetail)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            Text(FeedPresentation.timestampText(for: context.occurredAt))
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WanderTheme.textFaint.color)
+
+            if let note = context.note {
+                Text("“\(note)”")
+                    .font(.system(size: 14, weight: .medium))
+                    .italic()
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Note: \(note)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var ticketAccent: Color {
@@ -408,6 +465,168 @@ struct ActivityCommentsScreen: View {
             isPosting = false
             composerFocused = true
         }
+    }
+}
+
+private struct ActivityCommentsMediaThumbnail: View {
+    let media: [ActivityEngagementMedia]
+    let onOpen: (String) -> Void
+    private let size: CGFloat = 76
+
+    var body: some View {
+        if let first = media.first {
+            Button {
+                onOpen(first.id)
+            } label: {
+                ZStack(alignment: .bottomTrailing) {
+                    LinearGradient(
+                        colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color.opacity(0.55))
+                    }
+
+                    if let localImage = VisitPhotoLocalFileStore.image(from: first.localAssetRef) {
+                        Image(uiImage: localImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: size, height: size)
+                    } else if let remoteURL = first.urlString.flatMap(URL.init(string:)) {
+                        AsyncImage(url: remoteURL) { image in
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: size, height: size)
+                        } placeholder: {
+                            ProgressView()
+                                .tint(WanderTheme.terracotta.color)
+                        }
+                    }
+
+                    if media.count > 1 {
+                        Text("+\(media.count - 1)")
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .frame(minHeight: 20)
+                            .background(Color.black.opacity(0.72))
+                            .clipShape(Capsule())
+                            .padding(.trailing, 6)
+                            .padding(.bottom, 9)
+                    }
+                }
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            }
+            .buttonStyle(.plain)
+            .frame(minWidth: size, minHeight: size)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Open activity photos")
+            .accessibilityValue(media.count == 1 ? "1 photo" : "\(media.count) photos")
+            .accessibilityHint("Opens a full-screen photo viewer")
+        }
+    }
+}
+
+private struct ActivityCommentsPhotoViewerRoute: Identifiable {
+    let mediaID: String
+
+    var id: String { mediaID }
+}
+
+private struct ActivityCommentsPhotoViewer: View {
+    @Environment(\.dismiss) private var dismiss
+    let media: [ActivityEngagementMedia]
+    @State private var selectedMediaID: String
+
+    init(media: [ActivityEngagementMedia], initialMediaID: String) {
+        self.media = media
+        _selectedMediaID = State(initialValue: initialMediaID)
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+
+            TabView(selection: $selectedMediaID) {
+                ForEach(media) { item in
+                    ZoomablePhoto {
+                        ActivityCommentsFullScreenImage(media: item)
+                    }
+                    .tag(item.id)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, WanderTheme.spacing2)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .automatic))
+
+            WanderGlassActionButton(
+                systemImage: "chevron.left",
+                accessibilityLabel: "Back",
+                tone: .neutral,
+                action: dismiss.callAsFunction
+            )
+            .padding(.leading, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing3)
+        }
+        .preferredColorScheme(.dark)
+        .onChange(of: media.map(\.id)) { _, ids in
+            guard !ids.isEmpty else {
+                dismiss()
+                return
+            }
+            if !ids.contains(selectedMediaID), let firstID = ids.first {
+                selectedMediaID = firstID
+            }
+        }
+    }
+}
+
+private struct ActivityCommentsFullScreenImage: View {
+    let media: ActivityEngagementMedia
+
+    var body: some View {
+        if let localImage = VisitPhotoLocalFileStore.image(from: media.localAssetRef) {
+            Image(uiImage: localImage)
+                .resizable()
+                .scaledToFit()
+                .accessibilityLabel(media.accessibilityLabel)
+        } else if let remoteURL = media.urlString.flatMap(URL.init(string:)) {
+            AsyncImage(url: remoteURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .accessibilityLabel(media.accessibilityLabel)
+                case .failure:
+                    placeholder(systemImage: "exclamationmark.triangle.fill", title: "Photo unavailable")
+                case .empty:
+                    placeholder(systemImage: "arrow.triangle.2.circlepath", title: "Loading photo")
+                @unknown default:
+                    placeholder(systemImage: "photo", title: "Photo")
+                }
+            }
+        } else {
+            placeholder(systemImage: "photo", title: "Photo unavailable")
+        }
+    }
+
+    private func placeholder(systemImage: String, title: String) -> some View {
+        VStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 34, weight: .black))
+            Text(title)
+                .font(.system(size: 15, weight: .black))
+        }
+        .foregroundStyle(.white.opacity(0.76))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel(title)
     }
 }
 

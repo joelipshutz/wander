@@ -287,6 +287,7 @@ enum NotificationDestination: Equatable {
     case list(id: String)
     case listInvite(token: String)
     case place(id: String)
+    case activityComments(id: String)
     case sharedVisit(participantID: String, generation: Int)
     case drafts(extractionJobID: String?)
     case discover
@@ -602,6 +603,8 @@ final class PushNotificationManager: ObservableObject {
             return (data?["list_id"] as? String).map { .list(id: $0) }
         case "place_saved_from_your_map", "followed_place_visit", WannaGoReminderPlanner.notificationType:
             return (data?["place_id"] as? String).map { .place(id: $0) }
+        case "activity_liked", "activity_commented":
+            return (data?["activity_id"] as? String).map { .activityComments(id: $0) }
         case "shared_visit":
             guard let participantID = data?["participant_id"] as? String,
                   let generation = integerValue(data?["invitation_generation"])
@@ -632,6 +635,8 @@ final class PushNotificationManager: ObservableObject {
                 return .profile(id: profileID)
             case .sharedPlace(let placeID):
                 return .place(id: placeID)
+            case .sharedActivity(let activityID):
+                return .activityComments(id: activityID)
             case .sharedList(let listID):
                 return .list(id: listID)
             case .listInvite(let token):
@@ -652,6 +657,8 @@ final class PushNotificationManager: ObservableObject {
             return identifier.map { .list(id: $0) }
         case "places":
             return identifier.map { .place(id: $0) }
+        case "activities":
+            return identifier.map { .activityComments(id: $0) }
         case "shared-visits":
             guard let identifier,
                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false),

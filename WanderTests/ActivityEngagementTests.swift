@@ -150,6 +150,75 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertTrue(list.shareMessage.contains("list activity"))
     }
 
+    func testCommentsContextPreservesNoteAndPhotosForEveryTicketKind() {
+        let actor = ProfileShell(
+            id: "user_friend",
+            handle: "friend",
+            displayName: "Judy",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let media = [
+            ActivityEngagementMedia(
+                id: "photo-1",
+                urlString: "https://example.com/one.jpg",
+                accessibilityLabel: "First activity photo"
+            ),
+            ActivityEngagementMedia(
+                id: "photo-2",
+                localAssetRef: "local_file:two.jpg",
+                accessibilityLabel: "Second activity photo"
+            ),
+        ]
+
+        for ticketKind in [FeedTicketKind.checkIn, .wanna, .list] {
+            let context = ActivityEngagementContext(
+                activityID: "activity-\(ticketKind)",
+                actor: actor,
+                placeName: "Ada Street",
+                placeServerID: nil,
+                placeDetail: "Restaurant · Chicago, IL",
+                ticketKind: ticketKind,
+                occurredAt: .now,
+                note: "  Found god.  ",
+                media: media
+            )
+
+            XCTAssertEqual(context.note, "Found god.")
+            XCTAssertEqual(context.media, media)
+
+            let coordinator = ActivityNavigationCoordinator()
+            coordinator.openComments(context: context, visiblePlace: nil)
+            XCTAssertEqual(coordinator.commentsRoute?.context?.note, "Found god.")
+            XCTAssertEqual(coordinator.commentsRoute?.context?.media, media)
+        }
+    }
+
+    func testCommentsContextCollapsesMissingNoteAndPhotos() {
+        let context = ActivityEngagementContext(
+            activityID: "empty-content",
+            actor: ProfileShell(
+                id: "user_friend",
+                handle: "friend",
+                displayName: "Judy",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .follower
+            ),
+            placeName: "Ada Street",
+            placeServerID: nil,
+            placeDetail: "Restaurant · Chicago, IL",
+            ticketKind: .checkIn,
+            occurredAt: .now,
+            note: "  \n ",
+            media: []
+        )
+
+        XCTAssertNil(context.note)
+        XCTAssertTrue(context.media.isEmpty)
+    }
+
     func testActivityNavigationKeepsExactTicketIdentityUntilDismissal() {
         let coordinator = ActivityNavigationCoordinator()
         let activityID = "40000000-0000-0000-0000-000000000001"
@@ -256,6 +325,63 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(retriedResolution?.id, activityID)
         XCTAssertNil(store.activityEngagementError(for: activityID))
     }
+
+    func testExactActivityRefreshesCachedFeedTicketToLoadPhotos() async {
+        let activityID = "40000000-0000-0000-0000-000000000004"
+        let actor = ProfileShell(
+            id: "user_friend",
+            handle: "friend",
+            displayName: "Friend",
+            avatarURL: nil,
+            bio: nil,
+            relationship: .follower
+        )
+        let cachedActivity = FeedActivity(
+            id: activityID,
+            kind: .placeBeen,
+            actor: actor,
+            occurredAt: .now,
+            note: "A cached note",
+            media: []
+        )
+        let exactActivity = FeedActivity(
+            id: activityID,
+            kind: .placeBeen,
+            actor: actor,
+            occurredAt: cachedActivity.occurredAt,
+            note: cachedActivity.note,
+            media: [
+                FeedMediaPreview(
+                    id: "photo_1",
+                    urlString: "https://example.com/signed-photo.jpg",
+                    accessibilityLabel: "Activity photo"
+                )
+            ]
+        )
+        let feedRepository = SuspendedActivityFeedRepository(
+            page: FollowedFeedPage(
+                activity: [cachedActivity],
+                featuredPlaces: [],
+                nextCursor: nil,
+                fetchedAt: .now
+            )
+        )
+        feedRepository.finish()
+        let activityRepository = ActivityEngagementRepositoryStub(activityResult: exactActivity)
+        let backend = WanderBackend(
+            feedRepository: feedRepository,
+            activityEngagementRepository: activityRepository
+        )
+        let store = WanderStore(fixtures: .empty())
+        let didRefresh = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        let resolved = await store.activity(id: activityID, backend: backend)
+
+        XCTAssertEqual(resolved?.media.map(\.id), ["photo_1"])
+        XCTAssertEqual(store.followedFeedPage?.activity.first?.media.map(\.id), ["photo_1"])
+        XCTAssertEqual(activityRepository.activityRequestCount, 1)
+    }
 }
 
 private enum ActivityEngagementTestError: Error {
@@ -266,6 +392,7 @@ private enum ActivityEngagementTestError: Error {
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
     let setLikeError: Error?
+    private(set) var activityRequestCount = 0
     private var activityResponses: [Result<FeedActivity, Error>]
 
     init(
@@ -282,6 +409,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func activity(id: String) async throws -> FeedActivity {
+        activityRequestCount += 1
         guard !activityResponses.isEmpty else {
             throw ActivityEngagementTestError.expected
         }

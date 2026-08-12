@@ -1048,6 +1048,14 @@ struct WanderRootView: View {
             beginDeepLinkHandoff(to: .sharedProfile(profileID: profileID))
             return
         }
+        if case .activityComments(let activityID) = request.destination {
+            isPresentingAdd = false
+            initialPresentation = nil
+            selectedTab = .discover
+            activityNavigation.openComments(activityID: activityID)
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            return
+        }
 
         isPresentingAdd = false
         initialPresentation = nil
@@ -1092,6 +1100,7 @@ struct WanderRootView: View {
         case .people, .drafts: .profile
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
+        case .activityComments: .discover
         case .discover: .discover
         }
     }
