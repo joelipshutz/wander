@@ -953,15 +953,16 @@ enum WanderPlaceCategory {
             emoji: "🍸",
             aliases: [
             "bars_nightlife", "bars nightlife", "bars and nightlife", "bar", "bars", "nightlife",
-            "mkpoicategorynightlife", "cocktail", "pub", "sports bar", "wine bar", "lounge", "club", "disco",
+            "mkpoicategorynightlife", "cocktail", "pub", "sports bar", "wine bar", "cider bar", "sake bar",
+            "game bar", "lounge", "club", "disco",
             "brewery", "brewpub", "distillery", "winery", "vineyard", "nightclub", "karaoke", "live music", "comedy club",
             "casino"
         ],
             subcategories: [
-                "Bar", "Cocktail bar", "Pub", "Irish pub", "Billiards", "Sports bar", "Wine bar", "Gastropub",
-                "Bar & grill", "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Beer garden", "Jazz club",
-                "Hi-fi lounge", "Brewery", "Brewpub", "Winery", "Vineyard", "Nightclub", "Karaoke", "Live music",
-                "Comedy club", "Casino", "Distillery"
+                "Bar", "Cocktail bar", "Pub", "Irish pub", "Billiards", "Sports bar", "Wine bar", "Cider bar",
+                "Sake bar", "Game bar", "Gastropub", "Bar & grill", "Dance hall", "Club", "Disco", "Lounge",
+                "Hookah bar", "Beer garden", "Jazz club", "Hi-fi lounge", "Brewery", "Brewpub", "Winery",
+                "Vineyard", "Nightclub", "Karaoke", "Live music", "Comedy club", "Casino", "Distillery"
         ],
             isEditable: true
         ),
@@ -1449,14 +1450,14 @@ enum WanderPlaceCategory {
         barsNightlife: [
             PlaceCategorySubcategoryGroup(title: "Bars & pubs", subcategories: [
                 "Bar", "Cocktail bar", "Pub", "Irish pub", "Sports bar", "Wine bar", "Gastropub", "Bar & grill",
-                "Beer garden", "Brewery", "Brewpub"
+                "Cider bar", "Sake bar", "Beer garden", "Brewery", "Brewpub"
             ]),
             PlaceCategorySubcategoryGroup(title: "Lounges & clubs", subcategories: [
                 "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Jazz club", "Hi-fi lounge", "Nightclub",
                 "Karaoke", "Live music", "Comedy club"
             ]),
             PlaceCategorySubcategoryGroup(title: "Wine & gaming", subcategories: [
-                "Winery", "Vineyard", "Billiards", "Casino"
+                "Winery", "Vineyard", "Billiards", "Game bar", "Casino"
             ])
         ],
         outdoorsNature: [
