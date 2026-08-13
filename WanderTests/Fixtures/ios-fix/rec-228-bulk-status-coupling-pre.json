@@ -1,0 +1,22 @@
+{
+  "issue": "REC-228",
+  "bug": "the bulk Apply to selected control mirrors whichever status is selected in the checked rows",
+  "capture_source": "deterministic -WanderPlaceImportAdaptiveMockup simulator state",
+  "screenshot": "rec-228-bulk-status-coupling-pre.png",
+  "post_fix_screenshot": "rec-228-bulk-status-coupling-post.png",
+  "selected_ready_items": [
+    {
+      "id": "mart-collective",
+      "status": "wanna_go"
+    }
+  ],
+  "excluded_ready_items": [
+    {
+      "id": "gjusta",
+      "status": "been"
+    }
+  ],
+  "pre_fix_bulk_selection": "wanna_go",
+  "expected_bulk_selection": "neutral_action",
+  "expected_behavior": "row changes stay local; the top control only changes checked rows after an explicit bulk tap"
+}

@@ -10,7 +10,7 @@ struct WanderApp: App {
     @StateObject private var auth: AuthSessionStore
     @StateObject private var backend: WanderBackend
     @StateObject private var entryCoordinator: AppEntryCoordinator
-    @StateObject private var pushNotifications = PushNotificationManager()
+    @StateObject private var pushNotifications: PushNotificationManager
     #if DEBUG
     @StateObject private var mapCaptureBackend: WanderBackend
     #endif
@@ -26,7 +26,29 @@ struct WanderApp: App {
             analyticsClient = NoopAnalyticsClient()
         }
         analytics = analyticsClient
-        let authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        _pushNotifications = StateObject(
+            wrappedValue: PushNotificationManager(analytics: analyticsClient)
+        )
+        let authStore: AuthSessionStore
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest") {
+            authStore = AuthSessionStore(
+                provider: PreviewAuthSessionProvider(
+                    state: .signedIn(
+                        AuthSession(
+                            userID: "user_joe",
+                            displayName: "Joe",
+                            handle: "joe"
+                        )
+                    )
+                )
+            )
+        } else {
+            authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        }
+        #else
+        authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        #endif
         let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
         discoverParser = Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
         _auth = StateObject(wrappedValue: authStore)
@@ -50,6 +72,11 @@ struct WanderApp: App {
                 SaveStreakMockupRoot(page: streakMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
+            } else if let inviteMockupPage = InviteMockupPage.resolved() {
+                InviteMockupRoot(page: inviteMockupPage)
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
+                ClerkNativeAuthView(mode: .signUp)
+                    .environmentObject(auth)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
@@ -60,6 +87,12 @@ struct WanderApp: App {
                 PlacePhotoCarouselMockupRoot(page: carouselMockupPage)
             } else if let activityMockupPage = PlaceActivityMockupPage.resolved() {
                 PlaceActivityMockupRoot(page: activityMockupPage)
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderActivityShareMockup") {
+                ActivitySharePreviewMockupRoot()
+            } else if PlaceImportAdaptiveMockupPage.isPresented {
+                PlaceImportAdaptiveMockupRoot()
+                    .environmentObject(auth)
+                    .environmentObject(backend)
             } else if PlaceImportCandidateMockupPage.isPresented {
                 PlaceImportCandidateMockupRoot()
                     .environmentObject(auth)
@@ -273,12 +306,12 @@ struct WanderAppEntryView: View {
         )
 
         ZStack {
-            if case .signedIn(let session) = auth.state {
+            if let session = auth.state.session {
                 WanderRootView(
                     initialSession: session,
-                    isSessionValidated: destination == .authenticated,
+                    isSessionValidated: auth.isSessionValidated,
                     deepLinkLaunchRequest: deepLinkInbox.request(
-                        ifSessionValidated: destination == .authenticated
+                        ifSessionValidated: auth.isSessionValidated
                     ),
                     onDeepLinkLaunchRequestHandled: { requestID in
                         deepLinkInbox.consume(requestID)
@@ -307,11 +340,7 @@ struct WanderAppEntryView: View {
         }
         .onChange(of: auth.state, initial: true) { _, state in
             let newUserID: String?
-            if case .signedIn(let session) = state {
-                newUserID = session.userID
-            } else {
-                newUserID = nil
-            }
+            newUserID = state.session?.userID
             if authenticatedUserID != newUserID {
                 if authenticatedUserID != nil {
                     WanderWidgetSnapshotPublisher.clear()
@@ -329,7 +358,7 @@ struct WanderAppEntryView: View {
         .onChange(of: destination, initial: true) { _, destination in
             switch destination {
             case .authenticated:
-                if case .signedIn(let session) = auth.state {
+                if auth.isSessionValidated, case .signedIn(let session) = auth.state {
                     WanderAppDelegate.setAuthenticatedSessionActive(userID: session.userID)
                 }
             case .signIn, .unavailable:
@@ -408,6 +437,8 @@ struct WanderAppEntryView: View {
             return .signIn
         case .signedIn:
             return isSessionValidated ? .authenticated : .loading
+        case .offline:
+            return .authenticated
         case .unavailable(let message):
             return .unavailable(message)
         }

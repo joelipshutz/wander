@@ -5,13 +5,22 @@ struct FeedScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
     @State private var isShowingSearch = ProcessInfo.processInfo.arguments.contains("-WanderOpenDiscoverSearch")
     @State private var selectedProfile: FeedProfileRoute?
     @State private var selectedPlace: VisiblePlace?
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var followingProfileIDs = Set<String>()
-    @State private var selectedSurface: FeedSurface = .places
+    @State private var focusedActivityID: String?
+    @State private var selectedSurface: FeedSurface
+    private let onAdd: () -> Void
+
+    init(onAdd: @escaping () -> Void = {}) {
+        self.onAdd = onAdd
+        _selectedSurface = State(initialValue: FeedSurface.resolvedInitialSurface())
+    }
 
     private let tickerSuggestions = [
         "Joe's favorite coffee shops in LA",
@@ -25,9 +34,19 @@ struct FeedScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                FeedSurfaceTabs(selectedSurface: $selectedSurface)
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing2)
+                HStack(spacing: WanderTheme.spacing2) {
+                    FeedSurfaceTabs(selectedSurface: $selectedSurface)
+                    .walkthroughTarget(.feedSurfaceSwitch)
+
+                    WanderGlassActionButton(
+                        systemImage: "plus",
+                        accessibilityLabel: "Add a place",
+                        accessibilityIdentifier: "feed.headerAdd",
+                        action: onAdd
+                    )
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
 
                 switch selectedSurface {
                 case .places:
@@ -48,6 +67,7 @@ struct FeedScreen: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(walkthroughs)
             }
             .fullScreenCover(item: $selectedProfile) { route in
                 ProfileDetailView(profileID: route.id)
@@ -57,6 +77,16 @@ struct FeedScreen: View {
             }
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
+            }
+            .navigationDestination(item: commentsRouteBinding) { route in
+                ActivityCommentsRouteScreen(
+                    requestID: route.id,
+                    retry: resolveCommentsRouteIfNeeded
+                )
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
+                .environmentObject(activityNavigation)
             }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -74,26 +104,62 @@ struct FeedScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
+            .onChange(of: selectedSurface) { _, _ in
+                walkthroughs.perform(.feedSurfaceSwitch)
+            }
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                if target == .feedDiscoverSearch {
+                    selectedSurface = .places
+                }
+            }
+            .onChange(of: isShowingSearch) { _, isShowing in
+                if !isShowing {
+                    walkthroughs.activate(.feed)
+                }
+            }
+        }
+        .task(id: activityNavigation.commentsRoute?.id) {
+            await resolveCommentsRouteIfNeeded()
         }
     }
 
     private var placesSurface: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                FeedSearchLauncher(placeholders: tickerSuggestions) {
-                    isShowingSearch = true
-                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    FeedSearchLauncher(
+                        placeholders: tickerSuggestions,
+                        isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
+                        action: openDiscoverSearch
+                    )
+                    .walkthroughTarget(.feedDiscoverSearch)
 
-                content
+                    content
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing3)
+                .padding(.bottom, WanderTheme.spacing16)
             }
-            .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing3)
-            .padding(.bottom, WanderTheme.spacing16)
+            .scrollDismissesKeyboard(.interactively)
+            .refreshable {
+                await refresh()
+            }
+            .onChange(of: focusedActivityID, initial: true) { _, activityID in
+                scrollToFocusedActivity(activityID, proxy: proxy)
+            }
+            .onChange(of: page?.activity.map(\.id), initial: true) { _, _ in
+                scrollToFocusedActivity(focusedActivityID, proxy: proxy)
+            }
         }
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable {
-            await refresh()
+    }
+
+    private func openDiscoverSearch() {
+        if walkthroughs.currentStep?.target == .feedDiscoverSearch {
+            walkthroughs.perform(.feedDiscoverSearch)
+            walkthroughs.consumeRequestedSurface(.feedSearch)
         }
+        walkthroughs.activate(.feedSearch)
+        isShowingSearch = true
     }
 
     @ViewBuilder
@@ -154,20 +220,69 @@ struct FeedScreen: View {
     }
 
     private func refresh() async {
-        _ = await store.refreshFollowedFeed(backend: auth.isSignedIn ? backend : nil)
+        _ = await store.refreshFollowedFeed(
+            backend: auth.isSignedIn ? backend : nil,
+            preservingActivityID: activityNavigation.commentsRoute?.activityID ?? focusedActivityID
+        )
         guard store.followedFeedPage?.activity.isEmpty != false else { return }
         await store.refreshDiscoverPeopleRecommendations(backend: auth.isSignedIn ? backend : nil)
     }
 
+    private var commentsRouteBinding: Binding<ActivityCommentsRoute?> {
+        Binding(
+            get: { activityNavigation.commentsRoute },
+            set: { route in
+                guard route == nil,
+                      let requestID = activityNavigation.commentsRoute?.id
+                else { return }
+                activityNavigation.dismiss(requestID: requestID)
+            }
+        )
+    }
+
+    @MainActor
+    private func resolveCommentsRouteIfNeeded() async {
+        guard let route = activityNavigation.commentsRoute else { return }
+        focusedActivityID = route.activityID
+
+        let activity = await store.activity(
+            id: route.activityID,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        guard let context = activity?.activityEngagementContext ?? route.context else {
+            return
+        }
+        activityNavigation.resolve(
+            requestID: route.id,
+            context: context,
+            visiblePlace: route.visiblePlace ?? activity?.place
+        )
+    }
+
+    private func scrollToFocusedActivity(_ activityID: String?, proxy: ScrollViewProxy) {
+        guard let activityID,
+              page?.activity.contains(where: { $0.id == activityID }) == true
+        else { return }
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo(activityID, anchor: .center)
+            }
+        }
+    }
+
     private func openProfile(_ profile: ProfileShell) {
+        walkthroughs.perform(.feedActivity)
         selectedProfile = FeedProfileRoute(id: profile.id)
     }
 
     private func openPlace(_ visiblePlace: VisiblePlace) {
+        walkthroughs.perform(.feedActivity)
         selectedPlace = visiblePlace
     }
 
     private func openList(_ list: LocalPlaceList) {
+        walkthroughs.perform(.feedActivity)
         pushNotifications.route(to: .list(id: list.id))
     }
 
@@ -314,7 +429,11 @@ struct FeedScreen: View {
                 return true
             }
             .map { visiblePlace in
-                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: attributes(for: visiblePlace))
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: attributes(for: visiblePlace),
+                    viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
+                )
             }
             .sorted { lhs, rhs in
                 if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
@@ -327,7 +446,11 @@ struct FeedScreen: View {
 
     private var tasteSummaries: [PlaceSaveSummary] {
         store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
+            )
         }
     }
 
@@ -367,20 +490,33 @@ private enum FeedSurface: String, CaseIterable, Identifiable {
         case .people: "person.2"
         }
     }
+
+    static func resolvedInitialSurface(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> FeedSurface {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderFeedSurface") else {
+            return .places
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return .places }
+        return FeedSurface(rawValue: arguments[valueIndex]) ?? .places
+    }
 }
 
 private struct FeedSurfaceTabs: View {
     @Binding var selectedSurface: FeedSurface
 
     var body: some View {
-        Picker("Feed section", selection: $selectedSurface) {
-            ForEach(FeedSurface.allCases) { surface in
-                Text(surface.title)
-                    .tag(surface)
-            }
-        }
-        .pickerStyle(.segmented)
-        .frame(minHeight: WanderTheme.tapMinimum)
+        WanderGlassSegmentedSwitch(
+            options: FeedSurface.allCases.map {
+                WanderSegmentOption(id: $0.rawValue, title: $0.title)
+            },
+            selection: Binding(
+                get: { selectedSurface.rawValue },
+                set: { selectedSurface = FeedSurface(rawValue: $0) ?? .places }
+            )
+        )
+        .accessibilityLabel("Feed section")
     }
 }
 
@@ -388,12 +524,14 @@ private struct FeedPeopleSurface: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let openProfile: (ProfileShell) -> Void
 
     @State private var memberQuery = ""
     @State private var memberResults: [ProfileShell] = []
     @State private var followInFlightProfileIDs: Set<String> = []
     @State private var followFailedProfileIDs: Set<String> = []
+    @State private var isPresentingContactInvites = false
     @FocusState private var searchFieldFocused: Bool
 
     private var isMemberSearchActive: Bool {
@@ -410,6 +548,13 @@ private struct FeedPeopleSurface: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 FeedPeopleSearchField(text: $memberQuery)
                     .focused($searchFieldFocused)
+                    .walkthroughTarget(.feedPeopleSearch)
+
+                InviteEntryPointButton(surface: .feedPeople) {
+                    walkthroughs.perform(.feedInvite)
+                    isPresentingContactInvites = true
+                }
+                .walkthroughTarget(.feedInvite)
 
                 if isMemberSearchActive {
                     memberSearchResultsSection
@@ -432,6 +577,39 @@ private struct FeedPeopleSurface: View {
         }
         .task(id: memberQuery) {
             await refreshMembers(query: memberQuery, debounce: true)
+        }
+        .onChange(of: searchFieldFocused) { _, isFocused in
+            if isFocused {
+                walkthroughs.perform(.feedPeopleSearch)
+            }
+        }
+        .onChange(of: walkthroughs.currentStep?.target) { _, target in
+            if target == .feedInvite {
+                searchFieldFocused = false
+            }
+        }
+        .onChange(of: walkthroughs.isRequestingContactInvite, initial: true) { _, isRequested in
+            guard isRequested else { return }
+            searchFieldFocused = false
+            isPresentingContactInvites = true
+        }
+        .sheet(isPresented: $isPresentingContactInvites, onDismiss: {
+            walkthroughs.completeContactInviteRequest()
+        }) {
+            ContactInviteSheet(
+                surface: .feedPeople,
+                contactProvider: store.contactProvider,
+                senderProfileID: store.currentUser.id,
+                walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
+                onPermissionDenied: walkthroughPermissionDeniedAction
+            )
+        }
+    }
+
+    private var walkthroughPermissionDeniedAction: (() -> Void)? {
+        guard walkthroughs.isRequestingContactInvite else { return nil }
+        return {
+            isPresentingContactInvites = false
         }
     }
 
@@ -620,12 +798,8 @@ private struct FeedPeopleSearchField: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        }
+        .contentShape(Capsule())
+        .wanderGlassCapsule()
         .accessibilityLabel("Search people")
     }
 }
@@ -814,12 +988,15 @@ private struct FeedProfileRoute: Identifiable {
 }
 
 private struct FeedSearchLauncher: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let placeholders: [String]
+    let isWalkthroughTarget: Bool
     let action: () -> Void
     @State private var placeholderIndex = 0
+    @State private var isPulsing = false
 
     private var placeholder: String {
-        guard !placeholders.isEmpty else { return "Search places and people" }
+        guard !placeholders.isEmpty else { return "Search trusted places" }
         return placeholders[placeholderIndex % placeholders.count]
     }
 
@@ -841,16 +1018,40 @@ private struct FeedSearchLauncher: View {
             }
             .padding(.horizontal, WanderTheme.spacing3)
             .frame(minHeight: 44)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            }
+            .contentShape(Capsule())
+            .wanderGlassCapsule()
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Search places and people")
+        .accessibilityLabel("Search trusted places")
         .accessibilityIdentifier("feed.searchLauncher")
+        .overlay {
+            if isWalkthroughTarget {
+                Capsule()
+                    .stroke(WanderTheme.terracotta.color, lineWidth: 2)
+                    .padding(-2)
+            }
+        }
+        .scaleEffect(
+            isWalkthroughTarget && !reduceMotion && isPulsing ? 1.025 : 1
+        )
+        .shadow(
+            color: isWalkthroughTarget
+                ? WanderTheme.terracotta.color.opacity(isPulsing ? 0.55 : 0.2)
+                : .clear,
+            radius: isWalkthroughTarget && isPulsing ? 12 : 3
+        )
+        .task(id: isWalkthroughTarget) {
+            isPulsing = false
+            guard isWalkthroughTarget, !reduceMotion else { return }
+            await Task.yield()
+            isPulsing = true
+        }
+        .animation(
+            isWalkthroughTarget && !reduceMotion
+                ? .easeInOut(duration: 1.15).repeatForever(autoreverses: true)
+                : .easeOut(duration: 0.2),
+            value: isPulsing
+        )
         .task {
             guard placeholders.count > 1 else { return }
             while !Task.isCancelled {
@@ -934,26 +1135,19 @@ private struct FeedFeaturedCard: View {
             .accessibilityLabel("Open \(featured.visiblePlace.place.canonicalName)")
 
             Button {
-                openProfile(ProfileShell(
-                    id: featured.visiblePlace.owner.id,
-                    handle: featured.visiblePlace.owner.handle,
-                    displayName: featured.visiblePlace.owner.displayName,
-                    avatarURL: featured.visiblePlace.owner.avatarURL,
-                    bio: featured.visiblePlace.owner.bio,
-                    relationship: .follower
-                ))
+                openProfile(featured.actor)
             } label: {
                 HStack(alignment: .top, spacing: WanderTheme.spacing1) {
                     WanderAvatar(
-                        initials: featured.visiblePlace.owner.initials,
-                        avatarURL: featured.visiblePlace.owner.avatarURL,
+                        initials: initials(for: featured.actor.displayName),
+                        avatarURL: featured.actor.avatarURL,
                         size: 20,
-                        color: featured.visiblePlace.owner.handle == "ryan"
+                        color: featured.actor.handle == "ryan"
                             ? WanderTheme.avatarRyan.color
                             : WanderTheme.pinSocial.color
                     )
 
-                    Text("• \(featured.visiblePlace.owner.displayName) • \(featuredActivity)")
+                    Text("• \(featured.actor.displayName) • \(featuredActivity)")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(WanderTheme.stateInfo.color)
                         .fixedSize(horizontal: false, vertical: true)
@@ -961,7 +1155,7 @@ private struct FeedFeaturedCard: View {
                 .accessibilityElement(children: .combine)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(featured.visiblePlace.owner.displayName), \(featuredActivity)")
+            .accessibilityLabel("\(featured.actor.displayName), \(featuredActivity)")
 
             Spacer(minLength: 0)
         }
@@ -994,6 +1188,10 @@ private struct FeedActivityList: View {
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList
+                )
+                .id(event.id)
+                .walkthroughTarget(
+                    event.id == activity.first?.id ? .feedActivity : nil
                 )
             }
         }
@@ -1040,6 +1238,14 @@ private struct FeedActivityModule: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 activityThumbnailDestination
+            }
+
+            if let engagementContext {
+                ActivityEngagementActionRow(
+                    context: engagementContext,
+                    visiblePlace: activity.place
+                )
+                .padding(.top, WanderTheme.spacing1)
             }
         }
         .padding(WanderTheme.spacing3)
@@ -1277,6 +1483,49 @@ private struct FeedActivityModule: View {
         case .list: WanderTheme.terracotta.color
         case .saved: WanderTheme.categorySage.color
         }
+    }
+
+    private var engagementContext: ActivityEngagementContext? {
+        activity.activityEngagementContext
+    }
+}
+
+private extension FeedActivity {
+    var activityEngagementContext: ActivityEngagementContext? {
+        let subjectName: String
+        let subjectServerID: String?
+        let detail: String
+
+        if let place {
+            subjectName = place.place.canonicalName
+            subjectServerID = place.place.serverID ?? place.place.id
+            detail = placeDetail(for: place)
+        } else if let list {
+            subjectName = list.name
+            subjectServerID = nil
+            let count = list.cachedItemCount ?? 0
+            detail = count == 1 ? "1 place" : "\(count) places"
+        } else {
+            return nil
+        }
+
+        return ActivityEngagementContext(
+            activityID: id,
+            actor: actor,
+            placeName: subjectName,
+            placeServerID: subjectServerID,
+            placeDetail: detail,
+            ticketKind: resolvedTicketKind,
+            occurredAt: occurredAt,
+            note: note,
+            media: media.map {
+                ActivityEngagementMedia(
+                    id: $0.id,
+                    urlString: $0.urlString,
+                    accessibilityLabel: $0.accessibilityLabel
+                )
+            }
+        )
     }
 }
 
@@ -1697,7 +1946,7 @@ private func initials(for name: String) -> String {
 
 private func placeDetail(for place: VisiblePlace) -> String {
     [
-        place.effectiveCategoryDisplay.compactTitle,
+        place.effectiveCompactType,
         place.place.locality,
         place.place.region
     ]

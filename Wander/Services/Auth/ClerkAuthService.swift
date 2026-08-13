@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
 #if canImport(ClerkKit)
 import ClerkKit
 #endif
@@ -7,6 +10,7 @@ import ClerkKit
 final class ClerkAuthService: AuthSessionProviding {
     private(set) var state: AuthState = .loading
     private let configuration: WanderBackendConfiguration
+    private let sessionCache: AuthSessionCache
 
     #if canImport(ClerkKit)
     typealias SessionResolver = @MainActor () async throws -> AuthSession?
@@ -16,10 +20,12 @@ final class ClerkAuthService: AuthSessionProviding {
     init(
         configuration: WanderBackendConfiguration,
         resolveSession: @escaping SessionResolver = ClerkAuthService.resolveCurrentSession,
+        sessionCache: AuthSessionCache = .live,
         configureClerk: (String) -> String = { Clerk.configure(publishableKey: $0).publishableKey }
     ) {
         self.configuration = configuration
         self.resolveAuthoritativeSession = resolveSession
+        self.sessionCache = sessionCache
 
         if let publishableKey = configuration.clerkPublishableKey {
             let configuredPublishableKey = configureClerk(publishableKey)
@@ -31,8 +37,9 @@ final class ClerkAuthService: AuthSessionProviding {
         }
     }
     #else
-    init(configuration: WanderBackendConfiguration) {
+    init(configuration: WanderBackendConfiguration, sessionCache: AuthSessionCache = .live) {
         self.configuration = configuration
+        self.sessionCache = sessionCache
 
         state = .unavailable("ClerkKit is not linked.")
     }
@@ -66,6 +73,7 @@ final class ClerkAuthService: AuthSessionProviding {
                         guard let self else { return }
                         self.refreshGeneration &+= 1
                         let state = Self.currentClientState()
+                        self.persistAuthoritativeState(state)
                         self.state = state
                         continuation.yield(state)
                     case .tokenRefreshed:
@@ -101,12 +109,14 @@ final class ClerkAuthService: AuthSessionProviding {
             let resolvedSession = try await resolveAuthoritativeSession()
             guard !Task.isCancelled, generation == refreshGeneration else { return }
             guard let session = resolvedSession else {
+                sessionCache.save(nil)
                 state = .signedOut
                 #if DEBUG
                 WanderDebugLog.remote.debug("clerk refresh signed_out")
                 #endif
                 return
             }
+            sessionCache.save(session)
             state = .signedIn(session)
             #if DEBUG
             WanderDebugLog.remote.debug("clerk refresh signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public)")
@@ -115,7 +125,12 @@ final class ClerkAuthService: AuthSessionProviding {
             return
         } catch {
             guard generation == refreshGeneration else { return }
-            state = .unavailable("Could not verify your session. Check your connection and try again.")
+            let message = "Could not verify your session. Your saved map is available offline."
+            if let session = sessionCache.load() {
+                state = .offline(session, message: message)
+            } else {
+                state = .unavailable("Could not verify your session. Check your connection and try again.")
+            }
             #if DEBUG
             WanderDebugLog.remote.error("clerk refresh failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif
@@ -128,12 +143,54 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
     }
 
+    func signInWithApple(mode: NativeAuthMode) async throws -> NativeAppleAuthOutcome {
+        #if canImport(ClerkKit) && canImport(AuthenticationServices)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+
+        do {
+            let result: TransferFlowResult
+            switch mode {
+            case .signInOrUp:
+                result = try await Clerk.shared.auth.signInWithApple()
+            case .signIn:
+                result = try await Clerk.shared.auth.signInWithApple(transferable: false)
+            case .signUp:
+                result = try await Clerk.shared.auth.signUpWithApple()
+            }
+
+            let outcome: NativeAppleAuthOutcome
+            switch result {
+            case .signIn(let signIn):
+                outcome = signIn.status == .complete ? .completed : .requiresClerkContinuation
+            case .signUp(let signUp):
+                outcome = signUp.status == .complete ? .completed : .requiresClerkContinuation
+            }
+
+            guard outcome == .completed else { return outcome }
+            await refreshSession()
+            guard case .signedIn = state else {
+                throw AuthSessionError.appleSessionUnavailable
+            }
+            return .completed
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            throw AuthSessionError.cancelled
+        } catch is CancellationError {
+            throw AuthSessionError.cancelled
+        }
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
     func signOut() async throws {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
             throw AuthSessionError.notConfigured
         }
         try await Clerk.shared.auth.signOut()
+        sessionCache.save(nil)
         state = .signedOut
         #else
         throw AuthSessionError.notConfigured
@@ -145,6 +202,7 @@ final class ClerkAuthService: AuthSessionProviding {
         guard configuration.isClerkConfigured else { throw AuthSessionError.notConfigured }
         guard let user = Clerk.shared.user else { throw AuthSessionError.notSignedIn }
         _ = try await user.delete()
+        sessionCache.save(nil)
         state = .signedOut
         #else
         throw AuthSessionError.notConfigured
@@ -202,6 +260,17 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
         throw AuthSessionError.notConfigured
         #endif
+    }
+
+    private func persistAuthoritativeState(_ state: AuthState) {
+        switch state {
+        case .signedIn(let session):
+            sessionCache.save(session)
+        case .signedOut:
+            sessionCache.save(nil)
+        case .loading, .offline, .unavailable:
+            break
+        }
     }
 
     #if canImport(ClerkKit)

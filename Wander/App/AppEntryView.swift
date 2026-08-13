@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+#if canImport(TikTokOpenSDKCore)
+import TikTokOpenSDKCore
+#endif
 
 struct AppEntryForegroundRefreshPolicy {
     static let graceInterval: TimeInterval = 30
@@ -14,6 +17,41 @@ struct AppEntryForegroundRefreshPolicy {
         guard let backgroundedAtUptime else { return true }
         self.backgroundedAtUptime = nil
         return uptime - backgroundedAtUptime >= Self.graceInterval
+    }
+}
+
+enum AppEntryNotificationGateState: Equatable {
+    case validating(expectedUserID: String?)
+    case authenticated(userID: String)
+    case signedOut
+
+    init(authState: AuthState, isSessionValidated: Bool) {
+        if isSessionValidated, case .signedIn(let session) = authState {
+            self = .authenticated(userID: session.userID)
+            return
+        }
+
+        switch authState {
+        case .signedIn(let session), .offline(let session, _):
+            self = .validating(expectedUserID: session.userID)
+        case .loading:
+            self = .validating(expectedUserID: nil)
+        case .signedOut, .unavailable:
+            self = .signedOut
+        }
+    }
+
+    func synchronize() {
+        switch self {
+        case .validating(let expectedUserID):
+            WanderAppDelegate.beginAuthenticatedSessionValidation(
+                expectedUserID: expectedUserID
+            )
+        case .authenticated(let userID):
+            WanderAppDelegate.setAuthenticatedSessionActive(userID: userID)
+        case .signedOut:
+            WanderAppDelegate.setAuthenticatedSessionSignedOut()
+        }
     }
 }
 
@@ -33,6 +71,11 @@ struct AppEntryView: View {
     @State private var foregroundRefreshPolicy = AppEntryForegroundRefreshPolicy()
 
     var body: some View {
+        let notificationGateState = AppEntryNotificationGateState(
+            authState: auth.state,
+            isSessionValidated: auth.isSessionValidated
+        )
+
         Group {
             switch coordinator.state {
             case .launching:
@@ -51,11 +94,15 @@ struct AppEntryView: View {
                     saveProgress: { coordinator.saveProgress($0, for: session) },
                     complete: { coordinator.completeOnboarding(for: session, serverConfirmed: $0) }
                 )
-            case .ready(let session):
+            case .ready(let session, let firstVisitWalkthroughEligible):
                 WanderRootView(
                     initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
                     initialSession: session,
                     isSessionValidated: auth.isSessionValidated,
+                    isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible,
+                    onFirstVisitWalkthroughCompleted: {
+                        coordinator.completeFirstVisitWalkthrough(for: session)
+                    },
                     deepLinkLaunchRequest: deepLinkInbox.request(
                         ifSessionValidated: auth.isSessionValidated
                     ),
@@ -109,6 +156,9 @@ struct AppEntryView: View {
             guard didFinishInitialResolution else { return }
             coordinator.authStateChanged(state)
         }
+        .onChange(of: notificationGateState, initial: true) { _, state in
+            state.synchronize()
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
@@ -126,7 +176,7 @@ struct AppEntryView: View {
                     return
                 }
                 auth.beginSessionValidation()
-                Task { await coordinator.start() }
+                Task { await coordinator.start(preservingReadyState: true) }
             case .inactive:
                 break
             @unknown default:
@@ -136,9 +186,18 @@ struct AppEntryView: View {
         .onOpenURL { url in
             receiveIncomingURL(url)
         }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            receiveIncomingURL(url)
+        }
     }
 
     private func receiveIncomingURL(_ url: URL) {
+        #if canImport(TikTokOpenSDKCore)
+        if TikTokURLHandler.handleOpenURL(url) {
+            return
+        }
+        #endif
         if WanderRootView.sharedProfileRoute(for: url) != nil {
             if case .ready = coordinator.state {
                 deepLinkInbox.receive(url)

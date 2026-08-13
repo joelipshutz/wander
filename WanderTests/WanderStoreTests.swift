@@ -423,6 +423,7 @@ final class WanderStoreTests: XCTestCase {
         await store.refreshRemotePlaceLists(backend: backend)
         let socialHydrated = await store.refreshRemoteSocialSurfaces(backend: backend)
 
+        // Empty batch snapshots must not fabricate owner activity.
         XCTAssertTrue(calendarHydrated)
         XCTAssertTrue(socialHydrated)
         XCTAssertEqual(repository.calendarRequestCount, 1)
@@ -545,6 +546,41 @@ final class WanderStoreTests: XCTestCase {
             ),
             [visitedUserPlace.id, wannaUserPlace.id]
         )
+        XCTAssertEqual(store.stats.checkIns, 1)
+        XCTAssertEqual(store.stats.wanna, 1)
+
+        XCTAssertTrue(store.deleteVisit(visitID: "visit_west"))
+        XCTAssertEqual(
+            Set(
+                store.currentUserCalendarProjection.userPlaces.map(\.id)
+            ),
+            [wannaUserPlace.id]
+        )
+        XCTAssertEqual(store.stats.checkIns, 0)
+        XCTAssertEqual(store.stats.wanna, 1)
+
+        // A viewport request can finish after the delete RPC. Its stale,
+        // partial owner row must not repopulate the canonical Profile slice.
+        await store.refreshRemoteVisiblePlaces(
+            in: MapViewport(
+                minLatitude: 33.9,
+                minLongitude: -118.6,
+                maxLatitude: 34.1,
+                maxLongitude: -118.4
+            ),
+            backend: WanderBackend(
+                placeRepository: FakePlaceRepository(places: [westside])
+            )
+        )
+
+        XCTAssertEqual(
+            Set(
+                store.currentUserCalendarProjection.userPlaces.map(\.id)
+            ),
+            [wannaUserPlace.id]
+        )
+        XCTAssertEqual(store.stats.checkIns, 0)
+        XCTAssertEqual(store.stats.wanna, 1)
 
         let snapshotURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("wander-widget-regions-\(UUID().uuidString).json")
@@ -558,7 +594,7 @@ final class WanderStoreTests: XCTestCase {
         )
 
         let snapshot = try XCTUnwrap(snapshotStore.load())
-        XCTAssertEqual(snapshot.currentMonth.beenCount, 1)
+        XCTAssertEqual(snapshot.currentMonth.beenCount, 0)
         XCTAssertEqual(snapshot.currentMonth.wannaCount, 0)
     }
 
@@ -988,6 +1024,75 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(
             store.remoteVisiblePlaceCache.contains {
                 $0.owner.id == userA || $0.userPlace.visibility == .selfOnly
+            }
+        )
+    }
+
+    func testCurrentUserRemoteMapCacheSurvivesOfflineRelaunchAndClearsOnSignOut() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(
+            userID: "user_offline_cache",
+            displayName: "Offline User",
+            handle: "offline_user"
+        )
+        let savedAt = Date(timeIntervalSince1970: 1_753_100_000)
+
+        do {
+            let store = WanderStore(
+                fixtures: WanderFixtures.empty(),
+                persistence: fixture.persistence
+            )
+            store.apply(authState: .signedIn(session))
+            let cachedPlace = makeRemoteCalendarVisiblePlace(
+                owner: store.currentUser,
+                userPlaceID: "up_offline_cache",
+                placeID: "place_offline_cache",
+                name: "Cached Offline Cafe",
+                status: .been,
+                visibility: .selfOnly,
+                savedAt: savedAt,
+                visitedAt: savedAt
+            )
+            let hydrated = await store.refreshRemoteCurrentUserCalendarData(
+                backend: WanderBackend(
+                    userPlaceRepository: FakeUserPlaceRepository(
+                        userPlacesByUserID: [session.userID: [cachedPlace]]
+                    )
+                )
+            )
+
+            XCTAssertTrue(hydrated)
+            XCTAssertEqual(store.remoteVisiblePlaceCache.map(\.place.canonicalName), ["Cached Offline Cafe"])
+        }
+
+        do {
+            let relaunchedStore = WanderStore(
+                fixtures: WanderFixtures.empty(),
+                persistence: fixture.persistence
+            )
+            relaunchedStore.apply(
+                authState: .offline(session, message: "Saved map available offline")
+            )
+
+            XCTAssertEqual(relaunchedStore.currentUser.id, session.userID)
+            XCTAssertEqual(
+                relaunchedStore.currentUserVisiblePlaces.map(\.place.canonicalName),
+                ["Cached Offline Cafe"]
+            )
+            XCTAssertEqual(relaunchedStore.remoteVisiblePlaceCache.count, 1)
+
+            relaunchedStore.apply(authState: .signedOut)
+        }
+
+        let signedOutRelaunch = WanderStore(
+            fixtures: WanderFixtures.empty(),
+            persistence: fixture.persistence
+        )
+        XCTAssertTrue(signedOutRelaunch.remoteVisiblePlaceCache.isEmpty)
+        XCTAssertFalse(
+            signedOutRelaunch.visiblePlaces().contains {
+                $0.place.canonicalName == "Cached Offline Cafe"
             }
         )
     }
@@ -1546,6 +1651,41 @@ final class WanderStoreTests: XCTestCase {
 
     private func makeStore() -> WanderStore {
         WanderStore(fixtures: WanderFixtures.seed())
+    }
+
+    private func makeRemoteCollaboratorListStore() -> (WanderStore, LocalPlaceList) {
+        let seed = WanderFixtures.seed()
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let list = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: "user_ryan",
+            name: "Shared follower list",
+            description: "The former collaborator should see this through normal friend visibility.",
+            visibility: .followers,
+            syncState: .synced
+        )
+        let store = WanderStore(fixtures: WanderFixtures(
+            currentUser: seed.currentUser,
+            profiles: seed.profiles,
+            places: [],
+            userPlaces: [],
+            placeAttributes: [],
+            follows: seed.follows,
+            blocks: [],
+            placeLists: [list],
+            placeListMembers: [
+                LocalPlaceListMember(
+                    localID: "remote_list_member_\(listID)_user_joe",
+                    listID: listID,
+                    userID: seed.currentUser.id,
+                    role: .collaborator
+                )
+            ],
+            placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        ))
+        return (store, store.placeLists[0])
     }
 
     private func makeSharedVisitInvitation(
@@ -3850,11 +3990,20 @@ final class WanderStoreTests: XCTestCase {
             ratingScore: 4
         )
         let visit = store.visits(for: result.userPlaceID).first
+        let photo = store.createVisitPhoto(
+            visitID: visit?.id ?? "",
+            localAssetRef: "saba-cafe-and-surf.jpg"
+        )
+        photo?.serverID = "photo_saba_cafe_and_surf"
 
         XCTAssertEqual(store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }?.userPlace.status, .been)
         XCTAssertTrue(store.deleteVisit(visitID: visit?.id ?? ""))
 
         XCTAssertTrue(store.visits(for: result.userPlaceID).isEmpty)
+        XCTAssertEqual(
+            store.deletedVisitPhotoReferenceIDs,
+            Set([photo?.localID, photo?.serverID].compactMap { $0 })
+        )
         XCTAssertFalse(store.currentUserVisiblePlaces.contains { $0.userPlace.id == result.userPlaceID })
     }
 
@@ -3901,7 +4050,7 @@ final class WanderStoreTests: XCTestCase {
                 backend: WanderBackend(userPlaceRepository: failingRepository)
             )
 
-            XCTAssertFalse(deleted)
+            XCTAssertTrue(deleted)
             XCTAssertEqual(failingRepository.deletedCheckInIDs, [visitID])
             XCTAssertEqual(
                 firstStore.placeVisits.first { $0.serverID == visitID }?.syncState,
@@ -3927,6 +4076,351 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(retryRepository.deletedCheckInIDs, [visitID])
         XCTAssertEqual(
             relaunchedStore.placeVisits.first { $0.serverID == visitID }?.syncState,
+            .tombstoned
+        )
+    }
+
+    func testRemoteCalendarCheckInDeleteIsAcceptedAndDoesNotReappearFromCache() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let userID = "user_current"
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: userID, displayName: "Current", handle: "current")
+            )
+        )
+        let visitedAt = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-07-14T07:00:00Z")
+        )
+        let visiblePlace = makeRemoteCalendarVisiblePlace(
+            owner: store.currentUser,
+            userPlaceID: "up_remote_delete",
+            placeID: "place_remote_delete",
+            name: "Little Bean Cold Brew",
+            status: .been,
+            savedAt: visitedAt,
+            visitedAt: visitedAt
+        )
+        let visitRepository = FakeVisitRepository(
+            visitsByUserPlaceID: [
+                visiblePlace.userPlace.id: [
+                    PlaceVisitResult(
+                        visitID: "visit_remote_delete",
+                        userPlaceID: visiblePlace.userPlace.id,
+                        visitedAt: visitedAt,
+                        note: nil,
+                        ratingScore: 5,
+                        tags: [],
+                        backfilledFromUserPlace: false
+                    )
+                ]
+            ]
+        )
+        let hydrated = await store.refreshRemoteCurrentUserCalendarData(
+            backend: WanderBackend(
+                userPlaceRepository: FakeUserPlaceRepository(
+                    userPlacesByUserID: [userID: [visiblePlace]]
+                ),
+                visitRepository: visitRepository
+            )
+        )
+        XCTAssertTrue(hydrated)
+        XCTAssertEqual(
+            ProfileActivityPresenter.items(
+                visiblePlaces: store.currentUserCalendarProjection.visiblePlaces,
+                visits: store.currentUserCalendarProjection.visits,
+                currentUserID: userID
+            ).count,
+            1
+        )
+
+        let failingRepository = FakeUserPlaceRepository(
+            error: WanderRemoteError.invalidResponse("network down")
+        )
+        let deleted = await store.deleteVisit(
+            visitID: "visit_remote_delete",
+            backend: WanderBackend(userPlaceRepository: failingRepository)
+        )
+
+        XCTAssertTrue(deleted)
+        XCTAssertEqual(failingRepository.deletedCheckInIDs, ["visit_remote_delete"])
+        XCTAssertEqual(
+            store.placeVisits.first { $0.serverID == "visit_remote_delete" }?.syncState,
+            .failed
+        )
+        XCTAssertNotNil(
+            store.placeVisits.first { $0.serverID == "visit_remote_delete" }?.deletedAt
+        )
+        XCTAssertTrue(store.currentUserCalendarProjection.visiblePlaces.isEmpty)
+        XCTAssertTrue(store.currentUserCalendarProjection.visits.isEmpty)
+        XCTAssertTrue(
+            ProfileActivityPresenter.items(
+                visiblePlaces: store.currentUserCalendarProjection.visiblePlaces,
+                visits: store.currentUserCalendarProjection.visits,
+                currentUserID: userID
+            ).isEmpty
+        )
+
+        let deletedParent = try XCTUnwrap(
+            store.userPlaces.first { $0.serverID == visiblePlace.userPlace.serverID }
+        )
+        XCTAssertNotNil(deletedParent.deletedAt)
+        XCTAssertEqual(deletedParent.syncState, .pendingDelete)
+
+        let staleVisiblePlace = makeRemoteCalendarVisiblePlace(
+            owner: store.currentUser,
+            userPlaceID: "up_remote_delete",
+            placeID: "place_remote_delete",
+            name: "Little Bean Cold Brew",
+            status: .been,
+            savedAt: visitedAt,
+            visitedAt: visitedAt
+        )
+        let staleHydrated = await store.refreshRemoteCurrentUserCalendarData(
+            backend: WanderBackend(
+                userPlaceRepository: FakeUserPlaceRepository(
+                    userPlacesByUserID: [userID: [staleVisiblePlace]]
+                ),
+                visitRepository: FakeVisitRepository(
+                    visitsByUserPlaceID: [
+                        staleVisiblePlace.userPlace.id: [
+                            PlaceVisitResult(
+                                visitID: "visit_remote_delete",
+                                userPlaceID: staleVisiblePlace.userPlace.id,
+                                visitedAt: visitedAt,
+                                note: nil,
+                                ratingScore: 5,
+                                tags: [],
+                                backfilledFromUserPlace: false
+                            )
+                        ]
+                    ]
+                )
+            )
+        )
+
+        XCTAssertTrue(staleHydrated)
+        XCTAssertTrue(store.currentUserCalendarProjection.visiblePlaces.isEmpty)
+        XCTAssertTrue(store.currentUserCalendarProjection.visits.isEmpty)
+        XCTAssertTrue(
+            ProfileActivityPresenter.items(
+                visiblePlaces: store.currentUserCalendarProjection.visiblePlaces,
+                visits: store.currentUserCalendarProjection.visits,
+                currentUserID: userID
+            ).isEmpty
+        )
+    }
+
+    func testPendingRemoteDeletesStayShadowedWhenLocalMutationClearsAuthoritativeCalendar() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let userID = "user_current"
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: userID, displayName: "Current", handle: "current")
+            )
+        )
+        let savedAt = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-08-02T18:00:00Z")
+        )
+
+        func serverSnapshot() -> [VisiblePlace] {
+            [
+                makeRemoteCalendarVisiblePlace(
+                    owner: store.currentUser,
+                    userPlaceID: "up_failed_been_delete",
+                    placeID: "place_failed_been_delete",
+                    name: "Previously Deleted Check-in",
+                    status: .been,
+                    savedAt: savedAt,
+                    visitedAt: savedAt
+                ),
+                makeRemoteCalendarVisiblePlace(
+                    owner: store.currentUser,
+                    userPlaceID: "up_failed_wanna_delete",
+                    placeID: "place_failed_wanna_delete",
+                    name: "Previously Deleted Wanna",
+                    status: .wannaGo,
+                    savedAt: savedAt
+                ),
+                makeRemoteCalendarVisiblePlace(
+                    owner: store.currentUser,
+                    userPlaceID: "up_active_been",
+                    placeID: "place_active_been",
+                    name: "Active Check-in",
+                    status: .been,
+                    savedAt: savedAt,
+                    visitedAt: savedAt
+                )
+            ]
+        }
+
+        let initialHydrated = await store.refreshRemoteCurrentUserCalendarData(
+            backend: WanderBackend(
+                userPlaceRepository: FakeUserPlaceRepository(
+                    userPlacesByUserID: [userID: serverSnapshot()]
+                )
+            )
+        )
+        XCTAssertTrue(initialHydrated)
+
+        let failingRepository = FakeUserPlaceRepository(
+            error: WanderRemoteError.invalidResponse("missing delete RPC")
+        )
+        let failedBeenDelete = await store.removeSave(
+            userPlaceID: "up_failed_been_delete",
+            backend: WanderBackend(userPlaceRepository: failingRepository)
+        )
+        let failedWannaDelete = await store.removeSave(
+            userPlaceID: "up_failed_wanna_delete",
+            backend: WanderBackend(userPlaceRepository: failingRepository)
+        )
+        XCTAssertEqual(failedBeenDelete?.syncState, .failed)
+        XCTAssertEqual(failedWannaDelete?.syncState, .failed)
+
+        let rehydrated = await store.refreshRemoteCurrentUserCalendarData(
+            backend: WanderBackend(
+                userPlaceRepository: FakeUserPlaceRepository(
+                    userPlacesByUserID: [userID: serverSnapshot()]
+                )
+            )
+        )
+        XCTAssertTrue(rehydrated)
+        XCTAssertTrue(store.currentUserCalendarProjection.isAuthoritative)
+        XCTAssertEqual(
+            store.currentUserCalendarProjection.profileStats(
+                currentUserID: userID,
+                friends: 0
+            ),
+            ProfileStats(been: 1, checkIns: 1, wanna: 0, friends: 0)
+        )
+
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "unrelated_local_wanna",
+                name: "Unrelated Local Wanna",
+                category: "coffee",
+                latitude: 49.28,
+                longitude: -123.12,
+                confidence: 0.95
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            sourceType: .manual
+        )
+
+        let projection = store.currentUserCalendarProjection
+        XCTAssertFalse(projection.isAuthoritative)
+        XCTAssertEqual(
+            projection.profileStats(currentUserID: userID, friends: 0),
+            ProfileStats(been: 1, checkIns: 1, wanna: 1, friends: 0)
+        )
+        XCTAssertFalse(
+            projection.visiblePlaces.contains {
+                $0.userPlace.id == "up_failed_been_delete"
+                    || $0.userPlace.id == "up_failed_wanna_delete"
+            }
+        )
+    }
+
+    func testFailedRemoteWannaDeletePersistsAcrossRelaunchAndRetries() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let session = AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")
+        let remoteUserPlaceID = "8b567297-6e55-45a4-ae58-79b4288aa0a6"
+        let remotePlaceID = "93722c05-6b0d-4dfe-a687-85d73f8e7aa1"
+
+        do {
+            let firstStore = WanderStore(
+                fixtures: WanderFixtures.empty(),
+                persistence: fixture.persistence
+            )
+            firstStore.apply(authState: .signedIn(session))
+            let remotePlace = VisiblePlace(
+                id: remoteUserPlaceID,
+                place: LocalPlace(
+                    localID: remotePlaceID,
+                    serverID: remotePlaceID,
+                    canonicalName: "Retry Wanna Cafe",
+                    category: "coffee",
+                    latitude: 34.0407,
+                    longitude: -118.2354,
+                    syncState: .synced
+                ),
+                userPlace: LocalUserPlace(
+                    localID: remoteUserPlaceID,
+                    serverID: remoteUserPlaceID,
+                    userID: session.userID,
+                    placeID: remotePlaceID,
+                    status: .wannaGo,
+                    visibility: .followers,
+                    sourceType: "manual",
+                    syncState: .synced
+                ),
+                owner: firstStore.currentUser
+            )
+            await firstStore.refreshRemoteVisiblePlaces(
+                in: MapViewport(
+                    minLatitude: 34,
+                    minLongitude: -119,
+                    maxLatitude: 35,
+                    maxLongitude: -118
+                ),
+                backend: WanderBackend(
+                    placeRepository: FakePlaceRepository(places: [remotePlace])
+                )
+            )
+            XCTAssertTrue(
+                firstStore.currentUserVisiblePlaces.contains {
+                    $0.userPlace.id == remoteUserPlaceID
+                }
+            )
+
+            let failingRepository = FakeUserPlaceRepository(
+                error: WanderRemoteError.invalidResponse("network down")
+            )
+            let removed = await firstStore.removeSave(
+                userPlaceID: remoteUserPlaceID,
+                backend: WanderBackend(userPlaceRepository: failingRepository)
+            )
+
+            XCTAssertEqual(removed?.syncState, .failed)
+            XCTAssertEqual(failingRepository.deletedUserPlaceIDs, [remoteUserPlaceID])
+            XCTAssertEqual(
+                firstStore.userPlaces.first { $0.id == remoteUserPlaceID }?.syncState,
+                .failed
+            )
+            XCTAssertNotNil(
+                firstStore.userPlaces.first { $0.id == remoteUserPlaceID }?.deletedAt
+            )
+            XCTAssertFalse(
+                firstStore.currentUserCalendarProjection.userPlaces.contains {
+                    $0.id == remoteUserPlaceID
+                }
+            )
+        }
+
+        let relaunchedStore = WanderStore(
+            fixtures: WanderFixtures.empty(),
+            persistence: fixture.persistence
+        )
+        relaunchedStore.apply(authState: .signedIn(session))
+        XCTAssertEqual(
+            relaunchedStore.userPlaces.first { $0.id == remoteUserPlaceID }?.syncState,
+            .failed
+        )
+        XCTAssertNotNil(
+            relaunchedStore.userPlaces.first { $0.id == remoteUserPlaceID }?.deletedAt
+        )
+
+        let retryRepository = FakeUserPlaceRepository()
+        let retried = await relaunchedStore.retryPendingUserPlaceDeletes(
+            backend: WanderBackend(userPlaceRepository: retryRepository)
+        )
+
+        XCTAssertEqual(retried, 1)
+        XCTAssertEqual(retryRepository.deletedUserPlaceIDs, [remoteUserPlaceID])
+        XCTAssertEqual(
+            relaunchedStore.userPlaces.first { $0.id == remoteUserPlaceID }?.syncState,
             .tombstoned
         )
     }
@@ -4937,6 +5431,65 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visiblePlace.userPlace.sourceType, AddSourceType.manual.rawValue)
     }
 
+    @MainActor
+    func testCanonicalAddPlaceSubmissionCreatesAnotherVisitForExistingCheckIn() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_add_tab_repeat_visit",
+            name: "Repeat Visit Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let firstSave = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4,
+            visitedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let existingPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
+        )
+        let existingVisit = try XCTUnwrap(store.visits(for: firstSave.userPlaceID).first)
+        let context = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers,
+            currentUserSave: existingPlace,
+            latestVisit: existingVisit
+        ).resolvingExistingSave(selection: .been)
+        let submission = MapPlaceSaveSubmission(
+            context: context,
+            candidate: candidate,
+            status: .been,
+            visibility: .followers,
+            ratingScore: 5,
+            note: "tutorial revisit",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false,
+            visitedAt: Date(timeIntervalSince1970: 1_700_086_400)
+        )
+        let visitCountBeforeSave = store.visits(for: firstSave.userPlaceID).count
+
+        let result = await persistAddPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: nil
+        )
+
+        XCTAssertEqual(result?.userPlaceID, firstSave.userPlaceID)
+        XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
+        XCTAssertEqual(store.visits(for: firstSave.userPlaceID).count, visitCountBeforeSave + 1)
+        XCTAssertEqual(store.visits(for: firstSave.userPlaceID).first?.note, "tutorial revisit")
+    }
+
     func testFollowersAndFollowingUseGraphEdges() {
         let store = makeStore()
 
@@ -5412,7 +5965,25 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
     }
 
-    func testDiscoverUnknownNonemptyQueryDoesNotSilentlyReturnEveryPlace() async {
+    func testDiscoverFreeTextSearchMatchesTrustedPlaceMemory() async {
+        let store = makeStore()
+
+        let results = await store.discover(query: "Circuit Coffee")
+
+        XCTAssertFalse(results.places.isEmpty)
+        XCTAssertTrue(results.places.allSatisfy { $0.place.canonicalName == "Circuit Coffee" })
+    }
+
+    func testTrustedPlaceImmediateAndRefinedFreeTextUseSameOrdering() async {
+        let store = makeStore()
+
+        let immediate = store.searchTrustedPlaces(query: "Circuit Coffee")
+        let refined = await store.discover(query: "Circuit Coffee")
+
+        XCTAssertEqual(immediate.places.map(\.userPlace.id), refined.places.map(\.userPlace.id))
+    }
+
+    func testDiscoverGenuineFreeTextMissDoesNotSilentlyReturnEveryPlace() async {
         let store = makeStore()
 
         let results = await store.discover(query: "teleport me somewhere surprising")
@@ -5733,6 +6304,26 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.profileState(for: "user_maya"))
         XCTAssertEqual(store.attributes(for: "up_remote_maya_maru").map(\.questionKey), ["work_setup"])
         XCTAssertEqual(store.attributes(for: "up_remote_maya_maru")[0].valueJSON, "\"yes\"")
+    }
+
+    func testRemoteViewportFetchReturnsPlacesWithoutReplacingProfileWideCache() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let remotePlace = try XCTUnwrap(store.visiblePlaces().first)
+        let placeRepository = FakePlaceRepository(places: [remotePlace])
+        let backend = WanderBackend(placeRepository: placeRepository)
+        let viewport = MapViewport(
+            minLatitude: 33.9,
+            minLongitude: -118.4,
+            maxLatitude: 34.2,
+            maxLongitude: -118.1
+        )
+        let originalCacheIDs = store.remoteVisiblePlaceCache.map(\.id)
+
+        let places = await store.fetchRemoteViewportPlaces(in: viewport, backend: backend)
+
+        XCTAssertEqual(places?.map(\.id), [remotePlace.id])
+        XCTAssertEqual(placeRepository.viewports, [viewport])
+        XCTAssertEqual(store.remoteVisiblePlaceCache.map(\.id), originalCacheIDs)
     }
 
     func testRemoteSocialGraphHydratesFollowEdgesAndRelationships() async {
@@ -6117,6 +6708,48 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(context.initialAnswers["strenuousness"], Set(["easy"]))
         XCTAssertNil(context.initialAnswers["hike_tags"])
         XCTAssertTrue(context.initialPersonalLabels.isEmpty)
+    }
+
+    func testActivityBookmarkStartsABlankViewerOwnedWannaForm() throws {
+        let store = makeStore()
+        let socialPlace = try XCTUnwrap(
+            store.visiblePlaces().first { $0.owner.id != store.currentUser.id }
+        )
+
+        let context = MapPlaceSaveContext.addWannaVisiblePlace(
+            socialPlace,
+            defaultVisibility: .followers
+        )
+
+        XCTAssertEqual(context.initialStatus, .wannaGo)
+        XCTAssertFalse(context.requiresStatusConfirmation)
+        XCTAssertEqual(context.initialNote, "")
+        XCTAssertNil(context.initialRatingScore)
+        XCTAssertNil(context.initialPlannedDate)
+        XCTAssertTrue(context.initialAnswers.isEmpty)
+        XCTAssertTrue(context.initialPersonalLabels.isEmpty)
+        XCTAssertNil(context.initialCuisine)
+    }
+
+    func testRemovingActivityWannaOnlyDeletesTheViewerOwnedRecord() async throws {
+        let store = makeStore()
+        let socialPlace = try XCTUnwrap(
+            store.visiblePlaces().first { $0.owner.id != store.currentUser.id }
+        )
+        let sourceUserPlaceID = socialPlace.userPlace.id
+        let sourceOwnerID = socialPlace.owner.id
+        let ownSave = store.saveVisiblePlace(socialPlace, status: .wannaGo)
+
+        XCTAssertEqual(store.activityBookmarkState(for: socialPlace), .wanna)
+        _ = await store.removeActivityWanna(for: socialPlace, backend: nil)
+
+        XCTAssertEqual(store.activityBookmarkState(for: socialPlace), .notSaved)
+        XCTAssertTrue(store.visiblePlaces().contains {
+            $0.userPlace.id == sourceUserPlaceID && $0.owner.id == sourceOwnerID
+        })
+        XCTAssertFalse(store.currentUserVisiblePlaces.contains {
+            $0.userPlace.id == ownSave.userPlaceID
+        })
     }
 
     func testRemoteOwnPlaceSaveMarksLocalRowsSynced() async {
@@ -6607,6 +7240,201 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visitRepository.uploads.first?.bucket, "visit-photos")
         XCTAssertTrue(visitRepository.uploads.first?.path.contains("/\(uploadedPhoto?.serverID ?? "")") == true)
         XCTAssertEqual(uploadedPhoto?.remoteURLString?.hasPrefix("https://example.supabase.co/storage/v1/object/public/visit-photos/"), true)
+    }
+
+    func testVisitPhotoBatchFlushesAllLocalReferencesBeforeReturning() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("visit-photo-batch-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let persistence = WanderStorePersistence.coalescingFile(
+            url: directory.appendingPathComponent("store.json")
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_photo_batch",
+                name: "Batch Photo Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "four photos",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        let inputs = (1...4).map { index in
+            LocalVisitPhotoInput(
+                localAssetRef: "local_file:photo-\(index).jpg",
+                contentType: "image/jpeg",
+                byteSize: index * 1_000,
+                width: 1200,
+                height: 900
+            )
+        }
+
+        let photos = store.createVisitPhotos(visitID: visit.id, inputs: inputs)
+        store.flushPersistence()
+
+        let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: persistence)
+        let relaunchedVisit = try XCTUnwrap(relaunchedStore.visits(for: result.userPlaceID).first)
+        XCTAssertEqual(photos.count, 4)
+        XCTAssertEqual(
+            relaunchedStore.photos(for: relaunchedVisit.id).compactMap(\.localAssetRef),
+            inputs.compactMap(\.localAssetRef)
+        )
+    }
+
+    func testVisitPhotoRetryFinalizesUploadedBytesWithoutUploadingAgain() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_remote_photo_retry",
+                syncState: .synced,
+                placeID: "place_remote_photo_retry"
+            )
+        )
+        let visitRepository = FakeVisitRepository(failingPhotoMetadataCallNumbers: [2])
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            visitRepository: visitRepository
+        )
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_photo_finalize_retry",
+                name: "Finalize Retry Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "retry final metadata",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        _ = await store.syncPendingVisits(backend: backend)
+        let photo = try XCTUnwrap(
+            store.createVisitPhoto(
+                visitID: visit.id,
+                localAssetRef: "local_file:finalize-retry.jpg",
+                contentType: "image/jpeg",
+                byteSize: 3,
+                width: 12,
+                height: 9
+            )
+        )
+
+        _ = await store.uploadVisitPhoto(
+            photoID: photo.id,
+            data: Data([0xFF, 0xD8, 0xFF]),
+            backend: backend
+        )
+
+        XCTAssertEqual(photo.uploadState, .uploaded)
+        XCTAssertEqual(photo.syncState, .failed)
+        XCTAssertEqual(visitRepository.uploads.count, 1)
+
+        visitRepository.clearPhotoMetadataFailures()
+        let retriedCount = await store.retryPendingVisitPhotoUploads(backend: backend)
+
+        XCTAssertEqual(retriedCount, 1)
+        XCTAssertEqual(photo.uploadState, .uploaded)
+        XCTAssertEqual(photo.syncState, .synced)
+        XCTAssertEqual(visitRepository.uploads.count, 1, "Finalization retry must not upload the same bytes twice")
+        XCTAssertEqual(
+            visitRepository.photoEvents,
+            ["metadata:pending_upload", "upload", "metadata:uploaded", "metadata:uploaded"]
+        )
+    }
+
+    func testConcurrentVisitPhotoRetriesShareSingleFlightAndDrainNewPhotos() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let userPlaceRepository = FakeUserPlaceRepository(
+            result: SaveResult(
+                userPlaceID: "up_remote_photo_single_flight",
+                syncState: .synced,
+                placeID: "place_remote_photo_single_flight"
+            )
+        )
+        let visitRepository = FakeVisitRepository(isPhotoMetadataSuspended: true)
+        let backend = WanderBackend(
+            userPlaceRepository: userPlaceRepository,
+            visitRepository: visitRepository
+        )
+        let result = store.saveCandidate(
+            PlaceCandidate(
+                id: "mk_photo_single_flight",
+                name: "Single Flight Photo Cafe",
+                category: "coffee",
+                latitude: 34.045,
+                longitude: -118.235,
+                confidence: 0.92
+            ),
+            status: .been,
+            visibility: .followers,
+            note: "one upload task",
+            sourceType: .manual,
+            ratingScore: 4
+        )
+        let visit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        _ = await store.syncPendingVisits(backend: backend)
+        let photo = try XCTUnwrap(
+            store.createVisitPhoto(
+                visitID: visit.id,
+                remoteURLString: "https://example.supabase.co/visit-photos/already-uploaded.jpg",
+                contentType: "image/jpeg",
+                byteSize: 3,
+                width: 12,
+                height: 9
+            )
+        )
+
+        let first = Task { @MainActor in
+            await store.retryPendingVisitPhotoUploads(backend: backend)
+        }
+        for _ in 0..<20 where visitRepository.upsertedPhotoDrafts.isEmpty {
+            await Task.yield()
+        }
+        XCTAssertEqual(visitRepository.upsertedPhotoDrafts.count, 1)
+
+        let secondPhoto = try XCTUnwrap(
+            store.createVisitPhoto(
+                visitID: visit.id,
+                remoteURLString: "https://example.supabase.co/visit-photos/queued-during-upload.jpg",
+                contentType: "image/jpeg",
+                byteSize: 3,
+                width: 12,
+                height: 9
+            )
+        )
+
+        let second = Task { @MainActor in
+            await store.retryPendingVisitPhotoUploads(backend: backend)
+        }
+        for _ in 0..<5 {
+            await Task.yield()
+        }
+        XCTAssertEqual(visitRepository.upsertedPhotoDrafts.count, 1)
+
+        visitRepository.finishPhotoMetadata()
+        let firstCount = await first.value
+        let secondCount = await second.value
+
+        XCTAssertEqual(firstCount, 2)
+        XCTAssertEqual(secondCount, 2)
+        XCTAssertEqual(photo.syncState, .synced)
+        XCTAssertEqual(secondPhoto.syncState, .synced)
+        XCTAssertEqual(visitRepository.upsertedPhotoDrafts.count, 2)
+        XCTAssertTrue(visitRepository.uploads.isEmpty)
     }
 
     func testRemoteOwnPlaceSaveRefreshesVisiblePlaceCache() async {
@@ -7324,6 +8152,61 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertFalse(store.setPlaceListCollaborators(listID: collabList.id, collaboratorUserIDs: ["user_maya"]))
         XCTAssertEqual(store.collaborators(for: collabList).map(\.id), [store.currentUser.id])
+    }
+
+    func testOnlyCollaboratorCanLeaveSharedListLocally() async {
+        let store = makeStore()
+        let collaboratorList = store.placeLists.first { $0.id == "list_launch" }!
+        let ownedList = store.placeLists.first { $0.id == "list_laptop" }!
+        let friendList = store.placeLists.first { $0.id == "list_maya_sunset" }!
+
+        XCTAssertTrue(store.canLeave(collaboratorList))
+        XCTAssertFalse(store.canLeave(ownedList))
+        XCTAssertFalse(store.canLeave(friendList))
+
+        let didLeave = await store.leavePlaceList(collaboratorList, backend: nil)
+
+        XCTAssertTrue(didLeave)
+
+        XCTAssertFalse(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == collaboratorList.id })
+        XCTAssertNotNil(
+            store.placeListMembers.first {
+                $0.listID == collaboratorList.id && $0.userID == store.currentUser.id
+            }?.deletedAt
+        )
+    }
+
+    func testRemoteCollaboratorLeaveUsesBackendAndMovesFollowerVisibleListToFriends() async {
+        let (store, collaboratorList) = makeRemoteCollaboratorListStore()
+        let repository = FakePlaceListRepository()
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let didLeave = await store.leavePlaceList(collaboratorList, backend: backend)
+
+        XCTAssertTrue(didLeave)
+        XCTAssertEqual(repository.leftListIDs, [collaboratorList.id])
+        XCTAssertTrue(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .mine).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.visiblePlaceLists(scope: .collabs).contains { $0.id == collaboratorList.id })
+        XCTAssertTrue(store.visiblePlaceLists(scope: .friends).contains { $0.id == collaboratorList.id })
+        XCTAssertFalse(store.canLeave(collaboratorList))
+        XCTAssertFalse(store.canAddPlaces(to: collaboratorList))
+        XCTAssertNil(store.lastRemoteError)
+    }
+
+    func testFailedRemoteCollaboratorLeaveKeepsListVisible() async {
+        let (store, collaboratorList) = makeRemoteCollaboratorListStore()
+        let repository = FakePlaceListRepository(leaveError: TestError.expected)
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let didLeave = await store.leavePlaceList(collaboratorList, backend: backend)
+
+        XCTAssertFalse(didLeave)
+        XCTAssertEqual(repository.leftListIDs, [collaboratorList.id])
+        XCTAssertTrue(store.visiblePlaceLists.contains { $0.id == collaboratorList.id })
+        XCTAssertNotNil(store.lastRemoteError)
     }
 
     func testListPersistenceRestoresListsAndAutoSaveSetting() {
@@ -8480,6 +9363,8 @@ private final class FakeVisitRepository: VisitRepository {
     private let error: Error?
     private let failingUserPlaceIDs: Set<String>
     private var suspendedUserPlaceIDs: Set<String>
+    private var failingPhotoMetadataCallNumbers: Set<Int>
+    private var isPhotoMetadataSuspended: Bool
     private(set) var visitRequests: [String] = []
     private(set) var upsertedVisitDrafts: [PlaceVisitDraft] = []
     private(set) var deletedVisitIDs: [String] = []
@@ -8493,12 +9378,16 @@ private final class FakeVisitRepository: VisitRepository {
         visitsByUserPlaceID: [String: [PlaceVisitResult]] = [:],
         error: Error? = nil,
         failingUserPlaceIDs: Set<String> = [],
-        suspendedUserPlaceIDs: Set<String> = []
+        suspendedUserPlaceIDs: Set<String> = [],
+        failingPhotoMetadataCallNumbers: Set<Int> = [],
+        isPhotoMetadataSuspended: Bool = false
     ) {
         self.visitsByUserPlaceID = visitsByUserPlaceID
         self.error = error
         self.failingUserPlaceIDs = failingUserPlaceIDs
         self.suspendedUserPlaceIDs = suspendedUserPlaceIDs
+        self.failingPhotoMetadataCallNumbers = failingPhotoMetadataCallNumbers
+        self.isPhotoMetadataSuspended = isPhotoMetadataSuspended
     }
 
     func visits(for userPlaceID: String) async throws -> [PlaceVisitResult] {
@@ -8553,6 +9442,13 @@ private final class FakeVisitRepository: VisitRepository {
     func upsertPhotoMetadata(_ draft: VisitPhotoDraft) async throws -> VisitPhotoResult {
         upsertedPhotoDrafts.append(draft)
         photoEvents.append("metadata:\(draft.uploadState.rawValue)")
+        let callNumber = upsertedPhotoDrafts.count
+        while isPhotoMetadataSuspended {
+            await Task.yield()
+        }
+        if failingPhotoMetadataCallNumbers.contains(callNumber) {
+            throw error ?? TestError.expected
+        }
         if let error {
             throw error
         }
@@ -8570,6 +9466,14 @@ private final class FakeVisitRepository: VisitRepository {
             sortOrder: draft.sortOrder,
             uploadState: draft.uploadState
         )
+    }
+
+    func clearPhotoMetadataFailures() {
+        failingPhotoMetadataCallNumbers = []
+    }
+
+    func finishPhotoMetadata() {
+        isPhotoMetadataSuspended = false
     }
 
     func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws -> URL {
@@ -8747,10 +9651,12 @@ private final class FakePlaceListRepository: PlaceListRepository {
     private let upsertResults: [String]
     private let itemResult: String
     private let upsertDelayNanoseconds: UInt64
+    private let leaveError: Error?
     private(set) var visibleListRequestCount = 0
     private(set) var detailListIDs: [String] = []
     private(set) var upsertedDrafts: [PlaceListUpsertDraft] = []
     private(set) var deletedListIDs: [String] = []
+    private(set) var leftListIDs: [String] = []
     private(set) var collaboratorRequests: [CollaboratorRequest] = []
     private(set) var itemRequests: [ItemRequest] = []
     private(set) var removedItems: [(listID: String, itemID: String)] = []
@@ -8762,7 +9668,8 @@ private final class FakePlaceListRepository: PlaceListRepository {
         upsertResult: String = "11111111-1111-4111-8111-111111111111",
         upsertResults: [String]? = nil,
         itemResult: String = "22222222-2222-4222-8222-222222222222",
-        upsertDelayNanoseconds: UInt64 = 0
+        upsertDelayNanoseconds: UInt64 = 0,
+        leaveError: Error? = nil
     ) {
         self.visibleListsResult = visibleLists
         self.detailsByListID = details
@@ -8770,6 +9677,7 @@ private final class FakePlaceListRepository: PlaceListRepository {
         self.upsertResults = upsertResults ?? [upsertResult]
         self.itemResult = itemResult
         self.upsertDelayNanoseconds = upsertDelayNanoseconds
+        self.leaveError = leaveError
     }
 
     func setVisibleLists(_ visibleLists: [RemotePlaceListSummary]) {
@@ -8799,6 +9707,13 @@ private final class FakePlaceListRepository: PlaceListRepository {
 
     func delete(listID: String) async throws {
         deletedListIDs.append(listID)
+    }
+
+    func leave(listID: String) async throws {
+        leftListIDs.append(listID)
+        if let leaveError {
+            throw leaveError
+        }
     }
 
     func setCollaborators(listID: String, userIDs: [String]) async throws {

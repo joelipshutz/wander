@@ -18,12 +18,18 @@ struct OnboardingLocalState: Codable, Equatable {
     var nextStep: OnboardingStep
     var isComplete: Bool
     var needsServerCompletion: Bool
+    var isFirstVisitWalkthroughEligible: Bool? = nil
 
     static let fresh = OnboardingLocalState(
         nextStep: .identity,
         isComplete: false,
-        needsServerCompletion: false
+        needsServerCompletion: false,
+        isFirstVisitWalkthroughEligible: nil
     )
+
+    var shouldEnableFirstVisitWalkthrough: Bool {
+        isFirstVisitWalkthroughEligible == true
+    }
 }
 
 @MainActor
@@ -48,10 +54,15 @@ final class OnboardingCompletionStore {
         save(value, for: userID)
     }
 
-    func markComplete(for userID: String, needsServerCompletion: Bool) {
+    func markComplete(
+        for userID: String,
+        needsServerCompletion: Bool,
+        firstVisitWalkthroughEligible: Bool
+    ) {
         var value = state(for: userID)
         value.isComplete = true
         value.needsServerCompletion = needsServerCompletion
+        value.isFirstVisitWalkthroughEligible = firstVisitWalkthroughEligible
         save(value, for: userID)
     }
 
@@ -59,6 +70,12 @@ final class OnboardingCompletionStore {
         var value = state(for: userID)
         value.isComplete = true
         value.needsServerCompletion = false
+        save(value, for: userID)
+    }
+
+    func retireFirstVisitWalkthrough(for userID: String) {
+        var value = state(for: userID)
+        value.isFirstVisitWalkthroughEligible = false
         save(value, for: userID)
     }
 
@@ -80,9 +97,14 @@ enum AppEntryState: Equatable {
     case launching
     case signedOut
     case onboarding(session: AuthSession, step: OnboardingStep)
-    case ready(session: AuthSession)
+    case ready(session: AuthSession, firstVisitWalkthroughEligible: Bool)
     case recoverableFailure(session: AuthSession, message: String, canContinueOffline: Bool)
     case unavailable(String)
+
+    var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
 }
 
 enum AppEntryStateResolver {
@@ -92,9 +114,41 @@ enum AppEntryStateResolver {
         remoteProfile: LocalProfile?
     ) -> AppEntryState {
         if localState.isComplete || remoteProfile?.onboardingCompletedAt != nil {
-            return .ready(session: session)
+            return .ready(
+                session: session,
+                firstVisitWalkthroughEligible: localState.shouldEnableFirstVisitWalkthrough
+            )
         }
         return .onboarding(session: session, step: localState.nextStep)
+    }
+
+    static func offlineState(
+        session: AuthSession,
+        localState: OnboardingLocalState,
+        message: String
+    ) -> AppEntryState {
+        if localState.isComplete {
+            return .ready(
+                session: session,
+                firstVisitWalkthroughEligible: localState.shouldEnableFirstVisitWalkthrough
+            )
+        }
+        return .recoverableFailure(
+            session: session,
+            message: message,
+            canContinueOffline: canContinueOffline(session: session, localState: localState)
+        )
+    }
+
+    private static func canContinueOffline(
+        session: AuthSession,
+        localState: OnboardingLocalState
+    ) -> Bool {
+        localState.nextStep != .identity
+            || ProfileIdentityDraft(
+                displayName: session.displayName ?? "",
+                handle: session.handle ?? ""
+            ).isValid
     }
 }
 
@@ -122,8 +176,10 @@ final class AppEntryCoordinator: ObservableObject {
         self.analytics = analytics
     }
 
-    func start() async {
-        state = .launching
+    func start(preservingReadyState: Bool = false) async {
+        if !preservingReadyState || !state.isReady {
+            state = .launching
+        }
         await auth.refreshSession()
         await resolve(auth.state, forceRemote: false)
     }
@@ -137,11 +193,12 @@ final class AppEntryCoordinator: ObservableObject {
 
     func retry() {
         switch state {
-        case .recoverableFailure(let session, _, _):
+        case .recoverableFailure:
             state = .launching
             resolutionTask?.cancel()
             resolutionTask = Task { [weak self] in
-                await self?.resolve(.signedIn(session), forceRemote: true)
+                guard let self else { return }
+                await self.start()
             }
         case .unavailable:
             state = .launching
@@ -156,16 +213,32 @@ final class AppEntryCoordinator: ObservableObject {
 
     func continueOffline() {
         guard case .recoverableFailure(let session, _, true) = state else { return }
-        completionStore.markComplete(for: session.userID, needsServerCompletion: true)
+        completionStore.markComplete(
+            for: session.userID,
+            needsServerCompletion: true,
+            firstVisitWalkthroughEligible: false
+        )
         analytics.identify(userID: session.userID)
-        state = .ready(session: session)
+        state = .ready(session: session, firstVisitWalkthroughEligible: false)
     }
 
     func completeOnboarding(for session: AuthSession, serverConfirmed: Bool) {
-        completionStore.markComplete(for: session.userID, needsServerCompletion: !serverConfirmed)
+        completionStore.markComplete(
+            for: session.userID,
+            needsServerCompletion: !serverConfirmed,
+            firstVisitWalkthroughEligible: true
+        )
         analytics.identify(userID: session.userID)
         analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingCompleted, properties: [:]))
-        state = .ready(session: session)
+        state = .ready(session: session, firstVisitWalkthroughEligible: true)
+    }
+
+    func completeFirstVisitWalkthrough(for session: AuthSession) {
+        completionStore.retireFirstVisitWalkthrough(for: session.userID)
+        guard case .ready(let readySession, _) = state,
+              readySession.userID == session.userID
+        else { return }
+        state = .ready(session: session, firstVisitWalkthroughEligible: false)
     }
 
     func saveProgress(_ step: OnboardingStep, for session: AuthSession) {
@@ -190,6 +263,14 @@ final class AppEntryCoordinator: ObservableObject {
             state = .signedOut
         case .unavailable(let message):
             state = .unavailable(message)
+        case .offline(let session, let message):
+            let local = completionStore.state(for: session.userID)
+            resolvedUserID = session.userID
+            state = AppEntryStateResolver.offlineState(
+                session: session,
+                localState: local,
+                message: message
+            )
         case .signedIn(let session):
             guard auth.isSessionValidated else {
                 state = .launching
@@ -199,7 +280,10 @@ final class AppEntryCoordinator: ObservableObject {
             if local.isComplete && !forceRemote {
                 resolvedUserID = session.userID
                 analytics.identify(userID: session.userID)
-                state = .ready(session: session)
+                state = .ready(
+                    session: session,
+                    firstVisitWalkthroughEligible: local.shouldEnableFirstVisitWalkthrough
+                )
                 if local.needsServerCompletion {
                     Task { [weak self] in await self?.retryServerCompletion(for: session) }
                 }

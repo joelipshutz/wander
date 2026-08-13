@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
 enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case add
     case authGate
     case nativeAuth
     case initialPresentation
+    case profileSettings
     case sharedProfile
 }
 
@@ -28,10 +30,10 @@ private struct SharedPlaceImportDrainNotice: Identifiable {
     var title: String {
         if report.importedOrDuplicateBatchCount > 0,
            report.failedEnvelopeCount + report.quarantinedEnvelopeCount + report.expiredEnvelopeCount > 0 {
-            return "Some shared places were added"
+            return "Some shared places were captured"
         }
         if report.importedOrDuplicateBatchCount > 0 {
-            return "Shared places added"
+            return "Shared places captured"
         }
         return "Shared import needs attention"
     }
@@ -40,12 +42,12 @@ private struct SharedPlaceImportDrainNotice: Identifiable {
         var parts: [String] = []
         if report.importedBatchCount > 0 {
             parts.append(
-                "\(report.importedBatchCount) import\(report.importedBatchCount == 1 ? "" : "s") added to your inbox."
+                "\(report.importedBatchCount) import\(report.importedBatchCount == 1 ? " is" : "s are") ready to review."
             )
         }
         if report.duplicateBatchCount > 0 {
             parts.append(
-                "\(report.duplicateBatchCount) import\(report.duplicateBatchCount == 1 ? " was" : "s were") already in your inbox."
+                "\(report.duplicateBatchCount) import\(report.duplicateBatchCount == 1 ? " was" : "s were") already captured."
             )
         }
         let unavailableCount = report.failedEnvelopeCount
@@ -252,7 +254,7 @@ struct WanderDeepLinkPresentationRegistry {
     }
 }
 
-private struct WanderRootPresentationLifecycle<Content: View>: View {
+struct WanderRootPresentationLifecycle<Content: View>: View {
     let surface: WanderDeepLinkPresentationSurface
     let onPresent: (WanderDeepLinkPresentationToken) -> Void
     let onDismiss: (WanderDeepLinkPresentationToken) -> Void
@@ -317,13 +319,20 @@ struct WanderRootView: View {
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
+    @State private var restoredPlaceSaveDraftOwnerID: String?
+    @State private var interruptedSaveRecoveryMessage: String?
+    @State private var didApplyWalkthroughLaunchConfiguration = false
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
+    @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
+    @StateObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @StateObject private var activityNavigation = ActivityNavigationCoordinator()
     @StateObject private var controlNavigationCenter = WanderControlNavigationCenter.shared
     private let fixtureMode: WanderFixtureMode
     private let isSessionValidated: Bool
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
+    private let analytics: AnalyticsClient
 
     init(
         initialTab: WanderTab? = nil,
@@ -331,16 +340,20 @@ struct WanderRootView: View {
         initialSharedProfileRoute: SharedProfileRoute? = nil,
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
+        isFirstVisitWalkthroughEligible: Bool = false,
+        onFirstVisitWalkthroughCompleted: @escaping () -> Void = {},
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
         parser: any LLMFilterParser = DeterministicFilterParser()
     ) {
         let fixtureMode = Self.resolvedFixtureMode()
+        let launchArguments = ProcessInfo.processInfo.arguments
         self.fixtureMode = fixtureMode
         self.isSessionValidated = isSessionValidated
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
+        self.analytics = analytics
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
@@ -358,10 +371,25 @@ struct WanderRootView: View {
         )
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
-        _addSheetDetent = State(
-            initialValue: AddSheetLayout.restingDetent(
-                hasPendingImports: importStore.summary.hasPendingImports
+        _placeSaveDraftStore = StateObject(
+            wrappedValue: PlaceSaveDraftStore(
+                persistence: fixtureMode == .empty ? .live : .ephemeral
             )
+        )
+        _walkthroughs = StateObject(
+            wrappedValue: FirstVisitWalkthroughCoordinator(
+                isEnabled: (
+                    fixtureMode == .empty && isFirstVisitWalkthroughEligible
+                ) || launchArguments.contains("-WanderEnableWalkthroughs"),
+                onCompleted: onFirstVisitWalkthroughCompleted
+            )
+        )
+        _addSheetDetent = State(
+            initialValue: launchArguments.contains("-WanderOpenImportHub")
+                ? .large
+                : AddSheetLayout.restingDetent(
+                    hasPendingImports: importStore.summary.hasPendingImports
+                )
         )
     }
 
@@ -374,37 +402,65 @@ struct WanderRootView: View {
             MapScreen(
                 presentationResetRequest: presentationResetRequest,
                 searchLaunchRequest: mapSearchLaunchRequest,
-                onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest
+                onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
+                onAdd: presentAddSheet
             )
-                .tabItem { Label(WanderTab.map.title, systemImage: WanderTab.map.systemImage) }
+                .tabItem { tabItemLabel(for: .map) }
                 .tag(WanderTab.map)
 
-            FeedScreen()
-                .tabItem { Label(WanderTab.discover.title, systemImage: WanderTab.discover.systemImage) }
+            FeedScreen(onAdd: presentAddSheet)
+                .tabItem { tabItemLabel(for: .discover) }
                 .tag(WanderTab.discover)
 
-            Color.clear
-                .tabItem { Label(WanderTab.add.title, systemImage: WanderTab.add.systemImage) }
-                .tag(WanderTab.add)
-
             ListsScreen()
-                .tabItem { Label(WanderTab.lists.title, systemImage: WanderTab.lists.systemImage) }
+                .tabItem { tabItemLabel(for: .lists) }
                 .tag(WanderTab.lists)
 
             ProfileScreen(
                 visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
                 presentationResetRequest: presentationResetRequest,
                 calendarLaunchRequest: profileCalendarLaunchRequest,
-                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest
+                onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
+                onSettingsPresentation: handleDeepLinkPresentation,
+                onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
+                onSettingsDidDismiss: {
+                    handleDeepLinkPresentationDismissal(of: .profileSettings)
+                }
             ) {
                 selectedTab = .discover
             }
-                .tabItem { Label(WanderTab.profile.title, systemImage: WanderTab.profile.systemImage) }
+                .tabItem { tabItemLabel(for: .profile) }
                 .tag(WanderTab.profile)
         }
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
+        .background {
+            WanderNativeTabTouchObserver(tabs: WanderTab.primaryTabs)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
         .environmentObject(store)
+        .environmentObject(walkthroughs)
+        .environmentObject(activityNavigation)
+        .onChange(of: activityNavigation.commentsRoute?.id) { _, requestID in
+            if requestID != nil {
+                selectedTab = .discover
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Color.clear
+                .frame(height: walkthroughTabBarTargetHeight)
+                .offset(y: walkthroughTabBarTargetVerticalOffset)
+                .contentShape(Rectangle())
+                .allowsHitTesting(false)
+                .walkthroughTarget(.mapTabs)
+                .padding(.horizontal, walkthroughTabBarTargetHorizontalInset)
+        }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
+        .walkthroughLaunchLessonOverlay(
+            walkthroughs,
+            onOpenImport: presentWalkthroughImportHub
+        )
         .overlay {
             GeometryReader { proxy in
                 if let invitation = sharedVisitBannerInvitation {
@@ -440,8 +496,23 @@ struct WanderRootView: View {
         }
     }
 
+    private func tabItemLabel(for tab: WanderTab) -> some View {
+        Label {
+            Text(tab.title)
+        } icon: {
+            Image(
+                uiImage: tab.tabBarImage(
+                    isSelected: selectedTab == tab
+                )
+            )
+        }
+    }
+
     private var presentedRoot: some View {
         tabRoot
+        .walkthroughPresenterScrim(
+            isPresented: isPresentingAdd && shouldDimBehindAddWalkthrough
+        )
         .sheet(isPresented: $isPresentingAdd, onDismiss: handleAddSheetDismissal) {
             WanderRootPresentationLifecycle(
                 surface: .add,
@@ -450,6 +521,7 @@ struct WanderRootView: View {
             ) {
                 AddScreen(
                     importStore: importStore,
+                    placeSaveDraftStore: placeSaveDraftStore,
                     resetToken: addTabResetToken,
                     selectedDetent: $addSheetDetent,
                     launchRequest: addLaunchRequest,
@@ -460,6 +532,7 @@ struct WanderRootView: View {
                     .environmentObject(store)
                     .environmentObject(auth)
                     .environmentObject(backend)
+                    .environmentObject(walkthroughs)
                     .presentationDetents(
                         AddSheetLayout.detents(
                         hasPendingImports: importStore.summary.hasPendingImports
@@ -470,6 +543,10 @@ struct WanderRootView: View {
                     .presentationCornerRadius(28)
                     .presentationBackground(WanderTheme.surfaceBone.color)
                     .presentationContentInteraction(.resizes)
+                    .interactiveDismissDisabled(
+                        walkthroughs.activeSurface == .add
+                            || walkthroughs.activeSurface == .saveFlow
+                    )
             }
         }
         .sheet(
@@ -524,6 +601,11 @@ struct WanderRootView: View {
         }
     }
 
+    private var shouldDimBehindAddWalkthrough: Bool {
+        walkthroughs.activeSurface == .add
+            || walkthroughs.activeSurface == .saveFlow
+    }
+
     private var lifecycleRoot: some View {
         presentedRoot
         .task(id: isSessionValidated) {
@@ -531,6 +613,10 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
                 return
             }
+            if let userID = auth.state.session?.userID {
+                importStore.bind(to: userID)
+            }
+            restorePlaceSaveDraftIfNeeded()
             seedSharedVisitBannerTracker()
             queueSaveStreakCelebration(store.saveStreakCelebration)
             drainSharedPlaceImports()
@@ -543,11 +629,7 @@ struct WanderRootView: View {
             applyAuthStateIfNeeded(auth.state)
             await refreshWannaGoReminders(for: auth.state)
             guard !Task.isCancelled, isSessionValidated else { return }
-            while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo(
-                for: store.currentUser.id
-            ) {
-                pushNotifications.handleNotificationResponse(userInfo: pendingUserInfo)
-            }
+            drainPendingNotificationResponses()
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didRegisterForRemoteNotifications)) { notification in
             guard isSessionValidated,
@@ -562,14 +644,12 @@ struct WanderRootView: View {
             pushNotifications.handleRegistrationFailure(error)
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveNotificationResponse)) { notification in
-            guard isSessionValidated,
-                  let userInfo = WanderAppDelegate.takePendingNotificationUserInfo(
-                      for: store.currentUser.id
-                  )
-                ?? notification.userInfo?[WanderAppDelegate.userInfoKey] as? [AnyHashable: Any]
-            else { return }
-            pushNotifications.handleNotificationResponse(userInfo: userInfo)
-            scheduleSignedInMaintenance(for: auth.state)
+            #if DEBUG
+            WanderDebugLog.remote.debug("root received notification response session_validated=\(isSessionValidated, privacy: .public)")
+            #endif
+            let fallbackUserInfo = notification.userInfo?[WanderAppDelegate.userInfoKey]
+                as? [AnyHashable: Any]
+            drainPendingNotificationResponses(fallbackUserInfo: fallbackUserInfo)
         }
         .onReceive(NotificationCenter.default.publisher(for: WanderAppDelegate.didReceiveRemoteNotification)) { _ in
             guard isSessionValidated else { return }
@@ -580,11 +660,27 @@ struct WanderRootView: View {
     private var authObservedRoot: some View {
         lifecycleRoot
         .onChange(of: pushNotifications.navigationRequest) { _, request in
+            #if DEBUG
+            WanderDebugLog.remote.debug("root observed notification navigation request destination=\(String(describing: request?.destination), privacy: .public) session_validated=\(isSessionValidated, privacy: .public)")
+            #endif
             guard isSessionValidated, let request else { return }
             routeNotification(request)
         }
         .onChange(of: auth.state) { _, state in
+            if let userID = state.session?.userID {
+                importStore.bind(to: userID)
+            }
+            if !state.isSignedIn {
+                placeSaveDraftStore.clear()
+                restoredPlaceSaveDraftOwnerID = nil
+            }
             applyAuthStateIfNeeded(state)
+            if isSessionValidated {
+                configureWalkthroughsForCurrentUser()
+            }
+            if state.isSignedIn {
+                drainSharedPlaceImports()
+            }
             publishWidgetSnapshot()
             Task {
                 await refreshWannaGoReminders(for: state)
@@ -607,6 +703,20 @@ struct WanderRootView: View {
         .onChange(of: store.saveStreakCelebration) { _, celebration in
             guard isSessionValidated else { return }
             queueSaveStreakCelebration(celebration)
+            if let celebration {
+                pushNotifications.recordSaveCompletedAfterReminderOpen(
+                    userID: store.currentUser.id,
+                    status: celebration.status,
+                    streakCount: celebration.streakCount,
+                    savedAt: celebration.saveDate
+                )
+            }
+            Task {
+                await pushNotifications.reconcileSaveStreakReminder(
+                    store.saveStreakSummary,
+                    cancelledBySaveStatus: celebration?.status
+                )
+            }
         }
         .onChange(of: store.presentationRevision) { _, _ in
             guard isSessionValidated else { return }
@@ -648,7 +758,11 @@ struct WanderRootView: View {
             handleControlNavigationRequestIfReady(request)
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                placeSaveDraftStore.flush()
+            }
             guard phase == .active, isSessionValidated else { return }
+            drainPendingNotificationResponses()
             drainSharedPlaceImports()
             scheduleSignedInMaintenance(for: auth.state)
             publishWidgetSnapshot()
@@ -660,17 +774,41 @@ struct WanderRootView: View {
         .modifier(
             SharedPlaceImportAlertModifier(
                 notice: $sharedPlaceImportNotice,
-                onReview: presentSharedPlaceImportReview
+                onReview: presentSharedPlaceImportReviewFromNotice
             )
         )
+        .alert(
+            "Saved to your map",
+            isPresented: Binding(
+                get: { interruptedSaveRecoveryMessage != nil },
+                set: { if !$0 { interruptedSaveRecoveryMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                interruptedSaveRecoveryMessage = nil
+            }
+        } message: {
+            Text(interruptedSaveRecoveryMessage ?? "")
+        }
         .onChange(of: isSessionValidated, initial: true) { _, isValidated in
             if isValidated {
+                configureWalkthroughsForCurrentUser()
+                drainPendingNotificationResponses()
                 handleControlNavigationRequestIfReady(
                     controlNavigationCenter.pendingRequest
                 )
             } else {
                 cancelSignedInMaintenance()
             }
+        }
+        .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
+            if !isPresented {
+                walkthroughs.activate(walkthroughSurface(for: selectedTab))
+            }
+        }
+        .onChange(of: walkthroughs.requestedSurface) { _, surface in
+            guard let surface else { return }
+            routeWalkthrough(to: surface)
         }
         .onDisappear(perform: handleRootDisappear)
     }
@@ -680,15 +818,78 @@ struct WanderRootView: View {
             selectedTab
         } set: { newTab in
             if newTab == .add {
-                store.saveFlowDidPresent(.addSheet)
-                addTabResetToken = UUID()
-                addLaunchRequest = nil
-                addSheetDetent = addSheetRestingDetent
-                isPresentingAdd = true
+                presentAddSheet()
             } else {
+                walkthroughs.perform(.mapTabs)
                 selectedTab = newTab
+                presentLaunchLessonIfAppropriate()
+                walkthroughs.activate(walkthroughSurface(for: newTab))
             }
         }
+    }
+
+    private func presentAddSheet() {
+        if walkthroughs.currentStep?.target == .mapAddAgain {
+            walkthroughs.perform(.mapAddAgain)
+        } else {
+            walkthroughs.perform(.mapAdd)
+        }
+        walkthroughs.activate(.add)
+        placeSaveDraftStore.clear()
+        store.saveFlowDidPresent(.addSheet)
+        addTabResetToken = UUID()
+        addLaunchRequest = nil
+        addSheetDetent = addSheetRestingDetent
+        isPresentingAdd = true
+    }
+
+    private func restorePlaceSaveDraftIfNeeded() {
+        let ownerUserID = store.currentUser.id
+        guard restoredPlaceSaveDraftOwnerID != ownerUserID else { return }
+        restoredPlaceSaveDraftOwnerID = ownerUserID
+
+        guard case .restored(let draft) = placeSaveDraftStore.restore(
+            ownerUserID: ownerUserID
+        ) else { return }
+
+        let currentSave = MapPlaceSaveContext.currentUserSave(
+            matching: draft.candidate,
+            in: store.currentUserVisiblePlaces
+        )
+        let latestVisit = currentSave.flatMap {
+            store.visits(for: $0.userPlace.id).first
+        }
+        let evidence = currentSave.map {
+            PlaceSaveDraftCommitEvidence(
+                userPlaceLocalID: $0.userPlace.localID,
+                userPlaceUpdatedAt: $0.userPlace.localUpdatedAt,
+                status: $0.userPlace.status,
+                latestVisitLocalID: latestVisit?.localID,
+                latestVisitCreatedAt: latestVisit?.createdAt
+            )
+        }
+
+        switch PlaceSaveDraftRecoveryPolicy.outcome(for: draft, evidence: evidence) {
+        case .committed:
+            placeSaveDraftStore.clear()
+            interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
+                ? "Your check-in finished while rec.me was in the background."
+                : "This place was added to Wanna while rec.me was in the background."
+        case .retry:
+            placeSaveDraftStore.prepareRetry(
+                message: "Save was interrupted before rec.me could confirm it. Review your details and try again."
+            )
+            presentRestoredAddSheet()
+        case .editing:
+            presentRestoredAddSheet()
+        }
+    }
+
+    private func presentRestoredAddSheet() {
+        store.saveFlowDidPresent(.addSheet)
+        addLaunchRequest = nil
+        addSheetDetent = .large
+        isPresentingAdd = true
     }
 
     private var addSheetRestingDetent: PresentationDetent {
@@ -728,6 +929,10 @@ struct WanderRootView: View {
     }
 
     private func drainSharedPlaceImports() {
+        guard SharedPlaceImportDrainPolicy.canDrain(
+            isSessionValidated: isSessionValidated,
+            isSignedIn: auth.isSignedIn
+        ) else { return }
         guard let inbox = try? SharedPlaceImportInbox.live() else { return }
         let report = SharedPlaceImportInboxDrainer.drain(
             inbox: inbox,
@@ -735,13 +940,23 @@ struct WanderRootView: View {
         )
         guard report.hasUserVisibleResult else { return }
         reconcilePlaceImports()
-        sharedPlaceImportNotice = SharedPlaceImportDrainNotice(report: report)
+        if !report.batchIDs.isEmpty {
+            presentSharedPlaceImportReview(batchIDs: report.batchIDs)
+        } else {
+            sharedPlaceImportNotice = SharedPlaceImportDrainNotice(report: report)
+        }
     }
 
-    private func presentSharedPlaceImportReview() {
+    private func presentSharedPlaceImportReviewFromNotice() {
+        guard let notice = sharedPlaceImportNotice else { return }
+        presentSharedPlaceImportReview(batchIDs: notice.report.batchIDs)
+    }
+
+    private func presentSharedPlaceImportReview(batchIDs: [String]) {
+        guard !batchIDs.isEmpty else { return }
         addTabResetToken = UUID()
         addSheetDetent = .large
-        addLaunchRequest = WanderAddLaunchRequest(destination: .importInbox)
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importReview(batchIDs: batchIDs))
         isPresentingAdd = true
     }
 
@@ -783,6 +998,9 @@ struct WanderRootView: View {
         widgetCalendarHydratedUserID = session.userID
         widgetCalendarLastHydratedAt = .now
         publishWidgetSnapshot(allowFreshnessAdvance: true)
+        Task {
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+        }
     }
 
     static func calendarRefreshDidFinish(
@@ -816,6 +1034,7 @@ struct WanderRootView: View {
         saveStreakCelebrationTask?.cancel()
 
         guard !auth.state.isSignedIn, fixtureMode == .empty else { return }
+        placeSaveDraftStore.clear()
         WanderWidgetSnapshotPublisher.clear()
         store.apply(authState: auth.state)
         Task {
@@ -824,6 +1043,25 @@ struct WanderRootView: View {
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
+        if request.destination == .quickCapture {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .quickCapture)
+            return
+        }
+        if case .profile(let profileID) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .sharedProfile(profileID: profileID))
+            return
+        }
+        if case .activityComments(let activityID) = request.destination {
+            isPresentingAdd = false
+            initialPresentation = nil
+            selectedTab = .discover
+            activityNavigation.openComments(activityID: activityID)
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            return
+        }
+
         isPresentingAdd = false
         initialPresentation = nil
 
@@ -833,11 +1071,41 @@ struct WanderRootView: View {
         }
     }
 
+    private func drainPendingNotificationResponses(
+        fallbackUserInfo: [AnyHashable: Any]? = nil
+    ) {
+        guard isSessionValidated else { return }
+
+        var handledResponse = false
+        while let pendingUserInfo = WanderAppDelegate.takePendingNotificationUserInfo(
+            for: store.currentUser.id
+        ) {
+            handledResponse = pushNotifications.handleNotificationResponse(
+                userInfo: pendingUserInfo,
+                userID: store.currentUser.id
+            ) || handledResponse
+        }
+
+        if !handledResponse, let fallbackUserInfo {
+            handledResponse = pushNotifications.handleNotificationResponse(
+                userInfo: fallbackUserInfo,
+                userID: store.currentUser.id
+            )
+        }
+
+        if handledResponse {
+            scheduleSignedInMaintenance(for: auth.state)
+        }
+    }
+
     static func notificationTab(for destination: NotificationDestination) -> WanderTab {
         switch destination {
+        case .quickCapture: .map
+        case .profile: .profile
         case .people, .drafts: .profile
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
+        case .activityComments: .discover
         case .discover: .discover
         }
     }
@@ -882,6 +1150,9 @@ struct WanderRootView: View {
             route: route,
             awaitingDismissals: deepLinkPresentationTokensAwaitingDismissal()
         )
+        #if DEBUG
+        WanderDebugLog.remote.debug("deep link handoff began route=\(String(describing: route), privacy: .public) awaiting=\(deepLinkHandoff.awaitingDismissals.count, privacy: .public)")
+        #endif
         presentationResetRequest = resetRequest
         resetRootPresentationsForDeepLink()
 
@@ -919,7 +1190,127 @@ struct WanderRootView: View {
     }
 
     private func handleAddSheetDismissal() {
+        placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
+        if walkthroughs.requestedSurface == .map {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(260))
+                walkthroughs.consumeRequestedSurface(.map)
+                walkthroughs.activate(.map)
+                presentLaunchLessonIfAppropriate()
+            }
+        } else {
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
+            presentLaunchLessonIfAppropriate()
+        }
+    }
+
+    private func configureWalkthroughsForCurrentUser() {
+        walkthroughs.setUserID(store.currentUser.id)
+        if !didApplyWalkthroughLaunchConfiguration {
+            didApplyWalkthroughLaunchConfiguration = true
+            if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
+                walkthroughs.resetCurrentUser()
+            }
+        }
+        walkthroughs.registerLaunch(
+            forceImportLesson: ProcessInfo.processInfo.arguments.contains(
+                "-WanderShowImportWalkthrough"
+            ),
+            forceDeviceFeaturesLesson: ProcessInfo.processInfo.arguments.contains(
+                "-WanderShowDeviceFeaturesWalkthrough"
+            )
+        )
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") {
+            let valueIndex = launchArguments.index(after: flagIndex)
+            if launchArguments.indices.contains(valueIndex),
+               let target = WalkthroughTargetID(rawValue: launchArguments[valueIndex]) {
+                walkthroughs.forceActivate(target)
+                return
+            }
+        }
+        presentLaunchLessonIfAppropriate()
+        if !walkthroughs.isPresentingLaunchLesson {
+            walkthroughs.activate(walkthroughSurface(for: selectedTab))
+        }
+    }
+
+    private func presentLaunchLessonIfAppropriate() {
+        guard !isPresentingAdd, initialPresentation == nil, sharedProfile == nil else { return }
+        walkthroughs.presentLaunchLessonIfEligible()
+    }
+
+    private func presentWalkthroughImportHub() {
+        store.saveFlowDidPresent(.addSheet)
+        addTabResetToken = UUID()
+        addLaunchRequest = WanderAddLaunchRequest(destination: .importHub)
+        addSheetDetent = .large
+        isPresentingAdd = true
+    }
+
+    private func routeWalkthrough(to surface: WalkthroughSurface) {
+        let waitsForAddDismissal = isPresentingAdd && surface == .map
+        switch surface {
+        case .map, .sendoff:
+            selectedTab = .map
+            if !waitsForAddDismissal {
+                isPresentingAdd = false
+            }
+        case .feed:
+            selectedTab = .discover
+            isPresentingAdd = false
+        case .lists:
+            selectedTab = .lists
+            isPresentingAdd = false
+        case .profile:
+            selectedTab = .profile
+            isPresentingAdd = false
+        case .placeDetail, .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+            break
+        }
+
+        guard !waitsForAddDismissal else { return }
+
+        Task { @MainActor in
+            if isPresentingAdd {
+                await Task.yield()
+            } else {
+                try? await Task.sleep(for: .milliseconds(220))
+            }
+            walkthroughs.consumeRequestedSurface(surface)
+            walkthroughs.activate(surface)
+        }
+    }
+
+    private func walkthroughSurface(for tab: WanderTab) -> WalkthroughSurface {
+        switch tab {
+        case .map, .add:
+            if walkthroughs.activeSurface == .sendoff
+                || walkthroughs.requestedSurface == .sendoff {
+                .sendoff
+            } else {
+                .map
+            }
+        case .discover:
+            .feed
+        case .lists:
+            .lists
+        case .profile:
+            .profile
+        }
+    }
+
+    private var walkthroughTabBarTargetHeight: CGFloat {
+        50
+    }
+
+    private var walkthroughTabBarTargetVerticalOffset: CGFloat {
+        if #available(iOS 26.0, *) { 12 } else { 8 }
+    }
+
+    private var walkthroughTabBarTargetHorizontalInset: CGFloat {
+        if #available(iOS 26.0, *) { 32 } else { 0 }
     }
 
     private func handleDeepLinkPresentationDismissal(
@@ -1014,6 +1405,13 @@ struct WanderRootView: View {
             addLaunchRequest = WanderAddLaunchRequest(destination: .hereNow)
             addSheetDetent = .large
             isPresentingAdd = true
+        case .addSearch(let query):
+            selectedTab = .map
+            store.saveFlowDidPresent(.addSheet)
+            addTabResetToken = UUID()
+            addLaunchRequest = WanderAddLaunchRequest(destination: .search(query: query))
+            addSheetDetent = .large
+            isPresentingAdd = true
         case .map:
             selectedTab = .map
         case .nearbyPlace(let candidateID):
@@ -1054,6 +1452,9 @@ struct WanderRootView: View {
         case .sharedPlace(let placeID):
             selectedTab = .map
             pushNotifications.route(to: .place(id: placeID))
+        case .sharedActivity(let activityID):
+            selectedTab = .discover
+            activityNavigation.openComments(activityID: activityID)
         case .sharedList(let listID):
             selectedTab = .lists
             pushNotifications.route(to: .list(id: listID))
@@ -1072,7 +1473,7 @@ struct WanderRootView: View {
         }
 
         switch state {
-        case .signedIn(let session):
+        case .signedIn(let session), .offline(let session, _):
             if widgetCalendarIdentityUserID != session.userID {
                 WanderWidgetSnapshotPublisher.clear()
                 widgetCalendarIdentityUserID = session.userID
@@ -1347,6 +1748,7 @@ struct WanderRootView: View {
         guard case .signedIn = state else {
             pushNotifications.applyNotificationPreferences(.allDisabled)
             await pushNotifications.cancelAllWannaGoReminders()
+            await pushNotifications.cancelAllSaveStreakReminders()
             return
         }
         guard isSessionValidated || fixtureMode != .empty else { return }
@@ -1356,10 +1758,13 @@ struct WanderRootView: View {
             guard auth.state == state, !Task.isCancelled else { return }
             pushNotifications.applyNotificationPreferences(preferences)
         }
+        pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
         guard auth.state == state, !Task.isCancelled else { return }
         await store.refreshRemoteWannaGoPlans(backend: backend)
         guard auth.state == state, !Task.isCancelled else { return }
         await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+        guard auth.state == state, !Task.isCancelled else { return }
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
     }
 
     static func resolvedInitialTab(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderTab {
@@ -1448,6 +1853,231 @@ struct WanderRootView: View {
     }
 }
 
+struct WanderTabPressInteraction: Equatable {
+    private(set) var initialTab: WanderTab?
+    private(set) var pressedTab: WanderTab?
+
+    mutating func begin(on tab: WanderTab) {
+        initialTab = tab
+        pressedTab = tab
+    }
+
+    mutating func move(over tab: WanderTab?) {
+        pressedTab = tab == initialTab ? initialTab : nil
+    }
+
+    @discardableResult
+    mutating func end(over tab: WanderTab?) -> Bool {
+        let endedInside = tab == initialTab
+        initialTab = nil
+        pressedTab = nil
+        return endedInside
+    }
+
+    mutating func cancel() {
+        initialTab = nil
+        pressedTab = nil
+    }
+}
+
+private final class WanderTabTouchAnchorView: UIView {
+    var onWindowChange: ((UIWindow?) -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        onWindowChange?(window)
+    }
+}
+
+private struct WanderNativeTabTouchObserver: UIViewRepresentable {
+    let tabs: [WanderTab]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(observer: self)
+    }
+
+    func makeUIView(context: Context) -> WanderTabTouchAnchorView {
+        let view = WanderTabTouchAnchorView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.onWindowChange = { [weak coordinator = context.coordinator] window in
+            coordinator?.attachIfNeeded(in: window)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: WanderTabTouchAnchorView, context: Context) {
+        context.coordinator.update(observer: self, window: uiView.window)
+    }
+
+    static func dismantleUIView(
+        _ uiView: WanderTabTouchAnchorView,
+        coordinator: Coordinator
+    ) {
+        uiView.onWindowChange = nil
+        coordinator.detach()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        private var observer: WanderNativeTabTouchObserver
+        private var interaction = WanderTabPressInteraction()
+        private weak var observedTabBar: UITabBar?
+        private var observedControls: [UIControl] = []
+        private var originalImages: [(image: UIImage?, selectedImage: UIImage?)] = []
+
+        init(observer: WanderNativeTabTouchObserver) {
+            self.observer = observer
+        }
+
+        func update(observer: WanderNativeTabTouchObserver, window: UIWindow?) {
+            self.observer = observer
+            attachIfNeeded(in: window)
+        }
+
+        func attachIfNeeded(in window: UIWindow?) {
+            guard let window,
+                  let tabBar = Self.findTabBar(in: window),
+                  tabBar.items?.count == observer.tabs.count,
+                  let itemControls = Self.itemControls(
+                    in: tabBar,
+                    expectedCount: observer.tabs.count
+                  )
+            else {
+                return
+            }
+
+            let controlsMatch = observedControls.count == itemControls.count
+                && zip(observedControls, itemControls).allSatisfy { $0 === $1 }
+            guard observedTabBar !== tabBar || !controlsMatch else { return }
+
+            detach()
+            observedTabBar = tabBar
+            observedControls = itemControls
+            originalImages = tabBar.items?.map { ($0.image, $0.selectedImage) } ?? []
+            for control in itemControls {
+                control.addTarget(self, action: #selector(handleTouchDown(_:)), for: .touchDown)
+                control.addTarget(self, action: #selector(handleTouchDragEnter(_:)), for: .touchDragEnter)
+                control.addTarget(self, action: #selector(handleTouchDragExit(_:)), for: .touchDragExit)
+                control.addTarget(self, action: #selector(handleTouchUpInside(_:)), for: .touchUpInside)
+                control.addTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchUpOutside)
+                control.addTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchCancel)
+            }
+        }
+
+        func detach() {
+            restoreOriginalImages()
+            for control in observedControls {
+                control.removeTarget(self, action: #selector(handleTouchDown(_:)), for: .touchDown)
+                control.removeTarget(self, action: #selector(handleTouchDragEnter(_:)), for: .touchDragEnter)
+                control.removeTarget(self, action: #selector(handleTouchDragExit(_:)), for: .touchDragExit)
+                control.removeTarget(self, action: #selector(handleTouchUpInside(_:)), for: .touchUpInside)
+                control.removeTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchUpOutside)
+                control.removeTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchCancel)
+            }
+            observedControls = []
+            originalImages = []
+            observedTabBar = nil
+            interaction.cancel()
+        }
+
+        @objc
+        private func handleTouchDown(_ control: UIControl) {
+            guard let tab = tab(for: control) else { return }
+            interaction.begin(on: tab)
+            showPressedTab(tab)
+        }
+
+        @objc
+        private func handleTouchDragEnter(_ control: UIControl) {
+            guard let tab = tab(for: control) else { return }
+            interaction.move(over: tab)
+            showPressedTab(tab)
+        }
+
+        @objc
+        private func handleTouchDragExit(_ control: UIControl) {
+            interaction.move(over: nil)
+            restoreSelectedTab()
+        }
+
+        @objc
+        private func handleTouchUpInside(_ control: UIControl) {
+            guard let tab = tab(for: control) else {
+                handleTouchCancelled(control)
+                return
+            }
+            _ = interaction.end(over: tab)
+            // Let the native tab bar commit navigation on touch-up first.
+            DispatchQueue.main.async { [weak self] in
+                self?.restoreOriginalImages()
+            }
+        }
+
+        @objc
+        private func handleTouchCancelled(_ control: UIControl) {
+            interaction.cancel()
+            restoreSelectedTab()
+        }
+
+        private func showPressedTab(_ tab: WanderTab) {
+            guard let index = observer.tabs.firstIndex(of: tab),
+                  let items = observedTabBar?.items,
+                  items.indices.contains(index)
+            else { return }
+            items[index].image = tab.tabBarImage(isSelected: false, isPressed: true)
+            items[index].selectedImage = tab.tabBarImage(isSelected: true, isPressed: true)
+        }
+
+        private func restoreSelectedTab() {
+            restoreOriginalImages()
+        }
+
+        private func restoreOriginalImages() {
+            guard let items = observedTabBar?.items,
+                  items.count == originalImages.count
+            else { return }
+            for (index, images) in originalImages.enumerated() {
+                items[index].image = images.image
+                items[index].selectedImage = images.selectedImage
+            }
+        }
+
+        private func tab(for control: UIControl) -> WanderTab? {
+            guard let index = observedControls.firstIndex(where: { $0 === control }),
+                  observer.tabs.indices.contains(index)
+            else { return nil }
+            return observer.tabs[index]
+        }
+
+        private static func itemControls(
+            in tabBar: UITabBar,
+            expectedCount: Int
+        ) -> [UIControl]? {
+            var controls = tabBar.subviews.compactMap { $0 as? UIControl }
+                .filter { !$0.isHidden && $0.alpha > 0 && $0.isUserInteractionEnabled }
+                .sorted { $0.frame.minX < $1.frame.minX }
+            if tabBar.effectiveUserInterfaceLayoutDirection == .rightToLeft {
+                controls.reverse()
+            }
+            return controls.count == expectedCount ? controls : nil
+        }
+
+        private static func findTabBar(in root: UIView) -> UITabBar? {
+            if let tabBar = root as? UITabBar, !tabBar.isHidden, tabBar.alpha > 0 {
+                return tabBar
+            }
+
+            for subview in root.subviews {
+                if let tabBar = findTabBar(in: subview) {
+                    return tabBar
+                }
+            }
+
+            return nil
+        }
+    }
+}
+
 enum WanderFixtureMode: Equatable {
     case empty
     case demo
@@ -1472,6 +2102,11 @@ enum WanderTab: String, CaseIterable, Hashable {
     case lists
     case profile
 
+    static let primaryTabs: [WanderTab] = [.map, .discover, .lists, .profile]
+
+    @MainActor
+    private static var tabBarImageCache: [String: UIImage] = [:]
+
     var title: String {
         switch self {
         case .map: "Map"
@@ -1490,5 +2125,49 @@ enum WanderTab: String, CaseIterable, Hashable {
         case .lists: "bookmark.square"
         case .profile: "person.crop.circle"
         }
+    }
+
+    var selectedSystemImage: String {
+        switch self {
+        case .map: "map.fill"
+        case .discover: "newspaper.fill"
+        case .add: "plus"
+        case .lists: "bookmark.square.fill"
+        case .profile: "person.crop.circle.fill"
+        }
+    }
+
+    func systemImage(isSelected: Bool) -> String {
+        isSelected ? selectedSystemImage : systemImage
+    }
+
+    @MainActor
+    func tabBarImage(isSelected: Bool, isPressed: Bool = false) -> UIImage {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+        let name = systemImage(isSelected: isSelected || isPressed)
+        let cacheKey = "\(name)|\(isPressed ? "pressed" : "template")"
+        if let cachedImage = Self.tabBarImageCache[cacheKey] {
+            return cachedImage
+        }
+
+        guard let symbol = UIImage(systemName: name, withConfiguration: configuration) else {
+            return UIImage()
+        }
+
+        // SwiftUI automatically applies the fill symbol variant inside native tab items.
+        // Flatten the chosen variant first so the standard tab bar only tints the image.
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = symbol.scale
+
+        let tintColor = isPressed ? UIColor(WanderTheme.terracotta.color) : .white
+        let flattenedSymbol = symbol.withTintColor(tintColor, renderingMode: .alwaysOriginal)
+        let flattenedImage = UIGraphicsImageRenderer(size: symbol.size, format: format)
+            .image { _ in
+                flattenedSymbol.draw(in: CGRect(origin: .zero, size: symbol.size))
+            }
+        let result = flattenedImage.withRenderingMode(isPressed ? .alwaysOriginal : .alwaysTemplate)
+        Self.tabBarImageCache[cacheKey] = result
+        return result
     }
 }

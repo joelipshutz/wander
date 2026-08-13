@@ -1,0 +1,17 @@
+{
+  "bug": "Map and Feed/Discover use incompatible place-memory retrieval rules",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "pre_fix": {
+    "map_cross_field": "Ryan coffee fails because Map requires the full phrase to occur inside one field",
+    "map_typeahead": "saved-place typeahead repeats its own full-phrase substring matcher and owner-first alphabetical ranking",
+    "discover_free_text": "a nonempty query with no structured facet returns zero places even when a visible place name, note, label, or attribute matches",
+    "discover_latency": "Discover waits for structured parsing before it can publish place results"
+  },
+  "expected": {
+    "shared_core": "Map filtering, Map saved-place typeahead, and Discover lexical retrieval use one deterministic trusted-place matcher and ranker",
+    "cross_field": "meaningful query tokens can match different fields on the same visible memory but never different memories",
+    "local_first": "trusted-memory results are synchronous and do not wait for MapKit or the Discover parser",
+    "outside_world": "MapKit remains asynchronous and secondary to trusted-memory matches",
+    "privacy": "the matcher receives only the already-visible place corpus and records no raw query or memory content"
+  }
+}

@@ -95,15 +95,31 @@ struct PlaceCategoryDisplay: Equatable {
     let subcategory: String?
     let sourceLabel: String
 
-    var compactTitle: String {
-        var parts: [String] = []
-        if let subcategory, !subcategory.isEmpty {
-            parts.append(subcategory)
+    func compactType(foodType: String? = nil) -> String {
+        if primaryCategory == WanderPlaceCategory.restaurantsFood {
+            let broadCategoryKeys = Set([
+                primaryCategory,
+                category,
+                "Restaurants & Food",
+                "food_drink",
+                "food and drink"
+            ].map(WanderPlaceCategory.normalizedCategoryText))
+            return uniqueDisplayValues([foodType, subcategory])
+                .first { !broadCategoryKeys.contains(WanderPlaceCategory.normalizedCategoryText($0)) }
+                ?? "Restaurant"
         }
-        if !category.isEmpty {
-            parts.append(category)
+        return uniqueDisplayValues([subcategory, category]).first ?? ""
+    }
+
+    private func uniqueDisplayValues(_ values: [String?]) -> [String] {
+        var seen = Set<String>()
+        return values.compactMap { value in
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else { return nil }
+            let key = WanderPlaceCategory.normalizedCategoryText(value)
+            guard !key.isEmpty, seen.insert(key).inserted else { return nil }
+            return value
         }
-        return parts.joined(separator: " · ")
     }
 }
 
@@ -379,8 +395,8 @@ enum PlaceMemoryDefaultCatalog {
                     selectedWannaTags: [cuisineTag],
                     labelOptions: cuisineAware(["craving list", "dinner rotation", "bring friends", "neighborhood staple", "date night"], cuisine: context.cuisine),
                     selectedLabels: ["craving list"],
-                    wannaLabelOptions: cuisineAware(["cuisine shortlist", "dinner shortlist", "friend rec", "try soon", "date idea"], cuisine: context.cuisine),
-                    selectedWannaLabels: ["cuisine shortlist"]
+                    wannaLabelOptions: cuisineAware(["food type shortlist", "dinner shortlist", "friend rec", "try soon", "date idea"], cuisine: context.cuisine),
+                    selectedWannaLabels: ["food type shortlist"]
                 )
             }
 
@@ -402,7 +418,7 @@ enum PlaceMemoryDefaultCatalog {
                 )
             }
 
-            if containsAny(key, ["bakery", "bagel", "donut", "cake", "pastry", "dessert", "ice cream", "candy", "chocolate", "confectionery", "acai", "smoothie", "juice"]) {
+            if containsAny(key, ["bakery", "bagel", "donut", "cake", "pastry", "dessert", "ice cream", "gelato", "candy", "chocolate", "confectionery", "acai", "smoothie", "juice"]) {
                 return Defaults(
                     tagOptions: ["sweet treat", "bring home", "cute", "shareable", "worth a detour"],
                     selectedTags: ["sweet treat", "shareable"],
@@ -874,19 +890,19 @@ enum WanderPlaceCategory {
         PlaceCategoryTaxonomyEntry(
             id: restaurantsFood,
             group: "Restaurants & Food",
-            detail: "Restaurants, cuisines, quick bites",
+            detail: "Restaurants, food types, quick bites",
             defaultSubcategory: "Restaurant",
             emoji: "🍽️",
             aliases: [
             "restaurants_food", "restaurants food", "restaurants and food", "food_drink", "food drink",
             "food and drink", "restaurant", "restaurants", "fast food", "fine dining", "casual family", "diner",
             "bistro", "buffet", "food court", "takeout", "cafeteria", "breakfast", "brunch", "sandwich", "deli",
-            "pizza", "burger", "barbecue", "ramen", "noodle", "dumpling", "dim sum", "hot pot", "taco", "taqueria",
+            "pizza", "burger", "barbecue", "ramen", "noodle", "dumpling", "bao", "bao bun", "bao buns", "baozi", "dim sum", "hot pot", "taco", "taqueria",
             "thai restaurant", "sushi restaurant", "korean bbq"
         ],
             subcategories: [
             "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi", "Ramen",
-            "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya", "Yakitori",
+            "Dumplings", "Bao buns", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya", "Yakitori",
             "Yakiniku", "North Indian", "South Indian", "Pakistani", "Sri Lankan", "Bangladeshi", "Nepalese",
             "Malaysian", "Singaporean", "Indonesian", "Filipino", "Burmese", "Cambodian", "Laotian", "Asian",
             "Tibetan", "Mongolian", "Georgian", "Armenian", "Uzbek", "Mongolian BBQ", "Korean BBQ",
@@ -919,12 +935,12 @@ enum WanderPlaceCategory {
             aliases: [
             "coffee_tea_sweets", "coffee tea sweets", "coffee tea and sweets", "coffee", "coffee shop", "cafe",
             "espresso", "roaster", "roastery", "tea", "tea house", "tea store", "bakery", "dessert", "sweets",
-            "juice", "smoothie", "acai", "ice cream", "candy", "chocolate", "cat cafe", "dog cafe"
+            "juice", "smoothie", "acai", "ice cream", "gelato", "candy", "chocolate", "cat cafe", "dog cafe"
         ],
             subcategories: [
             "Coffee shop", "Cafe", "Coffee stand", "Coffee lounge", "Roastery", "Tea house", "Tea store", "Juice shop",
             "Smoothie shop", "Acai", "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop",
-            "Dessert shop", "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop",
+            "Dessert shop", "Dessert restaurant", "Ice cream", "Gelato", "Candy store", "Chocolate shop",
             "Chocolate factory", "Chocolate lounge", "Confectionery", "Cat cafe", "Dog cafe"
         ],
             isEditable: true
@@ -937,15 +953,16 @@ enum WanderPlaceCategory {
             emoji: "🍸",
             aliases: [
             "bars_nightlife", "bars nightlife", "bars and nightlife", "bar", "bars", "nightlife",
-            "mkpoicategorynightlife", "cocktail", "pub", "sports bar", "wine bar", "lounge", "club", "disco",
+            "mkpoicategorynightlife", "cocktail", "pub", "sports bar", "wine bar", "cider bar", "sake bar",
+            "game bar", "lounge", "club", "disco",
             "brewery", "brewpub", "distillery", "winery", "vineyard", "nightclub", "karaoke", "live music", "comedy club",
             "casino"
         ],
             subcategories: [
-                "Bar", "Cocktail bar", "Pub", "Irish pub", "Billiards", "Sports bar", "Wine bar", "Gastropub",
-                "Bar & grill", "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Beer garden", "Jazz club",
-                "Hi-fi lounge", "Brewery", "Brewpub", "Winery", "Vineyard", "Nightclub", "Karaoke", "Live music",
-                "Comedy club", "Casino", "Distillery"
+                "Bar", "Cocktail bar", "Pub", "Irish pub", "Billiards", "Sports bar", "Wine bar", "Cider bar",
+                "Sake bar", "Game bar", "Gastropub", "Bar & grill", "Dance hall", "Club", "Disco", "Lounge",
+                "Hookah bar", "Beer garden", "Jazz club", "Hi-fi lounge", "Brewery", "Brewpub", "Winery",
+                "Vineyard", "Nightclub", "Karaoke", "Live music", "Comedy club", "Casino", "Distillery"
         ],
             isEditable: true
         ),
@@ -1383,7 +1400,7 @@ enum WanderPlaceCategory {
         restaurantsFood: [
             PlaceCategorySubcategoryGroup(title: "Asian", subcategories: [
                 "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi",
-                "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya",
+                "Ramen", "Dumplings", "Bao buns", "Noodles", "Dim sum", "Hot pot", "Cantonese", "Taiwanese", "Izakaya",
                 "Yakitori", "Yakiniku", "North Indian", "South Indian", "Pakistani", "Sri Lankan",
                 "Bangladeshi", "Nepalese", "Malaysian", "Singaporean", "Indonesian", "Filipino", "Burmese",
                 "Cambodian", "Laotian", "Asian", "Tibetan", "Mongolian", "Georgian", "Armenian", "Uzbek",
@@ -1426,21 +1443,21 @@ enum WanderPlaceCategory {
             ]),
             PlaceCategorySubcategoryGroup(title: "Bakeries & sweets", subcategories: [
                 "Bakery", "Bagel shop", "Donut shop", "Cake shop", "Pastry shop", "Dessert shop",
-                "Dessert restaurant", "Ice cream", "Candy store", "Chocolate shop", "Chocolate factory",
+                "Dessert restaurant", "Ice cream", "Gelato", "Candy store", "Chocolate shop", "Chocolate factory",
                 "Chocolate lounge", "Confectionery"
             ])
         ],
         barsNightlife: [
             PlaceCategorySubcategoryGroup(title: "Bars & pubs", subcategories: [
                 "Bar", "Cocktail bar", "Pub", "Irish pub", "Sports bar", "Wine bar", "Gastropub", "Bar & grill",
-                "Beer garden", "Brewery", "Brewpub"
+                "Cider bar", "Sake bar", "Beer garden", "Brewery", "Brewpub"
             ]),
             PlaceCategorySubcategoryGroup(title: "Lounges & clubs", subcategories: [
                 "Dance hall", "Club", "Disco", "Lounge", "Hookah bar", "Jazz club", "Hi-fi lounge", "Nightclub",
                 "Karaoke", "Live music", "Comedy club"
             ]),
             PlaceCategorySubcategoryGroup(title: "Wine & gaming", subcategories: [
-                "Winery", "Vineyard", "Billiards", "Casino"
+                "Winery", "Vineyard", "Billiards", "Game bar", "Casino"
             ])
         ],
         outdoorsNature: [
@@ -2013,6 +2030,7 @@ enum WanderPlaceCategory {
             ("Pizza", ["pizzeria"]),
             ("Japanese", ["udon", "soba", "teppanyaki"]),
             ("Vietnamese", ["banh mi"]),
+            ("Bao buns", ["bao", "bao bun", "baozi"]),
             ("Indian", ["tandoor", "tandoori", "masala"]),
             ("Middle Eastern", ["mezze"]),
             ("Mediterranean", ["mediterranean grill"])

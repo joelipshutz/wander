@@ -34,12 +34,16 @@ struct WanderStorePersistence {
                 do {
                     try FileManager.default.createDirectory(
                         at: url.deletingLastPathComponent(),
-                        withIntermediateDirectories: true
+                        withIntermediateDirectories: true,
+                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
                     )
                     let encoder = JSONEncoder()
                     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                     let data = try encoder.encode(snapshot)
-                    try data.write(to: url, options: [.atomic])
+                    try data.write(
+                        to: url,
+                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                    )
                 } catch {
                     #if DEBUG
                     print("Wander local persistence failed: \(error)")
@@ -59,10 +63,14 @@ struct WanderStorePersistence {
                 do {
                     try FileManager.default.createDirectory(
                         at: url.deletingLastPathComponent(),
-                        withIntermediateDirectories: true
+                        withIntermediateDirectories: true,
+                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
                     )
                     let data = try JSONEncoder().encode(snapshot)
-                    try data.write(to: url, options: [.atomic])
+                    try data.write(
+                        to: url,
+                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                    )
                 } catch {
                     #if DEBUG
                     print("Wander local persistence failed: \(error)")
@@ -176,6 +184,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let places: [PlaceRecord]
     let userPlaces: [UserPlaceRecord]
     let placeAttributes: [PlaceAttributeRecord]
+    let cachedCurrentUserVisiblePlaces: [VisiblePlaceRecord]?
     let placeVisits: [PlaceVisitRecord]?
     let visitPhotos: [VisitPhotoRecord]?
     let sharedVisitInvitations: [SharedVisitInvitation]?
@@ -192,6 +201,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let extractionJobs: [ExtractionJobRecord]
     let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]?
     let saveStreakDatesByUserID: [String: [Date]]?
+    let saveStreakRecoveryDatesByUserID: [String: [Date]]?
     let savedPlaceResetVersion: Int?
     let defaultVisibilityRaw: String
     let isPrivateProfile: Bool?
@@ -205,6 +215,13 @@ struct WanderStoreSnapshot: Codable, Equatable {
         places = store.places.map(PlaceRecord.init)
         userPlaces = store.userPlaces.map(UserPlaceRecord.init)
         placeAttributes = store.placeAttributes.map(PlaceAttributeRecord.init)
+        cachedCurrentUserVisiblePlaces = store.remoteVisiblePlaceCache
+            .filter {
+                $0.owner.id == store.currentUser.id
+                    && $0.userPlace.userID == store.currentUser.id
+                    && $0.userPlace.deletedAt == nil
+            }
+            .map(VisiblePlaceRecord.init)
         placeVisits = store.placeVisits.map(PlaceVisitRecord.init)
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
         sharedVisitInvitations = store.sharedVisitInvitations
@@ -221,6 +238,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         extractionJobs = store.extractionJobs.map(ExtractionJobRecord.init)
         providerCategoryEnrichmentAttemptedAtByKey = store.providerCategoryEnrichmentAttemptedAtByKey
         saveStreakDatesByUserID = store.saveStreakDatesByUserID
+        saveStreakRecoveryDatesByUserID = store.saveStreakRecoveryDatesByUserID
         savedPlaceResetVersion = Self.currentSavedPlaceResetVersion
         defaultVisibilityRaw = store.defaultVisibility.rawValue
         isPrivateProfile = store.isPrivateProfile
@@ -228,7 +246,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         savedAt = .now
     }
 
-    func restoredState(contactProvider: FakeContactProvider) -> RestoredState {
+    func restoredState(contactProvider: any ContactProvider) -> RestoredState {
         let shouldResetSavedPlaces = (savedPlaceResetVersion ?? 0) < Self.currentSavedPlaceResetVersion
         let restoredCurrentUser = currentUser.model()
         var restoredProfiles = profiles.map { $0.model() }
@@ -236,6 +254,13 @@ struct WanderStoreSnapshot: Codable, Equatable {
         restoredProfiles.insert(restoredCurrentUser, at: 0)
         let fallbackStreakDates = Dictionary(grouping: userPlaces, by: \.userID)
             .mapValues { $0.map(\.savedAt) }
+        let restoredCachedCurrentUserVisiblePlaces = shouldResetSavedPlaces
+            ? []
+            : cachedCurrentUserVisiblePlaces?.map { $0.model() }.filter {
+                $0.owner.id == restoredCurrentUser.id
+                    && $0.userPlace.userID == restoredCurrentUser.id
+                    && $0.userPlace.deletedAt == nil
+            } ?? []
 
         return RestoredState(
             currentUser: restoredCurrentUser,
@@ -243,6 +268,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             places: shouldResetSavedPlaces ? [] : places.map { $0.model() },
             userPlaces: shouldResetSavedPlaces ? [] : userPlaces.map { $0.model() },
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
+            cachedCurrentUserVisiblePlaces: restoredCachedCurrentUserVisiblePlaces,
             placeVisits: shouldResetSavedPlaces ? [] : Self.restoredPlaceVisits(records: placeVisits, userPlaces: userPlaces, placeAttributes: placeAttributes),
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
             sharedVisitInvitations: sharedVisitInvitations ?? [],
@@ -261,6 +287,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             saveStreakDatesByUserID: shouldResetSavedPlaces
                 ? [:]
                 : saveStreakDatesByUserID ?? fallbackStreakDates,
+            saveStreakRecoveryDatesByUserID: shouldResetSavedPlaces
+                ? [:]
+                : saveStreakRecoveryDatesByUserID ?? [:],
             contactProvider: contactProvider,
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
             isPrivateProfile: isPrivateProfile ?? restoredCurrentUser.isPrivateProfile,
@@ -275,6 +304,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let places: [LocalPlace]
         let userPlaces: [LocalUserPlace]
         let placeAttributes: [LocalPlaceAttribute]
+        let cachedCurrentUserVisiblePlaces: [VisiblePlace]
         let placeVisits: [LocalPlaceVisit]
         let visitPhotos: [LocalVisitPhoto]
         let sharedVisitInvitations: [SharedVisitInvitation]
@@ -291,7 +321,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let extractionJobs: [LocalExtractionJob]
         let providerCategoryEnrichmentAttemptedAtByKey: [String: Date]
         let saveStreakDatesByUserID: [String: [Date]]
-        let contactProvider: FakeContactProvider
+        let saveStreakRecoveryDatesByUserID: [String: [Date]]
+        let contactProvider: any ContactProvider
         let defaultVisibility: PlaceVisibility
         let isPrivateProfile: Bool
         let autoSaveListAddsToWant: Bool
@@ -646,6 +677,32 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 lastSyncError: lastSyncError,
                 createdAt: createdAt,
                 updatedAt: updatedAt
+            )
+        }
+    }
+
+    struct VisiblePlaceRecord: Codable, Equatable {
+        let id: String
+        let place: PlaceRecord
+        let userPlace: UserPlaceRecord
+        let owner: ProfileRecord
+        let attributes: [PlaceAttributeRecord]
+
+        init(_ visiblePlace: VisiblePlace) {
+            id = visiblePlace.id
+            place = PlaceRecord(visiblePlace.place)
+            userPlace = UserPlaceRecord(visiblePlace.userPlace)
+            owner = ProfileRecord(visiblePlace.owner)
+            attributes = visiblePlace.attributes.map(PlaceAttributeRecord.init)
+        }
+
+        func model() -> VisiblePlace {
+            VisiblePlace(
+                id: id,
+                place: place.model(),
+                userPlace: userPlace.model(),
+                owner: owner.model(),
+                attributes: attributes.map { $0.model() }
             )
         }
     }

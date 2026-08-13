@@ -1,0 +1,15 @@
+{
+  "issue": "REC-274",
+  "build": 132,
+  "device": "iPhone 15 Pro",
+  "os": "iOS 26.5",
+  "reported_behavior": "Tapping Messages from the activity share preview can open the message composer and then immediately return to rec.me.",
+  "expected_behavior": "The message composer remains presented with the ticket PNG and canonical links until the user sends or cancels.",
+  "observed_state": {
+    "single_activation": "The build 132 composer remained presented with the PNG and both links during a connected-device reproduction.",
+    "crash_report": "No build 132 rec.me crash report was generated; the visible failure is a MessageUI presentation teardown rather than a process crash.",
+    "reentrant_guard": "absent",
+    "explicit_messageui_dismissal": "absent"
+  },
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration"
+}

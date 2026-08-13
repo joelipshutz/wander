@@ -40,6 +40,7 @@ final class AuthSessionTests: XCTestCase {
         }
         let service = ClerkAuthService(
             configuration: configuration,
+            sessionCache: .disabled,
             configureClerk: { publishableKey in publishableKey }
         )
         let store = AuthSessionStore(provider: service)
@@ -100,12 +101,88 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertFalse(store.isPresentingNativeAuth)
     }
 
+    func testAppleSignUpCompletesSessionAndClosesNativeAuth() async {
+        let session = AuthSession(userID: "user_apple", displayName: "Apple User", handle: nil)
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInSession: session
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signUp)
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertEqual(outcome, .completed)
+        XCTAssertEqual(provider.requestedAppleAuthModes, [.signUp])
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertTrue(store.isSessionValidated)
+        XCTAssertFalse(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSigningInWithApple)
+        XCTAssertNil(store.appleSignInError)
+    }
+
+    func testAppleCancellationKeepsAuthOpenWithoutShowingAnError() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInFailure: AuthSessionError.cancelled
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertNil(outcome)
+        XCTAssertEqual(provider.requestedAppleAuthModes, [.signIn])
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSigningInWithApple)
+        XCTAssertNil(store.appleSignInError)
+    }
+
+    func testAppleFailureKeepsAuthOpenWithRecoverableCopy() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInFailure: AuthSessionError.tokenUnavailable
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn()
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertNil(outcome)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertEqual(
+            store.appleSignInError,
+            "Apple sign-in didn’t finish. Try again or use another method."
+        )
+    }
+
+    func testIncompleteAppleFlowHandsOffToClerkWithoutClosingAuth() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            appleSignInOutcome: .requiresClerkContinuation
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signInOrUp)
+
+        let outcome = await store.signInWithApple()
+
+        XCTAssertEqual(outcome, .requiresClerkContinuation)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSigningInWithApple)
+        XCTAssertNil(store.appleSignInError)
+    }
+
     func testClerkAuthServiceDoesNotPresentNativeAuthWhenSDKConfigureReturnsUnconfiguredClient() {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
         }
         let service = ClerkAuthService(
             configuration: configuration,
+            sessionCache: .disabled,
             configureClerk: { _ in "" }
         )
 
@@ -113,15 +190,17 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertFalse(service.canPresentNativeAuth)
     }
 
-    func testClerkSessionRefreshFailsClosedWhenAuthoritativeResolutionFails() async {
+    func testClerkSessionRefreshFallsBackToLastConfirmedIdentityWhenResolutionFails() async {
         let configuration = WanderBackendConfiguration.current { key in
             "$(\(key))"
         }
         let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
         let resolution = AuthSessionResolutionHolder(.success(session))
+        let cache = AuthSessionCacheHolder()
         let service = ClerkAuthService(
             configuration: configuration,
             resolveSession: { try resolution.value.get() },
+            sessionCache: cache.value,
             configureClerk: { $0 }
         )
 
@@ -133,7 +212,75 @@ final class AuthSessionTests: XCTestCase {
 
         XCTAssertEqual(
             service.state,
+            .offline(
+                session,
+                message: "Could not verify your session. Your saved map is available offline."
+            )
+        )
+        XCTAssertEqual(cache.session, session)
+    }
+
+    func testClerkSessionRefreshWithoutCachedIdentityStillFailsClosed() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: { throw AuthSessionError.tokenUnavailable },
+            sessionCache: .disabled,
+            configureClerk: { $0 }
+        )
+
+        await service.refreshSession()
+
+        XCTAssertEqual(
+            service.state,
             .unavailable("Could not verify your session. Check your connection and try again.")
+        )
+    }
+
+    func testOfflineIdentityIsSignedInLocallyButCannotIssueRemoteTokens() async {
+        let session = AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
+        let provider = PreviewAuthSessionProvider(
+            state: .offline(session, message: "Offline"),
+            token: "must-not-be-used"
+        )
+        let store = AuthSessionStore(provider: provider)
+
+        await store.refreshSession()
+
+        XCTAssertTrue(store.isSignedIn)
+        XCTAssertFalse(store.isSessionValidated)
+        do {
+            _ = try await store.supabaseAccessToken()
+            XCTFail("Expected offline token lookup to be blocked")
+        } catch let error as AuthSessionError {
+            XCTAssertEqual(error, .notSignedIn)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testAuthSessionCacheOmitsContactInformation() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = directory.appendingPathComponent("last-auth-session-v1.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = AuthSessionCache.file(url: url)
+
+        cache.save(
+            AuthSession(
+                userID: "user_123",
+                displayName: "Joe",
+                handle: "joe",
+                email: "joe@example.com",
+                phoneNumber: "+15555550123"
+            )
+        )
+
+        XCTAssertEqual(
+            cache.load(),
+            AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")
         )
     }
 
@@ -181,6 +328,7 @@ final class AuthSessionTests: XCTestCase {
                     }
                 }
             },
+            sessionCache: .disabled,
             configureClerk: { $0 }
         )
 
@@ -217,6 +365,7 @@ final class AuthSessionTests: XCTestCase {
                 try await Task.sleep(nanoseconds: 30_000_000_000)
                 return AuthSession(userID: "stale", displayName: "Stale", handle: "stale")
             },
+            sessionCache: .disabled,
             configureClerk: { $0 }
         )
 
@@ -528,5 +677,17 @@ private final class AuthSessionResolutionHolder {
 
     init(_ value: Result<AuthSession?, AuthSessionError>) {
         self.value = value
+    }
+}
+
+@MainActor
+private final class AuthSessionCacheHolder {
+    var session: AuthSession?
+
+    var value: AuthSessionCache {
+        AuthSessionCache(
+            load: { [weak self] in self?.session },
+            save: { [weak self] session in self?.session = session }
+        )
     }
 }

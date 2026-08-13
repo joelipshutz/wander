@@ -42,6 +42,7 @@ struct PlaceProfileMapSurface: View {
                 onOpen: onOpen,
                 onAction: onAction
             )
+            .walkthroughTarget(.mapMemory)
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing3)
         }
@@ -63,6 +64,7 @@ struct PlaceProfileFullScreen: View {
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
 
     init(
         place: PlaceSheetPlace,
@@ -128,6 +130,7 @@ struct PlaceProfileFullScreen: View {
     private var edgeSwipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
             .onEnded { value in
+                guard walkthroughs.activeSurface != .placeDetail else { return }
                 if Self.shouldTriggerEdgeSwipeBack(
                     startX: value.startLocation.x,
                     translation: value.translation
@@ -421,6 +424,7 @@ private struct PlaceProfileFullView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var providerPhoto: PlacePhoto?
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
@@ -428,6 +432,7 @@ private struct PlaceProfileFullView: View {
     @State private var isLoadingGallery = false
     @State private var selectedHeaderPhotoID: String?
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
+    @State private var discoveredReservationAction: PlaceExternalAction?
 
     var body: some View {
         GeometryReader { proxy in
@@ -462,6 +467,8 @@ private struct PlaceProfileFullView: View {
                             PlaceProfileTagRail(tags: displayTags, compact: false)
 
                             ratingSection
+                                .id(WalkthroughTargetID.placeRatings)
+                                .walkthroughTarget(.placeRatings)
 
                             if action != .none {
                                 primaryPlaceAction
@@ -469,12 +476,18 @@ private struct PlaceProfileFullView: View {
 
                             if !actionItems.isEmpty {
                                 actionRow
+                                    .id(WalkthroughTargetID.placeActions)
+                                    .walkthroughTarget(.placeActions)
                             }
 
                             whyItFitsSection
                             bestForSection
-                            PlaceActivitySection(saves: saves, currentUserID: currentUserID)
-                                .id(PlaceProfileScrollAnchor.activity)
+                            VStack(spacing: 0) {
+                                PlaceActivitySection(saves: saves, currentUserID: currentUserID)
+                                    .id(PlaceProfileScrollAnchor.activity)
+                            }
+                            .id(WalkthroughTargetID.placeHistory)
+                            .walkthroughTarget(.placeHistory)
                             detailsSection
                         }
                         .padding(.horizontal, WanderTheme.spacing4)
@@ -486,6 +499,9 @@ private struct PlaceProfileFullView: View {
                         await Task.yield()
                         guard !Task.isCancelled else { return }
                         scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
+                    }
+                    .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                        scrollToWalkthroughTarget(target, using: scrollProxy)
                     }
                 }
                 .background(WanderTheme.surfaceBone.color)
@@ -502,10 +518,12 @@ private struct PlaceProfileFullView: View {
         .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: onBack) {
-                    Label("Back", systemImage: "chevron.left")
-                        .labelStyle(.iconOnly)
+            if walkthroughs.activeSurface != .placeDetail {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onBack) {
+                        Label("Back", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                    }
                 }
             }
 
@@ -530,11 +548,18 @@ private struct PlaceProfileFullView: View {
         .task(id: place.photoLookupKey) {
             await reloadGallery()
         }
+        .task(id: reservationLookupKey) {
+            await resolveReservationAction()
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
                 await reloadVisibleUserPhotos()
             }
+        }
+        .onChange(of: walkthroughs.requestedSurface, initial: true) { _, requestedSurface in
+            guard requestedSurface == .map else { return }
+            onBack()
         }
         .fullScreenCover(item: $viewerRoute) { route in
             PlacePhotoGalleryViewer(
@@ -549,14 +574,40 @@ private struct PlaceProfileFullView: View {
         }
     }
 
+    private func scrollToWalkthroughTarget(
+        _ target: WalkthroughTargetID?,
+        using proxy: ScrollViewProxy
+    ) {
+        guard walkthroughs.activeSurface == .placeDetail,
+              let target,
+              [WalkthroughTargetID.placeRatings, .placeActions, .placeHistory].contains(target)
+        else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard walkthroughs.currentStep?.target == target else { return }
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(target, anchor: target == .placeHistory ? .top : .center)
+            }
+        }
+    }
+
     private var galleryItems: [PlacePhotoGalleryItem] {
         PlacePhotoGalleryPresenter.items(
             providerPhoto: providerPhoto,
-            userPhotos: userPhotos
+            userPhotos: userPhotos,
+            excludingUserPhotoIDs: store.deletedVisitPhotoReferenceIDs
         )
     }
 
     private func reloadGallery() async {
+        if place.id.hasPrefix("walkthrough_place_") {
+            providerPhoto = nil
+            userPhotos = []
+            galleryCursor = nil
+            galleryHasMore = false
+            return
+        }
         guard !isLoadingGallery else { return }
         isLoadingGallery = true
 
@@ -726,37 +777,7 @@ private struct PlaceProfileFullView: View {
     @ViewBuilder
     private var ratingSection: some View {
         if hasRatingSection {
-            HStack(spacing: WanderTheme.spacing2) {
-                PlaceProfileRatingTile(
-                    value: presentation.ownRating?.displayScore ?? "No check-ins yet",
-                    suffix: presentation.ownRating == nil ? nil : "/5",
-                    title: "Your rating",
-                    subtitle: presentation.ownRating?.subtitle ?? "0 check-ins",
-                    systemImage: "star.fill",
-                    tint: WanderTheme.stateWarning.color,
-                    explanation: nil
-                )
-
-                PlaceProfileRatingTile(
-                    value: presentation.overallRating?.displayScore ?? "No ratings yet",
-                    suffix: presentation.overallRating == nil ? nil : "/5",
-                    title: "rec.me rating",
-                    subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
-                    systemImage: "person.2.fill",
-                    tint: WanderTheme.pinSocial.color,
-                    explanation: .recMe
-                )
-
-                PlaceProfileRatingTile(
-                    value: presentation.fitRating?.displayScore ?? "Not enough yet",
-                    suffix: presentation.fitRating == nil ? nil : "/10",
-                    title: "Fit Rating",
-                    subtitle: presentation.fitRating == nil ? "keep saving" : "based on places you like",
-                    systemImage: "sparkles",
-                    tint: WanderTheme.terracotta.color,
-                    explanation: .fit
-                )
-            }
+            PlaceProfileRatingsRail(presentation: presentation)
         } else {
             PlaceProfileSubtleCard(
                 text: "Add your rating and tags when this place belongs on your map."
@@ -764,34 +785,68 @@ private struct PlaceProfileFullView: View {
         }
     }
 
+    @ViewBuilder
     private var actionRow: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            ForEach(actionItems) { item in
-                Button {
-                    openURL(item.url)
-                } label: {
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Image(systemName: iconName(for: item.kind))
-                            .font(.system(size: 14, weight: .black))
-                        Text(item.title)
-                            .font(.system(size: 13, weight: .black))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .padding(.horizontal, WanderTheme.spacing2)
-                    .background(WanderTheme.surfaceRaised.color)
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                    )
+        if walkthroughs.activeSurface == .placeDetail {
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(actionItems) { item in
+                    walkthroughActionButton(item)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.title)
             }
+            .padding(.vertical, 1)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(actionItems) { item in
+                        standardActionButton(item)
+                    }
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.vertical, 1)
+            }
+            .padding(.horizontal, -WanderTheme.spacing4)
         }
+    }
+
+    private func standardActionButton(_ item: PlaceExternalAction) -> some View {
+        Button {
+            openURL(item.url)
+        } label: {
+            HStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: iconName(for: item.kind))
+                    .font(.system(size: 15, weight: .black))
+                Text(item.title)
+                    .font(.system(size: 13, weight: .black))
+                    .lineLimit(1)
+            }
+            .frame(width: 136, height: 48)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .contentShape(Capsule())
+            .wanderGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.title)
+    }
+
+    private func walkthroughActionButton(_ item: PlaceExternalAction) -> some View {
+        Button {
+            openURL(item.url)
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: iconName(for: item.kind))
+                    .font(.system(size: 14, weight: .black))
+                Text(item.title)
+                    .font(.system(size: 10, weight: .black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+            }
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .contentShape(Capsule())
+            .wanderGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.title)
     }
 
     private var primaryPlaceAction: some View {
@@ -906,7 +961,52 @@ private struct PlaceProfileFullView: View {
     }
 
     private var actionItems: [PlaceExternalAction] {
-        PlaceProfileCopy.actionItems(for: place)
+        PlaceProfileCopy.actionItems(
+            for: place,
+            reservationAction: discoveredReservationAction
+        )
+    }
+
+    private var reservationLookupKey: String {
+        [
+            place.id,
+            place.name,
+            place.locality,
+            place.region,
+            place.websiteURLString,
+            place.actionLinksJSON,
+            place.category,
+            place.primaryCategory,
+            place.subcategory,
+            place.rawProviderType
+        ]
+            .compactMap { $0 }
+            .joined(separator: "|")
+    }
+
+    private var allowsOfficialNatureReservationPageFallback: Bool {
+        if place.primaryCategory == WanderPlaceCategory.outdoorsNature {
+            return true
+        }
+        let classification = [place.category, place.subcategory, place.rawProviderType]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        return ["campground", "camping", "national park", "state park", "rv park"]
+            .contains { classification.contains($0) }
+    }
+
+    private func resolveReservationAction() async {
+        discoveredReservationAction = nil
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: place.actionLinksJSON,
+            websiteURLString: place.websiteURLString,
+            placeName: place.name,
+            locality: place.locality,
+            region: place.region,
+            allowsOfficialReservationPageFallback: allowsOfficialNatureReservationPageFallback
+        )
+        guard !Task.isCancelled else { return }
+        discoveredReservationAction = action
     }
 
     private var shareURL: URL? {
@@ -922,7 +1022,9 @@ private struct PlaceProfileFullView: View {
     }
 
     private var trustedSaves: [PlaceSaveSummary] {
-        saves.filter { $0.visiblePlace.owner.id != currentUserID }
+        saves.filter {
+            $0.visiblePlace.owner.id != currentUserID && $0.viewerFollowsOwner
+        }
     }
 
     private var displayRating: PlaceActualRating? {
@@ -995,6 +1097,8 @@ private struct PlaceProfileFullView: View {
             "globe"
         case .call:
             "phone.fill"
+        case .reserve, .reservationSearch:
+            "calendar"
         default:
             "link"
         }
@@ -1714,80 +1818,6 @@ private struct PlaceProfileCategoryThumb: View {
     }
 }
 
-private struct PlaceProfileRatingTile: View {
-    let value: String
-    let suffix: String?
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let tint: Color
-    let explanation: PlaceRatingExplanation?
-
-    var body: some View {
-        VStack(alignment: .center, spacing: WanderTheme.spacing2) {
-            HStack(spacing: WanderTheme.spacing1) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .black))
-                Text(title)
-                    .font(.system(size: 13, weight: .black))
-                    .textCase(.uppercase)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.68)
-            }
-            .foregroundStyle(WanderTheme.textMuted.color)
-            .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
-            .offset(x: ratingHeaderHorizontalOffset)
-
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(suffix == nil ? WanderTypography.label : WanderTypography.editorialRatingDisplay)
-                    .foregroundStyle(tint)
-                    .lineLimit(suffix == nil ? 2 : 1)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.78)
-                if let suffix {
-                    Text(suffix)
-                        .font(WanderTypography.editorialRatingSuffix)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 30, alignment: .center)
-
-            Text(subtitle)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.82)
-                .frame(maxWidth: .infinity, minHeight: 30, alignment: .center)
-        }
-        .padding(WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .center)
-        .background(WanderTheme.surfaceSand.color)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        )
-        .overlay(alignment: .topTrailing) {
-            if let explanation {
-                PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: infoButtonHorizontalOffset, y: 2)
-            }
-        }
-    }
-
-    private var ratingHeaderHorizontalOffset: CGFloat {
-        explanation == nil ? -5 : -10
-    }
-
-    private var infoButtonHorizontalOffset: CGFloat {
-        explanation == .recMe ? 9 : 6
-    }
-
-}
-
 private struct PlaceProfileTagRail: View {
     let tags: [String]
     var compact: Bool
@@ -2154,7 +2184,7 @@ private enum PlaceProfileCopy {
     }
 
     static func categoryDisplay(for place: PlaceSheetPlace) -> String? {
-        let display = WanderPlaceCategory.display(for: place.categoryAssignment).compactTitle
+        let display = place.compactPlaceType
         guard let display = trimmed(display), place.primaryCategory != "place" else { return nil }
         return display
     }
@@ -2192,7 +2222,10 @@ private enum PlaceProfileCopy {
         presentation.commonTags.map(\.title)
     }
 
-    static func actionItems(for place: PlaceSheetPlace) -> [PlaceExternalAction] {
+    static func actionItems(
+        for place: PlaceSheetPlace,
+        reservationAction: PlaceExternalAction? = nil
+    ) -> [PlaceExternalAction] {
         var actions: [PlaceExternalAction] = []
         if let latitude = place.latitude,
            let longitude = place.longitude,
@@ -2208,6 +2241,10 @@ private enum PlaceProfileCopy {
         .filter { $0.kind == .website || $0.kind == .call }
 
         actions.append(contentsOf: businessActions)
+        if let reservation = reservationAction
+            ?? PlaceExternalLinks.reservationAction(actionLinksJSON: place.actionLinksJSON) {
+            actions.append(reservation)
+        }
         return actions
     }
 

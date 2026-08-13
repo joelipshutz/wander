@@ -45,6 +45,31 @@ struct RemoveSaveResult: Equatable {
     let syncState: SyncState
 }
 
+struct LocalVisitPhotoInput: Equatable {
+    let localAssetRef: String?
+    let contentType: String
+    let byteSize: Int
+    let width: Int?
+    let height: Int?
+    let capturedAt: Date?
+
+    init(
+        localAssetRef: String?,
+        contentType: String,
+        byteSize: Int,
+        width: Int?,
+        height: Int?,
+        capturedAt: Date? = nil
+    ) {
+        self.localAssetRef = localAssetRef
+        self.contentType = contentType
+        self.byteSize = byteSize
+        self.width = width
+        self.height = height
+        self.capturedAt = capturedAt
+    }
+}
+
 private struct LocalRemoveSaveChange {
     let userPlaceID: String
     let removedUserPlaceIDs: [String]
@@ -82,6 +107,38 @@ struct CurrentUserCalendarProjection {
     var attributes: [LocalPlaceAttribute] {
         visiblePlaces.flatMap(\.attributes)
     }
+
+    func profileStats(currentUserID: String, friends: Int) -> ProfileStats {
+        let representativePlaces = VisiblePlaceGrouping.representativePlaces(
+            from: visiblePlaces,
+            currentUserID: currentUserID
+        )
+        let checkedInPlaces = representativePlaces.filter {
+            $0.userPlace.status == .been && $0.userPlace.deletedAt == nil
+        }
+        let checkInCount = checkedInPlaces.reduce(into: 0) { count, visiblePlace in
+            let referenceIDs = Set(
+                [
+                    visiblePlace.userPlace.id,
+                    visiblePlace.userPlace.localID,
+                    visiblePlace.userPlace.serverID
+                ].compactMap { $0 }
+            )
+            let matchingVisitCount = visits.filter {
+                $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
+            }.count
+            count += max(matchingVisitCount, 1)
+        }
+
+        return ProfileStats(
+            been: checkedInPlaces.count,
+            checkIns: checkInCount,
+            wanna: representativePlaces.filter {
+                $0.userPlace.status == .wannaGo && $0.userPlace.deletedAt == nil
+            }.count,
+            friends: friends
+        )
+    }
 }
 
 struct SmartFilter: Identifiable, Equatable {
@@ -111,6 +168,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeListItems: [LocalPlaceListItem]
     @Published private(set) var unresolvedDrafts: [UnresolvedDraft] = []
     @Published private(set) var saveStreakDatesByUserID: [String: [Date]] = [:]
+    @Published private(set) var saveStreakRecoveryDatesByUserID: [String: [Date]] = [:]
     @Published private(set) var saveStreakCelebration: SaveStreakCelebration?
     @Published private(set) var isSaveFlowPresented = false
     private var activeSaveFlowPresentationLayers: Set<SaveFlowPresentationLayer> = []
@@ -164,6 +222,11 @@ final class WanderStore: ObservableObject {
 
     private var placeListSyncTask: (id: UUID, task: Task<Int, Never>)?
     private var individualPlaceListSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
+    private var visitPhotoUploadTask: (
+        id: UUID,
+        userID: String,
+        task: Task<Int, Never>
+    )?
     private var sharedVisitInboxTask: (
         id: UUID,
         userID: String,
@@ -201,6 +264,12 @@ final class WanderStore: ObservableObject {
     @Published private(set) var followedFeedPage: FollowedFeedPage?
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
+    @Published private(set) var activityEngagementByID: [String: ActivityEngagementSummary] = [:]
+    @Published private(set) var activityCommentsByID: [String: [ActivityComment]] = [:]
+    @Published private(set) var placeActivityEngagementMatches: [PlaceActivityEngagementMatch] = []
+    @Published private(set) var activityEngagementErrorByID: [String: String] = [:]
+    private var pendingActivityLikeIDs = Set<String>()
+    private var pendingActivityCommentDeletionIDs = Set<String>()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
@@ -241,7 +310,7 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    let contactProvider: FakeContactProvider
+    let contactProvider: any ContactProvider
 
     private let visibilityPolicy = VisibilityPolicy()
     private let parser: any LLMFilterParser
@@ -394,6 +463,7 @@ final class WanderStore: ObservableObject {
             self.places = restored.places
             self.userPlaces = restored.userPlaces
             self.placeAttributes = restored.placeAttributes
+            self.remoteVisiblePlaceCache = restored.cachedCurrentUserVisiblePlaces
             self.placeVisits = restored.placeVisits
             self.visitPhotos = restored.visitPhotos
             self.sharedVisitInvitations = restored.sharedVisitInvitations
@@ -414,6 +484,7 @@ final class WanderStore: ObservableObject {
             self.autoSaveListAddsToWant = restored.autoSaveListAddsToWant
             self.providerCategoryEnrichmentAttemptedAtByKey = restored.providerCategoryEnrichmentAttemptedAtByKey
             self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
+            self.saveStreakRecoveryDatesByUserID = restored.saveStreakRecoveryDatesByUserID
             shouldPersistAfterRestore = restored.didApplySavedPlaceReset
         } else {
             self.currentUser = fixtures.currentUser
@@ -438,6 +509,7 @@ final class WanderStore: ObservableObject {
             self.autoSaveListAddsToWant = true
             self.saveStreakDatesByUserID = Dictionary(grouping: fixtures.userPlaces, by: \.userID)
                 .mapValues { $0.map(\.savedAt) }
+            self.saveStreakRecoveryDatesByUserID = [:]
         }
 
         self.currentUser.isPrivateProfile = self.isPrivateProfile
@@ -483,6 +555,10 @@ final class WanderStore: ObservableObject {
         let snapshot = WanderStoreSnapshot(store: self)
         WanderDebugLog.endPerformanceInterval("Snapshot Build", id: snapshotSignpostID)
         persistence.save(snapshot)
+    }
+
+    func flushPersistence() {
+        persistence?.flush()
     }
 
     private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
@@ -822,21 +898,66 @@ final class WanderStore: ObservableObject {
     func retryPendingVisitPhotoUploads(backend: WanderBackend?) async -> Int {
         guard let backend else { return 0 }
         let uploadUserID = currentUser.id
-        let pendingPhotos = visitPhotos.filter {
-            $0.deletedAt == nil
-                && $0.uploadState != .uploaded
-                && $0.localAssetRef?.isEmpty == false
-                && currentUserVisit(matching: $0.visitID) != nil
-        }
-        var uploadedCount = 0
 
-        for photo in pendingPhotos {
-            guard currentUser.id == uploadUserID else { break }
-            guard let data = VisitPhotoLocalFileStore.data(from: photo.localAssetRef) else { continue }
-            let result = await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
-            guard currentUser.id == uploadUserID else { break }
-            if result?.uploadState == .uploaded && result?.syncState == .synced {
-                uploadedCount += 1
+        if let visitPhotoUploadTask,
+           visitPhotoUploadTask.userID == uploadUserID {
+            return await visitPhotoUploadTask.task.value
+        }
+
+        visitPhotoUploadTask?.task.cancel()
+        let uploadID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return 0 }
+            defer {
+                if self.visitPhotoUploadTask?.id == uploadID {
+                    self.visitPhotoUploadTask = nil
+                }
+            }
+            return await self.performPendingVisitPhotoUploads(
+                userID: uploadUserID,
+                backend: backend
+            )
+        }
+        visitPhotoUploadTask = (uploadID, uploadUserID, task)
+        return await task.value
+    }
+
+    private func performPendingVisitPhotoUploads(
+        userID uploadUserID: String,
+        backend: WanderBackend
+    ) async -> Int {
+        var uploadedCount = 0
+        var attemptedPhotoIDs: Set<String> = []
+
+        while currentUser.id == uploadUserID, !Task.isCancelled {
+            let pendingPhotos = visitPhotos.filter {
+                !attemptedPhotoIDs.contains($0.id)
+                    && $0.deletedAt == nil
+                    && $0.syncState != .synced
+                    && $0.syncState != .serverDenied
+                    && $0.syncState != .tombstoned
+                    && (
+                        ($0.uploadState == .uploaded && $0.remoteURLString?.isEmpty == false)
+                            || $0.localAssetRef?.isEmpty == false
+                    )
+                    && currentUserVisit(matching: $0.visitID) != nil
+            }
+            guard !pendingPhotos.isEmpty else { break }
+
+            for photo in pendingPhotos {
+                guard currentUser.id == uploadUserID, !Task.isCancelled else { break }
+                attemptedPhotoIDs.insert(photo.id)
+                let isAlreadyUploaded = photo.uploadState == .uploaded
+                    && photo.remoteURLString?.isEmpty == false
+                let data = isAlreadyUploaded
+                    ? nil
+                    : VisitPhotoLocalFileStore.data(from: photo.localAssetRef)
+                guard data != nil || isAlreadyUploaded else { continue }
+                let result = await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
+                guard currentUser.id == uploadUserID, !Task.isCancelled else { break }
+                if result?.uploadState == .uploaded && result?.syncState == .synced {
+                    uploadedCount += 1
+                }
             }
         }
         return uploadedCount
@@ -856,7 +977,7 @@ final class WanderStore: ObservableObject {
 
     func apply(authState: AuthState) {
         switch authState {
-        case .signedIn(let session):
+        case .signedIn(let session), .offline(let session, _):
             let previousUserID = currentUser.id
             if previousUserID != session.userID {
                 analytics.resetIdentity()
@@ -868,7 +989,7 @@ final class WanderStore: ObservableObject {
             }
             analytics.identify(userID: session.userID)
             #if DEBUG
-            WanderDebugLog.sync.debug("store auth signed_in user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
+            WanderDebugLog.sync.debug("store auth identified user=\(WanderDebugLog.shortID(session.userID), privacy: .public) pending_sync_count=\(self.pendingSyncCount, privacy: .public)")
             #endif
         case .signedOut, .unavailable:
             clearSessionScopedRemoteState()
@@ -887,6 +1008,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func clearSessionScopedRemoteState() {
+        cancelVisitPhotoUploadTask()
         cancelCurrentUserCalendarRefresh()
         authoritativeCalendarUserID = nil
 
@@ -898,6 +1020,9 @@ final class WanderStore: ObservableObject {
             || followedFeedPage != nil
             || feedLoadState != .idle
             || lastFeedRefreshAt != nil
+            || !activityEngagementByID.isEmpty
+            || !activityCommentsByID.isEmpty
+            || !placeActivityEngagementMatches.isEmpty
             || lastRemoteError != nil
             || profiles.contains { $0.id != currentUser.id }
             || !follows.isEmpty
@@ -916,6 +1041,12 @@ final class WanderStore: ObservableObject {
             followedFeedPage = nil
             feedLoadState = .idle
             lastFeedRefreshAt = nil
+            activityEngagementByID = [:]
+            activityCommentsByID = [:]
+            placeActivityEngagementMatches = []
+            activityEngagementErrorByID = [:]
+            pendingActivityLikeIDs = []
+            pendingActivityCommentDeletionIDs = []
             lastRemoteError = nil
             profiles = []
             follows = []
@@ -927,26 +1058,17 @@ final class WanderStore: ObservableObject {
     }
 
     var stats: ProfileStats {
-        let mine = userPlaces.filter { $0.userID == currentUser.id && $0.deletedAt == nil }
-        let uniqueCheckedInPlaces = mine.filter { $0.status == .been }.count
-        let checkedInPlaceIDs = Set(
-            mine
-                .filter { $0.status == .been }
-                .flatMap { [$0.id, $0.localID, $0.serverID].compactMap { $0 } }
-        )
-        let checkInCount = placeVisits.filter {
-            $0.deletedAt == nil && checkedInPlaceIDs.contains($0.userPlaceID)
-        }.count
-        return ProfileStats(
-            been: uniqueCheckedInPlaces,
-            checkIns: max(checkInCount, uniqueCheckedInPlaces),
-            wanna: mine.filter { $0.status == .wannaGo }.count,
+        currentUserCalendarProjection.profileStats(
+            currentUserID: currentUser.id,
             friends: profiles.filter { relationship(to: $0.id) == .mutual }.count
         )
     }
 
     var saveStreakSummary: SaveStreakSummary {
-        SaveStreakCalculator.summary(saveDates: currentUserSaveStreakDates)
+        SaveStreakCalculator.summary(
+            saveDates: currentUserSaveStreakDates,
+            recoveryDates: saveStreakRecoveryDatesByUserID[currentUser.id, default: []]
+        )
     }
 
     func dismissSaveStreakCelebration(id: UUID) {
@@ -978,11 +1100,25 @@ final class WanderStore: ObservableObject {
         place: LocalPlace,
         status: PlaceStatus,
         savedAt: Date,
-        wasTodayCovered: Bool
+        previousSummary: SaveStreakSummary
     ) {
-        let kind: SaveStreakCelebration.Kind = wasTodayCovered
+        let kind: SaveStreakCelebration.Kind = previousSummary.isTodayCovered
             ? .sameDayConfetti
             : .dailyTakeover
+
+        let calendar = Calendar.current
+        let recoveryDate: Date? = if previousSummary.isRecoveryAvailable {
+            calendar.date(
+                byAdding: .day,
+                value: -1,
+                to: calendar.startOfDay(for: savedAt)
+            )
+        } else {
+            nil
+        }
+        if let recoveryDate {
+            saveStreakRecoveryDatesByUserID[currentUser.id, default: []].append(recoveryDate)
+        }
 
         saveStreakDatesByUserID[currentUser.id, default: []].append(savedAt)
         let updatedSummary = saveStreakSummary
@@ -1001,7 +1137,8 @@ final class WanderStore: ObservableObject {
             placeDetail: detail.isEmpty ? nil : detail,
             status: status,
             streakCount: updatedSummary.currentCount,
-            saveDate: savedAt
+            saveDate: savedAt,
+            recoveryDate: recoveryDate
         )
 
         if saveStreakCelebration?.kind != .dailyTakeover || kind == .dailyTakeover {
@@ -1019,6 +1156,19 @@ final class WanderStore: ObservableObject {
                 ]
             )
         )
+        if recoveryDate != nil {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.saveStreakRecovered,
+                    properties: [
+                        "status": status.rawValue,
+                        "recovered_streak_count": "\(previousSummary.recoverableCount)",
+                        "streak_count": "\(updatedSummary.currentCount)",
+                        "recovery_cooldown_days": "\(SaveStreakWindow.recoveryCooldownDayCount)"
+                    ]
+                )
+            )
+        }
     }
 
     var pendingSyncCount: Int {
@@ -1130,6 +1280,7 @@ final class WanderStore: ObservableObject {
         individualPlaceListSyncTasks.values.forEach { $0.task.cancel() }
         placeListSyncTask = nil
         individualPlaceListSyncTasks.removeAll()
+        cancelVisitPhotoUploadTask()
         cancelCurrentUserCalendarRefresh()
         authoritativeCalendarUserID = nil
 
@@ -1151,12 +1302,19 @@ final class WanderStore: ObservableObject {
         sourceArtifacts = []
         extractionJobs = []
         saveStreakDatesByUserID = [:]
+        saveStreakRecoveryDatesByUserID = [:]
         saveStreakCelebration = nil
         remoteVisiblePlaceCache = []
         discoverPeopleRecommendationsState = .idle
         followedFeedPage = nil
         feedLoadState = .idle
         lastFeedRefreshAt = nil
+        activityEngagementByID = [:]
+        activityCommentsByID = [:]
+        placeActivityEngagementMatches = []
+        activityEngagementErrorByID = [:]
+        pendingActivityLikeIDs = []
+        pendingActivityCommentDeletionIDs = []
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         lastDiscoverParseSource = .deterministic
@@ -1187,15 +1345,18 @@ final class WanderStore: ObservableObject {
             $0.owner.id == currentUser.id && $0.userPlace.deletedAt == nil
         }
         let isAuthoritative = authoritativeCalendarUserID == currentUser.id
+        let dirtyRows = userPlaces.filter {
+            $0.userID == currentUser.id && $0.syncState != .synced
+        }
+        let dirtyReferenceIDs = dirtyRows.reduce(into: Set<String>()) {
+            $0.formUnion(Self.referenceIDs(for: $1))
+        }
+        let unshadowedRemotePlaces = remoteOwnerPlaces.filter {
+            Self.referenceIDs(for: $0.userPlace).isDisjoint(with: dirtyReferenceIDs)
+        }
 
         let projectedPlaces: [VisiblePlace]
         if isAuthoritative {
-            let dirtyRows = userPlaces.filter {
-                $0.userID == currentUser.id && $0.syncState != .synced
-            }
-            let dirtyReferenceIDs = dirtyRows.reduce(into: Set<String>()) {
-                $0.formUnion(Self.referenceIDs(for: $1))
-            }
             let remoteReferenceIDs = remoteOwnerPlaces.reduce(into: Set<String>()) {
                 $0.formUnion(Self.referenceIDs(for: $1.userPlace))
             }
@@ -1217,13 +1378,10 @@ final class WanderStore: ObservableObject {
                 !Self.referenceIDs(for: $0.userPlace)
                     .isDisjoint(with: preservedLocalReferenceIDs)
             }
-            let unshadowedRemotePlaces = remoteOwnerPlaces.filter {
-                Self.referenceIDs(for: $0.userPlace).isDisjoint(with: dirtyReferenceIDs)
-            }
             projectedPlaces = preservedLocalPlaces + unshadowedRemotePlaces
         } else {
             projectedPlaces = mergeCalendarVisiblePlaces(
-                localOwnerPlaces + remoteOwnerPlaces
+                localOwnerPlaces + unshadowedRemotePlaces
             )
         }
 
@@ -1262,7 +1420,10 @@ final class WanderStore: ObservableObject {
     /// available. Production data is supplied by the server-side event
     /// projection; the fixture keeps demo and visual-QA launches deterministic.
     @discardableResult
-    func refreshFollowedFeed(backend: WanderBackend?) async -> Bool {
+    func refreshFollowedFeed(
+        backend: WanderBackend?,
+        preservingActivityID: String? = nil
+    ) async -> Bool {
         let requestUserID = currentUser.id
         feedLoadState = followedFeedPage == nil ? .loading : .stale
 
@@ -1272,10 +1433,18 @@ final class WanderStore: ObservableObject {
             do {
                 let page = try await loadFollowedFeed(from: repository)
                 guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
-                followedFeedPage = page
+                let resolvedPage = mergingPinnedActivity(
+                    into: page,
+                    activityID: preservingActivityID
+                )
+                followedFeedPage = resolvedPage
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
                 lastRemoteError = nil
+                await refreshActivityEngagement(
+                    activityIDs: resolvedPage.activity.map(\.id),
+                    backend: backend
+                )
                 return true
             } catch {
                 guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
@@ -1287,10 +1456,335 @@ final class WanderStore: ObservableObject {
 
         guard currentUser.id == requestUserID else { return false }
         let page = fixtureFollowedFeedPage(relativeTo: .now)
-        followedFeedPage = page
+        followedFeedPage = mergingPinnedActivity(
+            into: page,
+            activityID: preservingActivityID
+        )
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
+        seedFixtureActivityEngagement(for: page.activity)
         return true
+    }
+
+    private func mergingPinnedActivity(
+        into refreshedPage: FollowedFeedPage,
+        activityID: String?
+    ) -> FollowedFeedPage {
+        guard let activityID,
+              !refreshedPage.activity.contains(where: { $0.id == activityID }),
+              let pinnedActivity = followedFeedPage?.activity.first(where: { $0.id == activityID })
+        else { return refreshedPage }
+
+        return FollowedFeedPage(
+            activity: FeedPresentation.newestFirst(refreshedPage.activity + [pinnedActivity]),
+            featuredPlaces: refreshedPage.featuredPlaces,
+            nextCursor: refreshedPage.nextCursor,
+            fetchedAt: refreshedPage.fetchedAt
+        )
+    }
+
+    func activityEngagement(for activityID: String) -> ActivityEngagementSummary {
+        activityEngagementByID[activityID] ?? .empty(activityID: activityID)
+    }
+
+    @MainActor
+    func activity(id activityID: String, backend: WanderBackend?) async -> FeedActivity? {
+        let existing = followedFeedPage?.activity.first(where: { $0.id == activityID })
+
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return existing }
+
+        do {
+            let activity = try await repository.activity(id: activityID)
+            let currentPage = followedFeedPage
+            let mergedActivity = FeedPresentation.newestFirst(
+                [activity] + (currentPage?.activity ?? []).filter { $0.id != activity.id }
+            )
+            followedFeedPage = FollowedFeedPage(
+                activity: mergedActivity,
+                featuredPlaces: currentPage?.featuredPlaces ?? [],
+                nextCursor: currentPage?.nextCursor,
+                fetchedAt: currentPage?.fetchedAt ?? .now
+            )
+            await refreshActivityEngagement(activityIDs: [activityID], backend: backend)
+            return activity
+        } catch {
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return existing
+        }
+    }
+
+    func activityComments(for activityID: String) -> [ActivityComment] {
+        activityCommentsByID[activityID, default: []]
+    }
+
+    func activityEngagementError(for activityID: String) -> String? {
+        activityEngagementErrorByID[activityID]
+    }
+
+    func canDeleteActivityComment(_ comment: ActivityComment) -> Bool {
+        comment.author.id == currentUser.id
+            && !comment.isPending
+            && !pendingActivityCommentDeletionIDs.contains(comment.id)
+    }
+
+    func isActivityLikePending(_ activityID: String) -> Bool {
+        pendingActivityLikeIDs.contains(activityID)
+    }
+
+    func refreshActivityEngagement(activityIDs: [String], backend: WanderBackend?) async {
+        let remoteIDs = Array(Set(activityIDs.filter { UUID(uuidString: $0) != nil })).sorted()
+        guard !remoteIDs.isEmpty,
+              let repository = backend?.activityEngagementRepository
+        else { return }
+
+        do {
+            let summaries = try await repository.summaries(activityIDs: remoteIDs)
+            for summary in summaries where !pendingActivityLikeIDs.contains(summary.activityID) {
+                activityEngagementByID[summary.activityID] = summary
+                activityEngagementErrorByID[summary.activityID] = nil
+            }
+        } catch {
+            let message = remoteErrorMessage(error)
+            for activityID in remoteIDs {
+                activityEngagementErrorByID[activityID] = message
+            }
+        }
+    }
+
+    func refreshPlaceActivityEngagement(userPlaceIDs: [String], backend: WanderBackend?) async {
+        let remoteIDs = Array(Set(userPlaceIDs.filter { UUID(uuidString: $0) != nil })).sorted()
+        guard !remoteIDs.isEmpty,
+              let repository = backend?.activityEngagementRepository
+        else { return }
+
+        do {
+            let matches = try await repository.placeActivitySummaries(userPlaceIDs: remoteIDs)
+            let refreshedIDs = Set(remoteIDs)
+            placeActivityEngagementMatches.removeAll { refreshedIDs.contains($0.userPlaceID) }
+            placeActivityEngagementMatches.append(contentsOf: matches)
+            for match in matches where !pendingActivityLikeIDs.contains(match.activityID) {
+                activityEngagementByID[match.activityID] = match.engagement
+                activityEngagementErrorByID[match.activityID] = nil
+            }
+        } catch {
+            let message = remoteErrorMessage(error)
+            for userPlaceID in remoteIDs {
+                activityEngagementErrorByID["user-place:\(userPlaceID)"] = message
+            }
+        }
+    }
+
+    func placeActivityEngagementMatch(
+        userPlaceID: String,
+        visitID: String?,
+        preferredKinds: [FeedActivityKind]
+    ) -> PlaceActivityEngagementMatch? {
+        let candidates = placeActivityEngagementMatches.filter { match in
+            guard match.userPlaceID == userPlaceID else { return false }
+            if let visitID {
+                return match.visitID == visitID
+            }
+            // Remote place projections may not have materialized the explicit
+            // visit locally yet. In that case the immutable event is still the
+            // authority; choose the newest compatible event below instead of
+            // disabling engagement on a valid history card.
+            return preferredKinds.contains(match.kind)
+        }
+
+        return candidates.sorted { lhs, rhs in
+            let lhsRank = preferredKinds.firstIndex(of: lhs.kind) ?? preferredKinds.count
+            let rhsRank = preferredKinds.firstIndex(of: rhs.kind) ?? preferredKinds.count
+            if lhsRank != rhsRank { return lhsRank < rhsRank }
+            if lhs.occurredAt != rhs.occurredAt { return lhs.occurredAt > rhs.occurredAt }
+            return lhs.activityID < rhs.activityID
+        }.first
+    }
+
+    @discardableResult
+    func toggleActivityLike(activityID: String, backend: WanderBackend?) async -> Bool {
+        guard !pendingActivityLikeIDs.contains(activityID) else { return false }
+        let previous = activityEngagement(for: activityID)
+        let requestedLike = !previous.viewerHasLiked
+        activityEngagementByID[activityID] = previous.settingLike(requestedLike)
+        activityEngagementErrorByID[activityID] = nil
+
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return true }
+
+        pendingActivityLikeIDs.insert(activityID)
+        defer { pendingActivityLikeIDs.remove(activityID) }
+        do {
+            activityEngagementByID[activityID] = try await repository.setLike(
+                activityID: activityID,
+                isLiked: requestedLike
+            )
+            return true
+        } catch {
+            activityEngagementByID[activityID] = previous
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func refreshActivityComments(activityID: String, backend: WanderBackend?) async -> Bool {
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return true }
+
+        do {
+            let page = try await repository.comments(activityID: activityID, before: nil, limit: 50)
+            let pendingDeletedComments = page.comments.filter {
+                pendingActivityCommentDeletionIDs.contains($0.id)
+            }
+            activityCommentsByID[activityID] = page.comments.filter {
+                !pendingActivityCommentDeletionIDs.contains($0.id)
+            }.sorted { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+                return lhs.id < rhs.id
+            }
+            let refreshedEngagement = pendingDeletedComments.reduce(page.engagement) { summary, _ in
+                summary.removingComment()
+            }
+            if pendingActivityLikeIDs.contains(activityID) {
+                let optimistic = activityEngagement(for: activityID)
+                activityEngagementByID[activityID] = ActivityEngagementSummary(
+                    activityID: activityID,
+                    likeCount: optimistic.likeCount,
+                    commentCount: refreshedEngagement.commentCount,
+                    viewerHasLiked: optimistic.viewerHasLiked
+                )
+            } else {
+                activityEngagementByID[activityID] = refreshedEngagement
+            }
+            activityEngagementErrorByID[activityID] = nil
+            return true
+        } catch {
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func addActivityComment(activityID: String, body: String, backend: WanderBackend?) async -> Bool {
+        let normalizedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedBody.isEmpty, normalizedBody.count <= 1_000 else { return false }
+
+        let previousSummary = activityEngagement(for: activityID)
+        let pendingID = "pending-comment-\(UUID().uuidString.lowercased())"
+        let pending = ActivityComment(
+            id: pendingID,
+            activityID: activityID,
+            author: shell(for: currentUser),
+            body: normalizedBody,
+            createdAt: .now,
+            isPending: true
+        )
+        activityCommentsByID[activityID, default: []].append(pending)
+        activityEngagementByID[activityID] = previousSummary.addingComment()
+        activityEngagementErrorByID[activityID] = nil
+
+        guard UUID(uuidString: activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else {
+            activityCommentsByID[activityID] = activityComments(for: activityID).map { comment in
+                guard comment.id == pendingID else { return comment }
+                return ActivityComment(
+                    id: comment.id,
+                    activityID: comment.activityID,
+                    author: comment.author,
+                    body: comment.body,
+                    createdAt: comment.createdAt
+                )
+            }
+            return true
+        }
+
+        do {
+            let result = try await repository.addComment(activityID: activityID, body: normalizedBody)
+            activityCommentsByID[activityID] = activityComments(for: activityID)
+                .filter { $0.id != pendingID } + [result.comment]
+            activityCommentsByID[activityID]?.sort { lhs, rhs in
+                if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+                return lhs.id < rhs.id
+            }
+            activityEngagementByID[activityID] = result.engagement
+            return true
+        } catch {
+            activityCommentsByID[activityID]?.removeAll { $0.id == pendingID }
+            activityEngagementByID[activityID] = previousSummary
+            activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteActivityComment(_ comment: ActivityComment, backend: WanderBackend?) async -> Bool {
+        guard canDeleteActivityComment(comment),
+              let previousIndex = activityComments(for: comment.activityID).firstIndex(where: { $0.id == comment.id })
+        else { return false }
+
+        let previousSummary = activityEngagement(for: comment.activityID)
+        activityCommentsByID[comment.activityID]?.remove(at: previousIndex)
+        activityEngagementByID[comment.activityID] = previousSummary.removingComment()
+        activityEngagementErrorByID[comment.activityID] = nil
+
+        guard UUID(uuidString: comment.id) != nil,
+              UUID(uuidString: comment.activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return true }
+
+        pendingActivityCommentDeletionIDs.insert(comment.id)
+        defer { pendingActivityCommentDeletionIDs.remove(comment.id) }
+        do {
+            activityEngagementByID[comment.activityID] = try await repository.deleteComment(commentID: comment.id)
+            return true
+        } catch {
+            var restoredComments = activityComments(for: comment.activityID)
+            if !restoredComments.contains(where: { $0.id == comment.id }) {
+                restoredComments.insert(comment, at: min(previousIndex, restoredComments.count))
+            }
+            activityCommentsByID[comment.activityID] = restoredComments
+            activityEngagementByID[comment.activityID] = previousSummary
+            activityEngagementErrorByID[comment.activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    func activityBookmarkState(for visiblePlace: VisiblePlace) -> ActivityBookmarkState {
+        guard let ownPlace = currentUserVisiblePlaces.first(where: {
+            VisiblePlaceGrouping.matches($0, visiblePlace)
+        }) else { return .notSaved }
+        return ownPlace.userPlace.status == .wannaGo ? .wanna : .checkedIn
+    }
+
+    @discardableResult
+    func removeActivityWanna(for visiblePlace: VisiblePlace, backend: WanderBackend?) async -> ActivityBookmarkState {
+        guard let ownPlace = currentUserVisiblePlaces.first(where: {
+            VisiblePlaceGrouping.matches($0, visiblePlace)
+                && $0.userPlace.status == .wannaGo
+        }) else {
+            return activityBookmarkState(for: visiblePlace)
+        }
+
+        _ = await removeSave(userPlaceID: ownPlace.userPlace.id, backend: backend)
+        return activityBookmarkState(for: visiblePlace)
+    }
+
+    private func seedFixtureActivityEngagement(for activity: [FeedActivity]) {
+        let seedCounts = [(5, 2), (3, 1), (8, 3), (2, 0), (6, 1)]
+        for (index, event) in activity.filter({ $0.place != nil }).enumerated()
+            where activityEngagementByID[event.id] == nil {
+            let seed = seedCounts[index % seedCounts.count]
+            activityEngagementByID[event.id] = ActivityEngagementSummary(
+                activityID: event.id,
+                likeCount: seed.0,
+                commentCount: seed.1
+            )
+        }
     }
 
     /// Clerk may report a signed-in user slightly before its first usable
@@ -1482,6 +1976,10 @@ final class WanderStore: ObservableObject {
 
     func canManage(_ list: LocalPlaceList) -> Bool {
         list.ownerUserID == currentUser.id
+    }
+
+    func canLeave(_ list: LocalPlaceList) -> Bool {
+        !canManage(list) && isMember(of: list, userID: currentUser.id)
     }
 
     func canAddPlaces(to list: LocalPlaceList) -> Bool {
@@ -1827,6 +2325,30 @@ final class WanderStore: ObservableObject {
         }
         persist()
         return true
+    }
+
+    @discardableResult
+    func leavePlaceList(_ list: LocalPlaceList, backend: WanderBackend?) async -> Bool {
+        guard canLeave(list) else { return false }
+
+        guard let remoteListID = remoteID(list.serverID ?? list.id),
+              let backend,
+              backend.placeListRepository != nil
+        else {
+            markCurrentUserAsHavingLeft(list)
+            lastRemoteError = nil
+            return true
+        }
+
+        do {
+            try await backend.leavePlaceList(listID: remoteListID)
+            markCurrentUserAsHavingLeft(list)
+            lastRemoteError = nil
+            return true
+        } catch {
+            lastRemoteError = remoteErrorMessage(error)
+            return false
+        }
     }
 
     @discardableResult
@@ -2207,6 +2729,18 @@ final class WanderStore: ObservableObject {
         return placeListMembers.contains { member in
             listIDs.contains(member.listID) && member.userID == userID && member.deletedAt == nil
         }
+    }
+
+    private func markCurrentUserAsHavingLeft(_ list: LocalPlaceList) {
+        let listIDs = listReferenceIDs(for: list)
+        let now = Date.now
+        for memberIndex in placeListMembers.indices where
+            listIDs.contains(placeListMembers[memberIndex].listID)
+                && placeListMembers[memberIndex].userID == currentUser.id
+                && placeListMembers[memberIndex].deletedAt == nil {
+            placeListMembers[memberIndex].deletedAt = now
+        }
+        persist()
     }
 
     private func listItems(for list: LocalPlaceList) -> [LocalPlaceListItem] {
@@ -2722,6 +3256,16 @@ final class WanderStore: ObservableObject {
             }
     }
 
+    var deletedVisitPhotoReferenceIDs: Set<String> {
+        visitPhotos.reduce(into: Set<String>()) { result, photo in
+            guard photo.deletedAt != nil else { return }
+            result.insert(photo.localID)
+            if let serverID = photo.serverID {
+                result.insert(serverID)
+            }
+        }
+    }
+
     @discardableResult
     func applySharedVisitAcceptance(
         invitation: SharedVisitInvitation,
@@ -2730,7 +3274,7 @@ final class WanderStore: ObservableObject {
     ) -> LocalPlaceVisit {
         let place = upsertPlace(from: invitation.candidate, sourceType: .socialSave)
         let now = Date.now
-        let wasTodayCovered = saveStreakSummary.isTodayCovered
+        let streakSummaryBeforeSave = saveStreakSummary
         let userPlace: LocalUserPlace
         let createdNewUserPlace: Bool
 
@@ -2825,7 +3369,7 @@ final class WanderStore: ObservableObject {
                 place: place,
                 status: .been,
                 savedAt: now,
-                wasTodayCovered: wasTodayCovered
+                previousSummary: streakSummaryBeforeSave
             )
         }
         objectWillChange.send()
@@ -3422,6 +3966,9 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func deleteVisit(visitID: String) -> Bool {
         guard let visit = currentUserVisit(matching: visitID) else { return false }
+        let remoteOwnerPlace = remoteCurrentUserVisiblePlace(
+            matching: visit.userPlaceID
+        )
 
         let now = Date.now
         let visitIDs = matchingVisitIDs(visit.id)
@@ -3438,6 +3985,29 @@ final class WanderStore: ObservableObject {
                 }
             } else {
                 refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
+            }
+        } else if let remoteOwnerPlace {
+            let userPlaceReferenceIDs = Self.referenceIDs(
+                for: remoteOwnerPlace.userPlace
+            )
+            let remainingVisits = placeVisits.filter {
+                $0.deletedAt == nil
+                    && userPlaceReferenceIDs.contains($0.userPlaceID)
+            }
+            if remainingVisits.isEmpty {
+                let materializedUserPlace = materializeRemoteCurrentUserPlace(
+                    remoteOwnerPlace
+                )
+                if !restoreHistoricalWantAfterLastVisit(
+                    materializedUserPlace,
+                    at: now
+                ) {
+                    deleteUserPlaceAfterLastVisit(materializedUserPlace, at: now)
+                }
+                remoteVisiblePlaceCache.removeAll {
+                    $0.owner.id == currentUser.id
+                        && VisiblePlaceGrouping.matches($0, remoteOwnerPlace)
+                }
             }
         }
         analytics.track(
@@ -3496,6 +4066,26 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
+    func createVisitPhotos(
+        visitID: String,
+        inputs: [LocalVisitPhotoInput]
+    ) -> [LocalVisitPhoto] {
+        withDeferredPersistence {
+            inputs.compactMap { input in
+                createVisitPhoto(
+                    visitID: visitID,
+                    localAssetRef: input.localAssetRef,
+                    contentType: input.contentType,
+                    byteSize: input.byteSize,
+                    width: input.width,
+                    height: input.height,
+                    capturedAt: input.capturedAt
+                )
+            }
+        }
+    }
+
+    @discardableResult
     func createVisitPhoto(
         visitID: String,
         data: Data,
@@ -3518,11 +4108,12 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
-        guard backend != nil else {
+        guard let backend else {
             return photo
         }
 
-        return await uploadVisitPhoto(photoID: photo.id, data: data, backend: backend)
+        _ = await retryPendingVisitPhotoUploads(backend: backend)
+        return currentUserPhoto(matching: photo.id)
     }
 
     @discardableResult
@@ -3572,6 +4163,11 @@ final class WanderStore: ObservableObject {
         if iFollowThem && theyFollowMe { return .mutual }
         if iFollowThem { return .follower }
         return .nonFollower
+    }
+
+    func viewerFollows(_ userID: String) -> Bool {
+        let currentRelationship = relationship(to: userID)
+        return currentRelationship == .follower || currentRelationship == .mutual
     }
 
     func hasAcknowledgedFollow(to userID: String) -> Bool {
@@ -3782,6 +4378,37 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    func searchTrustedPlaces(
+        query: String,
+        scope: DiscoverPlaceScope = .everyone
+    ) -> DiscoverResults {
+        let filters = DiscoverFilters(query: query)
+        let matches = TrustedPlaceSearch.matches(
+            query: query,
+            in: visiblePlaces(filters: PlaceFilters(ownerScopes: scope.ownerScopes))
+        )
+        let places = matches.map(\.place)
+        let evidenceByUserPlaceID = Dictionary(
+            uniqueKeysWithValues: matches.map { match in
+                (
+                    match.place.userPlace.id,
+                    discoverMatchEvidence(
+                        for: match.place,
+                        filters: filters,
+                        searchEvidence: match.evidence
+                    )
+                )
+            }
+        )
+        return DiscoverResults(
+            places: places,
+            profiles: [],
+            filters: filters,
+            parseSource: .deterministic,
+            evidenceByUserPlaceID: evidenceByUserPlaceID
+        )
+    }
+
     func discover(query: String, scope: DiscoverPlaceScope = .everyone, backend: WanderBackend? = nil) async -> DiscoverResults {
         let filters = await parseDiscover(query: query)
         guard !Task.isCancelled else {
@@ -3811,31 +4438,49 @@ final class WanderStore: ObservableObject {
         }
 
         let hasSearchText = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        var places = (hasSearchText && !filters.hasRecognizedFacet ? [] : visiblePlaces(filters: placeFilters))
+        let candidates = visiblePlaces(filters: placeFilters)
             .filter { visiblePlace in
                 matchesArea(filters.area, visiblePlace: visiblePlace)
                     && matchesOwner(filters.ownerQuery, visiblePlace: visiblePlace)
                     && matchesTags(filters.tags, visiblePlace: visiblePlace)
                     && matchesOpinion(filters.opinion, visiblePlace: visiblePlace)
             }
-
-        if filters.sort == .ownerRatingDescending {
-            places.sort { lhs, rhs in
-                let lhsScore = lhs.userPlace.ratingScore ?? -.infinity
-                let rhsScore = rhs.userPlace.ratingScore ?? -.infinity
-                if lhsScore != rhsScore { return lhsScore > rhsScore }
-                if lhs.userPlace.savedAt != rhs.userPlace.savedAt {
-                    return lhs.userPlace.savedAt > rhs.userPlace.savedAt
-                }
-                return lhs.userPlace.id < rhs.userPlace.id
+        let queryPlan = TrustedPlaceSearchQuery(
+            query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+        var searchMatches: [TrustedPlaceSearchMatch]
+        if hasSearchText {
+            searchMatches = TrustedPlaceSearch.matches(query: queryPlan, in: candidates)
+        } else {
+            searchMatches = candidates.map {
+                TrustedPlaceSearchMatch(place: $0, score: 0, evidence: [])
             }
         }
 
+        if filters.sort == .ownerRatingDescending {
+            searchMatches.sort { lhs, rhs in
+                let lhsRating = lhs.place.userPlace.ratingScore ?? -.infinity
+                let rhsRating = rhs.place.userPlace.ratingScore ?? -.infinity
+                if lhsRating != rhsRating { return lhsRating > rhsRating }
+                if lhs.score != rhs.score { return lhs.score > rhs.score }
+                if lhs.place.userPlace.savedAt != rhs.place.userPlace.savedAt {
+                    return lhs.place.userPlace.savedAt > rhs.place.userPlace.savedAt
+                }
+                return lhs.place.userPlace.id < rhs.place.userPlace.id
+            }
+        }
+        let places = searchMatches.map(\.place)
+
         let evidenceByUserPlaceID = Dictionary(
-            uniqueKeysWithValues: places.map { visiblePlace in
+            uniqueKeysWithValues: searchMatches.map { searchMatch in
                 (
-                    visiblePlace.userPlace.id,
-                    discoverMatchEvidence(for: visiblePlace, filters: filters)
+                    searchMatch.place.userPlace.id,
+                    discoverMatchEvidence(
+                        for: searchMatch.place,
+                        filters: filters,
+                        searchEvidence: queryPlan.requiredTokens.isEmpty ? [] : searchMatch.evidence
+                    )
                 )
             }
         )
@@ -3990,7 +4635,7 @@ final class WanderStore: ObservableObject {
         }
 
         let savedAt = Date.now
-        let wasTodayCovered = saveStreakSummary.isTodayCovered
+        let streakSummaryBeforeSave = saveStreakSummary
         let userPlace = LocalUserPlace(
             localID: "local_up_\(currentUser.handle)_\(slug(place.localID))",
             userID: currentUser.id,
@@ -4040,7 +4685,7 @@ final class WanderStore: ObservableObject {
             place: place,
             status: status,
             savedAt: savedAt,
-            wasTodayCovered: wasTodayCovered
+            previousSummary: streakSummaryBeforeSave
         )
         persist()
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
@@ -4193,6 +4838,7 @@ final class WanderStore: ObservableObject {
             }
             lastRemoteError = nil
             await refreshRemoteVisiblePlaces(backend: backend)
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
             return RemoveSaveResult(userPlaceID: localChange.userPlaceID, syncState: .tombstoned)
         } catch {
             let message = remoteErrorMessage(error)
@@ -4308,6 +4954,7 @@ final class WanderStore: ObservableObject {
             return 0
         }
 
+        let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
         let retryableIDs = syncableOwnPlaceIDs { syncState in
             syncState == .failed
         }
@@ -4316,7 +4963,7 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: retryableIDs, backend: backend, trigger: .failedRetry)
         _ = await syncPendingVisits(backend: backend)
-        return syncedCount
+        return syncedCount + deletedCount
     }
 
     @discardableResult
@@ -4329,6 +4976,7 @@ final class WanderStore: ObservableObject {
             return 0
         }
 
+        let deletedCount = await retryPendingUserPlaceDeletes(backend: backend)
         let syncableIDs = syncableOwnPlaceIDs { syncState in
             syncState != .synced
                 && syncState != .pendingDelete
@@ -4340,6 +4988,49 @@ final class WanderStore: ObservableObject {
         #endif
         let syncedCount = await syncOwnPlaces(withIDs: syncableIDs, backend: backend, trigger: .signedInBackfill)
         _ = await syncPendingVisits(backend: backend)
+        return syncedCount + deletedCount
+    }
+
+    @discardableResult
+    func retryPendingUserPlaceDeletes(backend: WanderBackend?) async -> Int {
+        guard let backend else { return 0 }
+        let pendingRows = userPlaces.filter {
+            $0.userID == currentUser.id
+                && $0.deletedAt != nil
+                && $0.serverID != nil
+                && ($0.syncState == .pendingDelete || $0.syncState == .failed)
+        }
+        let rowsByRemoteID = Dictionary(
+            grouping: pendingRows,
+            by: { $0.serverID ?? $0.id }
+        )
+
+        var syncedCount = 0
+        for remoteUserPlaceID in rowsByRemoteID.keys.sorted() {
+            let rows = rowsByRemoteID[remoteUserPlaceID] ?? []
+            do {
+                try await backend.deleteUserPlace(userPlaceID: remoteUserPlaceID)
+                for row in rows {
+                    markUserPlace(localOrServerID: row.id, syncState: .tombstoned)
+                }
+                lastRemoteError = nil
+                syncedCount += 1
+            } catch {
+                let message = remoteErrorMessage(error)
+                for row in rows {
+                    markUserPlace(
+                        localOrServerID: row.id,
+                        syncState: .failed,
+                        error: message
+                    )
+                }
+                lastRemoteError = message
+            }
+        }
+
+        if syncedCount > 0 {
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
+        }
         return syncedCount
     }
 
@@ -4484,6 +5175,7 @@ final class WanderStore: ObservableObject {
             do {
                 _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
                 markPlaceVisit(localOrServerID: visit.id, syncState: .tombstoned)
+                lastRemoteError = nil
                 syncedCount += 1
             } catch {
                 let message = remoteErrorMessage(error)
@@ -4491,11 +5183,14 @@ final class WanderStore: ObservableObject {
                 lastRemoteError = message
             }
         }
+        if syncedCount > 0 {
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
+        }
         return syncedCount
     }
 
     @discardableResult
-    func uploadVisitPhoto(photoID: String, data: Data, backend: WanderBackend?) async -> LocalVisitPhoto? {
+    func uploadVisitPhoto(photoID: String, data: Data?, backend: WanderBackend?) async -> LocalVisitPhoto? {
         guard let backend,
               let photo = currentUserPhoto(matching: photoID),
               let visit = currentUserVisit(matching: photo.visitID)
@@ -4515,21 +5210,52 @@ final class WanderStore: ObservableObject {
         let remotePhotoID = photo.serverID ?? UUID().uuidString.lowercased()
         let contentType = photo.contentType ?? "image/jpeg"
         let storagePath = "\(currentUser.id)/\(remoteVisitID)/\(remotePhotoID).\(fileExtension(forContentType: contentType))"
+        let alreadyUploaded = photo.uploadState == .uploaded
+            && photo.remoteURLString?.isEmpty == false
         markVisitPhoto(
             localOrServerID: photo.id,
             serverID: remotePhotoID,
             visitID: remoteVisitID,
             storagePath: storagePath,
-            syncState: .pendingCreate,
-            uploadState: .pendingUpload
+            syncState: alreadyUploaded ? .pendingUpdate : .pendingCreate,
+            uploadState: alreadyUploaded ? .uploaded : .pendingUpload
         )
 
-        guard let pendingDraft = visitPhotoDraft(for: photo.id, uploadState: .pendingUpload) else {
-            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing visit photo draft")
-            return photo
-        }
-
         do {
+            if alreadyUploaded {
+                guard let uploadedDraft = visitPhotoDraft(for: photo.id, uploadState: .uploaded) else {
+                    markVisitPhoto(
+                        localOrServerID: photo.id,
+                        syncState: .failed,
+                        uploadState: .uploaded,
+                        error: "Missing uploaded visit photo draft"
+                    )
+                    return photo
+                }
+                let result = try await backend.upsertVisitPhotoMetadata(uploadedDraft)
+                markVisitPhoto(
+                    localOrServerID: photo.id,
+                    syncState: .synced,
+                    uploadState: result.uploadState,
+                    result: result
+                )
+                lastRemoteError = nil
+                return photo
+            }
+
+            guard let data else {
+                markVisitPhoto(
+                    localOrServerID: photo.id,
+                    syncState: .failed,
+                    uploadState: .failed,
+                    error: "Missing local visit photo data"
+                )
+                return photo
+            }
+            guard let pendingDraft = visitPhotoDraft(for: photo.id, uploadState: .pendingUpload) else {
+                markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: "Missing visit photo draft")
+                return photo
+            }
             _ = try await backend.upsertVisitPhotoMetadata(pendingDraft)
             markVisitPhoto(localOrServerID: photo.id, syncState: .pendingUpdate, uploadState: .uploading)
             let remoteURL = try await backend.uploadVisitPhotoData(
@@ -4551,7 +5277,17 @@ final class WanderStore: ObservableObject {
             lastRemoteError = nil
         } catch {
             let message = remoteErrorMessage(error)
-            markVisitPhoto(localOrServerID: photo.id, syncState: .failed, uploadState: .failed, error: message)
+            let latestPhoto = currentUserPhoto(matching: photo.id)
+            let uploadState: VisitPhotoUploadState = latestPhoto?.uploadState == .uploaded
+                && latestPhoto?.remoteURLString?.isEmpty == false
+                ? .uploaded
+                : .failed
+            markVisitPhoto(
+                localOrServerID: photo.id,
+                syncState: .failed,
+                uploadState: uploadState,
+                error: message
+            )
             lastRemoteError = message
         }
 
@@ -4574,12 +5310,13 @@ final class WanderStore: ObservableObject {
             _ = try await backend.deleteCheckIn(visitID: remoteVisitID)
             markPlaceVisit(localOrServerID: visitID, syncState: .tombstoned)
             lastRemoteError = nil
+            _ = await refreshRemoteCurrentUserCalendarData(backend: backend)
             return true
         } catch {
             let message = remoteErrorMessage(error)
             markPlaceVisit(localOrServerID: visitID, syncState: .failed, error: message)
             lastRemoteError = message
-            return false
+            return true
         }
     }
 
@@ -4974,6 +5711,28 @@ final class WanderStore: ObservableObject {
             lastRemoteError = remoteErrorMessage(error)
         }
         await refreshRemoteWannaGoPlans(backend: backend)
+    }
+
+    /// Fetches one Map viewport without replacing the store's profile-wide
+    /// social cache. Map uses this lightweight path after camera gestures so a
+    /// pan does not re-run the full social snapshot or Wanna plan refresh.
+    func fetchRemoteViewportPlaces(
+        in viewport: MapViewport,
+        backend: WanderBackend?
+    ) async -> [VisiblePlace]? {
+        guard let backend, backend.placeRepository != nil else { return nil }
+        let requestUserID = currentUser.id
+
+        do {
+            let visiblePlaces = try await backend.visiblePlaces(in: viewport)
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            lastRemoteError = nil
+            return visiblePlaces
+        } catch {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            lastRemoteError = remoteErrorMessage(error)
+            return nil
+        }
     }
 
     func refreshRemoteWannaGoPlans(backend: WanderBackend?) async {
@@ -6078,6 +6837,11 @@ final class WanderStore: ObservableObject {
             saveStreakDatesByUserID[signedInProfile.id, default: []].append(contentsOf: guestStreakDates)
             didClaimRows = true
         }
+        if let guestRecoveryDates = saveStreakRecoveryDatesByUserID.removeValue(forKey: previousUserID),
+           !guestRecoveryDates.isEmpty {
+            saveStreakRecoveryDatesByUserID[signedInProfile.id, default: []].append(contentsOf: guestRecoveryDates)
+            didClaimRows = true
+        }
 
         guard didClaimRows else { return }
         objectWillChange.send()
@@ -6118,6 +6882,11 @@ final class WanderStore: ObservableObject {
     private func cancelSharedVisitInboxTask() {
         sharedVisitInboxTask?.task.cancel()
         sharedVisitInboxTask = nil
+    }
+
+    private func cancelVisitPhotoUploadTask() {
+        visitPhotoUploadTask?.task.cancel()
+        visitPhotoUploadTask = nil
     }
 
     private func normalizedSessionHandle(from session: AuthSession) -> String {
@@ -6341,7 +7110,45 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
-        return currentUserPlace(matching: visit.userPlaceID) == nil ? nil : visit
+        let isOwnedLocally = currentUserPlace(matching: visit.userPlaceID) != nil
+        let isOwnedRemotely = remoteCurrentUserVisiblePlace(
+            matching: visit.userPlaceID
+        ) != nil
+        return isOwnedLocally || isOwnedRemotely ? visit : nil
+    }
+
+    private func remoteCurrentUserVisiblePlace(
+        matching userPlaceID: String
+    ) -> VisiblePlace? {
+        remoteVisiblePlaceCache.first { visiblePlace in
+            visiblePlace.owner.id == currentUser.id
+                && visiblePlace.userPlace.userID == currentUser.id
+                && visiblePlace.userPlace.deletedAt == nil
+                && Self.referenceIDs(for: visiblePlace.userPlace)
+                    .contains(userPlaceID)
+        }
+    }
+
+    private func materializeRemoteCurrentUserPlace(
+        _ visiblePlace: VisiblePlace
+    ) -> LocalUserPlace {
+        let remoteReferenceIDs = Self.referenceIDs(for: visiblePlace.userPlace)
+        if let existing = userPlaces.first(where: {
+            $0.userID == currentUser.id
+                && !Self.referenceIDs(for: $0).isDisjoint(with: remoteReferenceIDs)
+        }) {
+            return existing
+        }
+
+        if !places.contains(where: {
+            $0.id == visiblePlace.place.id
+                || $0.localID == visiblePlace.place.localID
+                || ($0.serverID != nil && $0.serverID == visiblePlace.place.serverID)
+        }) {
+            places.append(visiblePlace.place)
+        }
+        userPlaces.append(visiblePlace.userPlace)
+        return visiblePlace.userPlace
     }
 
     private func currentUserPhoto(matching photoID: String) -> LocalVisitPhoto? {
@@ -6909,9 +7716,26 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
+        let now = Date.now
         var removedUserPlaceIDs = Set<String>()
         var remoteUserPlaceIDs = Set<String>()
         for visiblePlace in matchingVisiblePlaces {
+            if !places.contains(where: {
+                $0.id == visiblePlace.place.id
+                    || $0.localID == visiblePlace.place.localID
+                    || ($0.serverID != nil
+                        && $0.serverID == visiblePlace.place.serverID)
+            }) {
+                places.append(visiblePlace.place)
+            }
+            if !userPlaces.contains(where: {
+                !Self.referenceIDs(for: $0).isDisjoint(
+                    with: Self.referenceIDs(for: visiblePlace.userPlace)
+                )
+            }) {
+                userPlaces.append(visiblePlace.userPlace)
+            }
+            deleteUserPlaceAfterLastVisit(visiblePlace.userPlace, at: now)
             removedUserPlaceIDs.insert(visiblePlace.userPlace.id)
             removedUserPlaceIDs.insert(visiblePlace.userPlace.localID)
             if let serverID = visiblePlace.userPlace.serverID {
@@ -7197,16 +8021,18 @@ final class WanderStore: ObservableObject {
         let retainedOwnerPlaces = remoteVisiblePlaceCache.filter {
             $0.owner.id == currentUser.id
         }
-        var mergedPlaces = visiblePlaces
-
-        for retainedPlace in retainedOwnerPlaces where !mergedPlaces.contains(where: {
-            $0.owner.id == currentUser.id
-                && VisiblePlaceGrouping.matches($0, retainedPlace)
-        }) {
-            mergedPlaces.append(retainedPlace)
+        let incomingNonOwnerPlaces = visiblePlaces.filter {
+            $0.owner.id != currentUser.id
         }
+        let ownerPlaces = authoritativeCalendarUserID == currentUser.id
+            ? retainedOwnerPlaces
+            : mergeCalendarVisiblePlaces(
+                retainedOwnerPlaces + visiblePlaces.filter {
+                    $0.owner.id == currentUser.id
+                }
+            )
 
-        remoteVisiblePlaceCache = mergeVisiblePlaces(mergedPlaces)
+        remoteVisiblePlaceCache = mergeVisiblePlaces(incomingNonOwnerPlaces + ownerPlaces)
         hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
     }
 
@@ -8247,7 +9073,8 @@ final class WanderStore: ObservableObject {
 
     private func discoverMatchEvidence(
         for visiblePlace: VisiblePlace,
-        filters: DiscoverFilters
+        filters: DiscoverFilters,
+        searchEvidence: [TrustedPlaceSearchEvidence] = []
     ) -> DiscoverMatchEvidence {
         var items: [DiscoverEvidenceItem] = []
 
@@ -8304,7 +9131,7 @@ final class WanderStore: ObservableObject {
             items.append(
                 DiscoverEvidenceItem(
                     kind: .category,
-                    displayValue: visiblePlace.effectiveCategoryDisplay.compactTitle,
+                    displayValue: visiblePlace.effectiveCompactType,
                     sourceOwnerID: visiblePlace.owner.id
                 )
             )
@@ -8348,6 +9175,27 @@ final class WanderStore: ObservableObject {
                 )
             )
         }
+
+        items.append(contentsOf: searchEvidence.compactMap { evidence in
+            let kind: DiscoverEvidenceKind
+            switch evidence.field {
+            case .name: kind = .name
+            case .owner: kind = .owner
+            case .category: kind = .category
+            case .area: kind = .area
+            case .note: kind = .note
+            case .attribute: kind = .attribute
+            case .status: kind = .status
+            }
+            guard !items.contains(where: { $0.kind == kind && $0.displayValue == evidence.displayValue }) else {
+                return nil
+            }
+            return DiscoverEvidenceItem(
+                kind: kind,
+                displayValue: evidence.displayValue,
+                sourceOwnerID: visiblePlace.owner.id
+            )
+        })
 
         return DiscoverMatchEvidence(
             userPlaceID: visiblePlace.userPlace.id,

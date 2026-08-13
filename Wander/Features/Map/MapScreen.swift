@@ -16,12 +16,103 @@ struct MapSaveFlowSelectionCoordinator {
     }
 }
 
+enum MapWalkthroughMemoryPolicy {
+    static func preferredVisiblePlace(
+        from visiblePlaces: [VisiblePlace],
+        tutorialUserPlaceID: String?,
+        currentUserID: String
+    ) -> VisiblePlace? {
+        if let tutorialUserPlaceID,
+           let tutorialSave = visiblePlaces.first(where: {
+               $0.userPlace.id == tutorialUserPlaceID
+           }) {
+            return tutorialSave
+        }
+
+        return visiblePlaces
+            .filter {
+                $0.owner.id == currentUserID && $0.userPlace.status == .been
+            }
+            .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
+            .first
+            ?? visiblePlaces
+                .filter { $0.userPlace.status == .been }
+                .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
+                .first
+            ?? visiblePlaces.first
+    }
+
+    static func supportsFullPlaceCardTour(_ visiblePlace: VisiblePlace) -> Bool {
+        let place = visiblePlace.place
+        let hasExactReservation = PlaceActionLink.decode(place.actionLinksJSON).contains {
+            $0.kind == .reserve && $0.confidence == .exact
+        }
+        return place.websiteURLString != nil
+            && place.phoneNumber != nil
+            && hasExactReservation
+    }
+
+    @MainActor
+    static func realisticFallback(owner: LocalProfile) -> VisiblePlace {
+        let reservationLinks = PlaceActionLink.encode([
+            PlaceActionLink(
+                kind: .reserve,
+                title: "Reservation",
+                urlString: "https://www.recreation.gov/camping/campgrounds/232447",
+                source: .providerSearch,
+                confidence: .exact
+            )
+        ])
+        let place = LocalPlace(
+            localID: "walkthrough_place_kirk_creek",
+            canonicalName: "Kirk Creek Campground",
+            category: "campground",
+            primaryCategory: WanderPlaceCategory.outdoorsNature,
+            subcategory: "Campground",
+            rawProviderType: "campground",
+            address: "CA-1",
+            locality: "Big Sur",
+            region: "CA",
+            latitude: 35.9907,
+            longitude: -121.4949,
+            sourceProvider: "walkthrough",
+            websiteURLString: "https://www.recreation.gov/camping/campgrounds/232447",
+            phoneNumber: "+1-877-444-6777",
+            actionLinksJSON: reservationLinks,
+            syncState: .localOnly
+        )
+        let userPlace = LocalUserPlace(
+            localID: "walkthrough_up_kirk_creek",
+            userID: owner.id,
+            placeID: place.id,
+            status: .been,
+            visibility: .followers,
+            note: "Ocean views from camp, dramatic sunsets, and an easy launch point for a Big Sur weekend.",
+            ratingScore: 4.5,
+            recommendedScore: 4.5,
+            recommendedCount: 1,
+            nearbyConfirmed: true,
+            visitedAt: .now,
+            sourceType: "walkthrough",
+            syncState: .localOnly
+        )
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner
+        )
+    }
+}
+
 struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
@@ -32,7 +123,7 @@ struct MapScreen: View {
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
-    @State private var mapQuery = ""
+    @State private var mapQuery: String
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
     @State private var mapFeatureResolutionTask: Task<Void, Never>?
@@ -43,16 +134,27 @@ struct MapScreen: View {
     @State private var isSearchingMapKit = false
     @State private var mapSearchRevision: UInt64 = 0
     @State private var mapSearchTask: Task<Void, Never>?
-    @State private var selectedFilters: Set<MapFilter>
-    @State private var selectedSocialOwnerID: String?
+    @State private var mapFilterState: MapFilterState
+    @State private var isMoreFiltersPresented: Bool
+    @State private var routedVisiblePlace: VisiblePlace?
     @State private var currentSearchRegion = Self.defaultRegion
+    @State private var featuredRankingRegion = Self.defaultRegion
+    @State private var featuredViewportPlaces: [VisiblePlace]?
+    @State private var loadedFeaturedViewport: MapViewport?
+    @State private var featuredViewportRefreshTask: Task<Void, Never>?
+    @State private var isLoadingMapSources = true
+    @State private var transitioningAnnotationGroups: [VisiblePlaceGroup]?
+    @State private var visibleTransitionGroupKeys: Set<String>?
+    @State private var mapPinTransitionTask: Task<Void, Never>?
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var isRecenteringOnUser = false
     @State private var suppressNextQueryAutoSelection = false
     @State private var didResolveInitialCamera = false
+    @State private var didResolveInitialSearch = false
     @State private var handlingNotificationRequestID: UUID?
     @State private var handledPresentationResetRequestID: UUID?
     @State private var mapSearchFocusRequestID: UUID?
+    @State private var walkthroughFallbackMemory: VisiblePlace?
     @FocusState private var isMapSearchFocused: Bool
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -66,10 +168,28 @@ struct MapScreen: View {
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let searchLaunchRequest: WanderMapSearchLaunchRequest?
     private let onSearchLaunchRequestHandled: (UUID) -> Void
+    private let onAdd: () -> Void
 
     private var baseVisiblePlaces: [VisiblePlace] {
-        guard let mapPlaceFilters else { return [] }
-        return store.visiblePlaces(filters: mapPlaceFilters)
+        let followedOwnerIDs = Set(store.following(of: store.currentUser.id).map(\.id))
+
+        switch mapFilterState.source {
+        case .featured:
+            return MapFeaturedSelection.places(
+                from: featuredViewportPlaces ?? store.visiblePlaces(),
+                currentUserID: store.currentUser.id,
+                eligibleOwnerIDs: followedOwnerIDs,
+                in: featuredRankingRegion,
+                refinements: mapFilterState.more
+            )
+        case .friends:
+            return MapFilterSelection.friendsPlaces(
+                from: store.visiblePlaces(),
+                currentUserID: store.currentUser.id,
+                followedOwnerIDs: followedOwnerIDs,
+                refinements: mapFilterState.more
+            )
+        }
     }
 
     init(
@@ -77,31 +197,30 @@ struct MapScreen: View {
         startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation(),
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         searchLaunchRequest: WanderMapSearchLaunchRequest? = nil,
-        onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in }
+        onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
+        onAdd: @escaping () -> Void = {}
     ) {
         self.initialPlaceQuery = initialPlaceQuery
         self.presentationResetRequest = presentationResetRequest
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
+        self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
-        _selectedFilters = State(initialValue: Self.resolvedInitialMapFilters())
+        _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
+        _mapFilterState = State(initialValue: Self.resolvedInitialMapFilterState())
+        _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
+        _routedVisiblePlace = State(initialValue: nil)
     }
 
     private var visiblePlaces: [VisiblePlace] {
-        let places = baseVisiblePlaces
-        let normalizedQuery = mapQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else { return places }
-
-        return places.filter { visiblePlace in
-            visiblePlace.place.canonicalName.lowercased().contains(normalizedQuery)
-                || visiblePlace.effectiveCategoryDisplay.compactTitle.lowercased().contains(normalizedQuery)
-                || (visiblePlace.place.locality?.lowercased().contains(normalizedQuery) ?? false)
-                || visiblePlace.owner.displayName.lowercased().contains(normalizedQuery)
-                || visiblePlace.owner.handle.lowercased().contains(normalizedQuery)
-                || (visiblePlace.userPlace.note?.lowercased().contains(normalizedQuery) ?? false)
-                || (visiblePlace.userPlace.ratingSignal?.lowercased().contains(normalizedQuery) ?? false)
-                || (visiblePlace.recommendedScore.map(PlaceRating.averageDisplay)?.lowercased().contains(normalizedQuery) ?? false)
+        var places = baseVisiblePlaces
+        if let routedVisiblePlace,
+           !places.contains(where: { $0.id == routedVisiblePlace.id }) {
+            places.append(routedVisiblePlace)
         }
+        let query = TrustedPlaceSearchQuery(mapQuery)
+        guard query.hasMeaningfulTokens else { return places }
+        return TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
@@ -119,32 +238,11 @@ struct MapScreen: View {
         visiblePlaceGroups.map(\.key)
     }
 
-    private var mapPlaceFilters: PlaceFilters? {
-        MapFilterSelection.placeFilters(
-            selectedFilters: selectedFilters,
-            selectedSocialOwnerID: selectedSocialOwnerID
-        )
-    }
-
     private var socialOwnerOptions: [MapSocialOwnerOption] {
-        let socialPlaces = store.visiblePlaces(filters: PlaceFilters(ownerScopes: ["social"]))
-        var seen = Set<String>()
-        return socialPlaces.compactMap { visiblePlace in
-            let owner = visiblePlace.owner
-            guard owner.id != store.currentUser.id, !seen.contains(owner.id) else { return nil }
-            seen.insert(owner.id)
-            return MapSocialOwnerOption(
-                id: owner.id,
-                displayName: owner.displayName,
-                handle: owner.handle
-            )
-        }
-        .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-    }
-
-    private var selectedSocialOwner: MapSocialOwnerOption? {
-        guard let selectedSocialOwnerID else { return nil }
-        return socialOwnerOptions.first { $0.id == selectedSocialOwnerID }
+        MapSocialOwnerSelection.options(
+            currentUser: store.currentUser,
+            following: store.following(of: store.currentUser.id)
+        )
     }
 
     private var selectedPlace: VisiblePlace? {
@@ -158,7 +256,7 @@ struct MapScreen: View {
     }
 
     private var hasSelectedProfile: Bool {
-        selectedPlace != nil || selectedSearchCandidate != nil
+        selectedPlace != nil || selectedSearchCandidate != nil || walkthroughFallbackMemory != nil
     }
 
     private var mappableSearchCandidates: [PlaceCandidate] {
@@ -168,8 +266,29 @@ struct MapScreen: View {
         }
     }
 
-    private var currentViewport: MapViewport {
-        MapViewport(minLatitude: 33.95, minLongitude: -118.45, maxLatitude: 34.2, maxLongitude: -118.12)
+    private var mapFilterEmptyMessage: String? {
+        guard routedVisiblePlace == nil,
+              mapSearchCandidates.isEmpty,
+              Self.normalized(mapQuery).isEmpty,
+              visiblePlaces.isEmpty
+        else { return nil }
+
+        if mapFilterState.source == .featured, isLoadingMapSources {
+            return nil
+        }
+        if mapFilterState.more.activeSectionCount > 0 {
+            return "No \(mapFilterState.source.title.lowercased()) places match these filters."
+        }
+        switch mapFilterState.source {
+        case .featured:
+            return "No featured check-ins here yet."
+        case .friends:
+            return "No friends’ places yet."
+        }
+    }
+
+    private static var initialRemoteViewport: MapViewport {
+        MapViewportRefreshPolicy.prefetchedViewport(for: defaultRegion)
     }
 
     private var shouldShowTypeahead: Bool {
@@ -180,9 +299,15 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        let annotationGroups = Self.orderedAnnotationGroups(
-            visiblePlaceGroups,
-            selectedGroupKey: selectedPlaceGroupKey
+        let annotationGroups = transitioningAnnotationGroups ?? orderedVisiblePlaceGroups()
+        let moreFilterSelection = Binding(
+            get: { mapFilterState.more },
+            set: { selection in
+                setMoreFilterSelection(
+                    selection,
+                    from: annotationGroups
+                )
+            }
         )
         NavigationStack {
             ZStack(alignment: .bottom) {
@@ -193,6 +318,7 @@ struct MapScreen: View {
                         }
 
                         ForEach(annotationGroups) { group in
+                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -212,6 +338,13 @@ struct MapScreen: View {
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
+                                .opacity(isTransitionVisible ? 1 : 0)
+                                .scaleEffect(
+                                    isTransitionVisible
+                                        ? 1
+                                        : MapPinFilterTransitionStyle.hiddenScale
+                                )
+                                .allowsHitTesting(isTransitionVisible)
                                 .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
                             }
                         }
@@ -247,6 +380,7 @@ struct MapScreen: View {
                     }
                     .onMapCameraChange(frequency: .onEnd) { context in
                         currentSearchRegion = context.region
+                        handleFeaturedCameraChange(context.region)
                     }
                     .onTapGesture(coordinateSpace: .local) { point in
                         handleMapTap(at: point, proxy: proxy)
@@ -271,16 +405,41 @@ struct MapScreen: View {
 
                 VStack(spacing: 0) {
                     VStack(spacing: WanderTheme.spacing2) {
-                        SearchBar(
-                            query: $mapQuery,
-                            isFocused: $isMapSearchFocused,
-                            focusRequestID: mapSearchFocusRequestID,
-                            onFocusRequestHandled: { requestID in
-                                guard mapSearchFocusRequestID == requestID else { return }
-                                mapSearchFocusRequestID = nil
-                            },
-                            onSubmit: submitMapSearch
-                        )
+                        HStack(spacing: WanderTheme.spacing2) {
+                            SearchBar(
+                                query: $mapQuery,
+                                isFocused: $isMapSearchFocused,
+                                focusRequestID: mapSearchFocusRequestID,
+                                onFocusRequestHandled: { requestID in
+                                    guard mapSearchFocusRequestID == requestID else { return }
+                                    mapSearchFocusRequestID = nil
+                                },
+                                onSubmit: submitMapSearch
+                            )
+                            .walkthroughTarget(
+                                walkthroughs.currentStep?.target == .mapSendoff
+                                    ? .mapSendoff
+                                    : .mapSearch
+                            )
+
+                            if isMapSearchFocused {
+                                MapSearchCancelButton(action: cancelMapSearch)
+                            } else {
+                                WanderGlassActionButton(
+                                    systemImage: "plus",
+                                    accessibilityLabel: "Add a place",
+                                    accessibilityIdentifier: "map.headerAdd",
+                                    action: onAdd
+                                )
+                                .walkthroughTarget(
+                                    walkthroughs.currentStep?.target == .mapAddAgain
+                                        ? .mapAddAgain
+                                        : .mapAdd
+                                )
+                            }
+                        }
+                        .padding(.horizontal, WanderTheme.spacing3)
+
                         if shouldShowTypeahead {
                             MapTypeaheadList(
                                 suggestions: typeaheadSuggestions,
@@ -293,32 +452,70 @@ struct MapScreen: View {
                             MapSearchMessage(text: mapSearchMessage)
                                 .padding(.horizontal, WanderTheme.spacing3)
                         }
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: WanderTheme.spacing1) {
-                                ForEach(MapFilter.allCases) { filter in
-                                    if filter == .social {
-                                        MapSocialFilterMenu(
-                                            isSelected: selectedFilters.contains(.social),
-                                            selectedOwner: selectedSocialOwner,
-                                            ownerOptions: socialOwnerOptions,
-                                            showAll: showAllSocialPlaces,
-                                            hideSocial: hideSocialPlaces,
-                                            selectOwner: showSocialPlaces
-                                        )
-                                    } else {
+                        if !isMapSearchFocused {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: WanderTheme.spacing1) {
+                                    ForEach(MapSource.allCases) { source in
                                         Button {
-                                            toggle(filter)
+                                            selectMapSource(
+                                                source,
+                                                from: annotationGroups
+                                            )
                                         } label: {
-                                            MapFilterChip(filter: filter, isSelected: selectedFilters.contains(filter))
+                                            MapSourceFilterChip(
+                                                source: source,
+                                                isSelected: mapFilterState.source == source
+                                            )
                                         }
                                         .buttonStyle(.plain)
+                                        .walkthroughTarget(
+                                            source == .featured ? .mapFeatured : .mapFriends
+                                        )
+                                    }
+
+                                    Button {
+                                        isMoreFiltersPresented.toggle()
+                                    } label: {
+                                        MapMoreFilterChip(
+                                            activeSectionCount: mapFilterState.more.activeSectionCount,
+                                            isExpanded: isMoreFiltersPresented
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .walkthroughTarget(.mapMoreFilters)
+                                    .popover(
+                                        isPresented: $isMoreFiltersPresented,
+                                        attachmentAnchor: .rect(.bounds),
+                                        arrowEdge: .top
+                                    ) {
+                                        MapMoreFiltersPopover(
+                                            selection: moreFilterSelection,
+                                            peopleOptions: socialOwnerOptions,
+                                            dismiss: { isMoreFiltersPresented = false }
+                                        )
+                                        .presentationCompactAdaptation(.popover)
                                     }
                                 }
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .padding(.vertical, WanderTheme.spacing1)
                             }
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .padding(.vertical, WanderTheme.spacing1)
+                            .frame(height: 48)
+
+                            if let mapFilterEmptyMessage {
+                                MapFilterEmptyNotice(
+                                    message: mapFilterEmptyMessage,
+                                    canReset: mapFilterState.more.activeSectionCount > 0,
+                                    reset: {
+                                        setMoreFilterSelection(
+                                            MapMoreFilterSelection(),
+                                            from: annotationGroups
+                                        )
+                                    }
+                                )
+                                .padding(.horizontal, WanderTheme.spacing3)
+                                .padding(.top, WanderTheme.spacing1)
+                            }
                         }
-                        .frame(height: 48)
 
                     }
 
@@ -330,6 +527,8 @@ struct MapScreen: View {
                             RecenterButton(isLoading: isRecenteringOnUser) {
                                 recenterOnUser()
                             }
+                            .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
+                            .accessibilityHidden(walkthroughs.currentStep?.target == .mapTabs)
                             .padding(.trailing, WanderTheme.spacing3)
                             .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
                         }
@@ -337,12 +536,14 @@ struct MapScreen: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .safeAreaPadding(.top, WanderTheme.spacing2)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
                 selectedPlaceProfileSurface
             }
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
                 resolveInitialSelection()
+                resolveInitialSearchIfNeeded()
             }
             .task {
                 await centerMapOnCurrentCityIfNeeded()
@@ -354,20 +555,30 @@ struct MapScreen: View {
                 await handleMapSearchLaunchRequest(searchLaunchRequest)
             }
             .task {
-                await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+                await refreshInitialMapSources()
                 if auth.isSignedIn {
                     await store.refreshSharedVisitInbox(backend: backend)
                 }
                 resolveInitialSelection()
             }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
-                guard isSignedIn else { return }
+                guard isSignedIn else {
+                    featuredViewportRefreshTask?.cancel()
+                    featuredViewportPlaces = store.visiblePlaces()
+                    loadedFeaturedViewport = nil
+                    featuredRankingRegion = currentSearchRegion
+                    isLoadingMapSources = false
+                    return
+                }
                 Task {
-                    await store.refreshRemoteSocialSurfaces(in: currentViewport, backend: backend)
+                    await refreshInitialMapSources()
                     await store.refreshSharedVisitInbox(backend: backend)
                     await handleNotificationRoute(pushNotifications.navigationRequest)
                     resolveInitialSelection()
                 }
+            }
+            .onChange(of: mapFilterState.more) { _, _ in
+                routedVisiblePlace = nil
             }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
@@ -389,10 +600,20 @@ struct MapScreen: View {
                     isPlaceProfilePresented = false
                 }
             }
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { previousTarget, target in
+                if target == .mapMemory {
+                    isMapSearchFocused = false
+                    presentWalkthroughPlaceMemory()
+                } else if previousTarget == .mapMemory, target == .mapTabs {
+                    presentWalkthroughPlaceDetail()
+                }
+            }
             .onDisappear {
                 typeaheadTask?.cancel()
                 mapFeatureResolutionTask?.cancel()
                 mapSearchTask?.cancel()
+                featuredViewportRefreshTask?.cancel()
+                mapPinTransitionTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -412,9 +633,13 @@ struct MapScreen: View {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
+                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
             }
             .toolbar(.hidden, for: .navigationBar)
         }
+        .walkthroughPresenterScrim(
+            isPresented: mapSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
+        )
         .task {
             await handleNotificationRoute(pushNotifications.navigationRequest)
         }
@@ -540,8 +765,7 @@ struct MapScreen: View {
         if let visiblePlace = store.visiblePlaces().first(where: {
             $0.place.id == placeID || $0.place.localID == placeID || $0.place.serverID == placeID
         }) {
-            selectedFilters = [.you, .social, .been, .wanna]
-            selectedSocialOwnerID = nil
+            routedVisiblePlace = visiblePlace
             mapQuery = ""
             selectVisiblePlace(visiblePlace)
             isPlaceProfilePresented = false
@@ -590,30 +814,76 @@ struct MapScreen: View {
         currentSearchRegion = region
     }
 
-    private func toggle(_ filter: MapFilter) {
-        if selectedFilters.contains(filter) {
-            selectedFilters.remove(filter)
-            if filter == .social {
-                selectedSocialOwnerID = nil
-            }
-        } else {
-            selectedFilters.insert(filter)
+    private func selectMapSource(
+        _ source: MapSource,
+        from outgoingGroups: [VisiblePlaceGroup]
+    ) {
+        guard mapFilterState.source != source else { return }
+        routedVisiblePlace = nil
+        mapFilterState.source = source
+        transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
+    }
+
+    private func setMoreFilterSelection(
+        _ selection: MapMoreFilterSelection,
+        from outgoingGroups: [VisiblePlaceGroup]
+    ) {
+        guard mapFilterState.more != selection else { return }
+        routedVisiblePlace = nil
+        mapFilterState.more = selection
+        transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
+    }
+
+    private func orderedVisiblePlaceGroups() -> [VisiblePlaceGroup] {
+        Self.orderedAnnotationGroups(
+            visiblePlaceGroups,
+            selectedGroupKey: selectedPlaceGroupKey
+        )
+    }
+
+    private func transitionMapPins(
+        from outgoingGroups: [VisiblePlaceGroup],
+        to incomingGroups: [VisiblePlaceGroup]
+    ) {
+        mapPinTransitionTask?.cancel()
+
+        let outgoingKeys = Set(outgoingGroups.map(\.key))
+        let incomingKeys = Set(incomingGroups.map(\.key))
+        guard outgoingKeys != incomingKeys, !reduceMotion else {
+            transitioningAnnotationGroups = nil
+            visibleTransitionGroupKeys = nil
+            return
         }
-    }
 
-    private func showAllSocialPlaces() {
-        selectedFilters.insert(.social)
-        selectedSocialOwnerID = nil
-    }
+        transitioningAnnotationGroups = outgoingGroups
+        visibleTransitionGroupKeys = outgoingKeys
 
-    private func hideSocialPlaces() {
-        selectedFilters.remove(.social)
-        selectedSocialOwnerID = nil
-    }
+        mapPinTransitionTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
 
-    private func showSocialPlaces(for ownerID: String) {
-        selectedFilters.insert(.social)
-        selectedSocialOwnerID = ownerID
+            withAnimation(MapPinFilterTransitionStyle.fadeOutAnimation) {
+                visibleTransitionGroupKeys = []
+            }
+
+            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeOutDuration))
+            guard !Task.isCancelled else { return }
+
+            transitioningAnnotationGroups = incomingGroups
+            visibleTransitionGroupKeys = []
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+
+            withAnimation(MapPinFilterTransitionStyle.fadeInAnimation) {
+                visibleTransitionGroupKeys = incomingKeys
+            }
+
+            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeInDuration))
+            guard !Task.isCancelled else { return }
+            transitioningAnnotationGroups = nil
+            visibleTransitionGroupKeys = nil
+            mapPinTransitionTask = nil
+        }
     }
 
     private func clearMapSelection() {
@@ -629,6 +899,7 @@ struct MapScreen: View {
         mapSelectionRevision += 1
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
+        routedVisiblePlace = nil
         clearSearchTextForMapInteraction()
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
@@ -673,6 +944,7 @@ struct MapScreen: View {
 
     private func selectSearchCandidateFromMapTap(_ candidate: PlaceCandidate) {
         mapSelectionRevision += 1
+        routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
         mapSearchCandidates = [candidate]
@@ -707,6 +979,7 @@ struct MapScreen: View {
 
         let candidate = Self.coordinateCandidate(at: coordinate)
         mapSelectionRevision += 1
+        routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
         mapSearchCandidates = [candidate]
@@ -741,15 +1014,74 @@ struct MapScreen: View {
         else { return }
 
         let normalized = initialPlaceQuery.lowercased()
-        guard let initialPlace = visiblePlaces.first(where: { visiblePlace in
+        guard let initialPlace = store.visiblePlaces().first(where: { visiblePlace in
             visiblePlace.id.lowercased().contains(normalized)
                 || visiblePlace.place.id.lowercased().contains(normalized)
                 || visiblePlace.place.canonicalName.lowercased().contains(normalized)
         }) else { return }
 
+        routedVisiblePlace = initialPlace
         selectVisiblePlace(initialPlace)
         center(on: initialPlace)
         didResolveInitialCamera = true
+    }
+
+    private func refreshInitialMapSources() async {
+        featuredViewportRefreshTask?.cancel()
+        isLoadingMapSources = true
+
+        let requestedViewport = Self.initialRemoteViewport
+        await store.refreshRemoteSocialSurfaces(
+            in: requestedViewport,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        guard !Task.isCancelled else { return }
+
+        featuredViewportPlaces = store.visiblePlaces()
+        loadedFeaturedViewport = requestedViewport
+        featuredRankingRegion = currentSearchRegion
+        isLoadingMapSources = false
+        handleFeaturedCameraChange(currentSearchRegion)
+    }
+
+    private func handleFeaturedCameraChange(_ region: MKCoordinateRegion) {
+        featuredViewportRefreshTask?.cancel()
+
+        guard !isLoadingMapSources,
+              auth.isSignedIn,
+              backend.placeRepository != nil
+        else {
+            featuredRankingRegion = region
+            return
+        }
+
+        guard MapViewportRefreshPolicy.shouldRefresh(
+            visibleRegion: region,
+            loadedViewport: loadedFeaturedViewport
+        ) else {
+            featuredRankingRegion = region
+            return
+        }
+
+        let requestedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: region)
+        featuredViewportRefreshTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let places = await store.fetchRemoteViewportPlaces(
+                      in: requestedViewport,
+                      backend: backend
+                  ),
+                  !Task.isCancelled
+            else { return }
+
+            featuredViewportPlaces = places
+            loadedFeaturedViewport = requestedViewport
+            featuredRankingRegion = region
+        }
     }
 
     private func centerMapOnCurrentCityIfNeeded() async {
@@ -804,7 +1136,11 @@ struct MapScreen: View {
             currentUserID: store.currentUser.id
         ) else {
             return [
-                PlaceSaveSummary(visiblePlace: selectedPlace, attributes: selectedPlace.attributes)
+                PlaceSaveSummary(
+                    visiblePlace: selectedPlace,
+                    attributes: selectedPlace.attributes,
+                    viewerFollowsOwner: store.viewerFollows(selectedPlace.owner.id)
+                )
             ]
         }
         return saveSummaries(for: group)
@@ -812,7 +1148,11 @@ struct MapScreen: View {
 
     private func saveSummaries(for group: VisiblePlaceGroup) -> [PlaceSaveSummary] {
         group.places.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: visiblePlace.attributes)
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: visiblePlace.attributes,
+                viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
+            )
         }
     }
 
@@ -823,7 +1163,11 @@ struct MapScreen: View {
 
     private var tasteSummaries: [PlaceSaveSummary] {
         store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
+            )
         }
     }
 
@@ -885,7 +1229,83 @@ struct MapScreen: View {
                 performAction(for: selectedPlace)
             }
             .zIndex(30)
+        } else if let walkthroughFallbackMemory,
+                  walkthroughs.currentStep?.target == .mapMemory {
+            PlaceProfileMapSurface(
+                place: PlaceSheetPlace(visiblePlace: walkthroughFallbackMemory),
+                saves: [
+                    PlaceSaveSummary(
+                        visiblePlace: walkthroughFallbackMemory,
+                        attributes: walkthroughFallbackMemory.attributes
+                    )
+                ],
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .none,
+                onOpen: {},
+                onAction: {}
+            )
+            .zIndex(30)
         }
+    }
+
+    private func presentWalkthroughPlaceMemory() {
+        guard walkthroughs.currentStep?.target == .mapMemory else { return }
+
+        isMapSearchFocused = false
+        mapQuery = ""
+        mapSearchCandidates = []
+        selectedSearchCandidateID = nil
+        isPlaceProfilePresented = false
+
+        if let visiblePlace = MapWalkthroughMemoryPolicy.preferredVisiblePlace(
+            from: store.visiblePlaces(),
+            tutorialUserPlaceID: walkthroughs.tutorialUserPlaceID,
+            currentUserID: store.currentUser.id
+        ) {
+            walkthroughFallbackMemory = nil
+            routedVisiblePlace = visiblePlace
+            selectVisiblePlace(visiblePlace)
+            centerMap(
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude
+            )
+        } else {
+            let fallback = MapWalkthroughMemoryPolicy.realisticFallback(
+                owner: store.currentUser
+            )
+            selectedPlaceGroupKey = nil
+            walkthroughFallbackMemory = fallback
+            centerMap(
+                latitude: fallback.place.latitude,
+                longitude: fallback.place.longitude
+            )
+        }
+    }
+
+    private func presentWalkthroughPlaceDetail() {
+        let selectedMemory = selectedPlace ?? walkthroughFallbackMemory
+        if let selectedMemory,
+           !MapWalkthroughMemoryPolicy.supportsFullPlaceCardTour(selectedMemory) {
+            routedVisiblePlace = nil
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = nil
+            walkthroughFallbackMemory = MapWalkthroughMemoryPolicy.realisticFallback(
+                owner: store.currentUser
+            )
+        }
+        isPlaceProfilePresented = hasSelectedProfile
+    }
+
+    private func closeWalkthroughPlaceDetail() {
+        isPlaceProfilePresented = false
+        guard walkthroughs.activeSurface == .placeDetail
+                || walkthroughs.requestedSurface == .map
+        else { return }
+        walkthroughFallbackMemory = nil
+        routedVisiblePlace = nil
+        selectedPlaceGroupKey = nil
+        selectedSearchCandidateID = nil
     }
 
     @ViewBuilder
@@ -898,7 +1318,7 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedSearchCandidate),
                 onBack: {
-                    isPlaceProfilePresented = false
+                    closeWalkthroughPlaceDetail()
                 },
                 onAction: {
                     dismissPlaceProfileThen {
@@ -917,13 +1337,28 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
                 onBack: {
-                    isPlaceProfilePresented = false
+                    closeWalkthroughPlaceDetail()
                 },
                 onAction: {
                     dismissPlaceProfileThen {
                         performAction(for: selectedPlace)
                     }
                 }
+            )
+        } else if let walkthroughFallbackMemory {
+            PlaceProfileFullScreen(
+                place: PlaceSheetPlace(visiblePlace: walkthroughFallbackMemory),
+                saves: [
+                    PlaceSaveSummary(
+                        visiblePlace: walkthroughFallbackMemory,
+                        attributes: walkthroughFallbackMemory.attributes
+                    )
+                ],
+                tasteSaves: tasteSummaries,
+                currentUserID: store.currentUser.id,
+                action: .none,
+                onBack: closeWalkthroughPlaceDetail,
+                onAction: {}
             )
         }
     }
@@ -942,6 +1377,7 @@ struct MapScreen: View {
     }
 
     private func submitMapSearch() {
+        walkthroughs.perform(.mapSearch)
         dismissKeyboard()
         suppressedTypeaheadQuery = Self.normalized(mapQuery)
         typeaheadTask?.cancel()
@@ -960,6 +1396,16 @@ struct MapScreen: View {
                 mapSearchTask = nil
             }
         }
+    }
+
+    private func cancelMapSearch() {
+        typeaheadTask?.cancel()
+        typeaheadSuggestions = []
+        isLoadingTypeahead = false
+        mapSearchMessage = nil
+        isMapSearchFocused = false
+        mapQuery = ""
+        dismissKeyboard()
     }
 
     @MainActor
@@ -1653,18 +2099,25 @@ struct MapScreen: View {
     }
 
     private func visiblePlace(matching candidate: PlaceCandidate) -> VisiblePlace? {
-        guard let match = baseVisiblePlaces.first(where: { visiblePlace in
-            visiblePlace.place.sourceProviderPlaceID == candidate.sourceProviderPlaceID
-                || visiblePlace.place.canonicalName.caseInsensitiveCompare(candidate.name) == .orderedSame
-        }) else {
-            return nil
-        }
+        guard let match = Self.matchingVisiblePlace(
+            for: candidate,
+            in: baseVisiblePlaces
+        ) else { return nil }
 
         return VisiblePlaceGrouping.matchingGroup(
             for: match,
             in: baseVisiblePlaces,
             currentUserID: store.currentUser.id
         )?.primary ?? match
+    }
+
+    static func matchingVisiblePlace(
+        for candidate: PlaceCandidate,
+        in visiblePlaces: [VisiblePlace]
+    ) -> VisiblePlace? {
+        visiblePlaces.first {
+            VisiblePlaceGrouping.matches($0, candidate: candidate)
+        }
     }
 
     private func upsertMapSearchCandidate(_ candidate: PlaceCandidate) {
@@ -1695,6 +2148,14 @@ struct MapScreen: View {
         mapSearchCandidates = []
         selectedSearchCandidateID = nil
         scheduleTypeahead(for: mapQuery)
+    }
+
+    private func resolveInitialSearchIfNeeded() {
+        guard !didResolveInitialSearch else { return }
+        didResolveInitialSearch = true
+        guard !Self.normalized(mapQuery).isEmpty else { return }
+        isMapSearchFocused = true
+        handleMapQueryChange()
     }
 
     private func scheduleTypeahead(for query: String) {
@@ -1734,16 +2195,10 @@ struct MapScreen: View {
         let normalized = Self.normalized(query)
         guard !normalized.isEmpty else { return [] }
 
-        let sortedMatches = baseVisiblePlaces
-            .filter { visiblePlace in
-                matchesTypeahead(visiblePlace, normalizedQuery: normalized)
-            }
-            .sorted { lhs, rhs in
-                let lhsIsMine = lhs.owner.id == store.currentUser.id
-                let rhsIsMine = rhs.owner.id == store.currentUser.id
-                if lhsIsMine != rhsIsMine { return lhsIsMine }
-                return lhs.place.canonicalName.localizedCaseInsensitiveCompare(rhs.place.canonicalName) == .orderedAscending
-            }
+        let sortedMatches = TrustedPlaceSearch.matches(
+            query: query,
+            in: baseVisiblePlaces
+        ).map(\.place)
 
         return VisiblePlaceGrouping.groups(
             from: sortedMatches,
@@ -1762,22 +2217,8 @@ struct MapScreen: View {
             .map { $0 }
     }
 
-    private func matchesTypeahead(_ visiblePlace: VisiblePlace, normalizedQuery: String) -> Bool {
-        [
-            visiblePlace.place.canonicalName,
-            visiblePlace.effectiveCategoryDisplay.compactTitle,
-            visiblePlace.place.locality,
-            visiblePlace.owner.displayName,
-            "@\(visiblePlace.owner.handle)",
-            visiblePlace.userPlace.note,
-            visiblePlace.userPlace.ratingSignal,
-            visiblePlace.recommendedScore.map(PlaceRating.averageDisplay)
-        ]
-        .compactMap { $0 }
-        .contains { Self.normalized($0).contains(normalizedQuery) }
-    }
-
     private func selectTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
+        trackMapSearchSelection(suggestion)
         dismissKeyboard()
         typeaheadTask?.cancel()
         isLoadingTypeahead = false
@@ -1803,6 +2244,7 @@ struct MapScreen: View {
     }
 
     private func addTypeaheadSuggestion(_ suggestion: MapSearchSuggestion) {
+        trackMapSearchSelection(suggestion)
         dismissKeyboard()
         typeaheadTask?.cancel()
         isLoadingTypeahead = false
@@ -1830,6 +2272,37 @@ struct MapScreen: View {
                 defaultVisibility: store.effectiveDefaultVisibility
             )
         }
+    }
+
+    private func trackMapSearchSelection(_ suggestion: MapSearchSuggestion) {
+        let index = typeaheadSuggestions.firstIndex { $0.id == suggestion.id } ?? 0
+        let rankBucket: String
+        switch index {
+        case 0: rankBucket = "1"
+        case 1...2: rankBucket = "2_3"
+        default: rankBucket = "4_plus"
+        }
+
+        let provider: String
+        let stage: String
+        switch suggestion.source {
+        case .saved:
+            provider = "trusted"
+            stage = "immediate"
+        case .mapKit:
+            provider = "mapkit"
+            stage = "external"
+        }
+
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.trustedPlaceSearchResultSelected,
+            properties: [
+                "surface": "map",
+                "provider": provider,
+                "stage": stage,
+                "rank": rankBucket
+            ]
+        )
     }
 
     private func dismissKeyboard() {
@@ -2066,29 +2539,41 @@ struct MapScreen: View {
         return arguments[valueIndex]
     }
 
+    static func resolvedInitialMapSearchQuery(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapSearchQuery") else {
+            return ""
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return "" }
+        return arguments[valueIndex]
+    }
+
     static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         arguments.contains("-WanderMapSheetExpanded")
     }
 
-    static func resolvedInitialMapFilters(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Set<MapFilter> {
+    static func resolvedInitialMapFilterState(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> MapFilterState {
         guard let flagIndex = arguments.firstIndex(of: "-WanderMapCaptureMode") else {
-            return [.you, .social, .been, .wanna]
+            return MapFilterState()
         }
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else {
-            return [.you, .social, .been, .wanna]
+            return MapFilterState()
         }
 
-        switch arguments[valueIndex] {
-        case "diary":
-            return [.you, .been]
-        case "friends":
-            return [.social, .been, .wanna]
-        case "trusted":
-            return [.social, .been]
-        default:
-            return [.you, .social, .been, .wanna]
-        }
+        return MapFilterState(
+            source: arguments[valueIndex] == "friends" ? .friends : .featured
+        )
+    }
+
+    static func resolvedInitialMoreFiltersPresentation(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        arguments.contains("-WanderMapMoreFiltersOpen")
     }
 
     static func coordinateCandidate(at coordinate: CLLocationCoordinate2D) -> PlaceCandidate {
@@ -2148,87 +2633,270 @@ enum MapHitTesting {
     }
 }
 
-enum MapFilter: String, CaseIterable, Identifiable {
-    case you
-    case social
-    case been
+enum MapSource: String, CaseIterable, Identifiable {
+    case featured
+    case friends
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .featured: "Featured"
+        case .friends: "Friends"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .featured: "sparkles"
+        case .friends: "person.2.fill"
+        }
+    }
+}
+
+enum MapPinFilterTransitionStyle {
+    static let fadeOutDuration: TimeInterval = 0.06
+    static let fadeInDuration: TimeInterval = 0.10
+    static let duration = fadeOutDuration + fadeInDuration
+    static let hiddenScale: CGFloat = 0.92
+    static let fadeOutAnimation = Animation.easeOut(duration: fadeOutDuration)
+    static let fadeInAnimation = Animation.spring(duration: fadeInDuration, bounce: 0.14)
+}
+
+enum MapStatusFilter: String, CaseIterable, Identifiable {
+    case all
+    case checkIns
     case wanna
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .you: "You"
-        case .social: "Social"
-        case .been: CheckInCopy.pluralTitle
+        case .all: "All"
+        case .checkIns: CheckInCopy.pluralTitle
         case .wanna: "Wanna"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .you: "person.fill"
-        case .social: "person.2.fill"
-        case .been: "circle.fill"
-        case .wanna: "circle.dotted"
-        }
-    }
-
-    func trimColor(isSelected: Bool) -> Color {
-        semanticColor.opacity(isSelected ? 1 : 0.42)
-    }
-
-    func iconColor(isSelected: Bool) -> Color {
-        semanticColor.opacity(isSelected ? 1 : 0.58)
-    }
-
-    func trimStyle(isSelected: Bool) -> StrokeStyle {
-        StrokeStyle(
-            lineWidth: isSelected ? 2 : 1.25,
-            lineCap: .round,
-            dash: self == .wanna ? MapPinVisualMetrics.wannaDashPattern : []
-        )
-    }
-
-    private var semanticColor: Color {
-        switch self {
-        case .you:
-            WanderTheme.pinYou.color
-        case .social:
-            WanderTheme.pinSocial.color
-        case .been, .wanna:
-            WanderTheme.textInk.color
+        case .all: "square.grid.2x2"
+        case .checkIns: "checkmark.circle.fill"
+        case .wanna: "bookmark.fill"
         }
     }
 }
 
+struct MapMoreFilterSelection: Equatable {
+    var categories: Set<String> = []
+    var people: Set<String> = []
+    var status: MapStatusFilter = .all
+
+    var activeSectionCount: Int {
+        (categories.isEmpty ? 0 : 1)
+            + (people.isEmpty ? 0 : 1)
+            + (status == .all ? 0 : 1)
+    }
+
+    mutating func selectAllCategories() {
+        categories.removeAll()
+    }
+
+    mutating func toggleCategory(_ category: String) {
+        if categories.contains(category) {
+            categories.remove(category)
+        } else {
+            categories.insert(category)
+        }
+    }
+
+    mutating func selectAllPeople() {
+        people.removeAll()
+    }
+
+    mutating func togglePerson(_ personID: String) {
+        if people.contains(personID) {
+            people.remove(personID)
+        } else {
+            people.insert(personID)
+        }
+    }
+}
+
+struct MapFilterState: Equatable {
+    var source: MapSource = .featured
+    var more = MapMoreFilterSelection()
+}
+
+enum MapViewportRefreshPolicy {
+    private static let prefetchScale = 2.0
+    private static let minimumPrefetchSpan = 0.04
+
+    static func viewport(for region: MKCoordinateRegion) -> MapViewport {
+        bounds(
+            center: region.center,
+            latitudeSpan: region.span.latitudeDelta,
+            longitudeSpan: region.span.longitudeDelta
+        )
+    }
+
+    static func prefetchedViewport(for region: MKCoordinateRegion) -> MapViewport {
+        bounds(
+            center: region.center,
+            latitudeSpan: max(region.span.latitudeDelta * prefetchScale, minimumPrefetchSpan),
+            longitudeSpan: max(region.span.longitudeDelta * prefetchScale, minimumPrefetchSpan)
+        )
+    }
+
+    static func shouldRefresh(
+        visibleRegion: MKCoordinateRegion,
+        loadedViewport: MapViewport?
+    ) -> Bool {
+        guard let loadedViewport else { return true }
+        let visibleViewport = viewport(for: visibleRegion)
+        return visibleViewport.minLatitude < loadedViewport.minLatitude
+            || visibleViewport.minLongitude < loadedViewport.minLongitude
+            || visibleViewport.maxLatitude > loadedViewport.maxLatitude
+            || visibleViewport.maxLongitude > loadedViewport.maxLongitude
+    }
+
+    static func contains(_ place: VisiblePlace, in viewport: MapViewport) -> Bool {
+        place.place.latitude >= viewport.minLatitude
+            && place.place.latitude <= viewport.maxLatitude
+            && place.place.longitude >= viewport.minLongitude
+            && place.place.longitude <= viewport.maxLongitude
+    }
+
+    private static func bounds(
+        center: CLLocationCoordinate2D,
+        latitudeSpan: CLLocationDegrees,
+        longitudeSpan: CLLocationDegrees
+    ) -> MapViewport {
+        let latitudeRadius = min(180, abs(latitudeSpan)) / 2
+        let longitudeRadius = min(360, abs(longitudeSpan)) / 2
+        return MapViewport(
+            minLatitude: max(-90, center.latitude - latitudeRadius),
+            minLongitude: max(-180, center.longitude - longitudeRadius),
+            maxLatitude: min(90, center.latitude + latitudeRadius),
+            maxLongitude: min(180, center.longitude + longitudeRadius)
+        )
+    }
+}
+
+enum MapFeaturedSelection {
+    static let maximumPlaceGroupCount = 24
+
+    static func places(
+        from candidates: [VisiblePlace],
+        currentUserID: String,
+        eligibleOwnerIDs: Set<String>,
+        in region: MKCoordinateRegion,
+        refinements: MapMoreFilterSelection,
+        limit: Int = maximumPlaceGroupCount
+    ) -> [VisiblePlace] {
+        guard limit > 0, !eligibleOwnerIDs.isEmpty else { return [] }
+
+        let viewport = MapViewportRefreshPolicy.viewport(for: region)
+        let communityCheckIns = candidates.filter { visiblePlace in
+            (visiblePlace.owner.id == currentUserID || eligibleOwnerIDs.contains(visiblePlace.owner.id))
+                && visiblePlace.userPlace.status == .been
+                && MapViewportRefreshPolicy.contains(visiblePlace, in: viewport)
+        }
+        let refinedPlaces = MapFilterSelection.applying(refinements, to: communityCheckIns)
+        let rankedGroups = VisiblePlaceGrouping.groups(
+            from: refinedPlaces,
+            currentUserID: currentUserID
+        )
+        .sorted(by: ranksBefore)
+
+        return rankedGroups.prefix(limit).flatMap(\.places)
+    }
+
+    private static func ranksBefore(_ lhs: VisiblePlaceGroup, _ rhs: VisiblePlaceGroup) -> Bool {
+        let lhsSupport = supportCount(for: lhs)
+        let rhsSupport = supportCount(for: rhs)
+        if lhsSupport != rhsSupport {
+            return lhsSupport > rhsSupport
+        }
+
+        let lhsScore = lhs.recommendedScore ?? -.infinity
+        let rhsScore = rhs.recommendedScore ?? -.infinity
+        if lhsScore != rhsScore {
+            return lhsScore > rhsScore
+        }
+
+        let lhsRecency = recency(for: lhs)
+        let rhsRecency = recency(for: rhs)
+        if lhsRecency != rhsRecency {
+            return lhsRecency > rhsRecency
+        }
+
+        return lhs.key < rhs.key
+    }
+
+    private static func supportCount(for group: VisiblePlaceGroup) -> Int {
+        max(Set(group.places.map(\.owner.id)).count, group.recommendedCount)
+    }
+
+    private static func recency(for group: VisiblePlaceGroup) -> Date {
+        group.places
+            .map { $0.userPlace.visitedAt ?? $0.userPlace.savedAt }
+            .max()
+            ?? .distantPast
+    }
+}
+
 enum MapFilterSelection {
-    static func placeFilters(selectedFilters: Set<MapFilter>, selectedSocialOwnerID: String?) -> PlaceFilters? {
-        let includesBeen = selectedFilters.contains(.been)
-        let includesWanna = selectedFilters.contains(.wanna)
-        guard includesBeen || includesWanna else { return nil }
+    static func friendsPlaces(
+        from candidates: [VisiblePlace],
+        currentUserID: String,
+        followedOwnerIDs: Set<String>,
+        refinements: MapMoreFilterSelection
+    ) -> [VisiblePlace] {
+        let eligibleOwnerIDs = followedOwnerIDs.union([currentUserID])
+        return applying(
+            refinements,
+            to: candidates.filter { eligibleOwnerIDs.contains($0.owner.id) }
+        )
+    }
 
-        let includesYou = selectedFilters.contains(.you)
-        let includesSocial = selectedFilters.contains(.social)
-        guard includesYou || includesSocial else { return nil }
-
-        var filters = PlaceFilters()
-        if includesBeen && !includesWanna {
-            filters.statuses = [.been]
-        } else if includesWanna && !includesBeen {
-            filters.statuses = [.wannaGo]
+    static func applying(
+        _ selection: MapMoreFilterSelection,
+        to places: [VisiblePlace]
+    ) -> [VisiblePlace] {
+        places.filter { visiblePlace in
+            matches(
+                status: visiblePlace.userPlace.status,
+                category: visiblePlace.effectiveCategory,
+                ownerID: visiblePlace.owner.id,
+                selection: selection
+            )
         }
+    }
 
-        var scopes: Set<String> = []
-        if includesYou { scopes.insert("you") }
-        if includesSocial { scopes.insert("social") }
-        filters.ownerScopes = scopes
+    static func matches(
+        status: PlaceStatus,
+        category: String,
+        ownerID: String,
+        selection: MapMoreFilterSelection
+    ) -> Bool {
+        let normalizedCategories = Set(
+            selection.categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        )
+        let matchesCategory = normalizedCategories.isEmpty
+            || normalizedCategories.contains(WanderPlaceCategory.normalizedPrimaryCategory(category))
+        let matchesPerson = selection.people.isEmpty || selection.people.contains(ownerID)
+        let matchesStatus = statuses(for: selection.status).isEmpty
+            || statuses(for: selection.status).contains(status)
+        return matchesCategory && matchesPerson && matchesStatus
+    }
 
-        if let selectedSocialOwnerID, includesSocial {
-            filters.ownerIDs = [selectedSocialOwnerID]
+    private static func statuses(for selection: MapStatusFilter) -> Set<PlaceStatus> {
+        switch selection {
+        case .all: []
+        case .checkIns: [.been]
+        case .wanna: [.wannaGo]
         }
-
-        return filters
     }
 }
 
@@ -2267,7 +2935,7 @@ private struct MapSearchSuggestion: Identifiable {
         let subtitle = [
             statusLabel,
             visiblePlace.place.locality,
-            visiblePlace.effectiveCategoryDisplay.compactTitle
+            visiblePlace.effectiveCompactType
         ]
         .compactMap { value -> String? in
             let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2312,13 +2980,41 @@ private struct MapSearchSuggestion: Identifiable {
     }
 }
 
-private struct MapSocialOwnerOption: Identifiable, Equatable {
+struct MapSocialOwnerOption: Identifiable, Equatable {
     let id: String
     let displayName: String
     let handle: String
 
     var menuTitle: String {
         handle.isEmpty ? displayName : "\(displayName) @\(handle)"
+    }
+}
+
+enum MapSocialOwnerSelection {
+    static func options(
+        currentUser: LocalProfile,
+        following: [LocalProfile]
+    ) -> [MapSocialOwnerOption] {
+        var seen = Set<String>()
+        let followedOptions = following.compactMap { profile -> MapSocialOwnerOption? in
+            guard profile.id != currentUser.id, seen.insert(profile.id).inserted else { return nil }
+            return MapSocialOwnerOption(
+                id: profile.id,
+                displayName: profile.displayName,
+                handle: profile.handle
+            )
+        }
+        .sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
+
+        return [
+            MapSocialOwnerOption(
+                id: currentUser.id,
+                displayName: "You",
+                handle: currentUser.handle
+            )
+        ] + followedOptions
     }
 }
 
@@ -2336,6 +3032,7 @@ private struct SearchBar: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
             TextField("search your map or people...", text: $query)
                 .focused(isFocused)
+                .accessibilityIdentifier("map.searchField")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)
@@ -2365,12 +3062,9 @@ private struct SearchBar: View {
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(height: 46)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 10, x: 0, y: 5)
-        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(maxWidth: .infinity, minHeight: 48)
+        .contentShape(Capsule())
+        .wanderGlassCapsule()
     }
 
     @MainActor
@@ -2391,6 +3085,23 @@ private struct SearchBar: View {
     }
 }
 
+private struct MapSearchCancelButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text("Cancel")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(minWidth: 64, minHeight: 44)
+                .contentShape(Capsule())
+                .wanderGlassCapsule()
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("map.searchCancel")
+    }
+}
+
 private struct MapTypeaheadList: View {
     let suggestions: [MapSearchSuggestion]
     let isLoading: Bool
@@ -2398,8 +3109,10 @@ private struct MapTypeaheadList: View {
     let onAdd: (MapSearchSuggestion) -> Void
 
     var body: some View {
+        let visibleSuggestions = Array(suggestions.prefix(4))
+
         VStack(spacing: 0) {
-            ForEach(suggestions) { suggestion in
+            ForEach(visibleSuggestions) { suggestion in
                 MapTypeaheadRow(
                     suggestion: suggestion,
                     onSelect: {
@@ -2410,7 +3123,7 @@ private struct MapTypeaheadList: View {
                     }
                 )
 
-                if suggestion.id != suggestions.last?.id {
+                if suggestion.id != visibleSuggestions.last?.id {
                     Divider()
                         .overlay(WanderTheme.borderHairline.color)
                         .padding(.leading, 52)
@@ -2432,13 +3145,9 @@ private struct MapTypeaheadList: View {
                 .accessibilityLabel("Looking for nearby places")
             }
         }
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        )
-        .shadow(color: WanderTheme.textInk.color.opacity(0.1), radius: 12, x: 0, y: 6)
+        .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("map.typeaheadPanel")
     }
 }
 
@@ -2559,104 +3268,299 @@ private struct RecenterButton: View {
     }
 }
 
-private struct MapFilterChip: View {
-    let filter: MapFilter
+private struct MapFilterEmptyNotice: View {
+    let message: String
+    let canReset: Bool
+    let reset: () -> Void
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: "mappin.slash")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+            Text(message)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if canReset {
+                Button("Reset", action: reset)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .frame(minHeight: 44)
+            }
+        }
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, canReset ? WanderTheme.spacing2 : WanderTheme.spacing3)
+        .frame(minHeight: 44)
+        .background(WanderTheme.surfaceBone.color.opacity(0.94), in: Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 10, x: 0, y: 5)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct MapSourceFilterChip: View {
+    let source: MapSource
     let isSelected: Bool
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: filter.systemImage)
+            Image(systemName: source.systemImage)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(filter.iconColor(isSelected: isSelected))
-            Text(filter.title)
+            Text(source.title)
                 .lineLimit(1)
         }
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(height: 44)
-        .background(WanderTheme.surfaceRaised.color)
         .foregroundStyle(WanderTheme.textInk.color)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(
-                    filter.trimColor(isSelected: isSelected),
-                    style: filter.trimStyle(isSelected: isSelected)
-                )
-        )
-        .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
         .contentShape(Capsule())
-        .accessibilityLabel("\(filter.title) places filter")
-        .accessibilityValue(isSelected ? "On" : "Off")
+        .wanderGlassCapsule(
+            tone: isSelected ? .selected : .neutral,
+            showsBorder: true
+        )
+        .accessibilityLabel("\(source.title) map source")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("map.filter.\(source.rawValue)")
     }
 }
 
-private struct MapSocialFilterMenu: View {
-    let isSelected: Bool
-    let selectedOwner: MapSocialOwnerOption?
-    let ownerOptions: [MapSocialOwnerOption]
-    let showAll: () -> Void
-    let hideSocial: () -> Void
-    let selectOwner: (String) -> Void
+private struct MapMoreFilterChip: View {
+    let activeSectionCount: Int
+    let isExpanded: Bool
+
+    private var isActive: Bool {
+        activeSectionCount > 0
+    }
 
     var body: some View {
-        Menu {
-            Button {
-                showAll()
-            } label: {
-                Label("All social places", systemImage: selectedOwner == nil && isSelected ? "checkmark" : "person.2")
+        HStack(spacing: WanderTheme.spacing1) {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: 11, weight: .bold))
+            Text("More")
+                .lineLimit(1)
+            if activeSectionCount > 0 {
+                Text("\(activeSectionCount)")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(WanderTheme.surfaceBone.color)
+                    .frame(minWidth: 18, minHeight: 18)
+                    .background(WanderTheme.terracotta.color, in: Circle())
             }
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 9, weight: .black))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+        .font(.system(size: 12, weight: .bold))
+        .padding(.horizontal, WanderTheme.spacing3)
+        .frame(height: 44)
+        .foregroundStyle(WanderTheme.textInk.color)
+        .contentShape(Capsule())
+        .wanderGlassCapsule(
+            tone: isActive ? .selected : .neutral,
+            showsBorder: true
+        )
+        .accessibilityLabel("More map filters")
+        .accessibilityValue(
+            activeSectionCount == 0
+                ? "All categories, people, and statuses"
+                : "\(activeSectionCount) filtered sections"
+        )
+        .accessibilityIdentifier("map.filter.more")
+    }
+}
 
-            if !ownerOptions.isEmpty {
-                Divider()
+private struct MapMoreFiltersPopover: View {
+    @Binding var selection: MapMoreFilterSelection
+    let peopleOptions: [MapSocialOwnerOption]
+    let dismiss: () -> Void
 
-                ForEach(ownerOptions) { owner in
-                    Button {
-                        selectOwner(owner.id)
-                    } label: {
-                        Label(owner.menuTitle, systemImage: selectedOwner?.id == owner.id ? "checkmark" : "person")
+    private let columns = [
+        GridItem(.adaptive(minimum: 118), spacing: WanderTheme.spacing2)
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                header
+
+                filterSection(
+                    title: "Category",
+                    detail: "Choose one or more"
+                ) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                        MapMoreOptionChip(
+                            title: "All",
+                            systemImage: "square.grid.2x2",
+                            isSelected: selection.categories.isEmpty
+                        ) {
+                            selection.selectAllCategories()
+                        }
+
+                        ForEach(WanderPlaceCategory.editableCategories, id: \.self) { category in
+                            MapMoreOptionChip(
+                                title: WanderPlaceCategory.broadCategory(for: category),
+                                emoji: WanderPlaceCategory.broadEmoji(for: category),
+                                isSelected: selection.categories.contains(category)
+                            ) {
+                                selection.toggleCategory(category)
+                            }
+                        }
                     }
                 }
-            }
 
-            Divider()
+                filterSection(
+                    title: "People",
+                    detail: "Choose one or more"
+                ) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                        MapMoreOptionChip(
+                            title: "All",
+                            systemImage: "person.2",
+                            isSelected: selection.people.isEmpty
+                        ) {
+                            selection.selectAllPeople()
+                        }
 
-            Button {
-                hideSocial()
-            } label: {
-                Label("Hide social places", systemImage: !isSelected ? "checkmark" : "eye.slash")
+                        ForEach(peopleOptions) { person in
+                            MapMoreOptionChip(
+                                title: person.displayName,
+                                systemImage: "person.fill",
+                                isSelected: selection.people.contains(person.id)
+                            ) {
+                                selection.togglePerson(person.id)
+                            }
+                            .accessibilityIdentifier("map.more.person.\(person.id)")
+                        }
+                    }
+
+                    if peopleOptions.isEmpty {
+                        Text("People you follow will appear here.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                }
+
+                filterSection(
+                    title: "Status",
+                    detail: "Choose one"
+                ) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                        ForEach(MapStatusFilter.allCases) { status in
+                            MapMoreOptionChip(
+                                title: status.title,
+                                systemImage: status.systemImage,
+                                isSelected: selection.status == status
+                            ) {
+                                selection.status = status
+                            }
+                        }
+                    }
+                }
+
+                Text("Choices combine across sections. If nothing matches, the map stays empty.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        } label: {
-            HStack(spacing: WanderTheme.spacing1) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(MapFilter.social.iconColor(isSelected: isSelected))
-                Text(selectedOwner?.displayName ?? MapFilter.social.title)
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .black))
+            .padding(WanderTheme.spacing4)
+        }
+        .frame(width: 330, height: 470)
+        .background(WanderTheme.surfaceBone.color)
+        .accessibilityIdentifier("map.moreFilters.popover")
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("More filters")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text("Narrow the active source")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
-            .font(.system(size: 12, weight: .bold))
-            .padding(.horizontal, WanderTheme.spacing3)
-            .frame(height: 44)
-            .background(WanderTheme.surfaceRaised.color)
-            .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(
-                        MapFilter.social.trimColor(isSelected: isSelected),
-                        style: MapFilter.social.trimStyle(isSelected: isSelected)
-                    )
-            )
-            .shadow(color: WanderTheme.textInk.color.opacity(isSelected ? 0.12 : 0), radius: 8, x: 0, y: 3)
-            .contentShape(Capsule())
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
+
+            Spacer(minLength: WanderTheme.spacing2)
+
+            if selection.activeSectionCount > 0 {
+                Button("Reset") {
+                    selection = MapMoreFilterSelection()
+                }
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(minHeight: 44)
+            }
+
+            Button("Done", action: dismiss)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .frame(minHeight: 44)
         }
-        .accessibilityLabel(selectedOwner.map { "Social places filtered to \($0.displayName)" } ?? "Social places filter")
-        .accessibilityValue(isSelected ? "On" : "Off")
+    }
+
+    private func filterSection<Content: View>(
+        title: String,
+        detail: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Spacer()
+                Text(detail)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+            content()
+        }
+    }
+}
+
+private struct MapMoreOptionChip: View {
+    let title: String
+    var systemImage: String? = nil
+    var emoji: String? = nil
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing1) {
+                if let emoji {
+                    Text(emoji)
+                        .font(.system(size: 14))
+                } else if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 11, weight: .bold))
+                }
+                Text(title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(isSelected ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(
+                isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceRaised.color,
+                in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                    .stroke(
+                        isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -2739,7 +3643,7 @@ private struct WanderMapPin: View {
             .accessibilityLabel(
                 MapPinAccessibility.label(
                     outlines: outlines,
-                    category: visiblePlace.effectiveCategoryDisplay.compactTitle,
+                    category: visiblePlace.effectiveCompactType,
                     placeName: visiblePlace.place.canonicalName
                 )
             )
@@ -3103,6 +4007,11 @@ struct PlaceSheetPlace {
         )
     }
 
+    var compactPlaceType: String {
+        WanderPlaceCategory.display(for: categoryAssignment)
+            .compactType(foodType: cuisine)
+    }
+
     var photoRequest: PlacePhotoRequest {
         PlacePhotoRequest(
             placeID: id,
@@ -3461,6 +4370,30 @@ struct MapPlaceSaveContext: Identifiable {
             initialAnswers: initialNewSaveAnswers(from: attributes),
             initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: attributes),
+            initialPhotoAttachments: []
+        )
+    }
+
+    /// A bookmark is an intent to create the viewer's own Wanna memory. It
+    /// deliberately starts blank instead of inheriting another person's note,
+    /// tags, rating, visibility, or check-in status.
+    static func addWannaVisiblePlace(
+        _ visiblePlace: VisiblePlace,
+        defaultVisibility: PlaceVisibility
+    ) -> MapPlaceSaveContext {
+        MapPlaceSaveContext(
+            candidate: candidate(from: visiblePlace),
+            mode: .add(.socialSave),
+            requiresStatusConfirmation: false,
+            hasPriorCheckIn: false,
+            initialStatus: .wannaGo,
+            initialVisibility: defaultVisibility,
+            initialRatingScore: nil,
+            initialNote: "",
+            initialPlannedDate: nil,
+            initialAnswers: [:],
+            initialPersonalLabels: [],
+            initialCuisine: nil,
             initialPhotoAttachments: []
         )
     }
@@ -3832,6 +4765,31 @@ struct MapPlaceSavePhotoAttachment: Identifiable {
         VisitPhotoLocalFileStore.data(from: localAssetRef)
     }
 
+    var draftPhoto: PlaceSaveDraftPhoto? {
+        guard let localAssetRef else { return nil }
+        return PlaceSaveDraftPhoto(
+            id: id,
+            contentType: contentType,
+            localAssetRef: localAssetRef,
+            sourcePhotoID: sourcePhotoID,
+            byteSize: byteSize
+        )
+    }
+
+    static func restore(from draft: PlaceSaveDraftPhoto) -> MapPlaceSavePhotoAttachment? {
+        guard let image = VisitPhotoLocalFileStore.image(from: draft.localAssetRef) else {
+            return nil
+        }
+        return MapPlaceSavePhotoAttachment(
+            id: draft.id,
+            image: thumbnail(from: image),
+            contentType: draft.contentType,
+            localAssetRef: draft.localAssetRef,
+            sourcePhotoID: draft.sourcePhotoID,
+            byteSize: draft.byteSize
+        )
+    }
+
     private static func thumbnail(from image: UIImage) -> UIImage {
         let maximumDimension: CGFloat = 320
         let scale = min(1, maximumDimension / max(image.size.width, image.size.height))
@@ -3840,6 +4798,58 @@ struct MapPlaceSavePhotoAttachment: Identifiable {
         return UIGraphicsImageRenderer(size: size).image { _ in
             image.draw(in: CGRect(origin: .zero, size: size))
         }
+    }
+}
+
+extension PlaceSaveDraft {
+    static func addFlow(
+        ownerUserID: String,
+        context: MapPlaceSaveContext,
+        now: Date = .now
+    ) -> PlaceSaveDraft? {
+        guard case .add(let sourceType) = context.mode else { return nil }
+
+        let initialCuisine = context.candidate.primaryCategory == WanderPlaceCategory.restaurantsFood
+            ? context.initialCuisine
+                ?? WanderPlaceCategory.restaurantCuisineInference(for: context.candidate)?.cuisine
+            : nil
+        let selectedAnswers = context.initialAnswers.filter { !$0.key.hasSuffix("_tags") }
+        let unifiedTags = context.initialAnswers
+            .filter { $0.key.hasSuffix("_tags") }
+            .values
+            .reduce(into: context.initialPersonalLabels) { result, values in
+                result.formUnion(values)
+            }
+        let today = WannaGoDate.normalized(now)
+        let plannedDate = context.initialPlannedDate
+            .map { WannaGoDate.normalized($0) }
+            .flatMap { $0 >= today ? $0 : nil }
+
+        return PlaceSaveDraft(
+            ownerUserID: ownerUserID,
+            createdAt: now,
+            updatedAt: now,
+            sourceType: sourceType,
+            candidate: context.candidate,
+            baselineUserPlaceLocalID: context.existingCurrentUserSave?.userPlace.localID,
+            baselineVisitLocalID: context.existingLatestVisit?.localID,
+            form: PlaceSaveDraftForm(
+                step: context.startsOnDetails ? .details : .confirm,
+                selectedAssignment: context.candidate.categoryAssignment,
+                selectedStatus: context.initialStatus,
+                selectedVisibility: context.initialVisibility.normalizedForStealthMode,
+                selectedRatingScore: context.initialRatingScore ?? PlaceRating.defaultScore,
+                selectedAnswers: selectedAnswers,
+                unifiedTags: unifiedTags,
+                selectedCuisine: initialCuisine,
+                note: context.initialNote,
+                visitedAt: context.editedVisit?.visitedAt ?? now,
+                plannedDate: plannedDate,
+                photoAttachments: context.initialPhotoAttachments.compactMap(\.draftPhoto),
+                selectedInviteeUserIDs: [],
+                isShowingOptionalDetails: false
+            )
+        )
     }
 }
 
@@ -3950,6 +4960,38 @@ func persistScopedVisitOrWantSubmission(
 }
 
 @MainActor
+func persistAddPlaceSaveSubmission(
+    _ submission: MapPlaceSaveSubmission,
+    store: WanderStore,
+    backend: WanderBackend?
+) async -> SaveResult? {
+    switch submission.context.mode {
+    case .add:
+        return await persistNewPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: backend
+        )
+    case .addVisit, .editVisit, .editWant:
+        let (result, targetVisit) = await persistScopedVisitOrWantSubmission(
+            submission,
+            store: store,
+            backend: backend
+        )
+        guard let result else { return nil }
+        await persistVisitPhotoAttachments(
+            submission.photoAttachments,
+            to: targetVisit,
+            store: store,
+            backend: backend
+        )
+        return result
+    case .sharedVisit:
+        return nil
+    }
+}
+
+@MainActor
 func persistVisitPhotoAttachments(
     _ attachments: [MapPlaceSavePhotoAttachment],
     to visit: LocalPlaceVisit?,
@@ -3958,17 +5000,51 @@ func persistVisitPhotoAttachments(
 ) async {
     guard let visit, !attachments.isEmpty else { return }
 
-    for attachment in attachments {
-        guard let data = attachment.data() else { continue }
-        _ = await store.createVisitPhoto(
-            visitID: visit.id,
-            data: data,
+    let inputs = attachments.compactMap { attachment -> LocalVisitPhotoInput? in
+        guard attachment.localAssetRef?.isEmpty == false else { return nil }
+        return LocalVisitPhotoInput(
             localAssetRef: attachment.localAssetRef,
             contentType: attachment.contentType,
+            byteSize: attachment.byteSize,
             width: attachment.width,
-            height: attachment.height,
-            backend: backend
+            height: attachment.height
         )
+    }
+    guard !inputs.isEmpty else { return }
+    _ = store.createVisitPhotos(visitID: visit.id, inputs: inputs)
+    store.flushPersistence()
+
+    if let backend {
+        Task { @MainActor [weak store] in
+            _ = await store?.retryPendingVisitPhotoUploads(backend: backend)
+        }
+    }
+}
+
+struct MapPlaceSaveQuestionBlocksCache {
+    struct Key: Equatable {
+        let primaryCategory: String
+        let subcategory: String?
+        let cuisine: String?
+        let status: PlaceStatus
+    }
+
+    private(set) var key: Key?
+    private(set) var blocks: [AddQuestionBlock]
+
+    init(initialBlocks: [AddQuestionBlock]) {
+        blocks = initialBlocks
+    }
+
+    @discardableResult
+    mutating func refresh(
+        for nextKey: Key,
+        load: () -> [AddQuestionBlock]
+    ) -> Bool {
+        guard key != nextKey else { return false }
+        key = nextKey
+        blocks = load()
+        return true
     }
 }
 
@@ -4147,20 +5223,26 @@ enum CheckInDatePickerSelection {
 }
 
 struct MapPlaceSaveFlowSheet: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let draftID: UUID?
+    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var step: MapPlaceSaveStep = .confirm
     @State private var selectedAssignment: PlaceCategoryAssignment
     @State private var selectedStatus: PlaceStatus
+    @State private var hasSelectedStatus: Bool
     @State private var selectedVisibility: PlaceVisibility
     @State private var selectedRatingScore: Double
     @State private var selectedAnswers: [String: Set<String>]
     @State private var unifiedTags: Set<String>
+    @State private var questionBlocksCache: MapPlaceSaveQuestionBlocksCache
     @State private var lastUnifiedTagOptions: [String]
     @State private var lastQuestionOptions: [String: [String]]
     @State private var selectedCuisine: String?
@@ -4181,36 +5263,60 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var sharedVisitInviteesError: String?
     @State private var errorMessage: String?
     @State private var isShowingOptionalDetails = false
+    @State private var isMoreOptionsArrowPulsing = false
+    @State private var saveAttemptedAt: Date?
 
     init(
         context: MapPlaceSaveContext,
+        draft: PlaceSaveDraft? = nil,
+        onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
     ) {
         _context = State(initialValue: context)
+        draftID = draft?.id
+        self.onDraftChange = onDraftChange
         self.onSave = onSave
         self.onRemove = onRemove
-        _step = State(initialValue: context.startsOnDetails ? .details : .confirm)
-        _selectedAssignment = State(initialValue: context.candidate.categoryAssignment)
-        _selectedStatus = State(initialValue: context.initialStatus)
-        _selectedVisibility = State(initialValue: context.initialVisibility.normalizedForStealthMode)
-        _selectedRatingScore = State(initialValue: context.initialRatingScore ?? PlaceRating.defaultScore)
-        let initialCuisine = Self.initialCuisine(for: context)
-        let initialUnifiedTags = context.initialAnswers
+        let restoredForm = draft?.form
+        let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
+            ? .details
+            : (context.startsOnDetails ? .details : .confirm)
+        let initialAssignment = restoredForm?.selectedAssignment ?? context.candidate.categoryAssignment
+        let initialStatus = restoredForm?.selectedStatus ?? context.initialStatus
+        let initialVisibility = restoredForm?.selectedVisibility
+            ?? context.initialVisibility.normalizedForStealthMode
+        let initialRatingScore = restoredForm?.selectedRatingScore
+            ?? context.initialRatingScore
+            ?? PlaceRating.defaultScore
+        let initialCuisine = restoredForm?.selectedCuisine ?? Self.initialCuisine(for: context)
+        let initialUnifiedTags = restoredForm?.unifiedTags ?? context.initialAnswers
             .filter { Self.isUnifiedTagKey($0.key) }
             .values
             .reduce(into: context.initialPersonalLabels) { result, values in
                 result.formUnion(values)
             }
-        let initialAnswers = context.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
+        let initialAnswers = restoredForm?.selectedAnswers
+            ?? context.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
         let initialQuestionBlocks = AddQuestionTemplates.blocks(
-            primaryCategory: context.candidate.primaryCategory,
-            subcategory: context.candidate.subcategory,
+            primaryCategory: initialAssignment.primaryCategory,
+            subcategory: initialAssignment.subcategory,
             cuisine: initialCuisine,
-            status: context.initialStatus
+            status: initialStatus
         )
+        _step = State(initialValue: initialStep)
+        _selectedAssignment = State(initialValue: initialAssignment)
+        _selectedStatus = State(initialValue: initialStatus)
+        _hasSelectedStatus = State(
+            initialValue: initialStep == .details || !context.requiresStatusConfirmation
+        )
+        _selectedVisibility = State(initialValue: initialVisibility)
+        _selectedRatingScore = State(initialValue: initialRatingScore)
         _selectedAnswers = State(initialValue: initialAnswers)
         _unifiedTags = State(initialValue: initialUnifiedTags)
+        _questionBlocksCache = State(
+            initialValue: MapPlaceSaveQuestionBlocksCache(initialBlocks: initialQuestionBlocks)
+        )
         _lastUnifiedTagOptions = State(
             initialValue: initialQuestionBlocks.first(where: { Self.isUnifiedTagKey($0.key) })?.options ?? []
         )
@@ -4222,24 +5328,53 @@ struct MapPlaceSaveFlowSheet: View {
             )
         )
         _selectedCuisine = State(initialValue: initialCuisine)
-        _note = State(initialValue: context.initialNote)
-        _visitedAt = State(initialValue: context.editedVisit?.visitedAt ?? .now)
+        _note = State(initialValue: restoredForm?.note ?? context.initialNote)
+        _visitedAt = State(initialValue: restoredForm?.visitedAt ?? context.editedVisit?.visitedAt ?? .now)
         let today = WannaGoDate.normalized(.now)
-        let initialPlannedDate = context.initialPlannedDate
+        let initialPlannedDate = (restoredForm?.plannedDate ?? context.initialPlannedDate)
             .map { WannaGoDate.normalized($0) }
             .flatMap { $0 >= today ? $0 : nil }
         _plannedDate = State(initialValue: initialPlannedDate)
-        _visitPhotoAttachments = State(initialValue: context.initialPhotoAttachments)
+        let restoredAttachments = restoredForm?.photoAttachments.compactMap(MapPlaceSavePhotoAttachment.restore)
+        _visitPhotoAttachments = State(
+            initialValue: restoredAttachments ?? context.initialPhotoAttachments
+        )
+        _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
+        _isShowingOptionalDetails = State(initialValue: restoredForm?.isShowingOptionalDetails ?? false)
+        let hasMissingRestoredPhotos = restoredForm.map {
+            $0.photoAttachments.count != (restoredAttachments?.count ?? 0)
+        } ?? false
+        _errorMessage = State(
+            initialValue: draft?.recoveryNotice
+                ?? (hasMissingRestoredPhotos ? "One photo could not be restored. You can add it again." : nil)
+        )
+        _saveAttemptedAt = State(initialValue: nil)
+    }
+
+    private var draftUpdate: PlaceSaveDraftUpdate {
+        PlaceSaveDraftUpdate(
+            form: PlaceSaveDraftForm(
+                step: step == .details ? .details : .confirm,
+                selectedAssignment: selectedAssignment,
+                selectedStatus: selectedStatus,
+                selectedVisibility: selectedVisibility,
+                selectedRatingScore: selectedRatingScore,
+                selectedAnswers: selectedAnswers,
+                unifiedTags: unifiedTags,
+                selectedCuisine: selectedCuisine,
+                note: note,
+                visitedAt: visitedAt,
+                plannedDate: plannedDate,
+                photoAttachments: visitPhotoAttachments.compactMap(\.draftPhoto),
+                selectedInviteeUserIDs: selectedInviteeUserIDs,
+                isShowingOptionalDetails: isShowingOptionalDetails
+            ),
+            submittedAt: saveAttemptedAt
+        )
     }
 
     private var questionBlocks: [AddQuestionBlock] {
-        AddQuestionTemplates.blocks(
-            primaryCategory: selectedAssignment.primaryCategory,
-            subcategory: selectedAssignment.subcategory,
-            cuisine: selectedCuisine,
-            status: selectedStatus,
-            localTagOptions: localCustomTagOptions()
-        )
+        questionBlocksCache.blocks
     }
 
     private var selectedCandidate: PlaceCandidate {
@@ -4278,74 +5413,86 @@ struct MapPlaceSaveFlowSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
-                    header
+            ScrollViewReader { walkthroughScrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
+                        header
 
-                    switch step {
-                    case .confirm:
-                        confirmContent
-                    case .details:
-                        detailsContent
+                        switch step {
+                        case .confirm:
+                            confirmContent
+                        case .details:
+                            detailsContent
+                        }
+                    }
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing6)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .background(WanderTheme.canvasWarm.color)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if step == .details {
+                        saveFooter
                     }
                 }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing3)
-                .padding(.bottom, WanderTheme.spacing6)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background(WanderTheme.canvasWarm.color)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if step == .details {
-                    saveFooter
+                .sheet(isPresented: $isChoosingPlaceType) {
+                    PlaceTypePickerSheet(
+                        selectedAssignment: $selectedAssignment,
+                        selectedCuisine: $selectedCuisine,
+                        placeName: context.candidate.name,
+                        suggestedCuisine: cuisineSuggestionValue,
+                        suggestionReason: cuisineSuggestionReason,
+                        recentCuisines: recentRestaurantCuisines,
+                        initialMode: placeTypePickerMode
+                    ) {
+                        handlePlaceTypeSelection()
+                    }
+                    .id(placeTypePickerMode)
                 }
-            }
-            .sheet(isPresented: $isChoosingPlaceType) {
-                PlaceTypePickerSheet(
-                    selectedAssignment: $selectedAssignment,
-                    selectedCuisine: $selectedCuisine,
-                    placeName: context.candidate.name,
-                    suggestedCuisine: cuisineSuggestionValue,
-                    suggestionReason: cuisineSuggestionReason,
-                    recentCuisines: recentRestaurantCuisines,
-                    initialMode: placeTypePickerMode
-                ) {
-                    handlePlaceTypeSelection()
+                .onAppear {
+                    store.saveFlowDidPresent(.saveSheet)
+                    if store.isPrivateProfile {
+                        selectedVisibility = .selfOnly
+                    }
+                    if step == .details {
+                        refreshQuestionBlocksIfNeeded()
+                        syncAnswersForCurrentQuestions()
+                    }
                 }
-                .id(placeTypePickerMode)
-            }
-            .onAppear {
-                store.saveFlowDidPresent(.saveSheet)
-                if store.isPrivateProfile {
-                    selectedVisibility = .selfOnly
+                .task {
+                    await loadSharedVisitInviteesIfNeeded()
                 }
-                if step == .details {
-                    syncAnswersForCurrentQuestions()
+                .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
+                    if isPrivateProfile {
+                        selectedVisibility = .selfOnly
+                        selectedInviteeUserIDs = []
+                    }
                 }
-            }
-            .task {
-                await loadSharedVisitInviteesIfNeeded()
-            }
-            .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
-                if isPrivateProfile {
-                    selectedVisibility = .selfOnly
-                    selectedInviteeUserIDs = []
+                .onChange(of: canInviteFriends) { _, canInvite in
+                    if !canInvite {
+                        selectedInviteeUserIDs = []
+                    }
                 }
-            }
-            .onChange(of: canInviteFriends) { _, canInvite in
-                if !canInvite {
-                    selectedInviteeUserIDs = []
+                .onChange(of: draftUpdate, initial: true) { _, update in
+                    guard let draftID else { return }
+                    onDraftChange(draftID, update.form, update.submittedAt)
                 }
-            }
-            .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
-                Button(context.removeTitle, role: .destructive) {
-                    removeSave()
+                .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                    prepareWalkthroughTarget(target, with: walkthroughScrollProxy)
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(context.removeConfirmationMessage)
+                .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
+                    Button(context.removeTitle, role: .destructive) {
+                        removeSave()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(context.removeConfirmationMessage)
+                }
             }
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .saveFlow)
+        .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
     }
 
     private var header: some View {
@@ -4393,6 +5540,8 @@ struct MapPlaceSaveFlowSheet: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close")
+                    .disabled(walkthroughs.activeSurface == .saveFlow)
+                    .accessibilityHidden(walkthroughs.activeSurface == .saveFlow)
                 }
             }
 
@@ -4418,21 +5567,34 @@ struct MapPlaceSaveFlowSheet: View {
 
             MapSavePickerBlock(title: "what do you want to do?") {
                 HStack(spacing: WanderTheme.spacing2) {
-                    MapSaveChoicePill(title: CheckInCopy.verb, isSelected: selectedStatus == .been) {
-                        selectedStatus = .been
+                    MapSaveChoicePill(
+                        title: CheckInCopy.verb,
+                        isSelected: hasSelectedStatus && selectedStatus == .been
+                    ) {
+                        selectStatus(.been)
                     }
                     if context.allowsWannaGoSelection {
-                        MapSaveChoicePill(title: "wanna go", isSelected: selectedStatus == .wannaGo) {
-                            selectedStatus = .wannaGo
+                        MapSaveChoicePill(
+                            title: "wanna go",
+                            isSelected: hasSelectedStatus && selectedStatus == .wannaGo
+                        ) {
+                            selectStatus(.wannaGo)
                         }
                     }
                 }
+                .walkthroughTarget(.saveStatus)
             }
 
-            WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
-                prepareDetails()
+            if hasSelectedStatus {
+                WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
+                    walkthroughs.perform(.saveContinue)
+                    prepareDetails()
+                }
+                .walkthroughTarget(.saveContinue)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: hasSelectedStatus)
     }
 
     private var detailsContent: some View {
@@ -4441,15 +5603,28 @@ struct MapPlaceSaveFlowSheet: View {
 
             if selectedStatus == .been {
                 checkInDateSection
+                    .id(WalkthroughTargetID.saveDate)
+                    .walkthroughTarget(.saveDate)
+            } else {
+                plannedDateSection
+                    .id(WalkthroughTargetID.saveDate)
+                    .walkthroughTarget(.saveDate)
             }
 
             placeTypeSection
+                .id(WalkthroughTargetID.saveDetails)
+                .walkthroughTarget(.saveDetails)
 
             if selectedStatus == .been {
                 ratingSection
+                    .id(WalkthroughTargetID.saveRating)
+                    .walkthroughTarget(.saveRating)
 
-                if canInviteFriends {
+                if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
                     sharedVisitInviteSection
+                        .disabled(!canInviteFriends)
+                        .id(WalkthroughTargetID.saveFriends)
+                        .walkthroughTarget(.saveFriends)
                 }
 
                 if context.allowsPhotoAttachments {
@@ -4457,6 +5632,8 @@ struct MapPlaceSaveFlowSheet: View {
                         canAddPhotos: true,
                         photos: $visitPhotoAttachments
                     )
+                    .id(WalkthroughTargetID.savePhotos)
+                    .walkthroughTarget(.savePhotos)
                 }
             }
 
@@ -4489,6 +5666,7 @@ struct MapPlaceSaveFlowSheet: View {
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing2)
         .background(WanderTheme.canvasWarm.color)
+        .walkthroughTarget(.saveSubmit)
     }
 
     private var primaryActionTitle: String {
@@ -4529,9 +5707,7 @@ struct MapPlaceSaveFlowSheet: View {
 
             VStack(spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        isShowingPlannedDatePicker.toggle()
-                    }
+                    isShowingPlannedDatePicker.toggle()
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar.badge.clock")
@@ -4566,6 +5742,7 @@ struct MapPlaceSaveFlowSheet: View {
                             .font(.system(size: 12, weight: .black))
                             .foregroundStyle(WanderTheme.terracotta.color)
                             .rotationEffect(.degrees(isShowingPlannedDatePicker ? 180 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: isShowingPlannedDatePicker)
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: 58)
@@ -4632,15 +5809,23 @@ struct MapPlaceSaveFlowSheet: View {
 
     @ViewBuilder
     private var questionAndLabelSections: some View {
-        ForEach(questionBlocks.filter { !Self.isUnifiedTagKey($0.key) }) { block in
-            MapSaveQuestionBlock(title: block.title, tag: block.tag) {
-                MapSaveQuestionOptions(
-                    block: block,
-                    selectedValues: selections(for: block)
-                ) { option in
-                    toggleAnswer(option, in: block)
+        let nonTagBlocks = questionBlocks.filter { !Self.isUnifiedTagKey($0.key) }
+
+        if !nonTagBlocks.isEmpty {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                ForEach(nonTagBlocks) { block in
+                    MapSaveQuestionBlock(title: block.title, tag: block.tag) {
+                        MapSaveQuestionOptions(
+                            block: block,
+                            selectedValues: selections(for: block)
+                        ) { option in
+                            toggleAnswer(option, in: block)
+                        }
+                    }
                 }
             }
+            .id(WalkthroughTargetID.saveQuestions)
+            .walkthroughTarget(.saveQuestions)
         }
 
         if let unifiedTagBlock {
@@ -4650,6 +5835,8 @@ struct MapPlaceSaveFlowSheet: View {
             ) { option in
                 toggleAnswer(option, in: unifiedTagBlock)
             }
+            .id(WalkthroughTargetID.saveTags)
+            .walkthroughTarget(.saveTags)
         }
     }
 
@@ -4679,9 +5866,15 @@ struct MapPlaceSaveFlowSheet: View {
     }
 
     private var optionalDetailsDisclosure: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+        let isWalkthroughTarget = walkthroughs.activeSurface == .saveFlow
+            && walkthroughs.currentStep?.target == .saveMoreOptions
+
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Button {
-                withAnimation(.easeInOut(duration: 0.22)) {
+                if walkthroughs.currentStep?.target == .saveMoreOptions {
+                    isShowingOptionalDetails = true
+                    walkthroughs.perform(.saveMoreOptions)
+                } else {
                     isShowingOptionalDetails.toggle()
                 }
             } label: {
@@ -4698,10 +5891,41 @@ struct MapPlaceSaveFlowSheet: View {
 
                     Spacer()
 
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
+                    ZStack {
+                        Circle()
+                            .fill(
+                                isWalkthroughTarget
+                                    ? WanderTheme.sunTint.color
+                                    : .clear
+                            )
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
+                    }
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .overlay {
+                        if isWalkthroughTarget {
+                            Circle()
+                                .stroke(WanderTheme.categorySun.color, lineWidth: 3)
+                        }
+                    }
+                    .scaleEffect(
+                        isWalkthroughTarget && !reduceMotion && isMoreOptionsArrowPulsing
+                            ? 1.08
+                            : 1
+                    )
+                    .shadow(
+                        color: isWalkthroughTarget
+                            ? WanderTheme.categorySun.color.opacity(
+                                isMoreOptionsArrowPulsing ? 0.72 : 0.34
+                            )
+                            : .clear,
+                        radius: isWalkthroughTarget && isMoreOptionsArrowPulsing ? 11 : 4
+                    )
+                    .walkthroughTarget(.saveMoreOptions)
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -4709,32 +5933,50 @@ struct MapPlaceSaveFlowSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .overlay(
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                        .stroke(WanderTheme.borderHairline.color)
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
-            .accessibilityHint("Optional. Continue without opening this section.")
+            .accessibilityHint(
+                walkthroughs.currentStep?.target == .saveMoreOptions
+                    ? "Required for this walkthrough. Opens the optional note, fit questions, tags, and privacy fields."
+                    : "Optional. Continue without opening this section."
+            )
+            .id(WalkthroughTargetID.saveMoreOptions)
+            .task(id: isWalkthroughTarget) {
+                isMoreOptionsArrowPulsing = false
+                guard isWalkthroughTarget, !reduceMotion else { return }
+                await Task.yield()
+                isMoreOptionsArrowPulsing = true
+            }
+            .animation(
+                isWalkthroughTarget && !reduceMotion
+                    ? .easeInOut(duration: 1.05).repeatForever(autoreverses: true)
+                    : .easeOut(duration: 0.2),
+                value: isMoreOptionsArrowPulsing
+            )
 
             if isShowingOptionalDetails {
-                if selectedStatus == .wannaGo {
-                    plannedDateSection
-                }
                 noteSection
+                    .id(WalkthroughTargetID.saveNote)
+                    .walkthroughTarget(.saveNote)
                 questionAndLabelSections
                 visibilitySection
+                    .id(WalkthroughTargetID.savePrivacy)
+                    .walkthroughTarget(.savePrivacy)
             }
         }
     }
 
     private var optionalDetailsSummary: String {
         if selectedStatus == .wannaGo, let plannedDate {
-            return "planned \(plannedDate.formatted(.dateTime.month(.abbreviated).day())) · note & privacy"
+            return "planned \(plannedDate.formatted(.dateTime.month(.abbreviated).day())) · note, fit & privacy"
         }
         return selectedStatus == .wannaGo
-            ? "date, note, tags & privacy"
-            : "note, tags & privacy"
+            ? "date, note, fit, tags & privacy"
+            : "note, fit, tags & privacy"
     }
 
     private var removeSaveSection: some View {
@@ -4760,9 +6002,7 @@ struct MapPlaceSaveFlowSheet: View {
 
             VStack(spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        isShowingCheckInDatePicker.toggle()
-                    }
+                    isShowingCheckInDatePicker.toggle()
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar")
@@ -4782,6 +6022,7 @@ struct MapPlaceSaveFlowSheet: View {
                             .font(.system(size: 12, weight: .black))
                             .foregroundStyle(WanderTheme.terracotta.color)
                             .rotationEffect(.degrees(isShowingCheckInDatePicker ? 180 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: isShowingCheckInDatePicker)
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .frame(minHeight: 58)
@@ -4804,9 +6045,7 @@ struct MapPlaceSaveFlowSheet: View {
                                     from: selection,
                                     currentDate: visitedAt
                                 )
-                                withAnimation(.easeInOut(duration: 0.22)) {
-                                    isShowingCheckInDatePicker = false
-                                }
+                                isShowingCheckInDatePicker = false
                             }
                         ),
                         in: ..<Date.now
@@ -4873,7 +6112,7 @@ struct MapPlaceSaveFlowSheet: View {
                         isChoosingPlaceType = true
                     } label: {
                         PlaceTypeRow(
-                            title: "cuisine",
+                            title: "food type",
                             value: selectedCuisine ?? "optional",
                             isPlaceholderValue: selectedCuisine == nil
                         )
@@ -4995,6 +6234,7 @@ struct MapPlaceSaveFlowSheet: View {
         if resolvedContext.id != context.id {
             applyDefaults(from: resolvedContext)
         }
+        refreshQuestionBlocksIfNeeded()
         syncAnswersForCurrentQuestions()
         errorMessage = nil
         step = .details
@@ -5030,6 +6270,7 @@ struct MapPlaceSaveFlowSheet: View {
                 .filter { !Self.isUnifiedTagKey($0.key) }
                 .map { ($0.key, $0.options) }
         )
+        questionBlocksCache = MapPlaceSaveQuestionBlocksCache(initialBlocks: initialQuestionBlocks)
 
         note = nextContext.initialNote
         visitedAt = nextContext.editedVisit?.visitedAt ?? .now
@@ -5073,7 +6314,26 @@ struct MapPlaceSaveFlowSheet: View {
             selectedCuisine = nil
         }
 
+        refreshQuestionBlocksIfNeeded()
         syncAnswersForCurrentQuestions()
+    }
+
+    private func refreshQuestionBlocksIfNeeded() {
+        let key = MapPlaceSaveQuestionBlocksCache.Key(
+            primaryCategory: selectedAssignment.primaryCategory,
+            subcategory: selectedAssignment.subcategory,
+            cuisine: selectedCuisine,
+            status: selectedStatus
+        )
+        questionBlocksCache.refresh(for: key) {
+            AddQuestionTemplates.blocks(
+                primaryCategory: selectedAssignment.primaryCategory,
+                subcategory: selectedAssignment.subcategory,
+                cuisine: selectedCuisine,
+                status: selectedStatus,
+                localTagOptions: localCustomTagOptions()
+            )
+        }
     }
 
     private func toggleAnswer(_ option: String, in block: AddQuestionBlock) {
@@ -5231,6 +6491,11 @@ struct MapPlaceSaveFlowSheet: View {
             errorMessage = "A check-in date can’t be in the future."
             return
         }
+        let attemptedAt = Date.now
+        saveAttemptedAt = attemptedAt
+        if let draftID {
+            onDraftChange(draftID, draftUpdate.form, attemptedAt)
+        }
         isSaving = true
         errorMessage = nil
 
@@ -5255,9 +6520,12 @@ struct MapPlaceSaveFlowSheet: View {
             let result = await onSave(submission)
             await MainActor.run {
                 isSaving = false
-                if result != nil {
+                if let result {
+                    walkthroughs.recordTutorialSave(userPlaceID: result.userPlaceID)
+                    walkthroughs.perform(.saveSubmit)
                     dismiss()
                 } else if auth.isSignedIn {
+                    saveAttemptedAt = nil
                     if context.sharedVisitInvitation != nil {
                         errorMessage = "Could not add this shared check-in. Open the invitation and try again."
                     } else {
@@ -5266,12 +6534,65 @@ struct MapPlaceSaveFlowSheet: View {
                             : "Could not add this to Wanna. Try again."
                     }
                 } else {
+                    saveAttemptedAt = nil
                     errorMessage = selectedStatus == .been
                         ? "Sign in to finish your check-in."
                         : "Sign in to add this to Wanna."
                 }
             }
         }
+    }
+
+    private func scrollToWalkthroughTarget(
+        _ target: WalkthroughTargetID?,
+        with proxy: ScrollViewProxy
+    ) {
+        guard walkthroughs.activeSurface == .saveFlow,
+              let target,
+              [
+                .saveDate,
+                .saveDetails,
+                .saveRating,
+                .saveFriends,
+                .savePhotos,
+                .saveMoreOptions,
+                .saveNote,
+                .saveQuestions,
+                .saveTags,
+                .savePrivacy
+              ].contains(target)
+        else { return }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard walkthroughs.currentStep?.target == target else { return }
+            withAnimation(.easeInOut(duration: 0.28)) {
+                proxy.scrollTo(
+                    target,
+                    anchor: target == .saveQuestions || target == .saveTags ? .top : .center
+                )
+            }
+        }
+    }
+
+    private func prepareWalkthroughTarget(
+        _ target: WalkthroughTargetID?,
+        with proxy: ScrollViewProxy
+    ) {
+        if selectedStatus == .wannaGo {
+            while let currentTarget = walkthroughs.currentStep?.target,
+                  [.saveRating, .saveFriends, .savePhotos].contains(currentTarget) {
+                walkthroughs.recoverUnavailableTarget(currentTarget)
+            }
+        }
+
+        scrollToWalkthroughTarget(walkthroughs.currentStep?.target ?? target, with: proxy)
+    }
+
+    private func selectStatus(_ status: PlaceStatus) {
+        selectedStatus = status
+        hasSelectedStatus = true
+        walkthroughs.perform(.saveStatus)
     }
 
     private func loadSharedVisitInviteesIfNeeded() async {
@@ -5536,6 +6857,8 @@ private struct MapSaveChoicePill: View {
                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -5869,12 +7192,12 @@ struct PlaceTypePickerSheet: View {
     private var cuisinePickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             CategoryPickerHeader(
-                title: "explore cuisines",
+                title: "explore food types",
                 subtitle: "We’ll start with our best guess. Change it only if we missed."
             )
 
             if selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
-                CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Cuisine only applies to restaurants and food places.")
+                CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Food type only applies to restaurants and food places.")
             } else {
                 selectedCategoryPills
 
@@ -5890,7 +7213,7 @@ struct PlaceTypePickerSheet: View {
                     }
                 }
 
-                CategoryPickerSearchField(placeholder: "Search cuisines", text: $query)
+                CategoryPickerSearchField(placeholder: "Search food types", text: $query)
 
                 if !recentCuisines.isEmpty {
                     RestaurantCuisineRecentsStrip(
@@ -5908,7 +7231,7 @@ struct PlaceTypePickerSheet: View {
 
                 if filteredCuisineOptions.isEmpty {
                     CategoryPickerEmptyState(
-                        title: "No matching cuisine",
+                        title: "No matching food type",
                         message: "Try Thai, Mexican, Korean BBQ, or South American."
                     )
                 } else {
@@ -5964,7 +7287,7 @@ struct PlaceTypePickerSheet: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .black))
-                    Text("No cuisine")
+                    Text("No food type")
                         .font(.system(size: 13, weight: .black))
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -5975,7 +7298,7 @@ struct PlaceTypePickerSheet: View {
                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Clear cuisine")
+            .accessibilityLabel("Clear food type")
         }
     }
 
@@ -6146,7 +7469,7 @@ private struct RestaurantCuisineSuggestionCard: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Best guess for \(placeName): \(cuisine)")
+        .accessibilityLabel("Best food type guess for \(placeName): \(cuisine)")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityHint(reason)
     }
@@ -6246,7 +7569,7 @@ private struct RestaurantCuisineRegionFilters: View {
                                 .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(filter.id) cuisines")
+                        .accessibilityLabel("\(filter.id) food types")
                         .accessibilityValue(selectedRegion == filter.id ? "Selected" : "Not selected")
                     }
                 }
@@ -6313,8 +7636,8 @@ private struct RestaurantCuisineSelectionFooter: View {
 
     var body: some View {
         PlaceTypeSelectionFooter(
-            label: "CUISINE",
-            value: cuisine ?? "No cuisine",
+            label: "FOOD TYPE",
+            value: cuisine ?? "No food type",
             onDone: onDone
         )
     }
@@ -6519,7 +7842,7 @@ struct PrimaryCategoryPickerTile: View {
 
     private var optionCountLabel: String {
         let count = WanderPlaceCategory.subcategorySuggestions(for: category).count
-        let noun = category == WanderPlaceCategory.restaurantsFood ? "cuisines" : "types"
+        let noun = category == WanderPlaceCategory.restaurantsFood ? "food types" : "types"
         return "\(count) \(noun)"
     }
 
@@ -6728,7 +8051,7 @@ private enum CategoryPickerVisuals {
     static func tileDetail(for category: String) -> String {
         switch category {
         case WanderPlaceCategory.restaurantsFood:
-            "Restaurants, cuisines, quick bites"
+            "Restaurants, food types, quick bites"
         case WanderPlaceCategory.coffeeTeaSweets:
             "Coffee, tea, bakeries"
         case WanderPlaceCategory.barsNightlife:
@@ -7002,36 +8325,33 @@ private struct MapSaveUnifiedTagsSection: View {
     var body: some View {
         MapSaveQuestionBlock(title: block.title, tag: "optional") {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                selectedShelf
+                selectionHeader
 
-                if !suggestionOptions.isEmpty {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("more suggestions")
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-
-                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                            ForEach(suggestionOptions, id: \.self) { option in
-                                suggestionButton(option)
-                            }
+                ScrollView(.vertical, showsIndicators: allOptions.count > maximumVisibleTagCount) {
+                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                        ForEach(allOptions, id: \.self) { option in
+                            tagButton(option)
                         }
                     }
                 }
+                .scrollDisabled(allOptions.count <= maximumVisibleTagCount)
+                .frame(height: tagPickerHeight)
+                .accessibilityIdentifier("save.tags.picker")
 
                 customTagControl
             }
         }
     }
 
-    private var selectedShelf: some View {
+    private var selectionHeader: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing2) {
                 Text("your tags")
                     .font(.system(size: 12, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
 
-                if !selectedOptions.isEmpty {
-                    Text("\(selectedOptions.count)")
+                if !selectedValues.isEmpty {
+                    Text("\(selectedValues.count)")
                         .font(.system(size: 10, weight: .black))
                         .foregroundStyle(WanderTheme.terracottaDark.color)
                         .frame(minWidth: 22, minHeight: 22)
@@ -7040,28 +8360,10 @@ private struct MapSaveUnifiedTagsSection: View {
                 }
             }
 
-            if selectedOptions.isEmpty {
-                HStack(spacing: WanderTheme.spacing2) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-
-                    Text("Pick the details that make this place worth remembering.")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
-                .padding(.horizontal, WanderTheme.spacing3)
-                .background(WanderTheme.surfaceRaised.color.opacity(0.72))
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            } else {
-                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                    ForEach(selectedOptions, id: \.self) { option in
-                        selectedButton(option)
-                    }
-                }
-            }
+            Text("Tap any that fit. Selected tags stay in place so you can review or change them.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(WanderTheme.spacing3)
         .background(WanderTheme.surfaceRaised.color)
@@ -7080,36 +8382,43 @@ private struct MapSaveUnifiedTagsSection: View {
         )
     }
 
-    private var selectedOptions: [String] {
-        let suggestedSelections = block.options.filter { option in
-            selectedValues.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
-        }
+    private var maximumVisibleTagCount: Int {
+        gridColumns.count * 4
+    }
+
+    private var tagPickerHeight: CGFloat {
+        let rows = min(
+            4,
+            max(1, Int(ceil(Double(allOptions.count) / Double(gridColumns.count))))
+        )
+        return CGFloat(rows) * 52 + CGFloat(rows - 1) * WanderTheme.spacing2
+    }
+
+    private var allOptions: [String] {
         let customSelections = selectedValues
             .filter { value in
                 !block.options.contains { $0.caseInsensitiveCompare(value) == .orderedSame }
             }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
-        return suggestedSelections + customSelections
+        return block.options + customSelections
     }
 
-    private var suggestionOptions: [String] {
-        block.options.filter { option in
-            !selectedValues.contains { $0.caseInsensitiveCompare(option) == .orderedSame }
+    private func tagButton(_ option: String) -> some View {
+        let isSelected = selectedValues.contains {
+            $0.caseInsensitiveCompare(option) == .orderedSame
         }
-    }
 
-    private func selectedButton(_ option: String) -> some View {
-        Button {
+        return Button {
             onSelect(option)
         } label: {
             HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "plus.circle")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
                 Text(option)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.leading)
 
@@ -7117,45 +8426,22 @@ private struct MapSaveUnifiedTagsSection: View {
             }
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .padding(.horizontal, WanderTheme.spacing2)
-            .background(WanderTheme.terracottaTint.color)
+            .background(isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceRaised.color)
             .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
             .overlay(
                 RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.terracotta.color.opacity(0.52), lineWidth: 1)
+                    .stroke(
+                        isSelected
+                            ? WanderTheme.terracotta.color.opacity(0.52)
+                            : WanderTheme.borderHairline.color,
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Remove \(option) tag")
-        .accessibilityAddTraits(.isSelected)
-    }
-
-    private func suggestionButton(_ option: String) -> some View {
-        Button {
-            onSelect(option)
-        } label: {
-            HStack(spacing: WanderTheme.spacing2) {
-                Image(systemName: "plus.circle")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-
-                Text(option)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .multilineTextAlignment(.leading)
-
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-            .padding(.horizontal, WanderTheme.spacing2)
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add \(option) tag")
+        .accessibilityLabel("\(isSelected ? "Remove" : "Add") \(option) tag")
+        .accessibilityIdentifier(isSelected ? "save.tags.selected" : "save.tags.suggestion")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -7613,11 +8899,11 @@ struct PlaceSheet: View {
     }
 
     private var compactSubtitle: String? {
-        trimmed(place.compactSubtitleOverride) ?? joinedText([place.locality, categoryDisplay])
+        trimmed(place.compactSubtitleOverride) ?? joinedText([place.locality, compactCategoryDisplay])
     }
 
     private var expandedSubtitle: String? {
-        joinedText([addressLine, categoryDisplay])
+        joinedText([addressLine, compactCategoryDisplay])
     }
 
     private var addressLine: String? {
@@ -7628,9 +8914,8 @@ struct PlaceSheet: View {
         return joinedText([place.locality, place.region])
     }
 
-    private var categoryDisplay: String? {
-        let display = WanderPlaceCategory.display(for: place.categoryAssignment).compactTitle
-        let trimmedDisplay = trimmed(display)
+    private var compactCategoryDisplay: String? {
+        let trimmedDisplay = trimmed(place.compactPlaceType)
         return place.primaryCategory == "place" ? nil : trimmedDisplay
     }
 
@@ -7646,8 +8931,8 @@ struct PlaceSheet: View {
 
     private var placeFacts: [PlaceFact] {
         var facts: [PlaceFact] = []
-        if let categoryDisplay {
-            facts.append(PlaceFact(title: categoryDisplay, emoji: place.categoryEmoji))
+        if let compactCategoryDisplay {
+            facts.append(PlaceFact(title: compactCategoryDisplay, emoji: place.categoryEmoji))
         }
         return facts
     }
@@ -7778,127 +9063,10 @@ private struct PlaceProfileRatingStrip: View {
     let compact: Bool
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            PlaceProfileMetricCard(
-                title: "Your rating",
-                value: presentation.ownRating?.displayScore ?? "No check-ins yet",
-                suffix: presentation.ownRating == nil ? nil : "/5",
-                subtitle: presentation.ownRating?.subtitle ?? "0 check-ins",
-                systemImage: "star.fill",
-                tint: WanderTheme.stateWarning.color,
-                explanation: nil,
-                compact: compact
-            )
-
-            PlaceProfileMetricCard(
-                title: "rec.me rating",
-                value: presentation.overallRating?.displayScore ?? "No ratings yet",
-                suffix: presentation.overallRating == nil ? nil : "/5",
-                subtitle: presentation.overallRating?.subtitle ?? "0 ratings",
-                systemImage: "person.2.fill",
-                tint: WanderTheme.pinSocial.color,
-                explanation: .recMe,
-                compact: compact
-            )
-
-            PlaceProfileMetricCard(
-                title: "Fit Rating",
-                value: presentation.fitRating?.displayScore ?? "Not enough yet",
-                suffix: presentation.fitRating == nil ? nil : "/10",
-                subtitle: presentation.fitRating == nil ? "keep saving" : (compact ? "for you" : "compared to places you like"),
-                systemImage: "sparkles",
-                tint: WanderTheme.terracotta.color,
-                explanation: .fit,
-                compact: compact
-            )
-        }
-    }
-}
-
-private struct PlaceProfileMetricCard: View {
-    let title: String
-    let value: String
-    let suffix: String?
-    let subtitle: String
-    let systemImage: String
-    let tint: Color
-    let explanation: PlaceRatingExplanation?
-    let compact: Bool
-
-    var body: some View {
-        VStack(alignment: .center, spacing: compact ? 4 : WanderTheme.spacing1) {
-            Image(systemName: systemImage)
-                .font(.system(size: compact ? 12 : 15, weight: .black))
-                .foregroundStyle(tint)
-                .frame(width: compact ? 24 : 32, height: compact ? 24 : 32)
-                .background(tint.opacity(0.12))
-                .clipShape(Circle())
-                .offset(x: ratingHeaderHorizontalOffset)
-
-            Text(title)
-                .font(.system(size: compact ? 11 : 13, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .textCase(.uppercase)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.68)
-                .frame(maxWidth: .infinity, minHeight: compact ? 28 : 34, alignment: .center)
-                .offset(x: ratingHeaderHorizontalOffset)
-
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(.system(size: valueFontSize, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(suffix == nil ? 2 : 1)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.62)
-                if let suffix {
-                    Text(suffix)
-                        .font(.system(size: compact ? 11 : 12, weight: .black))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: compact ? 25 : 30, alignment: .center)
-
-            Text(subtitle)
-                .font(.system(size: compact ? 9.5 : 11, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.78)
-                .frame(maxWidth: .infinity, minHeight: compact ? 16 : 24, alignment: .center)
-        }
-        .padding(.horizontal, compact ? 6 : WanderTheme.spacing2)
-        .padding(.vertical, compact ? 7 : WanderTheme.spacing2)
-        .frame(maxWidth: .infinity, minHeight: compact ? 118 : 136, alignment: .center)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        PlaceProfileRatingsRail(
+            presentation: presentation,
+            compact: compact
         )
-        .overlay(alignment: .topTrailing) {
-            if let explanation {
-                PlaceRatingInfoButton(explanation: explanation, tint: tint)
-                    .offset(x: infoButtonHorizontalOffset, y: compact ? -1 : 1)
-            }
-        }
-    }
-
-    private var ratingHeaderHorizontalOffset: CGFloat {
-        explanation == nil ? -5 : -10
-    }
-
-    private var infoButtonHorizontalOffset: CGFloat {
-        explanation == .recMe ? 9 : 6
-    }
-
-    private var valueFontSize: CGFloat {
-        if suffix != nil {
-            return compact ? 20 : 24
-        }
-
-        return compact ? 11 : 13
     }
 }
 
@@ -8107,7 +9275,10 @@ struct PlaceActivitySection: View {
             if filteredEntries.isEmpty {
                 PlaceActivityEmptyState(text: emptyStateText)
             } else {
-                LazyVStack(spacing: WanderTheme.spacing2) {
+                // The parent place profile already owns the vertical ScrollView.
+                // Keeping this finite history eager prevents variable-height
+                // ticket cards from being evicted and rebuilt mid-scroll.
+                VStack(spacing: WanderTheme.spacing2) {
                     ForEach(filteredEntries) { entry in
                         PlaceActivityCard(
                             entry: entry,
@@ -8143,6 +9314,13 @@ struct PlaceActivitySection: View {
         .task(id: companionVisitIDs) {
             guard auth.isSignedIn else { return }
             await store.refreshSharedVisitCompanions(visitIDs: companionVisitIDs, backend: backend)
+        }
+        .task(id: engagementUserPlaceIDs) {
+            guard auth.isSignedIn else { return }
+            await store.refreshPlaceActivityEngagement(
+                userPlaceIDs: engagementUserPlaceIDs,
+                backend: backend
+            )
         }
     }
 
@@ -8207,6 +9385,18 @@ struct PlaceActivitySection: View {
 
     private var companionVisitIDs: [String] {
         entries.compactMap { $0.visit?.serverID }.sorted()
+    }
+
+    private var engagementUserPlaceIDs: [String] {
+        Array(
+            Set(
+                saves.compactMap { summary in
+                    let serverID = summary.visiblePlace.userPlace.serverID
+                    return serverID.flatMap(UUID.init(uuidString:)) == nil ? nil : serverID
+                }
+            )
+        )
+        .sorted()
     }
 
     private func companions(for entry: PlaceActivityEntry) -> [SharedVisitCompanion] {
@@ -8387,6 +9577,12 @@ private struct PlaceActivityCard: View {
 
             addPhotoControl
 
+            ActivityEngagementActionRow(
+                context: engagementContext,
+                visiblePlace: entry.summary.visiblePlace,
+                isEngagementEnabled: isEngagementResolved
+            )
+
             if let photoError {
                 Text(photoError)
                     .font(.system(size: 12, weight: .bold))
@@ -8457,6 +9653,62 @@ private struct PlaceActivityCard: View {
 
     private var ticketAccentColor: Color {
         entry.isCurrentUser ? WanderTheme.terracotta.color : WanderTheme.pinSocial.color
+    }
+
+    private var engagementContext: ActivityEngagementContext {
+        let visiblePlace = entry.summary.visiblePlace
+        let match = store.placeActivityEngagementMatch(
+            userPlaceID: entry.userPlace.serverID ?? entry.userPlace.id,
+            visitID: entry.visit?.serverID,
+            preferredKinds: engagementKinds
+        )
+        let location = [visiblePlace.place.locality, visiblePlace.place.region]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .joined(separator: ", ")
+        let detailParts = [visiblePlace.effectiveSubcategory ?? visiblePlace.effectiveCategory, location]
+            .filter { !$0.isEmpty }
+
+        return ActivityEngagementContext(
+            activityID: match?.activityID ?? "local-place-activity-\(entry.id)",
+            actor: store.shell(for: entry.owner),
+            placeName: visiblePlace.place.canonicalName,
+            placeServerID: visiblePlace.place.serverID ?? visiblePlace.place.id,
+            placeDetail: detailParts.joined(separator: " · "),
+            status: entry.status,
+            occurredAt: entry.timestamp,
+            note: entry.note,
+            media: photos.map {
+                ActivityEngagementMedia(
+                    id: $0.id,
+                    urlString: $0.metadata.remoteURLString,
+                    localAssetRef: $0.metadata.localAssetRef,
+                    accessibilityLabel: "Photo from \(entry.displayName)'s activity at \(visiblePlace.place.canonicalName)"
+                )
+            }
+        )
+    }
+
+    private var isEngagementResolved: Bool {
+        guard let serverID = entry.userPlace.serverID,
+              UUID(uuidString: serverID) != nil
+        else { return true }
+        return store.placeActivityEngagementMatch(
+            userPlaceID: serverID,
+            visitID: entry.visit?.serverID,
+            preferredKinds: engagementKinds
+        ) != nil
+    }
+
+    private var engagementKinds: [FeedActivityKind] {
+        switch entry.kind {
+        case .visit, .legacyBeenSummary:
+            [.placeBeen, .placeSaved]
+        case .currentWant, .historicalWant:
+            [.placeWannaGo, .placeSaved]
+        }
     }
 
     @ViewBuilder

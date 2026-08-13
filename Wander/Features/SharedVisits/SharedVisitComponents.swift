@@ -122,6 +122,7 @@ struct SharedVisitFriendPicker: View {
     @EnvironmentObject private var store: WanderStore
     @Binding var selectedUserIDs: [String]
     @State private var query = ""
+    @State private var isPresentingContactInvites = false
 
     private var friends: [LocalProfile] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -147,6 +148,15 @@ struct SharedVisitFriendPicker: View {
                             .autocorrectionDisabled()
                     }
                 }
+
+                Section {
+                    InviteEntryPointButton(surface: .sharedVisit(placeName: nil)) {
+                        isPresentingContactInvites = true
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
                 Section("friends") {
                     if friends.isEmpty {
@@ -192,6 +202,13 @@ struct SharedVisitFriendPicker: View {
                     Button("Done") { dismiss() }
                         .font(.system(size: 15, weight: .bold))
                 }
+            }
+            .sheet(isPresented: $isPresentingContactInvites) {
+                ContactInviteSheet(
+                    surface: .sharedVisit(placeName: nil),
+                    contactProvider: store.contactProvider,
+                    senderProfileID: store.currentUser.id
+                )
             }
         }
     }

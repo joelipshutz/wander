@@ -113,6 +113,23 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
         )
     }
 
+    func testAddSearchRequiresAQueryAndRoundTripsForImportEditing() throws {
+        let route = WanderDeepLinkRoute.addSearch(query: "  Bavel Los Angeles  ")
+        let url = try XCTUnwrap(route.url)
+
+        XCTAssertEqual(url.absoluteString, "recme://add/search?q=Bavel%20Los%20Angeles")
+        XCTAssertEqual(
+            WanderDeepLinkRoute.parse(url),
+            .addSearch(query: "Bavel Los Angeles")
+        )
+        XCTAssertNil(WanderDeepLinkRoute.addSearch(query: " \n ").url)
+        XCTAssertNil(
+            WanderDeepLinkRoute.parse(
+                try XCTUnwrap(URL(string: "recme://add/search"))
+            )
+        )
+    }
+
     func testNearbyPlaceEncodesOneOpaquePathSegmentAndRoundTripsUnicode() throws {
         let route = WanderDeepLinkRoute.nearbyPlace(candidateID: "mapkit/Ggiata 東京")
         let url = try XCTUnwrap(route.url)
@@ -161,6 +178,10 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
                 "https://getrec.me/places/40000000-0000-0000-0000-000000000001"
             ),
             (
+                .sharedActivity(activityID: "42000000-0000-0000-0000-000000000001"),
+                "https://getrec.me/activities/42000000-0000-0000-0000-000000000001"
+            ),
+            (
                 .sharedList(listID: "44000000-0000-0000-0000-000000000001"),
                 "https://getrec.me/lists/44000000-0000-0000-0000-000000000001"
             ),
@@ -203,6 +224,7 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
             "https://getrec.me/profiles/user/extra",
             "https://getrec.me/profiles/user?q=private",
             "https://getrec.me/places/not-a-uuid",
+            "https://getrec.me/activities/not-a-uuid",
             "https://getrec.me/lists/not-a-uuid",
             "https://getrec.me/invites/too-short"
         ]

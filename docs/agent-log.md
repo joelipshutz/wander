@@ -19629,6 +19629,70 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
 
+## 2026-08-11 23:48 PDT - Codex - REC-270 Map Filter Polish
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher`
+Branch: `codex/rec-270-map-polish`
+Worktree: `/private/tmp/recme-rec270-map-polish`
+Linear: `REC-270` (`In Progress`)
+
+Goal: add a restrained transition when switching the Map between Featured and
+Friends, and remove the unintended visual shadow under the search/filter header
+without changing pin rendering, filter membership, More behavior, or map camera
+position.
+
+Starting status and plan:
+
+- Started clean from exact `origin/main` commit `4468db56`; the stale, dirty
+  phone-build checkout and other active worktrees remain untouched.
+- This is isolated one-screen visual polish, so the engineering review gate is
+  not needed. The existing source/filter contracts and data paths remain intact.
+- The generic `ios-fix` state-server snapshot path is not available in this
+  repository; use before/after simulator screenshots plus focused interaction
+  coverage instead.
+- Mission Control task creation was attempted, but `localhost:4000` is not
+  running. Linear REC-270 is the active task record.
+
+Expected files: `Wander/Features/Map/MapScreen.swift`, the shared glass modifier
+only if needed to suppress Map-header shadows without changing other surfaces,
+focused Map tests, and this log.
+
+Checkpoint, 2026-08-12 00:10 PDT:
+
+- Added a Map-only flat option to the existing glass capsule treatment. Search,
+  add, Featured, Friends, More, and focused-search Cancel now keep their warm
+  translucent fill and border without the fallback drop shadow or iOS 26
+  elevated glass effect. Other glass controls keep their current elevation.
+- Featured/Friends source changes now use a 160 ms ease-in/out transition with
+  a restrained 2% scale change on the deselected pill. Reduce Motion disables
+  the animation. Pin rendering, source membership, More refinements, and camera
+  position are unchanged.
+- Visual QA passed on iPhone 16 Plus / iOS 18.6, iPhone 16e / iOS 18.6, and
+  iPhone 16e / iOS 26.2. Before/after screenshots confirmed the gray shadow band
+  under the Map header is gone without losing control contrast.
+- Focused `MapFilterSelectionTests` passed 7/7. The complete unit suite passed
+  1,068/1,068, and 23/24 UI tests passed, including both Map filter walkthrough
+  and source/More persistence tests. The sole UI failure is the unrelated
+  `testFirstAddActionGuidesThroughSaveBeforeReturningToMap`: its harness tries
+  to tap an offscreen eighth tag suggestion and reports an invalid activation
+  point. A direct rerun reproduced the same harness failure. No Add/save/tag
+  code changed in this branch.
+- Deleted only this task's temporary 1.8 GB DerivedData cache after validation
+  because the volume reached 126 MB free; screenshots remain in `/private/tmp`.
+
+Handoff, 2026-08-12 00:13 PDT:
+
+- Opened ready PR #365: https://github.com/joelipshutz/wander/pull/365.
+  Its required TestFlight `ship` payload validates successfully and records no
+  release operation in this PR.
+- Linear REC-270 is `In Review` with the PR, validation, visual QA, and known
+  unrelated UI-test harness failure documented.
+- The branch is rebased onto exact current `origin/main` commit `ec53ce77`; the
+  intervening Apple-first authentication change did not overlap this diff.
+- No merge, build-number change, TestFlight upload, or Slack release note was
+  performed. Next: review/merge PR #365, then include it in the next explicitly
+  requested TestFlight batch.
+
 REC-133 production implementation restart, 2026-07-23 11:22 PDT:
 
 - Agent/tool: Codex. Goal: convert the approved debug-only place-photo carousel
@@ -28548,3 +28612,53 @@ Transition outcome:
   audits, Linear issue/relation/comment verification, and
   `scripts/install-agent-skills.sh --check` all passed. No `xcodebuild` run was
   needed because the change does not touch app/runtime code.
+## 2026-08-10 15:39 PDT - Codex - REC-249 Map Source Filters
+
+Agent: Codex
+Branch: `codex/rec-249-map-filters`
+Worktree: `/private/tmp/recme-rec249-map-filters`
+Linear: `REC-249` (`In Progress`)
+Mission Control: `e41e94ac-9f64-4007-b1b6-86f3c8df5376`
+
+Goal: replace the Map's current source/status chip row with mutually exclusive
+`Featured` and `Friends` source pills plus an anchored `More` dropdown. The
+dropdown remains identical for both sources and exposes Category, People, and
+Status with an explicit `All` option in every section. More selections persist
+when the source changes and narrow the active source using OR within a section
+and AND across sections. Do not change pin rendering or iconography.
+
+Starting status:
+
+- Clean isolated worktree from exact `origin/main` commit `eb34f54e`; Joe's
+  `joe/phone-build-latest` checkout is 149 commits behind with an untracked
+  `tmp/` directory and remains untouched.
+- Existing related issue `REC-3` was already Done for the older social-person
+  dropdown. Created REC-249 for this replacement contract and linked REC-3.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused Map filter
+  tests, `docs/decisions.md`, and this log. `MapScreen.swift` is a high-conflict
+  file, so all work is isolated here.
+
+Outcome and validation:
+
+- Replaced the prior independent owner/status chips with one required source:
+  `Featured` by default or `Friends`, plus one shared anchored `More` popover.
+- More includes explicit `All` controls for Category, People, and Status. The
+  same live People list and refinements stay selected when the source changes;
+  values OR within Category/People and every active section ANDs with the
+  selected source. Empty combinations remain empty and expose a reset action.
+- Featured projects the existing followed-feed curation; Friends projects
+  mutual-friend saves. Notification and walkthrough routes can temporarily
+  surface their exact destination without weakening the normal source contract.
+- Existing `MapPlaceMarker` / `WanderMapPin` rendering was not changed.
+- Focused filter/navigation tests: 7 passed, 0 failed.
+- Full `WanderTests` suite: 993 passed, 0 failed. Result:
+  `/private/tmp/DerivedData-rec249-focused/Logs/Test/Test-Wander-2026.08.10_15-59-15--0700.xcresult`.
+- Generic iOS Simulator build passed. Existing `WanderSupabaseClient` actor
+  warnings and traditional-headermap warnings remain unrelated.
+- Visual QA covered iPhone 16 Plus and iPhone 16e on iOS 18.6. The popover is
+  anchored to More, scrolls within its compact card, and keeps the source row
+  visible. Captures: `/private/tmp/rec249-iphone16plus-more.png` and
+  `/private/tmp/rec249-iphone16e-more.png`; the compact capture also contains
+  the simulator's unrelated first-run location prompt.
+- No schema, auth, signing, project membership, build-number, archive, upload,
+  TestFlight, or tester-Slack action was taken.

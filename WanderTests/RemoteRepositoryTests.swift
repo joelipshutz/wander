@@ -601,6 +601,156 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["input_limit"] as? Int, 25)
     }
 
+    func testActivityDetailSignsPrivateActivityMediaPaths() async throws {
+        let rpc = RecordingRPC()
+        let storage = RecordingStorage()
+        rpc.responses["activity_detail"] = """
+        {
+          "id": "event_with_photo",
+          "event_type": "place_been",
+          "occurred_at": "2026-08-09T20:00:00Z",
+          "actor": {
+            "id": "user_joe",
+            "handle": "jolipshutz",
+            "display_name": "Joe Lipshutz",
+            "avatar_url": null,
+            "relationship": "follower"
+          },
+          "place": null,
+          "list": null,
+          "note": "Great art.",
+          "rating": null,
+          "media": []
+        }
+        """.data(using: .utf8)
+        rpc.responses["activity_media"] = """
+        [
+          {
+            "activity_id": "event_with_photo",
+            "media": [
+              {
+                "id": "photo_1",
+                "url": null,
+                "storage_bucket": "visit-photos",
+                "storage_path": "user_joe/visit_1/photo_1.jpg",
+                "accessibility_label": "Activity photo"
+              }
+            ]
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabaseActivityEngagementRepository(rpc: rpc, storage: storage)
+
+        let activity = try await repository.activity(id: "event_with_photo")
+
+        XCTAssertEqual(activity.media.first?.id, "photo_1")
+        XCTAssertEqual(
+            storage.signedURLs,
+            [.init(bucket: "visit-photos", path: "user_joe/visit_1/photo_1.jpg")]
+        )
+    }
+
+    func testDeleteActivityCommentCallsOwnerScopedRPCAndDecodesEngagement() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["delete_own_activity_comment"] = """
+        {
+          "activity_id": "40000000-0000-0000-0000-000000000201",
+          "like_count": 3,
+          "comment_count": 1,
+          "viewer_has_liked": true
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseActivityEngagementRepository(rpc: rpc)
+
+        let summary = try await repository.deleteComment(
+            commentID: "50000000-0000-0000-0000-000000000201"
+        )
+
+        XCTAssertEqual(summary.commentCount, 1)
+        XCTAssertEqual(summary.likeCount, 3)
+        XCTAssertTrue(summary.viewerHasLiked)
+        XCTAssertEqual(rpc.calls.map(\.name), ["delete_own_activity_comment"])
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_comment_id"] as? String,
+            "50000000-0000-0000-0000-000000000201"
+        )
+    }
+
+    func testFollowedFeedFeaturedPlacesKeepTheActivityActorAvatar() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["followed_feed"] = """
+        {
+          "activity": [
+            {
+              "id": "event_1",
+              "event_type": "place_want_to_go",
+              "occurred_at": "2026-07-21T20:00:00Z",
+              "actor": {
+                "id": "user_ryan",
+                "handle": "ryan",
+                "display_name": "Ryan",
+                "avatar_url": "https://example.com/ryan.jpg",
+                "relationship": "follower"
+              },
+              "place": {
+                "user_place_id": "up_1",
+                "place_id": "place_1",
+                "owner_user_id": "user_ryan",
+                "owner_handle": "ryan",
+                "owner_display_name": "Ryan",
+                "owner_avatar_url": null,
+                "canonical_name": "Fern Coffee",
+                "category": "coffee",
+                "latitude": 34.0,
+                "longitude": -118.0,
+                "status": "wanna_go",
+                "visibility": "followers",
+                "saved_at": "2026-07-21T20:00:00Z",
+                "created_at": "2026-07-21T20:00:00Z",
+                "updated_at": "2026-07-21T20:00:00Z",
+                "source_type": "manual",
+                "attributes": []
+              },
+              "media": []
+            }
+          ],
+          "featured_places": [
+            {
+              "reason": "Wanna by Ryan",
+              "place": {
+                "user_place_id": "up_1",
+                "place_id": "place_1",
+                "owner_user_id": "user_ryan",
+                "owner_handle": "ryan",
+                "owner_display_name": "Ryan",
+                "owner_avatar_url": null,
+                "canonical_name": "Fern Coffee",
+                "category": "coffee",
+                "latitude": 34.0,
+                "longitude": -118.0,
+                "status": "wanna_go",
+                "visibility": "followers",
+                "saved_at": "2026-07-21T20:00:00Z",
+                "created_at": "2026-07-21T20:00:00Z",
+                "updated_at": "2026-07-21T20:00:00Z",
+                "source_type": "manual",
+                "attributes": []
+              }
+            }
+          ],
+          "next_cursor": null,
+          "fetched_at": "2026-07-21T21:10:46Z"
+        }
+        """.data(using: .utf8)
+        let repository = SupabaseFeedRepository(rpc: rpc)
+
+        let page = try await repository.followedFeed(before: nil, limit: 25)
+
+        XCTAssertNil(page.featuredPlaces.first?.visiblePlace.owner.avatarURL)
+        XCTAssertEqual(page.featuredPlaces.first?.actor.avatarURL, "https://example.com/ryan.jpg")
+        XCTAssertEqual(page.featuredPlaces.first?.actor.id, page.activity.first?.actor.id)
+    }
+
     func testDiscoverPeopleRecommendationsCallsExpectedRPCAndMapsReasons() async throws {
         let rpc = RecordingRPC()
         rpc.responses["discover_profile_recommendations"] = """
@@ -1490,14 +1640,15 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(WannaGoDate.storageString(from: try XCTUnwrap(plans.first?.plannedDate)), "2026-08-20")
     }
 
-    func testOwnPlaceDeleteUsesRemoteDeleteClient() async throws {
+    func testOwnPlaceDeleteUsesAtomicRPC() async throws {
         let rpc = RecordingRPC()
-        let repository = SupabaseUserPlaceRepository(rpc: rpc, userPlaceDeleter: rpc)
+        rpc.responses["delete_own_user_place"] = #"{"user_place_id":"up_saved","transition":"removed"}"#.data(using: .utf8)
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
 
         try await repository.delete(userPlaceID: "up_saved")
 
-        XCTAssertEqual(rpc.deletedUserPlaceIDs, ["up_saved"])
-        XCTAssertTrue(rpc.calls.isEmpty)
+        XCTAssertEqual(rpc.calls.map(\.name), ["delete_own_user_place"])
+        XCTAssertEqual(rpc.rawBodies[0]["input_user_place_id"] as? String, "up_saved")
     }
 
     func testUnblockCallsExpectedRPC() async throws {
@@ -1827,6 +1978,7 @@ final class RemoteRepositoryTests: XCTestCase {
             )
         )
         try await repository.removeItem(listID: listID, itemID: itemID)
+        try await repository.leave(listID: listID)
         try await repository.delete(listID: listID)
 
         XCTAssertEqual(createdListID, listID)
@@ -1838,6 +1990,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 "set_place_list_collaborators",
                 "add_place_list_item",
                 "remove_place_list_item",
+                "leave_place_list",
                 "delete_place_list"
             ]
         )
@@ -1850,6 +2003,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[2].body["input_owner_user_place_id"] as? String, userPlaceID)
         XCTAssertEqual(rpc.calls[3].body["input_item_id"] as? String, itemID)
         XCTAssertEqual(rpc.calls[4].body["input_list_id"] as? String, listID)
+        XCTAssertEqual(rpc.calls[5].body["input_list_id"] as? String, listID)
     }
 
     func testPlaceListRepositoryUsesConsentBasedInviteRPCs() async throws {
@@ -2294,6 +2448,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "capture_enabled": true,
           "discovery_digest_enabled": false,
           "followed_activity_enabled": true,
+          "engagement_enabled": true,
           "wanna_go_reminders_enabled": false
         }
         """.data(using: .utf8)
@@ -2307,6 +2462,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "capture_enabled": true,
           "discovery_digest_enabled": true,
           "followed_activity_enabled": false,
+          "engagement_enabled": false,
           "wanna_go_reminders_enabled": true
         }
         """.data(using: .utf8)
@@ -2318,6 +2474,7 @@ final class RemoteRepositoryTests: XCTestCase {
             NotificationPreferencesUpdate(
                 discoveryDigestEnabled: true,
                 followedActivityEnabled: false,
+                engagementEnabled: false,
                 wannaGoRemindersEnabled: true
             )
         )
@@ -2331,10 +2488,12 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertTrue(preferences.socialGraphEnabled)
         XCTAssertTrue(preferences.sharedVisitsEnabled)
         XCTAssertTrue(preferences.followedActivityEnabled)
+        XCTAssertTrue(preferences.engagementEnabled)
         XCTAssertFalse(preferences.discoveryDigestEnabled)
         XCTAssertFalse(preferences.wannaGoRemindersEnabled)
         XCTAssertTrue(updated.discoveryDigestEnabled)
         XCTAssertFalse(updated.followedActivityEnabled)
+        XCTAssertFalse(updated.engagementEnabled)
         XCTAssertTrue(updated.wannaGoRemindersEnabled)
         XCTAssertEqual(tokenID, "token-row-id")
         XCTAssertEqual(
@@ -2350,6 +2509,7 @@ final class RemoteRepositoryTests: XCTestCase {
         let updatePayload = rpc.rawBodies[1]["input_preferences"] as? [String: Any]
         XCTAssertEqual(updatePayload?["discovery_digest_enabled"] as? Bool, true)
         XCTAssertEqual(updatePayload?["followed_activity_enabled"] as? Bool, false)
+        XCTAssertEqual(updatePayload?["engagement_enabled"] as? Bool, false)
         XCTAssertEqual(updatePayload?["wanna_go_reminders_enabled"] as? Bool, true)
 
         XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
@@ -2493,6 +2653,117 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testAuthenticatedNotificationResponseRemainsPendingUntilRootDrainsIt() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_authenticated",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        XCTAssertEqual(
+            WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo),
+            "user_a"
+        )
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+    }
+
+    func testBufferedNotificationResponseSignalsRootWhenExpectedSessionAuthenticates() async {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_buffered_during_validation",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+        let releaseSignal = expectation(
+            forNotification: WanderAppDelegate.didReceiveNotificationResponse,
+            object: nil
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo))
+
+        // Reproduces the launch ordering where the root drains before session
+        // validation opens the gate. Authentication must wake it for a retry.
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        await fulfillment(of: [releaseSignal], timeout: 1)
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+    }
+
+    func testNotificationResponseSurvivesSameAccountForegroundRevalidation() {
+        defer { WanderAppDelegate.setAuthenticatedSessionSignedOut() }
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "event_foreground_revalidation",
+                "notification_type": "save_streak_reminder",
+                "deeplink_url": "recme://add/here-now"
+            ]
+        ]
+
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+        XCTAssertEqual(
+            WanderAppDelegate.receiveAuthenticatedNotificationUserInfo(userInfo),
+            "user_a"
+        )
+
+        WanderAppDelegate.beginAuthenticatedSessionValidation(expectedUserID: "user_a")
+        XCTAssertNil(WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a"))
+        WanderAppDelegate.setAuthenticatedSessionActive(userID: "user_a")
+
+        XCTAssertEqual(
+            WanderAppDelegate.takePendingNotificationUserInfo(for: "user_a")?["recme"]
+                as? [String: String],
+            userInfo["recme"] as? [String: String]
+        )
+    }
+
+    func testAppEntryNotificationGateStateTracksProductionAuthLifecycle() {
+        let session = AuthSession(
+            userID: "user_a",
+            displayName: "A",
+            handle: "a"
+        )
+
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedIn(session),
+                isSessionValidated: false
+            ),
+            .validating(expectedUserID: "user_a")
+        )
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedIn(session),
+                isSessionValidated: true
+            ),
+            .authenticated(userID: "user_a")
+        )
+        XCTAssertEqual(
+            AppEntryNotificationGateState(
+                authState: .signedOut,
+                isSessionValidated: false
+            ),
+            .signedOut
+        )
+    }
+
     func testNotificationResponseDeduplicatesBufferedAndDeliveredCopy() {
         let manager = PushNotificationManager()
         let userInfo: [AnyHashable: Any] = [
@@ -2531,6 +2802,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 captureEnabled: true,
                 discoveryDigestEnabled: true,
                 followedActivityEnabled: true,
+                engagementEnabled: true,
                 wannaGoRemindersEnabled: true
             )
         )
@@ -2543,6 +2815,7 @@ final class RemoteRepositoryTests: XCTestCase {
             captureEnabled: false,
             discoveryDigestEnabled: false,
             followedActivityEnabled: false,
+            engagementEnabled: false,
             wannaGoRemindersEnabled: false
         ))
     }
@@ -2555,7 +2828,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 from: URL(string: "recme://profiles/user_joe")!,
                 notificationType: "mutual_follow"
             ),
-            .people(.friends)
+            .profile(id: "user_joe")
         )
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "https://getrec.me/lists/44000000-0000-0000-0000-000000000001")!),
@@ -2564,6 +2837,10 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "https://getrec.me/places/40000000-0000-0000-0000-000000000001")!),
             .place(id: "40000000-0000-0000-0000-000000000001")
+        )
+        XCTAssertEqual(
+            PushNotificationManager.destination(from: URL(string: "https://getrec.me/activities/41000000-0000-0000-0000-000000000001")!),
+            .activityComments(id: "41000000-0000-0000-0000-000000000001")
         )
         XCTAssertEqual(
             PushNotificationManager.destination(from: URL(string: "https://getrec.me/invites/\(inviteToken)")!),
@@ -2604,10 +2881,20 @@ final class RemoteRepositoryTests: XCTestCase {
 
         XCTAssertEqual(destination("followed_you"), .people(.followers))
         XCTAssertEqual(destination("mutual_follow"), .people(.friends))
+        XCTAssertEqual(
+            destination("followed_you", data: ["actor_user_id": "user-1"]),
+            .profile(id: "user-1")
+        )
+        XCTAssertEqual(
+            destination("mutual_follow", data: ["actor_user_id": "user-2"]),
+            .profile(id: "user-2")
+        )
         XCTAssertEqual(destination("list_collaborator_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("list_place_added", data: ["list_id": "list-1"]), .list(id: "list-1"))
         XCTAssertEqual(destination("place_saved_from_your_map", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(destination("followed_place_visit", data: ["place_id": "place-1"]), .place(id: "place-1"))
+        XCTAssertEqual(destination("activity_liked", data: ["activity_id": "activity-1"]), .activityComments(id: "activity-1"))
+        XCTAssertEqual(destination("activity_commented", data: ["activity_id": "activity-2"]), .activityComments(id: "activity-2"))
         XCTAssertEqual(destination("wanna_go_reminder", data: ["place_id": "place-1"]), .place(id: "place-1"))
         XCTAssertEqual(
             destination(
@@ -3027,7 +3314,7 @@ private struct FailingDiscoverFilterRepository: DiscoverFilterParsingRepository 
 }
 
 @MainActor
-private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling, RemoteUserPlaceDeleting {
+private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling {
     struct Call: Equatable {
         let name: String
         let body: [String: AnyHashable]
@@ -3036,7 +3323,6 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
     var responses: [String: Data] = [:]
     private(set) var rawBodies: [[String: Any]] = []
     private(set) var calls: [Call] = []
-    private(set) var deletedUserPlaceIDs: [String] = []
 
     func call<Value: Decodable, Params: Encodable>(
         _ name: String,
@@ -3073,10 +3359,6 @@ private final class RecordingRPC: RemoteProcedureCalling, RemoteFunctionCalling,
         }
 
         return try decoder.decode(Value.self, from: data)
-    }
-
-    func deleteUserPlace(userPlaceID: String) async throws {
-        deletedUserPlaceIDs.append(userPlaceID)
     }
 
     private func encodedObject<Params: Encodable>(_ params: Params) throws -> [String: Any] {

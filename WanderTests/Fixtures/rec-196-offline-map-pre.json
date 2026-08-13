@@ -1,0 +1,13 @@
+{
+  "issue": "REC-196",
+  "captured_at": "2026-08-01T16:35:00-07:00",
+  "source": "Linear issue screenshot and tester report",
+  "precondition": [
+    "The user previously signed in and has saved places on their map",
+    "The app is relaunched or foregrounded without a working data connection",
+    "Clerk cannot complete authoritative session refresh"
+  ],
+  "observed": "The app replaces the map with a blocking Sign in isn’t available screen and offers only Try again.",
+  "expected": "Open the last confirmed user’s locally cached own map, keep remote work disabled until session validation succeeds, and still clear the cache after confirmed sign-out or an account switch.",
+  "state_server_capture": "unavailable: this repository has no StateServer or GET /state/snapshot integration"
+}

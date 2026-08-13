@@ -96,6 +96,19 @@ struct ProfileSettingsHome: View {
                         .foregroundStyle(WanderTheme.stateError.color)
                 }
                 .disabled(auth.isSigningOut)
+            case .offline(let session, _):
+                ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
+                Label("Saved map available offline", systemImage: "wifi.slash")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+
+                Button {
+                    Task { try? await auth.signOut() }
+                } label: {
+                    Label(auth.isSigningOut ? "signing out..." : "sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                        .foregroundStyle(WanderTheme.stateError.color)
+                }
+                .disabled(auth.isSigningOut)
             case .signedOut:
                 Button("sign in") { auth.beginSignIn() }
             case .loading:

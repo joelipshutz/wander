@@ -9,11 +9,14 @@ struct DiscoverScreen: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var selectedMode: DiscoverMode = .places
     @State private var placesQuery: String
     @State private var submittedPlacesQuery: String?
     @State private var isPlaceSearchPresented: Bool
     @State private var isPlaceSearchLoading = false
+    @State private var isPlaceSearchRefining = false
+    @State private var placeSearchResultStage = "immediate"
     @State private var placeSearchTask: Task<Void, Never>?
     @State private var activePlaceSearchSubmissionID: UUID?
     @State private var didTrackPlaceSearchOpen = false
@@ -169,7 +172,7 @@ struct DiscoverScreen: View {
                 ),
                 DiscoverEvidenceItem(
                     kind: .category,
-                    displayValue: primary.effectiveCategoryDisplay.compactTitle,
+                    displayValue: primary.effectiveCompactType,
                     sourceOwnerID: primary.owner.id
                 )
             ]
@@ -247,6 +250,7 @@ struct DiscoverScreen: View {
                     )
                 }
                 if isPlaceSearchPresented,
+                   walkthroughs.activeSurface != .feedSearch,
                    !ProcessInfo.processInfo.arguments.contains("-WanderDisableSearchAutofocus") {
                     await Task.yield()
                     searchFieldFocused = true
@@ -304,6 +308,11 @@ struct DiscoverScreen: View {
             .onChange(of: searchFieldFocused) { _, isFocused in
                 if isFocused, selectedMode == .places, !isPlaceSearchPresented {
                     activatePlaceSearch()
+                }
+            }
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                if target == .feedSearchField || target == .feedSmartSearch {
+                    searchFieldFocused = false
                 }
             }
             .task(id: visiblePlaceSignature) {
@@ -383,6 +392,7 @@ struct DiscoverScreen: View {
             }
             .onDisappear(perform: cancelPlaceSearchWork)
         }
+        .firstVisitWalkthroughOverlay(walkthroughs, surface: .feedSearch)
     }
 
     private func applyRequestedSection() {
@@ -437,6 +447,7 @@ struct DiscoverScreen: View {
         }
         isPlaceSearchPresented = false
         isPlaceSearchLoading = false
+        isPlaceSearchRefining = false
         submittedPlacesQuery = nil
         selectedOwnerCandidateID = nil
         placesQuery = ""
@@ -451,6 +462,7 @@ struct DiscoverScreen: View {
         selectedOwnerCandidateID = nil
         placeResults = DiscoverResults(places: [], profiles: [])
         isPlaceSearchLoading = false
+        isPlaceSearchRefining = false
         searchFieldFocused = true
     }
 
@@ -468,7 +480,6 @@ struct DiscoverScreen: View {
         placesQuery = query
         submittedPlacesQuery = query
         selectedOwnerCandidateID = nil
-        isPlaceSearchLoading = true
         searchFieldFocused = false
         store.trackDiscoverSearchEvent(
             WanderAnalyticsEvents.discoverSearchSubmitted,
@@ -479,7 +490,26 @@ struct DiscoverScreen: View {
             ]
         )
 
+        let localClock = ContinuousClock()
+        let localStart = localClock.now
+        let localResults = store.searchTrustedPlaces(query: query, scope: .everyone)
+        let localLatency = localStart.duration(to: localClock.now)
+        placeResults = localResults
+        placeSearchResultStage = "immediate"
+        isPlaceSearchLoading = localResults.places.isEmpty
+        isPlaceSearchRefining = true
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.trustedPlaceSearchLocalResults,
+            properties: [
+                "surface": "discover",
+                "result_count": discoverResultCountBucket(localResults.places.count),
+                "latency": trustedSearchLatencyBucket(localLatency)
+            ]
+        )
+
         placeSearchTask = Task { @MainActor in
+            let refinementClock = ContinuousClock()
+            let refinementStart = refinementClock.now
             let results = await store.discover(query: query, scope: .everyone, backend: backend)
             guard !Task.isCancelled,
                   isPlaceSearchPresented,
@@ -488,8 +518,19 @@ struct DiscoverScreen: View {
                   normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
             else { return }
             placeResults = results
+            placeSearchResultStage = "refined"
             isPlaceSearchLoading = false
+            isPlaceSearchRefining = false
             placeSearchTask = nil
+            store.trackDiscoverSearchEvent(
+                WanderAnalyticsEvents.trustedPlaceSearchRefinedResults,
+                properties: [
+                    "surface": "discover",
+                    "result_count": discoverResultCountBucket(results.places.count),
+                    "latency": trustedSearchLatencyBucket(refinementStart.duration(to: refinementClock.now)),
+                    "parse_source": results.parseSource.rawValue
+                ]
+            )
             store.trackDiscoverSearchEvent(
                 WanderAnalyticsEvents.discoverSearchResults,
                 properties: [
@@ -520,11 +561,25 @@ struct DiscoverScreen: View {
         }
     }
 
+    private func trustedSearchLatencyBucket(_ duration: Duration) -> String {
+        let components = duration.components
+        let milliseconds = (Double(components.seconds) * 1_000)
+            + (Double(components.attoseconds) / 1_000_000_000_000_000)
+        return switch milliseconds {
+        case ..<10: "under_10ms"
+        case ..<25: "10_24ms"
+        case ..<50: "25_49ms"
+        case ..<100: "50_99ms"
+        default: "100ms_plus"
+        }
+    }
+
     private func cancelPlaceSearchWork() {
         placeSearchTask?.cancel()
         placeSearchTask = nil
         activePlaceSearchSubmissionID = nil
         isPlaceSearchLoading = false
+        isPlaceSearchRefining = false
     }
 
     private func normalizedSearchQuery(_ query: String) -> String {
@@ -652,15 +707,16 @@ struct DiscoverScreen: View {
 
             DiscoverSearchField(
                 text: $placesQuery,
-                placeholders: ["Search places and people"],
+                placeholders: ["Search trusted places"],
                 isTicker: false,
-                accessibilityLabel: "Search places and people",
+                accessibilityLabel: "Search trusted places",
                 accessibilityIdentifier: "discover.placesSearchField",
                 onFocus: {},
                 onSubmit: submitPlaceSearch,
                 onClear: clearPlaceSearch
             )
             .focused($searchFieldFocused)
+            .walkthroughTarget(.feedSearchField)
         }
     }
 
@@ -669,6 +725,16 @@ struct DiscoverScreen: View {
         if isPlaceSearchLoading {
             DiscoverLoadingPanel(label: "Understanding your search")
         } else if submittedPlacesQuery != nil {
+            if isPlaceSearchRefining {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Refining with smart filters…")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+                .accessibilityElement(children: .combine)
+            }
             placeSearchInterpretation
             placeResultsSection
         } else {
@@ -760,12 +826,13 @@ struct DiscoverScreen: View {
                 ) {
                     ForEach(suggestedSearches) { suggestion in
                         Button {
+                            walkthroughs.perform(.feedSmartSearch)
                             placesQuery = suggestion.query
                             store.trackDiscoverSearchEvent(
                                 WanderAnalyticsEvents.discoverSearchExampleSelected,
                                 properties: ["example_id": suggestion.query]
                             )
-                            searchFieldFocused = true
+                            submitPlaceSearch(source: "example")
                         } label: {
                             HStack(alignment: .top, spacing: WanderTheme.spacing2) {
                                 Text(suggestion.emoji)
@@ -796,6 +863,7 @@ struct DiscoverScreen: View {
                 .padding(.vertical, 1)
             }
         }
+        .walkthroughTarget(.feedSmartSearch)
     }
 
     private var placeResultsSection: some View {
@@ -838,6 +906,7 @@ struct DiscoverScreen: View {
                         currentUserStatus: currentUserSave(matching: primary)?.userPlace.status,
                         evidence: matchEvidence(for: group),
                     ) {
+                        trackTrustedPlaceSelection(primary, in: groups)
                         selectedPlace = SelectedDiscoverPlace(visiblePlace: primary)
                     } addToWanna: {
                         addDiscoverPlaceToWanna(primary)
@@ -1245,7 +1314,11 @@ struct DiscoverScreen: View {
                 return true
             }
             .map { visiblePlace in
-                PlaceSaveSummary(visiblePlace: visiblePlace, attributes: attributes(for: visiblePlace))
+                PlaceSaveSummary(
+                    visiblePlace: visiblePlace,
+                    attributes: attributes(for: visiblePlace),
+                    viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
+                )
             }
             .sorted { lhs, rhs in
                 if lhs.visiblePlace.owner.id == store.currentUser.id { return true }
@@ -1258,7 +1331,11 @@ struct DiscoverScreen: View {
 
     private var tasteSummaries: [PlaceSaveSummary] {
         store.currentUserVisiblePlaces.map { visiblePlace in
-            PlaceSaveSummary(visiblePlace: visiblePlace, attributes: store.attributes(for: visiblePlace.userPlace.id))
+            PlaceSaveSummary(
+                visiblePlace: visiblePlace,
+                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                viewerFollowsOwner: false
+            )
         }
     }
 
@@ -1279,12 +1356,39 @@ struct DiscoverScreen: View {
               normalizedSearchQuery(submittedPlacesQuery) == normalizedSearchQuery(trimmedQuery)
         else { return }
 
+        placeResults = store.searchTrustedPlaces(query: trimmedQuery, scope: .everyone)
+        placeSearchResultStage = "immediate"
+        isPlaceSearchRefining = true
         let results = await store.discover(query: query, scope: .everyone, backend: backend)
         guard !Task.isCancelled,
               submittedPlacesQuery == self.submittedPlacesQuery,
               normalizedSearchQuery(query) == normalizedSearchQuery(placesQuery)
         else { return }
         placeResults = results
+        placeSearchResultStage = "refined"
+        isPlaceSearchRefining = false
+    }
+
+    private func trackTrustedPlaceSelection(
+        _ visiblePlace: VisiblePlace,
+        in groups: [VisiblePlaceGroup]
+    ) {
+        let index = groups.firstIndex { $0.key == VisiblePlaceGrouping.key(for: visiblePlace) } ?? 0
+        let rankBucket: String
+        switch index {
+        case 0: rankBucket = "1"
+        case 1...2: rankBucket = "2_3"
+        default: rankBucket = "4_plus"
+        }
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.trustedPlaceSearchResultSelected,
+            properties: [
+                "surface": "discover",
+                "provider": "trusted",
+                "stage": placeSearchResultStage,
+                "rank": rankBucket
+            ]
+        )
     }
 
     private func refreshMembers(query: String, debounce: Bool = false) async {
@@ -1749,12 +1853,8 @@ private struct DiscoverSearchField: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        )
+        .contentShape(Capsule())
+        .wanderGlassCapsule()
         .task {
             await runPlaceholderTicker()
         }
@@ -1799,7 +1899,7 @@ private struct DiscoverPlaceResultCard: View {
                             .foregroundStyle(WanderTheme.textInk.color)
                             .lineLimit(2)
 
-                        Text(visiblePlace.effectiveCategoryDisplay.compactTitle)
+                        Text(visiblePlace.effectiveCompactType)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -2021,7 +2121,7 @@ private struct LatestActivityRow: View {
         [
             visiblePlace.place.locality,
             visiblePlace.place.region,
-            visiblePlace.effectiveCategoryDisplay.compactTitle
+            visiblePlace.effectiveCompactType
         ]
             .compactMap { value in
                 let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)

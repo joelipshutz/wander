@@ -404,17 +404,92 @@ struct SupabaseFeedRepository: FeedRepository {
             "followed_feed",
             params: FollowedFeedParams(before: before, limit: min(max(limit, 1), 50))
         )
-        return try response.followedFeedPage()
+        return try await response.followedFeedPage()
+    }
+}
+
+struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
+    private let rpc: RemoteProcedureCalling
+    private let storage: (any RemoteStorageCalling)?
+
+    init(rpc: RemoteProcedureCalling, storage: (any RemoteStorageCalling)? = nil) {
+        self.rpc = rpc
+        self.storage = storage ?? (rpc as? any RemoteStorageCalling)
+    }
+
+    func activity(id: String) async throws -> FeedActivity {
+        let response: RemoteFeedActivityDTO = try await rpc.call(
+            "activity_detail",
+            params: ActivityDetailParams(activityID: id)
+        )
+        let mediaRows: [RemoteActivityMediaDTO] = (try? await rpc.call(
+            "activity_media",
+            params: ActivityEngagementSummariesParams(activityIDs: [id])
+        )) ?? []
+        return try await response.activity(
+            storage: storage,
+            mediaOverride: mediaRows.first(where: { $0.activityID == id })?.media
+        )
+    }
+
+    func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] {
+        let rows: [RemoteActivityEngagementSummaryDTO] = try await rpc.call(
+            "activity_engagement_summaries",
+            params: ActivityEngagementSummariesParams(activityIDs: activityIDs)
+        )
+        return rows.map(\.summary)
+    }
+
+    func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] {
+        let rows: [RemotePlaceActivityEngagementDTO] = try await rpc.call(
+            "place_activity_engagement_summaries",
+            params: PlaceActivityEngagementSummariesParams(userPlaceIDs: userPlaceIDs)
+        )
+        return try rows.map { try $0.match() }
+    }
+
+    func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary {
+        let response: RemoteActivityEngagementSummaryDTO = try await rpc.call(
+            "set_activity_like",
+            params: SetActivityLikeParams(activityID: activityID, isLiked: isLiked)
+        )
+        return response.summary
+    }
+
+    func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
+        let response: RemoteActivityCommentsPageDTO = try await rpc.call(
+            "activity_comments",
+            params: ActivityCommentsParams(
+                activityID: activityID,
+                before: before,
+                limit: min(max(limit, 1), 100)
+            )
+        )
+        return response.page
+    }
+
+    func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
+        let response: RemoteActivityCommentPostDTO = try await rpc.call(
+            "add_activity_comment",
+            params: AddActivityCommentParams(activityID: activityID, body: body)
+        )
+        return response.result
+    }
+
+    func deleteComment(commentID: String) async throws -> ActivityEngagementSummary {
+        let response: RemoteActivityEngagementSummaryDTO = try await rpc.call(
+            "delete_own_activity_comment",
+            params: DeleteActivityCommentParams(commentID: commentID)
+        )
+        return response.summary
     }
 }
 
 struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveRepository, CheckInRepository {
     private let rpc: RemoteProcedureCalling
-    private let userPlaceDeleter: RemoteUserPlaceDeleting?
 
-    init(rpc: RemoteProcedureCalling, userPlaceDeleter: RemoteUserPlaceDeleting? = nil) {
+    init(rpc: RemoteProcedureCalling) {
         self.rpc = rpc
-        self.userPlaceDeleter = userPlaceDeleter
     }
 
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] {
@@ -488,11 +563,10 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 
     func delete(userPlaceID: String) async throws {
-        guard let userPlaceDeleter else {
-            throw WanderRemoteError.notConfigured
-        }
-
-        try await userPlaceDeleter.deleteUserPlace(userPlaceID: userPlaceID)
+        let _: DeleteOwnUserPlaceResponse = try await rpc.call(
+            "delete_own_user_place",
+            params: DeleteOwnUserPlaceParams(inputUserPlaceID: userPlaceID)
+        )
     }
 
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult {
@@ -1388,6 +1462,13 @@ struct SupabasePlaceListRepository: PlaceListRepository {
         )
     }
 
+    func leave(listID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "leave_place_list",
+            params: PlaceListIDParams(inputListID: listID)
+        )
+    }
+
     func setCollaborators(listID: String, userIDs: [String]) async throws {
         let _: EmptyRPCResponse = try await rpc.call(
             "set_place_list_collaborators",
@@ -2021,6 +2102,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let captureEnabled: Bool
     let discoveryDigestEnabled: Bool
     let followedActivityEnabled: Bool
+    let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -2032,6 +2114,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 
@@ -2045,6 +2128,7 @@ private struct NotificationPreferencesResponse: Decodable {
             captureEnabled: captureEnabled,
             discoveryDigestEnabled: discoveryDigestEnabled,
             followedActivityEnabled: followedActivityEnabled,
+            engagementEnabled: engagementEnabled ?? false,
             wannaGoRemindersEnabled: wannaGoRemindersEnabled ?? false
         )
     }
@@ -2071,6 +2155,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let captureEnabled: Bool?
     let discoveryDigestEnabled: Bool?
     let followedActivityEnabled: Bool?
+    let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
 
     init(update: NotificationPreferencesUpdate) {
@@ -2082,6 +2167,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.captureEnabled = update.captureEnabled
         self.discoveryDigestEnabled = update.discoveryDigestEnabled
         self.followedActivityEnabled = update.followedActivityEnabled
+        self.engagementEnabled = update.engagementEnabled
         self.wannaGoRemindersEnabled = update.wannaGoRemindersEnabled
     }
 
@@ -2094,6 +2180,7 @@ private struct NotificationPreferencesPatch: Encodable {
         case captureEnabled = "capture_enabled"
         case discoveryDigestEnabled = "discovery_digest_enabled"
         case followedActivityEnabled = "followed_activity_enabled"
+        case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
     }
 }
@@ -2332,6 +2419,70 @@ private struct FollowedFeedParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case before = "input_before"
         case limit = "input_limit"
+    }
+}
+
+private struct ActivityEngagementSummariesParams: Encodable {
+    let activityIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case activityIDs = "input_activity_ids"
+    }
+}
+
+private struct ActivityDetailParams: Encodable {
+    let activityID: String
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+    }
+}
+
+private struct PlaceActivityEngagementSummariesParams: Encodable {
+    let userPlaceIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case userPlaceIDs = "input_user_place_ids"
+    }
+}
+
+private struct SetActivityLikeParams: Encodable {
+    let activityID: String
+    let isLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+        case isLiked = "input_is_liked"
+    }
+}
+
+private struct ActivityCommentsParams: Encodable {
+    let activityID: String
+    let before: String?
+    let limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+        case before = "input_before"
+        case limit = "input_limit"
+    }
+}
+
+private struct AddActivityCommentParams: Encodable {
+    let activityID: String
+    let body: String
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "input_activity_id"
+        case body = "input_body"
+    }
+}
+
+private struct DeleteActivityCommentParams: Encodable {
+    let commentID: String
+
+    enum CodingKeys: String, CodingKey {
+        case commentID = "input_comment_id"
     }
 }
 
@@ -2691,6 +2842,24 @@ private struct DeleteOwnCheckInResponse: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case visitID = "visit_id"
+        case userPlaceID = "user_place_id"
+        case transition
+    }
+}
+
+private struct DeleteOwnUserPlaceParams: Encodable {
+    let inputUserPlaceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case inputUserPlaceID = "input_user_place_id"
+    }
+}
+
+private struct DeleteOwnUserPlaceResponse: Decodable {
+    let userPlaceID: String
+    let transition: String
+
+    enum CodingKeys: String, CodingKey {
         case userPlaceID = "user_place_id"
         case transition
     }

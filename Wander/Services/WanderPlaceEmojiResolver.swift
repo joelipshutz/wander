@@ -239,7 +239,7 @@ enum WanderPlaceEmojiResolver {
         Rule(emoji: "🐟", terms: ["seafood", "fish and chips", "fish chips"]),
         Rule(emoji: "🥩", terms: ["steakhouse", "barbecue", "bbq"]),
         Rule(emoji: "🍜", terms: ["ramen", "noodles", "noodle"]),
-        Rule(emoji: "🥟", terms: ["dumplings", "dumpling", "dim sum"]),
+        Rule(emoji: "🥟", terms: ["dumplings", "dumpling", "bao buns", "bao bun", "baozi", "bao", "dim sum"]),
         Rule(emoji: "🍲", terms: ["hot pot", "fondue", "soup"]),
         Rule(emoji: "🧆", terms: ["falafel"]),
         Rule(emoji: "🥙", terms: ["gyro", "kebab", "shawarma", "halal"]),
@@ -304,6 +304,9 @@ enum WanderPlaceEmojiResolver {
             ])
         ],
         WanderPlaceCategory.barsNightlife: [
+            Rule(emoji: "🍎", terms: ["cider bar"]),
+            Rule(emoji: "🍶", terms: ["sake bar"]),
+            Rule(emoji: "🎮", terms: ["game bar"]),
             Rule(emoji: "🎱", terms: ["billiards", "pool hall"]),
             Rule(emoji: "🍻", terms: ["sports bar"]),
             Rule(emoji: "🍷", terms: ["wine bar", "winery", "vineyard"]),

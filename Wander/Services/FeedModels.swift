@@ -101,6 +101,7 @@ struct FeedActivity: Identifiable {
 
 struct FeedFeaturedPlace: Identifiable {
     let visiblePlace: VisiblePlace
+    let actor: ProfileShell
     let reason: String
 
     var id: String { visiblePlace.id }
@@ -156,6 +157,7 @@ enum FeedPresentation {
             results.append(
                 FeedFeaturedPlace(
                     visiblePlace: place,
+                    actor: event.actor,
                     reason: place.userPlace.status == .been
                         ? "Checked in by \(event.actor.displayName)"
                         : "Wanna by \(event.actor.displayName)"

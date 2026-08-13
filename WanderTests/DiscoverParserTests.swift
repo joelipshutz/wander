@@ -82,6 +82,19 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "check-in", "LA", "joe", "favorites"])
     }
 
+    func testDeterministicParserRecognizesNewNightlifeSubcategories() async throws {
+        let parser = DeterministicFilterParser()
+        let schema = DiscoverFilterSchema(
+            allowedCategories: [WanderPlaceCategory.barsNightlife]
+        )
+
+        for query in ["cider bar", "sake bar", "game bar"] {
+            let filters = try await parser.parse(query: query, schema: schema)
+
+            XCTAssertEqual(filters.categories, [WanderPlaceCategory.barsNightlife], query)
+        }
+    }
+
     func testDeterministicParserFlagsUnsupportedConceptsInsteadOfPretendingToApplyThem() async throws {
         let filters = try await DeterministicFilterParser().parse(
             query: "cheap coffee open now near me",

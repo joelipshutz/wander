@@ -3,6 +3,8 @@ import SwiftUI
 import UIKit
 
 private enum ProfileHomeScrollAnchor {
+    static let identity = "profile.identity"
+    static let activity = "profile.activity"
     static let calendar = "profile.calendar"
 }
 
@@ -79,6 +81,10 @@ enum ProfileActivityPresenter {
             from: visiblePlaces,
             currentUserID: currentUserID
         )
+        let visitsByUserPlaceID = Dictionary(
+            grouping: visits.filter { $0.deletedAt == nil },
+            by: \.userPlaceID
+        )
 
         return representativePlaces
             .flatMap { visiblePlace -> [ProfileActivityItem] in
@@ -86,8 +92,8 @@ enum ProfileActivityPresenter {
                 let referenceIDs = Set(
                     [userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 }
                 )
-                let matchingVisits = visits.filter {
-                    $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
+                let matchingVisits = referenceIDs.flatMap { referenceID in
+                    visitsByUserPlaceID[referenceID] ?? []
                 }
 
                 if userPlace.status == .been {
@@ -196,6 +202,11 @@ enum ProfileHomeMode: Equatable {
         guard case .member(let relationship, _) = self else { return nil }
         return relationship
     }
+
+    func visibleInCommonCount(profileID: String, viewerID: String) -> Int? {
+        guard profileID != viewerID else { return nil }
+        return inCommonCount
+    }
 }
 
 struct ProfileMemberActions {
@@ -207,7 +218,9 @@ struct ProfileMemberActions {
 }
 
 struct ProfileOwnerHome: View {
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let profile: LocalProfile
+    let viewerProfile: LocalProfile
     let mode: ProfileHomeMode
     let stats: ProfileStats
     let saveStreak: SaveStreakSummary?
@@ -220,12 +233,12 @@ struct ProfileOwnerHome: View {
     let avatarAction: () -> Void
     let editAction: () -> Void
     let settingsAction: () -> Void
+    let shareAction: () -> Void
     let relationshipAction: () -> Void
     let backAction: (() -> Void)?
     let memberActions: ProfileMemberActions?
     let graphAction: (ProfileSocialGraphTab) -> Void
     let sharedVisitInvitationsAction: () -> Void
-    let savedPlacesAction: (PlaceStatus) -> Void
     let recentActivity: [ProfileActivityItem]
     let recentActivityAction: (ProfileActivityItem) -> Void
     let allActivityAction: (ProfileActivityFilter) -> Void
@@ -241,28 +254,37 @@ struct ProfileOwnerHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 identitySection
+                    .id(ProfileHomeScrollAnchor.identity)
+                if let inCommonCount = mode.visibleInCommonCount(
+                    profileID: profile.id,
+                    viewerID: viewerProfile.id
+                ) {
+                    ProfileInCommonPlacesRow(
+                        viewerProfile: viewerProfile,
+                        profile: profile,
+                        count: inCommonCount,
+                        action: inCommonAction
+                    )
+                }
                 if mode.isOwner {
                     if let saveStreak {
                         ProfileSaveStreakRow(summary: saveStreak)
                     }
-                    ProfileSharedVisitInboxRow(
-                        invitationCount: sharedVisitInvitationCount,
-                        action: sharedVisitInvitationsAction
-                    )
-                    ProfileRecentActivitySection(
-                        items: recentActivity,
-                        checkInCount: stats.checkIns,
-                        wannaCount: stats.wanna,
-                        itemAction: recentActivityAction,
-                        allActivityAction: allActivityAction
-                    )
-                } else {
-                    ProfileSharedVisitInboxRow(
-                        invitationCount: sharedVisitInvitationCount,
-                        action: sharedVisitInvitationsAction
-                    )
-                    savedPlacesSection
                 }
+                if mode.isOwner || sharedVisitInvitationCount > 0 {
+                    ProfileSharedVisitInboxRow(
+                        invitationCount: sharedVisitInvitationCount,
+                        action: sharedVisitInvitationsAction
+                    )
+                }
+                ProfileRecentActivitySection(
+                    items: recentActivity,
+                    checkInCount: stats.checkIns,
+                    wannaCount: stats.wanna,
+                    itemAction: recentActivityAction,
+                    allActivityAction: allActivityAction
+                )
+                .id(ProfileHomeScrollAnchor.activity)
                 ProfileCalendarSection(
                     insights: insights,
                     selectedMonth: $selectedMonth,
@@ -300,6 +322,17 @@ struct ProfileOwnerHome: View {
             else { return }
             onCalendarScrollRequestHandled(calendarScrollRequestID)
         }
+        .onChange(of: walkthroughs.currentStep?.target) { _, target in
+            guard mode.isOwner else { return }
+            switch target {
+            case .profileActivity:
+                profileScrollPosition = ProfileHomeScrollAnchor.activity
+            case .profileSettings, .profileSocial, .profileShare:
+                profileScrollPosition = ProfileHomeScrollAnchor.identity
+            default:
+                break
+            }
+        }
         .wanderScreen()
         .toolbar(.hidden, for: .navigationBar)
     }
@@ -332,15 +365,17 @@ struct ProfileOwnerHome: View {
                         displayName: profile.displayName,
                         handle: profile.handle
                     ) {
-                        WanderShareButton(content: shareContent) {
+                        WanderShareButton(content: shareContent, onTap: shareAction) {
                             ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Share profile")
+                        .walkthroughTarget(mode.isOwner ? .profileShare : nil)
                     }
 
                     if mode.isOwner {
                         ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
+                            .walkthroughTarget(.profileSettings)
                     } else if let memberActions {
                         ProfileHeaderActionButton(
                             systemImage: "ellipsis",
@@ -399,10 +434,12 @@ struct ProfileOwnerHome: View {
                             .font(.system(size: 14, weight: .black))
                             .padding(.horizontal, WanderTheme.spacing4)
                             .frame(minHeight: WanderTheme.tapMinimum)
-                            .background(relationship == .nonFollower ? WanderTheme.terracotta.color : WanderTheme.surfaceRaised.color)
-                            .foregroundStyle(relationship == .nonFollower ? WanderTheme.textOnAction.color : WanderTheme.textInk.color)
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(WanderTheme.borderHairline.color))
+                            .foregroundStyle(
+                                relationship == .nonFollower
+                                    ? WanderTheme.terracottaDark.color
+                                    : WanderTheme.textInk.color
+                            )
+                            .wanderGlassCapsule(tone: relationship == .nonFollower ? .accent : .neutral)
                     }
                     .buttonStyle(.plain)
                     .padding(.top, WanderTheme.spacing2)
@@ -413,20 +450,18 @@ struct ProfileOwnerHome: View {
                 ProfileGraphCountButton(value: followerCount, label: "Followers") {
                     graphAction(.followers)
                 }
+                ProfileGraphDivider()
                 ProfileGraphCountButton(value: followingCount, label: "Following") {
                     graphAction(.following)
                 }
+                ProfileGraphDivider()
                 ProfileGraphCountButton(value: stats.friends, label: "Friends") {
                     graphAction(.friends)
                 }
             }
-            .padding(.vertical, WanderTheme.spacing2)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusSmall)
-                    .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-            )
+            .padding(.vertical, WanderTheme.spacing1)
+            .wanderGlassPanel(cornerRadius: 22)
+            .walkthroughTarget(mode.isOwner ? .profileSocial : nil)
         }
     }
 
@@ -446,44 +481,6 @@ struct ProfileOwnerHome: View {
                     .frame(width: 132, height: 132)
                 ProgressView()
                     .tint(WanderTheme.textOnAction.color)
-            }
-        }
-    }
-
-    private var savedPlacesSection: some View {
-        HStack(spacing: mode.isOwner ? WanderTheme.spacing3 : WanderTheme.spacing2) {
-            OwnerProfileSaveTile(
-                value: stats.checkIns,
-                label: "\(CheckInCopy.pluralNoun.uppercased()) · \(stats.been) \(stats.been == 1 ? "PLACE" : "PLACES")",
-                symbol: "ticket.fill",
-                color: WanderTheme.stateSuccess.color,
-                fill: WanderTheme.categorySage.color.opacity(0.22),
-                isCompact: !mode.isOwner
-            ) {
-                savedPlacesAction(.been)
-            }
-
-            OwnerProfileSaveTile(
-                value: stats.wanna,
-                label: "WANNA",
-                symbol: "bookmark.fill",
-                color: WanderTheme.stateWarning.color,
-                fill: WanderTheme.sunTint.color,
-                isCompact: !mode.isOwner
-            ) {
-                savedPlacesAction(.wannaGo)
-            }
-
-            if let inCommonCount = mode.inCommonCount {
-                OwnerProfileSaveTile(
-                    value: inCommonCount,
-                    label: "IN COMMON",
-                    symbol: "arrow.triangle.2.circlepath.circle.fill",
-                    color: WanderTheme.pinSocial.color,
-                    fill: WanderTheme.skyTint.color,
-                    isCompact: true,
-                    action: inCommonAction
-                )
             }
         }
     }
@@ -599,10 +596,79 @@ private struct ProfileHeaderActionLabel: View {
         Image(systemName: systemImage)
             .font(.system(size: 16, weight: .black))
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-            .background(WanderTheme.surfaceBone.color)
             .foregroundStyle(WanderTheme.textInk.color)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(WanderTheme.borderHairline.color))
+            .contentShape(Circle())
+            .wanderGlassCapsule()
+    }
+}
+
+private struct ProfileGraphDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(WanderTheme.surfaceRaised.color.opacity(0.72))
+            .frame(width: 1, height: 34)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct ProfileInCommonPlacesRow: View {
+    let viewerProfile: LocalProfile
+    let profile: LocalProfile
+    let count: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: WanderTheme.spacing3) {
+                avatarPair
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(count) \(count == 1 ? "place" : "places") in common")
+                        .font(.system(.body, design: .default, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("See where your maps overlap")
+                        .font(.system(.caption, design: .default, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+
+                Spacer(minLength: WanderTheme.spacing2)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.vertical, WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .wanderGlassPanel(cornerRadius: 22)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(count) \(count == 1 ? "place" : "places") in common with \(profile.displayName)")
+        .accessibilityHint("Opens shared places")
+    }
+
+    private var avatarPair: some View {
+        HStack(spacing: -10) {
+            WanderAvatar(
+                initials: viewerProfile.initials,
+                avatarURL: viewerProfile.avatarURL,
+                size: 32,
+                color: WanderTheme.avatarRyan.color
+            )
+            .overlay(Circle().stroke(WanderTheme.canvasWarm.color, lineWidth: 2))
+            .zIndex(1)
+
+            WanderAvatar(
+                initials: profile.initials,
+                avatarURL: profile.avatarURL,
+                size: 32,
+                color: WanderTheme.avatarJames.color
+            )
+            .overlay(Circle().stroke(WanderTheme.canvasWarm.color, lineWidth: 2))
+        }
+        .frame(width: 54, alignment: .leading)
+        .accessibilityHidden(true)
     }
 }
 
@@ -734,6 +800,7 @@ struct ProfileActivityFilterControl: View {
 }
 
 private struct ProfileRecentActivitySection: View {
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let items: [ProfileActivityItem]
     let checkInCount: Int
     let wannaCount: Int
@@ -747,12 +814,20 @@ private struct ProfileRecentActivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("Recent activity")
+            Text("Activity")
                 .font(WanderTypography.editorialMajorSectionTitle)
                 .accessibilityAddTraits(.isHeader)
 
             ProfileActivityFilterControl(
-                selection: $filter,
+                selection: Binding(
+                    get: { filter },
+                    set: { newFilter in
+                        if newFilter != filter {
+                            walkthroughs.perform(.profileActivity)
+                        }
+                        filter = newFilter
+                    }
+                ),
                 checkInCount: checkInCount,
                 wannaCount: wannaCount
             )
@@ -785,6 +860,7 @@ private struct ProfileRecentActivitySection: View {
             }
 
             Button {
+                walkthroughs.perform(.profileActivity)
                 allActivityAction(filter)
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
@@ -806,11 +882,12 @@ private struct ProfileRecentActivitySection: View {
             }
             .buttonStyle(.plain)
         }
+        .walkthroughTarget(.profileActivity)
     }
 
     private var emptyStateText: String {
         switch filter {
-        case .all: "Your activity will show up here."
+        case .all: "Activity will show up here."
         case .checkIns: "No check-ins yet."
         case .wanna: "No Wanna activity yet."
         }
@@ -917,14 +994,16 @@ private struct ProfileSaveStreakRow: View {
                 Spacer(minLength: WanderTheme.spacing1)
 
                 HStack(spacing: 3) {
-                    ForEach(summary.recentDayCoverage.indices, id: \.self) { index in
+                    ForEach(summary.displayedDayStates.indices, id: \.self) { index in
                         Capsule()
-                            .fill(
-                                summary.recentDayCoverage[index]
-                                    ? WanderTheme.terracotta.color
-                                    : WanderTheme.borderHairline.color.opacity(0.65)
-                            )
+                            .fill(dayFill(summary.displayedDayStates[index]))
                             .frame(width: 10, height: 4)
+                            .overlay {
+                                if summary.displayedDayStates[index] == .streakSave {
+                                    Capsule()
+                                        .stroke(WanderTheme.terracotta.color, lineWidth: 1)
+                                }
+                            }
                     }
                 }
                 .accessibilityHidden(true)
@@ -947,16 +1026,36 @@ private struct ProfileSaveStreakRow: View {
     }
 
     private var streakTitle: String {
+        if summary.isRecoveryAvailable {
+            return "restore \(summary.recoverableCount)-day streak"
+        }
         guard summary.currentCount > 0 else { return "start a streak" }
         return "\(summary.currentCount)-day streak"
     }
 
     private var accessibilityLabel: String {
+        if summary.isRecoveryAvailable {
+            return "Your \(summary.recoverableCount) day save streak can be restored today. Check in or save a place to use your Streak Save."
+        }
         guard summary.currentCount > 0 else {
             return "No active save streak. Check in or save a Wanna place to start one."
         }
         let todayStatus = summary.isTodayCovered ? "Today is covered." : "Save today to keep it going."
-        return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus)"
+        let streakSaveStatus = summary.displayedDayStates.contains(.streakSave)
+            ? "One missed day was protected by a Streak Save."
+            : ""
+        return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus) \(streakSaveStatus)"
+    }
+
+    private func dayFill(_ state: SaveStreakDayState) -> Color {
+        switch state {
+        case .saved:
+            WanderTheme.terracotta.color
+        case .streakSave:
+            WanderTheme.terracotta.color.opacity(0.2)
+        case .missed:
+            WanderTheme.borderHairline.color.opacity(0.65)
+        }
     }
 }
 
@@ -1065,7 +1164,7 @@ private struct ProfileCalendarSection: View {
 
             HStack(spacing: 0) {
                 ProfileCalendarMetric(value: insights.monthSpotCount, label: "spots ranked")
-                ProfileCalendarMetric(value: insights.monthCategoryCount, label: "cuisines")
+                ProfileCalendarMetric(value: insights.monthCategoryCount, label: "categories")
                 ProfileCalendarMetric(value: insights.monthCityCount, label: "cities")
             }
 
@@ -1165,10 +1264,9 @@ private struct ProfileMonthButton: View {
             Image(systemName: systemImage)
                 .font(.system(size: 13, weight: .black))
                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                .background(WanderTheme.surfaceRaised.color)
                 .foregroundStyle(WanderTheme.textInk.color)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(WanderTheme.borderHairline.color))
+                .contentShape(Circle())
+                .wanderGlassCapsule()
         }
         .buttonStyle(.plain)
     }
@@ -1341,12 +1439,7 @@ private struct ProfileMapSection: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Map of \(ownerLabel) checked-in places")
 
-            Picker("Map summary", selection: $selectedSummary) {
-                ForEach(ProfileMapSummaryKind.allCases) { kind in
-                    Text(kind.title).tag(kind)
-                }
-            }
-            .pickerStyle(.segmented)
+            ProfileMapSummaryPicker(selection: $selectedSummary)
 
             if summaryItems.isEmpty {
                 Text(emptyCopy)
@@ -1421,6 +1514,37 @@ private struct ProfileMapSection: View {
         case .cities: "Cities appear after \(ownerLabel) checked-in places have location details."
         case .countries: "Countries appear after \(ownerLabel) checked-in places have location details."
         }
+    }
+}
+
+private struct ProfileMapSummaryPicker: View {
+    @Binding var selection: ProfileMapSummaryKind
+
+    var body: some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            ForEach(ProfileMapSummaryKind.allCases) { kind in
+                Button {
+                    selection = kind
+                } label: {
+                    Text(kind.title)
+                        .font(.system(.subheadline, design: .default, weight: .black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(
+                            selection == kind
+                                ? WanderTheme.terracottaDark.color
+                                : WanderTheme.textInk.color
+                        )
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                        .contentShape(Capsule())
+                        .wanderGlassCapsule(tone: selection == kind ? .selected : .neutral)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == kind ? .isSelected : [])
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Map summary")
     }
 }
 
@@ -1652,10 +1776,6 @@ private struct ProfileMapSummaryShareButton: View {
             prepareAndShare()
         } label: {
             ZStack {
-                Circle()
-                    .fill(WanderTheme.surfaceSand.color)
-                Circle()
-                    .stroke(WanderTheme.borderHairline.color)
                 if isPreparing {
                     ProgressView()
                         .tint(WanderTheme.terracotta.color)
@@ -1666,6 +1786,8 @@ private struct ProfileMapSummaryShareButton: View {
                 }
             }
             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            .contentShape(Circle())
+            .wanderGlassCapsule()
         }
         .buttonStyle(.plain)
         .disabled(activeShareItemID != nil || profile.serverID == nil)

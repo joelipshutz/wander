@@ -27,7 +27,7 @@ struct SettingsScreen: View {
             SettingsSectionTitle("account")
 
             switch auth.state {
-            case .signedIn(let session):
+            case .signedIn(let session), .offline(let session, _):
                 HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     WanderAvatar(
                         initials: initials(for: session),
@@ -424,6 +424,11 @@ struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.followedActivityEnabled) { NotificationPreferencesUpdate(followedActivityEnabled: $0) }
                         )
                         notificationToggle(
+                            title: "Likes and comments",
+                            systemImage: "heart.text.bubble",
+                            binding: preferenceBinding(\.engagementEnabled) { NotificationPreferencesUpdate(engagementEnabled: $0) }
+                        )
+                        notificationToggle(
                             title: "Capture ready",
                             systemImage: "sparkles",
                             binding: preferenceBinding(\.captureEnabled) { NotificationPreferencesUpdate(captureEnabled: $0) }
@@ -437,6 +442,11 @@ struct NotificationSettingsSheet: View {
                             title: "Wanna go reminders",
                             systemImage: "calendar.badge.exclamationmark",
                             binding: preferenceBinding(\.wannaGoRemindersEnabled) { NotificationPreferencesUpdate(wannaGoRemindersEnabled: $0) }
+                        )
+                        notificationToggle(
+                            title: "Save streak reminders",
+                            systemImage: "flame",
+                            binding: saveStreakReminderBinding
                         )
                     }
                     .padding(WanderTheme.spacing3)
@@ -594,6 +604,20 @@ struct NotificationSettingsSheet: View {
         }
     }
 
+    private var saveStreakReminderBinding: Binding<Bool> {
+        Binding {
+            pushNotifications.saveStreakRemindersEnabled
+        } set: { isEnabled in
+            pushNotifications.setSaveStreakRemindersEnabled(
+                isEnabled,
+                for: store.currentUser.id
+            )
+            Task {
+                await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
+            }
+        }
+    }
+
     private func load() async {
         await pushNotifications.refreshAuthorizationStatus()
         guard auth.isSignedIn, backend.canRegisterPushNotifications else {
@@ -610,7 +634,9 @@ struct NotificationSettingsSheet: View {
                 ? loadedPreferences
                 : .allDisabled
             pushNotifications.applyNotificationPreferences(preferences)
+            pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
             await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
         } catch {
             errorMessage = "Could not load notification settings."
         }
@@ -647,7 +673,9 @@ struct NotificationSettingsSheet: View {
             return
         }
         preferences = enabledPreferences
+        pushNotifications.configureSaveStreakReminders(for: store.currentUser.id)
         await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+        await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
     }
 
     private func disableNotifications() async {
@@ -678,6 +706,7 @@ struct NotificationSettingsSheet: View {
             preferences = try await backend.updateNotificationPreferences(update)
             pushNotifications.applyNotificationPreferences(preferences)
             await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            await pushNotifications.reconcileSaveStreakReminder(store.saveStreakSummary)
         } catch {
             errorMessage = "Could not save notification settings."
         }

@@ -373,6 +373,33 @@ The new Wander Clerk application was created on 2026-06-02.
 
 Local-only Clerk env values are stored in `/Users/joelipshutz/.openclaw/workspace/.env.keys`.
 
+### Sign in with Apple
+
+REC-259 adds the native iOS Sign in with Apple capability and makes Apple's
+system button the primary action in the existing Clerk auth sheet. The app calls
+ClerkKit's native Apple transfer flow; Clerk remains the identity and session
+owner. Email, Google, verification, recovery, and any incomplete Apple flow stay
+in Clerk's prebuilt `AuthView` behind **Use email or Google**.
+
+The development Clerk environment still reported Apple as disabled on
+2026-08-11. Before a live device test or release:
+
+1. In Apple Developer **Certificates, Identifiers & Profiles**, confirm Sign in
+   with Apple is enabled for the existing `com.grayline.wander` App ID. Preserve
+   the existing Team/App ID prefix and regenerate provisioning profiles if Apple
+   requires it.
+2. In the Clerk development instance, add the native iOS application using that
+   App ID prefix and bundle id, then enable the Apple social connection for both
+   sign-up and sign-in.
+3. Install a signed build on a physical device. Test both a new Apple account and
+   an existing account, including **Hide My Email**, cancellation, relaunch, and
+   sign-out/sign-in. Apple only returns the person's name on the first consent.
+4. Repeat the connection setup for Clerk production before the production
+   cutover; do not assume the development connection carries over.
+
+The simulator can validate presentation and cancellation, but a signed physical
+device is the release gate for the complete Apple credential exchange.
+
 The Clerk development instance has session token claims patched for Supabase:
 
 ```json
@@ -444,7 +471,21 @@ Current status as of 2026-06-16:
 - Increment `CURRENT_PROJECT_VERSION` in `project.yml` before each additional TestFlight upload, then run `xcodegen generate`.
 - When creating the export options plist for App Store Connect upload, set `manageAppVersionAndBuildNumber` to `false` so Xcode cannot silently upload a different build number than the archive.
 - If Xcode Accounts cannot be used for upload, pass the local App Store Connect API key to `xcodebuild -exportArchive` with `-authenticationKeyPath`, `-authenticationKeyID`, and `-authenticationKeyIssuerID`.
-- After `xcodebuild -exportArchive` reports `Uploaded Wander`, run `node scripts/testflight-release.mjs --archive-path <archive>`. It waits for the uploaded build to become `VALID`, sets export compliance, attaches the build to `rec.me Alpha`, submits external beta review, and prints the final TestFlight summary. Passing `--archive-path` lets the helper detect Xcode upload build-number drift before attaching the wrong TestFlight build. Use `--dry-run` before upload to verify the resolved build number and App Store Connect config.
+- Before the build-number bump and again against the exact candidate, generate
+  all release artifacts from the machine GitHub issue with
+  `node scripts/testflight-manifest.mjs snapshot --base testflight/build-<previous> --head <candidate> --build <n> --status candidate --write-dir <temporary-directory>`.
+  The command refreshes every pending `main` commit from its merged PR and fails
+  on any missing or unclassified payload.
+- After `xcodebuild -exportArchive` reports `Uploaded Wander`, run
+  `node scripts/testflight-release.mjs --archive-path <archive> --reconciliation-file <generated-reconciliation.json> --what-to-test-file <generated-what-to-test.md>`.
+  It refuses to touch App Store Connect unless the version-2 reconciliation
+  came from the machine GitHub issue, still matches that live issue, passed for
+  the exact build/current candidate, classifies every release-range commit, and
+  hashes to the generated What to Test output. It then waits
+  for the uploaded build to become `VALID`, sets export compliance, attaches
+  the build to `rec.me Alpha`, submits external beta review, and prints the
+  final TestFlight summary. Use `--dry-run` with the same required gate/copy
+  files before upload to verify the resolved build number and configuration.
 
 ## Main Files To Read First
 

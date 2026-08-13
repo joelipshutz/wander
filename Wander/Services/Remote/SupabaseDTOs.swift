@@ -312,16 +312,48 @@ struct RemotePlaceAttributeDTO: Codable, Equatable {
 struct RemoteFeedMediaDTO: Codable, Equatable {
     let id: String
     let urlString: String?
+    let storageBucket: String?
+    let storagePath: String?
     let accessibilityLabel: String
 
     enum CodingKeys: String, CodingKey {
         case id
         case urlString = "url"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
         case accessibilityLabel = "accessibility_label"
     }
 
-    var preview: FeedMediaPreview {
-        FeedMediaPreview(id: id, urlString: urlString, accessibilityLabel: accessibilityLabel)
+    @MainActor
+    func preview(storage: (any RemoteStorageCalling)?) async -> FeedMediaPreview {
+        var resolvedURLString = urlString
+        if resolvedURLString == nil,
+           let storage,
+           let storageBucket,
+           let storagePath {
+            if let signedURL = try? await storage.signedObjectURL(
+                bucket: storageBucket,
+                path: storagePath,
+                expiresIn: 3_600
+            ) {
+                resolvedURLString = signedURL.absoluteString
+            }
+        }
+        return FeedMediaPreview(
+            id: id,
+            urlString: resolvedURLString,
+            accessibilityLabel: accessibilityLabel
+        )
+    }
+}
+
+struct RemoteActivityMediaDTO: Codable, Equatable {
+    let activityID: String
+    let media: [RemoteFeedMediaDTO]
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id"
+        case media
     }
 }
 
@@ -385,9 +417,19 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
         case media
     }
 
-    func activity() throws -> FeedActivity {
+    @MainActor
+    func activity(
+        storage: (any RemoteStorageCalling)? = nil,
+        mediaOverride: [RemoteFeedMediaDTO]? = nil
+    ) async throws -> FeedActivity {
         guard let kind = FeedActivityKind(rawValue: eventType) else {
             throw WanderRemoteError.invalidResponse("Unknown Feed event type: \(eventType)")
+        }
+        var renderedMedia: [FeedMediaPreview] = []
+        let sourceMedia = mediaOverride ?? media
+        renderedMedia.reserveCapacity(sourceMedia.count)
+        for item in sourceMedia {
+            renderedMedia.append(await item.preview(storage: storage))
         }
         return FeedActivity(
             id: id,
@@ -398,7 +440,7 @@ struct RemoteFeedActivityDTO: Codable, Equatable {
             occurredAt: occurredAt,
             note: note,
             rating: rating,
-            media: media.map(\.preview)
+            media: renderedMedia
         )
     }
 }
@@ -407,8 +449,20 @@ struct RemoteFeedFeaturedPlaceDTO: Codable, Equatable {
     let place: RemoteVisiblePlaceDTO
     let reason: String
 
-    func featuredPlace() throws -> FeedFeaturedPlace {
-        FeedFeaturedPlace(visiblePlace: try place.visiblePlace(), reason: reason)
+    func featuredPlace(actor activityActor: ProfileShell? = nil) throws -> FeedFeaturedPlace {
+        let visiblePlace = try place.visiblePlace()
+        let actor = ProfileShell(
+            id: activityActor?.id ?? visiblePlace.owner.id,
+            handle: activityActor?.handle ?? visiblePlace.owner.handle,
+            displayName: activityActor?.displayName ?? visiblePlace.owner.displayName,
+            avatarURL: activityActor?.avatarURL ?? visiblePlace.owner.avatarURL,
+            bio: activityActor?.bio ?? visiblePlace.owner.bio,
+            homeArea: activityActor?.homeArea ?? visiblePlace.owner.homeArea,
+            isPrivateProfile: activityActor?.isPrivateProfile ?? visiblePlace.owner.isPrivateProfile,
+            createdAt: activityActor?.createdAt ?? visiblePlace.owner.createdAt,
+            relationship: activityActor?.relationship ?? .follower
+        )
+        return FeedFeaturedPlace(visiblePlace: visiblePlace, actor: actor, reason: reason)
     }
 }
 
@@ -425,12 +479,147 @@ struct RemoteFollowedFeedPageDTO: Codable, Equatable {
         case fetchedAt = "fetched_at"
     }
 
-    func followedFeedPage() throws -> FollowedFeedPage {
-        FollowedFeedPage(
-            activity: try activity.map { try $0.activity() },
-            featuredPlaces: try featuredPlaces.map { try $0.featuredPlace() },
+    @MainActor
+    func followedFeedPage() async throws -> FollowedFeedPage {
+        var renderedActivity: [FeedActivity] = []
+        renderedActivity.reserveCapacity(activity.count)
+        for item in activity {
+            renderedActivity.append(try await item.activity())
+        }
+        let actorsByID = Dictionary(
+            renderedActivity.map { ($0.actor.id, $0.actor) },
+            uniquingKeysWith: { current, _ in current }
+        )
+
+        return FollowedFeedPage(
+            activity: renderedActivity,
+            featuredPlaces: try featuredPlaces.map {
+                try $0.featuredPlace(actor: actorsByID[$0.place.ownerUserID])
+            },
             nextCursor: nextCursor,
             fetchedAt: fetchedAt
+        )
+    }
+}
+
+struct RemoteActivityEngagementSummaryDTO: Codable, Equatable {
+    let activityID: String
+    let likeCount: Int
+    let commentCount: Int
+    let viewerHasLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id"
+        case likeCount = "like_count"
+        case commentCount = "comment_count"
+        case viewerHasLiked = "viewer_has_liked"
+    }
+
+    var summary: ActivityEngagementSummary {
+        ActivityEngagementSummary(
+            activityID: activityID,
+            likeCount: likeCount,
+            commentCount: commentCount,
+            viewerHasLiked: viewerHasLiked
+        )
+    }
+}
+
+struct RemotePlaceActivityEngagementDTO: Codable, Equatable {
+    let activityID: String
+    let userPlaceID: String
+    let visitID: String?
+    let eventType: String
+    let occurredAt: Date
+    let likeCount: Int
+    let commentCount: Int
+    let viewerHasLiked: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case activityID = "activity_id"
+        case userPlaceID = "user_place_id"
+        case visitID = "visit_id"
+        case eventType = "event_type"
+        case occurredAt = "occurred_at"
+        case likeCount = "like_count"
+        case commentCount = "comment_count"
+        case viewerHasLiked = "viewer_has_liked"
+    }
+
+    func match() throws -> PlaceActivityEngagementMatch {
+        guard let kind = FeedActivityKind(rawValue: eventType) else {
+            throw WanderRemoteError.invalidResponse("Unknown activity engagement event type: \(eventType)")
+        }
+        return PlaceActivityEngagementMatch(
+            activityID: activityID,
+            userPlaceID: userPlaceID,
+            visitID: visitID,
+            kind: kind,
+            occurredAt: occurredAt,
+            engagement: ActivityEngagementSummary(
+                activityID: activityID,
+                likeCount: likeCount,
+                commentCount: commentCount,
+                viewerHasLiked: viewerHasLiked
+            )
+        )
+    }
+}
+
+struct RemoteActivityCommentDTO: Codable, Equatable {
+    let id: String
+    let activityID: String
+    let author: RemoteProfileShellDTO
+    let body: String
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case activityID = "activity_id"
+        case author
+        case body
+        case createdAt = "created_at"
+    }
+
+    var comment: ActivityComment {
+        ActivityComment(
+            id: id,
+            activityID: activityID,
+            author: author.profileShell(fallbackRelationship: .nonFollower),
+            body: body,
+            createdAt: createdAt
+        )
+    }
+}
+
+struct RemoteActivityCommentsPageDTO: Codable, Equatable {
+    let comments: [RemoteActivityCommentDTO]
+    let nextCursor: String?
+    let engagement: RemoteActivityEngagementSummaryDTO
+
+    enum CodingKeys: String, CodingKey {
+        case comments
+        case nextCursor = "next_cursor"
+        case engagement
+    }
+
+    var page: ActivityCommentsPage {
+        ActivityCommentsPage(
+            comments: comments.map(\.comment),
+            nextCursor: nextCursor,
+            engagement: engagement.summary
+        )
+    }
+}
+
+struct RemoteActivityCommentPostDTO: Codable, Equatable {
+    let comment: RemoteActivityCommentDTO
+    let engagement: RemoteActivityEngagementSummaryDTO
+
+    var result: ActivityCommentPostResult {
+        ActivityCommentPostResult(
+            comment: comment.comment,
+            engagement: engagement.summary
         )
     }
 }

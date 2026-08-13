@@ -102,10 +102,10 @@ Date: 2026-05-29
   - Current rule: always support Directions from coordinates; show Website, Call, and Order only when MapKit/provider/user-captured data actually supplies the URL or phone. Hide missing actions.
   - Google Places reviews should not be used in the no-billing alpha path; official Google Places fields put reviews in a paid field tier.
 
-- Decide whether native Contacts integration ships in v0.1. Done 2026-06-01.
-  - Why: contacts are a recommended people-finding affordance, but native Contacts adds permission/privacy and App Store disclosure work.
-  - Decision: native Contacts is planned later, not in v0.1. Build the contacts-first UI against `FakeContactProvider` plus username search.
-  - Later native scope: add pre-permission copy, denied-permission UX, hashed matching, backend privacy rules, App Store disclosure, seeded/contact test fixtures, and contact-import QA.
+- Decide whether native Contacts integration ships in v0.1. Done 2026-08-05.
+  - Why: contacts are a recommended people-finding and invitation affordance, with permission/privacy and App Store disclosure requirements.
+  - Decision: REC-224 supersedes the earlier deferral. Native phone contacts are available contextually from Check-in Friends, Discover People, and list collaborators after an explicit primer. Contact data stays on device and the user confirms each invitation in the native Messages composer.
+  - Deferred scope: attributed invite links, install/signup attribution, joined notifications, and deferred check-in/list acceptance require a backend invite-token contract. The public TestFlight link alone cannot provide those behaviors.
 
 - Add lightweight LLM Discover query parser up front.
   - Why: Joe wants natural-language/smart query UX early, but execution should stay constrained to structured filters.

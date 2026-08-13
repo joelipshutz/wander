@@ -321,6 +321,17 @@ create temporary table smoke_shared_visit_invitation (
 ) on commit drop;
 grant select, insert on smoke_shared_visit_invitation to authenticated;
 
+create temporary table smoke_shared_source_delete_result (
+  result jsonb not null
+) on commit drop;
+grant select, insert on smoke_shared_source_delete_result to authenticated;
+
+create temporary table smoke_user_place_delete_result (
+  user_place_id uuid primary key,
+  result jsonb not null
+) on commit drop;
+grant select, insert, update on smoke_user_place_delete_result to authenticated;
+
 insert into public.follows (follower_user_id, followed_user_id, source)
 values
   (${collaboratorUser}, ${smokeUser}, 'profile'),
@@ -1174,6 +1185,111 @@ begin
 end
 $shared_remove_persistence$;
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+insert into smoke_shared_source_delete_result(result)
+select public.delete_own_check_in('${smokeVisitID}'::uuid);
+reset role;
+do $shared_source_delete$
+declare
+  delete_result jsonb;
+  source_deleted_at timestamptz;
+  group_count integer;
+begin
+  select source.result into delete_result
+  from smoke_shared_source_delete_result source;
+  select visit.deleted_at into source_deleted_at
+  from public.place_visits visit
+  where visit.id = '${smokeVisitID}'::uuid;
+  select count(*)::integer into group_count
+  from public.shared_visit_groups shared_group
+  where shared_group.source_visit_id = '${smokeVisitID}'::uuid;
+
+  if delete_result->>'visit_id' is distinct from '${smokeVisitID}'
+     or source_deleted_at is null
+     or group_count <> 1 then
+    raise exception 'shared visit source check-in soft deletion failed';
+  end if;
+end
+$shared_source_delete$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('app.explicit_check_in', 'off', true);
+insert into smoke_user_place_delete_result(user_place_id, result)
+with saved as (
+  select public.save_own_place(
+    '{
+      "canonical_name":"Codex Smoke Delete Wanna",
+      "category":"coffee_tea_sweets",
+      "primary_category":"coffee_tea_sweets",
+      "subcategory":"Cafe",
+      "category_source":"deterministic",
+      "category_confidence":1,
+      "raw_provider_type":"cafe",
+      "latitude":34.0524,
+      "longitude":-118.2438,
+      "source_provider":"codex_smoke",
+      "source_provider_place_id":"delete-wanna-feed-subject",
+      "confidence":1
+    }'::jsonb,
+    '{"status":"wanna_go","visibility":"followers","nearby_confirmed":false,"source_type":"manual"}'::jsonb,
+    '[]'::jsonb
+  ) as result
+)
+select
+  (saved.result->>'user_place_id')::uuid,
+  '{}'::jsonb
+from saved;
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${strangerUser}, true);
+do $stranger_user_place_delete$
+begin
+  perform public.delete_own_user_place(
+    (select deletion.user_place_id from smoke_user_place_delete_result deletion)
+  );
+  raise exception 'stranger unexpectedly deleted another user save';
+exception when others then
+  if sqlerrm not like '%not_owner%' then
+    raise;
+  end if;
+end
+$stranger_user_place_delete$;
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+update smoke_user_place_delete_result deletion
+set result = public.delete_own_user_place(deletion.user_place_id);
+reset role;
+do $user_place_soft_delete$
+declare
+  deleted_user_place_id uuid;
+  delete_result jsonb;
+  parent_deleted_at timestamptz;
+  feed_event_count integer;
+begin
+  select deletion.user_place_id, deletion.result
+  into deleted_user_place_id, delete_result
+  from smoke_user_place_delete_result deletion;
+  select user_place.deleted_at into parent_deleted_at
+  from public.user_places user_place
+  where user_place.id = deleted_user_place_id;
+  select count(*)::integer into feed_event_count
+  from public.feed_events event
+  where event.user_place_id = deleted_user_place_id;
+
+  if delete_result->>'transition' is distinct from 'removed'
+     or parent_deleted_at is null
+     or feed_event_count < 1 then
+    raise exception 'Wanna save soft deletion failed transition=% parent_deleted=% feed_events=%',
+      delete_result->>'transition',
+      parent_deleted_at is not null,
+      feed_event_count;
+  end if;
+end
+$user_place_soft_delete$;
+
 ${migrationPreviewTestSQL}
 
 reset role;
@@ -1759,12 +1875,14 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     `
       select (
         public.update_notification_preferences(
-          '{"push_enabled":true,"social_graph_enabled":true,"shared_lists_enabled":true,"shared_visits_enabled":true,"recommendations_enabled":true,"capture_enabled":true,"discovery_digest_enabled":true,"followed_activity_enabled":true,"wanna_go_reminders_enabled":true}'::jsonb
+          '{"push_enabled":true,"social_graph_enabled":true,"shared_lists_enabled":true,"shared_visits_enabled":true,"recommendations_enabled":true,"capture_enabled":true,"discovery_digest_enabled":true,"followed_activity_enabled":true,"wanna_go_reminders_enabled":true,"engagement_enabled":true}'::jsonb
         )
-      ).wanna_go_reminders_enabled as enabled
+      ).wanna_go_reminders_enabled as wanna_enabled,
+      (public.get_notification_preferences()).engagement_enabled as engagement_enabled
     `,
     [],
-    (result) => result.rows[0]?.enabled === true,
+    (result) => result.rows[0]?.wanna_enabled === true
+      && result.rows[0]?.engagement_enabled === true,
   );
 
   await client.query("reset role");
@@ -2619,6 +2737,92 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [detailListID],
     (result) => result.rows[0]?.detail !== null,
   );
+  // feed_events is intentionally unavailable to authenticated clients. Resolve
+  // the fixture as the privileged smoke-test session, then restore the owner
+  // claims before exercising the public activity RPCs below.
+  await client.query("reset role");
+  const activityEvent = await expectQuery(
+    client,
+    "resolve list activity fixture",
+    `
+      select id::text
+      from public.feed_events
+      where list_id = $1::uuid
+        and event_type = 'list_created'
+      order by occurred_at desc, id desc
+      limit 1
+    `,
+    [detailListID],
+    (result) => typeof result.rows[0]?.id === "string",
+  );
+  const activityID = activityEvent.rows[0].id;
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner resolves exact activity detail",
+    "select public.activity_detail($1::uuid) as activity",
+    [activityID],
+    (result) => result.rows[0]?.activity?.id === activityID
+      && result.rows[0]?.activity?.event_type === "list_created"
+      && result.rows[0]?.activity?.list?.id === detailListID,
+  );
+  await expectQuery(
+    client,
+    "owner loads activity engagement summary",
+    "select public.activity_engagement_summaries(array[$1::uuid]) as engagement",
+    [activityID],
+    (result) => result.rows[0]?.engagement?.[0]?.activity_id === activityID,
+  );
+  await expectQuery(
+    client,
+    "owner likes list activity",
+    "select public.set_activity_like($1::uuid, true) as engagement",
+    [activityID],
+    (result) => result.rows[0]?.engagement?.viewer_has_liked === true,
+  );
+  const activityCommentResult = await expectQuery(
+    client,
+    "owner comments on list activity",
+    "select public.add_activity_comment($1::uuid, $2) as result",
+    [activityID, "Smoke-tested list activity."],
+    (result) => result.rows[0]?.result?.comment?.body === "Smoke-tested list activity.",
+  );
+  await expectQuery(
+    client,
+    "owner reloads list activity comments",
+    "select public.activity_comments($1::uuid, null, 50) as page",
+    [activityID],
+    (result) => result.rows[0]?.page?.comments?.some(
+      (comment) => comment.body === "Smoke-tested list activity.",
+    ) === true,
+  );
+  const activityCommentID = activityCommentResult.rows[0].result.comment.id;
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQueryFailure(
+    client,
+    "another user cannot delete the owner's activity comment",
+    "select public.delete_own_activity_comment($1::uuid) as engagement",
+    [activityCommentID],
+    /comment_not_found_or_not_owned/,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner deletes their own activity comment",
+    "select public.delete_own_activity_comment($1::uuid) as engagement",
+    [activityCommentID],
+    (result) => result.rows[0]?.engagement?.activity_id === activityID
+      && result.rows[0]?.engagement?.comment_count === 0,
+  );
+  await expectQuery(
+    client,
+    "deleted activity comment stays deleted",
+    "select public.activity_comments($1::uuid, null, 50) as page",
+    [activityID],
+    (result) => result.rows[0]?.page?.comments?.some(
+      (comment) => comment.id === activityCommentID,
+    ) === false,
+  );
 
   const collaboratorListID = await createSmokeList(client, "Codex smoke collaborator check");
   await expectQuery(
@@ -2762,6 +2966,49 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [collaboratorListID, collaboratorItem.rows[0].item_id],
     /place_list_not_found_or_forbidden/,
   );
+  await expectQuery(
+    client,
+    "collaborator can leave shared list",
+    "select public.leave_place_list($1::uuid) as result",
+    [collaboratorListID],
+    () => true,
+  );
+  await expectQuery(
+    client,
+    "former collaborator sees follower-visible list as a friend list",
+    "select exists(select 1 from public.visible_place_lists() where id = $1::uuid) as visible",
+    [collaboratorListID],
+    (result) => result.rows[0]?.visible === true,
+  );
+  await expectQuery(
+    client,
+    "former collaborator can load follower-visible list detail",
+    "select public.place_list_detail($1::uuid) as detail",
+    [collaboratorListID],
+    (result) => result.rows[0]?.detail !== null,
+  );
+  await expectQuery(
+    client,
+    "former collaborator is removed from list collaborators",
+    `
+      select not exists (
+        select 1
+        from jsonb_array_elements(
+          coalesce(public.place_list_detail($1::uuid)->'collaborators', '[]'::jsonb)
+        ) collaborator
+        where collaborator->>'id' = $2
+      ) as removed
+    `,
+    [collaboratorListID, collaboratorUserID],
+    (result) => result.rows[0]?.removed === true,
+  );
+  await expectQueryFailure(
+    client,
+    "collaborator cannot leave the same list twice",
+    "select public.leave_place_list($1::uuid)",
+    [collaboratorListID],
+    /place_list_not_found_or_forbidden/,
+  );
 
   await setAuthenticatedUser(client, strangerUserID);
   await expectQuery(
@@ -2872,6 +3119,31 @@ async function runSurfaceSnapshotSmokeChecks(
   collaboratorUserID,
   strangerUserID,
 ) {
+  await expectQuery(
+    client,
+    "activity media RPC metadata",
+    `
+      select
+        p.prosecdef as security_definer,
+        'search_path=pg_catalog, public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'activity_media'
+        and pg_get_function_identity_arguments(p.oid) = 'input_activity_ids uuid[]'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_definer === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
   await expectQuery(
     client,
     "surface snapshot RPC metadata",
@@ -3111,12 +3383,13 @@ async function runFirstVisiblePlacePhotoChecks(
         0,
         'uploaded'
       from ids
-      returning id
+      returning id, visit_id
     `,
     [smokeUserPlaceID, smokeUserID],
     (result) => result.rows.length === 1,
   );
   const expectedPhotoID = photoFixture.rows[0].id;
+  const expectedVisitID = photoFixture.rows[0].visit_id;
   const collaboratorPhotoFixture = await expectQuery(
     client,
     "create rolled-back collaborator list-cover photo fixture",
@@ -3158,6 +3431,31 @@ async function runFirstVisiblePlacePhotoChecks(
   );
 
   await setAuthenticatedUser(client, smokeUserID);
+  await client.query("reset role");
+  const activityFixture = await expectQuery(
+    client,
+    "resolve rolled-back activity media fixture",
+    `
+      select id
+      from public.feed_events
+      where visit_id = $1::uuid
+      order by occurred_at desc, id desc
+      limit 1
+    `,
+    [expectedVisitID],
+    (result) => result.rows.length === 1,
+  );
+  const expectedActivityID = activityFixture.rows[0].id;
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner activity media returns the exact uploaded visit photo",
+    "select * from public.activity_media(array[$1::uuid])",
+    [expectedActivityID],
+    (result) => result.rows[0]?.activity_id === expectedActivityID
+      && result.rows[0]?.media?.[0]?.id === expectedPhotoID
+      && result.rows[0]?.media?.[0]?.storage_bucket === "visit-photos",
+  );
   await expectQuery(
     client,
     "owner can resolve first visible place photo",
@@ -3423,6 +3721,7 @@ async function assertPlaceListRPCMetadata(client) {
     "public.place_list_detail(uuid)",
     "public.upsert_place_list(jsonb)",
     "public.delete_place_list(uuid)",
+    "public.leave_place_list(uuid)",
     "public.set_place_list_collaborators(uuid,text[])",
     "public.add_place_list_item(uuid,uuid,uuid,uuid)",
     "public.remove_place_list_item(uuid,uuid)",
@@ -3492,6 +3791,7 @@ async function assertPlaceListRPCMetadata(client) {
     "can_read_place_list",
     "upsert_place_list",
     "delete_place_list",
+    "leave_place_list",
     "set_place_list_collaborators",
     "add_place_list_item",
     "remove_place_list_item",
@@ -3510,6 +3810,26 @@ async function assertPlaceListRPCMetadata(client) {
     `,
     [securityDefinerFunctions],
     (result) => result.rows[0]?.count === securityDefinerFunctions.length,
+  );
+  await expectQuery(
+    client,
+    "leave-list boundary keeps its definer, invoker, search_path, and grant posture",
+    `
+      select
+        app_proc.prosecdef as app_security_definer,
+        'search_path=public, app' = any(coalesce(app_proc.proconfig, array[]::text[])) as app_search_path,
+        not public_proc.prosecdef as public_security_invoker,
+        'search_path=app, public' = any(coalesce(public_proc.proconfig, array[]::text[])) as public_search_path,
+        has_function_privilege('authenticated', app_proc.oid, 'execute') as app_authenticated_execute,
+        has_function_privilege('authenticated', public_proc.oid, 'execute') as public_authenticated_execute,
+        not has_function_privilege('anon', public_proc.oid, 'execute') as public_anon_denied
+      from pg_proc app_proc
+      cross join pg_proc public_proc
+      where app_proc.oid = 'app.leave_place_list(uuid)'::regprocedure
+        and public_proc.oid = 'public.leave_place_list(uuid)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
   );
   await expectQuery(
     client,

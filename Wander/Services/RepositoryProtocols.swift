@@ -300,6 +300,16 @@ extension PlaceCandidate {
         return "\(Int(miles.rounded())) mi"
     }
 
+    var inferredRestaurantFoodType: String? {
+        guard primaryCategory == WanderPlaceCategory.restaurantsFood else { return nil }
+        return WanderPlaceCategory.restaurantCuisineInference(for: self)?.cuisine
+    }
+
+    var compactPlaceType: String {
+        WanderPlaceCategory.display(for: categoryAssignment)
+            .compactType(foodType: inferredRestaurantFoodType)
+    }
+
     func previewSubtitle(
         includeDistance: Bool = true,
         includeCategory: Bool = true,
@@ -308,7 +318,7 @@ extension PlaceCandidate {
     ) -> String {
         let locality = Self.trimmed(self.locality)
         let address = Self.addressWithoutDuplicateLocality(self.address, locality: locality)
-        let categoryDisplay = WanderPlaceCategory.display(for: categoryAssignment).compactTitle
+        let categoryDisplay = compactPlaceType
         let category = includeCategory && !categoryDisplay.isEmpty && self.primaryCategory != "place" ? categoryDisplay : nil
         let baseParts: [String?] = [
             includeDistance ? previewFormattedDistance : nil,
@@ -1166,6 +1176,7 @@ struct NotificationPreferences: Equatable {
     var captureEnabled: Bool = false
     var discoveryDigestEnabled: Bool = false
     var followedActivityEnabled: Bool = false
+    var engagementEnabled: Bool = false
     var wannaGoRemindersEnabled: Bool = false
 
     static let allEnabled = NotificationPreferences(
@@ -1177,6 +1188,7 @@ struct NotificationPreferences: Equatable {
         captureEnabled: true,
         discoveryDigestEnabled: true,
         followedActivityEnabled: true,
+        engagementEnabled: true,
         wannaGoRemindersEnabled: true
     )
 
@@ -1189,6 +1201,7 @@ struct NotificationPreferences: Equatable {
         captureEnabled: false,
         discoveryDigestEnabled: false,
         followedActivityEnabled: false,
+        engagementEnabled: false,
         wannaGoRemindersEnabled: false
     )
 }
@@ -1202,6 +1215,7 @@ struct NotificationPreferencesUpdate: Equatable {
     var captureEnabled: Bool?
     var discoveryDigestEnabled: Bool?
     var followedActivityEnabled: Bool?
+    var engagementEnabled: Bool?
     var wannaGoRemindersEnabled: Bool?
 
     init(
@@ -1213,6 +1227,7 @@ struct NotificationPreferencesUpdate: Equatable {
         captureEnabled: Bool? = nil,
         discoveryDigestEnabled: Bool? = nil,
         followedActivityEnabled: Bool? = nil,
+        engagementEnabled: Bool? = nil,
         wannaGoRemindersEnabled: Bool? = nil
     ) {
         self.pushEnabled = pushEnabled
@@ -1223,6 +1238,7 @@ struct NotificationPreferencesUpdate: Equatable {
         self.captureEnabled = captureEnabled
         self.discoveryDigestEnabled = discoveryDigestEnabled
         self.followedActivityEnabled = followedActivityEnabled
+        self.engagementEnabled = engagementEnabled
         self.wannaGoRemindersEnabled = wannaGoRemindersEnabled
     }
 
@@ -1235,6 +1251,7 @@ struct NotificationPreferencesUpdate: Equatable {
         captureEnabled: true,
         discoveryDigestEnabled: true,
         followedActivityEnabled: true,
+        engagementEnabled: true,
         wannaGoRemindersEnabled: true
     )
 
@@ -1247,6 +1264,7 @@ struct NotificationPreferencesUpdate: Equatable {
         captureEnabled: false,
         discoveryDigestEnabled: false,
         followedActivityEnabled: false,
+        engagementEnabled: false,
         wannaGoRemindersEnabled: false
     )
 }
@@ -1584,6 +1602,23 @@ protocol FeedRepository {
 }
 
 @MainActor
+protocol ActivityEngagementRepository {
+    func activity(id: String) async throws -> FeedActivity
+    func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary]
+    func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch]
+    func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary
+    func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage
+    func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult
+    func deleteComment(commentID: String) async throws -> ActivityEngagementSummary
+}
+
+extension ActivityEngagementRepository {
+    func activity(id: String) async throws -> FeedActivity {
+        throw WanderRemoteError.notImplemented("activity detail")
+    }
+}
+
+@MainActor
 protocol UserPlaceRepository {
     func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace]
     func ownWannaGoPlans() async throws -> [OwnWannaGoPlan]
@@ -1655,6 +1690,7 @@ protocol PlaceListRepository {
     func detail(listID: String) async throws -> RemotePlaceListDetail?
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String
     func delete(listID: String) async throws
+    func leave(listID: String) async throws
     func setCollaborators(listID: String, userIDs: [String]) async throws
     func addItem(_ draft: PlaceListItemDraft) async throws -> String
     func removeItem(listID: String, itemID: String) async throws
@@ -1665,6 +1701,10 @@ protocol PlaceListRepository {
 }
 
 extension PlaceListRepository {
+    func leave(listID: String) async throws {
+        throw WanderRemoteError.notConfigured
+    }
+
     func createInvite(listID: String) async throws -> PlaceListInviteCreation {
         throw WanderRemoteError.notConfigured
     }

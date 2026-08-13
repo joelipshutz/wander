@@ -4,11 +4,25 @@ enum AuthState: Equatable {
     case signedOut
     case loading
     case signedIn(AuthSession)
+    case offline(AuthSession, message: String)
     case unavailable(String)
 
     var isSignedIn: Bool {
-        if case .signedIn = self { return true }
-        return false
+        switch self {
+        case .signedIn, .offline:
+            return true
+        case .signedOut, .loading, .unavailable:
+            return false
+        }
+    }
+
+    var session: AuthSession? {
+        switch self {
+        case .signedIn(let session), .offline(let session, _):
+            return session
+        case .signedOut, .loading, .unavailable:
+            return nil
+        }
     }
 }
 
@@ -22,6 +36,8 @@ extension AuthState {
             return "loading"
         case .signedIn(let session):
             return "signed_in:\(WanderDebugLog.shortID(session.userID))"
+        case .offline(let session, _):
+            return "offline:\(WanderDebugLog.shortID(session.userID))"
         case .unavailable:
             return "unavailable"
         }
@@ -29,7 +45,7 @@ extension AuthState {
 }
 #endif
 
-struct AuthSession: Equatable, Identifiable {
+struct AuthSession: Codable, Equatable, Identifiable {
     let userID: String
     let displayName: String?
     let handle: String?
@@ -53,9 +69,64 @@ struct AuthSession: Equatable, Identifiable {
     }
 }
 
+@MainActor
+struct AuthSessionCache {
+    let load: () -> AuthSession?
+    let save: (AuthSession?) -> Void
+
+    static let disabled = AuthSessionCache(load: { nil }, save: { _ in })
+
+    static let live = file(
+        url: FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Wander", isDirectory: true)
+            .appendingPathComponent("last-auth-session-v1.json")
+    )
+
+    static func file(url: URL) -> AuthSessionCache {
+        AuthSessionCache(
+            load: {
+                guard let data = try? Data(contentsOf: url) else { return nil }
+                return try? JSONDecoder().decode(AuthSession.self, from: data)
+            },
+            save: { session in
+                guard let session else {
+                    try? FileManager.default.removeItem(at: url)
+                    return
+                }
+
+                do {
+                    try FileManager.default.createDirectory(
+                        at: url.deletingLastPathComponent(),
+                        withIntermediateDirectories: true,
+                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+                    )
+                    let cachedSession = AuthSession(
+                        userID: session.userID,
+                        displayName: session.displayName,
+                        handle: session.handle
+                    )
+                    let data = try JSONEncoder().encode(cachedSession)
+                    try data.write(
+                        to: url,
+                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+                    )
+                } catch {
+                    #if DEBUG
+                    WanderDebugLog.remote.error(
+                        "auth session cache write failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+                    )
+                    #endif
+                }
+            }
+        )
+    }
+}
+
 enum AuthGateIntent: String, Equatable, Identifiable {
     case syncPlace
     case socialSave
+    case socialActivity
     case followPeople
     case manageBlocks
     case manageNotifications
@@ -76,6 +147,13 @@ enum AuthGateIntent: String, Equatable, Identifiable {
             AuthGateCopy(
                 title: "Sign in to save from people",
                 message: "Social saves need an account so \(AppBrand.displayName) knows whose map gets the copy.",
+                primaryAction: "Sign in",
+                secondaryAction: "Keep browsing"
+            )
+        case .socialActivity:
+            AuthGateCopy(
+                title: "Sign in to join the conversation",
+                message: "Likes and comments need an account so people know they came from you.",
                 primaryAction: "Sign in",
                 secondaryAction: "Keep browsing"
             )
@@ -123,6 +201,8 @@ enum AuthSessionError: Error, Equatable {
     case notSignedIn
     case notConfigured
     case tokenUnavailable
+    case cancelled
+    case appleSessionUnavailable
 }
 
 enum NativeAuthMode: String, Equatable {
@@ -131,12 +211,18 @@ enum NativeAuthMode: String, Equatable {
     case signUp
 }
 
+enum NativeAppleAuthOutcome: Equatable {
+    case completed
+    case requiresClerkContinuation
+}
+
 @MainActor
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
     var canPresentNativeAuth: Bool { get }
     func sessionChanges() -> AsyncStream<AuthState>
     func refreshSession() async
+    func signInWithApple(mode: NativeAuthMode) async throws -> NativeAppleAuthOutcome
     func signOut() async throws
     func deleteAccount() async throws
     func supabaseAccessToken() async throws -> String
@@ -144,6 +230,10 @@ protocol AuthSessionProviding: AnyObject {
 }
 
 extension AuthSessionProviding {
+    func signInWithApple(mode: NativeAuthMode) async throws -> NativeAppleAuthOutcome {
+        throw AuthSessionError.notConfigured
+    }
+
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
     }
@@ -162,6 +252,8 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published var activeGate: AuthGateRequest?
     @Published var isPresentingNativeAuth = false
     @Published private(set) var activeNativeAuthMode: NativeAuthMode = .signInOrUp
+    @Published private(set) var isSigningInWithApple = false
+    @Published private(set) var appleSignInError: String?
     @Published private(set) var isSigningOut = false
     @Published private(set) var signOutError: String?
     @Published private(set) var isSessionValidated = false
@@ -236,6 +328,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     func beginSignIn(mode: NativeAuthMode = .signInOrUp) {
         activeGate = nil
+        appleSignInError = nil
         if provider.canPresentNativeAuth {
             activeNativeAuthMode = mode
             isNativeAuthAttemptActive = true
@@ -249,6 +342,43 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     func nativeAuthDidDismiss() {
         isNativeAuthAttemptActive = false
         isPresentingNativeAuth = false
+        isSigningInWithApple = false
+        appleSignInError = nil
+    }
+
+    @discardableResult
+    func signInWithApple() async -> NativeAppleAuthOutcome? {
+        guard provider.canPresentNativeAuth else {
+            appleSignInError = "Apple sign-in is not available in this build."
+            return nil
+        }
+
+        appleSignInError = nil
+        isNativeAuthAttemptActive = true
+        isSigningInWithApple = true
+        defer { isSigningInWithApple = false }
+
+        do {
+            let outcome = try await provider.signInWithApple(mode: activeNativeAuthMode)
+            if outcome == .completed {
+                synchronizeState(provider.state)
+                guard state.isSignedIn else {
+                    appleSignInError = "Apple sign-in didn’t finish. Try again or use another method."
+                    return nil
+                }
+            }
+            return outcome
+        } catch AuthSessionError.cancelled, is CancellationError {
+            return nil
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error(
+                "apple sign-in failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            appleSignInError = "Apple sign-in didn’t finish. Try again or use another method."
+            return nil
+        }
     }
 
     func supabaseAccessToken() async throws -> String {
@@ -321,11 +451,15 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     private func synchronizeState(_ state: AuthState) {
         self.state = state
-        isSessionValidated = state.isSignedIn
+        if case .signedIn = state {
+            isSessionValidated = true
+        } else {
+            isSessionValidated = false
+        }
         switch state {
         case .signedIn:
             nativeAuthDidDismiss()
-        case .unavailable:
+        case .offline, .unavailable:
             activeGate = nil
             nativeAuthDidDismiss()
         case .loading, .signedOut:
@@ -343,15 +477,30 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     let canPresentNativeAuth: Bool
     private let token: String?
     private let signOutError: Error?
+    private let appleSignInOutcome: NativeAppleAuthOutcome
+    private let appleSignInSession: AuthSession?
+    private let appleSignInFailure: Error?
     private let sessionChangeStream: AsyncStream<AuthState>
     private let sessionChangeContinuation: AsyncStream<AuthState>.Continuation
+    private(set) var requestedAppleAuthModes: [NativeAuthMode] = []
 
-    init(state: AuthState = .signedOut, canPresentNativeAuth: Bool = false, token: String? = nil, signOutError: Error? = nil) {
+    init(
+        state: AuthState = .signedOut,
+        canPresentNativeAuth: Bool = false,
+        token: String? = nil,
+        signOutError: Error? = nil,
+        appleSignInOutcome: NativeAppleAuthOutcome = .completed,
+        appleSignInSession: AuthSession? = nil,
+        appleSignInFailure: Error? = nil
+    ) {
         let (stream, continuation) = AsyncStream<AuthState>.makeStream()
         self.state = state
         self.canPresentNativeAuth = canPresentNativeAuth
         self.token = token
         self.signOutError = signOutError
+        self.appleSignInOutcome = appleSignInOutcome
+        self.appleSignInSession = appleSignInSession
+        self.appleSignInFailure = appleSignInFailure
         self.sessionChangeStream = stream
         self.sessionChangeContinuation = continuation
     }
@@ -368,6 +517,18 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     func sessionChanges() -> AsyncStream<AuthState> { sessionChangeStream }
 
     func refreshSession() async {}
+
+    func signInWithApple(mode: NativeAuthMode) async throws -> NativeAppleAuthOutcome {
+        requestedAppleAuthModes.append(mode)
+        if let appleSignInFailure {
+            throw appleSignInFailure
+        }
+        if appleSignInOutcome == .completed, let appleSignInSession {
+            state = .signedIn(appleSignInSession)
+            sessionChangeContinuation.yield(state)
+        }
+        return appleSignInOutcome
+    }
 
     func signOut() async throws {
         if let signOutError {

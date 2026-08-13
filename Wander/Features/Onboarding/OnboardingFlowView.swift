@@ -39,18 +39,18 @@ struct OnboardingFlowView: View {
                     advance(from: .identity)
                 }
             case .location:
-                OnboardingPermissionView(
-                    step: .location,
-                    systemImage: "location.fill",
-                    accent: WanderTheme.terracotta.color,
-                    title: "Make your map useful nearby",
-                    message: "Allow location to find and save places around you. rec.me never broadcasts your live location.",
-                    bullets: ["See places around you", "Add your current spot faster"],
-                    primaryTitle: "Allow location",
-                    analytics: analytics,
-                    request: { await locationPermission.requestAccess() },
-                    continueAction: { advance(from: .location) }
-                )
+                if OnboardingLocationPermissionPolicy.action(
+                    for: locationPermission.authorizationStatus
+                ) == .skip {
+                    Color.clear
+                        .task { advance(from: .location) }
+                } else {
+                    OnboardingLocationPermissionView(
+                        permission: locationPermission,
+                        analytics: analytics,
+                        continueAction: { advance(from: .location) }
+                    )
+                }
             case .contacts:
                 OnboardingPermissionView(
                     step: .contacts,
@@ -83,6 +83,7 @@ struct OnboardingFlowView: View {
     }
 
     private func advance(from current: OnboardingStep) {
+        guard step == current else { return }
         guard let next = current.next else { return }
         saveProgress(next)
         step = next
@@ -115,10 +116,13 @@ private struct OnboardingIdentityView: View {
     let session: AuthSession
     let analytics: AnalyticsClient
     let continueAction: () -> Void
+    private let originalNormalizedHandle: String
 
     @State private var name: String
     @State private var handle: String
+    @State private var hasEditedHandle = false
     @State private var selectedPhoto: PhotosPickerItem?
+    @State private var photoCropSelection: ProfilePhotoCropSelection?
     @State private var previewImage: UIImage?
     @State private var jpegData: Data?
     @State private var availability: Availability = .idle
@@ -132,8 +136,14 @@ private struct OnboardingIdentityView: View {
         self.session = session
         self.analytics = analytics
         self.continueAction = continueAction
-        _name = State(initialValue: session.displayName ?? "")
-        _handle = State(initialValue: session.handle ?? "")
+        let initialName = session.displayName ?? ""
+        let initialHandle = session.handle ?? ""
+        originalNormalizedHandle = ProfileIdentityDraft(
+            displayName: initialName,
+            handle: initialHandle
+        ).normalizedHandle
+        _name = State(initialValue: initialName)
+        _handle = State(initialValue: initialHandle)
     }
 
     private var draft: ProfileIdentityDraft {
@@ -141,7 +151,22 @@ private struct OnboardingIdentityView: View {
     }
 
     private var canSubmit: Bool {
-        draft.isValid && availability != .unavailable && !isSaving
+        draft.isValid
+            && availability != .checking
+            && availability != .unavailable
+            && !isSaving
+    }
+
+    private var handleBinding: Binding<String> {
+        Binding(
+            get: { handle },
+            set: { value in
+                handle = value
+                hasEditedHandle = true
+                availability = .idle
+                errorMessage = nil
+            }
+        )
     }
 
     var body: some View {
@@ -210,7 +235,7 @@ private struct OnboardingIdentityView: View {
                             OnboardingTextField(
                                 title: "Username",
                                 prompt: "your_username",
-                                text: $handle,
+                                text: handleBinding,
                                 prefix: "@",
                                 capitalization: .never,
                                 autocorrectionDisabled: true
@@ -267,11 +292,27 @@ private struct OnboardingIdentityView: View {
             guard let item else { return }
             Task { await loadPhoto(item) }
         }
+        .fullScreenCover(item: $photoCropSelection) { selection in
+            ProfilePhotoCropView(
+                image: selection.image,
+                cancel: { photoCropSelection = nil },
+                choose: { data, image in
+                    jpegData = data
+                    previewImage = image
+                    photoCropSelection = nil
+                }
+            )
+        }
     }
 
     @MainActor
     private func checkAvailability() async {
-        guard draft.validationError != .invalidHandle else {
+        guard OnboardingHandleAvailabilityPolicy.shouldCheck(
+            normalizedHandle: draft.normalizedHandle,
+            originalNormalizedHandle: originalNormalizedHandle,
+            hasUserEdited: hasEditedHandle,
+            validationError: draft.validationError
+        ) else {
             availability = .idle
             return
         }
@@ -322,16 +363,127 @@ private struct OnboardingIdentityView: View {
     private func loadPhoto(_ item: PhotosPickerItem) async {
         defer { selectedPhoto = nil }
         guard let data = try? await item.loadTransferable(type: Data.self),
-              let processed = try? await Task.detached(priority: .userInitiated, operation: {
-                  try WanderImageProcessor.squareJPEGData(from: data)
-              }).value,
-              let image = UIImage(data: processed)
+              let image = UIImage(data: data)
         else {
             errorMessage = "That photo couldn’t be loaded. Try another one."
             return
         }
-        jpegData = processed
-        previewImage = image
+        errorMessage = nil
+        photoCropSelection = ProfilePhotoCropSelection(image: image)
+    }
+}
+
+private struct OnboardingLocationPermissionView: View {
+    @ObservedObject var permission: OnboardingLocationPermissionManager
+    let analytics: AnalyticsClient
+    let continueAction: () -> Void
+
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var isRequesting = false
+
+    private var permissionAction: OnboardingLocationPermissionAction {
+        OnboardingLocationPermissionPolicy.action(for: permission.authorizationStatus)
+    }
+
+    var body: some View {
+        OnboardingStepScaffold(step: .location) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
+                    OnboardingLocationMapPreview()
+                        .frame(height: 350)
+
+                    OnboardingHeadline(
+                        eyebrow: OnboardingLocationContent.eyebrow,
+                        title: OnboardingLocationContent.title,
+                        message: OnboardingLocationContent.message
+                    )
+
+                    Label(
+                        OnboardingLocationContent.privacyMessage,
+                        systemImage: "lock.fill"
+                    )
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .symbolRenderingMode(.hierarchical)
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
+                .padding(.top, WanderTheme.spacing2)
+                .padding(.bottom, WanderTheme.spacing6)
+            }
+        } footer: {
+            VStack(spacing: WanderTheme.spacing1) {
+                WanderPrimaryButton(
+                    title: isRequesting
+                        ? "Requesting location…"
+                        : OnboardingLocationPermissionPolicy.primaryTitle(
+                            for: permission.authorizationStatus
+                        ),
+                    isDisabled: isRequesting
+                ) {
+                    performPrimaryAction()
+                }
+                .accessibilityIdentifier("onboarding.location.primary")
+
+                Button("Not now") {
+                    trackResult("skipped")
+                    continueAction()
+                }
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            }
+        }
+        .task {
+            permission.refreshAuthorizationStatus()
+            advanceIfAuthorized()
+        }
+        .onChange(of: permission.authorizationStatus) { _, _ in
+            advanceIfAuthorized()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            permission.refreshAuthorizationStatus()
+            advanceIfAuthorized()
+        }
+    }
+
+    private func performPrimaryAction() {
+        switch permissionAction {
+        case .skip:
+            continueAction()
+        case .request:
+            Task {
+                isRequesting = true
+                let granted = await permission.requestAccess()
+                trackResult(granted ? "true" : "false")
+                isRequesting = false
+                if granted {
+                    continueAction()
+                }
+            }
+        case .openSettings:
+            trackResult("settings")
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            openURL(url)
+        case .continueWithoutAccess:
+            trackResult("restricted")
+            continueAction()
+        }
+    }
+
+    private func advanceIfAuthorized() {
+        guard OnboardingLocationPermissionPolicy.action(
+            for: permission.authorizationStatus
+        ) == .skip else { return }
+        continueAction()
+    }
+
+    private func trackResult(_ result: String) {
+        analytics.track(AnalyticsEvent(
+            name: WanderAnalyticsEvents.onboardingPermissionResult,
+            properties: ["permission": OnboardingStep.location.rawValue, "granted": result]
+        ))
     }
 }
 

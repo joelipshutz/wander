@@ -506,16 +506,45 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Thai")
         XCTAssertEqual(visiblePlace.categoryEmoji, "🇹🇭")
+        XCTAssertEqual(visiblePlace.effectiveCompactType, "Thai")
 
         cuisine.valueJSON = "\"Italian\""
         XCTAssertEqual(visiblePlace.restaurantCuisine, "Italian")
         XCTAssertEqual(visiblePlace.categoryEmoji, "🍝")
+        XCTAssertEqual(visiblePlace.effectiveCompactType, "Italian")
 
         userPlace.categoryOverride = WanderPlaceCategory.wellnessFitness
         userPlace.subcategoryOverride = "Gym"
         userPlace.categoryOverrideSource = PlaceCategorySource.user.rawValue
         XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.wellnessFitness)
         XCTAssertEqual(visiblePlace.categoryEmoji, "💪")
+
+        let inferredRestaurant = LocalPlace(
+            localID: "inferred-restaurant",
+            canonicalName: "Jitlada",
+            category: WanderPlaceCategory.restaurantsFood,
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            rawProviderType: "thai restaurant",
+            latitude: 34.0,
+            longitude: -118.0
+        )
+        let inferredUserPlace = LocalUserPlace(
+            localID: "inferred-user-place",
+            userID: owner.id,
+            placeID: inferredRestaurant.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual"
+        )
+        let inferredVisiblePlace = VisiblePlace(
+            id: inferredUserPlace.id,
+            place: inferredRestaurant,
+            userPlace: inferredUserPlace,
+            owner: owner
+        )
+        XCTAssertEqual(inferredVisiblePlace.restaurantCuisine, "Thai")
+        XCTAssertEqual(inferredVisiblePlace.effectiveCompactType, "Thai")
     }
 
     func testEveryRestaurantCuisineHasDishOrRegionalEmoji() {
@@ -908,11 +937,28 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(restaurant.category, "Restaurants & Food")
         XCTAssertEqual(restaurant.subcategory, "Restaurant")
         XCTAssertEqual(restaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
-        XCTAssertEqual(restaurant.compactTitle, "Restaurant · Restaurants & Food")
+        XCTAssertEqual(restaurant.compactType(foodType: "Hot dogs"), "Hot dogs")
+        XCTAssertEqual(restaurant.compactType(), "Restaurant")
+        XCTAssertEqual(
+            restaurant.compactType(foodType: "Restaurants & Food"),
+            "Restaurant"
+        )
+        XCTAssertEqual(restaurant.compactType(foodType: "restaurants_food"), "Restaurant")
+        XCTAssertEqual(restaurant.compactType(foodType: "food_drink"), "Restaurant")
 
         let transit = WanderPlaceCategory.display(for: "transportation")
         XCTAssertEqual(transit.category, "Travel & Transit")
         XCTAssertEqual(transit.subcategory, "Transit stop")
+        XCTAssertEqual(transit.compactType(), "Transit stop")
+
+        let nightlifeWithoutSubcategory = PlaceCategoryDisplay(
+            rawCategory: "nightlife",
+            primaryCategory: WanderPlaceCategory.barsNightlife,
+            category: "Bars & Nightlife",
+            subcategory: nil,
+            sourceLabel: "suggested"
+        )
+        XCTAssertEqual(nightlifeWithoutSubcategory.compactType(), "Bars & Nightlife")
 
         let providerRestaurant = WanderPlaceCategory.display(for: "thai restaurant")
         XCTAssertEqual(providerRestaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
@@ -992,7 +1038,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             candidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Restaurants & Food"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant"
         )
 
         let commaCandidate = PlaceCandidate(
@@ -1008,7 +1054,22 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             commaCandidate.previewSubtitle(includeDistance: false),
-            "231 Santa Monica Boulevard · Santa Monica · Restaurant · Restaurants & Food"
+            "231 Santa Monica Boulevard · Santa Monica · Restaurant"
+        )
+
+        let thaiCandidate = PlaceCandidate(
+            id: "thai-restaurant",
+            name: "Jitlada",
+            category: "restaurant",
+            rawProviderType: "thai restaurant",
+            locality: "Los Angeles",
+            latitude: 34.0,
+            longitude: -118.0,
+            confidence: 0.9
+        )
+        XCTAssertEqual(
+            thaiCandidate.previewSubtitle(includeDistance: false),
+            "Los Angeles · Thai"
         )
     }
 
@@ -1044,7 +1105,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
-        XCTAssertEqual(shared.version, 8)
+        XCTAssertEqual(shared.version, 9)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
@@ -1078,6 +1139,39 @@ final class WanderPlaceCategoryTests: XCTestCase {
         }
     }
 
+    func testBarsNightlifeIncludesCiderSakeAndGameBars() throws {
+        let expectedSubcategories = ["Cider bar", "Sake bar", "Game bar"]
+        let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.barsNightlife)
+
+        XCTAssertTrue(expectedSubcategories.allSatisfy(suggestions.contains))
+        XCTAssertEqual(WanderPlaceCategory.normalizedPrimaryCategory("cider bar"), WanderPlaceCategory.barsNightlife)
+        XCTAssertEqual(WanderPlaceCategory.normalizedPrimaryCategory("sake bar"), WanderPlaceCategory.barsNightlife)
+        XCTAssertEqual(WanderPlaceCategory.normalizedPrimaryCategory("game bar"), WanderPlaceCategory.barsNightlife)
+
+        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.barsNightlife)
+        let barsAndPubs = try XCTUnwrap(groups.first { $0.title == "Bars & pubs" })
+        let wineAndGaming = try XCTUnwrap(groups.first { $0.title == "Wine & gaming" })
+
+        XCTAssertTrue(barsAndPubs.subcategories.contains("Cider bar"))
+        XCTAssertTrue(barsAndPubs.subcategories.contains("Sake bar"))
+        XCTAssertTrue(wineAndGaming.subcategories.contains("Game bar"))
+
+        let emojiBySubcategory = [
+            "Cider bar": "🍎",
+            "Sake bar": "🍶",
+            "Game bar": "🎮"
+        ]
+        for (subcategory, expectedEmoji) in emojiBySubcategory {
+            let assignment = PlaceCategoryAssignment(
+                primaryCategory: WanderPlaceCategory.barsNightlife,
+                subcategory: subcategory,
+                source: PlaceCategorySource.user.rawValue,
+                confidence: 1
+            )
+            XCTAssertEqual(WanderPlaceCategory.emoji(for: assignment), expectedEmoji, subcategory)
+        }
+    }
+
     func testRestaurantsFoodUsesCuisineOnlyGroups() throws {
         let groups = WanderPlaceCategory.restaurantCuisineGroups()
 
@@ -1088,11 +1182,11 @@ final class WanderPlaceCategoryTests: XCTestCase {
             "Americas & Pacific",
             "Misc"
         ])
-        XCTAssertEqual(groups.map(\.subcategories.count), [42, 29, 40, 45, 17])
+        XCTAssertEqual(groups.map(\.subcategories.count), [43, 29, 40, 45, 17])
         XCTAssertTrue(groups.allSatisfy { $0.role == .cuisine })
 
         let cuisines = WanderPlaceCategory.restaurantCuisineOptions
-        XCTAssertEqual(cuisines.count, 173)
+        XCTAssertEqual(cuisines.count, 174)
         XCTAssertEqual(Set(cuisines).count, cuisines.count)
         XCTAssertEqual(
             WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.restaurantsFood),
@@ -1110,7 +1204,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let expectedByGroup: [String: [String]] = [
             "Asian": [
                 "Thai", "Vietnamese", "Chinese", "Korean", "Japanese", "Indian", "Asian fusion", "Sushi",
-                "Ramen", "Dumplings", "Noodles", "Dim sum", "Hot pot", "Pakistani", "Sri Lankan",
+                "Ramen", "Dumplings", "Bao buns", "Noodles", "Dim sum", "Hot pot", "Pakistani", "Sri Lankan",
                 "Bangladeshi", "Nepalese", "Singaporean", "Laotian", "Mongolian", "Georgian",
                 "Armenian", "Uzbek"
             ],
@@ -1157,6 +1251,20 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "gluten-free restaurant"), "Gluten-free")
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "laotian restaurant"), "Laotian")
         XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "poke restaurant"), "Poke")
+        XCTAssertEqual(WanderPlaceCategory.cuisineGuess(forRawValue: "bao buns restaurant"), "Bao buns")
+        XCTAssertEqual(
+            WanderPlaceCategory.assignment(forRawCategory: "baozi shop").primaryCategory,
+            WanderPlaceCategory.restaurantsFood
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.restaurantCuisineInference(
+                name: "Little Bao",
+                rawProviderType: "bao bun shop",
+                subcategory: "Restaurant",
+                category: "Restaurants & Food"
+            )?.cuisine,
+            "Bao buns"
+        )
     }
 
     func testRecentRestaurantCuisinesUseLatestUniqueSavedChoices() {
@@ -1305,6 +1413,14 @@ final class WanderPlaceCategoryTests: XCTestCase {
         )
         XCTAssertTrue(chocolateLounge.defaultTags.contains("sweet treat"))
         XCTAssertTrue(chocolateLounge.labelOptions.contains("dessert list"))
+
+        let gelato = PlaceMemoryDefaultCatalog.suggestions(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            subcategory: "Gelato",
+            status: .been
+        )
+        XCTAssertTrue(gelato.defaultTags.contains("sweet treat"))
+        XCTAssertTrue(gelato.labelOptions.contains("dessert list"))
     }
 
     func testUnifiedTagSuggestionsMergeLabelsWithoutDuplicatesAndTrackCuisine() {
@@ -1345,9 +1461,10 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
     func testCoffeeTeaSweetsIncludesLoungeSubcategories() {
         let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.coffeeTeaSweets)
-        XCTAssertEqual(suggestions.count, 25)
+        XCTAssertEqual(suggestions.count, 26)
         XCTAssertTrue(suggestions.contains("Coffee lounge"))
         XCTAssertTrue(suggestions.contains("Chocolate lounge"))
+        XCTAssertTrue(suggestions.contains("Gelato"))
         XCTAssertEqual(
             WanderPlaceCategory.canonicalSubcategory("coffee lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
             "Coffee lounge"
@@ -1356,9 +1473,29 @@ final class WanderPlaceCategoryTests: XCTestCase {
             WanderPlaceCategory.canonicalSubcategory("chocolate lounge", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
             "Chocolate lounge"
         )
+        XCTAssertEqual(
+            WanderPlaceCategory.canonicalSubcategory("gelato", primaryCategory: WanderPlaceCategory.coffeeTeaSweets),
+            "Gelato"
+        )
 
         let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.coffeeTeaSweets)
         XCTAssertTrue(groups.first { $0.title == "Coffee & tea" }?.subcategories.contains("Coffee lounge") == true)
         XCTAssertTrue(groups.first { $0.title == "Bakeries & sweets" }?.subcategories.contains("Chocolate lounge") == true)
+        XCTAssertTrue(groups.first { $0.title == "Bakeries & sweets" }?.subcategories.contains("Gelato") == true)
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.coffeeTeaSweets,
+                subcategory: "Gelato"
+            ),
+            "🍦"
+        )
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.restaurantsFood,
+                subcategory: "Restaurant",
+                cuisine: "Bao buns"
+            ),
+            "🥟"
+        )
     }
 }

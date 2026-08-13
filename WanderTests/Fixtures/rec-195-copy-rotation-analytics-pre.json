@@ -1,0 +1,12 @@
+{
+  "issue": "REC-195",
+  "fixture": "save streak reminder copy rotation and funnel analytics before implementation",
+  "steps": [
+    "Enable notifications and save-streak reminders for an account with an active uncovered streak",
+    "Reconcile the reminder more than once before 8 PM",
+    "Inspect the pending notification copy on each weekday",
+    "Save before the reminder, or open the reminder and complete a save"
+  ],
+  "observed": "Every production reminder uses one fixed body and only two count-dependent titles. Analytics records only save_streak_reminder_opened, so scheduling, save cancellation, and post-open save completion are not measurable. Reconciliation also replaces an already-pending same-day request.",
+  "expected": "Copy follows the approved weekday rotation, matching pending requests stay scheduled, and non-PII scheduled, cancelled-by-save, opened, and completed-save-after-open events describe the funnel without account or place identifiers."
+}

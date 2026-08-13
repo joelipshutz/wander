@@ -311,6 +311,274 @@ struct WanderSegmentOption: Identifiable, Equatable {
     let title: String
 }
 
+enum WanderGlassTone: Equatable {
+    case neutral
+    case selected
+    case accent
+    case darkOverlay
+
+    var tint: Color? {
+        switch self {
+        case .neutral:
+            nil
+        case .selected:
+            WanderTheme.terracotta.color.opacity(0.18)
+        case .accent:
+            WanderTheme.terracotta.color.opacity(0.28)
+        case .darkOverlay:
+            Color.black.opacity(0.46)
+        }
+    }
+
+    var foregroundStyle: Color {
+        switch self {
+        case .neutral:
+            WanderTheme.textInk.color
+        case .selected, .accent:
+            WanderTheme.terracottaDark.color
+        case .darkOverlay:
+            .white
+        }
+    }
+
+    var fallbackFill: Color {
+        switch self {
+        case .neutral:
+            WanderTheme.surfaceRaised.color.opacity(0.72)
+        case .selected:
+            WanderTheme.terracottaTint.color.opacity(0.72)
+        case .accent:
+            WanderTheme.terracottaTint.color.opacity(0.78)
+        case .darkOverlay:
+            Color.black.opacity(0.64)
+        }
+    }
+
+    var border: Color {
+        switch self {
+        case .neutral:
+            WanderTheme.surfaceRaised.color.opacity(0.72)
+        case .selected, .accent:
+            WanderTheme.terracotta.color
+        case .darkOverlay:
+            Color.white.opacity(0.42)
+        }
+    }
+
+    var borderWidth: CGFloat {
+        switch self {
+        case .neutral, .darkOverlay:
+            1
+        case .selected, .accent:
+            2
+        }
+    }
+}
+
+private struct WanderGlassCapsuleModifier: ViewModifier {
+    let tone: WanderGlassTone
+    let isInteractive: Bool
+    let showsBorder: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    .regular
+                        .tint(tone.tint)
+                        .interactive(isInteractive),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule()
+                        .stroke(
+                            showsBorder ? tone.border : Color.clear,
+                            lineWidth: showsBorder ? tone.borderWidth : 0
+                        )
+                }
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .background(tone.fallbackFill, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(
+                            showsBorder ? tone.border : Color.clear,
+                            lineWidth: showsBorder ? tone.borderWidth : 0
+                        )
+                }
+                .shadow(
+                    color: tone == .darkOverlay
+                        ? Color.black.opacity(0.34)
+                        : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
+                    radius: 10,
+                    x: 0,
+                    y: 5
+                )
+        }
+    }
+}
+
+private struct WanderGlassPanelModifier: ViewModifier {
+    let cornerRadius: CGFloat
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: shape)
+                .overlay {
+                    shape.stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(WanderTheme.surfaceRaised.color.opacity(0.62), in: shape)
+                .overlay {
+                    shape.stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+                .shadow(
+                    color: WanderTheme.textInk.color.opacity(0.08),
+                    radius: 14,
+                    x: 0,
+                    y: 7
+                )
+        }
+    }
+}
+
+private struct WanderSelectedGlassModifier: ViewModifier {
+    let isSelected: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isSelected {
+            content.wanderGlassCapsule(tone: .selected)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func wanderGlassCapsule(
+        tone: WanderGlassTone = .neutral,
+        interactive: Bool = true,
+        showsBorder: Bool = true
+    ) -> some View {
+        modifier(
+            WanderGlassCapsuleModifier(
+                tone: tone,
+                isInteractive: interactive,
+                showsBorder: showsBorder
+            )
+        )
+    }
+
+    func wanderGlassPanel(cornerRadius: CGFloat = WanderTheme.radiusLarge) -> some View {
+        modifier(WanderGlassPanelModifier(cornerRadius: cornerRadius))
+    }
+}
+
+struct WanderGlassActionButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    var accessibilityIdentifier: String?
+    var tone: WanderGlassTone = .accent
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .black))
+                .frame(width: 44, height: 44)
+                .foregroundStyle(tone.foregroundStyle)
+                .contentShape(Circle())
+                .wanderGlassCapsule(tone: tone)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(accessibilityIdentifier ?? accessibilityLabel)
+    }
+}
+
+struct WanderGlassHeader<Accessory: View>: View {
+    let title: String
+    let subtitle: String?
+    let accessory: Accessory
+
+    init(
+        title: String,
+        subtitle: String? = nil,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.accessory = accessory()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                Text(title)
+                    .font(.system(.title2, design: .default, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+
+                Spacer(minLength: WanderTheme.spacing2)
+                accessory
+            }
+            .padding(.leading, WanderTheme.spacing4)
+            .padding(.trailing, WanderTheme.spacing2)
+            .padding(.vertical, WanderTheme.spacing2)
+            .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
+
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
+                    .padding(.horizontal, WanderTheme.spacing2)
+            }
+        }
+    }
+}
+
+struct WanderGlassSegmentedSwitch: View {
+    let options: [WanderSegmentOption]
+    @Binding var selection: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(options) { option in
+                let isSelected = selection == option.id
+                Button {
+                    selection = option.id
+                } label: {
+                    Text(option.title)
+                        .font(.system(size: 13, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .foregroundStyle(
+                            isSelected
+                                ? WanderTheme.terracottaDark.color
+                                : WanderTheme.textMuted.color
+                        )
+                        .contentShape(Capsule())
+                        .modifier(WanderSelectedGlassModifier(isSelected: isSelected))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .wanderGlassCapsule(interactive: false, showsBorder: false)
+    }
+}
+
 struct WanderSegmentedSwitch: View {
     let options: [WanderSegmentOption]
     @Binding var selection: String
