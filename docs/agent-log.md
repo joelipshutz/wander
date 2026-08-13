@@ -28753,3 +28753,5 @@ Validation and handoff:
   release candidate. Do not upload product-page assets or submit the app until
   the production-auth, UGC moderation, privacy, backend, and version gates above
   are closed and an explicit release instruction is given.
+- Audit/storyboard commit: `61449ca2`. Draft PR:
+  https://github.com/joelipshutz/wander/pull/379
