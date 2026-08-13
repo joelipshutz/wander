@@ -1158,17 +1158,24 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
     }
 
-    func testLoggedOutAuthMakesAppleThePrimaryAccountAction() {
+    func testLoggedOutLoginExposesAppleGoogleAndEmailWithoutClerkSheet() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthUITest"]
         app.launch()
 
         let apple = app.buttons["auth.continueWithApple"]
-        let alternatives = app.buttons["auth.useOtherMethod"]
+        let google = app.buttons["auth.continueWithGoogle"]
+        let email = app.textFields["auth.email"]
+        let emailContinue = app.buttons["auth.continueWithEmail"]
         XCTAssertTrue(apple.waitForExistence(timeout: 4))
-        XCTAssertTrue(alternatives.exists)
+        XCTAssertTrue(google.exists)
+        XCTAssertTrue(email.exists)
+        XCTAssertTrue(emailContinue.exists)
         XCTAssertTrue(apple.isHittable)
-        XCTAssertLessThan(apple.frame.minY, alternatives.frame.minY)
+        XCTAssertTrue(google.isHittable)
+        XCTAssertLessThan(apple.frame.minY, google.frame.minY)
+        XCTAssertLessThan(google.frame.minY, email.frame.minY)
+        XCTAssertFalse(app.buttons["auth.useOtherMethod"].exists)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let systemAlert = springboard.alerts.firstMatch
@@ -1181,7 +1188,7 @@ final class OnboardingUITests: XCTestCase {
         }
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-259 Apple-first auth"
+        screenshot.name = "REC-259 native Welcome back auth"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }

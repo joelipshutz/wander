@@ -75,7 +75,7 @@ struct WanderApp: App {
             } else if let inviteMockupPage = InviteMockupPage.resolved() {
                 InviteMockupRoot(page: inviteMockupPage)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
-                ClerkNativeAuthView(mode: .signUp)
+                ClerkNativeAuthView(mode: .signIn)
                     .environmentObject(auth)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})

@@ -106,74 +106,149 @@ final class AuthSessionTests: XCTestCase {
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
             canPresentNativeAuth: true,
-            appleSignInSession: session
+            nativeAuthSession: session
         )
         let store = AuthSessionStore(provider: provider)
         store.beginSignIn(mode: .signUp)
 
-        let outcome = await store.signInWithApple()
+        let outcome = await store.authenticate(with: .apple)
 
         XCTAssertEqual(outcome, .completed)
-        XCTAssertEqual(provider.requestedAppleAuthModes, [.signUp])
+        XCTAssertEqual(
+            provider.requestedSocialAuth,
+            [.init(provider: .apple, mode: .signUp)]
+        )
         XCTAssertEqual(store.state, .signedIn(session))
         XCTAssertTrue(store.isSessionValidated)
         XCTAssertFalse(store.isPresentingNativeAuth)
-        XCTAssertFalse(store.isSigningInWithApple)
-        XCTAssertNil(store.appleSignInError)
+        XCTAssertNil(store.activeSocialAuthProvider)
+        XCTAssertNil(store.nativeAuthError)
     }
 
     func testAppleCancellationKeepsAuthOpenWithoutShowingAnError() async {
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
             canPresentNativeAuth: true,
-            appleSignInFailure: AuthSessionError.cancelled
+            nativeAuthFailure: AuthSessionError.cancelled
         )
         let store = AuthSessionStore(provider: provider)
         store.beginSignIn(mode: .signIn)
 
-        let outcome = await store.signInWithApple()
+        let outcome = await store.authenticate(with: .apple)
 
         XCTAssertNil(outcome)
-        XCTAssertEqual(provider.requestedAppleAuthModes, [.signIn])
+        XCTAssertEqual(
+            provider.requestedSocialAuth,
+            [.init(provider: .apple, mode: .signIn)]
+        )
         XCTAssertTrue(store.isPresentingNativeAuth)
-        XCTAssertFalse(store.isSigningInWithApple)
-        XCTAssertNil(store.appleSignInError)
+        XCTAssertNil(store.activeSocialAuthProvider)
+        XCTAssertNil(store.nativeAuthError)
     }
 
     func testAppleFailureKeepsAuthOpenWithRecoverableCopy() async {
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
             canPresentNativeAuth: true,
-            appleSignInFailure: AuthSessionError.tokenUnavailable
+            nativeAuthFailure: AuthSessionError.tokenUnavailable
         )
         let store = AuthSessionStore(provider: provider)
         store.beginSignIn()
 
-        let outcome = await store.signInWithApple()
+        let outcome = await store.authenticate(with: .apple)
 
         XCTAssertNil(outcome)
         XCTAssertTrue(store.isPresentingNativeAuth)
         XCTAssertEqual(
-            store.appleSignInError,
+            store.nativeAuthError,
             "Apple sign-in didn’t finish. Try again or use another method."
         )
     }
 
-    func testIncompleteAppleFlowHandsOffToClerkWithoutClosingAuth() async {
+    func testUnmatchedAppleLoginRequiresExistingAccountProofWithoutCreatingAnAccount() async {
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
             canPresentNativeAuth: true,
-            appleSignInOutcome: .requiresClerkContinuation
+            nativeAuthOutcome: .requiresExistingAccountVerification
         )
         let store = AuthSessionStore(provider: provider)
-        store.beginSignIn(mode: .signInOrUp)
+        store.beginSignIn(mode: .signIn)
 
-        let outcome = await store.signInWithApple()
+        let outcome = await store.authenticate(with: .apple)
 
-        XCTAssertEqual(outcome, .requiresClerkContinuation)
+        XCTAssertEqual(outcome, .requiresExistingAccountVerification)
         XCTAssertTrue(store.isPresentingNativeAuth)
-        XCTAssertFalse(store.isSigningInWithApple)
-        XCTAssertNil(store.appleSignInError)
+        XCTAssertNil(store.activeSocialAuthProvider)
+        XCTAssertEqual(
+            store.nativeAuthError,
+            "We couldn’t match that Apple login to an existing account. Sign in with your original method first, then connect Apple in Settings."
+        )
+    }
+
+    func testGoogleLoginUsesNativeProviderPathAndCompletesSession() async {
+        let session = AuthSession(userID: "user_google", displayName: "Google User", handle: nil)
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            nativeAuthSession: session
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let outcome = await store.authenticate(with: .google)
+
+        XCTAssertEqual(outcome, .completed)
+        XCTAssertEqual(
+            provider.requestedSocialAuth,
+            [.init(provider: .google, mode: .signIn)]
+        )
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertFalse(store.isPresentingNativeAuth)
+    }
+
+    func testEmailLoginSendsAndVerifiesCodeWithoutEnteringSignUp() async {
+        let session = AuthSession(userID: "user_email", displayName: "Email User", handle: nil)
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            emailVerificationSession: session
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let didSendCode = await store.sendEmailCode(to: " person@example.com ")
+
+        XCTAssertTrue(didSendCode)
+        XCTAssertEqual(provider.requestedEmailCodes.count, 1)
+        XCTAssertEqual(provider.requestedEmailCodes.first?.emailAddress, "person@example.com")
+        XCTAssertEqual(provider.requestedEmailCodes.first?.mode, .signIn)
+        XCTAssertEqual(store.emailVerificationAddress, "person@example.com")
+
+        let outcome = await store.verifyEmailCode("123456")
+
+        XCTAssertEqual(outcome, .completed)
+        XCTAssertEqual(provider.verifiedEmailCodes, ["123456"])
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertFalse(store.isPresentingNativeAuth)
+    }
+
+    func testMissingEmailAccountShowsLoginRecoveryInsteadOfEmailAlreadyTakenLoop() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            emailCodeFailure: AuthSessionError.accountNotFound
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let didSendCode = await store.sendEmailCode(to: "missing@example.com")
+
+        XCTAssertFalse(didSendCode)
+        XCTAssertNil(store.emailVerificationAddress)
+        XCTAssertEqual(
+            store.nativeAuthError,
+            "We couldn’t find an account for that email. Try Apple or Google, or create an account."
+        )
     }
 
     func testClerkAuthServiceDoesNotPresentNativeAuthWhenSDKConfigureReturnsUnconfiguredClient() {
