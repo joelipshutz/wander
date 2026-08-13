@@ -1,0 +1,24 @@
+{
+  "issue": "REC-274",
+  "pr_head": "074155bc13a32d49bcaa71f309f599cfb0405785",
+  "device": "iPhone 15 Pro",
+  "os": "iOS 26.5",
+  "source_recording": {
+    "filename": "ScreenRecording_08-12-2026 02-54-47_1.mov",
+    "sha256": "c75cdddba810a97c6d1c52948b7567b6b7f5e33de60b57924a9e06503bf0f8eb",
+    "duration_seconds": 8.282
+  },
+  "reported_behavior": "Messages remains stable when Share is opened from Feed, but automatically dismisses when the same action starts from the Comments view.",
+  "expected_behavior": "Feed and Comments retain one immutable share-preview presentation until the user sends, cancels, or closes it.",
+  "observed_timeline": [
+    "At 1.80 seconds Messages is tapped; the blank composer appears at 2.03 seconds and returns to the share preview by 3.03 seconds.",
+    "At 4.00 seconds Messages is tapped again; the populated composer appears at 4.73 seconds and returns to the share preview by 4.97 seconds.",
+    "At 5.70 seconds Messages is tapped a third time; the blank composer appears at 5.97 seconds and returns to the share preview by 6.70 seconds."
+  ],
+  "presentation_difference": {
+    "feed": "The action row is hosted by the Feed scroll hierarchy.",
+    "comments": "The action row is a List row inside the Comments full-screen cover, while its share cover reads context and content live from that row on every presentation update.",
+    "required_fix": "Capture an identifiable, immutable share-preview route when the button is tapped and let ActivityCommentsScreen own its presentation above the recyclable List row so both origins retain the same presentation identity and payload for the full modal lifetime."
+  },
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; the supplied physical-device recording is the pre-fix source of truth"
+}

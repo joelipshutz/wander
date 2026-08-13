@@ -78,6 +78,16 @@ struct FeedScreen: View {
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
             }
+            .navigationDestination(item: commentsRouteBinding) { route in
+                ActivityCommentsRouteScreen(
+                    requestID: route.id,
+                    retry: resolveCommentsRouteIfNeeded
+                )
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
+                .environmentObject(activityNavigation)
+            }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
             }) { context in
@@ -107,16 +117,6 @@ struct FeedScreen: View {
                     walkthroughs.activate(.feed)
                 }
             }
-        }
-        .fullScreenCover(item: commentsRouteBinding) { route in
-            ActivityCommentsRouteScreen(
-                requestID: route.id,
-                retry: resolveCommentsRouteIfNeeded
-            )
-            .environmentObject(store)
-            .environmentObject(auth)
-            .environmentObject(backend)
-            .environmentObject(activityNavigation)
         }
         .task(id: activityNavigation.commentsRoute?.id) {
             await resolveCommentsRouteIfNeeded()

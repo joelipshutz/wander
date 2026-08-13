@@ -9,10 +9,10 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: Y7TVK75RZ8
     MARKETING_VERSION: "0.1"
-    CURRENT_PROJECT_VERSION: "133"
+    CURRENT_PROJECT_VERSION: "136"
     WANDER_CLERK_FRONTEND_API: growing-pheasant-22.clerk.accounts.dev
     WANDER_SUPABASE_URL: https://rugmtlgufrhlxwfkumhw.supabase.co
-    WANDER_TIKTOK_CLIENT_KEY: recme-tiktok-unconfigured
+    WANDER_TIKTOK_CLIENT_KEY: sbawa5efdmmcvrudh7
 packages:
   posthog-ios:
     url: https://github.com/PostHog/posthog-ios.git

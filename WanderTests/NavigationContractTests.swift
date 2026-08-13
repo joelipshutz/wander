@@ -229,6 +229,30 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(activityViews.contains("store.canDeleteActivityComment(comment)"))
     }
 
+    func testActivityCommentsUseNativeNavigationDestinationForInteractiveBackSwipe() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let activityViews = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Activity/ActivityEngagementViews.swift"
+            )
+        )
+
+        XCTAssertTrue(feed.contains(".navigationDestination(item: commentsRouteBinding)"))
+        XCTAssertFalse(feed.contains(".fullScreenCover(item: commentsRouteBinding)"))
+        XCTAssertTrue(activityViews.contains(".navigationTitle(\"comments\")"))
+        XCTAssertFalse(activityViews.contains(".navigationBarBackButtonHidden(true)"))
+        XCTAssertTrue(activityViews.contains(".toolbar(.hidden, for: .tabBar)"))
+
+        let commentsScreen = try sourceSection(
+            activityViews,
+            after: "struct ActivityCommentsScreen: View",
+            before: "private struct ActivityCommentsMediaThumbnail"
+        )
+        XCTAssertFalse(commentsScreen.contains("NavigationStack"))
+    }
+
     func testPrimarySurfacesShareLiquidGlassHeaderNavigationWithoutLosingFilterState() throws {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")

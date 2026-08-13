@@ -916,6 +916,50 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 4))
     }
 
+    func testCommentsEdgeSwipeReturnsToPreviousFeedPage() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderInitialTab",
+            "discover"
+        ]
+        app.launch()
+
+        let feedSearch = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(feedSearch.waitForExistence(timeout: 4))
+
+        let openComments = app.buttons.matching(
+            NSPredicate(format: "label == %@", "Open comments")
+        ).firstMatch
+        XCTAssertTrue(openComments.waitForExistence(timeout: 4))
+        if !openComments.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(openComments.isHittable)
+        openComments.tap()
+
+        XCTAssertTrue(app.navigationBars["comments"].waitForExistence(timeout: 4))
+
+        let commentsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        commentsScreenshot.name = "Comments native navigation destination"
+        commentsScreenshot.lifetime = .keepAlways
+        add(commentsScreenshot)
+
+        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
+
+        XCTAssertTrue(feedSearch.waitForExistence(timeout: 4))
+        XCTAssertFalse(app.navigationBars["comments"].exists)
+
+        let returnedFeedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        returnedFeedScreenshot.name = "Feed restored after comments back-swipe"
+        returnedFeedScreenshot.lifetime = .keepAlways
+        add(returnedFeedScreenshot)
+    }
+
     func testFocusedMapSearchStaysWithinTheUsableViewport() {
         let app = XCUIApplication()
         app.launchArguments = [

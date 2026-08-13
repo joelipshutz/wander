@@ -71,6 +71,45 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
+    func testTikTokOutcomePolicyReportsSuccessDraftCancellationAndProviderFailures() {
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_000),
+            .shared
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_015),
+            .savedAsDraft
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_015),
+            .savedAsDraft
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -2, shareState: 20_001),
+            .cancelled
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_013),
+            .cancelled
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_008),
+            .failed(message: "TikTok rejected the share image resolution.")
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_004),
+            .failed(
+                message: "Sign in to the TikTok account enabled for this rec.me sandbox, then try again."
+            )
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_001),
+            .failed(
+                message: "TikTok could not finish this share. Try again or use More to share another way."
+            )
+        )
+    }
+
     func testActivitySharePNGAttachmentKeepsCanonicalLinkOutOfTheLocalMessagePath() throws {
         let activityID = "41000000-0000-0000-0000-000000000001"
         let fileURL = URL(fileURLWithPath: "/tmp/recme-activity-share.png")
@@ -90,6 +129,66 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertTrue(content.messageBody.contains("https://getrec.me/activities/\(activityID)"))
         XCTAssertTrue(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
         XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
+    }
+
+    func testMessagesPresentationPolicyBlocksAReentrantLaunch() {
+        XCTAssertTrue(
+            ActivityShareMessagePresentationPolicy.shouldBeginPresentation(isPending: false)
+        )
+        XCTAssertFalse(
+            ActivityShareMessagePresentationPolicy.shouldBeginPresentation(isPending: true)
+        )
+    }
+
+    func testMessagesPresentationPolicyFallsBackOnlyWhenMessageUIFails() {
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .cancelled),
+            .dismiss
+        )
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .sent),
+            .dismiss
+        )
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .failed),
+            .openSystemShare
+        )
+    }
+
+    func testSharePreviewPresentationCapturesAnImmutableRouteAtTapTime() throws {
+        let context = ActivityEngagementContext(
+            activityID: "41000000-0000-0000-0000-000000000274",
+            actor: ProfileShell(
+                id: "user_joe",
+                handle: "joelipshutz",
+                displayName: "Joe Lipshutz",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .owner
+            ),
+            placeName: "Jade Rabbit",
+            placeServerID: "40000000-0000-0000-0000-000000000274",
+            placeDetail: "Chinese · Santa Monica · CA",
+            ticketKind: .checkIn,
+            occurredAt: Date(timeIntervalSince1970: 1_775_520_000),
+            note: "Did it again"
+        )
+        let routeID = UUID(uuidString: "51000000-0000-0000-0000-000000000274")!
+
+        let presentation = try XCTUnwrap(
+            ActivitySharePreviewPresentation(id: routeID, context: context)
+        )
+        let expectedContent = try XCTUnwrap(
+            WanderShareContent.activity(
+                activityID: context.activityID,
+                placeName: context.placeName,
+                message: context.shareMessage
+            )
+        )
+
+        XCTAssertEqual(presentation.id, routeID)
+        XCTAssertEqual(presentation.context, context)
+        XCTAssertEqual(presentation.content, expectedContent)
     }
 
     func testShareArtworkRendererUsesTheResolvedAvatarImage() throws {
