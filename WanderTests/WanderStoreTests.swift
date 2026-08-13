@@ -2947,6 +2947,47 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredPhoto?.height, 900)
     }
 
+    func testAutomaticImportDoesNotCreateASecondCheckInForAnExistingBeenPlace() {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "mapkit_import_idempotency",
+            name: "Import Idempotency Cafe",
+            category: "coffee",
+            latitude: 34.12345,
+            longitude: -118.54321,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "import-idempotency-cafe",
+            confidence: 0.99
+        )
+        let first = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "original memory",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+        let originalVisits = store.visits(for: first.userPlaceID)
+
+        let imported = store.saveImportedCandidate(
+            candidate,
+            status: .been,
+            visibility: .selfOnly,
+            note: "imported memory",
+            sourceType: .link,
+            ratingScore: 2
+        )
+
+        XCTAssertEqual(imported.userPlaceID, first.userPlaceID)
+        XCTAssertEqual(store.visits(for: first.userPlaceID), originalVisits)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.visibility,
+            .followers
+        )
+    }
+
     func testFirstVisitPhotoForPlaceUsesEarliestUsablePhoto() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

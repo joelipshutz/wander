@@ -160,13 +160,32 @@ final class SharedPlaceImportInboxTests: XCTestCase {
             deliveryID: "caption-delivery"
         )
 
-        XCTAssertEqual(envelope.version, 2)
+        XCTAssertEqual(envelope.version, 3)
+        XCTAssertFalse(envelope.requestsAutomaticSave)
         XCTAssertEqual(envelope.items.first?.source, .instagram)
         XCTAssertEqual(envelope.items.first?.sourceURLString, url.absoluteString)
         XCTAssertEqual(
             envelope.items.first?.contextText,
             "Lunch at @mendocinofarms in Los Angeles."
         )
+    }
+
+    func testCapturePersistsTheExplicitAutoSaveIntent() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+
+        let envelope = try inbox.capture(
+            [.text("Maru Coffee, Los Angeles", suggestedName: "Instagram")],
+            saveIntent: SharedPlaceImportSaveIntent(mode: .checkIn, ratingScore: 7),
+            deliveryID: "check-in-delivery"
+        )
+
+        XCTAssertEqual(envelope.version, 3)
+        XCTAssertTrue(envelope.requestsAutomaticSave)
+        XCTAssertEqual(envelope.saveIntent?.mode, .checkIn)
+        XCTAssertEqual(envelope.saveIntent?.ratingScore, 5)
+        XCTAssertEqual(try inbox.scan().entries.first?.envelope.saveIntent, envelope.saveIntent)
     }
 
     func testScanQuarantinesCorruptAndExpiresOldEnvelopes() throws {
@@ -209,6 +228,7 @@ final class SharedPlaceImportInboxTests: XCTestCase {
             JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
         object["version"] = 1
+        object.removeValue(forKey: "saveIntent")
         if var items = object["items"] as? [[String: Any]] {
             for index in items.indices {
                 items[index].removeValue(forKey: "sourceURLString")
@@ -337,6 +357,34 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
         )
     }
 
+    func testDrainCarriesExtensionCheckInIntentIntoEveryBatch() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SharedPlaceImportDrainerIntentTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = SharedPlaceImportInbox(rootURL: root)
+        let store = PlaceImportStore(
+            persistence: SharedImportTestPersistence(),
+            resolver: SharedImportTestResolver()
+        )
+        _ = try inbox.capture(
+            [
+                .text("Maru Coffee, Los Angeles", suggestedName: "Notes"),
+                .text("Gjusta, Venice", suggestedName: "Notes")
+            ],
+            saveIntent: SharedPlaceImportSaveIntent(mode: .checkIn, ratingScore: 4),
+            deliveryID: "check-in"
+        )
+
+        _ = SharedPlaceImportInboxDrainer.drain(inbox: inbox, into: store)
+
+        XCTAssertEqual(store.batches.count, 2)
+        XCTAssertTrue(store.batches.allSatisfy(\.shouldSaveAutomatically))
+        XCTAssertTrue(store.batches.allSatisfy { $0.requestedStatus == .been })
+        XCTAssertTrue(store.batches.allSatisfy { $0.requestedRatingScore == 4 })
+        XCTAssertTrue(store.items.allSatisfy { $0.stagedStatus == .been })
+        XCTAssertTrue(store.items.allSatisfy { $0.stagedRatingScore == 4 })
+    }
+
     func testDrainPolicyHoldsSharesUntilSessionValidationAndSignIn() {
         XCTAssertFalse(
             SharedPlaceImportDrainPolicy.canDrain(
@@ -403,9 +451,11 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
             entitlements["com.apple.security.application-groups"] as? [String],
             [SharedPlaceImportInbox.appGroupIdentifier]
         )
-        XCTAssertTrue(shareController.contains("Captured for rec.me"))
-        XCTAssertTrue(shareController.contains("review the match before anything is saved"))
-        XCTAssertFalse(shareController.contains("Saving to rec.me"))
+        XCTAssertTrue(shareController.contains("Save this place"))
+        XCTAssertTrue(shareController.contains("[\"Wanna\", \"Check In\"]"))
+        XCTAssertTrue(shareController.contains("try inbox.capture(inputs, saveIntent: intent)"))
+        XCTAssertTrue(shareController.contains("extensionContext?.completeRequest"))
+        XCTAssertFalse(shareController.contains("share-extension-captured"))
     }
 
     private func propertyList(_ url: URL) throws -> [String: Any] {

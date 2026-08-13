@@ -29,6 +29,130 @@ final class PlaceImportBulkStatusActionTests: XCTestCase {
     }
 }
 
+final class PlaceImportAutoSavePolicyTests: XCTestCase {
+    func testWannaAutoSavesEverySelectedConfidentMatch() {
+        let first = readyItem(id: "first")
+        let second = readyItem(id: "second")
+        let excluded = readyItem(id: "excluded", isIncluded: false)
+        let batch = automaticBatch(status: .wannaGo, count: 3)
+
+        XCTAssertEqual(
+            PlaceImportAutoSavePolicy.committableItemIDs(
+                batchItems: [(batch, [first, second, excluded])]
+            ),
+            ["first", "second"]
+        )
+    }
+
+    func testCheckInAutoSavesOnlyOneConfidentPlace() {
+        let first = readyItem(id: "first")
+        let second = readyItem(id: "second")
+
+        XCTAssertEqual(
+            PlaceImportAutoSavePolicy.committableItemIDs(
+                batchItems: [(automaticBatch(status: .been, count: 1), [first])]
+            ),
+            ["first"]
+        )
+        XCTAssertTrue(
+            PlaceImportAutoSavePolicy.committableItemIDs(
+                batchItems: [(automaticBatch(status: .been, count: 2), [first, second])]
+            ).isEmpty
+        )
+    }
+
+    func testCheckInSafetyAppliesAcrossEveryBatchFromOneShare() {
+        let firstBatch = automaticBatch(status: .been, count: 1)
+        let secondBatch = PlaceImportBatch(
+            id: "second-batch",
+            source: .textNotes,
+            sourceName: "Shared text",
+            captureDeliveryID: "shared-capture:1",
+            totalCount: 1,
+            automaticSaveRequested: true,
+            requestedStatus: .been
+        )
+
+        XCTAssertTrue(
+            PlaceImportAutoSavePolicy.committableItemIDs(
+                batchItems: [
+                    (firstBatch, [readyItem(id: "first")]),
+                    (secondBatch, [readyItem(id: "second")])
+                ]
+            ).isEmpty
+        )
+    }
+
+    func testSeparateSinglePlaceCheckInSharesCanBothAutoSave() {
+        let firstBatch = automaticBatch(status: .been, count: 1)
+        let secondBatch = PlaceImportBatch(
+            id: "second-batch",
+            source: .instagram,
+            sourceName: "Instagram",
+            captureDeliveryID: "another-capture:0",
+            totalCount: 1,
+            automaticSaveRequested: true,
+            requestedStatus: .been
+        )
+
+        XCTAssertEqual(
+            PlaceImportAutoSavePolicy.committableItemIDs(
+                batchItems: [
+                    (firstBatch, [readyItem(id: "first")]),
+                    (secondBatch, [readyItem(id: "second")])
+                ]
+            ),
+            ["first", "second"]
+        )
+    }
+
+    func testLegacyReviewFirstBatchNeverAutoSaves() {
+        let batch = PlaceImportBatch(
+            source: .instagram,
+            sourceName: "Instagram",
+            totalCount: 1
+        )
+
+        XCTAssertTrue(
+            PlaceImportAutoSavePolicy.committableItemIDs(
+                batchItems: [(batch, [readyItem(id: "first")])]
+            ).isEmpty
+        )
+    }
+
+    private func automaticBatch(status: PlaceStatus, count: Int) -> PlaceImportBatch {
+        PlaceImportBatch(
+            id: "first-batch",
+            source: .instagram,
+            sourceName: "Instagram",
+            captureDeliveryID: "shared-capture:0",
+            totalCount: count,
+            automaticSaveRequested: true,
+            requestedStatus: status
+        )
+    }
+
+    private func readyItem(id: String, isIncluded: Bool = true) -> PlaceImportItem {
+        let candidate = placeImportCandidate(name: id)
+        return PlaceImportItem(
+            id: id,
+            batchID: "batch",
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: id,
+                nameHint: id,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id,
+            isIncludedInImport: isIncluded
+        )
+    }
+}
+
 final class PlaceImportParserTests: XCTestCase {
     func testParsesAndDeduplicatesTextNotes() throws {
         let seeds = try PlaceImportParser.parse(

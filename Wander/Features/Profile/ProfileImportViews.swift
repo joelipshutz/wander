@@ -271,9 +271,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.dismiss) private var dismiss
-    @State private var expandedItemIDs: Set<String> = []
     @State private var candidatePickerItem: PlaceImportItem?
     @State private var rescueItem: PlaceImportItem?
+    @State private var saveRoute: PlaceImportSaveRoute?
     @State private var completedReceipt: PlaceImportReceipt?
     @State private var isSaving = false
     @State private var saveTask: Task<Void, Never>?
@@ -292,7 +292,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .wanderScreen()
-        .navigationTitle(displayedReceipt == nil ? "Review Import" : "Import Saved")
+        .navigationTitle(displayedReceipt == nil ? "Review Import" : "Verify Import")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if displayedReceipt != nil {
@@ -348,6 +348,17 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     )
                 }
             )
+        }
+        .sheet(item: $saveRoute, onDismiss: {
+            store.saveFlowDidDismiss(.saveSheet)
+        }) { route in
+            MapPlaceSaveFlowSheet(context: route.context) { submission in
+                await saveOptionalDetails(submission, itemID: route.itemID)
+            } onRemove: { context in
+                await removeOptionalDetailsSave(context, itemID: route.itemID)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .task(id: duplicateSignature) {
             importStore.reconcileDuplicates(with: existingPlaces)
@@ -540,12 +551,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
                 HStack(spacing: WanderTheme.spacing2) {
                     Button {
-                        toggleDetails(item.id)
+                        beginOptionalDetails(for: item)
                     } label: {
-                        Label(
-                            "Optional details",
-                            systemImage: expandedItemIDs.contains(item.id) ? "chevron.up" : "chevron.down"
-                        )
+                        Label("Optional details", systemImage: "slider.horizontal.3")
                         .font(WanderTypography.label)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .frame(minHeight: WanderTheme.tapMinimum)
@@ -565,12 +573,6 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 .disabled(!isSelected)
                 .opacity(isSelected ? 1 : 0.48)
 
-                if expandedItemIDs.contains(item.id) {
-                    optionalDetails(for: item)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        .disabled(!isSelected)
-                        .opacity(isSelected ? 1 : 0.48)
-                }
             } else {
                 recoveryActions(for: item)
                     .disabled(!isSelected)
@@ -618,6 +620,18 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 selectionButton(for: item)
             }
             .opacity(isSelected ? 1 : 0.62)
+
+            if isSelected, let existing {
+                Button {
+                    beginOptionalDetails(for: item, visiblePlace: existing)
+                } label: {
+                    Label("Optional details", systemImage: "slider.horizontal.3")
+                        .font(WanderTypography.label)
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(minHeight: WanderTheme.tapMinimum)
+                }
+                .buttonStyle(.plain)
+            }
 
             if !isSelected {
                 Label("Won’t be added to the imported list", systemImage: "minus.circle")
@@ -694,83 +708,6 @@ struct PlaceImportAdaptiveReviewScreen: View {
         }
     }
 
-    private func optionalDetails(for item: PlaceImportItem) -> some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Divider().overlay(WanderTheme.borderHairline.color)
-
-            if item.stagedStatus == .been {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Rating")
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                    HStack(spacing: 6) {
-                        ForEach(1...5, id: \.self) { score in
-                            Button {
-                                let value = Double(score)
-                                importStore.setStagedRatingScore(
-                                    item.stagedRatingScore == value ? nil : value,
-                                    itemID: item.id
-                                )
-                            } label: {
-                                Image(systemName: score <= Int(item.stagedRatingScore ?? 0) ? "star.fill" : "star")
-                                    .font(.system(size: 21, weight: .bold))
-                                    .foregroundStyle(WanderTheme.stateWarning.color)
-                                    .frame(minWidth: 34, minHeight: WanderTheme.tapMinimum)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("\(score) star\(score == 1 ? "" : "s")")
-                        }
-                    }
-                }
-
-                Toggle(
-                    "Add visit date",
-                    isOn: Binding(
-                        get: { item.stagedVisitedAt != nil },
-                        set: { enabled in
-                            importStore.setStagedVisitedAt(enabled ? .now : nil, itemID: item.id)
-                        }
-                    )
-                )
-                .font(WanderTypography.label)
-                .tint(WanderTheme.terracotta.color)
-
-                if let date = item.stagedVisitedAt {
-                    DatePicker(
-                        "Visited",
-                        selection: Binding(
-                            get: { date },
-                            set: { importStore.setStagedVisitedAt($0, itemID: item.id) }
-                        ),
-                        in: ...Date.now,
-                        displayedComponents: .date
-                    )
-                    .font(WanderTypography.label)
-                    .datePickerStyle(.compact)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("Note")
-                    .font(WanderTypography.metadata)
-                    .foregroundStyle(WanderTheme.textMuted.color)
-                TextField(
-                    item.stagedStatus == .been ? "What should you remember?" : "Why do you want to go?",
-                    text: Binding(
-                        get: { item.stagedNote ?? "" },
-                        set: { importStore.setStagedNote($0, itemID: item.id) }
-                    ),
-                    axis: .vertical
-                )
-                .font(WanderTypography.body)
-                .lineLimit(2...5)
-                .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceBone.color)
-                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
-            }
-        }
-    }
-
     private func completionContent(_ receipt: PlaceImportReceipt) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
@@ -821,33 +758,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
 
             VStack(spacing: 0) {
                 ForEach(receipt.entries) { entry in
-                    HStack(spacing: WanderTheme.spacing3) {
-                        Image(systemName: entry.outcome.receiptSystemImage)
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(entry.outcome.receiptColor)
-                            .frame(width: 30, height: 30)
-                            .background(entry.outcome.receiptColor.opacity(0.12))
-                            .clipShape(Circle())
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(entry.displayName)
-                                .font(WanderTypography.editorialNamedContent)
-                            Text(entry.receiptDetail)
-                                .font(WanderTypography.metadata)
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                        }
-                        Spacer()
-                        if entry.outcome == .needsReview,
-                           let item = importStore.item(id: entry.itemID) {
-                            Button("Edit") {
-                                completedReceipt = nil
-                                rescueItem = item
-                            }
-                            .font(WanderTypography.label)
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                            .buttonStyle(.plain)
-                        }
-                    }
+                    verificationRow(entry)
                     .padding(.horizontal, WanderTheme.spacing3)
                     .padding(.vertical, WanderTheme.spacing2)
 
@@ -864,17 +775,6 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
                     .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
             )
-
-            if receipt.needsReviewCount > 0 {
-                Button("Review remaining \(receipt.needsReviewCount)") {
-                    completedReceipt = nil
-                }
-                .font(WanderTypography.label)
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .foregroundStyle(WanderTheme.terracottaDark.color)
-                .wanderGlassCapsule(tone: .accent)
-                .buttonStyle(.plain)
-            }
 
             WanderPrimaryButton(
                 title: "View on map",
@@ -986,12 +886,20 @@ struct PlaceImportAdaptiveReviewScreen: View {
     }
 
     private var combinedStoredReceipt: PlaceImportReceipt? {
-        guard PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(
-            activeItemCount: scopedItems.count
-        ) else { return nil }
         let receipts = scopedBatches.compactMap(\.receipt)
         guard !receipts.isEmpty,
               receipts.count == scopedBatches.count
+        else { return nil }
+        let hasAutomaticSavedEntries = scopedBatches.contains { batch in
+            batch.automaticSaveCompletedAt != nil
+                && batch.receipt?.entries.contains {
+                    [.added, .existing].contains($0.outcome)
+                } == true
+        }
+        guard hasAutomaticSavedEntries
+                || PlaceImportReceiptPresentationPolicy.canUseStoredReceipt(
+                    activeItemCount: scopedItems.count
+                )
         else { return nil }
         return PlaceImportReceipt(
             batchID: receipts.count == 1 ? receipts[0].batchID : "combined",
@@ -1038,13 +946,255 @@ struct PlaceImportAdaptiveReviewScreen: View {
         return store.currentUserVisiblePlaces.first { $0.userPlace.id == duplicateID }
     }
 
-    private func toggleDetails(_ itemID: String) {
-        withAnimation(.easeInOut(duration: 0.18)) {
-            if expandedItemIDs.contains(itemID) {
-                expandedItemIDs.remove(itemID)
-            } else {
-                expandedItemIDs.insert(itemID)
+    @ViewBuilder
+    private func verificationRow(_ entry: PlaceImportReceiptEntry) -> some View {
+        if let item = importStore.item(id: entry.itemID) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                HStack(spacing: WanderTheme.spacing3) {
+                    PlaceImportPhotoThumb(item: item, loadsRemotePhoto: auth.isSignedIn, size: 48)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.displayName)
+                            .font(WanderTypography.editorialNamedContent)
+                        Text(verificationDetail(entry, item: item))
+                            .font(WanderTypography.metadata)
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button {
+                        toggleVerifiedInclusion(entry, item: item)
+                    } label: {
+                        Image(systemName: item.isSelectedForImport ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(
+                                item.isSelectedForImport
+                                    ? WanderTheme.terracotta.color
+                                    : WanderTheme.borderStrong.color
+                            )
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        item.isSelectedForImport
+                            ? "Remove \(entry.displayName) from this import"
+                            : "Keep \(entry.displayName)"
+                    )
+                }
+                .opacity(item.isSelectedForImport ? 1 : 0.58)
+
+                if item.isSelectedForImport, entry.outcome == .needsReview {
+                    Button("Search for the place", systemImage: "magnifyingglass") {
+                        completedReceipt = nil
+                        rescueItem = item
+                    }
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .buttonStyle(.plain)
+                } else if item.isSelectedForImport,
+                          let visiblePlace = verifiedVisiblePlace(entry, item: item) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        WanderGlassSegmentedSwitch(
+                            options: importStatusOptions,
+                            selection: Binding(
+                                get: { visiblePlace.userPlace.status.rawValue },
+                                set: { rawValue in
+                                    guard let status = PlaceStatus(rawValue: rawValue) else { return }
+                                    changeVerifiedStatus(status, entry: entry, item: item)
+                                }
+                            )
+                        )
+                        .disabled(entry.outcome == .existing)
+                        .accessibilityLabel("Status for \(entry.displayName)")
+
+                        if entry.outcome == .existing {
+                            Text("Already saved — your existing status and details stay unchanged.")
+                                .font(WanderTypography.metadata)
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                        }
+
+                        Button {
+                            beginOptionalDetails(for: item, visiblePlace: visiblePlace)
+                        } label: {
+                            Label("Optional details", systemImage: "slider.horizontal.3")
+                                .font(WanderTypography.label)
+                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .frame(minHeight: WanderTheme.tapMinimum)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else if !item.isSelectedForImport {
+                    Label(
+                        entry.outcome == .existing ? "Existing save kept" : "Removed from your map",
+                        systemImage: "minus.circle"
+                    )
+                    .font(WanderTypography.metadata)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                }
             }
+        } else {
+            HStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: entry.outcome.receiptSystemImage)
+                    .foregroundStyle(entry.outcome.receiptColor)
+                Text(entry.displayName)
+                    .font(WanderTypography.editorialNamedContent)
+            }
+        }
+    }
+
+    private func verificationDetail(
+        _ entry: PlaceImportReceiptEntry,
+        item: PlaceImportItem
+    ) -> String {
+        if entry.outcome == .needsReview {
+            return item.helpMessage ?? "Needs your help matching the place"
+        }
+        return [verifiedVisiblePlace(entry, item: item)?.userPlace.status == .been ? "Check In" : "Wanna", entry.displayArea]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    private func verifiedVisiblePlace(
+        _ entry: PlaceImportReceiptEntry,
+        item: PlaceImportItem
+    ) -> VisiblePlace? {
+        let userPlaceID = item.savedUserPlaceID ?? entry.userPlaceID
+        return store.currentUserVisiblePlaces.first { $0.userPlace.id == userPlaceID }
+    }
+
+    private func toggleVerifiedInclusion(
+        _ entry: PlaceImportReceiptEntry,
+        item: PlaceImportItem
+    ) {
+        let shouldInclude = !item.isSelectedForImport
+        if entry.outcome == .added {
+            if shouldInclude,
+               let candidate = item.selectedCandidate {
+                let result = store.saveImportedCandidate(
+                    candidate,
+                    status: item.stagedStatus,
+                    visibility: .selfOnly,
+                    note: item.stagedNote,
+                    sourceType: item.source.addSourceType,
+                    ratingScore: item.stagedRatingScore,
+                    visitedAt: item.stagedVisitedAt ?? .now
+                )
+                importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
+            } else if let userPlaceID = item.savedUserPlaceID ?? entry.userPlaceID {
+                _ = store.removeSave(userPlaceID: userPlaceID)
+            }
+        }
+        importStore.setIncludedInImport(shouldInclude, itemID: item.id)
+        syncVerifiedChanges()
+    }
+
+    private func changeVerifiedStatus(
+        _ status: PlaceStatus,
+        entry: PlaceImportReceiptEntry,
+        item: PlaceImportItem
+    ) {
+        guard entry.outcome == .added,
+              status != verifiedVisiblePlace(entry, item: item)?.userPlace.status,
+              let candidate = item.selectedCandidate
+        else { return }
+        if let userPlaceID = item.savedUserPlaceID ?? entry.userPlaceID {
+            _ = store.removeSave(userPlaceID: userPlaceID)
+        }
+        importStore.setStagedStatus(status, itemID: item.id)
+        let result = store.saveImportedCandidate(
+            candidate,
+            status: status,
+            visibility: .selfOnly,
+            note: item.stagedNote,
+            sourceType: item.source.addSourceType,
+            ratingScore: status == .been ? item.stagedRatingScore : nil,
+            visitedAt: item.stagedVisitedAt ?? .now
+        )
+        importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
+        syncVerifiedChanges()
+    }
+
+    private func beginOptionalDetails(
+        for item: PlaceImportItem,
+        visiblePlace: VisiblePlace? = nil
+    ) {
+        let context: MapPlaceSaveContext
+        if let visiblePlace {
+            if visiblePlace.userPlace.status == .been,
+               let visit = store.visits(for: visiblePlace.userPlace.id).first {
+                context = .editVisit(visit, visiblePlace: visiblePlace)
+            } else {
+                context = .editWant(
+                    visiblePlace,
+                    attributes: store.attributes(for: visiblePlace.userPlace.id)
+                )
+            }
+        } else {
+            guard let candidate = item.selectedCandidate else { return }
+            context = .importCandidate(
+                candidate,
+                sourceType: item.source.addSourceType,
+                status: item.stagedStatus,
+                defaultVisibility: .selfOnly,
+                ratingScore: item.stagedRatingScore,
+                note: item.stagedNote ?? ""
+            )
+        }
+        store.saveFlowDidPresent(.saveSheet)
+        saveRoute = PlaceImportSaveRoute(
+            itemID: item.id,
+            status: item.stagedStatus,
+            context: context
+        )
+    }
+
+    @MainActor
+    private func saveOptionalDetails(
+        _ submission: MapPlaceSaveSubmission,
+        itemID: String
+    ) async -> SaveResult? {
+        guard let result = await persistAddPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: auth.isSignedIn ? backend : nil
+        ) else { return nil }
+        importStore.setStagedStatus(submission.status, itemID: itemID)
+        importStore.setIncludedInImport(true, itemID: itemID)
+        importStore.markSaved(itemID: itemID, userPlaceID: result.userPlaceID)
+        return result
+    }
+
+    @MainActor
+    private func removeOptionalDetailsSave(
+        _ context: MapPlaceSaveContext,
+        itemID: String
+    ) async -> Bool {
+        let didRemove: Bool
+        switch context.mode {
+        case .editVisit(_, let visit):
+            didRemove = await store.deleteVisit(
+                visitID: visit.id,
+                backend: auth.isSignedIn ? backend : nil
+            )
+        case .editWant(let visiblePlace):
+            didRemove = await store.removeSave(
+                userPlaceID: visiblePlace.userPlace.id,
+                backend: auth.isSignedIn ? backend : nil
+            ) != nil
+        case .add, .addVisit, .sharedVisit:
+            didRemove = false
+        }
+        if didRemove {
+            importStore.setIncludedInImport(false, itemID: itemID)
+        }
+        return didRemove
+    }
+
+    private func syncVerifiedChanges() {
+        guard auth.isSignedIn else { return }
+        Task { @MainActor in
+            _ = await store.syncUnsyncedOwnPlaces(backend: backend)
+            _ = await store.syncPendingPlaceLists(backend: backend)
         }
     }
 
@@ -1237,9 +1387,8 @@ struct PlaceImportAdaptiveReviewScreen: View {
     }
 
     private func completionTitle(_ receipt: PlaceImportReceipt) -> String {
-        let saved = receipt.addedCount + receipt.existingCount
-        if saved == 0 { return "Nothing saved yet" }
-        return saved == 1 ? "1 place saved" : "\(saved) places saved"
+        let total = receipt.entries.count
+        return total == 1 ? "Review this place" : "Review \(total) places"
     }
 
     private func completionMetric(_ count: Int, _ label: String, _ color: Color) -> some View {
@@ -3691,7 +3840,7 @@ private struct PlaceImportRescueScreen: View {
     }
 }
 
-private extension PlaceImportSource {
+extension PlaceImportSource {
     var navigationTitle: String {
         switch self {
         case .googleMaps: "Google Maps"

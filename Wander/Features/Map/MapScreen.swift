@@ -4351,7 +4351,9 @@ struct MapPlaceSaveContext: Identifiable {
         _ candidate: PlaceCandidate,
         sourceType: AddSourceType,
         status: PlaceStatus,
-        defaultVisibility: PlaceVisibility
+        defaultVisibility: PlaceVisibility,
+        ratingScore: Double? = nil,
+        note: String = ""
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
@@ -4360,8 +4362,8 @@ struct MapPlaceSaveContext: Identifiable {
             hasPriorCheckIn: false,
             initialStatus: status,
             initialVisibility: defaultVisibility,
-            initialRatingScore: nil,
-            initialNote: "",
+            initialRatingScore: status == .been ? ratingScore : nil,
+            initialNote: note,
             initialPlannedDate: nil,
             initialAnswers: [:],
             initialPersonalLabels: [],

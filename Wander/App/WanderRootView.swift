@@ -319,6 +319,9 @@ struct WanderRootView: View {
     @State private var presentedSaveStreakCelebration: SaveStreakCelebration?
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
+    @State private var importAutoSaveTask: Task<Void, Never>?
+    @State private var queuedAutomaticImportBatchIDs: Set<String> = []
+    @State private var completedAutomaticImportBatchIDs: Set<String> = []
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var didApplyWalkthroughLaunchConfiguration = false
@@ -621,6 +624,7 @@ struct WanderRootView: View {
             queueSaveStreakCelebration(store.saveStreakCelebration)
             drainSharedPlaceImports()
             importStore.resumePendingImports()
+            resumeAutomaticPlaceImports()
             reconcilePlaceImports()
             publishWidgetSnapshot()
             refreshNearbyWidgetSnapshot()
@@ -671,6 +675,10 @@ struct WanderRootView: View {
                 importStore.bind(to: userID)
             }
             if !state.isSignedIn {
+                importAutoSaveTask?.cancel()
+                importAutoSaveTask = nil
+                queuedAutomaticImportBatchIDs.removeAll()
+                completedAutomaticImportBatchIDs.removeAll()
                 placeSaveDraftStore.clear()
                 restoredPlaceSaveDraftOwnerID = nil
             }
@@ -764,6 +772,8 @@ struct WanderRootView: View {
             guard phase == .active, isSessionValidated else { return }
             drainPendingNotificationResponses()
             drainSharedPlaceImports()
+            resumeAutomaticPlaceImports()
+            presentPendingImportVerificationIfPossible()
             scheduleSignedInMaintenance(for: auth.state)
             publishWidgetSnapshot()
             refreshNearbyWidgetSnapshot()
@@ -941,7 +951,14 @@ struct WanderRootView: View {
         guard report.hasUserVisibleResult else { return }
         reconcilePlaceImports()
         if !report.batchIDs.isEmpty {
-            presentSharedPlaceImportReview(batchIDs: report.batchIDs)
+            let automaticIDs = report.batchIDs.filter { batchID in
+                importStore.batches.first(where: { $0.id == batchID })?.shouldSaveAutomatically == true
+            }
+            let reviewBeforeSaveIDs = report.batchIDs.filter { !automaticIDs.contains($0) }
+            enqueueAutomaticPlaceImports(batchIDs: automaticIDs)
+            if !reviewBeforeSaveIDs.isEmpty {
+                presentSharedPlaceImportReview(batchIDs: reviewBeforeSaveIDs)
+            }
         } else {
             sharedPlaceImportNotice = SharedPlaceImportDrainNotice(report: report)
         }
@@ -954,10 +971,75 @@ struct WanderRootView: View {
 
     private func presentSharedPlaceImportReview(batchIDs: [String]) {
         guard !batchIDs.isEmpty else { return }
+        completedAutomaticImportBatchIDs.subtract(batchIDs)
         addTabResetToken = UUID()
         addSheetDetent = .large
         addLaunchRequest = WanderAddLaunchRequest(destination: .importReview(batchIDs: batchIDs))
         isPresentingAdd = true
+    }
+
+    private func resumeAutomaticPlaceImports() {
+        enqueueAutomaticPlaceImports(
+            batchIDs: importStore.batches
+                .filter(\.shouldSaveAutomatically)
+                .map(\.id)
+        )
+    }
+
+    private func enqueueAutomaticPlaceImports(batchIDs: [String]) {
+        guard !batchIDs.isEmpty else { return }
+        queuedAutomaticImportBatchIDs.formUnion(batchIDs)
+        guard importAutoSaveTask == nil else { return }
+        let backgroundTaskID = UIApplication.shared.beginBackgroundTask(
+            withName: "rec.me place import",
+            expirationHandler: nil
+        )
+
+        importAutoSaveTask = Task { @MainActor in
+            defer {
+                if backgroundTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                }
+            }
+            while !Task.isCancelled, !queuedAutomaticImportBatchIDs.isEmpty {
+                let nextBatchIDs = queuedAutomaticImportBatchIDs.sorted()
+                queuedAutomaticImportBatchIDs.subtract(nextBatchIDs)
+                let result = await PlaceImportAutoSaveCoordinator.process(
+                    batchIDs: nextBatchIDs,
+                    importStore: importStore,
+                    store: store
+                )
+                guard !Task.isCancelled else { return }
+                if result.hasResult {
+                    completedAutomaticImportBatchIDs.formUnion(result.batchIDs)
+                    if scenePhase == .active {
+                        presentPendingImportVerificationIfPossible()
+                    } else {
+                        await pushNotifications.notifyImportFinished(
+                            batchIDs: result.batchIDs,
+                            savedCount: result.savedCount,
+                            needsReviewCount: result.needsReviewCount
+                        )
+                    }
+                    Task { @MainActor in
+                        _ = await store.syncUnsyncedOwnPlaces(backend: backend)
+                        _ = await store.syncPendingPlaceLists(backend: backend)
+                    }
+                }
+            }
+            importAutoSaveTask = nil
+        }
+    }
+
+    private func presentPendingImportVerificationIfPossible() {
+        guard scenePhase == .active,
+              !isPresentingAdd,
+              !store.isSaveFlowPresented,
+              !completedAutomaticImportBatchIDs.isEmpty
+        else { return }
+        presentSharedPlaceImportReview(
+            batchIDs: completedAutomaticImportBatchIDs.sorted()
+        )
     }
 
     private func publishWidgetSnapshot(allowFreshnessAdvance: Bool = false) {
@@ -1043,6 +1125,11 @@ struct WanderRootView: View {
     }
 
     private func routeNotification(_ request: NotificationNavigationRequest) {
+        if case .importReview(let batchIDs) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            presentSharedPlaceImportReview(batchIDs: batchIDs)
+            return
+        }
         if request.destination == .quickCapture {
             pushNotifications.consumeNavigationRequest(id: request.id)
             beginDeepLinkHandoff(to: .quickCapture)
@@ -1103,6 +1190,7 @@ struct WanderRootView: View {
         case .quickCapture: .map
         case .profile: .profile
         case .people, .drafts: .profile
+        case .importReview: .map
         case .list, .listInvite: .lists
         case .place, .sharedVisit: .map
         case .activityComments: .discover
@@ -1192,6 +1280,10 @@ struct WanderRootView: View {
     private func handleAddSheetDismissal() {
         placeSaveDraftStore.clear()
         handleDeepLinkPresentationDismissal(of: .add)
+        Task { @MainActor in
+            await Task.yield()
+            presentPendingImportVerificationIfPossible()
+        }
         if walkthroughs.requestedSurface == .map {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(260))

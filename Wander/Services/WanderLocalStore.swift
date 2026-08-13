@@ -4712,6 +4712,41 @@ final class WanderStore: ObservableObject {
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
     }
 
+    /// Import is idempotent. A repeated import may enrich a Wanna with its
+    /// first Check In, but it must never create another visit for a place that
+    /// is already Been or overwrite details the user previously entered.
+    @discardableResult
+    func saveImportedCandidate(
+        _ candidate: PlaceCandidate,
+        status: PlaceStatus,
+        visibility: PlaceVisibility,
+        note: String?,
+        sourceType: AddSourceType,
+        ratingScore: Double? = nil,
+        visitedAt: Date = .now
+    ) -> SaveResult {
+        if let existingPlace = place(matching: candidate),
+           let existingUserPlace = currentUserPlace(for: existingPlace) {
+            if existingUserPlace.status == .been || status == .wannaGo {
+                return SaveResult(
+                    userPlaceID: existingUserPlace.id,
+                    syncState: existingUserPlace.syncState,
+                    placeID: existingPlace.serverID
+                )
+            }
+        }
+
+        return saveCandidate(
+            candidate,
+            status: status,
+            visibility: visibility,
+            note: note,
+            sourceType: sourceType,
+            ratingScore: ratingScore,
+            visitedAt: visitedAt
+        )
+    }
+
     @discardableResult
     func saveCandidate(
         _ candidate: PlaceCandidate,

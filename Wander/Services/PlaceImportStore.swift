@@ -903,7 +903,10 @@ final class PlaceImportStore: ObservableObject {
         source: PlaceImportSource,
         text: String,
         sourceName: String? = nil,
-        captureDeliveryID: String? = nil
+        captureDeliveryID: String? = nil,
+        automaticSaveRequested: Bool = false,
+        requestedStatus: PlaceStatus = .wannaGo,
+        requestedRatingScore: Double? = nil
     ) throws -> String {
         if let captureDeliveryID,
            let existingBatch = batches.first(where: { $0.captureDeliveryID == captureDeliveryID }) {
@@ -914,11 +917,20 @@ final class PlaceImportStore: ObservableObject {
             source: source,
             sourceName: sourceName,
             captureDeliveryID: captureDeliveryID,
-            totalCount: seeds.count
+            totalCount: seeds.count,
+            automaticSaveRequested: automaticSaveRequested,
+            requestedStatus: requestedStatus,
+            requestedRatingScore: requestedRatingScore
         )
         batches.append(batch)
         items.append(contentsOf: seeds.map { seed in
-            PlaceImportItem(batchID: batch.id, source: source, seed: seed)
+            PlaceImportItem(
+                batchID: batch.id,
+                source: source,
+                seed: seed,
+                stagedStatus: requestedStatus,
+                stagedRatingScore: requestedStatus == .been ? requestedRatingScore : nil
+            )
         })
         persist()
         startProcessing(batchID: batch.id)
@@ -931,7 +943,10 @@ final class PlaceImportStore: ObservableObject {
         urlString: String,
         caption: String?,
         sourceName: String?,
-        captureDeliveryID: String
+        captureDeliveryID: String,
+        automaticSaveRequested: Bool = false,
+        requestedStatus: PlaceStatus = .wannaGo,
+        requestedRatingScore: Double? = nil
     ) throws -> String {
         if let existingBatch = batches.first(where: { $0.captureDeliveryID == captureDeliveryID }) {
             return existingBatch.id
@@ -950,7 +965,10 @@ final class PlaceImportStore: ObservableObject {
             source: source,
             sourceName: sourceName,
             captureDeliveryID: captureDeliveryID,
-            totalCount: 1
+            totalCount: 1,
+            automaticSaveRequested: automaticSaveRequested,
+            requestedStatus: requestedStatus,
+            requestedRatingScore: requestedRatingScore
         )
         let seed = PlaceImportSeed(
             rawText: url.absoluteString,
@@ -961,7 +979,15 @@ final class PlaceImportStore: ObservableObject {
             socialCaptionHint: normalizedCaption
         )
         batches.append(batch)
-        items.append(PlaceImportItem(batchID: batch.id, source: source, seed: seed))
+        items.append(
+            PlaceImportItem(
+                batchID: batch.id,
+                source: source,
+                seed: seed,
+                stagedStatus: requestedStatus,
+                stagedRatingScore: requestedStatus == .been ? requestedRatingScore : nil
+            )
+        )
         persist()
         startProcessing(batchID: batch.id)
         return batch.id
@@ -1052,7 +1078,8 @@ final class PlaceImportStore: ObservableObject {
         let ids = Set(itemIDs)
         guard !ids.isEmpty else { return }
         var didChange = false
-        for index in items.indices where ids.contains(items[index].id) && items[index].state == .ready {
+        for index in items.indices
+        where ids.contains(items[index].id) && [.ready, .saved].contains(items[index].state) {
             items[index].stagedStatus = status
             items[index].updatedAt = .now
             didChange = true
@@ -1069,7 +1096,7 @@ final class PlaceImportStore: ObservableObject {
         guard !ids.isEmpty else { return }
         var didChange = false
         for index in items.indices
-        where ids.contains(items[index].id) && ![.saved, .dismissed].contains(items[index].state) {
+        where ids.contains(items[index].id) && items[index].state != .dismissed {
             items[index].isSelectedForImport = isIncluded
             items[index].updatedAt = .now
             didChange = true
@@ -1337,6 +1364,13 @@ final class PlaceImportStore: ObservableObject {
         persist()
     }
 
+    func markAutomaticSaveCompleted(batchID: String, at date: Date = .now) {
+        guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        batches[index].automaticSaveCompletedAt = date
+        batches[index].updatedAt = date
+        persist()
+    }
+
     func setDestinationListID(_ destinationListID: String, batchID: String) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
         batches[index].destinationListID = destinationListID
@@ -1577,6 +1611,8 @@ final class PlaceImportStore: ObservableObject {
                     source: original.source,
                     seed: seed,
                     resolverVersion: PlaceImportItem.currentResolverVersion,
+                    stagedStatus: original.stagedStatus,
+                    stagedRatingScore: original.stagedRatingScore,
                     createdAt: original.createdAt
                 )
             }
@@ -1607,6 +1643,8 @@ final class PlaceImportStore: ObservableObject {
                     selectedCandidateID: entry.selectedCandidateID,
                     helpMessage: entry.helpMessage,
                     resolverVersion: PlaceImportItem.currentResolverVersion,
+                    stagedStatus: original.stagedStatus,
+                    stagedRatingScore: original.stagedRatingScore,
                     createdAt: original.createdAt
                 )
             }
