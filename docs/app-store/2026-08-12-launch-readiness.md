@@ -83,12 +83,12 @@ The linked in-app pages currently return HTTP 200: support, privacy, terms, comm
 | Gate | Evidence | Required before submission |
 |---|---|---|
 | [REC-182](https://linear.app/recme/issue/REC-182/switch-recme-to-production-clerk-and-supabase-auth) — production auth | Release currently inherits the tracked Clerk test key and `.clerk.accounts.dev` host | Use production Clerk/Supabase configuration and production Associated Domains; validate sign-in, deletion, and a clean-device session |
-| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | Blocking exists, but no in-product place/person/content report path or moderation workflow was found | Add report/filter/moderation intake, response ownership, auditability, and regression coverage |
-| [REC-185](https://linear.app/recme/issue/REC-185/complete-app-privacy-manifest-labels-and-permission-audit) — privacy | App targets do not include an app-owned `PrivacyInfo.xcprivacy`; App Store privacy fields are empty | Audit all app/SDK collection, add manifests as required, verify permissions, and complete the privacy labels |
-| [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | Production readiness remains in progress | Complete hosted backend, observability, rollback, and operational validation |
+| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | Full remediation is ready in [PR #381](https://github.com/joelipshutz/wander/pull/381), including reporting, filtering, private evidence intake, reviewer notes, and an operations runbook; it is not merged and its production migration is not applied | Merge the reviewed change, name primary/backup safety reviewers, test the support mailbox, apply and verify the migration, and complete one live report-to-resolution exercise |
+| [REC-185](https://linear.app/recme/issue/REC-185/complete-app-privacy-manifest-labels-and-permission-audit) — privacy | App and SDK privacy-manifest remediation is ready in [PR #380](https://github.com/joelipshutz/wander/pull/380), with 1,097 tests and a Release build passing; it is not merged | Merge the reviewed change, verify PostHog project-level IP capture, and complete App Store privacy labels from the audited data-flow matrix |
+| [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | The deployed security migration and rollback smoke harness are revalidated in merge-clean [PR #304](https://github.com/joelipshutz/wander/pull/304); operational cutover work remains | Merge repository parity, then complete monitoring ownership, quota alerts, APNs delivery, backups/rollback, deletion cleanup, and the REC-182 production cutover |
 | Version/build compatibility | Store version is 1.0; all uploaded binaries are 0.1 | Generate and upload a new 1.0 build only after the other release gates are closed |
 
-Apple's UGC guideline requires objectionable-content filtering, reporting with timely response, blocking abusive users, and published contact information. The current report/moderation gap is therefore a review blocker, not a post-launch enhancement.
+Apple's UGC guideline requires objectionable-content filtering, reporting with timely response, blocking abusive users, and published contact information. PR #381 implements the missing product and backend controls, but the gate remains blocked until it is merged, deployed, staffed, and exercised end to end.
 
 ## Product-page copy draft
 
@@ -152,12 +152,13 @@ Do not put real customer credentials or private user data in this document or so
 ## Release sequence
 
 1. **Complete:** positioning, first-frame copy, and six-panel storyboard direction approved 2026-08-12.
-2. Close REC-182, REC-183, REC-185, and REC-187 with evidence.
-3. Replace concept fixtures with public-safe release fixtures and capture final screens from the release candidate.
-4. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA.
-5. Archive and upload only on explicit release instruction.
-6. Complete App Store Connect metadata, categories, rating, privacy, agreements, pricing/availability, review account, and manual-release setting.
-7. Run a final pre-submission audit, then submit only with explicit approval.
+2. Review and merge PRs #380, #381, and #304; then close their remaining production and human-operations gates with evidence.
+3. Complete REC-182's explicit production Clerk/Supabase cutover and clean-device validation.
+4. Replace concept fixtures with public-safe release fixtures and recapture the approved six-panel set from the release candidate.
+5. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA.
+6. Archive and upload only on explicit release instruction.
+7. Complete App Store Connect metadata, categories, rating, privacy, agreements, pricing/availability, review account, and manual-release setting.
+8. Run a final pre-submission audit, then submit only with explicit approval.
 
 ## Validation performed for this audit
 
