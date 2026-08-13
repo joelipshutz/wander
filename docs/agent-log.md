@@ -28755,3 +28755,11 @@ Validation and handoff:
   are closed and an explicit release instruction is given.
 - Audit/storyboard commit: `61449ca2`. Draft PR:
   https://github.com/joelipshutz/wander/pull/379
+
+Approval checkpoint — 2026-08-12:
+
+- Joe approved the warm editorial utility direction, the first-frame promise
+  “Your people. Their places. One map.”, and the six-panel narrative.
+- The direction is now locked for final production. Final pixels still require
+  a public-safe fixture recapture from the production release candidate; this
+  approval does not authorize App Store upload, submission, or release.

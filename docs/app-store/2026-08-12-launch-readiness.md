@@ -20,11 +20,13 @@ Recommended first-frame promise:
 
 > Your people. Their places. One map.
 
-## Screenshot storyboard v1 — awaiting approval
+## Screenshot storyboard v1 — direction approved
 
 ![Six-panel rec.me App Store storyboard](concepts/v1/recme-app-store-storyboard-v1.png)
 
 The six panels use current, working rec.me UI rather than invented product screens. The visual system uses the existing cream, terracotta, sky, sun, serif, and black brand language. Before final export, fixture names and content should be replaced with a small public-safe fictional social graph and every screenshot should be recaptured from the release candidate.
+
+Joe approved the visual direction and first-frame promise on 2026-08-12. This approval locks the narrative and art direction; it does not authorize App Store upload or submission. The final pixels remain gated on the production release candidate and public-safe fixture recapture.
 
 | Order | Promise | Product proof |
 |---|---|---|
@@ -149,7 +151,7 @@ Do not put real customer credentials or private user data in this document or so
 
 ## Release sequence
 
-1. Approve the positioning, first-frame copy, and six-panel storyboard.
+1. **Complete:** positioning, first-frame copy, and six-panel storyboard direction approved 2026-08-12.
 2. Close REC-182, REC-183, REC-185, and REC-187 with evidence.
 3. Replace concept fixtures with public-safe release fixtures and capture final screens from the release candidate.
 4. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA.
