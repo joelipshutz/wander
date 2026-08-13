@@ -9,9 +9,11 @@ struct ActivityEngagementActionRow: View {
     let visiblePlace: VisiblePlace?
     var showsCommentButton = true
     var isEngagementEnabled = true
+    var reportSubjectOverride: CommunityReportSubject?
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
     @State private var wannaSaveContext: MapPlaceSaveContext?
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
+    @State private var reportSubject: CommunityReportSubject?
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
@@ -22,6 +24,10 @@ struct ActivityEngagementActionRow: View {
             }
 
             shareButton
+
+            if context.actor.id != store.currentUser.id, resolvedReportSubject != nil {
+                reportMenu
+            }
 
             Spacer(minLength: WanderTheme.spacing3)
 
@@ -49,6 +55,10 @@ struct ActivityEngagementActionRow: View {
                 content: presentation.content
             )
             .id(presentation.id)
+        }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
         }
     }
 
@@ -122,6 +132,40 @@ struct ActivityEngagementActionRow: View {
         .opacity(isEngagementEnabled ? 1 : 0.45)
         .accessibilityLabel("Open comments")
         .accessibilityValue("\(engagement.commentCount) comments")
+    }
+
+    private var reportMenu: some View {
+        Menu {
+            Button {
+                auth.requireSignIn(for: .reportContent) {
+                    reportSubject = resolvedReportSubject
+                }
+            } label: {
+                Label("Report activity", systemImage: "exclamationmark.bubble")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Activity actions")
+    }
+
+    private var resolvedReportSubject: CommunityReportSubject? {
+        if let reportSubjectOverride {
+            return reportSubjectOverride
+        }
+        guard UUID(uuidString: context.activityID) != nil else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .activity,
+            subjectID: context.activityID,
+            reportedUserID: context.actor.id,
+            context: "Report \(context.actor.displayName)’s activity at \(context.placeName)."
+        )
     }
 
     @ViewBuilder
@@ -222,6 +266,7 @@ struct ActivityCommentsScreen: View {
     @State private var commentError: String?
     @State private var photoViewerRoute: ActivityCommentsPhotoViewerRoute?
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
+    @State private var reportSubject: CommunityReportSubject?
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -299,7 +344,10 @@ struct ActivityCommentsScreen: View {
         .fullScreenCover(item: $photoViewerRoute) { route in
             ActivityCommentsPhotoViewer(
                 media: context.media,
-                initialMediaID: route.mediaID
+                initialMediaID: route.mediaID,
+                reportedUserID: context.actor.id,
+                reportedUserName: context.actor.displayName,
+                placeName: context.placeName
             )
         }
         .fullScreenCover(item: $sharePreviewPresentation) { presentation in
@@ -308,6 +356,10 @@ struct ActivityCommentsScreen: View {
                 content: presentation.content
             )
             .id(presentation.id)
+        }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
         }
     }
 
@@ -318,7 +370,7 @@ struct ActivityCommentsScreen: View {
     @ViewBuilder
     private func commentRow(_ comment: ActivityComment) -> some View {
         if store.canDeleteActivityComment(comment) {
-            ActivityCommentRow(comment: comment)
+            ActivityCommentRow(comment: comment, onDelete: { delete(comment) })
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         delete(comment)
@@ -331,7 +383,19 @@ struct ActivityCommentsScreen: View {
                     delete(comment)
                 }
         } else {
-            ActivityCommentRow(comment: comment)
+            ActivityCommentRow(comment: comment, onReport: { presentReport(for: comment) })
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button {
+                        presentReport(for: comment)
+                    } label: {
+                        Label("Report", systemImage: "exclamationmark.bubble")
+                    }
+                    .tint(WanderTheme.stateWarning.color)
+                    .accessibilityLabel("Report comment")
+                }
+                .accessibilityAction(named: "Report comment") {
+                    presentReport(for: comment)
+                }
         }
     }
 
@@ -505,6 +569,12 @@ struct ActivityCommentsScreen: View {
     private func post() {
         let body = normalizedDraft
         guard !body.isEmpty, body.count <= 1_000, !isPosting else { return }
+        do {
+            try CommunityContentPolicy.validate(body)
+        } catch {
+            commentError = error.localizedDescription
+            return
+        }
         draft = ""
         isPosting = true
         commentError = nil
@@ -533,6 +603,17 @@ struct ActivityCommentsScreen: View {
             if !didDelete {
                 commentError = "Your comment couldn't be deleted. Try again."
             }
+        }
+    }
+
+    private func presentReport(for comment: ActivityComment) {
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = CommunityReportSubject(
+                kind: .comment,
+                subjectID: comment.id,
+                reportedUserID: comment.author.id,
+                context: "Report \(comment.author.displayName)’s comment."
+            )
         }
     }
 }
@@ -610,16 +691,32 @@ private struct ActivityCommentsPhotoViewerRoute: Identifiable {
 
 private struct ActivityCommentsPhotoViewer: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     let media: [ActivityEngagementMedia]
+    let reportedUserID: String
+    let reportedUserName: String
+    let placeName: String
     @State private var selectedMediaID: String
+    @State private var reportSubject: CommunityReportSubject?
 
-    init(media: [ActivityEngagementMedia], initialMediaID: String) {
+    init(
+        media: [ActivityEngagementMedia],
+        initialMediaID: String,
+        reportedUserID: String,
+        reportedUserName: String,
+        placeName: String
+    ) {
         self.media = media
+        self.reportedUserID = reportedUserID
+        self.reportedUserName = reportedUserName
+        self.placeName = placeName
         _selectedMediaID = State(initialValue: initialMediaID)
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
 
             TabView(selection: $selectedMediaID) {
@@ -634,13 +731,26 @@ private struct ActivityCommentsPhotoViewer: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
 
-            WanderGlassActionButton(
-                systemImage: "chevron.left",
-                accessibilityLabel: "Back",
-                tone: .darkOverlay,
-                action: dismiss.callAsFunction
-            )
-            .padding(.leading, WanderTheme.spacing4)
+            HStack {
+                WanderGlassActionButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabel: "Back",
+                    tone: .darkOverlay,
+                    action: dismiss.callAsFunction
+                )
+
+                Spacer()
+
+                if reportableSelectedPhoto != nil {
+                    WanderGlassActionButton(
+                        systemImage: "exclamationmark.bubble",
+                        accessibilityLabel: "Report photo",
+                        tone: .darkOverlay,
+                        action: reportSelectedPhoto
+                    )
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
         }
         .preferredColorScheme(.dark)
@@ -652,6 +762,31 @@ private struct ActivityCommentsPhotoViewer: View {
             if !ids.contains(selectedMediaID), let firstID = ids.first {
                 selectedMediaID = firstID
             }
+        }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
+        }
+    }
+
+    private var reportableSelectedPhoto: CommunityReportSubject? {
+        guard reportedUserID != store.currentUser.id,
+              UUID(uuidString: selectedMediaID) != nil
+        else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .visitPhoto,
+            subjectID: selectedMediaID,
+            reportedUserID: reportedUserID,
+            context: "Report \(reportedUserName)’s photo from \(placeName)."
+        )
+    }
+
+    private func reportSelectedPhoto() {
+        guard let reportableSelectedPhoto else { return }
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = reportableSelectedPhoto
         }
     }
 }
@@ -778,6 +913,18 @@ struct ActivityCommentsRouteScreen: View {
 
 private struct ActivityCommentRow: View {
     let comment: ActivityComment
+    var onDelete: (() -> Void)?
+    var onReport: (() -> Void)?
+
+    init(
+        comment: ActivityComment,
+        onDelete: (() -> Void)? = nil,
+        onReport: (() -> Void)? = nil
+    ) {
+        self.comment = comment
+        self.onDelete = onDelete
+        self.onReport = onReport
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing2) {
@@ -787,6 +934,7 @@ private struct ActivityCommentRow: View {
                 size: 34,
                 color: WanderTheme.skyTint.color
             )
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: WanderTheme.spacing1) {
@@ -803,12 +951,35 @@ private struct ActivityCommentRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .opacity(comment.isPending ? 0.58 : 1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
 
             Spacer(minLength: 0)
+
+            if onDelete != nil || onReport != nil {
+                Menu {
+                    if let onReport {
+                        Button(action: onReport) {
+                            Label("Report comment", systemImage: "exclamationmark.bubble")
+                        }
+                    }
+                    if let onDelete {
+                        Button(role: .destructive, action: onDelete) {
+                            Label("Delete comment", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Comment actions")
+            }
         }
         .padding(.vertical, WanderTheme.spacing1)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(comment.author.displayName) commented: \(comment.body)")
+        .accessibilityElement(children: .contain)
     }
 }
 

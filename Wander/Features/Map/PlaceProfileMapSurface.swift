@@ -1137,6 +1137,7 @@ private struct PlacePhotoGalleryViewer: View {
 
     @State private var selectedPhotoID: String?
     @State private var selectedProfileRoute: PlacePhotoContributorProfileRoute?
+    @State private var reportSubject: CommunityReportSubject?
 
     init(
         placeName: String,
@@ -1165,6 +1166,25 @@ private struct PlacePhotoGalleryViewer: View {
                     HStack {
                         viewerButton(systemImage: "xmark", action: dismiss.callAsFunction)
                         Spacer()
+                        if let selectedItem,
+                           let contributor = selectedItem.contributor,
+                           contributor.userID != currentUserID {
+                            Menu {
+                                Button {
+                                    presentPhotoReport(item: selectedItem, contributor: contributor)
+                                } label: {
+                                    Label("Report photo", systemImage: "exclamationmark.bubble")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.system(size: 18, weight: .black))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 52, height: 52)
+                                    .background(Color.white.opacity(0.18))
+                                    .clipShape(Circle())
+                            }
+                            .accessibilityLabel("Photo actions")
+                        }
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, WanderTheme.spacing3)
@@ -1215,6 +1235,10 @@ private struct PlacePhotoGalleryViewer: View {
             ProfileDetailView(profileID: route.id)
                 .environmentObject(store)
                 .environmentObject(auth)
+                .environmentObject(backend)
+        }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
                 .environmentObject(backend)
         }
     }
@@ -1429,6 +1453,20 @@ private struct PlacePhotoGalleryViewer: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Close photo viewer")
+    }
+
+    private func presentPhotoReport(
+        item: PlacePhotoGalleryItem,
+        contributor: PlacePhotoContributor
+    ) {
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = CommunityReportSubject(
+                kind: .visitPhoto,
+                subjectID: item.photo.providerPlaceID,
+                reportedUserID: contributor.userID,
+                context: "Report \(contributor.displayName)’s photo from \(placeName)."
+            )
+        }
     }
 
     private var selectedItem: PlacePhotoGalleryItem? {

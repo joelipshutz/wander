@@ -1265,6 +1265,7 @@ final class WanderStore: ObservableObject {
     }
 
     func updateCurrentUserDetails(_ update: ProfileDetailsUpdate, backend: WanderBackend?) async throws {
+        try CommunityContentPolicy.validate(update.displayName, update.handle, update.bio, update.homeArea)
         guard let backend, backend.profileRepository != nil else {
             updateCurrentUserProfile(
                 displayName: update.displayName,
@@ -2257,7 +2258,10 @@ final class WanderStore: ObservableObject {
         collaboratorUserIDs: [String] = []
     ) -> LocalPlaceList? {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return nil }
+        guard !trimmedName.isEmpty,
+              CommunityContentPolicy.allows(trimmedName),
+              CommunityContentPolicy.allows(description)
+        else { return nil }
 
         let now = Date.now
         let list = LocalPlaceList(
@@ -2286,6 +2290,8 @@ final class WanderStore: ObservableObject {
     ) -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty,
+              CommunityContentPolicy.allows(trimmedName),
+              CommunityContentPolicy.allows(description),
               let index = placeLists.firstIndex(where: { $0.id == id || $0.localID == id || $0.serverID == id }),
               canManage(placeLists[index])
         else { return false }

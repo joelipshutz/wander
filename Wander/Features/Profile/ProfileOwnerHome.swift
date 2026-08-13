@@ -247,6 +247,7 @@ struct ProfileMemberActions {
     let isMuted: Bool
     let unfollowAction: () -> Void
     let toggleMuteAction: () -> Void
+    let reportAction: () -> Void
     let blockAction: () -> Void
 }
 
@@ -573,6 +574,12 @@ private struct ProfileMemberActionsPopover: View {
                 title: actions.isMuted ? "Unmute activity" : "Mute activity",
                 systemImage: actions.isMuted ? "speaker.wave.2.fill" : "speaker.slash.fill",
                 action: actions.toggleMuteAction
+            )
+            Divider()
+            actionButton(
+                title: "Report",
+                systemImage: "exclamationmark.bubble.fill",
+                action: actions.reportAction
             )
             Divider()
             actionButton(
