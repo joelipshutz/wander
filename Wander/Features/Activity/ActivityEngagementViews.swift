@@ -210,7 +210,6 @@ struct ActivityEngagementActionRow: View {
 }
 
 struct ActivityCommentsScreen: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -226,93 +225,76 @@ struct ActivityCommentsScreen: View {
     @FocusState private var composerFocused: Bool
 
     var body: some View {
-        NavigationStack {
-            ScrollViewReader { proxy in
-                List {
-                    activityHeader
-                        .listRowInsets(
-                            EdgeInsets(
-                                top: WanderTheme.spacing3,
-                                leading: WanderTheme.spacing4,
-                                bottom: WanderTheme.spacing2,
-                                trailing: WanderTheme.spacing4
-                            )
+        ScrollViewReader { proxy in
+            List {
+                activityHeader
+                    .listRowInsets(
+                        EdgeInsets(
+                            top: WanderTheme.spacing3,
+                            leading: WanderTheme.spacing4,
+                            bottom: WanderTheme.spacing2,
+                            trailing: WanderTheme.spacing4
                         )
+                    )
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+
+                if isLoading, comments.isEmpty {
+                    ProgressView("Loading comments…")
+                        .tint(WanderTheme.terracotta.color)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, minHeight: 140)
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-
-                    if isLoading, comments.isEmpty {
-                        ProgressView("Loading comments…")
-                            .tint(WanderTheme.terracotta.color)
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .frame(maxWidth: .infinity, minHeight: 140)
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    } else if comments.isEmpty {
-                        emptyState
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(comments) { comment in
-                            commentRow(comment)
-                                .id(comment.id)
-                                .padding(.horizontal, WanderTheme.spacing4)
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                        }
-                    }
-
-                    if let commentError {
-                        Text(commentError)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                } else if comments.isEmpty {
+                    emptyState
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(comments) { comment in
+                        commentRow(comment)
+                            .id(comment.id)
                             .padding(.horizontal, WanderTheme.spacing4)
                             .listRowInsets(EdgeInsets())
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                     }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .contentMargins(.bottom, WanderTheme.spacing8, for: .scrollContent)
-                .scrollDismissesKeyboard(.interactively)
-                .onChange(of: comments.map(\.id)) { _, commentIDs in
-                    guard let newestID = commentIDs.last else { return }
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(newestID, anchor: .bottom)
-                    }
+
+                if let commentError {
+                    Text(commentError)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
             }
-            .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                composer
-            }
-            .navigationTitle("comments")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: dismiss.callAsFunction) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Back")
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .contentMargins(.bottom, WanderTheme.spacing8, for: .scrollContent)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: comments.map(\.id)) { _, commentIDs in
+                guard let newestID = commentIDs.last else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(newestID, anchor: .bottom)
                 }
             }
-            .task(id: context.activityID) {
-                isLoading = true
-                let didRefresh = await store.refreshActivityComments(
-                    activityID: context.activityID,
-                    backend: auth.isSignedIn ? backend : nil
-                )
-                commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
-                isLoading = false
-            }
+        }
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            composer
+        }
+        .task(id: context.activityID) {
+            isLoading = true
+            let didRefresh = await store.refreshActivityComments(
+                activityID: context.activityID,
+                backend: auth.isSignedIn ? backend : nil
+            )
+            commentError = didRefresh ? nil : "Comments couldn't refresh. Try again."
+            isLoading = false
         }
         .fullScreenCover(item: $photoViewerRoute) { route in
             ActivityCommentsPhotoViewer(
@@ -718,7 +700,6 @@ private struct ActivityCommentsFullScreenImage: View {
 }
 
 struct ActivityCommentsRouteScreen: View {
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var activityNavigation: ActivityNavigationCoordinator
     let requestID: UUID
@@ -736,6 +717,12 @@ struct ActivityCommentsRouteScreen: View {
                 resolutionState
             }
         }
+        .navigationTitle("comments")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(WanderTheme.textInk.color)
+        .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private var currentRoute: ActivityCommentsRoute? {
@@ -749,63 +736,43 @@ struct ActivityCommentsRouteScreen: View {
     }
 
     private var resolutionState: some View {
-        NavigationStack {
-            VStack(spacing: WanderTheme.spacing4) {
-                if resolutionError == nil || isRetrying {
-                    ProgressView("Opening activity…")
-                        .tint(WanderTheme.terracotta.color)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                } else {
-                    Image(systemName: "exclamationmark.bubble")
-                        .font(.system(size: 30, weight: .semibold))
-                        .foregroundStyle(WanderTheme.terracotta.color)
+        VStack(spacing: WanderTheme.spacing4) {
+            if resolutionError == nil || isRetrying {
+                ProgressView("Opening activity…")
+                    .tint(WanderTheme.terracotta.color)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            } else {
+                Image(systemName: "exclamationmark.bubble")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
 
-                    Text("This activity couldn’t load")
-                        .font(WanderTypography.editorialCardTitle)
-                        .foregroundStyle(WanderTheme.textInk.color)
+                Text("This activity couldn’t load")
+                    .font(WanderTypography.editorialCardTitle)
+                    .foregroundStyle(WanderTheme.textInk.color)
 
-                    Text("Check your connection and try again.")
-                        .font(.system(size: 14, weight: .medium))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                Text("Check your connection and try again.")
+                    .font(.system(size: 14, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(WanderTheme.textMuted.color)
 
-                    Button("Try again") {
-                        Task { @MainActor in
-                            isRetrying = true
-                            await retry()
-                            isRetrying = false
-                        }
+                Button("Try again") {
+                    Task { @MainActor in
+                        isRetrying = true
+                        await retry()
+                        isRetrying = false
                     }
-                    .font(.system(size: 15, weight: .black))
-                    .foregroundStyle(WanderTheme.surfaceRaised.color)
-                    .frame(minWidth: 132, minHeight: 44)
-                    .background(WanderTheme.terracotta.color)
-                    .clipShape(Capsule())
-                    .disabled(isRetrying)
                 }
-            }
-            .padding(WanderTheme.spacing6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
-            .navigationTitle("comments")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        activityNavigation.dismiss(requestID: requestID)
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Back")
-                }
+                .font(.system(size: 15, weight: .black))
+                .foregroundStyle(WanderTheme.surfaceRaised.color)
+                .frame(minWidth: 132, minHeight: 44)
+                .background(WanderTheme.terracotta.color)
+                .clipShape(Capsule())
+                .disabled(isRetrying)
             }
         }
+        .padding(WanderTheme.spacing6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
     }
 }
 
