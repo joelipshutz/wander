@@ -601,7 +601,8 @@ private struct FeedPeopleSurface: View {
                 contactProvider: store.contactProvider,
                 senderProfileID: store.currentUser.id,
                 walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
-                onPermissionDenied: walkthroughPermissionDeniedAction
+                onPermissionDenied: walkthroughPermissionDeniedAction,
+                analytics: store.productAnalytics
             )
         }
     }

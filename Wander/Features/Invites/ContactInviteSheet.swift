@@ -98,6 +98,7 @@ struct ContactInviteSheet: View {
     let canDismiss: Bool
     let walkthroughSelectionGoal: Int?
     let onPermissionDenied: (() -> Void)?
+    let analytics: AnalyticsClient
 
     @State private var contacts: [InviteContact]
     @State private var accessState: ContactInviteAccessState
@@ -125,7 +126,8 @@ struct ContactInviteSheet: View {
         senderProfileID: String? = nil,
         canDismiss: Bool = true,
         walkthroughSelectionGoal: Int? = nil,
-        onPermissionDenied: (() -> Void)? = nil
+        onPermissionDenied: (() -> Void)? = nil,
+        analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
         self.surface = surface
         contactProvider = nil
@@ -133,6 +135,7 @@ struct ContactInviteSheet: View {
         self.canDismiss = canDismiss
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
         self.onPermissionDenied = onPermissionDenied
+        self.analytics = analytics
         _contacts = State(initialValue: contacts)
         _accessState = State(initialValue: accessState)
         _presentationState = State(initialValue: presentationState)
@@ -146,7 +149,8 @@ struct ContactInviteSheet: View {
         senderProfileID: String? = nil,
         canDismiss: Bool = true,
         walkthroughSelectionGoal: Int? = nil,
-        onPermissionDenied: (() -> Void)? = nil
+        onPermissionDenied: (() -> Void)? = nil,
+        analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
         self.surface = surface
         self.contactProvider = contactProvider
@@ -154,6 +158,7 @@ struct ContactInviteSheet: View {
         self.canDismiss = canDismiss
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
         self.onPermissionDenied = onPermissionDenied
+        self.analytics = analytics
         _contacts = State(initialValue: [])
         _accessState = State(initialValue: .primer)
         _presentationState = State(initialValue: .choosing)
@@ -202,6 +207,12 @@ struct ContactInviteSheet: View {
         }
         .preferredColorScheme(.light)
         .task {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.contactInviteSheetOpened,
+                    properties: ["surface": surface.analyticsValue]
+                )
+            )
             await refreshProviderState()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -219,10 +230,19 @@ struct ContactInviteSheet: View {
         }
         .sheet(item: $sharePresentation) { presentation in
             WanderShareSheet(content: presentation.content) { completed in
-                guard completed else { return }
+                guard completed else {
+                    trackInviteCompletion(
+                        outcome: "cancelled",
+                        deliveryMode: "share_sheet",
+                        sentCount: 0
+                    )
+                    return
+                }
                 completeDelivery(
                     headline: selection.count == 1 ? "invite shared" : "invites shared",
-                    detail: "The TestFlight link was handed off successfully."
+                    detail: "The TestFlight link was handed off successfully.",
+                    deliveryMode: "share_sheet",
+                    sentCount: selection.count
                 )
             }
         }
@@ -626,6 +646,7 @@ struct ContactInviteSheet: View {
                 .clipShape(Capsule())
 
             Button {
+                trackInviteDeliveryStarted(mode: "share_sheet", recipientCount: 0)
                 sharePresentation = InviteSharePresentation(content: inviteShareContent)
             } label: {
                 Label("share an invite link", systemImage: "square.and.arrow.up")
@@ -785,10 +806,12 @@ struct ContactInviteSheet: View {
             return isLikelyPhoneNumber(detail)
         }
         guard MFMessageComposeViewController.canSendText(), canAddressEveryRecipient else {
+            trackInviteDeliveryStarted(mode: "share_sheet", recipientCount: recipients.count)
             sharePresentation = InviteSharePresentation(content: inviteShareContent)
             return
         }
 
+        trackInviteDeliveryStarted(mode: "messages", recipientCount: recipients.count)
         messageDeliveryPlan = InviteMessageDeliveryPlan(contacts: recipients)
         presentNextMessageComposer()
     }
@@ -803,7 +826,9 @@ struct ContactInviteSheet: View {
                 headline: sentCount == 1 ? "invite sent" : "invites sent",
                 detail: sentCount == 1
                     ? "The TestFlight link was sent in Messages."
-                    : "The TestFlight link was sent to \(sentCount) people in Messages."
+                    : "The TestFlight link was sent to \(sentCount) people in Messages.",
+                deliveryMode: "messages",
+                sentCount: sentCount
             )
             return
         }
@@ -829,21 +854,87 @@ struct ContactInviteSheet: View {
                 }
             }
         case .cancelled:
+            trackInviteCompletion(
+                outcome: "cancelled",
+                deliveryMode: "messages",
+                sentCount: messageDeliveryPlan?.sentCount ?? 0
+            )
             messageDeliveryPlan?.cancelRemaining()
         case .failed:
+            trackInviteCompletion(
+                outcome: "failed",
+                deliveryMode: "messages",
+                sentCount: messageDeliveryPlan?.sentCount ?? 0
+            )
             messageDeliveryPlan?.cancelRemaining()
             deliveryErrorMessage = "Messages could not send this invitation. Try again."
         @unknown default:
+            trackInviteCompletion(
+                outcome: "failed",
+                deliveryMode: "messages",
+                sentCount: messageDeliveryPlan?.sentCount ?? 0
+            )
             messageDeliveryPlan?.cancelRemaining()
             deliveryErrorMessage = "Messages returned an unknown result. Try again."
         }
     }
 
-    private func completeDelivery(headline: String, detail: String) {
+    private func completeDelivery(
+        headline: String,
+        detail: String,
+        deliveryMode: String,
+        sentCount: Int
+    ) {
+        trackInviteCompletion(
+            outcome: "sent",
+            deliveryMode: deliveryMode,
+            sentCount: sentCount
+        )
         completionHeadline = headline
         completionDetail = detail
         withAnimation(.easeInOut(duration: 0.22)) {
             presentationState = .completed
+        }
+    }
+
+    private func trackInviteDeliveryStarted(mode: String, recipientCount: Int) {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.contactInviteDeliveryStarted,
+                properties: [
+                    "surface": surface.analyticsValue,
+                    "delivery_mode": mode,
+                    "recipient_count": "\(recipientCount)"
+                ]
+            )
+        )
+    }
+
+    private func trackInviteCompletion(outcome: String, deliveryMode: String, sentCount: Int) {
+        let properties = [
+            "surface": surface.analyticsValue,
+            "delivery_mode": deliveryMode,
+            "outcome": outcome,
+            "sent_count": "\(sentCount)"
+        ]
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.contactInviteCompleted,
+                properties: properties
+            )
+        )
+        if sentCount > 0 {
+            analytics.track(
+                .engagement(
+                    need: .connect,
+                    action: .contactInviteSent,
+                    surface: surface.analyticsValue,
+                    properties: [
+                        "delivery_mode": deliveryMode,
+                        "sent_count": "\(sentCount)"
+                    ]
+                )
+            )
         }
     }
 

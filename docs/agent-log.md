@@ -28724,3 +28724,61 @@ Completion checkpoint, 2026-08-13 10:40 PDT:
 - PR #384 is ready to squash-merge. REC-180 remains In Progress because the
   exact external changes listed above and the production auth/mail/backend
   gates still require explicit account-level authorization or credentials.
+
+## 2026-08-13 15:56 PDT - Codex - REC-170 Product Analytics Dashboard
+
+Agent: Codex
+Branch: `codex/rec-170-analytics`
+Worktree: `/private/tmp/recme-rec170-analytics`
+Linear: `REC-170` (`In Progress`)
+Mission Control: `a10fe8a5-fd83-4263-a598-3c72f33fb2a6` (`in_progress`)
+
+Goal: turn Joe's acquisition/activation/engagement/retention/referral sketches
+into a complete analytics contract, instrument the shipping iOS flows, build a
+clear operating dashboard, validate capture, and leave maintenance rules for
+future agents. Monetization remains an explicit empty placeholder until a model
+is defined.
+
+Starting state and coordination:
+
+- Started from clean exact `origin/main` commit `eb587b19` in an isolated
+  worktree. Joe's `joe/phone-build-latest` checkout is 195 commits behind with
+  an untracked `tmp/` directory and remains untouched.
+- Existing urgent Linear issue REC-170 exactly owns this work. Expanded it with
+  the requested funnel and human-needs scope, assigned it to Joe, and moved it
+  from Backlog to In Progress. Related REC-171 remains separate follow-up scope
+  for a default analytics question-answering agent.
+- The KB has no prior rec.me analytics-dashboard synthesis. The repo already
+  locks PostHog behind a vendor-neutral interface and prohibits place names,
+  notes, coordinates, emails, handles, or other private payloads in analytics.
+- Expected files: analytics service/event contracts, onboarding/app/social/save/
+  invite call sites, focused analytics tests, a reproducible dashboard script
+  or configuration, analytics documentation and agent instructions, project
+  generation files only if source membership requires it, and this log. Exact
+  call sites will be narrowed after tracing current flows.
+- 2026-08-13 checkpoint: chose PostHog as the dashboard surface and a checked-in idempotent provisioning script as its source of truth. The existing machine credentials include a rec.me ingestion token, but the available personal API key is scoped to a different PostHog project, so no cross-project mutation was attempted. Live apply requires rec.me-specific `WANDER_POSTHOG_PROJECT_ID` and `WANDER_POSTHOG_PERSONAL_API_KEY`.
+- 2026-08-13 checkpoint: added schema-v2 common context/privacy filtering, first-open/session/tagged-link acquisition events, per-step onboarding events, activation follow/save events, and raw plus normalized Connect/Expression/Status events across saves, check-ins, follows, likes, comments, shares, lists, profile views, streaks, shared visits, and contact invites. The managed dashboard has Acquisition, Activation, Engagement, Retention, Referrals, and intentionally blank Monetization sections.
+- Validation checkpoint: `npm --prefix scripts run analytics:check` passes 4
+  tests, including a mocked end-to-end management-API apply that creates the
+  dashboard, attaches all 9 insights, creates all 6 section tiles through the
+  supported tile endpoints, and orders them. The script was checked against
+  PostHog's current OpenAPI schema. A safe schema-v2 ingestion probe returned
+  HTTP 200 `{"status":"Ok"}` without PII.
+- Focused `BuildConfigurationTests`: 26 passed, 0 failed. Focused canonical
+  product-action analytics test: 1 passed, 0 failed. The pre-rebase full suite
+  passed 1,120 tests; after rebasing onto exact latest `origin/main`
+  `acabb4ca` (build 140), full `WanderTests` passed 1,123 tests with 0 failures,
+  using iPhone 16 Plus / iOS 18.6 and `ONLY_ACTIVE_ARCH=YES`.
+  A first generic dual-architecture build reached the link phase but the disk
+  filled (`errno=28`); only this worktree's disposable DerivedData was removed,
+  then the active-architecture suite compiled and passed. The replacement
+  DerivedData caches were also removed after validation, leaving 4.8 GiB free.
+- Acquisition docs now state the rollout caveat: existing installs emit the
+  install-local first-open marker once on their first schema-v2 launch, so the
+  initial baseline must be filtered by build/release date. No install or
+  referral attribution is inferred beyond available data.
+- Live dashboard provisioning remains blocked only on rec.me-specific
+  `WANDER_POSTHOG_PROJECT_ID` and `WANDER_POSTHOG_PERSONAL_API_KEY`; the generic
+  personal API key belongs to another project and was intentionally not used.
+  No database, auth, payment, RLS, build-number, archive, upload, TestFlight, or
+  tester-Slack change was made.

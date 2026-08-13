@@ -64,6 +64,7 @@ struct AppEntryView: View {
     @ObservedObject var coordinator: AppEntryCoordinator
 
     let analytics: AnalyticsClient
+    let analyticsLifecycle: AppAnalyticsLifecycleTracker
     let parser: any LLMFilterParser
 
     @State private var didFinishInitialResolution = false
@@ -144,6 +145,7 @@ struct AppEntryView: View {
                 .environmentObject(auth)
         }
         .task {
+            analyticsLifecycle.recordLaunch()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-WanderForceSignedOut") {
                 try? await auth.signOut()
@@ -175,6 +177,7 @@ struct AppEntryView: View {
                    case .ready = coordinator.state {
                     return
                 }
+                analyticsLifecycle.recordForegroundSession()
                 auth.beginSessionValidation()
                 Task { await coordinator.start(preservingReadyState: true) }
             case .inactive:
@@ -198,6 +201,14 @@ struct AppEntryView: View {
             return
         }
         #endif
+        if let attribution = AcquisitionAttribution(url: url) {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.acquisitionLinkOpened,
+                    properties: attribution.properties
+                )
+            )
+        }
         if WanderRootView.sharedProfileRoute(for: url) != nil {
             if case .ready = coordinator.state {
                 deepLinkInbox.receive(url)

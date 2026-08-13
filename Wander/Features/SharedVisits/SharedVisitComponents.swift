@@ -207,7 +207,8 @@ struct SharedVisitFriendPicker: View {
                 ContactInviteSheet(
                     surface: .sharedVisit(placeName: nil),
                     contactProvider: store.contactProvider,
-                    senderProfileID: store.currentUser.id
+                    senderProfileID: store.currentUser.id,
+                    analytics: store.productAnalytics
                 )
             }
         }

@@ -13,6 +13,7 @@ struct OnboardingFlowView: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var step: OnboardingStep
+    @State private var didTrackStart = false
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
     @StateObject private var contactsPermission = OnboardingContactsPermissionManager()
 
@@ -80,17 +81,49 @@ struct OnboardingFlowView: View {
         .transition(.opacity.combined(with: .move(edge: .trailing)))
         .animation(.snappy(duration: 0.35), value: step)
         .preferredColorScheme(.light)
+        .task(id: step) {
+            if !didTrackStart {
+                didTrackStart = true
+                analytics.track(
+                    AnalyticsEvent(
+                        name: WanderAnalyticsEvents.onboardingStarted,
+                        properties: [
+                            "initial_step": initialStep.rawValue,
+                            "is_resumed": initialStep == .identity ? "false" : "true"
+                        ]
+                    )
+                )
+            }
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.onboardingStepViewed,
+                    properties: ["step": step.rawValue]
+                )
+            )
+        }
     }
 
     private func advance(from current: OnboardingStep) {
         guard step == current else { return }
         guard let next = current.next else { return }
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.onboardingStepCompleted,
+                properties: ["step": current.rawValue]
+            )
+        )
         saveProgress(next)
         step = next
     }
 
     @MainActor
     private func finish() async {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.onboardingStepCompleted,
+                properties: ["step": OnboardingStep.notifications.rawValue]
+            )
+        )
         let serverConfirmed: Bool
         do {
             _ = try await backend.updateCurrentProfile(
@@ -639,6 +672,26 @@ private struct OnboardingFriendSuggestionsView: View {
                             name: WanderAnalyticsEvents.onboardingFriendSuggestionsCompleted,
                             properties: ["selected_count": String(count), "followed_count": String(followed)]
                         ))
+                        if followed > 0 {
+                            analytics.track(
+                                AnalyticsEvent(
+                                    name: WanderAnalyticsEvents.followCreated,
+                                    properties: [
+                                        "source": "onboarding_suggestions",
+                                        "outcome": "succeeded",
+                                        "followed_count": String(followed)
+                                    ]
+                                )
+                            )
+                            analytics.track(
+                                .engagement(
+                                    need: .connect,
+                                    action: .followCreated,
+                                    surface: "onboarding_suggestions",
+                                    properties: ["followed_count": String(followed)]
+                                )
+                            )
+                        }
                         continueAction()
                     }
                 }

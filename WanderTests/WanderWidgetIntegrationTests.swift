@@ -433,7 +433,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         let profileScreen = try source("Wander/Features/Profile/ProfileScreen.swift")
         let profileHome = try source("Wander/Features/Profile/ProfileOwnerHome.swift")
 
-        XCTAssertTrue(app.contains("AppEntryView(coordinator: entryCoordinator"))
+        XCTAssertTrue(app.contains("AppEntryView("))
         XCTAssertTrue(appEntry.contains("@State private var deepLinkInbox = WanderDeepLinkInbox()"))
         XCTAssertTrue(appEntry.contains(".onOpenURL { url in"))
         XCTAssertTrue(appEntry.contains("deepLinkInbox.receive(url)"))

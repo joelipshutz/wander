@@ -2577,7 +2577,8 @@ private struct FriendCollaboratorSearchContent: View {
             ContactInviteSheet(
                 surface: .listCollaborator(listName: listName),
                 contactProvider: store.contactProvider,
-                senderProfileID: store.currentUser.id
+                senderProfileID: store.currentUser.id,
+                analytics: store.productAnalytics
             )
         }
     }

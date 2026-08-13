@@ -180,7 +180,20 @@ struct ActivitySharePreviewScreen: View {
 
     let context: ActivityEngagementContext
     let content: WanderShareContent
-    var initiallyVisibleDestination: ActivityShareDestination? = nil
+    let initiallyVisibleDestination: ActivityShareDestination?
+    let analytics: AnalyticsClient
+
+    init(
+        context: ActivityEngagementContext,
+        content: WanderShareContent,
+        initiallyVisibleDestination: ActivityShareDestination? = nil,
+        analytics: AnalyticsClient = NoopAnalyticsClient()
+    ) {
+        self.context = context
+        self.content = content
+        self.initiallyVisibleDestination = initiallyVisibleDestination
+        self.analytics = analytics
+    }
 
     @State private var renderedImage: UIImage?
     @State private var renderedImageURL: URL?
@@ -232,7 +245,12 @@ struct ActivitySharePreviewScreen: View {
             }
         }
         .sheet(item: $systemSharePresentation) { presentation in
-            WanderShareSheet(content: presentation.content)
+            WanderShareSheet(content: presentation.content) { completed in
+                trackShareCompleted(
+                    destination: "system_share",
+                    outcome: completed ? "shared" : "cancelled"
+                )
+            }
                 .presentationDetents([.medium, .large])
         }
         .sheet(item: $messagePresentation, onDismiss: {
@@ -308,6 +326,12 @@ struct ActivitySharePreviewScreen: View {
             Text(tikTokFailureMessage ?? "TikTok could not finish this share.")
         }
         .task(id: context.activityID) {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.activityShareOpened,
+                    properties: ["ticket_kind": ticketKindAnalyticsValue]
+                )
+            )
             _ = await prepareArtworkIfNeeded()
         }
         .onDisappear {
@@ -364,6 +388,7 @@ struct ActivitySharePreviewScreen: View {
         switch destination.route {
         case .copyLink:
             UIPasteboard.general.url = content.item
+            trackShareCompleted(destination: "copy_link", outcome: "copied")
             showConfirmation("link copied")
         case .messages:
             startMessagesPresentation()
@@ -455,6 +480,16 @@ struct ActivitySharePreviewScreen: View {
 
     @MainActor
     private func handleMessageCompletion(_ result: MessageComposeResult) {
+        switch result {
+        case .sent:
+            trackShareCompleted(destination: "messages", outcome: "sent")
+        case .cancelled:
+            trackShareCompleted(destination: "messages", outcome: "cancelled")
+        case .failed:
+            trackShareCompleted(destination: "messages", outcome: "failed")
+        @unknown default:
+            trackShareCompleted(destination: "messages", outcome: "failed")
+        }
         let action = ActivityShareMessagePresentationPolicy.completionAction(for: result)
         shouldOpenSystemShareAfterMessagesDismiss = action == .openSystemShare
         messagePresentation = nil
@@ -489,6 +524,7 @@ struct ActivitySharePreviewScreen: View {
             await presentSystemShare()
             return
         }
+        trackShareCompleted(destination: "instagram_story", outcome: "handoff")
     }
 
     @MainActor
@@ -502,6 +538,7 @@ struct ActivitySharePreviewScreen: View {
                 if await ActivityShareProviderLauncher.openInstagramPost(
                     localIdentifier: localIdentifier
                 ) {
+                    trackShareCompleted(destination: "instagram_post", outcome: "handoff")
                     return
                 }
             } catch {
@@ -519,6 +556,7 @@ struct ActivitySharePreviewScreen: View {
         do {
             let fileURL = try ActivityShareInstagramFeedFile.prepare(renderedImage)
             instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
+            trackShareCompleted(destination: "instagram_post", outcome: "handoff")
         } catch {
             isShowingExportError = true
         }
@@ -553,12 +591,16 @@ struct ActivitySharePreviewScreen: View {
     private func handleTikTokOutcome(_ outcome: ActivityShareTikTokOutcome) {
         switch outcome {
         case .shared:
+            trackShareCompleted(destination: "tiktok", outcome: "shared")
             showConfirmation("shared to TikTok")
         case .savedAsDraft:
+            trackShareCompleted(destination: "tiktok", outcome: "draft")
             showConfirmation("saved as a TikTok draft")
         case .cancelled:
+            trackShareCompleted(destination: "tiktok", outcome: "cancelled")
             showConfirmation("TikTok share canceled")
         case .failed(let message):
+            trackShareCompleted(destination: "tiktok", outcome: "failed")
             tikTokFailureMessage = message
         }
     }
@@ -573,6 +615,7 @@ struct ActivitySharePreviewScreen: View {
             await presentSystemShare()
             return
         }
+        trackShareCompleted(destination: "snapchat", outcome: "handoff")
     }
 
     @MainActor
@@ -583,6 +626,7 @@ struct ActivitySharePreviewScreen: View {
 
         do {
             _ = try await ActivitySharePhotoWriter.save(renderedImage)
+            trackShareCompleted(destination: "save_photo", outcome: "saved")
             showConfirmation("saved to photos")
         } catch {
             isShowingExportError = true
@@ -621,6 +665,35 @@ struct ActivitySharePreviewScreen: View {
             withAnimation(.easeIn(duration: 0.18)) {
                 confirmationMessage = nil
             }
+        }
+    }
+
+    private func trackShareCompleted(destination: String, outcome: String) {
+        let properties = ["destination": destination, "outcome": outcome]
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.activityShareCompleted,
+                properties: properties
+            )
+        )
+        if ["copied", "draft", "handoff", "saved", "sent", "shared"].contains(outcome) {
+            analytics.track(
+                .engagement(
+                    need: .expression,
+                    action: .recommendationShared,
+                    surface: "activity_share",
+                    properties: properties
+                )
+            )
+        }
+    }
+
+    private var ticketKindAnalyticsValue: String {
+        switch context.ticketKind {
+        case .checkIn: "check_in"
+        case .wanna: "wanna"
+        case .list: "list"
+        case .saved: "saved"
         }
     }
 }
