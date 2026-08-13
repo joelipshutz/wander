@@ -82,6 +82,36 @@ final class BuildConfigurationTests: XCTestCase {
         )
     }
 
+    func testSnapchatSharingUsesRegisteredStagingClient() throws {
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        let generatedProject = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj")
+        )
+        let plistData = try Data(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist")
+        )
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+        let querySchemes = try XCTUnwrap(plist["LSApplicationQueriesSchemes"] as? [String])
+
+        XCTAssertTrue(
+            project.contains(
+                "WANDER_SNAPCHAT_CLIENT_ID: 9ff6b79b-97ce-435c-bf7a-5176638246a0"
+            )
+        )
+        XCTAssertTrue(
+            generatedProject.contains(
+                #"WANDER_SNAPCHAT_CLIENT_ID = "9ff6b79b-97ce-435c-bf7a-5176638246a0";"#
+            )
+        )
+        XCTAssertEqual(
+            plist["WANDER_SNAPCHAT_CLIENT_ID"] as? String,
+            "$(WANDER_SNAPCHAT_CLIENT_ID)"
+        )
+        XCTAssertTrue(querySchemes.contains("snapchat"))
+    }
+
     func testInfoPlistRegistersProfileShareURLScheme() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(

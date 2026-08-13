@@ -1612,6 +1612,7 @@
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
 				WANDER_META_APP_ID = 1056841943950470;
+				WANDER_SNAPCHAT_CLIENT_ID = "9ff6b79b-97ce-435c-bf7a-5176638246a0";
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
 				WANDER_TIKTOK_CLIENT_KEY = sbawa5efdmmcvrudh7;
 			};
@@ -1628,6 +1629,7 @@
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
 				WANDER_META_APP_ID = 1056841943950470;
+				WANDER_SNAPCHAT_CLIENT_ID = "9ff6b79b-97ce-435c-bf7a-5176638246a0";
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
 				WANDER_TIKTOK_CLIENT_KEY = sbawa5efdmmcvrudh7;
 			};
