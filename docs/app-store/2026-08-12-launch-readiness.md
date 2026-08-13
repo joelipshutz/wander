@@ -59,7 +59,7 @@ Recent public reviews reinforce four product requirements:
 
 ## Live App Store Connect audit
 
-Read-only snapshot taken 2026-08-12. No App Store data was changed.
+Read-only snapshot refreshed 2026-08-13. No App Store data was changed.
 
 | Surface | Current state | Launch action |
 |---|---|---|
@@ -76,14 +76,16 @@ Read-only snapshot taken 2026-08-12. No App Store data was changed.
 | Description/keywords | Drafts exist but need final copy | Replace with the product-page draft below after feature verification |
 | Latest binary | Build 136 is valid, iOS 17+, export encryption false | Not selectable for version 1.0 because of the marketing-version mismatch |
 
-The linked in-app pages currently return HTTP 200: support, privacy, terms, community standards, and privacy choices.
+The linked in-app pages currently return HTTP 200: support, privacy, terms, community standards, and privacy choices. The `getrec.me` launch-site PR [#10](https://github.com/joelipshutz/recme-site/pull/10) is merged and deployed. It adds the safety-report fallback and moderation appeal paths, the 24-month safety-report retention disclosure, accessibility and responsive fixes, and a safe TestFlight-to-App-Store CTA switch.
+
+The reversible metadata mutation is scripted in `scripts/app-store-metadata-release.mjs`. It defaults to a read-only plan and requires `--apply` before it changes App Store Connect. The 2026-08-13 dry run verified the exact editable version and localization IDs plus the intended before/after values; applying it still requires explicit external-account approval.
 
 ## Hard submission blockers
 
 | Gate | Evidence | Required before submission |
 |---|---|---|
 | [REC-182](https://linear.app/recme/issue/REC-182/switch-recme-to-production-clerk-and-supabase-auth) — production auth | Release currently inherits the tracked Clerk test key and `.clerk.accounts.dev` host | Use production Clerk/Supabase configuration and production Associated Domains; validate sign-in, deletion, and a clean-device session |
-| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | [PR #381](https://github.com/joelipshutz/wander/pull/381) is merged, with 1,107 iOS tests, a Release build, 71/71 rollback-only hosted assertions, and the full hosted rollback smoke passing. The exact production target was confirmed, a 401,951-byte schema backup was taken, and the migration dry run selected only `20260813010000_community_moderation.sql`. Production application is awaiting the environment's explicit write approval. | Approve and apply the reviewed migration, verify it live, complete one report-to-resolution exercise, name primary/backup safety reviewers, test the support mailbox, and add the 24-month safety-retention disclosure to the public Privacy Policy |
+| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | [PR #381](https://github.com/joelipshutz/wander/pull/381) is merged, with 1,107 iOS tests, a Release build, 71/71 rollback-only hosted assertions, and the full hosted rollback smoke passing. The exact production target was confirmed, a 401,951-byte schema backup was taken, and the migration dry run selected only `20260813010000_community_moderation.sql`. The 24-month disclosure is now live at `https://getrec.me/privacy`. Production application is awaiting the environment's explicit write approval. | Approve and apply the reviewed migration, verify it live, complete one report-to-resolution exercise, name primary/backup safety reviewers, and test the support mailbox |
 | [REC-185](https://linear.app/recme/issue/REC-185/complete-app-privacy-manifest-labels-and-permission-audit) — privacy | [PR #380](https://github.com/joelipshutz/wander/pull/380) is merged; app and share-extension manifests are on `main`, and 1,097 tests plus the Release build passed before merge | Verify PostHog project-level IP capture, inspect the signed archive privacy report, and complete App Store privacy labels from the audited data-flow matrix |
 | [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | [PR #304](https://github.com/joelipshutz/wander/pull/304) is merged, restoring repository parity with the already deployed hardening migration and preserving the rollback smoke harness | Complete monitoring ownership, quota alerts, APNs delivery, backups/rollback, deletion cleanup, and the REC-182 production cutover |
 | Version/build compatibility | Store version is 1.0; all uploaded binaries are 0.1 | Generate and upload a new 1.0 build only after the other release gates are closed |

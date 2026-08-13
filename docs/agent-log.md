@@ -28662,3 +28662,47 @@ Outcome and validation:
   the simulator's unrelated first-run location prompt.
 - No schema, auth, signing, project membership, build-number, archive, upload,
   TestFlight, or tester-Slack action was taken.
+## 2026-08-13 10:35 PDT - Codex - REC-180 Site and App Store Metadata Gate
+
+Agent: Codex
+Branch: `codex/rec-180-launch-metadata`
+Worktree: `/private/tmp/recme-rec186-appstore`
+Linear: `REC-180` (`In Progress`)
+
+Goal: finish the launch-site and DNS handoff, refresh the live App Store
+Connect state, and preserve a safe, reproducible metadata update path while
+moving through every non-blocked launch gate.
+
+Starting state and coordination:
+
+- Refreshed and rebased this isolated branch onto exact `origin/main`
+  `7ba2a3c6`. The main checkout remains dirty with Joe-owned `tmp/` content and
+  was not touched.
+- Mission Control remained unavailable because `localhost:4000` was not
+  running. REC-180 is the existing Linear owner issue and remains In Progress.
+- `getrec.me` site PR #10 was squash-merged and auto-deployed as recme-site
+  commit `7f131ea1426712472dd696536b41861a3771b938`. Production is Ready on both
+  `getrec.me` and `www.getrec.me`; the live support page, launch legal copy,
+  and AASA response were browser-verified.
+- Public DNS was rechecked. The working Vercel A/CNAME records must remain.
+  Real blockers are a missing Clerk production instance/records and a missing
+  mail provider: the domain has no MX and publishes `v=spf1 -all`, so
+  `support@getrec.me` cannot currently receive or send authenticated mail.
+
+App Store Connect checkpoint:
+
+- Added `scripts/app-store-metadata-release.mjs`, which defaults to a read-only
+  plan and mutates only when passed `--apply`. It uses the existing local App
+  Store Connect credentials without printing secrets and verifies all values
+  after an apply.
+- `node --check` and `--help` passed. The live read-only run resolved rec.me
+  version 1.0 and confirmed the missing privacy/support/marketing URLs,
+  missing categories, automatic release behavior, and the intended finalized
+  copy.
+- Applying the reversible metadata was intentionally not performed because
+  the environment requires exact external-account approval for that mutation.
+  No App Store listing, release behavior, binary, submission, or production
+  backend data was changed in this checkpoint.
+
+Expected files: `scripts/app-store-metadata-release.mjs`,
+`docs/app-store/2026-08-12-launch-readiness.md`, and this log.
