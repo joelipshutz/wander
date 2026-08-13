@@ -97,6 +97,25 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
+    func testInstagramPostExplainsFullAccessOnceBeforeDirectSharing() {
+        XCTAssertEqual(
+            ActivityShareInstagramPhotoAccessGuidance.action(
+                hasAcknowledgedFullAccess: false
+            ),
+            .showPhotoAccessGuidance
+        )
+        XCTAssertEqual(
+            ActivityShareInstagramPhotoAccessGuidance.action(
+                hasAcknowledgedFullAccess: true
+            ),
+            .openDirectEditor
+        )
+        XCTAssertEqual(
+            ActivityShareInstagramPhotoAccessGuidance.settingsPath,
+            "Settings → Apps → Instagram → Photos → Full Access"
+        )
+    }
+
     func testInstagramPostDirectHandoffFixtureDocumentsFallback() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

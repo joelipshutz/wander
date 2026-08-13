@@ -2,6 +2,37 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testInstagramPostExplainsFullPhotoAccessBeforeDirectShare() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderActivityShareMockup",
+            "-WanderActivityShareInstagramPostMockup",
+            "-activityShare.instagramPostFullPhotoAccessAcknowledged",
+            "NO",
+        ]
+        app.launch()
+
+        let instagramPost = app.buttons["Instagram Post"]
+        XCTAssertTrue(instagramPost.waitForExistence(timeout: 5))
+        XCTAssertTrue(instagramPost.isHittable)
+        instagramPost.tap()
+
+        XCTAssertTrue(
+            app.staticTexts["Instagram needs Full Photo Access"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(
+            app.staticTexts["Settings → Apps → Instagram → Photos → Full Access"].exists
+        )
+        XCTAssertTrue(app.buttons["I've enabled Full Access"].isHittable)
+        XCTAssertTrue(app.buttons["Use compatible sharing"].isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-271 Instagram Full Photo Access guidance"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testSecondLaunchImportLessonOpensImportFromPage() {
         let app = XCUIApplication()
         app.launchArguments = [
