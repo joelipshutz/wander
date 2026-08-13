@@ -3064,7 +3064,7 @@ private struct SearchBar: View {
         .padding(.horizontal, WanderTheme.spacing3)
         .frame(maxWidth: .infinity, minHeight: 48)
         .contentShape(Capsule())
-        .wanderGlassCapsule()
+        .mapSearchCapsuleSurface()
     }
 
     @MainActor
@@ -3082,6 +3082,24 @@ private struct SearchBar: View {
         guard !Task.isCancelled else { return }
         isFocused.wrappedValue = true
         onFocusRequestHandled(focusRequestID)
+    }
+}
+
+private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: Capsule())
+            .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+            }
+    }
+}
+
+private extension View {
+    func mapSearchCapsuleSurface() -> some View {
+        modifier(MapSearchCapsuleSurfaceModifier())
     }
 }
 

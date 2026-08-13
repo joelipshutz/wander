@@ -1,0 +1,11 @@
+{
+  "issue": "REC-270",
+  "capture_source": "Joe-supplied physical-device screenshot from 2026-08-13 plus exact current source",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "screenshot_evidence": "Linear attachment 331546c4-3afe-402c-88e3-5ce11e953754",
+  "screenshot_sha256": "d3998985c6a88c4e181c87ff113fdf8fe81c7d0e1b13b7cf61a7799cc454435e",
+  "reported_problem": "the large Map search capsule casts an elevated drop shadow across the map",
+  "expected_search_behavior": "the Map search capsule keeps a translucent capsule surface without any drop shadow",
+  "preserved_behavior": "Featured, Friends, and More keep native iOS 26 Liquid Glass; pin transitions, search behavior, filter membership, and the add action remain unchanged",
+  "release_impact": "TestFlight packaging remains paused until Joe explicitly resumes it after this fix reaches main"
+}
