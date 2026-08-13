@@ -28706,3 +28706,21 @@ App Store Connect checkpoint:
 
 Expected files: `scripts/app-store-metadata-release.mjs`,
 `docs/app-store/2026-08-12-launch-readiness.md`, and this log.
+
+Completion checkpoint, 2026-08-13 10:40 PDT:
+
+- Committed the validated release tool and updated launch evidence as
+  `9df2f9b8`, pushed `codex/rec-180-launch-metadata`, and opened ready PR #384:
+  https://github.com/joelipshutz/wander/pull/384.
+- The required TestFlight manifest classifies the change as excluded from the
+  next tester build because it changes release tooling and docs only. GitHub's
+  trusted payload validation passes.
+- Copy limits are valid: subtitle 28/30, promotional text 83/170, and keywords
+  91/100. `node --check`, `--help`, and the live read-only App Store Connect
+  plan all passed.
+- Removed only three disposable Xcode DerivedData caches after the disk reached
+  100%; this recovered 6.6 GiB. Source, signed archives, project files, and user
+  files were not removed.
+- PR #384 is ready to squash-merge. REC-180 remains In Progress because the
+  exact external changes listed above and the production auth/mail/backend
+  gates still require explicit account-level authorization or credentials.
