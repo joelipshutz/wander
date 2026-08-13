@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(45);
+select plan(71);
 
 select has_table('public', 'content_reports', 'content reports table exists');
 select has_table('public', 'moderation_report_events', 'moderation audit table exists');
@@ -26,12 +26,32 @@ select ok(
   'authenticated clients cannot read the moderation audit trail'
 );
 select ok(
-  has_table_privilege('service_role', 'public.content_reports', 'select,update'),
-  'service role can operate the moderation queue'
+  has_table_privilege('service_role', 'public.content_reports', 'select'),
+  'service role can read the moderation queue'
 );
 select ok(
-  has_table_privilege('service_role', 'public.moderation_report_events', 'select,insert'),
-  'service role can read and append moderation events'
+  not has_table_privilege('service_role', 'public.content_reports', 'update'),
+  'service role does not receive unrestricted report-row updates'
+);
+select ok(
+  has_column_privilege('service_role', 'public.content_reports', 'status', 'update')
+    and has_column_privilege('service_role', 'public.content_reports', 'priority', 'update')
+    and has_column_privilege('service_role', 'public.content_reports', 'assigned_to', 'update')
+    and has_column_privilege('service_role', 'public.content_reports', 'resolution_action', 'update')
+    and has_column_privilege('service_role', 'public.content_reports', 'resolution_notes', 'update'),
+  'service role can update only moderation workflow columns'
+);
+select ok(
+  not has_column_privilege('service_role', 'public.content_reports', 'content_snapshot', 'update'),
+  'service role cannot rewrite captured evidence'
+);
+select ok(
+  has_table_privilege('service_role', 'public.moderation_report_events', 'select'),
+  'service role can read moderation events'
+);
+select ok(
+  not has_table_privilege('service_role', 'public.moderation_report_events', 'insert'),
+  'service role cannot fabricate moderation events'
 );
 
 select has_function(
@@ -76,10 +96,25 @@ select ok(
   not has_function_privilege('authenticated', 'app.community_text_allowed(text)', 'execute'),
   'clients cannot bypass the write-boundary content guard helper'
 );
+select ok(
+  has_function_privilege('service_role', 'public.purge_expired_content_reports()', 'execute'),
+  'service role can run the bounded retention purge'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.purge_expired_content_reports()', 'execute'),
+  'app clients cannot purge moderation records'
+);
+select ok(
+  pg_get_functiondef('public.submit_content_report(text,text,text,text,text)'::regprocedure)
+    like '%pg_advisory_xact_lock(hashtextextended(viewer_id, 0))%',
+  'report submissions serialize per reporter before rate-limit and deduplication checks'
+);
 
 select ok(app.community_text_allowed('A quiet table with great noodles'), 'ordinary place text is allowed');
 select ok(not app.community_text_allowed('you are a nigger'), 'an explicit blocked token is rejected');
 select ok(not app.community_text_allowed('n1gg3r'), 'basic leetspeak evasion is rejected');
+select ok(not app.community_text_allowed('ｎｉｇｇｅｒ'), 'Unicode-width evasion is rejected');
+select ok(not app.community_text_allowed('nígger'), 'diacritic evasion is rejected');
 select ok(not app.community_text_allowed('Go kill yourself'), 'a targeted dangerous phrase is rejected');
 select is(
   (
@@ -87,6 +122,7 @@ select is(
     from pg_trigger
     where not tgisinternal
       and tgname in (
+        'places_community_text_guard',
         'profiles_community_text_guard',
         'user_places_community_text_guard',
         'place_visits_community_text_guard',
@@ -95,7 +131,7 @@ select is(
         'activity_comments_community_text_guard'
       )
   ),
-  6,
+  7,
   'every current shared-text table has a server-side guard'
 );
 
@@ -169,6 +205,14 @@ insert into public.place_visits (
   'A reportable visit',
   '[]'::jsonb,
   false
+);
+
+update moderation_test_context
+set activity_id = (
+  select event.id
+  from public.feed_events event
+  where event.visit_id = 'b1400000-0000-0000-0000-000000000001'
+  limit 1
 );
 
 insert into public.visit_photos (
@@ -296,6 +340,16 @@ select throws_ok(
   'invalid_report_reason',
   'server rejects unknown report reasons'
 );
+select is(
+  (
+    public.submit_content_report(
+      'profile', 'moderation_target', 'moderation_target', 'privacy',
+      'The private report can quote: go kill yourself.'
+    )->>'is_duplicate'
+  )::boolean,
+  true,
+  'private report details may quote the abusive content being reported'
+);
 
 select is(
   public.submit_content_report(
@@ -368,6 +422,54 @@ select throws_ok(
 );
 
 reset role;
+
+select is(
+  (
+    select content_snapshot->>'note'
+    from public.content_reports
+    where reporter_user_id = 'moderation_reporter'
+      and subject_kind = 'activity'
+  ),
+  'A reportable visit',
+  'activity evidence matches the explicit check-in note shown in the feed'
+);
+select is(
+  (
+    select content_snapshot->>'place_name'
+    from public.content_reports
+    where reporter_user_id = 'moderation_reporter'
+      and subject_kind = 'user_place'
+  ),
+  'Moderation Cafe',
+  'place-memory evidence preserves the shared place metadata'
+);
+
+select throws_ok(
+  $$
+    insert into public.place_visits (
+      user_place_id, visited_at, note, attribute_answers, backfilled_from_user_place
+    ) values (
+      'b1100000-0000-0000-0000-000000000001', now(), 'go kill yourself', '[]'::jsonb, false
+    )
+  $$,
+  '22023',
+  'content_not_allowed',
+  'visit-note writes are filtered at the table boundary'
+);
+select throws_ok(
+  $$
+    insert into public.place_attributes (user_place_id, question_key, value_type, value)
+    values (
+      'b1100000-0000-0000-0000-000000000001',
+      'personal_labels',
+      'multi_select',
+      '["go kill yourself"]'::jsonb
+    )
+  $$,
+  '22023',
+  'content_not_allowed',
+  'place-attribute writes are filtered at the table boundary'
+);
 
 select is(
   (select count(*)::integer from public.content_reports where reporter_user_id = 'moderation_reporter'),
@@ -455,6 +557,30 @@ select throws_ok(
   'content_not_allowed',
   'shared place-note writes are filtered on the server'
 );
+select throws_ok(
+  $$
+    select public.save_own_place(
+      '{
+        "canonical_name":"go kill yourself",
+        "category":"other",
+        "latitude":34.05,
+        "longitude":-118.25,
+        "source_provider":"codex_moderation",
+        "source_provider_place_id":"filtered-place-name"
+      }'::jsonb,
+      '{
+        "status":"wanna_go",
+        "visibility":"self",
+        "nearby_confirmed":false,
+        "source_type":"manual"
+      }'::jsonb,
+      '[]'::jsonb
+    )
+  $$,
+  '22023',
+  'content_not_allowed',
+  'shared canonical place metadata is filtered on the server'
+);
 
 reset role;
 
@@ -487,6 +613,16 @@ select ok(
   ),
   'resolved reports receive a closed timestamp'
 );
+select ok(
+  (
+    select retention_expires_at = closed_at + interval '24 months'
+    from public.content_reports
+    where reporter_user_id = 'moderation_reporter'
+      and subject_kind = 'profile'
+      and reason = 'harassment'
+  ),
+  'resolved reports receive the documented 24-month retention deadline'
+);
 select is(
   (
     select count(*)::integer
@@ -498,6 +634,97 @@ select is(
   ),
   2,
   'resolution appends a second audit event'
+);
+
+set local role service_role;
+select throws_ok(
+  $$
+    update public.content_reports
+    set content_snapshot = '{"tampered":true}'::jsonb
+    where subject_kind = 'profile' and subject_id = 'moderation_target'
+  $$,
+  '42501',
+  'permission denied for table content_reports',
+  'the operator role cannot rewrite report evidence'
+);
+select lives_ok(
+  $$
+    update public.content_reports
+    set priority = 'urgent'
+    where subject_kind = 'profile'
+      and subject_id = 'moderation_target'
+      and reason = 'privacy'
+  $$,
+  'the operator role can update an allowed workflow column'
+);
+reset role;
+
+select is(
+  (
+    select count(*)::integer
+    from public.moderation_report_events event
+    join public.content_reports report on report.id = event.report_id
+    where report.subject_kind = 'profile'
+      and report.subject_id = 'moderation_target'
+      and report.reason = 'privacy'
+      and event.action = 'priority_changed'
+      and event.metadata->>'priority' = 'urgent'
+  ),
+  1,
+  'priority changes append an explicit audit event'
+);
+
+update public.content_reports
+set retention_expires_at = now() - interval '1 second'
+where reporter_user_id = 'moderation_reporter'
+  and subject_kind = 'profile'
+  and reason = 'harassment';
+set local role service_role;
+select is(
+  public.purge_expired_content_reports(),
+  1,
+  'the retention purge removes one expired, unheld report'
+);
+reset role;
+select ok(
+  not exists (
+    select 1
+    from public.moderation_report_events event
+    left join public.content_reports report on report.id = event.report_id
+    where report.id is null
+  ),
+  'the retention purge leaves no orphaned audit events'
+);
+
+select lives_ok(
+  $$ delete from public.profiles where id = 'moderation_target' $$,
+  'deleting a reported account is not blocked by retained moderation events'
+);
+select ok(
+  not exists (
+    select 1 from public.content_reports where reported_user_id = 'moderation_target'
+  ),
+  'account deletion clears the reported-user profile reference'
+);
+select ok(
+  exists (
+    select 1
+    from public.moderation_report_events event
+    join public.content_reports report on report.id = event.report_id
+    where report.subject_kind = 'profile'
+      and report.subject_id = 'moderation_target'
+  ),
+  'account deletion preserves the safety record and audit history'
+);
+select lives_ok(
+  $$ delete from public.profiles where id = 'moderation_reporter' $$,
+  'deleting a reporting account is not blocked by retained moderation events'
+);
+select ok(
+  not exists (
+    select 1 from public.content_reports where reporter_user_id = 'moderation_reporter'
+  ),
+  'account deletion clears the reporter profile reference'
 );
 
 select * from finish();

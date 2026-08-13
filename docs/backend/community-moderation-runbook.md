@@ -52,6 +52,8 @@ Only a trusted server-side or operator tool using the Supabase `service_role` ma
 
 The RPC deduplicates the same reporter, subject, and reason for 24 hours and rejects more than 30 accepted submissions from one reporter in an hour. Rate limiting protects the queue; it does not replace an abuse investigation when a repeated pattern is legitimate.
 
+Account deletion clears the report's live reporter/reported-user profile references while preserving the private safety record, captured snapshot, opaque subject identifier, and append-only audit history for abuse prevention and legal/safety review. Resolved or dismissed records expire 24 months after closure unless `retention_hold` is set for a documented legal or immediate-safety need. Never use retained records to recreate a deleted account.
+
 Never:
 
 - expose the service-role key to the app or a browser;
@@ -75,7 +77,8 @@ select
   created_at
 from public.content_reports
 where status in ('queued', 'reviewing')
-order by (priority = 'urgent') desc, created_at asc;
+order by priority desc, created_at asc, id asc
+limit 100;
 ```
 
 Open the private `content_snapshot` only when needed to make the decision. Use internal user IDs in operational notes.
@@ -97,6 +100,17 @@ Open the private `content_snapshot` only when needed to make the decision. Use i
 8. When user communication is appropriate, send it through the support workflow. Do not identify the reporter.
 
 Closing a report without `resolution_action` is rejected by the database.
+
+## Retention and purge
+
+- Open reports have no purge deadline because they still require action.
+- Closing a report sets `retention_expires_at` to 24 months after `closed_at`.
+- `retention_hold` may be set only for an active legal preservation request or documented immediate-safety investigation. Review holds every 90 days and clear them when the need ends.
+- The Safety Owner runs `select public.purge_expired_content_reports();` with the service role at least monthly. The function removes expired, unheld reports and their audit events in one transaction and returns only the aggregate number removed.
+- Record the run date, operator, and aggregate count in the private operations log. Do not copy report content into the log.
+- Authenticated app users cannot execute the purge. The service role cannot rewrite captured evidence or directly fabricate audit events; it can update only workflow columns.
+
+Before production submission, ensure the public Privacy Policy and App Store privacy answers disclose that private safety reports and evidence may be retained for abuse prevention for up to 24 months after resolution, longer only under a legal or immediate-safety hold.
 
 ## Action guidance
 

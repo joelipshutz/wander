@@ -173,53 +173,49 @@ struct CommunityReportSheet: View {
     }
 
     private var confirmation: some View {
-        VStack(spacing: WanderTheme.spacing4) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 58, weight: .bold))
-                .foregroundStyle(WanderTheme.stateSuccess.color)
-                .accessibilityHidden(true)
+        ScrollView {
+            VStack(spacing: WanderTheme.spacing4) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 58, weight: .bold))
+                    .foregroundStyle(WanderTheme.stateSuccess.color)
+                    .accessibilityHidden(true)
 
-            Text("Thanks for looking out for the community.")
-                .font(WanderTypography.editorialTitle)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(WanderTheme.textInk.color)
+                Text("Thanks for looking out for the community.")
+                    .font(WanderTypography.editorialTitle)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(WanderTheme.textInk.color)
 
-            Text("Our safety team will review the report. If anyone is in immediate danger, contact local emergency services.")
-                .font(WanderTypography.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .fixedSize(horizontal: false, vertical: true)
+                Text("Our safety team will review the report. If anyone is in immediate danger, contact local emergency services.")
+                    .font(WanderTypography.body)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            WanderPrimaryButton(title: "Done", systemImage: "checkmark") {
-                dismiss()
-            }
-
-            if subject.reportedUserID != store.currentUser.id {
-                Button(role: .destructive) {
-                    blockReportedUser()
-                } label: {
-                    Label(isBlocking ? "Blocking…" : "Block this person", systemImage: "hand.raised.fill")
-                        .font(WanderTypography.emphasizedBody)
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                WanderPrimaryButton(title: "Done", systemImage: "checkmark") {
+                    dismiss()
                 }
-                .disabled(isBlocking)
-                .accessibilityIdentifier("communityReport.block")
+
+                if subject.reportedUserID != store.currentUser.id {
+                    Button(role: .destructive) {
+                        blockReportedUser()
+                    } label: {
+                        Label(isBlocking ? "Blocking…" : "Block this person", systemImage: "hand.raised.fill")
+                            .font(WanderTypography.emphasizedBody)
+                            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                    }
+                    .disabled(isBlocking)
+                    .accessibilityIdentifier("communityReport.block")
+                }
             }
+            .padding(WanderTheme.spacing6)
+            .frame(maxWidth: .infinity, minHeight: 520)
         }
-        .padding(WanderTheme.spacing6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("communityReport.confirmation")
     }
 
     private func submit() {
         guard let selectedReason, !isSubmitting else { return }
         let normalizedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
-        do {
-            try CommunityContentPolicy.validate(normalizedDetails)
-        } catch {
-            errorMessage = error.localizedDescription
-            return
-        }
 
         isSubmitting = true
         errorMessage = nil

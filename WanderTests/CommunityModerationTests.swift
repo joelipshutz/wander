@@ -15,6 +15,8 @@ final class CommunityModerationTests: XCTestCase {
     func testCommunityContentPolicyRejectsBlockedTokensPhrasesAndBasicEvasion() {
         XCTAssertFalse(CommunityContentPolicy.allows("you are a nigger"))
         XCTAssertFalse(CommunityContentPolicy.allows("n1gg3r"))
+        XCTAssertFalse(CommunityContentPolicy.allows("ｎｉｇｇｅｒ"))
+        XCTAssertFalse(CommunityContentPolicy.allows("nígger"))
         XCTAssertFalse(CommunityContentPolicy.allows("Go kill yourself"))
         XCTAssertFalse(CommunityContentPolicy.allows("I will kill you"))
     }

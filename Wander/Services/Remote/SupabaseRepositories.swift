@@ -270,7 +270,6 @@ struct SupabaseCommunityReportRepository: CommunityReportRepository {
     }
 
     func submit(_ submission: CommunityReportSubmission) async throws -> CommunityReportReceipt {
-        try CommunityContentPolicy.validate(submission.details)
         return try await rpc.call(
             "submit_content_report",
             params: SubmitContentReportParams(submission: submission)
@@ -555,7 +554,14 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
-        try CommunityContentPolicy.validate(draft.note)
+        try CommunityContentPolicy.validate(
+            draft.place.canonicalName,
+            draft.place.address,
+            draft.place.locality,
+            draft.place.region,
+            draft.place.country,
+            draft.note
+        )
         for attribute in draft.attributes {
             try CommunityContentPolicy.validateJSONText(attribute.valueJSON)
         }
@@ -567,7 +573,16 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 
     func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
-        try CommunityContentPolicy.validate(draft.userPlace.note, draft.visit.note, draft.historicalWant?.note)
+        try CommunityContentPolicy.validate(
+            draft.userPlace.place.canonicalName,
+            draft.userPlace.place.address,
+            draft.userPlace.place.locality,
+            draft.userPlace.place.region,
+            draft.userPlace.place.country,
+            draft.userPlace.note,
+            draft.visit.note,
+            draft.historicalWant?.note
+        )
         try CommunityContentPolicy.validateJSONText(draft.visit.attributeAnswersJSON)
         let result: SaveOwnCheckInResponse = try await rpc.call(
             "save_own_check_in",

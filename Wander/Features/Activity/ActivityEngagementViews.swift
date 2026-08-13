@@ -9,6 +9,7 @@ struct ActivityEngagementActionRow: View {
     let visiblePlace: VisiblePlace?
     var showsCommentButton = true
     var isEngagementEnabled = true
+    var reportSubjectOverride: CommunityReportSubject?
     var onSharePreviewPresentation: ((ActivitySharePreviewPresentation) -> Void)?
     @State private var wannaSaveContext: MapPlaceSaveContext?
     @State private var sharePreviewPresentation: ActivitySharePreviewPresentation?
@@ -24,7 +25,7 @@ struct ActivityEngagementActionRow: View {
 
             shareButton
 
-            if context.actor.id != store.currentUser.id {
+            if context.actor.id != store.currentUser.id, resolvedReportSubject != nil {
                 reportMenu
             }
 
@@ -137,12 +138,7 @@ struct ActivityEngagementActionRow: View {
         Menu {
             Button {
                 auth.requireSignIn(for: .reportContent) {
-                    reportSubject = CommunityReportSubject(
-                        kind: .activity,
-                        subjectID: context.activityID,
-                        reportedUserID: context.actor.id,
-                        context: "Report \(context.actor.displayName)’s activity at \(context.placeName)."
-                    )
+                    reportSubject = resolvedReportSubject
                 }
             } label: {
                 Label("Report activity", systemImage: "exclamationmark.bubble")
@@ -155,6 +151,21 @@ struct ActivityEngagementActionRow: View {
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("Activity actions")
+    }
+
+    private var resolvedReportSubject: CommunityReportSubject? {
+        if let reportSubjectOverride {
+            return reportSubjectOverride
+        }
+        guard UUID(uuidString: context.activityID) != nil else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .activity,
+            subjectID: context.activityID,
+            reportedUserID: context.actor.id,
+            context: "Report \(context.actor.displayName)’s activity at \(context.placeName)."
+        )
     }
 
     @ViewBuilder
@@ -333,7 +344,10 @@ struct ActivityCommentsScreen: View {
         .fullScreenCover(item: $photoViewerRoute) { route in
             ActivityCommentsPhotoViewer(
                 media: context.media,
-                initialMediaID: route.mediaID
+                initialMediaID: route.mediaID,
+                reportedUserID: context.actor.id,
+                reportedUserName: context.actor.displayName,
+                placeName: context.placeName
             )
         }
         .fullScreenCover(item: $sharePreviewPresentation) { presentation in
@@ -677,16 +691,32 @@ private struct ActivityCommentsPhotoViewerRoute: Identifiable {
 
 private struct ActivityCommentsPhotoViewer: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
+    @EnvironmentObject private var backend: WanderBackend
     let media: [ActivityEngagementMedia]
+    let reportedUserID: String
+    let reportedUserName: String
+    let placeName: String
     @State private var selectedMediaID: String
+    @State private var reportSubject: CommunityReportSubject?
 
-    init(media: [ActivityEngagementMedia], initialMediaID: String) {
+    init(
+        media: [ActivityEngagementMedia],
+        initialMediaID: String,
+        reportedUserID: String,
+        reportedUserName: String,
+        placeName: String
+    ) {
         self.media = media
+        self.reportedUserID = reportedUserID
+        self.reportedUserName = reportedUserName
+        self.placeName = placeName
         _selectedMediaID = State(initialValue: initialMediaID)
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack(alignment: .top) {
             Color.black.ignoresSafeArea()
 
             TabView(selection: $selectedMediaID) {
@@ -701,13 +731,26 @@ private struct ActivityCommentsPhotoViewer: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
 
-            WanderGlassActionButton(
-                systemImage: "chevron.left",
-                accessibilityLabel: "Back",
-                tone: .darkOverlay,
-                action: dismiss.callAsFunction
-            )
-            .padding(.leading, WanderTheme.spacing4)
+            HStack {
+                WanderGlassActionButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabel: "Back",
+                    tone: .darkOverlay,
+                    action: dismiss.callAsFunction
+                )
+
+                Spacer()
+
+                if reportableSelectedPhoto != nil {
+                    WanderGlassActionButton(
+                        systemImage: "exclamationmark.bubble",
+                        accessibilityLabel: "Report photo",
+                        tone: .darkOverlay,
+                        action: reportSelectedPhoto
+                    )
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
             .padding(.top, WanderTheme.spacing3)
         }
         .preferredColorScheme(.dark)
@@ -719,6 +762,31 @@ private struct ActivityCommentsPhotoViewer: View {
             if !ids.contains(selectedMediaID), let firstID = ids.first {
                 selectedMediaID = firstID
             }
+        }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
+        }
+    }
+
+    private var reportableSelectedPhoto: CommunityReportSubject? {
+        guard reportedUserID != store.currentUser.id,
+              UUID(uuidString: selectedMediaID) != nil
+        else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .visitPhoto,
+            subjectID: selectedMediaID,
+            reportedUserID: reportedUserID,
+            context: "Report \(reportedUserName)’s photo from \(placeName)."
+        )
+    }
+
+    private func reportSelectedPhoto() {
+        guard let reportableSelectedPhoto else { return }
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = reportableSelectedPhoto
         }
     }
 }

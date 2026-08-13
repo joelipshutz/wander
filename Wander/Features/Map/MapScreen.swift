@@ -9604,7 +9604,8 @@ private struct PlaceActivityCard: View {
             ActivityEngagementActionRow(
                 context: engagementContext,
                 visiblePlace: entry.summary.visiblePlace,
-                isEngagementEnabled: isEngagementResolved
+                isEngagementEnabled: isEngagementResolved,
+                reportSubjectOverride: reportableUserPlaceSubject
             )
 
             if let photoError {
@@ -9724,6 +9725,21 @@ private struct PlaceActivityCard: View {
             visitID: entry.visit?.serverID,
             preferredKinds: engagementKinds
         ) != nil
+    }
+
+    private var reportableUserPlaceSubject: CommunityReportSubject? {
+        guard !entry.isCurrentUser,
+              let serverID = entry.userPlace.serverID,
+              UUID(uuidString: serverID) != nil
+        else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .userPlace,
+            subjectID: serverID,
+            reportedUserID: entry.owner.id,
+            context: "Report \(entry.owner.displayName)’s place memory."
+        )
     }
 
     private var engagementKinds: [FeedActivityKind] {
@@ -9950,6 +9966,7 @@ private struct PlaceActivityPhotoViewer: View {
     let entriesByID: [String: PlaceActivityEntry]
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPhotoID: String
+    @State private var reportSubject: CommunityReportSubject?
 
     init(
         photos: [PlaceActivityPhoto],
@@ -9971,6 +9988,8 @@ private struct PlaceActivityPhotoViewer: View {
                     Spacer()
                     if canDeleteSelectedPhoto {
                         viewerButton(systemImage: "trash", action: deleteSelectedPhoto)
+                    } else if reportableSelectedPhoto != nil {
+                        viewerButton(systemImage: "exclamationmark.bubble", action: reportSelectedPhoto)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -10004,6 +10023,10 @@ private struct PlaceActivityPhotoViewer: View {
                 selectedPhotoID = firstID
             }
         }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
+        }
     }
 
     private var selectedPhoto: PlaceActivityPhoto? {
@@ -10016,6 +10039,25 @@ private struct PlaceActivityPhotoViewer: View {
 
     private var canDeleteSelectedPhoto: Bool {
         selectedEntry?.isCurrentUser == true
+    }
+
+    private var reportableSelectedPhoto: CommunityReportSubject? {
+        guard let selectedPhoto,
+              let selectedEntry,
+              !selectedEntry.isCurrentUser
+        else {
+            return nil
+        }
+        let photoID = selectedPhoto.metadata.serverID ?? selectedPhoto.metadata.id
+        guard UUID(uuidString: photoID) != nil else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .visitPhoto,
+            subjectID: photoID,
+            reportedUserID: selectedEntry.owner.id,
+            context: "Report \(selectedEntry.owner.displayName)’s photo."
+        )
     }
 
     private func viewerButton(systemImage: String, action: @escaping () -> Void) -> some View {
@@ -10037,6 +10079,13 @@ private struct PlaceActivityPhotoViewer: View {
                 photoID: selectedPhoto.id,
                 backend: auth.isSignedIn ? backend : nil
             )
+        }
+    }
+
+    private func reportSelectedPhoto() {
+        guard let reportableSelectedPhoto else { return }
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = reportableSelectedPhoto
         }
     }
 }

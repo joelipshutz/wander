@@ -151,15 +151,17 @@ enum CommunityContentPolicy {
     }
 
     private static func normalized(_ value: String) -> String {
+        let normalizationLocale = Locale(identifier: "en_US_POSIX")
         let folded = value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
-            .lowercased()
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: normalizationLocale)
+            .lowercased(with: normalizationLocale)
         let leetMap: [Character: Character] = [
             "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"
         ]
         let mapped = folded.map { leetMap[$0] ?? $0 }
+        let asciiAlphanumerics = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
         let words = String(mapped)
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .components(separatedBy: asciiAlphanumerics.inverted)
             .filter { !$0.isEmpty }
         return words.joined(separator: " ")
     }

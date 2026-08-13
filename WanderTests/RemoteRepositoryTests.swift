@@ -2190,6 +2190,43 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testOwnPlaceSaveRejectsProhibitedCanonicalMetadataBeforeNetwork() async {
+        let rpc = RecordingRPC()
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        let draft = UserPlaceDraft(
+            place: PlaceDraft(
+                localID: "local_bad_place",
+                serverID: nil,
+                canonicalName: "go kill yourself",
+                category: "other",
+                address: "1 Safe Street",
+                locality: "Los Angeles",
+                region: "CA",
+                country: "US",
+                latitude: 34.045,
+                longitude: -118.235,
+                sourceProvider: "manual",
+                sourceProviderPlaceID: "bad-place",
+                confidence: nil
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            nearbyConfirmed: false,
+            sourceType: "manual",
+            attributes: []
+        )
+
+        do {
+            _ = try await repository.save(draft)
+            XCTFail("Expected canonical place metadata to be rejected")
+        } catch {
+            XCTAssertEqual(error as? CommunityContentPolicyError, .prohibitedContent)
+        }
+
+        XCTAssertTrue(rpc.calls.isEmpty)
+    }
+
     func testPlaceProviderMetadataRequestDoesNotRequireAProviderPhoto() async throws {
         let rpc = RecordingRPC()
         rpc.responses["function:place-photo"] = """
@@ -2979,29 +3016,28 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.first?.body["input_details"] as? String, "Please review this.")
     }
 
-    func testCommunityReportRepositoryRejectsProhibitedDetailBeforeNetwork() async {
+    func testCommunityReportRepositoryAllowsPrivateDetailsToQuoteReportedContent() async throws {
         let rpc = RecordingRPC()
+        rpc.responses["submit_content_report"] = Data(
+            #"{"report_id":"b9000000-0000-0000-0000-000000000002","status":"queued","created_at":"2026-08-13T08:00:00.000Z","is_duplicate":false}"#.utf8
+        )
         let repository = SupabaseCommunityReportRepository(rpc: rpc)
 
-        do {
-            _ = try await repository.submit(
-                CommunityReportSubmission(
-                    subject: CommunityReportSubject(
-                        kind: .profile,
-                        subjectID: "user_target",
-                        reportedUserID: "user_target",
-                        context: "Report profile"
-                    ),
-                    reason: .other,
-                    details: "go kill yourself"
-                )
+        _ = try await repository.submit(
+            CommunityReportSubmission(
+                subject: CommunityReportSubject(
+                    kind: .profile,
+                    subjectID: "user_target",
+                    reportedUserID: "user_target",
+                    context: "Report profile"
+                ),
+                reason: .other,
+                details: "They wrote: go kill yourself"
             )
-            XCTFail("Expected the client content guard to reject the report detail")
-        } catch {
-            XCTAssertEqual(error as? CommunityContentPolicyError, .prohibitedContent)
-        }
+        )
 
-        XCTAssertTrue(rpc.calls.isEmpty)
+        XCTAssertEqual(rpc.calls.count, 1)
+        XCTAssertEqual(rpc.calls.first?.body["input_details"] as? String, "They wrote: go kill yourself")
     }
 }
 

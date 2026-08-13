@@ -7,7 +7,7 @@ Use this as the source for the App Review Notes field. Replace the bracketed lau
 rec.me includes user-generated profiles, place memories, activity, comments, photos, and shared lists. The build provides filtering, reporting, blocking, and human review:
 
 1. **Report a profile:** open another person's profile, tap the actions button, then **Report**.
-2. **Report activity or a place memory:** open Activity or the check-in history on a place, tap the ellipsis, then **Report activity**.
+2. **Report activity or a place memory:** open Activity or the check-in history on a place, tap the ellipsis, then **Report activity**. In check-in history, the report is tied directly to the shared place memory even when no activity event is available.
 3. **Report a comment:** open an activity's comments, swipe another person's comment or use its accessibility actions, then tap **Report comment**.
 4. **Report a photo:** open another person's full-screen place photo, tap the ellipsis, then **Report photo**.
 5. **Report a shared list:** open a list owned by another person, tap the ellipsis, then **Report list**.
@@ -19,7 +19,7 @@ Reports are private. The reported person is not told who submitted the report. A
 
 ## Filtering and response
 
-The app performs a deterministic client check before shared text is saved. The database applies the same minimum policy to profile text, place notes, visit answers, list text, and comments, so a modified client cannot bypass it. Photo moderation is report-driven for launch.
+The app performs a deterministic client check before shared text is saved. The database applies the same minimum policy to place metadata, profile text, place notes, visit answers, list text, and comments, so a modified client cannot bypass it. Private report details may quote the content being reported and are visible only to the safety workflow. Photo moderation is report-driven for launch.
 
 Reports enter a private moderation queue with a captured content snapshot and append-only audit history. Dangerous or sexual-content reports are marked urgent. The launch response commitment is:
 

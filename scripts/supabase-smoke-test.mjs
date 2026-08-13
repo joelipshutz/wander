@@ -70,14 +70,27 @@ async function main() {
       }
       if (options.migrationTest) {
         const testSQL = transactionBody(
-          loadStrictPgTapSQL(new URL(resolve(options.migrationTest), "file:")),
+          readFileSync(new URL(resolve(options.migrationTest), "file:"), "utf8"),
           "rollback",
         );
-        await client.query(testSQL);
+        const results = await client.query(testSQL);
+        const failures = (Array.isArray(results) ? results : [results])
+          .flatMap((result) => result.rows ?? [])
+          .flatMap((row) => Object.values(row))
+          .filter((message) => typeof message === "string" && message.startsWith("not ok"));
+        if (failures.length > 0) {
+          throw new Error(`pgTAP smoke failures:\n${failures.join("\n")}`);
+        }
         console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
         await runProductionSecuritySmokeChecks(client);
+        await runCommunityModerationSmokeChecks(
+          client,
+          smokeUserID,
+          collaboratorUserID,
+          strangerUserID,
+        );
         await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
@@ -99,6 +112,124 @@ async function main() {
   } finally {
     await client.end().catch(() => {});
   }
+}
+
+async function runCommunityModerationSmokeChecks(
+  client,
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+) {
+  await client.query("reset role");
+  await client.query(
+    `
+      insert into public.follows (follower_user_id, followed_user_id, source)
+      values ($1, $2, 'profile')
+      on conflict (follower_user_id, followed_user_id) do nothing
+    `,
+    [smokeUserID, collaboratorUserID],
+  );
+  const target = await client.query(
+    `
+      select up.id::text as user_place_id
+      from public.user_places up
+      join public.places p on p.id = up.place_id
+      where up.user_id = $1
+        and p.source_provider = 'codex_smoke'
+        and p.source_provider_place_id = 'place-list-rpc-smoke'
+        and up.deleted_at is null
+      limit 1
+    `,
+    [collaboratorUserID],
+  );
+  const targetUserPlaceID = target.rows[0]?.user_place_id;
+  if (!targetUserPlaceID) {
+    throw new Error("community moderation smoke fixture is missing the collaborator place memory");
+  }
+
+  await setAuthenticatedUser(client, smokeUserID);
+  const submitted = await expectQuery(
+    client,
+    "authenticated report submission preserves the exact production payload",
+    `select public.submit_content_report($1, $2, $3, $4, $5) as report`,
+    [
+      "user_place",
+      targetUserPlaceID,
+      collaboratorUserID,
+      "harassment",
+      "Private report details may quote: go kill yourself.",
+    ],
+    (result) => Boolean(
+      result.rows[0]?.report?.report_id
+        && result.rows[0]?.report?.status === "queued"
+        && result.rows[0]?.report?.is_duplicate === false
+    ),
+  );
+  const reportID = submitted.rows[0].report.report_id;
+
+  await expectQuery(
+    client,
+    "duplicate report submission returns the existing private report",
+    `select public.submit_content_report($1, $2, $3, $4, null) as report`,
+    ["user_place", targetUserPlaceID, collaboratorUserID, "harassment"],
+    (result) => result.rows[0]?.report?.report_id === reportID
+      && result.rows[0]?.report?.is_duplicate === true,
+  );
+  await expectQueryFailure(
+    client,
+    "report submission rejects a spoofed content owner",
+    `select public.submit_content_report($1, $2, $3, $4, null)`,
+    ["user_place", targetUserPlaceID, strangerUserID, "other"],
+    /report_subject_not_visible/,
+  );
+
+  await client.query("reset role");
+  await expectQuery(
+    client,
+    "report queue remains private and captures moderation evidence",
+    `
+      select
+        report.status,
+        report.content_snapshot->>'note' as note,
+        count(event.id)::integer as event_count,
+        not has_table_privilege('authenticated', 'public.content_reports', 'select') as private_queue,
+        not has_function_privilege('anon', 'public.submit_content_report(text,text,text,text,text)', 'execute') as anon_denied
+      from public.content_reports report
+      left join public.moderation_report_events event on event.report_id = report.id
+      where report.id = $1::uuid
+      group by report.id
+    `,
+    [reportID],
+    (result) => result.rows[0]?.status === "queued"
+      && result.rows[0]?.note === "Smoke test fixture"
+      && result.rows[0]?.event_count === 1
+      && result.rows[0]?.private_queue === true
+      && result.rows[0]?.anon_denied === true,
+  );
+
+  await client.query(
+    `
+      insert into public.content_reports (
+        reporter_user_id, reported_user_id, subject_kind, subject_id, reason, content_snapshot
+      )
+      select $1, $2, 'profile', 'smoke-rate-' || sequence, 'spam', '{}'::jsonb
+      from generate_series(1, 29) as sequence
+    `,
+    [smokeUserID, collaboratorUserID],
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQueryFailure(
+    client,
+    "report submission enforces the hourly flood limit",
+    `select public.submit_content_report('profile', $1, $1, 'dangerous_content', null)`,
+    [collaboratorUserID],
+    /report_rate_limited/,
+  );
+  await client.query("reset role");
+  await client.query(
+    `delete from public.follows where follower_user_id = $1 and followed_user_id = $2`,
+    [smokeUserID, collaboratorUserID],
+  );
 }
 
 function parseArgs(args) {
@@ -3910,8 +4041,14 @@ function sqlString(value) {
 
 function sanitizeError(error, dbURL) {
   const message = error instanceof Error ? error.message : String(error);
+  const diagnostics = error && typeof error === "object"
+    ? [error.detail, error.where, error.position ? `position ${error.position}` : null]
+        .filter(Boolean)
+        .join("\n")
+    : "";
   const password = process.env.WANDER_SUPABASE_DB_PASSWORD;
-  let sanitized = message.replaceAll(dbURL, "[REDACTED_DB_URL]");
+  let sanitized = [message, diagnostics].filter(Boolean).join("\n")
+    .replaceAll(dbURL, "[REDACTED_DB_URL]");
   if (password) {
     sanitized = sanitized.replaceAll(password, "[REDACTED_DB_PASSWORD]");
   }

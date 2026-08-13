@@ -1,9 +1,11 @@
 begin;
 
+create extension if not exists unaccent with schema extensions;
+
 create table public.content_reports (
   id uuid primary key default gen_random_uuid(),
-  reporter_user_id text not null references public.profiles(id) on delete cascade,
-  reported_user_id text not null references public.profiles(id) on delete cascade,
+  reporter_user_id text references public.profiles(id) on delete set null,
+  reported_user_id text references public.profiles(id) on delete set null,
   subject_kind text not null check (
     subject_kind in ('profile', 'activity', 'comment', 'user_place', 'visit_photo', 'place_list')
   ),
@@ -37,6 +39,8 @@ create table public.content_reports (
     )
   ),
   resolution_notes text,
+  retention_hold boolean not null default false,
+  retention_expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   closed_at timestamptz,
@@ -46,7 +50,10 @@ create table public.content_reports (
 );
 
 create index content_reports_queue_idx
-  on public.content_reports (status, priority desc, created_at asc);
+  on public.content_reports (priority desc, created_at asc, id asc)
+  where status in ('queued', 'reviewing');
+create index content_reports_reporter_created_idx
+  on public.content_reports (reporter_user_id, created_at desc);
 create index content_reports_reporter_subject_idx
   on public.content_reports (reporter_user_id, subject_kind, subject_id, created_at desc);
 create index content_reports_reported_user_idx
@@ -69,23 +76,25 @@ create index moderation_report_events_report_idx
 alter table public.content_reports enable row level security;
 alter table public.moderation_report_events enable row level security;
 
-revoke all on table public.content_reports from public, anon, authenticated;
-revoke all on table public.moderation_report_events from public, anon, authenticated;
-grant select, update on table public.content_reports to service_role;
-grant select, insert on table public.moderation_report_events to service_role;
+revoke all on table public.content_reports from public, anon, authenticated, service_role;
+revoke all on table public.moderation_report_events from public, anon, authenticated, service_role;
+grant select on table public.content_reports to service_role;
+grant update (status, priority, assigned_to, resolution_action, resolution_notes, retention_hold)
+  on table public.content_reports to service_role;
+grant select on table public.moderation_report_events to service_role;
 
 create function app.normalized_community_text(input_text text)
 returns text
 language sql
-immutable
+stable
 strict
 security invoker
-set search_path = pg_catalog
+set search_path = pg_catalog, extensions
 as $$
   select btrim(
     regexp_replace(
       regexp_replace(
-        lower(translate(input_text, '013457@$', 'oieastas')),
+        lower(translate(extensions.unaccent(normalize(input_text, NFKD)), '013457@$', 'oieastas')),
         '[^a-z0-9]+',
         ' ',
         'g'
@@ -100,7 +109,7 @@ $$;
 create function app.community_text_allowed(input_text text)
 returns boolean
 language sql
-immutable
+stable
 security invoker
 set search_path = pg_catalog, app
 as $$
@@ -123,7 +132,7 @@ $$;
 create function app.assert_community_text(input_text text)
 returns void
 language plpgsql
-immutable
+stable
 security invoker
 set search_path = pg_catalog, app
 as $$
@@ -142,6 +151,12 @@ set search_path = pg_catalog, public, app
 as $$
 begin
   case tg_table_name
+    when 'places' then
+      perform app.assert_community_text(new.canonical_name);
+      perform app.assert_community_text(new.address);
+      perform app.assert_community_text(new.locality);
+      perform app.assert_community_text(new.region);
+      perform app.assert_community_text(new.country);
     when 'profiles' then
       perform app.assert_community_text(new.display_name);
       perform app.assert_community_text(new.handle);
@@ -163,6 +178,10 @@ begin
   return new;
 end;
 $$;
+
+create trigger places_community_text_guard
+before insert or update of canonical_name, address, locality, region, country on public.places
+for each row execute function app.enforce_community_text_policy();
 
 create trigger profiles_community_text_guard
 before insert or update of display_name, handle, bio, home_area on public.profiles
@@ -207,6 +226,8 @@ begin
   end if;
 
   if new.status is distinct from old.status
+     or new.priority is distinct from old.priority
+     or new.retention_hold is distinct from old.retention_hold
      or new.assigned_to is distinct from old.assigned_to
      or new.resolution_action is distinct from old.resolution_action
      or new.resolution_notes is distinct from old.resolution_notes then
@@ -222,6 +243,8 @@ begin
       actor,
       case
         when new.status is distinct from old.status then 'status_changed'
+        when new.priority is distinct from old.priority then 'priority_changed'
+        when new.retention_hold is distinct from old.retention_hold then 'retention_hold_changed'
         when new.assigned_to is distinct from old.assigned_to then 'assigned'
         else 'resolution_updated'
       end,
@@ -229,6 +252,8 @@ begin
       new.status,
       jsonb_strip_nulls(jsonb_build_object(
         'assigned_to', new.assigned_to,
+        'priority', new.priority,
+        'retention_hold', new.retention_hold,
         'resolution_action', new.resolution_action
       ))
     );
@@ -250,8 +275,10 @@ begin
       raise exception 'moderation_resolution_required' using errcode = '23514';
     end if;
     new.closed_at := coalesce(new.closed_at, now());
+    new.retention_expires_at := coalesce(new.retention_expires_at, new.closed_at + interval '24 months');
   else
     new.closed_at := null;
+    new.retention_expires_at := null;
   end if;
   return new;
 end;
@@ -308,7 +335,9 @@ begin
   if normalized_details is not null and char_length(normalized_details) > 500 then
     raise exception 'report_details_too_long' using errcode = '22023';
   end if;
-  perform app.assert_community_text(normalized_details);
+  -- Serialize submissions per reporter so the rate-limit and 24-hour
+  -- deduplication checks cannot be bypassed by concurrent requests.
+  perform pg_advisory_xact_lock(hashtextextended(viewer_id, 0));
 
   if (
     select count(*)
@@ -350,12 +379,14 @@ begin
       when 'activity' then
         select jsonb_strip_nulls(jsonb_build_object(
           'event_type', event.event_type,
-          'note', user_place.note,
+          'note', coalesce(visit.note, user_place.note),
+          'visit_id', event.visit_id,
           'list_name', place_list.name,
           'list_description', place_list.description
         )) into snapshot
         from public.feed_events event
         left join public.user_places user_place on user_place.id = event.user_place_id
+        left join public.place_visits visit on visit.id = event.visit_id
         left join public.place_lists place_list on place_list.id = event.list_id
         where event.id = subject_uuid
           and event.actor_user_id = input_reported_user_id
@@ -367,8 +398,16 @@ begin
           and comment.author_user_id = input_reported_user_id
           and app.can_read_activity_event(viewer_id, comment.activity_id);
       when 'user_place' then
-        select jsonb_strip_nulls(jsonb_build_object('note', user_place.note)) into snapshot
+        select jsonb_strip_nulls(jsonb_build_object(
+          'note', user_place.note,
+          'place_name', place.canonical_name,
+          'address', place.address,
+          'locality', place.locality,
+          'region', place.region,
+          'country', place.country
+        )) into snapshot
         from public.user_places user_place
+        join public.places place on place.id = user_place.place_id
         where user_place.id = subject_uuid
           and user_place.user_id = input_reported_user_id
           and user_place.deleted_at is null
@@ -452,17 +491,60 @@ begin
 end;
 $$;
 
+create function app.purge_expired_content_reports()
+returns integer
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, public, app
+as $$
+declare
+  expired_report_ids uuid[];
+  purged_count integer := 0;
+begin
+  select array_agg(report.id)
+  into expired_report_ids
+  from public.content_reports report
+  where report.retention_expires_at <= now()
+    and not report.retention_hold;
+
+  if expired_report_ids is null then
+    return 0;
+  end if;
+
+  delete from public.moderation_report_events
+  where report_id = any(expired_report_ids);
+  delete from public.content_reports
+  where id = any(expired_report_ids);
+  get diagnostics purged_count = row_count;
+  return purged_count;
+end;
+$$;
+
+create function public.purge_expired_content_reports()
+returns integer
+language sql
+volatile
+security definer
+set search_path = pg_catalog, app
+as $$
+  select app.purge_expired_content_reports();
+$$;
+
 revoke all on function app.normalized_community_text(text) from public, anon, authenticated;
 revoke all on function app.community_text_allowed(text) from public, anon, authenticated;
 revoke all on function app.assert_community_text(text) from public, anon, authenticated;
 revoke all on function app.enforce_community_text_policy() from public, anon, authenticated;
 revoke all on function app.audit_content_report_change() from public, anon, authenticated;
 revoke all on function app.prepare_content_report_update() from public, anon, authenticated;
+revoke all on function app.purge_expired_content_reports() from public, anon, authenticated;
+revoke all on function public.purge_expired_content_reports() from public, anon, authenticated;
 revoke all on function public.submit_content_report(text, text, text, text, text) from public, anon;
 grant execute on function public.submit_content_report(text, text, text, text, text) to authenticated;
+grant execute on function public.purge_expired_content_reports() to service_role;
 
 comment on table public.content_reports is
-  'Private abuse reports available only to the service-role moderation workflow.';
+  'Private abuse reports available only to the service-role moderation workflow. Account deletion clears profile references while retaining the safety record and audit trail.';
 comment on table public.moderation_report_events is
   'Append-only moderation status and assignment audit trail.';
 comment on function public.submit_content_report(text, text, text, text, text) is
