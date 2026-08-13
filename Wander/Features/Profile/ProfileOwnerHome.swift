@@ -77,7 +77,7 @@ enum ProfileActivityPresenter {
         visits: [LocalPlaceVisit],
         currentUserID: String
     ) -> [ProfileActivityItem] {
-        let representativePlaces = VisiblePlaceGrouping.representativePlaces(
+        let groups = VisiblePlaceGrouping.groups(
             from: visiblePlaces,
             currentUserID: currentUserID
         )
@@ -86,18 +86,38 @@ enum ProfileActivityPresenter {
             by: \.userPlaceID
         )
 
-        return representativePlaces
-            .flatMap { visiblePlace -> [ProfileActivityItem] in
-                let userPlace = visiblePlace.userPlace
-                let referenceIDs = Set(
-                    [userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 }
-                )
-                let matchingVisits = referenceIDs.flatMap { referenceID in
-                    visitsByUserPlaceID[referenceID] ?? []
+        return groups
+            .flatMap { group -> [ProfileActivityItem] in
+                let ownerPlaces = group.places.filter {
+                    $0.owner.id == currentUserID && $0.userPlace.deletedAt == nil
                 }
+                let checkedInPlaces = ownerPlaces.filter { $0.userPlace.status == .been }
 
-                if userPlace.status == .been {
-                    var activity = matchingVisits.map { visit in
+                if let visiblePlace = checkedInPlaces.first {
+                    let referenceIDs = checkedInPlaces.reduce(into: Set<String>()) {
+                        result, checkedInPlace in
+                        result.formUnion(
+                            [
+                                checkedInPlace.userPlace.id,
+                                checkedInPlace.userPlace.localID,
+                                checkedInPlace.userPlace.serverID
+                            ].compactMap { $0 }
+                        )
+                    }
+                    let matchingVisits = referenceIDs.flatMap { referenceID in
+                        visitsByUserPlaceID[referenceID] ?? []
+                    }
+                    let uniqueVisits = matchingVisits.reduce(
+                        into: [String: LocalPlaceVisit]()
+                    ) { result, visit in
+                        guard let existing = result[visit.id],
+                              existing.updatedAt >= visit.updatedAt
+                        else {
+                            result[visit.id] = visit
+                            return
+                        }
+                    }
+                    var activity = uniqueVisits.values.map { visit in
                         ProfileActivityItem(
                             id: "check-in-\(visit.id)",
                             visiblePlace: visiblePlace,
@@ -108,21 +128,29 @@ enum ProfileActivityPresenter {
                     }
 
                     if activity.isEmpty {
+                        let legacyUserPlace = checkedInPlaces
+                            .map(\.userPlace)
+                            .max { lhs, rhs in
+                                (lhs.visitedAt ?? lhs.savedAt) < (rhs.visitedAt ?? rhs.savedAt)
+                            } ?? visiblePlace.userPlace
                         activity.append(
                             ProfileActivityItem(
-                                id: "check-in-legacy-\(userPlace.id)",
+                                id: "check-in-legacy-\(legacyUserPlace.id)",
                                 visiblePlace: visiblePlace,
                                 kind: .checkIn,
-                                timestamp: userPlace.visitedAt ?? userPlace.savedAt,
+                                timestamp: legacyUserPlace.visitedAt ?? legacyUserPlace.savedAt,
                                 visitID: nil
                             )
                         )
                     }
 
-                    if let historicalWantedAt = userPlace.historicalWantedAt {
+                    let historicalWantedDates = Set(
+                        checkedInPlaces.compactMap(\.userPlace.historicalWantedAt)
+                    )
+                    for historicalWantedAt in historicalWantedDates {
                         activity.append(
                             ProfileActivityItem(
-                                id: "wanna-history-\(userPlace.id)-\(historicalWantedAt.timeIntervalSince1970)",
+                                id: "wanna-history-\(group.id)-\(historicalWantedAt.timeIntervalSince1970)",
                                 visiblePlace: visiblePlace,
                                 kind: .wanna,
                                 timestamp: historicalWantedAt,
@@ -133,12 +161,17 @@ enum ProfileActivityPresenter {
                     return activity
                 }
 
+                guard let visiblePlace = ownerPlaces.first(where: {
+                    $0.userPlace.status == .wannaGo
+                }) else {
+                    return []
+                }
                 return [
                     ProfileActivityItem(
-                        id: "wanna-\(userPlace.id)",
+                        id: "wanna-\(visiblePlace.userPlace.id)",
                         visiblePlace: visiblePlace,
                         kind: .wanna,
-                        timestamp: userPlace.savedAt,
+                        timestamp: visiblePlace.userPlace.savedAt,
                         visitID: nil
                     )
                 ]
@@ -214,6 +247,7 @@ struct ProfileMemberActions {
     let isMuted: Bool
     let unfollowAction: () -> Void
     let toggleMuteAction: () -> Void
+    let reportAction: () -> Void
     let blockAction: () -> Void
 }
 
@@ -540,6 +574,12 @@ private struct ProfileMemberActionsPopover: View {
                 title: actions.isMuted ? "Unmute activity" : "Mute activity",
                 systemImage: actions.isMuted ? "speaker.wave.2.fill" : "speaker.slash.fill",
                 action: actions.toggleMuteAction
+            )
+            Divider()
+            actionButton(
+                title: "Report",
+                systemImage: "exclamationmark.bubble.fill",
+                action: actions.reportAction
             )
             Divider()
             actionButton(

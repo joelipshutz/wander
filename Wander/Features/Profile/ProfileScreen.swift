@@ -1037,6 +1037,7 @@ struct ProfileDetailView: View {
     @State private var placeCollectionRoute: ProfilePlaceCollectionRoute?
     @State private var showBlockConfirm = false
     @State private var showUnfollowConfirm = false
+    @State private var reportSubject: CommunityReportSubject?
     @State private var isLoading = true
     @State private var profileInsightsCache = ProfileInsightsCache()
 
@@ -1080,6 +1081,7 @@ struct ProfileDetailView: View {
                                 isMuted: store.isMuted(userID: profileID),
                                 unfollowAction: { showUnfollowConfirm = true },
                                 toggleMuteAction: toggleMute,
+                                reportAction: presentProfileReport,
                                 blockAction: { showBlockConfirm = true }
                             ),
                             graphAction: { socialGraphTab = $0 },
@@ -1156,6 +1158,10 @@ struct ProfileDetailView: View {
                 ProfileSocialGraphScreen(profileID: profileID, initialTab: tab, onFindFriends: {})
                     .environmentObject(store)
                     .environmentObject(auth)
+                    .environmentObject(backend)
+            }
+            .sheet(item: $reportSubject) { subject in
+                CommunityReportSheet(subject: subject)
                     .environmentObject(backend)
             }
             .alert("Block this person?", isPresented: $showBlockConfirm) {
@@ -1318,6 +1324,17 @@ struct ProfileDetailView: View {
                     await store.mute(userID: profileID, backend: backend)
                 }
             }
+        }
+    }
+
+    private func presentProfileReport() {
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = CommunityReportSubject(
+                kind: .profile,
+                subjectID: profileID,
+                reportedUserID: profileID,
+                context: "Report @\(profile?.handle ?? "this person") and anything they’ve shared."
+            )
         }
     }
 

@@ -226,11 +226,16 @@ private struct AppleFirstAuthView: View {
                         .accessibilityIdentifier("auth.useOtherMethod")
                     }
 
-                    Text("Apple can hide your email from \(AppBrand.displayName). Authentication is securely handled by Apple and Clerk.")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(spacing: WanderTheme.spacing2) {
+                        Text(.init("By continuing, you agree to the [Terms of Use](https://getrec.me/terms) and [Community Guidelines](https://getrec.me/community), and acknowledge the [Privacy Policy](https://getrec.me/privacy)."))
+                            .accessibilityIdentifier("auth.legalAcknowledgement")
+
+                        Text("Apple can hide your email from \(AppBrand.displayName). Authentication is securely handled by Apple and Clerk.")
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
                     Spacer(minLength: WanderTheme.spacing4)
                 }

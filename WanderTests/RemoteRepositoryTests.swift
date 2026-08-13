@@ -2190,6 +2190,43 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testOwnPlaceSaveRejectsProhibitedCanonicalMetadataBeforeNetwork() async {
+        let rpc = RecordingRPC()
+        let repository = SupabaseUserPlaceRepository(rpc: rpc)
+        let draft = UserPlaceDraft(
+            place: PlaceDraft(
+                localID: "local_bad_place",
+                serverID: nil,
+                canonicalName: "go kill yourself",
+                category: "other",
+                address: "1 Safe Street",
+                locality: "Los Angeles",
+                region: "CA",
+                country: "US",
+                latitude: 34.045,
+                longitude: -118.235,
+                sourceProvider: "manual",
+                sourceProviderPlaceID: "bad-place",
+                confidence: nil
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: nil,
+            nearbyConfirmed: false,
+            sourceType: "manual",
+            attributes: []
+        )
+
+        do {
+            _ = try await repository.save(draft)
+            XCTFail("Expected canonical place metadata to be rejected")
+        } catch {
+            XCTAssertEqual(error as? CommunityContentPolicyError, .prohibitedContent)
+        }
+
+        XCTAssertTrue(rpc.calls.isEmpty)
+    }
+
     func testPlaceProviderMetadataRequestDoesNotRequireAProviderPhoto() async throws {
         let rpc = RecordingRPC()
         rpc.responses["function:place-photo"] = """
@@ -2943,6 +2980,64 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(filters.opinion, .favorite)
         XCTAssertEqual(filters.sort, .ownerRatingDescending)
         XCTAssertEqual(parser.parseSource, .deterministicFallback)
+    }
+
+    func testCommunityReportRepositoryUsesTheServerVerifiedRPCContract() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["submit_content_report"] = Data(
+            #"{"report_id":"b9000000-0000-0000-0000-000000000001","status":"queued","created_at":"2026-08-13T08:00:00.000Z","is_duplicate":false}"#.utf8
+        )
+        let repository = SupabaseCommunityReportRepository(rpc: rpc)
+
+        let receipt = try await repository.submit(
+            CommunityReportSubmission(
+                subject: CommunityReportSubject(
+                    kind: .comment,
+                    subjectID: "b1200000-0000-0000-0000-000000000001",
+                    reportedUserID: "user_target",
+                    context: "Report a comment"
+                ),
+                reason: .harassment,
+                details: "Please review this."
+            )
+        )
+
+        XCTAssertEqual(receipt.status, "queued")
+        XCTAssertFalse(receipt.isDuplicate)
+        XCTAssertEqual(rpc.calls.count, 1)
+        XCTAssertEqual(rpc.calls.first?.name, "submit_content_report")
+        XCTAssertEqual(rpc.calls.first?.body["input_subject_kind"] as? String, "comment")
+        XCTAssertEqual(
+            rpc.calls.first?.body["input_subject_id"] as? String,
+            "b1200000-0000-0000-0000-000000000001"
+        )
+        XCTAssertEqual(rpc.calls.first?.body["input_reported_user_id"] as? String, "user_target")
+        XCTAssertEqual(rpc.calls.first?.body["input_reason"] as? String, "harassment")
+        XCTAssertEqual(rpc.calls.first?.body["input_details"] as? String, "Please review this.")
+    }
+
+    func testCommunityReportRepositoryAllowsPrivateDetailsToQuoteReportedContent() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["submit_content_report"] = Data(
+            #"{"report_id":"b9000000-0000-0000-0000-000000000002","status":"queued","created_at":"2026-08-13T08:00:00.000Z","is_duplicate":false}"#.utf8
+        )
+        let repository = SupabaseCommunityReportRepository(rpc: rpc)
+
+        _ = try await repository.submit(
+            CommunityReportSubmission(
+                subject: CommunityReportSubject(
+                    kind: .profile,
+                    subjectID: "user_target",
+                    reportedUserID: "user_target",
+                    context: "Report profile"
+                ),
+                reason: .other,
+                details: "They wrote: go kill yourself"
+            )
+        )
+
+        XCTAssertEqual(rpc.calls.count, 1)
+        XCTAssertEqual(rpc.calls.first?.body["input_details"] as? String, "They wrote: go kill yourself")
     }
 }
 

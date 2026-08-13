@@ -4883,6 +4883,13 @@ func persistNewPlaceSaveSubmission(
     guard case .add(let sourceType) = submission.context.mode else {
         return nil
     }
+    guard CommunityContentPolicy.allows(submission.note),
+          submission.attributes.allSatisfy({ attribute in
+              (try? CommunityContentPolicy.validateJSONText(attribute.valueJSON)) != nil
+          })
+    else {
+        return nil
+    }
 
     let result = await store.saveCandidate(
         submission.candidate,
@@ -4912,6 +4919,13 @@ func persistScopedVisitOrWantSubmission(
     store: WanderStore,
     backend: WanderBackend?
 ) async -> (SaveResult?, LocalPlaceVisit?) {
+    guard CommunityContentPolicy.allows(submission.note),
+          submission.attributes.allSatisfy({ attribute in
+              (try? CommunityContentPolicy.validateJSONText(attribute.valueJSON)) != nil
+          })
+    else {
+        return (nil, nil)
+    }
     switch submission.context.mode {
     case .add:
         return (nil, nil)
@@ -6491,6 +6505,16 @@ struct MapPlaceSaveFlowSheet: View {
             errorMessage = "A check-in date can’t be in the future."
             return
         }
+        let attributes = attributeDrafts()
+        do {
+            try CommunityContentPolicy.validate(note)
+            for attribute in attributes {
+                try CommunityContentPolicy.validateJSONText(attribute.valueJSON)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         let attemptedAt = Date.now
         saveAttemptedAt = attemptedAt
         if let draftID {
@@ -6506,7 +6530,7 @@ struct MapPlaceSaveFlowSheet: View {
             visibility: saveVisibility,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
-            attributes: attributeDrafts(),
+            attributes: attributes,
             photoAttachments: visitPhotoAttachments,
             inviteeUserIDs: canInviteFriends ? selectedInviteeUserIDs : [],
             reconcilesSharedVisitInvitees: context.editedVisit != nil
@@ -9580,7 +9604,8 @@ private struct PlaceActivityCard: View {
             ActivityEngagementActionRow(
                 context: engagementContext,
                 visiblePlace: entry.summary.visiblePlace,
-                isEngagementEnabled: isEngagementResolved
+                isEngagementEnabled: isEngagementResolved,
+                reportSubjectOverride: reportableUserPlaceSubject
             )
 
             if let photoError {
@@ -9700,6 +9725,21 @@ private struct PlaceActivityCard: View {
             visitID: entry.visit?.serverID,
             preferredKinds: engagementKinds
         ) != nil
+    }
+
+    private var reportableUserPlaceSubject: CommunityReportSubject? {
+        guard !entry.isCurrentUser,
+              let serverID = entry.userPlace.serverID,
+              UUID(uuidString: serverID) != nil
+        else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .userPlace,
+            subjectID: serverID,
+            reportedUserID: entry.owner.id,
+            context: "Report \(entry.owner.displayName)’s place memory."
+        )
     }
 
     private var engagementKinds: [FeedActivityKind] {
@@ -9926,6 +9966,7 @@ private struct PlaceActivityPhotoViewer: View {
     let entriesByID: [String: PlaceActivityEntry]
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPhotoID: String
+    @State private var reportSubject: CommunityReportSubject?
 
     init(
         photos: [PlaceActivityPhoto],
@@ -9947,6 +9988,8 @@ private struct PlaceActivityPhotoViewer: View {
                     Spacer()
                     if canDeleteSelectedPhoto {
                         viewerButton(systemImage: "trash", action: deleteSelectedPhoto)
+                    } else if reportableSelectedPhoto != nil {
+                        viewerButton(systemImage: "exclamationmark.bubble", action: reportSelectedPhoto)
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -9980,6 +10023,10 @@ private struct PlaceActivityPhotoViewer: View {
                 selectedPhotoID = firstID
             }
         }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
+        }
     }
 
     private var selectedPhoto: PlaceActivityPhoto? {
@@ -9992,6 +10039,25 @@ private struct PlaceActivityPhotoViewer: View {
 
     private var canDeleteSelectedPhoto: Bool {
         selectedEntry?.isCurrentUser == true
+    }
+
+    private var reportableSelectedPhoto: CommunityReportSubject? {
+        guard let selectedPhoto,
+              let selectedEntry,
+              !selectedEntry.isCurrentUser
+        else {
+            return nil
+        }
+        let photoID = selectedPhoto.metadata.serverID ?? selectedPhoto.metadata.id
+        guard UUID(uuidString: photoID) != nil else {
+            return nil
+        }
+        return CommunityReportSubject(
+            kind: .visitPhoto,
+            subjectID: photoID,
+            reportedUserID: selectedEntry.owner.id,
+            context: "Report \(selectedEntry.owner.displayName)’s photo."
+        )
     }
 
     private func viewerButton(systemImage: String, action: @escaping () -> Void) -> some View {
@@ -10013,6 +10079,13 @@ private struct PlaceActivityPhotoViewer: View {
                 photoID: selectedPhoto.id,
                 backend: auth.isSignedIn ? backend : nil
             )
+        }
+    }
+
+    private func reportSelectedPhoto() {
+        guard let reportableSelectedPhoto else { return }
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = reportableSelectedPhoto
         }
     }
 }
