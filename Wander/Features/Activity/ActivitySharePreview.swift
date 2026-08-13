@@ -80,6 +80,21 @@ enum ActivitySharePhotoPermissionPolicy {
     }
 }
 
+enum ActivityShareInstagramPostTapAction: Equatable {
+    case showPhotoAccessGuidance
+    case openDirectEditor
+}
+
+enum ActivityShareInstagramPhotoAccessGuidance {
+    static let acknowledgementKey = "activityShare.instagramPostFullPhotoAccessAcknowledged"
+    static let title = "Instagram needs Full Photo Access"
+    static let settingsPath = "Settings → Apps → Instagram → Photos → Full Access"
+
+    static func action(hasAcknowledgedFullAccess: Bool) -> ActivityShareInstagramPostTapAction {
+        hasAcknowledgedFullAccess ? .openDirectEditor : .showPhotoAccessGuidance
+    }
+}
+
 enum ActivityShareTikTokOutcome: Equatable, Sendable {
     case shared
     case savedAsDraft
@@ -160,6 +175,9 @@ struct ActivitySharePreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
+    @AppStorage(ActivityShareInstagramPhotoAccessGuidance.acknowledgementKey)
+    private var hasAcknowledgedInstagramFullPhotoAccess = false
+
     let context: ActivityEngagementContext
     let content: WanderShareContent
     var initiallyVisibleDestination: ActivityShareDestination? = nil
@@ -170,8 +188,12 @@ struct ActivitySharePreviewScreen: View {
     @State private var isPreparingArtwork = false
     @State private var systemSharePresentation: ActivityShareSystemPresentation?
     @State private var messagePresentation: ActivityShareMessagePresentation?
+    @State private var instagramPostPresentation: ActivityShareInstagramPostPresentation?
+    @State private var instagramPhotoAccessGuidance: ActivityShareInstagramPhotoAccessGuidancePresentation?
+    @State private var pendingInstagramPostShare: ActivityShareInstagramPostShareMethod?
     @State private var isMessagePresentationPending = false
     @State private var shouldOpenSystemShareAfterMessagesDismiss = false
+    @State private var shouldOpenSystemShareAfterInstagramDismiss = false
     @State private var isShowingPhotoSettingsAlert = false
     @State private var isShowingExportError = false
     @State private var tikTokFailureMessage: String?
@@ -197,6 +219,9 @@ struct ActivitySharePreviewScreen: View {
             ActivityShareDestinationTray(
                 isPreparing: isPreparingArtwork || isMessagePresentationPending,
                 initiallyVisibleDestination: initiallyVisibleDestination,
+                instagramPhotoAccessInfoAction: hasAcknowledgedInstagramFullPhotoAccess
+                    ? { instagramPhotoAccessGuidance = .reminder }
+                    : nil,
                 action: handleDestination
             )
             .background(alignment: .bottom) {
@@ -223,6 +248,35 @@ struct ActivitySharePreviewScreen: View {
             ) { result in
                 handleMessageCompletion(result)
             }
+        }
+        .sheet(item: $instagramPostPresentation, onDismiss: {
+            guard shouldOpenSystemShareAfterInstagramDismiss else { return }
+            shouldOpenSystemShareAfterInstagramDismiss = false
+            Task { await presentSystemShare() }
+        }) { presentation in
+            ActivityShareInstagramPostComposer(fileURL: presentation.fileURL) { result in
+                if result == .unavailable {
+                    shouldOpenSystemShareAfterInstagramDismiss = true
+                }
+                instagramPostPresentation = nil
+            }
+        }
+        .sheet(item: $instagramPhotoAccessGuidance, onDismiss: {
+            resumePendingInstagramPostShare()
+        }) { presentation in
+            ActivityShareInstagramPhotoAccessGuidanceSheet(
+                primaryTitle: presentation.primaryTitle,
+                primaryAction: {
+                    hasAcknowledgedInstagramFullPhotoAccess = true
+                    pendingInstagramPostShare = .directEditor
+                },
+                compatibleAction: {
+                    pendingInstagramPostShare = .compatibleDocumentHandoff
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
+            .presentationBackground(WanderTheme.canvasWarm.color)
         }
         .alert("Allow rec.me to access your photos", isPresented: $isShowingPhotoSettingsAlert) {
             Button("Cancel", role: .cancel) {}
@@ -316,7 +370,14 @@ struct ActivitySharePreviewScreen: View {
         case .instagramStory:
             Task { await presentInstagramStory() }
         case .instagramPost:
-            Task { await presentInstagramPost() }
+            switch ActivityShareInstagramPhotoAccessGuidance.action(
+                hasAcknowledgedFullAccess: hasAcknowledgedInstagramFullPhotoAccess
+            ) {
+            case .showPhotoAccessGuidance:
+                instagramPhotoAccessGuidance = .requiredBeforeFirstDirectShare
+            case .openDirectEditor:
+                Task { await presentInstagramPost() }
+            }
         case .tikTok:
             Task { await presentTikTok() }
         case .snapchat:
@@ -400,6 +461,19 @@ struct ActivitySharePreviewScreen: View {
     }
 
     @MainActor
+    private func resumePendingInstagramPostShare() {
+        guard let pendingInstagramPostShare else { return }
+        self.pendingInstagramPostShare = nil
+
+        switch pendingInstagramPostShare {
+        case .directEditor:
+            Task { await presentInstagramPost() }
+        case .compatibleDocumentHandoff:
+            Task { await presentCompatibleInstagramPost() }
+        }
+    }
+
+    @MainActor
     private func presentSystemShare() async {
         guard let shareContent = await preparedShareContent() else { return }
         systemSharePresentation = ActivityShareSystemPresentation(content: shareContent)
@@ -420,20 +494,31 @@ struct ActivitySharePreviewScreen: View {
     @MainActor
     private func presentInstagramPost() async {
         guard await prepareArtworkIfNeeded(), let renderedImage else { return }
-        guard ActivityShareProviderLauncher.canOpenInstagram else {
-            await presentSystemShare()
-            return
-        }
-        guard await ensurePhotoLibraryAccess() else { return }
 
-        do {
-            let localIdentifier = try await ActivitySharePhotoWriter.save(renderedImage)
-            guard await ActivityShareProviderLauncher.openInstagramPost(
-                localIdentifier: localIdentifier
-            ) else {
-                await presentSystemShare()
-                return
+        if ActivityShareProviderLauncher.canOpenInstagramPostLibrary,
+           await ensurePhotoLibraryAccess() {
+            do {
+                let localIdentifier = try await ActivitySharePhotoWriter.save(renderedImage)
+                if await ActivityShareProviderLauncher.openInstagramPost(
+                    localIdentifier: localIdentifier
+                ) {
+                    return
+                }
+            } catch {
+                // The unsupported deep link is opportunistic. Keep Meta's documented
+                // document-interaction route available if Photos or Instagram rejects it.
             }
+        }
+
+        await presentCompatibleInstagramPost()
+    }
+
+    @MainActor
+    private func presentCompatibleInstagramPost() async {
+        guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+        do {
+            let fileURL = try ActivityShareInstagramFeedFile.prepare(renderedImage)
+            instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
         } catch {
             isShowingExportError = true
         }
@@ -702,6 +787,7 @@ private struct ActivityShareTicket: View {
 private struct ActivityShareDestinationTray: View {
     let isPreparing: Bool
     let initiallyVisibleDestination: ActivityShareDestination?
+    let instagramPhotoAccessInfoAction: (() -> Void)?
     let action: (ActivityShareDestination) -> Void
 
     var body: some View {
@@ -730,6 +816,19 @@ private struct ActivityShareDestinationTray: View {
                     guard let initiallyVisibleDestination else { return }
                     proxy.scrollTo(initiallyVisibleDestination, anchor: .center)
                 }
+            }
+
+            if let instagramPhotoAccessInfoAction {
+                Button(action: instagramPhotoAccessInfoAction) {
+                    Label("Instagram Post needs Full Photo Access", systemImage: "info.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .accessibilityHint("Shows the Instagram photo access instructions again.")
             }
         }
         .padding(.top, WanderTheme.spacing4)
@@ -905,12 +1004,124 @@ private struct ActivityShareDestinationButton: View {
         case .messages: "Opens Messages with the ticket image and rec.me link."
         case .copyLink: "Copies the rec.me link."
         case .instagramStory: "Opens the Instagram Story composer with the ticket image."
-        case .instagramPost: "Opens the Instagram post composer with the ticket image."
+        case .instagramPost:
+            "Opens the Instagram post composer with the ticket image. Instagram needs Full Photo Access to select the exact ticket."
         case .tikTok: "Shares the ticket image to TikTok when Share Kit is configured."
         case .snapchat: "Opens the Snapchat preview editor with the ticket image when Creative Kit is configured."
         case .savePhoto: "Saves the ticket image to Photos."
         case .systemShare: "Opens the standard iOS share sheet."
         }
+    }
+}
+
+private enum ActivityShareInstagramPostShareMethod {
+    case directEditor
+    case compatibleDocumentHandoff
+}
+
+private enum ActivityShareInstagramPhotoAccessGuidancePresentation: String, Identifiable {
+    case requiredBeforeFirstDirectShare
+    case reminder
+
+    var id: String { rawValue }
+
+    var primaryTitle: String {
+        switch self {
+        case .requiredBeforeFirstDirectShare: "I've enabled Full Access"
+        case .reminder: "Continue to Instagram"
+        }
+    }
+}
+
+private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let primaryTitle: String
+    let primaryAction: () -> Void
+    let compatibleAction: () -> Void
+
+    var body: some View {
+        VStack(spacing: WanderTheme.spacing4) {
+            HStack {
+                Spacer()
+                Button(action: dismiss.callAsFunction) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close Instagram photo access instructions")
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    Image(systemName: "photo.stack.fill")
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .frame(width: 58, height: 58)
+                        .background(WanderTheme.terracottaTint.color)
+                        .clipShape(Circle())
+                        .accessibilityHidden(true)
+
+                    Text(ActivityShareInstagramPhotoAccessGuidance.title)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+
+                    Text("To open this exact ticket directly in Instagram, go to:")
+                        .font(.system(size: 16))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+
+                    Text(ActivityShareInstagramPhotoAccessGuidance.settingsPath)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(WanderTheme.spacing4)
+                        .background(WanderTheme.surfaceBone.color)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                        }
+
+                    Text("Without Full Access, Instagram may select a different photo.")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(WanderTheme.stateWarning.color)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            VStack(spacing: WanderTheme.spacing2) {
+                WanderPrimaryButton(title: primaryTitle, systemImage: "checkmark") {
+                    primaryAction()
+                    dismiss()
+                }
+
+                Button {
+                    compatibleAction()
+                    dismiss()
+                } label: {
+                    Text("Use compatible sharing")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(WanderTheme.surfaceSand.color)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+
+                Text("Compatible sharing avoids Instagram's Photos permission, but iOS may show an extra chooser.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(WanderTheme.spacing4)
+        .background(WanderTheme.canvasWarm.color)
     }
 }
 
@@ -992,16 +1203,15 @@ enum ActivityShareProviderLauncher {
     private static var retainedTikTokRequest: TikTokShareRequest?
     #endif
 
-    static var canOpenInstagram: Bool {
-        guard let url = URL(string: "instagram://app") else { return false }
-        return UIApplication.shared.canOpenURL(url)
-    }
-
     static var canOpenTikTok: Bool {
         guard ActivityShareProviderConfiguration.tikTokClientKey != nil,
               let url = URL(string: "tiktoksharesdk://")
         else { return false }
         return UIApplication.shared.canOpenURL(url)
+    }
+
+    static var canOpenInstagramPostLibrary: Bool {
+        UIApplication.shared.canOpenURL(ActivityShareInstagramFeedContract.libraryURL)
     }
 
     static func openInstagramStory(image: UIImage, contentURL: URL) async -> Bool {
@@ -1023,9 +1233,9 @@ enum ActivityShareProviderLauncher {
     }
 
     static func openInstagramPost(localIdentifier: String) async -> Bool {
-        guard var components = URLComponents(string: "instagram://library") else { return false }
-        components.queryItems = [URLQueryItem(name: "LocalIdentifier", value: localIdentifier)]
-        guard let shareURL = components.url, UIApplication.shared.canOpenURL(shareURL) else {
+        guard let shareURL = ActivityShareInstagramFeedContract.deepLinkURL(
+            localIdentifier: localIdentifier
+        ), UIApplication.shared.canOpenURL(shareURL) else {
             return false
         }
         return await open(shareURL)
@@ -1137,9 +1347,124 @@ private enum ActivitySharePhotoWriterError: Error {
     case saveFailed
 }
 
+enum ActivityShareInstagramFeedContract {
+    static let libraryURL = URL(string: "instagram://library")!
+    static let fileExtension = "igo"
+    static let uniformTypeIdentifier = "com.instagram.exclusivegram"
+
+    static func deepLinkURL(localIdentifier: String) -> URL? {
+        guard !localIdentifier.isEmpty,
+              var components = URLComponents(url: libraryURL, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.queryItems = [
+            URLQueryItem(name: "OpenInEditor", value: "1"),
+            URLQueryItem(name: "LocalIdentifier", value: localIdentifier),
+        ]
+        return components.url
+    }
+}
+
+private enum ActivityShareInstagramFeedFile {
+    static func prepare(_ image: UIImage) throws -> URL {
+        guard let data = image.jpegData(compressionQuality: 0.95) else {
+            throw ActivityShareInstagramFeedFileError.encodingFailed
+        }
+
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("recme-instagram-\(UUID().uuidString)")
+            .appendingPathExtension(ActivityShareInstagramFeedContract.fileExtension)
+        try data.write(to: fileURL, options: .atomic)
+        return fileURL
+    }
+}
+
+private enum ActivityShareInstagramFeedFileError: Error {
+    case encodingFailed
+}
+
 private struct ActivityShareSystemPresentation: Identifiable {
     let id = UUID()
     let content: WanderShareContent
+}
+
+private struct ActivityShareInstagramPostPresentation: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
+private enum ActivityShareInstagramPostResult: Equatable {
+    case dismissed
+    case unavailable
+}
+
+private struct ActivityShareInstagramPostComposer: UIViewControllerRepresentable {
+    let fileURL: URL
+    let onFinish: (ActivityShareInstagramPostResult) -> Void
+
+    func makeUIViewController(context: Context) -> ActivityShareInstagramPostHostController {
+        ActivityShareInstagramPostHostController(fileURL: fileURL, onFinish: onFinish)
+    }
+
+    func updateUIViewController(
+        _ uiViewController: ActivityShareInstagramPostHostController,
+        context: Context
+    ) {}
+}
+
+@MainActor
+private final class ActivityShareInstagramPostHostController: UIViewController,
+    @preconcurrency UIDocumentInteractionControllerDelegate
+{
+    private let fileURL: URL
+    private let onFinish: (ActivityShareInstagramPostResult) -> Void
+    private var documentController: UIDocumentInteractionController?
+    private var hasPresented = false
+    private var hasFinished = false
+
+    init(fileURL: URL, onFinish: @escaping (ActivityShareInstagramPostResult) -> Void) {
+        self.fileURL = fileURL
+        self.onFinish = onFinish
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !hasPresented else { return }
+        hasPresented = true
+
+        let controller = UIDocumentInteractionController(url: fileURL)
+        controller.uti = ActivityShareInstagramFeedContract.uniformTypeIdentifier
+        controller.delegate = self
+        documentController = controller
+
+        guard controller.presentOpenInMenu(from: view.bounds, in: view, animated: true) else {
+            finish(.unavailable)
+            return
+        }
+    }
+
+    func documentInteractionControllerDidDismissOpenInMenu(
+        _ controller: UIDocumentInteractionController
+    ) {
+        finish(.dismissed)
+    }
+
+    private func finish(_ result: ActivityShareInstagramPostResult) {
+        guard !hasFinished else { return }
+        hasFinished = true
+        try? FileManager.default.removeItem(at: fileURL)
+        onFinish(result)
+    }
 }
 
 private struct ActivityShareMessagePresentation: Identifiable {
@@ -1223,7 +1548,9 @@ struct ActivitySharePreviewMockupRoot: View {
             ActivitySharePreviewScreen(
                 context: context,
                 content: content,
-                initiallyVisibleDestination: .tikTok
+                initiallyVisibleDestination: ProcessInfo.processInfo.arguments.contains(
+                    "-WanderActivityShareInstagramPostMockup"
+                ) ? .instagramPost : .tikTok
             )
                 .onOpenURL(perform: handleTikTokCallback)
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in

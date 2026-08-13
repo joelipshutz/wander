@@ -75,6 +75,7 @@
 		489B81B85CE01E5443268DAF /* SharedPlaceImportInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A294B4D596A37D263243FAF /* SharedPlaceImportInbox.swift */; };
 		489DE0EACE7936C845A43AA4 /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE82052FB7FADD2A758552E /* OnboardingFlowView.swift */; };
 		494E2C67824F5DC9AFBDC46C /* WanderFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00EA2E6F128127B2CED014D /* WanderFixtures.swift */; };
+		4A07E4DBDDA8BC31D120B17A /* rec-271-instagram-post-direct-handoff-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 2AA16BF5C2E2E6C371692333 /* rec-271-instagram-post-direct-handoff-pre.json */; };
 		4A22B42F0D3DFB823F938E9D /* PlaceImportParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E8DC0A8E7A20017527489A9 /* PlaceImportParser.swift */; };
 		4B1E69D54A34826BF104006B /* OnboardingStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059173381275E3363050A4E1 /* OnboardingStateTests.swift */; };
 		4C5E13BFB09959A31A40295B /* rec-166-feed-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 909841D535730B229BFD4563 /* rec-166-feed-search-pre.json */; };
@@ -315,6 +316,7 @@
 		249D58D889C2DFE7795EB7C6 /* PlacePhotoCarouselMockupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoCarouselMockupTests.swift; sourceTree = "<group>"; };
 		250A52345423E83FCB445CEE /* InviteFrameworkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFrameworkTests.swift; sourceTree = "<group>"; };
 		260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverParserTests.swift; sourceTree = "<group>"; };
+		2AA16BF5C2E2E6C371692333 /* rec-271-instagram-post-direct-handoff-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-271-instagram-post-direct-handoff-pre.json"; sourceTree = "<group>"; };
 		2D56F3E007FB8CA01FD8B342 /* WanderCheckInControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderCheckInControl.swift; sourceTree = "<group>"; };
 		2EC6DBFE09F2D96DE9F1DD38 /* rec-195-streak-notification-live-entry-gate-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-195-streak-notification-live-entry-gate-pre.json"; sourceTree = "<group>"; };
 		2F1CF8668571F118A931FD44 /* WanderStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderStoreTests.swift; sourceTree = "<group>"; };
@@ -591,6 +593,7 @@
 				19B0EEA0C26443BE29075013 /* rec-270-liquid-glass-pin-transition-pre.json */,
 				94C2EEFCBA5E32F70E1FDDD6 /* rec-270-liquid-glass-pin-transition-pre.png */,
 				5158D1D9D07312701C4E026B /* rec-270-map-search-shadow-followup-pre.json */,
+				2AA16BF5C2E2E6C371692333 /* rec-271-instagram-post-direct-handoff-pre.json */,
 				2FCD985E8B3B2DF9E8EF2BAD /* rec-274-comments-message-dismissal-pre.json */,
 				B4CFACA664252A3BBDF70791 /* rec-274-messages-composer-dismissal-pre.json */,
 			);
@@ -1229,6 +1232,7 @@
 				1CC229F1DBD13EA63FA6EE21 /* rec-270-liquid-glass-pin-transition-pre.json in Resources */,
 				9FB326CCA609385EEEED194B /* rec-270-liquid-glass-pin-transition-pre.png in Resources */,
 				E140EC2813E26B8307B1D1B1 /* rec-270-map-search-shadow-followup-pre.json in Resources */,
+				4A07E4DBDDA8BC31D120B17A /* rec-271-instagram-post-direct-handoff-pre.json in Resources */,
 				A2FD2C362D9DAB53792C8B06 /* rec-274-comments-message-dismissal-pre.json in Resources */,
 				93E16EB26DD015377F5B2D9A /* rec-274-messages-composer-dismissal-pre.json in Resources */,
 			);
@@ -1607,6 +1611,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
+				WANDER_META_APP_ID = 1056841943950470;
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
 				WANDER_TIKTOK_CLIENT_KEY = sbawa5efdmmcvrudh7;
 			};
@@ -1622,6 +1627,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				WANDER_CLERK_FRONTEND_API = "growing-pheasant-22.clerk.accounts.dev";
+				WANDER_META_APP_ID = 1056841943950470;
 				WANDER_SUPABASE_URL = "https://rugmtlgufrhlxwfkumhw.supabase.co";
 				WANDER_TIKTOK_CLIENT_KEY = sbawa5efdmmcvrudh7;
 			};
