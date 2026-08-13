@@ -2944,6 +2944,65 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(filters.sort, .ownerRatingDescending)
         XCTAssertEqual(parser.parseSource, .deterministicFallback)
     }
+
+    func testCommunityReportRepositoryUsesTheServerVerifiedRPCContract() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["submit_content_report"] = Data(
+            #"{"report_id":"b9000000-0000-0000-0000-000000000001","status":"queued","created_at":"2026-08-13T08:00:00.000Z","is_duplicate":false}"#.utf8
+        )
+        let repository = SupabaseCommunityReportRepository(rpc: rpc)
+
+        let receipt = try await repository.submit(
+            CommunityReportSubmission(
+                subject: CommunityReportSubject(
+                    kind: .comment,
+                    subjectID: "b1200000-0000-0000-0000-000000000001",
+                    reportedUserID: "user_target",
+                    context: "Report a comment"
+                ),
+                reason: .harassment,
+                details: "Please review this."
+            )
+        )
+
+        XCTAssertEqual(receipt.status, "queued")
+        XCTAssertFalse(receipt.isDuplicate)
+        XCTAssertEqual(rpc.calls.count, 1)
+        XCTAssertEqual(rpc.calls.first?.name, "submit_content_report")
+        XCTAssertEqual(rpc.calls.first?.body["input_subject_kind"] as? String, "comment")
+        XCTAssertEqual(
+            rpc.calls.first?.body["input_subject_id"] as? String,
+            "b1200000-0000-0000-0000-000000000001"
+        )
+        XCTAssertEqual(rpc.calls.first?.body["input_reported_user_id"] as? String, "user_target")
+        XCTAssertEqual(rpc.calls.first?.body["input_reason"] as? String, "harassment")
+        XCTAssertEqual(rpc.calls.first?.body["input_details"] as? String, "Please review this.")
+    }
+
+    func testCommunityReportRepositoryRejectsProhibitedDetailBeforeNetwork() async {
+        let rpc = RecordingRPC()
+        let repository = SupabaseCommunityReportRepository(rpc: rpc)
+
+        do {
+            _ = try await repository.submit(
+                CommunityReportSubmission(
+                    subject: CommunityReportSubject(
+                        kind: .profile,
+                        subjectID: "user_target",
+                        reportedUserID: "user_target",
+                        context: "Report profile"
+                    ),
+                    reason: .other,
+                    details: "go kill yourself"
+                )
+            )
+            XCTFail("Expected the client content guard to reject the report detail")
+        } catch {
+            XCTAssertEqual(error as? CommunityContentPolicyError, .prohibitedContent)
+        }
+
+        XCTAssertTrue(rpc.calls.isEmpty)
+    }
 }
 
 private struct FeedRPCProbeParameters: Encodable {

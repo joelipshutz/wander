@@ -826,6 +826,7 @@ private struct ListPreviewMosaic: View {
 
 private struct ListDetailScreen: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
@@ -846,6 +847,7 @@ private struct ListDetailScreen: View {
     @State private var isShowingLeaveConfirmation = false
     @State private var isLeavingList = false
     @State private var isShowingLeaveError = false
+    @State private var reportSubject: CommunityReportSubject?
 
     init(
         list: PlaceListMock,
@@ -927,7 +929,7 @@ private struct ListDetailScreen: View {
                     .accessibilityLabel("Edit list")
                 }
 
-                if canLeaveList {
+                if !renderedList.isOwnedByCurrentUser {
                     if isLeavingList {
                         ProgressView()
                             .tint(WanderTheme.textInk.color)
@@ -935,10 +937,18 @@ private struct ListDetailScreen: View {
                             .accessibilityLabel("Leaving list")
                     } else {
                         Menu {
-                            Button(role: .destructive) {
-                                isShowingLeaveConfirmation = true
+                            if canLeaveList {
+                                Button(role: .destructive) {
+                                    isShowingLeaveConfirmation = true
+                                } label: {
+                                    Label("Leave List", systemImage: "rectangle.portrait.and.arrow.right")
+                                }
+                            }
+
+                            Button {
+                                presentListReport(renderedList)
                             } label: {
-                                Label("Leave List", systemImage: "rectangle.portrait.and.arrow.right")
+                                Label("Report list", systemImage: "exclamationmark.bubble")
                             }
                         } label: {
                             Image(systemName: "ellipsis")
@@ -1009,6 +1019,10 @@ private struct ListDetailScreen: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Try again later")
+        }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
         }
     }
 
@@ -1230,6 +1244,17 @@ private struct ListDetailScreen: View {
             serverID: sourceList?.serverID ?? list.sourceListID,
             name: displayList.name
         )
+    }
+
+    private func presentListReport(_ renderedList: PlaceListMock) {
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = CommunityReportSubject(
+                kind: .placeList,
+                subjectID: sourceList?.serverID ?? list.sourceListID ?? list.id,
+                reportedUserID: renderedList.ownerUserID,
+                context: "Report \(renderedList.ownerName)’s list “\(renderedList.name)”."
+            )
+        }
     }
 
     @MainActor
@@ -3639,6 +3664,7 @@ private struct ListEditorSheet: View {
     @State private var stagedCollaborators: [ListCollaboratorMock]
     @State private var isShowingFriendSearch = false
     @State private var isShowingDeleteConfirmation = false
+    @State private var contentErrorMessage: String?
     @State private var walkthroughScrollPosition: String?
     @FocusState private var focusedField: ListEditorFocus?
 
@@ -3699,6 +3725,14 @@ private struct ListEditorSheet: View {
                         TextField("quiet tables, outlets, places worth returning to", text: $description, axis: .vertical)
                             .font(.system(size: 15, weight: .semibold))
                             .lineLimit(3...5)
+                    }
+
+                    if let contentErrorMessage {
+                        Label(contentErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(WanderTypography.emphasizedBody)
+                            .foregroundStyle(WanderTheme.stateError.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("listEditor.contentError")
                     }
 
                     collaboratorsBlock
@@ -3824,6 +3858,13 @@ private struct ListEditorSheet: View {
 
     private func saveAndDismiss() {
         guard !trimmedTitle.isEmpty else { return }
+        do {
+            try CommunityContentPolicy.validate(title, description)
+        } catch {
+            contentErrorMessage = error.localizedDescription
+            return
+        }
+        contentErrorMessage = nil
         onSave(
             ListEditorDraft(
                 title: title,

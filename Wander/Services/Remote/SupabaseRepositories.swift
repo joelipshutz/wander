@@ -16,6 +16,7 @@ struct SupabaseProfileRepository: ProfileRepository {
     }
 
     func updateCurrentProfile(_ update: ProfileDetailsUpdate) async throws -> LocalProfile {
+        try CommunityContentPolicy.validate(update.displayName, update.handle, update.bio, update.homeArea)
         let response: RemoteCurrentProfileDTO = try await rpc.call(
             "update_own_profile",
             params: UpdateOwnProfileParams(
@@ -261,6 +262,46 @@ struct SupabaseMuteRepository: MuteRepository {
     }
 }
 
+struct SupabaseCommunityReportRepository: CommunityReportRepository {
+    private let rpc: RemoteProcedureCalling
+
+    init(rpc: RemoteProcedureCalling) {
+        self.rpc = rpc
+    }
+
+    func submit(_ submission: CommunityReportSubmission) async throws -> CommunityReportReceipt {
+        try CommunityContentPolicy.validate(submission.details)
+        return try await rpc.call(
+            "submit_content_report",
+            params: SubmitContentReportParams(submission: submission)
+        )
+    }
+}
+
+private struct SubmitContentReportParams: Encodable {
+    let subjectKind: String
+    let subjectID: String
+    let reportedUserID: String
+    let reason: String
+    let details: String?
+
+    init(submission: CommunityReportSubmission) {
+        subjectKind = submission.subject.kind.rawValue
+        subjectID = submission.subject.subjectID
+        reportedUserID = submission.subject.reportedUserID
+        reason = submission.reason.rawValue
+        details = submission.details
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case subjectKind = "input_subject_kind"
+        case subjectID = "input_subject_id"
+        case reportedUserID = "input_reported_user_id"
+        case reason = "input_reason"
+        case details = "input_details"
+    }
+}
+
 struct SupabasePlaceRepository: PlaceRepository {
     private let rpc: RemoteProcedureCalling
 
@@ -469,6 +510,7 @@ struct SupabaseActivityEngagementRepository: ActivityEngagementRepository {
     }
 
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
+        try CommunityContentPolicy.validate(body)
         let response: RemoteActivityCommentPostDTO = try await rpc.call(
             "add_activity_comment",
             params: AddActivityCommentParams(activityID: activityID, body: body)
@@ -513,6 +555,10 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 
     func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
+        try CommunityContentPolicy.validate(draft.note)
+        for attribute in draft.attributes {
+            try CommunityContentPolicy.validateJSONText(attribute.valueJSON)
+        }
         let result: SaveOwnPlaceResponse = try await rpc.call(
             "save_own_place",
             params: SaveOwnPlaceParams(draft: draft)
@@ -521,6 +567,8 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
     }
 
     func saveCheckIn(_ draft: CheckInSaveDraft) async throws -> CheckInSaveResult {
+        try CommunityContentPolicy.validate(draft.userPlace.note, draft.visit.note, draft.historicalWant?.note)
+        try CommunityContentPolicy.validateJSONText(draft.visit.attributeAnswersJSON)
         let result: SaveOwnCheckInResponse = try await rpc.call(
             "save_own_check_in",
             params: SaveOwnCheckInParams(draft: draft)
@@ -601,6 +649,8 @@ struct SupabaseVisitRepository: VisitRepository {
     }
 
     func upsertVisit(_ draft: PlaceVisitDraft) async throws -> PlaceVisitResult {
+        try CommunityContentPolicy.validate(draft.note)
+        try CommunityContentPolicy.validateJSONText(draft.attributeAnswersJSON)
         let body = PlaceVisitUpsertBody(draft: draft)
         let rows: [PlaceVisitRow] = try await table.upsert(
             table: "place_visits",
@@ -1449,7 +1499,8 @@ struct SupabasePlaceListRepository: PlaceListRepository {
     }
 
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
-        try await rpc.call(
+        try CommunityContentPolicy.validate(draft.name, draft.description)
+        return try await rpc.call(
             "upsert_place_list",
             params: UpsertPlaceListParams(draft: draft)
         )

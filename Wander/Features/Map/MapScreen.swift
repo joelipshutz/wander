@@ -4883,6 +4883,13 @@ func persistNewPlaceSaveSubmission(
     guard case .add(let sourceType) = submission.context.mode else {
         return nil
     }
+    guard CommunityContentPolicy.allows(submission.note),
+          submission.attributes.allSatisfy({ attribute in
+              (try? CommunityContentPolicy.validateJSONText(attribute.valueJSON)) != nil
+          })
+    else {
+        return nil
+    }
 
     let result = await store.saveCandidate(
         submission.candidate,
@@ -4912,6 +4919,13 @@ func persistScopedVisitOrWantSubmission(
     store: WanderStore,
     backend: WanderBackend?
 ) async -> (SaveResult?, LocalPlaceVisit?) {
+    guard CommunityContentPolicy.allows(submission.note),
+          submission.attributes.allSatisfy({ attribute in
+              (try? CommunityContentPolicy.validateJSONText(attribute.valueJSON)) != nil
+          })
+    else {
+        return (nil, nil)
+    }
     switch submission.context.mode {
     case .add:
         return (nil, nil)
@@ -6491,6 +6505,16 @@ struct MapPlaceSaveFlowSheet: View {
             errorMessage = "A check-in date can’t be in the future."
             return
         }
+        let attributes = attributeDrafts()
+        do {
+            try CommunityContentPolicy.validate(note)
+            for attribute in attributes {
+                try CommunityContentPolicy.validateJSONText(attribute.valueJSON)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         let attemptedAt = Date.now
         saveAttemptedAt = attemptedAt
         if let draftID {
@@ -6506,7 +6530,7 @@ struct MapPlaceSaveFlowSheet: View {
             visibility: saveVisibility,
             ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
-            attributes: attributeDrafts(),
+            attributes: attributes,
             photoAttachments: visitPhotoAttachments,
             inviteeUserIDs: canInviteFriends ? selectedInviteeUserIDs : [],
             reconcilesSharedVisitInvitees: context.editedVisit != nil
