@@ -28782,3 +28782,17 @@ Starting state and coordination:
   personal API key belongs to another project and was intentionally not used.
   No database, auth, payment, RLS, build-number, archive, upload, TestFlight, or
   tester-Slack change was made.
+
+Handoff:
+
+- Committed the complete implementation as `bc075e57`, pushed
+  `codex/rec-170-analytics`, and opened draft PR #391:
+  https://github.com/joelipshutz/wander/pull/391. The PR carries a `ship`
+  TestFlight manifest because runtime analytics changed, but no build or release
+  action was requested or taken.
+- Linear REC-170 has the PR, validation, rollout caveat, and credential blocker.
+  Mission Control task `a10fe8a5-fd83-4263-a598-3c72f33fb2a6` is in Review.
+- Restart: add the two rec.me-specific management values to the local secret
+  environment, run `npm --prefix scripts run analytics:apply`, open each managed
+  tile to confirm the live query succeeds, then mark the PR ready and move
+  REC-170 / Mission Control to Done after merge or final acceptance.
