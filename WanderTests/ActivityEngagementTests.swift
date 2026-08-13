@@ -84,7 +84,10 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(components.host, "library")
         XCTAssertEqual(
             components.queryItems,
-            [URLQueryItem(name: "LocalIdentifier", value: localIdentifier)]
+            [
+                URLQueryItem(name: "OpenInEditor", value: "1"),
+                URLQueryItem(name: "LocalIdentifier", value: localIdentifier),
+            ]
         )
         XCTAssertNil(ActivityShareInstagramFeedContract.deepLinkURL(localIdentifier: ""))
         XCTAssertEqual(ActivityShareInstagramFeedContract.fileExtension, "igo")

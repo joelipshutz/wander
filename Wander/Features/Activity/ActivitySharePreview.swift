@@ -1165,6 +1165,7 @@ enum ActivityShareInstagramFeedContract {
               var components = URLComponents(url: libraryURL, resolvingAgainstBaseURL: false)
         else { return nil }
         components.queryItems = [
+            URLQueryItem(name: "OpenInEditor", value: "1"),
             URLQueryItem(name: "LocalIdentifier", value: localIdentifier),
         ]
         return components.url
