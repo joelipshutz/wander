@@ -87,6 +87,7 @@ targets:
             CFBundleURLSchemes:
               - $(WANDER_TIKTOK_CLIENT_KEY)
         LSApplicationQueriesSchemes:
+          - instagram
           - instagram-stories
           - snapchat
           - tiktoksharesdk
@@ -95,7 +96,7 @@ targets:
         NSCameraUsageDescription: rec.me uses the camera only when you choose to take a photo in the app.
         NSContactsUsageDescription: rec.me uses contacts only to help you find people you already know. It never messages anyone.
         NSLocationWhenInUseUsageDescription: rec.me uses your location to suggest nearby places when you ask and to keep an optional nearby widget useful. It never broadcasts live location.
-        NSPhotoLibraryAddUsageDescription: rec.me saves a share ticket to your photo library when you choose Save or TikTok.
+        NSPhotoLibraryAddUsageDescription: rec.me saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.
         UILaunchScreen: {}
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:

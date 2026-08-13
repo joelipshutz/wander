@@ -434,6 +434,22 @@ struct ActivitySharePreviewScreen: View {
     @MainActor
     private func presentInstagramPost() async {
         guard await prepareArtworkIfNeeded(), let renderedImage else { return }
+
+        if ActivityShareProviderLauncher.canOpenInstagramPostLibrary,
+           await ensurePhotoLibraryAccess() {
+            do {
+                let localIdentifier = try await ActivitySharePhotoWriter.save(renderedImage)
+                if await ActivityShareProviderLauncher.openInstagramPost(
+                    localIdentifier: localIdentifier
+                ) {
+                    return
+                }
+            } catch {
+                // The unsupported deep link is opportunistic. Keep Meta's documented
+                // document-interaction route available if Photos or Instagram rejects it.
+            }
+        }
+
         do {
             let fileURL = try ActivityShareInstagramFeedFile.prepare(renderedImage)
             instagramPostPresentation = ActivityShareInstagramPostPresentation(fileURL: fileURL)
@@ -1002,6 +1018,10 @@ enum ActivityShareProviderLauncher {
         return UIApplication.shared.canOpenURL(url)
     }
 
+    static var canOpenInstagramPostLibrary: Bool {
+        UIApplication.shared.canOpenURL(ActivityShareInstagramFeedContract.libraryURL)
+    }
+
     static func openInstagramStory(image: UIImage, contentURL: URL) async -> Bool {
         guard let appID = ActivityShareProviderConfiguration.metaAppID,
               let pngData = image.pngData(),
@@ -1017,6 +1037,15 @@ enum ActivityShareProviderLauncher {
             "com.instagram.sharedSticker.backgroundImage": pngData,
             "com.instagram.sharedSticker.contentURL": contentURL.absoluteString,
         ]])
+        return await open(shareURL)
+    }
+
+    static func openInstagramPost(localIdentifier: String) async -> Bool {
+        guard let shareURL = ActivityShareInstagramFeedContract.deepLinkURL(
+            localIdentifier: localIdentifier
+        ), UIApplication.shared.canOpenURL(shareURL) else {
+            return false
+        }
         return await open(shareURL)
     }
 
@@ -1127,8 +1156,19 @@ private enum ActivitySharePhotoWriterError: Error {
 }
 
 enum ActivityShareInstagramFeedContract {
+    static let libraryURL = URL(string: "instagram://library")!
     static let fileExtension = "igo"
     static let uniformTypeIdentifier = "com.instagram.exclusivegram"
+
+    static func deepLinkURL(localIdentifier: String) -> URL? {
+        guard !localIdentifier.isEmpty,
+              var components = URLComponents(url: libraryURL, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.queryItems = [
+            URLQueryItem(name: "LocalIdentifier", value: localIdentifier),
+        ]
+        return components.url
+    }
 }
 
 private enum ActivityShareInstagramFeedFile {

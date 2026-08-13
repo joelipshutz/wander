@@ -1,0 +1,16 @@
+{
+  "issue": "REC-271",
+  "pr": 376,
+  "branch_head": "b822897a3",
+  "device": "iPhone 15 Pro",
+  "source_recording": {
+    "filename": "ScreenRecording_08-12-2026 16-22-34_1.mov",
+    "access": "macOS denied this task access to the copy stored under Messages attachments"
+  },
+  "reported_behavior": "Tapping Instagram Post presents Apple's Open In application chooser before Instagram opens its own intermediate sharing screens and eventually reaches the New Post composer.",
+  "expected_behavior": "Tapping Instagram Post first saves the rendered ticket to Photos and opens instagram://library with that asset's LocalIdentifier so Instagram can start with the ticket selected.",
+  "fallback_behavior": "If iOS cannot open the unsupported Instagram library deep link, rec.me presents the existing .igo and com.instagram.exclusivegram document-interaction handoff, then the system share sheet if that route is unavailable.",
+  "root_cause": "The supported implementation calls UIDocumentInteractionController.presentOpenInMenu, whose contract always presents an application-selection menu.",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; Ryan's physical-device recording and the current route contract are the pre-fix source of truth",
+  "screenshot_capture": "unavailable: macOS denied access to the Messages attachment and no StateServer screenshot endpoint exists"
+}

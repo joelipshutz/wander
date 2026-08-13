@@ -71,11 +71,50 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
-    func testInstagramFeedUsesMetasDocumentInteractionContract() {
+    func testInstagramFeedPrefersLibraryDeepLinkAndKeepsDocumentFallback() throws {
+        let localIdentifier = "A1B2C3/L0/001"
+        let deepLink = try XCTUnwrap(
+            ActivityShareInstagramFeedContract.deepLinkURL(localIdentifier: localIdentifier)
+        )
+        let components = try XCTUnwrap(
+            URLComponents(url: deepLink, resolvingAgainstBaseURL: false)
+        )
+
+        XCTAssertEqual(components.scheme, "instagram")
+        XCTAssertEqual(components.host, "library")
+        XCTAssertEqual(
+            components.queryItems,
+            [URLQueryItem(name: "LocalIdentifier", value: localIdentifier)]
+        )
+        XCTAssertNil(ActivityShareInstagramFeedContract.deepLinkURL(localIdentifier: ""))
         XCTAssertEqual(ActivityShareInstagramFeedContract.fileExtension, "igo")
         XCTAssertEqual(
             ActivityShareInstagramFeedContract.uniformTypeIdentifier,
             "com.instagram.exclusivegram"
+        )
+    }
+
+    func testInstagramPostDirectHandoffFixtureDocumentsFallback() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: projectRoot.appendingPathComponent(
+                "WanderTests/Fixtures/ios-fix/rec-271-instagram-post-direct-handoff-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        XCTAssertEqual(fixture["issue"] as? String, "REC-271")
+        XCTAssertTrue(
+            try XCTUnwrap(fixture["expected_behavior"] as? String)
+                .contains("instagram://library")
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(fixture["fallback_behavior"] as? String)
+                .contains("com.instagram.exclusivegram")
         )
     }
 

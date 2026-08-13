@@ -74,7 +74,12 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(project.contains(#"WANDER_META_APP_ID: "1056841943950470""#))
         XCTAssertTrue(generatedProject.contains("WANDER_META_APP_ID = 1056841943950470;"))
         XCTAssertEqual(plist["WANDER_META_APP_ID"] as? String, "$(WANDER_META_APP_ID)")
+        XCTAssertTrue(querySchemes.contains("instagram"))
         XCTAssertTrue(querySchemes.contains("instagram-stories"))
+        XCTAssertTrue(
+            try XCTUnwrap(plist["NSPhotoLibraryAddUsageDescription"] as? String)
+                .contains("Instagram")
+        )
     }
 
     func testInfoPlistRegistersProfileShareURLScheme() throws {

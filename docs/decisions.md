@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -37,6 +37,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 |---|---|---|
 | Native iOS | Locked | SwiftUI, iOS 17+, iPhone-first. |
 | XcodeGen | Locked | `project.yml` is source of truth. |
+| Instagram Feed direct handoff | Provisional for REC-271 | Ryan explicitly accepted the risk of trying the undocumented `instagram://library?LocalIdentifier=` route first so the rendered ticket can open already selected in Instagram. The app must save the ticket to Photos, keep `.igo` plus `com.instagram.exclusivegram` as the automatic fallback when the deep link cannot open, and retain the system share fallback behind that. Remove or revise this experiment if physical-device testing fails or Instagram/App Review rejects it. |
 | Clerk + Supabase | Locked | Clerk for identity/account, Supabase for data/RLS/PostGIS/storage/functions. |
 | Apple-first Clerk auth | Locked for REC-259 | The existing auth sheet opens on a rec.me-owned native Sign in with Apple CTA. Clerk remains the identity/session owner and handles Apple sign-in/sign-up transfer. Email, Google, verification, recovery, and any incomplete Apple continuation stay in Clerk's prebuilt `AuthView` behind **Use email or Google**; do not build a second independent account system or duplicate those flows. |
 | Clerk user id mapping | Locked | Store Clerk user ids as text `profiles.id` / owner fields. Supabase RLS reads the Clerk session token subject through `auth.jwt()->>'sub'`, with a local-test fallback to `request.jwt.claim.sub`. |
