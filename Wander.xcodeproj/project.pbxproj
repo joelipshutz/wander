@@ -126,6 +126,7 @@
 		8A2B415C5F41508EB61C1026 /* rec-195-copy-rotation-analytics-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 1F632D2BDC390C70FD727599 /* rec-195-copy-rotation-analytics-pre.json */; };
 		8B6F8926CF8E18D2B2B21F22 /* rec-195-streak-notification-auth-race-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 82139F335706F798EFC2439B /* rec-195-streak-notification-auth-race-pre.json */; };
 		8C199C879B404C2660D9571D /* ProfileInsightsPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32385DF4A2C769C69C78156B /* ProfileInsightsPresenter.swift */; };
+		8DFB67B038C4C8CB6D84B8FC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D2745F268FA93EB19F1DE757 /* PrivacyInfo.xcprivacy */; };
 		8E6FE20E754A7C65A933AD53 /* ZoomablePhoto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58EF753986682D036EC50061 /* ZoomablePhoto.swift */; };
 		8FC6E5AF64993C4B3DB8C4E9 /* PlaceRating.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4753F17DA5C73EB4353038E /* PlaceRating.swift */; };
 		8FE082C847183FA74B0E89A6 /* SharedPlaceImportInboxTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C2A2ADEB522DD9B634F1EF /* SharedPlaceImportInboxTests.swift */; };
@@ -195,6 +196,7 @@
 		DBDA10E305A15751087B1BB0 /* WanderWidgetSnapshotPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159538D8F8224999DF1BB697 /* WanderWidgetSnapshotPublisher.swift */; };
 		DC93B6D45F927B63B3DD012D /* SaveStreak.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBCA8B148895B9ED982B4E4A /* SaveStreak.swift */; };
 		DF7751B0E499B150900F2027 /* ClerkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 8988486B1914A6E2FBB405A6 /* ClerkKit */; };
+		E15BC91E5CA5C62F2E9E710A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 541F19B34A4A3BAEB65C2836 /* PrivacyInfo.xcprivacy */; };
 		E4B474B631166BEA26F3C833 /* SupabaseDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21979B6601194E839F12552D /* SupabaseDTOs.swift */; };
 		E4FD872A229A8C85B3F63CEF /* rec-196-offline-map-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */; };
 		E675767BE5C249B99B816B74 /* WanderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0078639327C81EA5F98400B4 /* WanderApp.swift */; };
@@ -335,6 +337,7 @@
 		46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgets.swift; sourceTree = "<group>"; };
 		50BCB996310F4905E98BAAFE /* AuthGateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthGateSheet.swift; sourceTree = "<group>"; };
 		53269BFD9AB143F47A3DDAC7 /* rec-268-comment-delete-photo-back-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-268-comment-delete-photo-back-pre.json"; sourceTree = "<group>"; };
+		541F19B34A4A3BAEB65C2836 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		55E1982754D8F9C0128D97CB /* AppEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEntryView.swift; sourceTree = "<group>"; };
 		56F0D3D160FF8337D43E3C2F /* PlaceExternalLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceExternalLinks.swift; sourceTree = "<group>"; };
 		58182EF60912B97691F7340A /* PlacePhotoGalleryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePhotoGalleryTests.swift; sourceTree = "<group>"; };
@@ -428,6 +431,7 @@
 		CF4AB698D7C8717206FB36A4 /* ProfileMetadataTagParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileMetadataTagParserTests.swift; sourceTree = "<group>"; };
 		CF55A883DB97E39A4A2D85F2 /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
 		D1A3B6E88CE5E045D8FA3403 /* PostHogAnalyticsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostHogAnalyticsClient.swift; sourceTree = "<group>"; };
+		D2745F268FA93EB19F1DE757 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D34EA36529858ADD6C880DAE /* BoundaryImportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundaryImportTests.swift; sourceTree = "<group>"; };
 		D3A3B59E94C99CDA86C1B466 /* FirstVisitWalkthrough.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstVisitWalkthrough.swift; sourceTree = "<group>"; };
 		D54C8EF64A2C7C57ACBFFFAB /* PlaceActivityMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceActivityMockups.swift; sourceTree = "<group>"; };
@@ -532,6 +536,7 @@
 			children = (
 				D6A18F74DCFE0F295B598171 /* Assets.xcassets */,
 				D63987ED78C8738917AB869B /* Info.plist */,
+				541F19B34A4A3BAEB65C2836 /* PrivacyInfo.xcprivacy */,
 				70527AF1590BEF9CB781A16D /* Wander.entitlements */,
 			);
 			path = Resources;
@@ -840,6 +845,7 @@
 			isa = PBXGroup;
 			children = (
 				5D2998E89FC3805E187D600C /* Info.plist */,
+				D2745F268FA93EB19F1DE757 /* PrivacyInfo.xcprivacy */,
 				3E382A2A47A6DC2EAEF12F23 /* ShareViewController.swift */,
 				718A86905C5ED6292D127B8D /* WanderShareExtension.entitlements */,
 			);
@@ -1000,6 +1006,7 @@
 			buildConfigurationList = B90FA0239AE8ED9A869533F4 /* Build configuration list for PBXNativeTarget "WanderShareExtension" */;
 			buildPhases = (
 				2BA3132B2A7C8FB8F790F19E /* Sources */,
+				4DECCDDA979FE8FE58DC5282 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -1153,11 +1160,20 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		4DECCDDA979FE8FE58DC5282 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8DFB67B038C4C8CB6D84B8FC /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		565C39457D48A6461B4D97A9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				9BDDE72CA80B33CAFC0EFD17 /* Assets.xcassets in Resources */,
+				E15BC91E5CA5C62F2E9E710A /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
