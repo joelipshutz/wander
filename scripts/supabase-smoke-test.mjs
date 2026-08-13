@@ -781,7 +781,11 @@ begin
 
   select locality into visible_city
   from public.profile_visible_places(${smokeUser}, null, null)
-  where canonical_name = 'Codex Smoke Coffee'
+  where place_id = (
+    select id from public.places
+    where source_provider = 'codex_smoke'
+      and source_provider_place_id = 'place-list-rpc-smoke'
+  )
   limit 1;
   if visible_city is distinct from 'Los Angeles' then
     raise exception 'profile geography payload failed';
@@ -1601,6 +1605,10 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     subcategory: "Coffee shop",
     category_source: "deterministic",
     raw_provider_type: "coffee shop",
+    address: "1 Smoke Test Way",
+    locality: "Los Angeles",
+    region: "CA",
+    country: "United States",
     latitude: 34.052235,
     longitude: -118.243683,
     source_provider: "codex_smoke",
@@ -1893,27 +1901,7 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
   await expectQuery(
     client,
     "a second stable UUID creates a second active ticket",
-    `
-      with saved as (
-        select public.save_own_check_in(
-          $1::jsonb,
-          $2::jsonb,
-          $3::jsonb,
-          $4::jsonb,
-          null
-        )
-      )
-      select
-        count(*)::integer as ticket_count,
-        count(distinct feed.visit_id)::integer as feed_count
-      from public.place_visits visit
-      left join public.feed_events feed
-        on feed.visit_id = visit.id
-        and feed.event_type = 'place_been'
-      cross join saved
-      where visit.user_place_id = $5::uuid
-        and visit.deleted_at is null
-    `,
+    "select public.save_own_check_in($1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, null) as saved",
     [
       JSON.stringify(place),
       JSON.stringify({ ...userPlace, note: "latest check-in", rating_score: 5 }),
@@ -1925,34 +1913,66 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
         rating_score: 5,
         attribute_answers: attributes,
       }),
-      userPlaceID,
     ],
-    (result) => result.rows[0]?.ticket_count === 2 && result.rows[0]?.feed_count === 2,
+    (result) => result.rows[0]?.saved?.visit_id === secondVisitID,
   );
+  await expectQuery(
+    client,
+    "both stable UUIDs remain active tickets",
+    `
+      select count(*)::integer as ticket_count
+      from public.place_visits
+      where user_place_id = $1::uuid
+        and id = any($2::uuid[])
+        and deleted_at is null
+    `,
+    [userPlaceID, [firstVisitID, secondVisitID]],
+    (result) => result.rows[0]?.ticket_count === 2,
+  );
+
+  // feed_events is intentionally unavailable to authenticated clients. Check
+  // its internal projection as the privileged smoke-test session, then restore
+  // the owner claims before exercising the remaining public RPCs.
+  await client.query("reset role");
+  await expectQuery(
+    client,
+    "both active tickets project into distinct feed events",
+    `
+      select count(distinct visit_id)::integer as feed_count
+      from public.feed_events
+      where visit_id = any($1::uuid[])
+        and event_type = 'place_been'
+    `,
+    [[firstVisitID, secondVisitID]],
+    (result) => result.rows[0]?.feed_count === 2,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
 
   await expectQuery(
     client,
-    "deleting one of two tickets retains checked-in state and restores the remaining summary",
+    "deleting one of two tickets retains checked-in state",
+    "select public.delete_own_check_in($1::uuid) as result",
+    [secondVisitID],
+    (result) => result.rows[0]?.result?.transition === "been",
+  );
+  await expectQuery(
+    client,
+    "deleting one of two tickets restores the remaining summary",
     `
-      with deleted as (
-        select public.delete_own_check_in($1::uuid) as result
-      )
       select
-        deleted.result->>'transition' as transition,
         up.status,
         up.note,
         up.rating_score::double precision as rating_score,
         count(visit.id)::integer as ticket_count
-      from deleted
-      join public.user_places up on up.id = $2::uuid
+      from public.user_places up
       left join public.place_visits visit
         on visit.user_place_id = up.id
         and visit.deleted_at is null
-      group by deleted.result, up.status, up.note, up.rating_score
+      where up.id = $1::uuid
+      group by up.status, up.note, up.rating_score
     `,
-    [secondVisitID, userPlaceID],
-    (result) => result.rows[0]?.transition === "been"
-      && result.rows[0]?.status === "been"
+    [userPlaceID],
+    (result) => result.rows[0]?.status === "been"
       && result.rows[0]?.note === "first check-in"
       && result.rows[0]?.rating_score === 4
       && result.rows[0]?.ticket_count === 1,
@@ -1960,26 +1980,28 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
 
   await expectQuery(
     client,
-    "deleting the final ticket restores the historical Wanna snapshot atomically",
+    "deleting the final ticket transitions to historical Wanna",
+    "select public.delete_own_check_in($1::uuid) as result",
+    [firstVisitID],
+    (result) => result.rows[0]?.result?.transition === "wanna_go",
+  );
+  await expectQuery(
+    client,
+    "deleting the final ticket restores the historical Wanna snapshot",
     `
-      with deleted as (
-        select public.delete_own_check_in($1::uuid) as result
-      )
       select
-        deleted.result->>'transition' as transition,
         up.status,
         up.note,
         up.deleted_at,
         attr.value
-      from deleted
-      join public.user_places up on up.id = $2::uuid
+      from public.user_places up
       left join public.place_attributes attr
         on attr.user_place_id = up.id
         and attr.question_key = 'personal_labels'
+      where up.id = $1::uuid
     `,
-    [firstVisitID, userPlaceID],
-    (result) => result.rows[0]?.transition === "wanna_go"
-      && result.rows[0]?.status === "wanna_go"
+    [userPlaceID],
+    (result) => result.rows[0]?.status === "wanna_go"
       && result.rows[0]?.note === "want snapshot"
       && result.rows[0]?.deleted_at === null
       && JSON.stringify(result.rows[0]?.value) === JSON.stringify(["try soon"]),
@@ -2134,14 +2156,15 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
 
   await expectQuery(
     client,
+    "authenticated user can mute a profile",
+    "select public.mute_profile($1)",
+    [collaboratorUserID],
+    (result) => result.rowCount === 1,
+  );
+  await expectQuery(
+    client,
     "authenticated mute is owner-private and listable",
-    `
-      with muted as (select public.mute_profile($1))
-      select profiles.id
-      from public.muted_profiles() profiles
-      cross join muted
-      where profiles.id = $1
-    `,
+    "select id from public.muted_profiles() where id = $1",
     [collaboratorUserID],
     (result) => result.rows[0]?.id === collaboratorUserID,
   );
@@ -2167,7 +2190,11 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
       select locality, region, country, owner_avatar_url,
              visited_at, saved_at, created_at, updated_at
       from public.profile_visible_places($1, null, null)
-      where canonical_name = 'Codex Smoke Coffee'
+      where place_id = (
+        select id from public.places
+        where source_provider = 'codex_smoke'
+          and source_provider_place_id = 'place-list-rpc-smoke'
+      )
       limit 1
     `,
     [smokeUserID],
@@ -2184,14 +2211,23 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
   await expectQuery(
     client,
     "authenticated user can remove a mute",
-    `
-      with unmuted as (select public.unmute_profile($1))
-      select count(profiles.id)::integer as count
-      from unmuted
-      left join public.muted_profiles() profiles on profiles.id = $1
-    `,
+    "select public.unmute_profile($1)",
+    [collaboratorUserID],
+    (result) => result.rowCount === 1,
+  );
+  await expectQuery(
+    client,
+    "removed mute no longer appears in owner list",
+    "select count(*)::integer as count from public.muted_profiles() where id = $1",
     [collaboratorUserID],
     (result) => result.rows[0]?.count === 0,
+  );
+  await expectQuery(
+    client,
+    "profile privacy fixture resets before cross-surface checks",
+    "select public.update_own_profile(null, null, null, false, null, null, true) as profile",
+    [],
+    (result) => result.rows[0]?.profile?.is_private_profile === false,
   );
 
   await client.query("reset role");
@@ -2281,8 +2317,8 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
         ($2, $3, 'profile'),
         ($3, $4, 'profile'),
         ($2, $5, 'profile'),
-        ($6, $9, 'profile'),
-        ($9, $6, 'profile'),
+        ($6, $7, 'profile'),
+        ($7, $6, 'profile'),
         ($6, $5, 'profile')
       on conflict (follower_user_id, followed_user_id) do update
       set source = excluded.source, updated_at = now()
@@ -2295,8 +2331,6 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
       fixture.shared,
       fixture.followed,
       fixture.private,
-      fixture.blocked,
-      fixture.blocker,
       fixture.fallback,
     ],
     (result) => result.rows.length === 7,
