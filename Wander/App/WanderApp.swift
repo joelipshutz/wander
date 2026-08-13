@@ -29,7 +29,26 @@ struct WanderApp: App {
         _pushNotifications = StateObject(
             wrappedValue: PushNotificationManager(analytics: analyticsClient)
         )
-        let authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        let authStore: AuthSessionStore
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest") {
+            authStore = AuthSessionStore(
+                provider: PreviewAuthSessionProvider(
+                    state: .signedIn(
+                        AuthSession(
+                            userID: "user_joe",
+                            displayName: "Joe",
+                            handle: "joe"
+                        )
+                    )
+                )
+            )
+        } else {
+            authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        }
+        #else
+        authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        #endif
         let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
         discoverParser = Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
         _auth = StateObject(wrappedValue: authStore)

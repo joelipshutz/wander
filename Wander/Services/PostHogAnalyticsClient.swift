@@ -39,12 +39,30 @@ final class PostHogAnalyticsClient: AnalyticsClient {
 
         self.sdk = sdk
 
-        let postHogConfig = PostHogConfig(projectToken: projectToken, host: configuration.host)
-        postHogConfig.captureScreenViews = false
-        postHogConfig.captureElementInteractions = false
-        postHogConfig.sessionReplay = false
-        postHogConfig.surveys = false
+        let postHogConfig = Self.sdkConfiguration(
+            projectToken: projectToken,
+            host: configuration.host
+        )
         sdk.setup(postHogConfig)
+    }
+
+    static func sdkConfiguration(projectToken: String, host: String) -> PostHogConfig {
+        let configuration = PostHogConfig(projectToken: projectToken, host: host)
+        configuration.captureApplicationLifecycleEvents = false
+        configuration.captureScreenViews = false
+        configuration.captureElementInteractions = false
+        configuration.enableSwizzling = false
+        configuration.sessionReplay = false
+        configuration.surveys = false
+        configuration.errorTrackingConfig.autoCapture = false
+        configuration.setDefaultPersonProperties = false
+        configuration.setBeforeSend { event in
+            // Defense in depth: prevent event IPs from becoming GeoIP properties even if the
+            // PostHog project-level IP capture setting is changed later.
+            event.properties["$geoip_disable"] = true
+            return event
+        }
+        return configuration
     }
 
     func track(_ event: AnalyticsEvent) {

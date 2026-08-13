@@ -129,6 +129,7 @@ enum AuthGateIntent: String, Equatable, Identifiable {
     case socialActivity
     case followPeople
     case manageBlocks
+    case reportContent
     case manageNotifications
     case syncPending
 
@@ -168,6 +169,13 @@ enum AuthGateIntent: String, Equatable, Identifiable {
             AuthGateCopy(
                 title: "Sign in to manage blocks",
                 message: "Blocks apply across search, profiles, and maps, so they need an account.",
+                primaryAction: "Sign in",
+                secondaryAction: "Cancel"
+            )
+        case .reportContent:
+            AuthGateCopy(
+                title: "Sign in to send a report",
+                message: "Reports need an account so our safety team can investigate abuse and prevent duplicate reports.",
                 primaryAction: "Sign in",
                 secondaryAction: "Cancel"
             )

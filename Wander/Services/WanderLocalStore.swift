@@ -109,32 +109,47 @@ struct CurrentUserCalendarProjection {
     }
 
     func profileStats(currentUserID: String, friends: Int) -> ProfileStats {
-        let representativePlaces = VisiblePlaceGrouping.representativePlaces(
+        let groups = VisiblePlaceGrouping.groups(
             from: visiblePlaces,
             currentUserID: currentUserID
         )
-        let checkedInPlaces = representativePlaces.filter {
-            $0.userPlace.status == .been && $0.userPlace.deletedAt == nil
+        let visitsByUserPlaceID = Dictionary(
+            grouping: visits.filter { $0.deletedAt == nil },
+            by: \.userPlaceID
+        )
+        let ownerPlacesByGroup = groups.map { group in
+            group.places.filter {
+                $0.owner.id == currentUserID && $0.userPlace.deletedAt == nil
+            }
         }
-        let checkInCount = checkedInPlaces.reduce(into: 0) { count, visiblePlace in
-            let referenceIDs = Set(
-                [
-                    visiblePlace.userPlace.id,
-                    visiblePlace.userPlace.localID,
-                    visiblePlace.userPlace.serverID
-                ].compactMap { $0 }
-            )
-            let matchingVisitCount = visits.filter {
-                $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
-            }.count
-            count += max(matchingVisitCount, 1)
+        let checkedInGroups = ownerPlacesByGroup.compactMap { ownerPlaces -> [VisiblePlace]? in
+            let checkedInPlaces = ownerPlaces.filter { $0.userPlace.status == .been }
+            return checkedInPlaces.isEmpty ? nil : checkedInPlaces
+        }
+        let checkInCount = checkedInGroups.reduce(into: 0) { count, checkedInPlaces in
+            let referenceIDs = checkedInPlaces.reduce(into: Set<String>()) {
+                result, checkedInPlace in
+                result.formUnion(
+                    [
+                        checkedInPlace.userPlace.id,
+                        checkedInPlace.userPlace.localID,
+                        checkedInPlace.userPlace.serverID
+                    ].compactMap { $0 }
+                )
+            }
+            let matchingVisitIDs = referenceIDs.reduce(into: Set<String>()) {
+                result, referenceID in
+                result.formUnion((visitsByUserPlaceID[referenceID] ?? []).map(\.id))
+            }
+            count += max(matchingVisitIDs.count, 1)
         }
 
         return ProfileStats(
-            been: checkedInPlaces.count,
+            been: checkedInGroups.count,
             checkIns: checkInCount,
-            wanna: representativePlaces.filter {
-                $0.userPlace.status == .wannaGo && $0.userPlace.deletedAt == nil
+            wanna: ownerPlacesByGroup.filter { ownerPlaces in
+                !ownerPlaces.contains { $0.userPlace.status == .been }
+                    && ownerPlaces.contains { $0.userPlace.status == .wannaGo }
             }.count,
             friends: friends
         )
@@ -1250,6 +1265,7 @@ final class WanderStore: ObservableObject {
     }
 
     func updateCurrentUserDetails(_ update: ProfileDetailsUpdate, backend: WanderBackend?) async throws {
+        try CommunityContentPolicy.validate(update.displayName, update.handle, update.bio, update.homeArea)
         guard let backend, backend.profileRepository != nil else {
             updateCurrentUserProfile(
                 displayName: update.displayName,
@@ -2242,7 +2258,10 @@ final class WanderStore: ObservableObject {
         collaboratorUserIDs: [String] = []
     ) -> LocalPlaceList? {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return nil }
+        guard !trimmedName.isEmpty,
+              CommunityContentPolicy.allows(trimmedName),
+              CommunityContentPolicy.allows(description)
+        else { return nil }
 
         let now = Date.now
         let list = LocalPlaceList(
@@ -2271,6 +2290,8 @@ final class WanderStore: ObservableObject {
     ) -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty,
+              CommunityContentPolicy.allows(trimmedName),
+              CommunityContentPolicy.allows(description),
               let index = placeLists.firstIndex(where: { $0.id == id || $0.localID == id || $0.serverID == id }),
               canManage(placeLists[index])
         else { return false }

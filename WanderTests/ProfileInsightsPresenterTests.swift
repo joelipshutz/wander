@@ -1296,6 +1296,89 @@ final class ProfilePlaceCollectionMapTests: XCTestCase {
         XCTAssertEqual(timestamp, ProfileActivityTimestampText(date: "Yesterday", time: "8:42 PM"))
     }
 
+    func testProfileActivityKeepsVisitsAcrossDuplicateCurrentUserPlaceRows() throws {
+        let owner = profile(id: "joe")
+        let newerJadeRabbit = visiblePlace(
+            owner: owner,
+            userPlaceID: "jade-rabbit-new",
+            placeLocalID: "jade-rabbit-place-new",
+            placeServerID: "jade-rabbit-place-server-new",
+            name: "Jade Rabbit",
+            latitude: 34.03095,
+            longitude: -118.47756,
+            status: .been
+        )
+        let olderJadeRabbit = visiblePlace(
+            owner: owner,
+            userPlaceID: "jade-rabbit-old",
+            placeLocalID: "jade-rabbit-place-old",
+            placeServerID: "jade-rabbit-place-server-old",
+            name: "Jade Rabbit",
+            latitude: 34.03095,
+            longitude: -118.47756,
+            status: .been
+        )
+        let newestVisit = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-08-12T08:38:01Z")
+        )
+        let priorVisit = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-08-04T19:00:00Z")
+        )
+        let oldestVisit = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-07-27T19:00:00Z")
+        )
+        newerJadeRabbit.userPlace.savedAt = priorVisit
+        newerJadeRabbit.userPlace.updatedAt = newestVisit
+        newerJadeRabbit.userPlace.visitedAt = newestVisit
+        olderJadeRabbit.userPlace.savedAt = oldestVisit
+        olderJadeRabbit.userPlace.updatedAt = oldestVisit
+        olderJadeRabbit.userPlace.visitedAt = oldestVisit
+
+        let visits = [
+            LocalPlaceVisit(
+                localID: "jade-rabbit-visit-newest",
+                userPlaceID: newerJadeRabbit.userPlace.id,
+                visitedAt: newestVisit
+            ),
+            LocalPlaceVisit(
+                localID: "jade-rabbit-visit-prior",
+                userPlaceID: newerJadeRabbit.userPlace.id,
+                visitedAt: priorVisit
+            ),
+            LocalPlaceVisit(
+                localID: "jade-rabbit-visit-oldest",
+                userPlaceID: olderJadeRabbit.userPlace.id,
+                visitedAt: oldestVisit
+            )
+        ]
+
+        let group = try XCTUnwrap(
+            VisiblePlaceGrouping.groups(
+                from: [newerJadeRabbit, olderJadeRabbit],
+                currentUserID: owner.id
+            ).first
+        )
+        XCTAssertEqual(group.primary.userPlace.id, newerJadeRabbit.userPlace.id)
+
+        let items = ProfileActivityPresenter.items(
+            visiblePlaces: [newerJadeRabbit, olderJadeRabbit],
+            visits: visits,
+            currentUserID: owner.id
+        )
+        XCTAssertEqual(items.map(\.timestamp), [newestVisit, priorVisit, oldestVisit])
+        XCTAssertEqual(items.map(\.visitID), visits.map(\.id))
+        XCTAssertTrue(items.allSatisfy {
+            $0.visiblePlace.userPlace.id == newerJadeRabbit.userPlace.id
+        })
+
+        let stats = CurrentUserCalendarProjection(
+            visiblePlaces: [newerJadeRabbit, olderJadeRabbit],
+            visits: visits,
+            isAuthoritative: true
+        ).profileStats(currentUserID: owner.id, friends: 0)
+        XCTAssertEqual(stats, ProfileStats(been: 1, checkIns: 3, wanna: 0, friends: 0))
+    }
+
     private func profile(id: String) -> LocalProfile {
         LocalProfile(
             localID: "local-\(id)",

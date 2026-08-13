@@ -8,6 +8,7 @@ final class WanderBackend: ObservableObject {
     let followRepository: (any FollowRepository)?
     let blockRepository: (any BlockRepository)?
     let muteRepository: (any MuteRepository)?
+    let communityReportRepository: (any CommunityReportRepository)?
     let placeRepository: (any PlaceRepository)?
     let feedRepository: (any FeedRepository)?
     let activityEngagementRepository: (any ActivityEngagementRepository)?
@@ -41,6 +42,7 @@ final class WanderBackend: ObservableObject {
             self.followRepository = SupabaseFollowRepository(rpc: client)
             self.blockRepository = SupabaseBlockRepository(rpc: client)
             self.muteRepository = SupabaseMuteRepository(rpc: client)
+            self.communityReportRepository = SupabaseCommunityReportRepository(rpc: client)
             self.placeRepository = SupabasePlaceRepository(rpc: client)
             self.feedRepository = SupabaseFeedRepository(rpc: client)
             self.activityEngagementRepository = SupabaseActivityEngagementRepository(rpc: client)
@@ -61,6 +63,7 @@ final class WanderBackend: ObservableObject {
             self.followRepository = nil
             self.blockRepository = nil
             self.muteRepository = nil
+            self.communityReportRepository = nil
             self.placeRepository = nil
             self.feedRepository = nil
             self.activityEngagementRepository = nil
@@ -89,6 +92,7 @@ final class WanderBackend: ObservableObject {
         followRepository: (any FollowRepository)? = nil,
         blockRepository: (any BlockRepository)? = nil,
         muteRepository: (any MuteRepository)? = nil,
+        communityReportRepository: (any CommunityReportRepository)? = nil,
         placeRepository: (any PlaceRepository)? = nil,
         feedRepository: (any FeedRepository)? = nil,
         activityEngagementRepository: (any ActivityEngagementRepository)? = nil,
@@ -109,6 +113,7 @@ final class WanderBackend: ObservableObject {
         self.followRepository = followRepository
         self.blockRepository = blockRepository
         self.muteRepository = muteRepository
+        self.communityReportRepository = communityReportRepository
         self.placeRepository = placeRepository
         self.feedRepository = feedRepository
         self.activityEngagementRepository = activityEngagementRepository
@@ -130,6 +135,7 @@ final class WanderBackend: ObservableObject {
             || followRepository != nil
             || blockRepository != nil
             || muteRepository != nil
+            || communityReportRepository != nil
             || placeRepository != nil
             || feedRepository != nil
             || activityEngagementRepository != nil
@@ -400,6 +406,13 @@ final class WanderBackend: ObservableObject {
     func mutedProfiles() async throws -> [ProfileShell] {
         guard let muteRepository else { throw WanderRemoteError.notConfigured }
         return try await muteRepository.mutedProfiles()
+    }
+
+    func submitCommunityReport(_ submission: CommunityReportSubmission) async throws -> CommunityReportReceipt {
+        guard let communityReportRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        return try await communityReportRepository.submit(submission)
     }
 
     func saveVisiblePlace(placeID: String, sourceUserPlaceID: String) async throws -> SaveResult {

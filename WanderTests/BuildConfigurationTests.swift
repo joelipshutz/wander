@@ -286,6 +286,70 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(configuration.isConfigured)
     }
 
+    func testPostHogDisablesUnusedAutomaticCaptureSurfaces() {
+        #if canImport(PostHog)
+        let configuration = PostHogAnalyticsClient.sdkConfiguration(
+            projectToken: "phc_recme_project",
+            host: "https://us.i.posthog.com"
+        )
+
+        XCTAssertFalse(configuration.captureApplicationLifecycleEvents)
+        XCTAssertFalse(configuration.captureScreenViews)
+        XCTAssertFalse(configuration.captureElementInteractions)
+        XCTAssertFalse(configuration.enableSwizzling)
+        XCTAssertFalse(configuration.sessionReplay)
+        XCTAssertFalse(configuration.surveys)
+        XCTAssertFalse(configuration.errorTrackingConfig.autoCapture)
+        XCTAssertFalse(configuration.setDefaultPersonProperties)
+        #endif
+    }
+
+    func testAppPrivacyManifestDeclaresAppOwnedDataAndRequiredReasons() throws {
+        let manifest = try privacyManifest("Wander/Resources/PrivacyInfo.xcprivacy")
+
+        XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
+        XCTAssertEqual(manifest["NSPrivacyTrackingDomains"] as? [String], [])
+        XCTAssertEqual(
+            try collectedDataTypes(in: manifest),
+            [
+                "NSPrivacyCollectedDataTypeContacts",
+                "NSPrivacyCollectedDataTypeDeviceID",
+                "NSPrivacyCollectedDataTypeEmailAddress",
+                "NSPrivacyCollectedDataTypeName",
+                "NSPrivacyCollectedDataTypeOtherUserContent",
+                "NSPrivacyCollectedDataTypePhoneNumber",
+                "NSPrivacyCollectedDataTypePhotosorVideos",
+                "NSPrivacyCollectedDataTypeSearchHistory",
+                "NSPrivacyCollectedDataTypeUserID"
+            ]
+        )
+        XCTAssertEqual(
+            try accessedAPIReasons(in: manifest),
+            [
+                "NSPrivacyAccessedAPICategoryFileTimestamp": ["C617.1"],
+                "NSPrivacyAccessedAPICategorySystemBootTime": ["35F9.1"],
+                "NSPrivacyAccessedAPICategoryUserDefaults": ["CA92.1"]
+            ]
+        )
+
+        for declaration in try collectedDataDeclarations(in: manifest) {
+            XCTAssertEqual(declaration["NSPrivacyCollectedDataTypeLinked"] as? Bool, true)
+            XCTAssertEqual(declaration["NSPrivacyCollectedDataTypeTracking"] as? Bool, false)
+        }
+    }
+
+    func testShareExtensionPrivacyManifestDeclaresOnlyContainerFileTimestamps() throws {
+        let manifest = try privacyManifest("WanderShareExtension/PrivacyInfo.xcprivacy")
+
+        XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
+        XCTAssertEqual(manifest["NSPrivacyTrackingDomains"] as? [String], [])
+        XCTAssertEqual(try collectedDataTypes(in: manifest), [])
+        XCTAssertEqual(
+            try accessedAPIReasons(in: manifest),
+            ["NSPrivacyAccessedAPICategoryFileTimestamp": ["C617.1"]]
+        )
+    }
+
     func testUnauthorizedRPCStatusRequiresOneFreshTokenRetry() {
         XCTAssertTrue(WanderSupabaseClient.requiresFreshToken(after: 401))
         XCTAssertTrue(WanderSupabaseClient.requiresFreshToken(after: 403))
@@ -297,6 +361,32 @@ final class BuildConfigurationTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func privacyManifest(_ relativePath: String) throws -> [String: Any] {
+        let data = try Data(contentsOf: projectRoot.appendingPathComponent(relativePath))
+        return try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        )
+    }
+
+    private func collectedDataDeclarations(in manifest: [String: Any]) throws -> [[String: Any]] {
+        try XCTUnwrap(manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
+    }
+
+    private func collectedDataTypes(in manifest: [String: Any]) throws -> [String] {
+        try collectedDataDeclarations(in: manifest)
+            .compactMap { $0["NSPrivacyCollectedDataType"] as? String }
+            .sorted()
+    }
+
+    private func accessedAPIReasons(in manifest: [String: Any]) throws -> [String: [String]] {
+        let declarations = try XCTUnwrap(manifest["NSPrivacyAccessedAPITypes"] as? [[String: Any]])
+        return try Dictionary(uniqueKeysWithValues: declarations.map { declaration in
+            let category = try XCTUnwrap(declaration["NSPrivacyAccessedAPIType"] as? String)
+            let reasons = try XCTUnwrap(declaration["NSPrivacyAccessedAPITypeReasons"] as? [String])
+            return (category, reasons.sorted())
+        })
     }
 
     private static func xcconfigSettings(in contents: String) -> [String: String] {
