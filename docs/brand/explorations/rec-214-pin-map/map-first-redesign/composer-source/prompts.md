@@ -61,3 +61,23 @@ Style/medium: preserve the warm cream paper map, sage land, pale blue water, cor
 Constraints: exactly two pins total; strong close crop; very quiet background; exact centered wordmark unchanged; 1024×1024 square; no baked rounded corners; no extra text; no watermark.
 Avoid: pin constellation, more than two markers, background clutter, off-center wordmark, baked liquid glass.
 ```
+
+## AM — Zoomed-out in-app emojis
+
+The zoomed-out AH source is a direct copy of the original Neighborhood Grid
+artwork. AM used the following precise edit to swap only the pin-center glyphs:
+
+```text
+Use case: precise-object-edit
+Asset type: square iOS app icon source for later Apple Icon Composer treatment
+Input images: Image 1 is the exact base artwork and edit target.
+Primary request: Replace only the four black inner glyphs inside the existing terracotta map-pin medallions with the exact colorful native Apple-style emoji characters used by the app:
+- upper-left pin: "☕️"
+- upper-right pin: "🌳"
+- lower-left pin: "🚲"
+- lower-right pin: "📚"
+Composition/framing: Preserve the exact square 1:1 canvas and the existing zoomed-out neighborhood-map composition.
+Text (verbatim): "rec.me"
+Typography: Preserve the existing lowercase black serif wordmark exactly as it appears, in exactly the same size and centered position.
+Constraints: Change only the four black glyphs inside the cream circular centers of the four existing pins. Keep every pin's terracotta outline, cream center, location, scale, perspective, and shadow unchanged. Keep the full map, streets, parks, water, coral roads, paper texture, colors, lighting, and wordmark unchanged. Center each emoji cleanly inside its original pin center at a readable size. Use each requested emoji exactly once. Exactly four pins total. No additional icons, text, pins, routes, labels, borders, baked gloss, rounded-square mask, watermark, or redesign. Full-bleed square output.
+```

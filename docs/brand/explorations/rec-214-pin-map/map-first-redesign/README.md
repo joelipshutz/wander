@@ -66,3 +66,7 @@ crops and only one or two pins. The finished editable `.icon` documents,
 Composer-rendered review PNGs, 180/87 px checks, and exact source-edit prompts
 are documented in [`icon-composer/`](icon-composer/README.md). `rec.me` stays
 locked to the center in every direction.
+
+Two zoomed-out AH Composer variants are included as well: one preserves the
+original black category glyphs, and AM replaces them with the exact in-app
+`☕️`, `🌳`, `🚲`, and `📚` emoji set.

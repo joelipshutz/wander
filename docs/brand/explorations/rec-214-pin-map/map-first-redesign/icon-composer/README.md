@@ -1,4 +1,4 @@
-# Tight Liquid Glass Composer pass
+# Liquid Glass Composer pass
 
 Status: concept exploration only. These files do not replace the canonical
 production `AppIcon` master.
@@ -36,10 +36,29 @@ shape. This has the calmest background and strongest map personality.
 One oversized central pin plus one partially cropped coffee pin. This is the
 boldest and most symbolic option.
 
+## Zoomed-out review exports
+
+### AH — Original category glyphs
+
+![AH — Zoomed-out original glyphs](../composer-export/direction-ah-neighborhood-grid-zoomed-out-liquid-glass.png)
+
+This preserves the original Neighborhood Grid framing and its four black
+category glyphs, while applying the same Apple Icon Composer material recipe
+as the tight finalists.
+
+### AM — In-app category emojis
+
+![AM — Zoomed-out app emojis](../composer-export/direction-am-neighborhood-grid-zoomed-out-emojis-liquid-glass.png)
+
+This keeps the same zoomed-out map and centered wordmark, but replaces the four
+pin-center glyphs with the app's native emoji vocabulary: `☕️`, `🌳`, `🚲`, and
+`📚`. Their source values are defined by `WanderPlaceCategory`/
+`WanderPlaceEmojiResolver` and rendered in-app by `WanderCategoryEmoji`.
+
 ## Apple Icon Composer recipe
 
 Editable documents live in [`final/`](final/). Each document uses one full-
-bleed source layer inside a group named `Liquid Map + Centered rec.me`.
+bleed source layer inside a descriptively named Liquid Map group.
 
 - Layer layout: x `0 pt`, y `0 pt`, scale `100%`.
 - Group mode: Individual.
@@ -59,12 +78,12 @@ rendered by Icon Composer's bundled `ictool` using the iOS Default rendition at
 mask; use the editable `.icon` documents—not the preview PNGs—for any future
 implementation. The 180 px and 87 px checks live in `composer-export/small-size/`.
 
-Validation: all four source masters are opaque 1024 × 1024 PNGs, every final
-document references its expected source asset, and all four Apple-rendered
-exports passed 180 px and 87 px visual review. A central-band pixel scan placed
-the dark wordmark center within 34 px of the 512 × 512 canvas center in every
-render; the remaining offset is the intentional optical centering of the serif
-forms rather than a Composer layer transform.
+Validation: all six source masters are opaque 1024 × 1024 PNGs, every final
+document references its expected source asset, and all six Apple-rendered
+exports passed 180 px and 87 px visual review. For the four tight renders, a
+central-band pixel scan placed the dark wordmark center within 34 px of the
+512 × 512 canvas center; the two zoomed-out copies retain the centered source
+wordmark with a zero-translation Composer layer.
 
 ## Recommendation
 
