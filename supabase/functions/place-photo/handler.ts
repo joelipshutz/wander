@@ -9,7 +9,7 @@ import {
 
 const googlePlacesBaseURL = "https://places.googleapis.com/v1";
 const cacheBucket = "google-place-photo-cache";
-const cacheLifetimeMilliseconds = 30 * 24 * 60 * 60 * 1_000;
+const cacheLifetimeMonths = 6;
 const signedURLLifetimeSeconds = 24 * 60 * 60;
 const maximumCachedImageBytes = 10 * 1_024 * 1_024;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
@@ -377,8 +377,7 @@ function cacheRow(
     source_photo_url: payload.source_photo_url,
     flag_content_url: payload.flag_content_url,
     fetched_at: fetchedAt.toISOString(),
-    expires_at: new Date(fetchedAt.getTime() + cacheLifetimeMilliseconds)
-      .toISOString(),
+    expires_at: addCalendarMonths(fetchedAt, cacheLifetimeMonths).toISOString(),
     last_accessed_at: fetchedAt.toISOString(),
   };
 }
@@ -486,7 +485,7 @@ async function uploadCachedImage(
       headers: {
         ...serviceHeaders(supabase),
         "Content-Type": image.contentType,
-        "Cache-Control": "2592000",
+        "Cache-Control": String(signedURLLifetimeSeconds),
         "x-upsert": "true",
       },
       body: new Blob([image.bytes.buffer as ArrayBuffer], {
@@ -495,6 +494,20 @@ async function uploadCachedImage(
     },
   );
   if (!response.ok) throw new Error(`cache_upload_status_${response.status}`);
+}
+
+function addCalendarMonths(date: Date, months: number): Date {
+  const result = new Date(date.getTime());
+  const originalDay = result.getUTCDate();
+  result.setUTCDate(1);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  const finalDayOfTargetMonth = new Date(Date.UTC(
+    result.getUTCFullYear(),
+    result.getUTCMonth() + 1,
+    0,
+  )).getUTCDate();
+  result.setUTCDate(Math.min(originalDay, finalDayOfTargetMonth));
+  return result;
 }
 
 async function signedStorageURL(

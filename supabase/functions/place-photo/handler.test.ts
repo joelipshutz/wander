@@ -1,6 +1,6 @@
 import { handleRequest, type PlacePhotoDependencies } from "./handler.ts";
 
-const fixedNow = new Date("2026-08-14T05:30:00.000Z");
+const fixedNow = new Date("2026-08-31T05:30:00.000Z");
 
 Deno.test("place-photo stores a provider image once and reuses the private server cache", async () => {
   const calls: Array<{ url: string; method: string }> = [];
@@ -9,6 +9,7 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
   let googleMediaCount = 0;
   let googleImageCount = 0;
   let storageUploadCount = 0;
+  let storageCacheControl: string | null = null;
   let signedURLExpirySeconds: number | null = null;
 
   const dependencies: PlacePhotoDependencies = {
@@ -77,6 +78,7 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
       }
       if (url.includes("/storage/v1/object/google-place-photo-cache/")) {
         storageUploadCount += 1;
+        storageCacheControl = new Headers(init?.headers).get("Cache-Control");
         return Response.json({ Key: "cached" });
       }
       if (url.includes("/storage/v1/object/sign/google-place-photo-cache/")) {
@@ -106,6 +108,8 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
   const writtenRow = cachedRow as unknown as Record<string, unknown>;
   assertEquals(writtenRow.content_type, "image/jpeg");
   assertEquals(writtenRow.byte_size, 4);
+  assertEquals(writtenRow.expires_at, "2027-02-28T05:30:00.000Z");
+  assertEquals(storageCacheControl, "86400");
   assertEquals(signedURLExpirySeconds, 86_400);
 
   const second = await handleRequest(photoRequest(), dependencies);

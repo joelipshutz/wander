@@ -73,9 +73,9 @@ select ok(
     from pg_constraint
     where conrelid = 'public.google_place_photo_cache'::regclass
       and conname = 'google_place_photo_cache_expiry_check'
-      and pg_get_constraintdef(oid) like '%30 days%'
+      and pg_get_constraintdef(oid) like '%6 mons%'
   ),
-  'cache metadata enforces the 30-day refresh boundary'
+  'cache metadata enforces the six-month refresh boundary'
 );
 
 select * from finish();
