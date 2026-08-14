@@ -129,7 +129,7 @@ enum DiscoverSemanticNormalizer {
 
         let requestsFavorite = contains(
             normalizedQuery,
-            pattern: #"\b(favou?rite|best|loved|highly\s+rated)\b"#
+            pattern: #"\b(favou?rite|best|loved|highly\s+rated|worth\s+crossing\s+town\s+for)\b"#
         )
         if requestsFavorite {
             filters.opinion = .favorite

@@ -99,7 +99,8 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 8
+    static let version = 9
+    static let suppressedSurfaces: Set<WalkthroughSurface> = [.listDetail, .listEditor]
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
@@ -108,16 +109,16 @@ enum FirstVisitWalkthroughContent {
             step(
                 .map,
                 .mapFeatured,
-                "Start with the standouts",
-                "Featured ranks strong, recent check-ins from people you follow in the map area you’re viewing.",
+                "Featured shows you recommendations based on your taste",
+                "",
                 advance: .next,
                 coachTheme: .map
             ),
             step(
                 .map,
                 .mapFriends,
-                "See your friends’ map",
-                "Friends shows the Check Ins and Wanna places shared by people in your trusted circle.",
+                "All places from everyone you follow",
+                "",
                 advance: .next,
                 coachTheme: .social
             ),
@@ -215,59 +216,18 @@ enum FirstVisitWalkthroughContent {
             step(
                 .saveFlow,
                 .saveFriends,
-                "Remember who was there",
-                "Add friends who shared the visit, or leave this empty when the memory is just yours.",
-                advance: .next,
-                allowsTargetInteraction: true,
-                coachTheme: .social
-            ),
-            step(
-                .saveFlow,
-                .savePhotos,
-                "Keep a photo with the visit",
-                "Photos are optional. Add one now, or keep moving without it.",
+                "Friends and photos are optional",
+                "Add who was there and a photo worth remembering—or leave both blank.",
                 advance: .next,
                 allowsTargetInteraction: true
             ),
             step(
                 .saveFlow,
                 .saveMoreOptions,
-                "Open more options",
-                "Tap More Options to see the rest of the memory fields."
-            ),
-            step(
-                .saveFlow,
-                .saveNote,
-                "Leave the useful detail",
-                "Write what you’d want to know next time, or leave the note blank.",
+                "More options, whenever you need them",
+                "Notes, fit questions, tags, and privacy live here. You can adjust them on any save.",
                 advance: .next,
-                allowsTargetInteraction: true
-            ),
-            step(
-                .saveFlow,
-                .saveQuestions,
-                "Capture what the place is good for",
-                "Answer the quick fit question—like work setup, price feel, or occasion—or keep the suggested answer.",
-                advance: .next,
-                allowsTargetInteraction: true,
                 coachTheme: .save
-            ),
-            step(
-                .saveFlow,
-                .saveTags,
-                "Make it easy to rediscover",
-                "Tags capture the mood, occasion, and details that make this place fit. They’re optional too.",
-                advance: .next,
-                allowsTargetInteraction: true,
-                coachTheme: .tags
-            ),
-            step(
-                .saveFlow,
-                .savePrivacy,
-                "Choose who can see it",
-                "Stealth mode keeps this memory to you. Leave it off to use your normal sharing setting.",
-                advance: .next,
-                allowsTargetInteraction: true
             ),
             step(.saveFlow, .saveSubmit, "Put it on your map", "Save the place to finish your first memory.")
         ],
@@ -275,26 +235,9 @@ enum FirstVisitWalkthroughContent {
             step(
                 .feed,
                 .feedActivity,
-                "Why this place matters",
-                "See who saved it, what they did, and the note they left.",
+                "See your friends’ check-ins here",
+                "Like, comment, share, and add people to make your trusted feed more useful.",
                 advance: .next
-            ),
-            step(.feed, .feedSurfaceSwitch, "Places and people", "Switch between trusted place activity and the people behind it."),
-            step(
-                .feed,
-                .feedPeopleSearch,
-                "Find people you trust",
-                "Search by name or handle, then follow their place activity.",
-                advance: .next
-            ),
-            step(
-                .feed,
-                .feedInvite,
-                "Build your trusted circle",
-                "rec.me gets more useful when the people whose taste you trust are here. Their saves make your map smarter.",
-                advance: .next,
-                nextButtonTitle: "Find my people",
-                coachTheme: .social
             ),
             step(
                 .feed,
@@ -323,44 +266,17 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .lists: [
-            step(.lists, .listsCreate, "Make a list", "Tap + to turn saved places into a plan you can use."),
-            step(.lists, .listsScope, "Plans from your people", "Switch between your own lists, friends' lists, and shared collabs."),
-            step(.lists, .listsOpenPlan, "Open a plan", "Tap any list to see its places, map, privacy, and collaborators.")
-        ],
-        .listDetail: [
-            step(.listDetail, .listMap, "See the whole plan", "Open the map to understand how every place fits together."),
             step(
-                .listDetail,
-                .listMapPlace,
-                "A place card at a glance",
-                "The focused card keeps the place type, who saved it, and whether it’s a Check In or Wanna Go together.",
+                .lists,
+                .listsScope,
+                "Keep plans together",
+                "Save places into lists for trips, date nights, neighborhoods, and plans with friends.",
                 advance: .next,
                 coachTheme: .lists
             )
         ],
-        .listEditor: [
-            step(
-                .listEditor,
-                .listEditorTitle,
-                "Name the plan",
-                "Give this list a title you'll recognize when the moment comes.",
-                advance: .next
-            ),
-            step(
-                .listEditor,
-                .listEditorCollaborators,
-                "Plan it together",
-                "Add collaborators so everyone can keep the list current.",
-                advance: .next
-            ),
-            step(
-                .listEditor,
-                .listEditorPrivacy,
-                "Choose who can see it",
-                "Stealth is the final choice: keep the list private or share it with people who follow you.",
-                advance: .next
-            )
-        ],
+        .listDetail: [],
+        .listEditor: [],
         .profile: [
             step(
                 .profile,
@@ -425,6 +341,50 @@ enum FirstVisitWalkthroughContent {
     static var allSteps: [WalkthroughStep] {
         WalkthroughSurface.allCases.flatMap { stepsBySurface[$0, default: []] }
     }
+
+    // Retained for a later Lists NUX re-enable. These lessons stay compiled and their
+    // target anchors remain in the Lists UI, but suppressedSurfaces keeps them dormant.
+    static let suppressedListsStepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
+        .lists: [
+            step(.lists, .listsCreate, "Make a list", "Tap + to turn saved places into a plan you can use."),
+            step(.lists, .listsScope, "Plans from your people", "Switch between your own lists, friends' lists, and shared collabs."),
+            step(.lists, .listsOpenPlan, "Open a plan", "Tap any list to see its places, map, privacy, and collaborators.")
+        ],
+        .listDetail: [
+            step(.listDetail, .listMap, "See the whole plan", "Open the map to understand how every place fits together."),
+            step(
+                .listDetail,
+                .listMapPlace,
+                "A place card at a glance",
+                "The focused card keeps the place type, who saved it, and whether it’s a Check In or Wanna Go together.",
+                advance: .next,
+                coachTheme: .lists
+            )
+        ],
+        .listEditor: [
+            step(
+                .listEditor,
+                .listEditorTitle,
+                "Name the plan",
+                "Give this list a title you'll recognize when the moment comes.",
+                advance: .next
+            ),
+            step(
+                .listEditor,
+                .listEditorCollaborators,
+                "Plan it together",
+                "Add collaborators so everyone can keep the list current.",
+                advance: .next
+            ),
+            step(
+                .listEditor,
+                .listEditorPrivacy,
+                "Choose who can see it",
+                "Stealth is the final choice: keep the list private or share it with people who follow you.",
+                advance: .next
+            )
+        ]
+    ]
 
     private static func step(
         _ surface: WalkthroughSurface,
@@ -509,7 +469,9 @@ struct FirstVisitWalkthroughStore {
     }
 
     func hasCompletedEntireWalkthrough(for userID: String) -> Bool {
-        WalkthroughSurface.allCases.allSatisfy { isComplete(for: userID, surface: $0) }
+        WalkthroughSurface.allCases
+            .filter { !FirstVisitWalkthroughContent.suppressedSurfaces.contains($0) }
+            .allSatisfy { isComplete(for: userID, surface: $0) }
             && hasCompletedImportLesson(for: userID)
             && hasCompletedDeviceFeaturesLesson(for: userID)
     }
@@ -645,6 +607,10 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     func activate(_ surface: WalkthroughSurface) {
         guard isEnabled else {
             activeSurface = nil
+            return
+        }
+        guard !FirstVisitWalkthroughContent.suppressedSurfaces.contains(surface) else {
+            if activeSurface == surface { activeSurface = nil }
             return
         }
         guard !isPresentingImportLesson, !isPresentingDeviceFeaturesLesson else { return }
@@ -810,7 +776,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         case .feedSearch:
             .lists
         case .lists:
-            nil
+            .profile
         case .profile:
             .sendoff
         }
@@ -854,7 +820,7 @@ extension View {
     func walkthroughPresenterScrim(isPresented: Bool) -> some View {
         overlay {
             if isPresented {
-                Color.black.opacity(0.76)
+                WalkthroughFullScreenScrim()
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -907,7 +873,7 @@ private struct ImportWalkthroughOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.76)
+            WalkthroughFullScreenScrim()
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -977,7 +943,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.76)
+            WalkthroughFullScreenScrim()
                 .ignoresSafeArea()
 
             ScrollView {
@@ -1166,11 +1132,23 @@ struct WalkthroughCoachMarkLayout: Equatable {
     let targetFrame: CGRect
     let containerSize: CGSize
     let cardSize: CGSize
+    let spotlightInset: CGFloat
 
     private let screenMargin: CGFloat = 16
     private let pointerHeight: CGFloat = 12
-    private let spotlightInset: CGFloat = 5
     private let pointerCornerClearance: CGFloat = 28
+
+    init(
+        targetFrame: CGRect,
+        containerSize: CGSize,
+        cardSize: CGSize,
+        spotlightInset: CGFloat = 8
+    ) {
+        self.targetFrame = targetFrame
+        self.containerSize = containerSize
+        self.cardSize = cardSize
+        self.spotlightInset = spotlightInset
+    }
 
     var spotlightFrame: CGRect {
         targetFrame
@@ -1241,8 +1219,20 @@ private struct FirstVisitWalkthroughOverlay: View {
         WalkthroughCoachMarkLayout(
             targetFrame: targetFrame,
             containerSize: containerSize,
-            cardSize: CGSize(width: cardWidth, height: max(measuredCardSize.height, 1))
+            cardSize: CGSize(width: cardWidth, height: max(measuredCardSize.height, 1)),
+            spotlightInset: spotlightInset
         )
+    }
+
+    private var spotlightInset: CGFloat {
+        switch step.target {
+        case .addSearch:
+            18
+        case .addPlace, .addImport:
+            12
+        default:
+            8
+        }
     }
 
     var body: some View {
@@ -1272,10 +1262,12 @@ private struct FirstVisitWalkthroughOverlay: View {
                             .foregroundStyle(WanderTheme.textInk.color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text(step.message)
-                        .font(.system(.subheadline, design: .rounded))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if !step.message.isEmpty {
+                        Text(step.message)
+                            .font(.system(.subheadline, design: .rounded))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if onBack != nil || step.advance == .next {
                         HStack(spacing: WanderTheme.spacing2) {
@@ -1470,12 +1462,31 @@ struct WalkthroughScrim: View {
     var cornerRadius = WanderTheme.radiusLarge
 
     var body: some View {
-        WalkthroughScrimShape(
-            spotlightFrame: spotlightFrame,
-            cornerRadius: cornerRadius
-        )
-            .fill(Color.black.opacity(0.76), style: FillStyle(eoFill: true))
-            .frame(width: containerSize.width, height: containerSize.height)
+        ZStack {
+            WalkthroughScrimShape(
+                spotlightFrame: spotlightFrame,
+                cornerRadius: cornerRadius
+            )
+                .fill(.ultraThinMaterial, style: FillStyle(eoFill: true))
+                .opacity(0.68)
+
+            WalkthroughScrimShape(
+                spotlightFrame: spotlightFrame,
+                cornerRadius: cornerRadius
+            )
+                .fill(Color.black.opacity(0.22), style: FillStyle(eoFill: true))
+        }
+        .frame(width: containerSize.width, height: containerSize.height)
+    }
+}
+
+private struct WalkthroughFullScreenScrim: View {
+    var body: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .opacity(0.62)
+            .overlay(Color.black.opacity(0.18))
+            .accessibilityHidden(true)
     }
 }
 
