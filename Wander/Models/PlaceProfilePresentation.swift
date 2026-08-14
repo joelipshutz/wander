@@ -4,15 +4,18 @@ struct PlaceSaveSummary: Identifiable {
     let visiblePlace: VisiblePlace
     let attributes: [LocalPlaceAttribute]
     let viewerFollowsOwner: Bool
+    let displayNoteOverride: String?
 
     init(
         visiblePlace: VisiblePlace,
         attributes: [LocalPlaceAttribute],
-        viewerFollowsOwner: Bool = false
+        viewerFollowsOwner: Bool = false,
+        displayNoteOverride: String? = nil
     ) {
         self.visiblePlace = visiblePlace
         self.attributes = attributes
         self.viewerFollowsOwner = viewerFollowsOwner
+        self.displayNoteOverride = displayNoteOverride
     }
 
     var id: String { visiblePlace.userPlace.id }

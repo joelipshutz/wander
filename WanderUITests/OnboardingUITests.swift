@@ -295,10 +295,88 @@ final class OnboardingUITests: XCTestCase {
 
         suggestedSearch.tap()
         XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchResultsBack"]
                 .waitForExistence(timeout: 6)
         )
-        XCTAssertTrue(app.buttons["Lists"].isSelected)
+        XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 6))
+
+        let backButton = app.buttons["discover.searchBack"]
+        XCTAssertTrue(backButton.isHittable)
+        XCTAssertFalse(app.buttons["Lists"].isSelected)
+
+        let resultsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        resultsScreenshot.name = "REC-236 guided Discover results stay in NUX"
+        resultsScreenshot.lifetime = .keepAlways
+        add(resultsScreenshot)
+
+        backButton.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchExitBack"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(app.staticTexts["Try a search"].exists)
+        XCTAssertTrue(backButton.isHittable)
+
+        backButton.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedPeopleSearch"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.buttons["Feed"].isSelected)
+        let feedSectionButtons = app.buttons.matching(
+            NSPredicate(format: "label == %@", "Feed section")
+        )
+        XCTAssertEqual(feedSectionButtons.count, 2)
+        XCTAssertFalse(feedSectionButtons.element(boundBy: 0).isSelected)
+        XCTAssertTrue(feedSectionButtons.element(boundBy: 1).isSelected)
+        XCTAssertTrue(app.descendants(matching: .any)["Search people"].exists)
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+    }
+
+    func testTypedDiscoverQueryAlsoStaysInGuidedResults() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderWalkthroughTarget",
+            "feedDiscoverSearch"
+        ]
+        app.launch()
+
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 6))
+        launcher.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"]
+                .waitForExistence(timeout: 6)
+        )
+        app.buttons["Next"].tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSmartSearch"]
+                .waitForExistence(timeout: 5)
+        )
+        let searchField = app.textFields["discover.placesSearchField"]
+        XCTAssertTrue(searchField.isHittable)
+        searchField.tap()
+        let keyboardTutorialContinue = app.buttons["Continue"]
+        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
+            keyboardTutorialContinue.tap()
+        }
+        searchField.typeText("quiet cafes with wifi\n")
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchResultsBack"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["discover.searchBack"].isHittable)
+        XCTAssertFalse(app.buttons["Lists"].isSelected)
     }
 
     func testMapMorePeopleIncludesYouAndPersistsAcrossSourceSwitch() {
@@ -440,7 +518,7 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testListsUsesOneCompactOverview() {
+    func testListsUsesTwoClearPageAutoAdvancingLessons() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -454,24 +532,26 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
+        let startedAt = Date()
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.lists.listsScope"]
-                .waitForExistence(timeout: 6)
+                .waitForExistence(timeout: 4)
         )
-        XCTAssertTrue(app.staticTexts["Keep plans together"].exists)
-        XCTAssertTrue(app.buttons["Next"].isHittable)
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-236 compact Lists overview"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-
-        app.buttons["Next"].tap()
-        XCTAssertTrue(app.buttons["Profile"].waitForExistence(timeout: 6))
-        XCTAssertTrue(app.buttons["Profile"].isSelected)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.lists.listsOpenPlan"]
+                .waitForExistence(timeout: 4)
+        )
+        let profileTab = app.buttons["Profile"]
+        XCTAssertTrue(profileTab.exists)
+        let selectionDeadline = Date().addingTimeInterval(12)
+        while !profileTab.isSelected, Date() < selectionDeadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertTrue(profileTab.isSelected)
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 12)
     }
 
-    func testProfileExplanationsUseNext() {
+    func testProfileRunsAHandsFreeDemoInUnderFifteenSeconds() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -481,31 +561,35 @@ final class OnboardingUITests: XCTestCase {
             "-WanderInitialTab",
             "profile",
             "-WanderWalkthroughTarget",
-            "profileSettings"
+            "profileShare"
         ]
         app.launch()
 
-        for target in ["profileSettings", "profileSocial", "profileActivity", "profileShare"] {
-            XCTAssertTrue(
-                app.descendants(matching: .any)["walkthrough.profile.\(target)"]
-                    .waitForExistence(timeout: 6)
-            )
-            XCTAssertTrue(app.buttons["Next"].isHittable)
-
-            if target == "profileActivity" {
-                let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-                screenshot.name = "REC-236 Profile history passive coach mark"
-                screenshot.lifetime = .keepAlways
-                add(screenshot)
-            }
-
-            app.buttons["Next"].tap()
-        }
-
+        let startedAt = Date()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.profile.profileShare"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.profile.profileActivity"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["profile.walkthrough.activitySection"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.profile.profileCalendar"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["profile.walkthrough.calendarSection"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.profile.profileMap"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["profile.walkthrough.mapSection"].exists)
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
-                .waitForExistence(timeout: 6)
+                .waitForExistence(timeout: 15)
         )
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 15)
         XCTAssertTrue(app.buttons["Start exploring"].isHittable)
         XCTAssertTrue(app.buttons["Map"].isSelected)
 
@@ -788,7 +872,7 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testPlaceMemoryUsesRealisticSeedWhenTutorialSaveIsUnavailable() {
+    func testPlaceMemoryFallsBackWhenTutorialSaveIsUnavailable() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",

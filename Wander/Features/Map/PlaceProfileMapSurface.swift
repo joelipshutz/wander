@@ -961,10 +961,54 @@ private struct PlaceProfileFullView: View {
     }
 
     private var actionItems: [PlaceExternalAction] {
-        PlaceProfileCopy.actionItems(
+        let resolved = PlaceProfileCopy.actionItems(
             for: place,
             reservationAction: discoveredReservationAction
         )
+        guard walkthroughs.activeSurface == .placeDetail else { return resolved }
+
+        var byKind: [PlaceExternalAction.Kind: PlaceExternalAction] = [:]
+        for item in resolved where byKind[item.kind] == nil {
+            byKind[item.kind] = item
+        }
+        for item in walkthroughDisplayActions where byKind[item.kind] == nil {
+            byKind[item.kind] = item
+        }
+        return [
+            PlaceExternalAction.Kind.directions,
+            .call,
+            .website,
+            .reserve
+        ].compactMap { byKind[$0] }
+    }
+
+    private var walkthroughDisplayActions: [PlaceExternalAction] {
+        [
+            PlaceExternalAction(
+                kind: .directions,
+                title: "Directions",
+                systemImage: "arrow.triangle.turn.up.right.diamond.fill",
+                url: URL(string: "https://maps.google.com")!
+            ),
+            PlaceExternalAction(
+                kind: .call,
+                title: "Call",
+                systemImage: "phone.fill",
+                url: URL(string: "tel:+10000000000")!
+            ),
+            PlaceExternalAction(
+                kind: .website,
+                title: "Website",
+                systemImage: "globe",
+                url: URL(string: "https://getrec.me")!
+            ),
+            PlaceExternalAction(
+                kind: .reserve,
+                title: "Reservation",
+                systemImage: "calendar.badge.plus",
+                url: URL(string: "https://getrec.me")!
+            )
+        ]
     }
 
     private var reservationLookupKey: String {
@@ -2114,7 +2158,8 @@ private struct PlaceProfileSaveCard: View {
     }
 
     private var note: String? {
-        PlaceProfileCopy.trimmed(userPlace.note)
+        PlaceProfileCopy.trimmed(summary.displayNoteOverride)
+            ?? PlaceProfileCopy.trimmed(userPlace.note)
     }
 
     private var noteSubtitle: String {

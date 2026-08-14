@@ -108,8 +108,10 @@ struct FeedScreen: View {
                 walkthroughs.perform(.feedSurfaceSwitch)
             }
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
-                if target == .feedDiscoverSearch {
+                if target == .feedDiscoverSearch || target == .feedActivity {
                     selectedSurface = .places
+                } else if target == .feedPeopleSearch || target == .feedInvite {
+                    selectedSurface = .people
                 }
             }
             .onChange(of: isShowingSearch) { _, isShowing in

@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 struct ListsScreen: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -362,6 +363,9 @@ struct ListsScreen: View {
         .task {
             await syncAndRefreshLists()
         }
+        .task(id: walkthroughs.currentStep?.id) {
+            await runListsWalkthroughAnimationIfNeeded()
+        }
     }
 
     private var header: some View {
@@ -464,6 +468,7 @@ struct ListsScreen: View {
 
             emptyHintRow
         }
+        .walkthroughTarget(.listsOpenPlan)
     }
 
     private var emptyStateTitle: String {
@@ -538,6 +543,43 @@ struct ListsScreen: View {
                 )
                 .walkthroughTarget(index == 0 ? .listsOpenPlan : nil)
             }
+        }
+    }
+
+    @MainActor
+    private func runListsWalkthroughAnimationIfNeeded() async {
+        guard walkthroughs.activeSurface == .lists else { return }
+
+        switch walkthroughs.currentStep?.target {
+        case .listsScope:
+            if reduceMotion {
+                try? await Task.sleep(for: .milliseconds(2_600))
+            } else {
+                for scope in [ListsScope.friends, .collabs, .mine] {
+                    try? await Task.sleep(for: .milliseconds(650))
+                    guard !Task.isCancelled,
+                          walkthroughs.currentStep?.target == .listsScope
+                    else { return }
+                    withAnimation(.snappy(duration: 0.38, extraBounce: 0.08)) {
+                        selectedScopeID = scope.rawValue
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(1_100))
+            }
+            guard !Task.isCancelled,
+                  walkthroughs.currentStep?.target == .listsScope
+            else { return }
+            walkthroughs.advancePassiveStep()
+
+        case .listsOpenPlan:
+            try? await Task.sleep(for: .milliseconds(3_200))
+            guard !Task.isCancelled,
+                  walkthroughs.currentStep?.target == .listsOpenPlan
+            else { return }
+            walkthroughs.advancePassiveStep()
+
+        default:
+            break
         }
     }
 
