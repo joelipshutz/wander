@@ -719,8 +719,59 @@ begin
 end
 $member_profile_metadata$;
 
+do $identity_continuity_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and exists (
+      select 1
+      from unnest(coalesce(p.proconfig, array[]::text[])) setting
+      where setting in ('search_path=', 'search_path=""')
+    )
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and (
+      select relrowsecurity
+      from pg_class
+      where oid = 'public.clerk_identity_mappings'::regclass
+    )
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'select')
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'insert')
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'update')
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'delete')
+    and not has_table_privilege('anon', 'public.clerk_identity_mappings', 'select')
+    and not has_table_privilege('authenticated', 'public.clerk_identity_mappings', 'select')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app'
+    and p.proname = 'current_user_id'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if valid is distinct from true then
+    raise exception 'Clerk identity continuity metadata contract failed';
+  end if;
+end
+$identity_continuity_metadata$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_new_production_subject', true);
+select set_config('request.jwt.claim.canonical_user_id', ${smokeUser}, true);
+do $identity_continuity_behavior$
+begin
+  if app.current_user_id() is distinct from ${smokeUser} then
+    raise exception 'canonical production identity did not resolve to the existing profile';
+  end if;
+  if not exists (select 1 from public.profiles where id = ${smokeUser}) then
+    raise exception 'canonical production identity could not read the existing profile';
+  end if;
+end
+$identity_continuity_behavior$;
+
+reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.canonical_user_id', '', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 do $check_in_behavior$

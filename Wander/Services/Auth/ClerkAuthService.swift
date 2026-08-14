@@ -11,6 +11,7 @@ final class ClerkAuthService: AuthSessionProviding {
     private(set) var state: AuthState = .loading
     private let configuration: WanderBackendConfiguration
     private let sessionCache: AuthSessionCache
+    private static let canonicalUserIDMetadataKey = "canonical_user_id"
 
     #if canImport(ClerkKit)
     typealias SessionResolver = @MainActor () async throws -> AuthSession?
@@ -451,7 +452,10 @@ final class ClerkAuthService: AuthSessionProviding {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         return AuthSession(
-            userID: user.id,
+            userID: resolvedUserID(
+                clerkUserID: user.id,
+                canonicalUserID: user.publicMetadata?[canonicalUserIDMetadataKey]?.stringValue
+            ),
             displayName: name.isEmpty ? user.username : name,
             handle: user.username,
             email: user.primaryEmailAddress?.emailAddress,
@@ -459,4 +463,10 @@ final class ClerkAuthService: AuthSessionProviding {
         )
     }
     #endif
+
+    static func resolvedUserID(clerkUserID: String, canonicalUserID: String?) -> String {
+        guard let canonicalUserID else { return clerkUserID }
+        let trimmed = canonicalUserID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? clerkUserID : trimmed
+    }
 }

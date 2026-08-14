@@ -6,6 +6,33 @@ import ClerkKit
 
 @MainActor
 final class AuthSessionTests: XCTestCase {
+    func testCanonicalProductionUserIDPreservesExistingAccountIdentity() {
+        XCTAssertEqual(
+            ClerkAuthService.resolvedUserID(
+                clerkUserID: "user_new_production",
+                canonicalUserID: " user_existing_profile "
+            ),
+            "user_existing_profile"
+        )
+    }
+
+    func testCanonicalProductionUserIDFallsBackForNewAndLegacyAccounts() {
+        XCTAssertEqual(
+            ClerkAuthService.resolvedUserID(
+                clerkUserID: "user_new_account",
+                canonicalUserID: nil
+            ),
+            "user_new_account"
+        )
+        XCTAssertEqual(
+            ClerkAuthService.resolvedUserID(
+                clerkUserID: "user_legacy_account",
+                canonicalUserID: "  "
+            ),
+            "user_legacy_account"
+        )
+    }
+
     func testRequireSignInRunsActionWhenSignedIn() {
         let provider = PreviewAuthSessionProvider(
             state: .signedIn(AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")),
