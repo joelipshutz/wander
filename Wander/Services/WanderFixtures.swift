@@ -174,6 +174,125 @@ struct WanderFixtures {
         )
     }
 
+    /// A public-safe, deterministic social graph used only for App Store
+    /// screenshots. It deliberately reuses the demo graph's stable identifiers
+    /// and behavior while replacing every visible person and venue label.
+    /// Production launches never select this fixture.
+    @MainActor
+    static func storefront() -> WanderFixtures {
+        let fixtures = seed()
+
+        let profileCopy: [String: (handle: String, name: String, home: String)] = [
+            "user_joe": ("avery", "Avery", "Los Angeles"),
+            "user_maya": ("mina", "Mina", "Los Angeles"),
+            "user_ryan": ("theo", "Theo", "Brooklyn"),
+            "user_demo": ("june", "June", "Los Angeles"),
+        ]
+        for profile in fixtures.profiles {
+            guard let copy = profileCopy[profile.id] else { continue }
+            profile.handle = copy.handle
+            profile.searchHandle = copy.handle
+            profile.displayName = copy.name
+            profile.homeArea = copy.home
+        }
+        fixtures.currentUser.bio = "Coffee, hikes, and tables worth sharing."
+
+        let venueCopy: [String: String] = [
+            "place_woodcat": "Hearthline Coffee",
+            "place_griffith": "Canyon Lookout Trail",
+            "place_noodles": "Lantern Noodles",
+            "place_circuit_coffee": "Willow Desk Coffee",
+            "place_bar_nido": "Marigold Table",
+            "place_elysian_picnic": "Sunset Picnic Steps",
+            "place_fern_desk_coffee": "Fern & Found Coffee",
+            "place_juniper_table": "Juniper Supper Club",
+        ]
+        for place in fixtures.places {
+            guard let name = venueCopy[place.id] else { continue }
+            place.canonicalName = name
+            place.address = nil
+            place.websiteURLString = nil
+            place.phoneNumber = nil
+        }
+
+        var lists = fixtures.placeLists
+        let listCopy: [String: (name: String, description: String)] = [
+            "list_laptop": (
+                "LA laptop mornings",
+                "Quiet tables, outlets, and coffee that does not turn into a scene."
+            ),
+            "list_date": (
+                "Date night short list",
+                "Warm rooms where conversation is easy."
+            ),
+            "list_sunset": (
+                "Low-effort sunsets",
+                "Places that feel planned without becoming a project."
+            ),
+            "list_maya_sunset": (
+                "Mina's sunset walks",
+                "Soft landings around Los Angeles."
+            ),
+            "list_ryan_brooklyn_tables": (
+                "Theo's Brooklyn tables",
+                "Dinner ideas from Theo that are worth saving."
+            ),
+            "list_demo_laptop": (
+                "June's laptop mornings",
+                "Coffee saves with enough detail to pick the right table."
+            ),
+            "list_saturday": (
+                "Saturday plan",
+                "A shared shortlist for where the day can go next."
+            ),
+            "list_launch": (
+                "Weeknight favorites",
+                "Easy places where nobody has to decide too hard."
+            ),
+        ]
+        for index in lists.indices {
+            guard let copy = listCopy[lists[index].id] else { continue }
+            lists[index].name = copy.name
+            lists[index].description = copy.description
+        }
+
+        let contacts = FakeContactProvider(seededMatches: [
+            ContactMatch(
+                id: "storefront_contact_mina",
+                displayName: "Mina",
+                handle: "mina",
+                userID: "user_maya",
+                isAlreadyFollowing: true,
+                followsCurrentUser: false
+            ),
+            ContactMatch(
+                id: "storefront_contact_remy",
+                displayName: "Remy",
+                handle: nil,
+                userID: nil,
+                isAlreadyFollowing: false,
+                followsCurrentUser: false
+            ),
+        ])
+
+        return WanderFixtures(
+            currentUser: fixtures.currentUser,
+            profiles: fixtures.profiles,
+            places: fixtures.places,
+            userPlaces: fixtures.userPlaces,
+            placeAttributes: fixtures.placeAttributes,
+            placeVisits: fixtures.placeVisits,
+            visitPhotos: fixtures.visitPhotos,
+            follows: fixtures.follows,
+            blocks: fixtures.blocks,
+            mutes: fixtures.mutes,
+            placeLists: lists,
+            placeListMembers: fixtures.placeListMembers,
+            placeListItems: fixtures.placeListItems,
+            contactProvider: contacts
+        )
+    }
+
     /// A deterministic power-user dataset for simulator profiling. This is only
     /// selected through `-WanderUsePerformanceFixtures`; production launches
     /// continue to restore the persisted account or use the empty fixture.

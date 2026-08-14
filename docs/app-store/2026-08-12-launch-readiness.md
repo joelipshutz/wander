@@ -24,7 +24,7 @@ Recommended first-frame promise:
 
 ![Six-panel rec.me App Store storyboard](concepts/v1/recme-app-store-storyboard-v1.png)
 
-The six panels use current, working rec.me UI rather than invented product screens. The visual system uses the existing cream, terracotta, sky, sun, serif, and black brand language. Before final export, fixture names and content should be replaced with a small public-safe fictional social graph and every screenshot should be recaptured from the release candidate.
+The six panels use current, working rec.me UI rather than invented product screens. The visual system uses the existing cream, terracotta, sky, sun, serif, and black brand language. The dedicated Debug-only storefront fixture and capture pipeline are documented in `screenshot-capture-runbook.md`; final upload assets must still be recaptured from the exact release candidate and approved before upload.
 
 Joe approved the visual direction and first-frame promise on 2026-08-12. This approval locks the narrative and art direction; it does not authorize App Store upload or submission. The final pixels remain gated on the production release candidate and public-safe fixture recapture.
 

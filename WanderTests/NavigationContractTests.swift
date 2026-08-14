@@ -1948,6 +1948,65 @@ final class NavigationContractTests: XCTestCase {
     }
 
     @MainActor
+    func testStorefrontFixturesArePublicSafeAndExplicitlySelected() {
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander", "-WanderUseDemoFixtures", "-WanderUseStorefrontFixtures"]
+            ),
+            .storefront
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]),
+            .demo
+        )
+        XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
+
+        let fixtures = WanderFixtures.storefront()
+        XCTAssertEqual(fixtures.currentUser.displayName, "Avery")
+        XCTAssertEqual(Set(fixtures.profiles.map(\.displayName)), ["Avery", "Mina", "Theo", "June"])
+        XCTAssertTrue(fixtures.places.contains { $0.canonicalName == "Hearthline Coffee" })
+        XCTAssertTrue(fixtures.placeLists.contains { $0.name == "Mina's sunset walks" })
+
+        let store = WanderStore(fixtures: fixtures)
+        let coffeeResults = store.searchTrustedPlaces(query: "coffee", scope: .everyone)
+        XCTAssertGreaterThanOrEqual(coffeeResults.places.count, 2)
+        XCTAssertTrue(coffeeResults.places.contains { $0.place.canonicalName == "Willow Desk Coffee" })
+        XCTAssertTrue(coffeeResults.places.contains { $0.place.canonicalName == "Fern & Found Coffee" })
+
+        let forbiddenVisibleCopy = [
+            "Joe", "Maya", "Ryan", "Demo", "Woodcat Coffee", "Griffith Observatory Trail",
+            "Larchmont Noodles", "Circuit Coffee", "Bar Nido", "Elysian Picnic Steps",
+        ]
+        let visibleCopy = fixtures.profiles.flatMap {
+            [$0.displayName, $0.handle, $0.bio ?? "", $0.homeArea ?? ""]
+        } + fixtures.places.flatMap {
+            [$0.canonicalName, $0.address ?? "", $0.websiteURLString ?? "", $0.phoneNumber ?? ""]
+        } + fixtures.placeLists.flatMap {
+            [$0.name, $0.description]
+        }
+        for forbidden in forbiddenVisibleCopy {
+            XCTAssertFalse(
+                visibleCopy.contains { $0.localizedCaseInsensitiveContains(forbidden) },
+                "Storefront fixture leaked visible demo copy: \(forbidden)"
+            )
+        }
+    }
+
+    @MainActor
+    func testStorefrontFixtureBuildsDenseFriendFeedAfterVenueRenaming() async {
+        let store = WanderStore(fixtures: WanderFixtures.storefront())
+        _ = await store.refreshFollowedFeed(backend: nil)
+
+        XCTAssertGreaterThanOrEqual(store.followedFeedPage?.activity.count ?? 0, 4)
+        let placeNames = store.followedFeedPage?.activity.compactMap {
+            $0.place?.place.canonicalName
+        } ?? []
+        XCTAssertTrue(placeNames.contains("Marigold Table"))
+        XCTAssertTrue(placeNames.contains("Lantern Noodles"))
+        XCTAssertTrue(placeNames.contains("Fern & Found Coffee"))
+    }
+
+    @MainActor
     func testRootViewCanResolveSettingsPresentationForVisualQA() {
         XCTAssertEqual(
             WanderRootView.resolvedInitialPresentation(from: ["Wander", "-WanderOpenSettings"]),

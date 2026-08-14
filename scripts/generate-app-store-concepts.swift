@@ -29,37 +29,37 @@ private enum StoreConcepts {
     static let panels = [
         Panel(
             filename: "01-your-people-one-map.png",
-            sourceFilename: "rec186-map-friends-la.png",
+            sourceFilename: "recme-store-01-map-friends.png",
             headline: "Your people.\nTheir places. One map.",
             background: warm
         ),
         Panel(
             filename: "02-friends-actually-went.png",
-            sourceFilename: "rec186-feed-places.png",
+            sourceFilename: "recme-store-02-feed-places.png",
             headline: "See where your friends\nactually went.",
             background: sky
         ),
         Panel(
             filename: "03-fits-right-now.png",
-            sourceFilename: "rec186-trusted-search.png",
+            sourceFilename: "recme-store-03-trusted-search.png",
             headline: "Find a place that\nfits right now.",
             background: sun
         ),
         Panel(
             filename: "04-worth-returning-to.png",
-            sourceFilename: "rec186-place-detail.png",
+            sourceFilename: "recme-store-04-place-detail.png",
             headline: "Remember every place\nworth returning to.",
             background: bone
         ),
         Panel(
             filename: "05-save-before-you-lose-it.png",
-            sourceFilename: "rec186-add.png",
+            sourceFilename: "recme-store-05-add.png",
             headline: "Save it before\nyou lose it.",
             background: terracottaTint
         ),
         Panel(
             filename: "06-make-plans-together.png",
-            sourceFilename: "rec186-lists.png",
+            sourceFilename: "recme-store-06-lists.png",
             headline: "Make plans\ntogether.",
             background: warm
         ),

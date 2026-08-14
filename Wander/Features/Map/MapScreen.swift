@@ -2378,6 +2378,11 @@ struct MapScreen: View {
     }
 
     private func currentUserCoordinate() async -> (latitude: Double, longitude: Double)? {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures") {
+            return (Self.defaultRegion.center.latitude, Self.defaultRegion.center.longitude)
+        }
+        #endif
         do {
             let location = try await CoreLocationProvider().currentLocation()
             return (location.coordinate.latitude, location.coordinate.longitude)
