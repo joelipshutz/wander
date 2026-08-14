@@ -28845,3 +28845,16 @@ Prototype checkpoint:
 - No app source, tests, project generation, build number, backend, TestFlight,
   or Slack state changed. REC-122 remains In Progress pending Joe's motion
   review; production implementation is deliberately deferred.
+
+Handoff:
+
+- Committed and pushed the coordination record as `d39ad4d6` on
+  `codex/rec-122-confetti-motion`; opened draft PR #396:
+  https://github.com/joelipshutz/wander/pull/396. Linked the draft from Linear
+  REC-122.
+- Restart: open the local prototype, compare Current and Proposed at 1x and
+  0.5x, adjust the three sliders if desired, and record the approved values.
+  Then translate only the approved particle recipe into
+  `Wander/Features/Streak/SaveStreakCelebrationView.swift`, add focused motion
+  contract coverage, and run simulator visual QA before moving REC-122 to
+  In Review.
