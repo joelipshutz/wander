@@ -696,6 +696,34 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertTrue(facts.first { $0.id == "contacts" }?.body.contains("iOS Settings") == true)
     }
 
+    func testSettingsAccountIdentityNeverFallsBackToInternalUserID() {
+        let withoutPublicHandle = AuthSession(
+            userID: "user_internal_123",
+            displayName: "Joe",
+            handle: nil
+        )
+        let withPublicHandle = AuthSession(
+            userID: "user_internal_456",
+            displayName: "Joe",
+            handle: "joelipshutz"
+        )
+        let withPrefixedPublicHandle = AuthSession(
+            userID: "user_internal_789",
+            displayName: "Joe",
+            handle: "@joelipshutz"
+        )
+        let withBlankHandle = AuthSession(
+            userID: "user_internal_000",
+            displayName: "Joe",
+            handle: "   "
+        )
+
+        XCTAssertNil(SettingsAccountIdentityPresentation.publicHandle(for: withoutPublicHandle))
+        XCTAssertEqual(SettingsAccountIdentityPresentation.publicHandle(for: withPublicHandle), "@joelipshutz")
+        XCTAssertEqual(SettingsAccountIdentityPresentation.publicHandle(for: withPrefixedPublicHandle), "@joelipshutz")
+        XCTAssertNil(SettingsAccountIdentityPresentation.publicHandle(for: withBlankHandle))
+    }
+
     func testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch() {
         XCTAssertEqual(SettingsDefaultPlacePrivacySurface.toggleTitle, "stealth mode for new saves")
 

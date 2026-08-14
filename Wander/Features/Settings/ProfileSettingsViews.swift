@@ -275,12 +275,25 @@ private struct ProfileSettingsIdentityRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.displayName ?? "Your account")
                     .font(.system(size: 15, weight: .black))
-                Text(session.handle.map { "@\($0)" } ?? session.userID)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                if let publicHandle = SettingsAccountIdentityPresentation.publicHandle(for: session) {
+                    Text(publicHandle)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
             }
         }
         .padding(.vertical, WanderTheme.spacing1)
+    }
+}
+
+struct SettingsAccountIdentityPresentation {
+    static func publicHandle(for session: AuthSession) -> String? {
+        guard let handle = session.handle?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !handle.isEmpty else {
+            return nil
+        }
+
+        return handle.hasPrefix("@") ? handle : "@\(handle)"
     }
 }
 
