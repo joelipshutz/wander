@@ -5965,6 +5965,55 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
     }
 
+    func testProductActionsEmitCanonicalHumanNeedAnalyticsWithoutContent() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.seed(), analytics: analytics)
+
+        store.follow(userID: "user_analytics_probe", source: .profile)
+        _ = store.createPlaceList(
+            name: "Private list name",
+            description: "Private list description",
+            visibility: .stealth
+        )
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "analytics_probe_place",
+                name: "Private place name",
+                category: "coffee",
+                latitude: 34.05,
+                longitude: -118.24,
+                confidence: 0.9
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: "Private note",
+            sourceType: .manual
+        )
+        _ = await store.toggleActivityLike(activityID: "local-analytics-activity", backend: nil)
+
+        let engagement = analytics.events.filter {
+            $0.name == WanderAnalyticsEvents.engagementActionPerformed
+        }
+        let needAndAction = Set(engagement.compactMap { event -> String? in
+            guard let need = event.properties["need"], let action = event.properties["action"] else {
+                return nil
+            }
+            return "\(need):\(action)"
+        })
+        XCTAssertTrue(needAndAction.contains("connect:follow_created"))
+        XCTAssertTrue(needAndAction.contains("connect:activity_liked"))
+        XCTAssertTrue(needAndAction.contains("expression:list_created"))
+        XCTAssertTrue(needAndAction.contains("expression:place_saved"))
+
+        let serializedProperties = analytics.events.flatMap(\.properties.values).joined(separator: " ")
+        XCTAssertFalse(serializedProperties.contains("Private list name"))
+        XCTAssertFalse(serializedProperties.contains("Private list description"))
+        XCTAssertFalse(serializedProperties.contains("Private place name"))
+        XCTAssertFalse(serializedProperties.contains("Private note"))
+        XCTAssertFalse(serializedProperties.contains("34.05"))
+        XCTAssertFalse(serializedProperties.contains("-118.24"))
+    }
+
     func testDiscoverFreeTextSearchMatchesTrustedPlaceMemory() async {
         let store = makeStore()
 

@@ -334,6 +334,93 @@ final class BuildConfigurationTests: XCTestCase {
         #endif
     }
 
+    func testAnalyticsPrivacySanitizerDropsPrivatePayloadsAndTruncatesValues() {
+        let event = WanderAnalyticsSchema.sanitized(
+            AnalyticsEvent(
+                name: "privacy_probe",
+                properties: [
+                    "place_name": "Private place",
+                    "note": "Private note",
+                    "phone_number": "+15551234567",
+                    "status": String(repeating: "a", count: 140)
+                ]
+            )
+        )
+
+        XCTAssertNil(event.properties["place_name"])
+        XCTAssertNil(event.properties["note"])
+        XCTAssertNil(event.properties["phone_number"])
+        XCTAssertEqual(event.properties["status"]?.count, 128)
+    }
+
+    func testContextualAnalyticsAddsSchemaAndBuildContext() throws {
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+        let analytics = ContextualAnalyticsClient(client: recording, platform: "ios_test")
+
+        analytics.track(AnalyticsEvent(name: "context_probe", properties: ["surface": "test"]))
+
+        let event = try XCTUnwrap(recording.events.first)
+        XCTAssertEqual(event.properties["analytics_schema_version"], WanderAnalyticsSchema.version)
+        XCTAssertEqual(event.properties["platform"], "ios_test")
+        XCTAssertNotNil(event.properties["app_version"])
+        XCTAssertNotNil(event.properties["build_number"])
+    }
+
+    @MainActor
+    func testLifecycleTracksFirstOpenOnlyOnceAndEveryColdSession() throws {
+        let suiteName = "BuildConfigurationTests.analytics.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+
+        let firstTracker = AppAnalyticsLifecycleTracker(analytics: recording, defaults: defaults)
+        firstTracker.recordLaunch()
+        firstTracker.recordLaunch()
+        let secondTracker = AppAnalyticsLifecycleTracker(analytics: recording, defaults: defaults)
+        secondTracker.recordLaunch()
+
+        XCTAssertEqual(
+            recording.events.filter { $0.name == WanderAnalyticsEvents.appFirstOpened }.count,
+            1
+        )
+        XCTAssertEqual(
+            recording.events.filter { $0.name == WanderAnalyticsEvents.appSessionStarted }.count,
+            2
+        )
+    }
+
+    func testAcquisitionAttributionAllowListsAndSanitizesCampaignProperties() throws {
+        let url = try XCTUnwrap(
+            URL(string: "https://getrec.me/import/google?utm_source=tiktok&utm_campaign=summer%20launch&utm_term=private&utm_content=a%2Fb")
+        )
+        let attribution = try XCTUnwrap(AcquisitionAttribution(url: url))
+
+        XCTAssertEqual(attribution.properties["route"], "import")
+        XCTAssertEqual(attribution.properties["utm_source"], "tiktok")
+        XCTAssertEqual(attribution.properties["utm_campaign"], "summer launch")
+        XCTAssertEqual(attribution.properties["utm_content"], "ab")
+        XCTAssertNil(attribution.properties["utm_term"])
+        XCTAssertNil(attribution.properties["url"])
+    }
+
+    func testAnalyticsDashboardAndMaintenanceDocsStayCheckedIn() throws {
+        let dashboard = try String(
+            contentsOf: projectRoot.appendingPathComponent("scripts/posthog-product-dashboard.mjs")
+        )
+        let analyticsDocs = try String(
+            contentsOf: projectRoot.appendingPathComponent("docs/analytics.md")
+        )
+        let agentInstructions = try String(
+            contentsOf: projectRoot.appendingPathComponent("AGENTS.md")
+        )
+
+        for section in ["Acquisition", "Activation", "Engagement", "Retention", "Referrals", "Monetization"] {
+            XCTAssertTrue(dashboard.contains("title: \"\(section)\""))
+        }
+        XCTAssertTrue(analyticsDocs.contains("engagement_action_performed"))
+        XCTAssertTrue(agentInstructions.contains("## Analytics Maintenance"))
+    }
+
     func testAppPrivacyManifestDeclaresAppOwnedDataAndRequiredReasons() throws {
         let manifest = try privacyManifest("Wander/Resources/PrivacyInfo.xcprivacy")
 
@@ -432,4 +519,15 @@ final class BuildConfigurationTests: XCTestCase {
                 result[key] = value
             }
     }
+}
+
+private final class BuildConfigurationRecordingAnalyticsClient: AnalyticsClient {
+    private(set) var events: [AnalyticsEvent] = []
+
+    func track(_ event: AnalyticsEvent) {
+        events.append(event)
+    }
+
+    func identify(userID: String) {}
+    func resetIdentity() {}
 }

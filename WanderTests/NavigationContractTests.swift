@@ -21,7 +21,8 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(app.contains("AppEntryView(coordinator: entryCoordinator, analytics: analytics, parser: discoverParser)"))
+        XCTAssertTrue(app.contains("AppEntryView("))
+        XCTAssertTrue(app.contains("analyticsLifecycle: analyticsLifecycle"))
         XCTAssertTrue(entry.contains("case .signedOut:"))
         XCTAssertTrue(entry.contains("LoggedOutCarouselView(analytics: analytics)"))
         XCTAssertTrue(entry.contains("auth.beginSignIn(mode: .signUp)"))

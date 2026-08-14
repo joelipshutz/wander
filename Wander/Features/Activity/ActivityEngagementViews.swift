@@ -52,7 +52,8 @@ struct ActivityEngagementActionRow: View {
         .fullScreenCover(item: $sharePreviewPresentation) { presentation in
             ActivitySharePreviewScreen(
                 context: presentation.context,
-                content: presentation.content
+                content: presentation.content,
+                analytics: store.productAnalytics
             )
             .id(presentation.id)
         }
@@ -353,7 +354,8 @@ struct ActivityCommentsScreen: View {
         .fullScreenCover(item: $sharePreviewPresentation) { presentation in
             ActivitySharePreviewScreen(
                 context: presentation.context,
-                content: presentation.content
+                content: presentation.content,
+                analytics: store.productAnalytics
             )
             .id(presentation.id)
         }

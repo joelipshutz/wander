@@ -320,6 +320,20 @@ Observability policy:
   `scripts/generate-app-icon-renditions.sh`, then retain the
   `BuildConfigurationTests` size, alpha, and discoverability coverage.
 
+## Analytics Maintenance
+
+Before changing a user-facing flow, read `docs/analytics.md` and search the flow for `WanderAnalyticsEvents`. Analytics changes are part of the feature contract:
+
+- instrument successful state transitions in the store/domain layer where practical;
+- emit a raw event plus `engagement_action_performed` when an action maps to Connect, Expression, or Status;
+- never log place/contact/profile content, coordinates, messages, raw search text, URLs, tokens, or private backend payloads;
+- add contract/privacy tests and update `docs/analytics.md` when events or properties change;
+- update and check `scripts/posthog-product-dashboard.mjs` when a dashboard metric changes;
+- do not hand-edit PostHog resources tagged `recme:managed`; apply the checked-in dashboard script;
+- keep Monetization blank until an explicit product decision defines it.
+
+Run `npm --prefix scripts run analytics:check` for every analytics/dashboard change, then run the relevant iOS tests. Before release, validate changed events in PostHog using a non-production/test account and confirm both expected properties and the absence of private payloads.
+
 ## Testing Rules
 
 - Every milestone should land with matching tests.

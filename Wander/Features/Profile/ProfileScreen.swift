@@ -1180,6 +1180,15 @@ struct ProfileDetailView: View {
                 await refreshRemoteProfile()
                 await store.refreshRemoteMutes(backend: backend)
                 isLoading = false
+                if profile != nil {
+                    store.productAnalytics.track(
+                        .engagement(
+                            need: .connect,
+                            action: .trustedProfileViewed,
+                            surface: "profile_detail"
+                        )
+                    )
+                }
             }
         }
     }
