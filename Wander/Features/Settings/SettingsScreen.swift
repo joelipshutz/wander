@@ -38,10 +38,12 @@ struct SettingsScreen: View {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                         Text(session.displayName ?? "Signed in")
                             .font(.system(size: 15, weight: .bold))
-                        Text(session.handle.map { "@\($0)" } ?? session.userID)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
+                        if let publicHandle = SettingsAccountIdentityPresentation.publicHandle(for: session) {
+                            Text(publicHandle)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .lineLimit(1)
+                        }
                     }
                     Spacer()
                 }
