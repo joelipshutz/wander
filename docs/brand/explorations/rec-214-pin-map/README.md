@@ -61,3 +61,12 @@ references, not final masters.
 
 The built-in image-generation workflow produced the concepts from the current
 canonical icon as an edit target. Exact prompts are recorded in `prompts.md`.
+
+## Liquid Glass follow-up
+
+Ryan requested a more expressive follow-up with stronger refraction, a much
+more colorful globe, and alternate wordmark typography. Five additional
+composition mockups and their small-size reductions live in
+[`liquid-glass/`](liquid-glass/README.md). Each direction also includes four
+flat 1024 px layers prepared for Icon Composer import; the canonical AppIcon
+master remains unchanged.
