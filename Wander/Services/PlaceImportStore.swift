@@ -32,14 +32,14 @@ actor SocialImportAutomaticLookupPacer {
     }
 }
 
-struct PlaceImportResolvedEntry: Equatable {
+struct PlaceImportResolvedEntry: Equatable, Sendable {
     let seed: PlaceImportSeed
     let candidates: [PlaceCandidate]
     let selectedCandidateID: String?
     let helpMessage: String?
 }
 
-enum PlaceImportResolution: Equatable {
+enum PlaceImportResolution: Equatable, Sendable {
     case candidates([PlaceCandidate], selectedCandidateID: String?)
     case needsHelp(String)
     case expanded([PlaceImportSeed], sourceName: String?)
@@ -764,6 +764,20 @@ final class FilePlaceImportPersistence: PlaceImportPersisting {
 
 @MainActor
 final class PlaceImportStore: ObservableObject {
+    private static let maximumConcurrentResolutions = 6
+
+    private struct ProcessingClaim: Sendable {
+        let itemID: String
+        let seed: PlaceImportSeed
+        let source: PlaceImportSource
+        let isManualSearch: Bool
+    }
+
+    private enum ProcessingAttempt: Sendable {
+        case resolved(PlaceImportResolution)
+        case failed(String)
+        case cancelled
+    }
     private struct LoadedItemUpgrade {
         let items: [PlaceImportItem]
         let replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
@@ -1044,6 +1058,30 @@ final class PlaceImportStore: ObservableObject {
         }
     }
 
+    /// Stops in-flight resolution without discarding durable import progress.
+    /// Resolved rows stay resolved; only active rows return to the queue so the
+    /// next foreground/background window can resume them safely.
+    func pauseProcessing(batchIDs: [String]) {
+        let ids = Set(batchIDs)
+        guard !ids.isEmpty else { return }
+        for batchID in ids {
+            processingTasks[batchID]?.cancel()
+        }
+        var didChange = false
+        for index in items.indices
+        where ids.contains(items[index].batchID) && items[index].state == .resolving {
+            items[index].state = .queued
+            items[index].updatedAt = .now
+            didChange = true
+        }
+        for batchID in ids {
+            synchronizeBatch(batchID, persist: false)
+        }
+        if didChange {
+            persist()
+        }
+    }
+
     func items(for batchID: String) -> [PlaceImportItem] {
         items.enumerated()
             .filter { $0.element.batchID == batchID }
@@ -1121,7 +1159,7 @@ final class PlaceImportStore: ObservableObject {
 
     func setStagedNote(_ note: String?, itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
-              items[index].state == .ready
+              [.ready, .saved].contains(items[index].state)
         else { return }
         let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         items[index].stagedNote = trimmed?.isEmpty == false ? trimmed : nil
@@ -1131,7 +1169,7 @@ final class PlaceImportStore: ObservableObject {
 
     func setStagedRatingScore(_ score: Double?, itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
-              items[index].state == .ready,
+              [.ready, .saved].contains(items[index].state),
               items[index].stagedStatus == .been
         else { return }
         items[index].stagedRatingScore = score
@@ -1141,7 +1179,7 @@ final class PlaceImportStore: ObservableObject {
 
     func setStagedVisitedAt(_ date: Date?, itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
-              items[index].state == .ready,
+              [.ready, .saved].contains(items[index].state),
               items[index].stagedStatus == .been
         else { return }
         items[index].stagedVisitedAt = date
@@ -1492,7 +1530,17 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func waitForProcessing(batchID: String) async {
-        await processingTasks[batchID]?.value
+        while !Task.isCancelled {
+            if processingTasks[batchID] == nil {
+                startProcessing(batchID: batchID)
+            }
+            guard let task = processingTasks[batchID] else { return }
+            await task.value
+            guard !Task.isCancelled else { return }
+            if !items.contains(where: { $0.batchID == batchID && $0.state == .queued }) {
+                return
+            }
+        }
     }
 
     private func waitForResolution(itemID: String) async {
@@ -1514,72 +1562,118 @@ final class PlaceImportStore: ObservableObject {
     }
 
     private func process(batchID: String) async {
-        while !Task.isCancelled,
-              let index = nextQueuedItemIndex(batchID: batchID) {
-            items[index].state = .resolving
-            items[index].updatedAt = .now
-            let itemID = items[index].id
-            let seed = items[index].seed
-            let source = items[index].source
-            let isManualSearch = items[index].pendingManualSearch == true
-            let isSocialUpgrade = replacedSocialItemsByPlaceholderID[itemID] != nil
-            // Keep the pre-upgrade snapshot durable until its network-dependent refresh succeeds.
-            synchronizeBatch(batchID, persist: !isSocialUpgrade)
+        while !Task.isCancelled {
+            let claims = claimQueuedItems(
+                batchID: batchID,
+                limit: resolutionConcurrencyLimit(for: batchID)
+            )
+            guard !claims.isEmpty else { break }
 
-            do {
-                let resolution = if isManualSearch {
-                    try await resolver.resolveManualSearch(seed: seed, source: source)
-                } else {
-                    try await resolver.resolve(seed: seed, source: source)
+            let tasks = claims.map { claim in
+                Task { @MainActor [resolver] in
+                    do {
+                        let resolution = if claim.isManualSearch {
+                            try await resolver.resolveManualSearch(seed: claim.seed, source: claim.source)
+                        } else {
+                            try await resolver.resolve(seed: claim.seed, source: claim.source)
+                        }
+                        return ProcessingAttempt.resolved(resolution)
+                    } catch is CancellationError {
+                        return ProcessingAttempt.cancelled
+                    } catch {
+                        return ProcessingAttempt.failed(error.localizedDescription)
+                    }
                 }
-                guard !Task.isCancelled,
-                      let resolvedIndex = items.firstIndex(where: { $0.id == itemID })
-                else { break }
-                guard items[resolvedIndex].state == .resolving,
-                      items[resolvedIndex].seed == seed
-                else {
-                    // A newer search, retry, or dismissal superseded this request.
-                    await Task.yield()
-                    continue
+            }
+            let attempts = await withTaskCancellationHandler {
+                var values: [ProcessingAttempt] = []
+                for task in tasks {
+                    values.append(await task.value)
                 }
-                let shouldRestorePreviousRows: Bool
-                switch resolution {
-                case .needsHelp, .partialExpandedResolved:
-                    shouldRestorePreviousRows = true
-                case .candidates, .expanded, .expandedResolved:
-                    shouldRestorePreviousRows = false
-                }
-                if shouldRestorePreviousRows,
-                   restoreReplacedSocialItems(placeholderID: itemID, at: resolvedIndex) {
-                    // A transient metadata failure must not erase previously useful rows.
-                } else {
-                    replacedSocialItemsByPlaceholderID[itemID] = nil
-                    items[resolvedIndex].pendingManualSearch = nil
-                    apply(resolution, at: resolvedIndex)
-                }
-            } catch {
-                guard !Task.isCancelled,
-                      let failedIndex = items.firstIndex(where: { $0.id == itemID })
-                else { break }
-                guard items[failedIndex].state == .resolving,
-                      items[failedIndex].seed == seed
-                else {
-                    // Do not let an older failure overwrite newer user intent.
-                    await Task.yield()
-                    continue
-                }
-                if !restoreReplacedSocialItems(placeholderID: itemID, at: failedIndex) {
-                    items[failedIndex].state = .failed
-                    items[failedIndex].pendingManualSearch = nil
-                    items[failedIndex].helpMessage = error.localizedDescription
-                    items[failedIndex].updatedAt = .now
-                }
+                return values
+            } onCancel: {
+                tasks.forEach { $0.cancel() }
+            }
+            guard !Task.isCancelled else { break }
+
+            for (claim, attempt) in zip(claims, attempts) {
+                apply(attempt, to: claim)
             }
             synchronizeBatch(batchID)
             await Task.yield()
         }
         processingTasks[batchID] = nil
         synchronizeBatch(batchID)
+    }
+
+    private func claimQueuedItems(batchID: String, limit: Int) -> [ProcessingClaim] {
+        var claims: [ProcessingClaim] = []
+        for _ in 0..<limit {
+            guard let index = nextQueuedItemIndex(batchID: batchID) else { break }
+            items[index].state = .resolving
+            items[index].updatedAt = .now
+            claims.append(
+                ProcessingClaim(
+                    itemID: items[index].id,
+                    seed: items[index].seed,
+                    source: items[index].source,
+                    isManualSearch: items[index].pendingManualSearch == true
+                )
+            )
+        }
+        if !claims.isEmpty {
+            // The persistence layer substitutes pre-upgrade social rows while
+            // their network refresh is in flight, so a whole claimed chunk is safe.
+            synchronizeBatch(batchID)
+        }
+        return claims
+    }
+
+    private func resolutionConcurrencyLimit(for batchID: String) -> Int {
+        guard let batch = batches.first(where: { $0.id == batchID }),
+              batch.source == .googleMaps,
+              batch.totalCount >= 10
+        else { return 1 }
+        return Self.maximumConcurrentResolutions
+    }
+
+    private func apply(_ attempt: ProcessingAttempt, to claim: ProcessingClaim) {
+        guard let index = items.firstIndex(where: { $0.id == claim.itemID }),
+              items[index].state == .resolving,
+              items[index].seed == claim.seed
+        else {
+            // A newer search, retry, pause, or dismissal superseded this request.
+            return
+        }
+
+        switch attempt {
+        case .resolved(let resolution):
+            let shouldRestorePreviousRows: Bool
+            switch resolution {
+            case .needsHelp, .partialExpandedResolved:
+                shouldRestorePreviousRows = true
+            case .candidates, .expanded, .expandedResolved:
+                shouldRestorePreviousRows = false
+            }
+            if shouldRestorePreviousRows,
+               restoreReplacedSocialItems(placeholderID: claim.itemID, at: index) {
+                // A transient metadata failure must not erase previously useful rows.
+            } else {
+                replacedSocialItemsByPlaceholderID[claim.itemID] = nil
+                items[index].pendingManualSearch = nil
+                apply(resolution, at: index)
+            }
+        case .failed(let message):
+            if !restoreReplacedSocialItems(placeholderID: claim.itemID, at: index) {
+                items[index].state = .failed
+                items[index].pendingManualSearch = nil
+                items[index].helpMessage = message
+                items[index].updatedAt = .now
+            }
+        case .cancelled:
+            items[index].state = .queued
+            items[index].updatedAt = .now
+        }
     }
 
     private func nextQueuedItemIndex(batchID: String) -> Int? {

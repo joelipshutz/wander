@@ -3898,6 +3898,90 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(updatedVisiblePlace.userPlace.syncState, .pendingCreate)
     }
 
+    func testImportStatusChangePreservesOptionalDetailsInsteadOfRebuildingStaleCandidate() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let originalCandidate = PlaceCandidate(
+            id: "mapkit_import_optional_details",
+            name: "Imported Place",
+            category: WanderPlaceCategory.restaurantsFood,
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.98
+        )
+        let result = store.saveCandidate(
+            originalCandidate,
+            status: .been,
+            visibility: .mutuals,
+            note: "stale import note",
+            sourceType: .link
+        )
+        let originalVisit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        let coffeeAssignment = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            subcategory: "Coffee shop",
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: "restaurant"
+        )
+        let editedAttributes = [
+            PlaceAttributeDraft(
+                questionKey: "coffee_tags",
+                valueType: "multi_tag",
+                stringValues: ["quiet", "wifi solid"]
+            )
+        ]
+        _ = try XCTUnwrap(
+            store.updateVisit(
+                visitID: originalVisit.id,
+                note: "edited in Optional Details",
+                attributes: editedAttributes,
+                categoryCandidate: originalCandidate.recategorized(as: coffeeAssignment),
+                visibility: .selfOnly,
+                replacesNote: true
+            )
+        )
+
+        _ = try XCTUnwrap(
+            store.changeImportedSaveStatus(userPlaceID: result.userPlaceID, to: .wannaGo)
+        )
+        var visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        XCTAssertEqual(visiblePlace.userPlace.status, .wannaGo)
+        XCTAssertEqual(visiblePlace.userPlace.note, "edited in Optional Details")
+        XCTAssertEqual(visiblePlace.userPlace.visibility, .selfOnly)
+        XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(visiblePlace.effectiveSubcategory, "Coffee shop")
+        XCTAssertEqual(
+            store.attributes(for: result.userPlaceID).first { $0.questionKey == "coffee_tags" }?.valueJSON,
+            "[\"quiet\",\"wifi solid\"]"
+        )
+        XCTAssertTrue(store.visits(for: result.userPlaceID).isEmpty)
+
+        _ = try XCTUnwrap(
+            store.changeImportedSaveStatus(
+                userPlaceID: result.userPlaceID,
+                to: .been,
+                ratingScore: 4.5
+            )
+        )
+        visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        let restoredVisit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        XCTAssertEqual(visiblePlace.userPlace.status, .been)
+        XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(restoredVisit.note, "edited in Optional Details")
+        XCTAssertEqual(restoredVisit.ratingScore, 4.5)
+        XCTAssertEqual(
+            VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: restoredVisit.attributeAnswersJSON),
+            editedAttributes
+        )
+    }
+
     func testVisitAttributeAnswerDraftsRoundTripForDefaults() {
         let drafts = [
             PlaceAttributeDraft(questionKey: "coffee_tags", valueType: "multi_tag", stringValues: ["quiet", "wifi solid"]),

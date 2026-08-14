@@ -1081,11 +1081,20 @@ struct PlaceImportAdaptiveReviewScreen: View {
                 )
                 importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
             } else if let userPlaceID = item.savedUserPlaceID ?? entry.userPlaceID {
-                _ = store.removeSave(userPlaceID: userPlaceID)
+                let anotherSelectedEntryUsesSave = displayedReceipt?.entries.contains { otherEntry in
+                    guard otherEntry.id != entry.id,
+                          (otherEntry.userPlaceID == userPlaceID
+                            || importStore.item(id: otherEntry.itemID)?.savedUserPlaceID == userPlaceID),
+                          let otherItem = importStore.item(id: otherEntry.itemID)
+                    else { return false }
+                    return otherItem.isSelectedForImport
+                } == true
+                if !anotherSelectedEntryUsesSave {
+                    _ = store.removeSave(userPlaceID: userPlaceID)
+                }
             }
         }
         importStore.setIncludedInImport(shouldInclude, itemID: item.id)
-        syncVerifiedChanges()
     }
 
     private func changeVerifiedStatus(
@@ -1095,23 +1104,16 @@ struct PlaceImportAdaptiveReviewScreen: View {
     ) {
         guard entry.outcome == .added,
               status != verifiedVisiblePlace(entry, item: item)?.userPlace.status,
-              let candidate = item.selectedCandidate
+              let userPlaceID = item.savedUserPlaceID ?? entry.userPlaceID
         else { return }
-        if let userPlaceID = item.savedUserPlaceID ?? entry.userPlaceID {
-            _ = store.removeSave(userPlaceID: userPlaceID)
-        }
-        importStore.setStagedStatus(status, itemID: item.id)
-        let result = store.saveImportedCandidate(
-            candidate,
-            status: status,
-            visibility: .selfOnly,
-            note: item.stagedNote,
-            sourceType: item.source.addSourceType,
+        guard let result = store.changeImportedSaveStatus(
+            userPlaceID: userPlaceID,
+            to: status,
             ratingScore: status == .been ? item.stagedRatingScore : nil,
             visitedAt: item.stagedVisitedAt ?? .now
-        )
+        ) else { return }
+        importStore.setStagedStatus(status, itemID: item.id)
         importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
-        syncVerifiedChanges()
     }
 
     private func beginOptionalDetails(
@@ -1159,6 +1161,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
             backend: auth.isSignedIn ? backend : nil
         ) else { return nil }
         importStore.setStagedStatus(submission.status, itemID: itemID)
+        importStore.setStagedNote(submission.note, itemID: itemID)
+        importStore.setStagedRatingScore(submission.ratingScore, itemID: itemID)
+        importStore.setStagedVisitedAt(submission.visitedAt, itemID: itemID)
         importStore.setIncludedInImport(true, itemID: itemID)
         importStore.markSaved(itemID: itemID, userPlaceID: result.userPlaceID)
         return result
@@ -1188,14 +1193,6 @@ struct PlaceImportAdaptiveReviewScreen: View {
             importStore.setIncludedInImport(false, itemID: itemID)
         }
         return didRemove
-    }
-
-    private func syncVerifiedChanges() {
-        guard auth.isSignedIn else { return }
-        Task { @MainActor in
-            _ = await store.syncUnsyncedOwnPlaces(backend: backend)
-            _ = await store.syncPendingPlaceLists(backend: backend)
-        }
     }
 
     private func startSave() {

@@ -114,6 +114,7 @@ enum PlaceImportAutoSaveCoordinator {
                 var addedCount = 0
                 var existingCount = 0
                 var needsReviewCount = 0
+                var committedUserPlaceIDs = Set<String>()
 
                 for batchID in orderedIDs {
                     guard let batch = importStore.batches.first(where: { $0.id == batchID }),
@@ -134,19 +135,31 @@ enum PlaceImportAutoSaveCoordinator {
 
                     for item in items where committableIDs.contains(item.id) {
                         guard let candidate = item.selectedCandidate else { continue }
-                        let existingSave = item.duplicateUserPlaceID.flatMap {
+                        let reconciledExistingSave = item.duplicateUserPlaceID.flatMap {
                             visiblePlacesByUserPlaceID[$0]
+                        }.map {
+                            ExistingImportSave(
+                                userPlaceID: $0.userPlace.id,
+                                status: $0.userPlace.status,
+                                syncState: $0.userPlace.syncState,
+                                placeID: $0.place.serverID
+                            )
                         }
-                        let upgradesExistingWanna = existingSave?.userPlace.status == .wannaGo
+                        // Use the exact same identity matcher as the save path.
+                        // Reconciliation is UI-oriented and intentionally looser;
+                        // it must never decide whether a prior memory can be deleted.
+                        let existingSave = store.existingImportSave(matching: candidate)
+                            ?? reconciledExistingSave
+                        let upgradesExistingWanna = existingSave?.status == .wannaGo
                             && batch.requestedStatus == .been
                         let result: SaveResult
                         if let existingSave, !upgradesExistingWanna {
                             // An import never rewrites a pre-existing personal memory.
                             // It can still add the place to the imported Google list.
                             result = SaveResult(
-                                userPlaceID: existingSave.userPlace.id,
-                                syncState: existingSave.userPlace.syncState,
-                                placeID: existingSave.place.serverID
+                                userPlaceID: existingSave.userPlaceID,
+                                syncState: existingSave.syncState,
+                                placeID: existingSave.placeID
                             )
                         } else {
                             result = store.saveImportedCandidate(
@@ -168,7 +181,9 @@ enum PlaceImportAutoSaveCoordinator {
                             )
                         }
                         importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
-                        let outcome: PlaceImportReceiptOutcome = existingSave == nil ? .added : .existing
+                        let wasAddedByThisItem = existingSave == nil
+                            && committedUserPlaceIDs.insert(result.userPlaceID).inserted
+                        let outcome: PlaceImportReceiptOutcome = wasAddedByThisItem ? .added : .existing
                         if outcome == .added { addedCount += 1 } else { existingCount += 1 }
                         entries.append(
                             PlaceImportReceiptEntry(
@@ -177,7 +192,7 @@ enum PlaceImportAutoSaveCoordinator {
                                 displayArea: item.displayArea,
                                 status: upgradesExistingWanna
                                     ? .been
-                                    : (existingSave?.userPlace.status ?? batch.requestedStatus),
+                                    : (existingSave?.status ?? batch.requestedStatus),
                                 outcome: outcome,
                                 userPlaceID: result.userPlaceID
                             )

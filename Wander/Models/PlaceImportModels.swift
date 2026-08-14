@@ -1,6 +1,6 @@
 import Foundation
 
-enum PlaceImportSource: String, Codable, CaseIterable, Equatable, Hashable, Identifiable {
+enum PlaceImportSource: String, Codable, CaseIterable, Equatable, Hashable, Identifiable, Sendable {
     case googleMaps = "google_maps"
     case instagram
     case tiktok
@@ -269,7 +269,7 @@ enum PlaceImportDestinationListName {
     }
 }
 
-struct PlaceImportSeed: Codable, Equatable, Identifiable {
+struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
     let id: String
     let rawText: String
     let nameHint: String?

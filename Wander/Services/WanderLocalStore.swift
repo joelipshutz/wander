@@ -4955,6 +4955,85 @@ final class WanderStore: ObservableObject {
         )
     }
 
+    func existingImportSave(matching candidate: PlaceCandidate) -> ExistingImportSave? {
+        guard let place = place(matching: candidate),
+              let userPlace = currentUserPlace(for: place)
+        else { return nil }
+        return ExistingImportSave(
+            userPlaceID: userPlace.id,
+            status: userPlace.status,
+            syncState: userPlace.syncState,
+            placeID: place.serverID
+        )
+    }
+
+    /// Changes the status of a save created by an import without rebuilding it
+    /// from the import's stale candidate fields. Verification can follow an
+    /// Optional Details edit, so the current place memory is authoritative.
+    @discardableResult
+    func changeImportedSaveStatus(
+        userPlaceID: String,
+        to status: PlaceStatus,
+        ratingScore: Double? = nil,
+        visitedAt: Date = .now
+    ) -> SaveResult? {
+        guard let userPlace = currentUserPlace(matching: userPlaceID) else {
+            return nil
+        }
+        guard userPlace.status != status else {
+            return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
+        }
+
+        let now = Date.now
+        if status == .been {
+            let currentAttributes = attributeDrafts(for: userPlace.id)
+            _ = createVisit(
+                userPlaceID: userPlace.id,
+                visitedAt: visitedAt,
+                note: userPlace.note,
+                ratingScore: ratingScore,
+                attributes: currentAttributes,
+                visibility: userPlace.visibility
+            )
+            return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
+        }
+
+        // A Check In's editor stores its details on the visit. Carry those
+        // details forward to Wanna before removing the visits, while leaving
+        // the current category override and visibility untouched.
+        let latestVisit = visits(for: userPlace.id).max { lhs, rhs in
+            if lhs.visitedAt != rhs.visitedAt {
+                return lhs.visitedAt < rhs.visitedAt
+            }
+            return lhs.createdAt < rhs.createdAt
+        }
+        let currentAttributes = latestVisit.map {
+            VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: $0.attributeAnswersJSON)
+        } ?? attributeDrafts(for: userPlace.id)
+
+        userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        if let latestVisit {
+            userPlace.note = latestVisit.note
+        }
+        userPlace.ratingSignal = ratingSignal(from: currentAttributes)
+        userPlace.ratingScore = nil
+        userPlace.recommendedScore = nil
+        userPlace.recommendedCount = 0
+        userPlace.visitedAt = nil
+        userPlace.plannedDate = nil
+        userPlace.updatedAt = now
+        userPlace.localUpdatedAt = now
+        userPlace.lastSyncError = nil
+        userPlace.syncStateRaw = userPlace.serverID == nil
+            ? SyncState.pendingCreate.rawValue
+            : SyncState.pendingUpdate.rawValue
+        replaceAttributes(for: userPlace.id, with: currentAttributes, syncState: userPlace.syncState)
+        softDeleteVisits(for: userPlace.id, at: now)
+        objectWillChange.send()
+        persist()
+        return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
+    }
+
     @discardableResult
     func saveCandidate(
         _ candidate: PlaceCandidate,

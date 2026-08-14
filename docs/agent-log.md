@@ -28796,3 +28796,66 @@ Handoff:
   environment, run `npm --prefix scripts run analytics:apply`, open each managed
   tile to confirm the live query succeeds, then mark the PR ready and move
   REC-170 / Mission Control to Done after merge or final acceptance.
+
+## 2026-08-14 02:36 PDT - Codex - REC-227 background import autosave release
+
+Agent: Codex
+Branch: `codex/rec-227-background-autosave`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-227-background-autosave`
+Linear: `REC-227` (`In Review`), release tracker `REC-240` (`In Progress`)
+Mission Control: `65ec5c4e-a905-4771-b265-2f91a32c2b9a` (`review`)
+
+Goal: ship the redesigned Google Maps / Instagram / TikTok share flow in the
+combined TestFlight build 144, including compact Wanna / Check In capture,
+durable local-first processing, background continuation, notification, and
+per-item verification through the regular Add details editor.
+
+Coordination and implementation:
+
+- Worked in the existing isolated REC-227 worktree and PR #385. The original
+  `joe/phone-build-latest` checkout and its untracked `tmp/` directory were not
+  touched. Merged latest `origin/main` so the release also contains PR #398.
+- Hardened account ownership and cancellation around automatic commits,
+  restored unpresented verification receipts after relaunch, prevented legacy
+  v1/v2 envelopes from silently opting into autosave, and coalesced 45-place
+  local/import persistence to one write per store.
+- Final release red-team found four edge cases. Fixed Optional Details being
+  overwritten by top-level Wanna / Check In changes by transitioning the live
+  memory in place; preserved edited note, category, tags, visibility, date, and
+  rating staging; and made the regular edit context honor status changes.
+- Protected prior memories and same-import duplicates with the exact store
+  identity matcher plus defensive shared-save removal checks. A renamed place
+  whose provider identity already exists is now receipt-labeled `existing`,
+  never `added`.
+- Removed fire-and-forget verification sync that could cross account sessions.
+  Local changes remain durable and the root's account-scoped signed-in
+  maintenance owns remote reconciliation.
+- Large Google Maps batches now resolve with bounded concurrency of six instead
+  of serial MapKit waits. Background expiration cancels active lookups, returns
+  only in-flight rows to the durable queue, and resumes them on the next runtime
+  window. The extension still cannot launch the host app by itself; a future
+  server runner remains the honest limitation for completing while rec.me is
+  never opened.
+
+Validation so far:
+
+- Full pre-red-team `WanderTests`: 1,138 passed, 0 failed on iPhone 16 Plus /
+  iOS 18.6.
+- Focused blocker regression pass: 5 passed, then expanded import regression
+  group: 47 passed, 0 failed.
+- The 45-place concurrency probe confirms more than one and no more than six
+  simultaneous resolutions. The 45-place commit regression still verifies 45
+  saves/list members with exactly one WanderStore and one PlaceImportStore
+  persistence write.
+- `git diff --check` passes. Existing Xcode warnings about Supabase date
+  formatters and traditional headermaps are unrelated.
+- Final post-red-team `WanderTests`: 1,143 passed, 0 failed, 0 skipped on
+  iPhone 16 Plus / iOS 18.6 (`Test-Wander-2026.08.14_02-37-46--0700.xcresult`).
+  The final release red-team returned no remaining blockers.
+
+Release state: PR #385 is not yet merged and no build number, archive, upload,
+TestFlight attachment, tag, or Slack release note has been created at this
+checkpoint. Next: receive the final red-team verdict, run the full unit suite,
+commit/push, merge only after payload checks pass, snapshot the build-144
+manifest from `testflight/build-143`, then create and merge the build-number PR
+before archiving the exact candidate.

@@ -1005,6 +1005,7 @@ struct WanderRootView: View {
     }
 
     private func resumeAutomaticPlaceImports() {
+        importStore.resumePendingImports()
         completedAutomaticImportBatchIDs.formUnion(
             PlaceImportAutoSavePolicy.pendingVerificationBatchIDs(
                 in: importStore.batches
@@ -1031,6 +1032,11 @@ struct WanderRootView: View {
             expirationHandler: {
                 Task { @MainActor in
                     guard automaticImportOwnerUserID == expectedUserID else { return }
+                    importStore.pauseProcessing(
+                        batchIDs: importStore.batches
+                            .filter(\.shouldSaveAutomatically)
+                            .map(\.id)
+                    )
                     importAutoSaveTask?.cancel()
                 }
             }
@@ -1075,10 +1081,6 @@ struct WanderRootView: View {
                             savedCount: result.savedCount,
                             needsReviewCount: result.needsReviewCount
                         )
-                    }
-                    Task { @MainActor in
-                        _ = await store.syncUnsyncedOwnPlaces(backend: backend)
-                        _ = await store.syncPendingPlaceLists(backend: backend)
                     }
                 }
             }
