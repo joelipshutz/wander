@@ -76,3 +76,9 @@ Icon Composer. Exact built-in image-generation prompts are in `prompts.md`.
 The focused [pin iterations](pin-iterations/README.md) use J as the base and
 change only the coral glass marker. They test four broader silhouettes at
 1024 px, 180 px, and 87 px without replacing the production AppIcon.
+
+## Creative riff follow-up
+
+The [ten-direction creative riff](creative-riff/README.md) uses the wider N pin
+composition as a loose anchor, then explores realistic and invented globes,
+radically different marker shapes, and glossy, satin, and fully matte finishes.
