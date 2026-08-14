@@ -30,9 +30,9 @@ Primary reviewer: `[name and role]`
 
 Backup reviewer: `[name and role]`
 
-Support contact supplied in App Store Connect: `[verified monitored address]`
+Support contact supplied in App Store Connect: `getrec.me@gmail.com`
 
-The public Support page currently publishes `support@getrec.me`; verify receipt and ownership before replacing the placeholder above.
+The public Support page must publish `getrec.me@gmail.com` for launch. Before submission, verify inbound receipt and an authenticated reply; use `joe@grayline-studio.com` only as fallback.
 
 Do not submit the build until those three fields are complete, the production moderation migration and live queue test have been verified, and the dedicated review account can enter a populated fictional graph without requiring an external inbox, phone, or one-time code.
 

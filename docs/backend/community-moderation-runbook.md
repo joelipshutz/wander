@@ -22,7 +22,7 @@ The public endpoints were verified to return HTTP 200 on 2026-08-13:
 - `https://getrec.me/privacy`
 - `https://getrec.me/terms`
 
-The Support page publishes `support@getrec.me`. Before submission, the launch owner must send and receive a test message and confirm the mailbox is monitored during the coverage window.
+The Support page must publish `getrec.me@gmail.com` for launch. Before submission, the launch owner must send and receive a test message, send an authenticated reply, and confirm the mailbox is monitored during the coverage window. `joe@grayline-studio.com` is the fallback contact.
 
 The text guard is intentionally a narrow first pass. It does not replace human review, and image moderation is report-driven in this launch version.
 
