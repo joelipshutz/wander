@@ -115,8 +115,8 @@ function createToken() {
 }
 
 function createClient(token) {
-  return async function api(path) {
-    const response = await fetch(`${DEFAULTS.apiBase}${path}`, {
+  return async function api(path, options = {}) {
+    const response = await fetch(`${options.apiBase ?? DEFAULTS.apiBase}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const text = await response.text();
@@ -131,9 +131,9 @@ function createClient(token) {
   };
 }
 
-async function optional(api, path) {
+async function optional(api, path, options) {
   try {
-    return await api(path);
+    return await api(path, options);
   } catch (error) {
     if ([403, 404].includes(error.status)) {
       return { unavailable: true, status: error.status };
@@ -159,7 +159,9 @@ async function main() {
   loadEnv(options.envPath);
   const api = createClient(createToken());
 
-  const app = await api(`/apps/${options.appId}?fields[apps]=name,bundleId,sku,primaryLocale`);
+  const app = await api(
+    `/apps/${options.appId}?fields[apps]=name,bundleId,sku,primaryLocale,isOrEverWasMadeForKids,contentRightsDeclaration,accessibilityUrl`,
+  );
   const versions = await api(
     `/apps/${options.appId}/appStoreVersions?limit=20&fields[appStoreVersions]=versionString,appStoreState,platform,createdDate,releaseType,earliestReleaseDate`,
   );
@@ -169,6 +171,31 @@ async function main() {
   const infos = await api(
     `/apps/${options.appId}/appInfos?limit=10&fields[appInfos]=appStoreState,appStoreAgeRating,brazilAgeRating`,
   );
+  const availability = await optional(
+    api,
+    `/apps/${options.appId}/appAvailabilityV2?include=territoryAvailabilities&limit[territoryAvailabilities]=50`,
+  );
+  const priceSchedule = await optional(
+    api,
+    `/apps/${options.appId}/appPriceSchedule?include=baseTerritory,manualPrices&limit[manualPrices]=50`,
+  );
+  const usaPricePoints = await optional(
+    api,
+    `/apps/${options.appId}/appPricePoints?filter[territory]=USA&include=territory&limit=200`,
+  );
+  const availabilityTerritories = availability.data
+    ? await optional(
+        api,
+        `/appAvailabilities/${availability.data.id}/territoryAvailabilities?include=territory&limit=200`,
+        { apiBase: "https://api.appstoreconnect.apple.com/v2" },
+      )
+    : availability;
+  const manualAppPrices = priceSchedule.data
+    ? await optional(
+        api,
+        `/appPriceSchedules/${priceSchedule.data.id}/manualPrices?include=appPricePoint,territory&limit=200`,
+      )
+    : priceSchedule;
 
   const versionDetails = [];
   for (const version of versions.data ?? []) {
@@ -223,18 +250,73 @@ async function main() {
     );
     const categories = await optional(api, `/appInfos/${info.id}/primaryCategory`);
     const secondaryCategory = await optional(api, `/appInfos/${info.id}/secondaryCategory`);
+    const ageRatingDeclaration = await optional(
+      api,
+      `/appInfos/${info.id}/ageRatingDeclaration`,
+    );
+    const territoryAgeRatings = await optional(
+      api,
+      `/appInfos/${info.id}/territoryAgeRatings?limit=200`,
+    );
     infoDetails.push({
       id: info.id,
       ...info.attributes,
       localizations: compact(localizations),
       primaryCategory: categories.data?.id ?? null,
       secondaryCategory: secondaryCategory.data?.id ?? null,
+      ageRatingDeclaration: ageRatingDeclaration.data
+        ? {
+            id: ageRatingDeclaration.data.id,
+            ...ageRatingDeclaration.data.attributes,
+          }
+        : ageRatingDeclaration,
+      territoryAgeRatings: compact(territoryAgeRatings),
     });
   }
 
   console.log(JSON.stringify({
     auditedAt: new Date().toISOString(),
     app: { id: app.data.id, ...app.data.attributes },
+    availability: availability.data
+      ? {
+          id: availability.data.id,
+          ...availability.data.attributes,
+          territoryCount: availabilityTerritories.data?.length ?? null,
+          availableTerritories: (availabilityTerritories.data ?? [])
+            .filter((item) => item.attributes?.available)
+            .map((item) => item.relationships?.territory?.data?.id)
+            .filter(Boolean)
+            .sort(),
+          preOrderTerritories: (availabilityTerritories.data ?? [])
+            .filter((item) => item.attributes?.preOrderEnabled)
+            .map((item) => item.relationships?.territory?.data?.id)
+            .filter(Boolean)
+            .sort(),
+        }
+      : availability,
+    priceSchedule: priceSchedule.data
+      ? {
+          id: priceSchedule.data.id,
+          ...priceSchedule.data.attributes,
+          included: compact({ data: priceSchedule.included ?? [] }),
+          manualPrices: (manualAppPrices.data ?? []).map((price) => {
+            const pricePointId = price.relationships?.appPricePoint?.data?.id;
+            const territoryId = price.relationships?.territory?.data?.id;
+            const pricePoint = manualAppPrices.included?.find(
+              (item) => item.type === "appPricePoints" && item.id === pricePointId,
+            );
+            return {
+              territory: territoryId ?? null,
+              customerPrice: pricePoint?.attributes?.customerPrice ?? null,
+              startDate: price.attributes?.startDate ?? null,
+              endDate: price.attributes?.endDate ?? null,
+            };
+          }),
+        }
+      : priceSchedule,
+    usaPricePoints: usaPricePoints.data
+      ? compact(usaPricePoints)
+      : usaPricePoints,
     appInfos: infoDetails,
     versions: compact(versions),
     versionDetails,
