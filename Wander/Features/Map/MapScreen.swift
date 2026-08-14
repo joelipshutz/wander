@@ -9017,18 +9017,14 @@ struct PlaceSheet: View {
     }
 
     private var externalActionItems: [PlaceExternalAction] {
-        var actions: [PlaceExternalAction] = []
-        if let latitude = place.latitude,
-           let longitude = place.longitude,
-           let directionsAction = PlaceExternalLinks.directionsAction(placeName: place.name, latitude: latitude, longitude: longitude) {
-            actions.append(directionsAction)
-        }
-        actions.append(contentsOf: PlaceExternalLinks.visibleBusinessActions(
+        PlaceExternalLinks.placeProfileActions(
+            placeName: place.name,
+            latitude: place.latitude,
+            longitude: place.longitude,
             websiteURLString: place.websiteURLString,
             phoneNumber: place.phoneNumber,
             actionLinksJSON: place.actionLinksJSON
-        ))
-        return actions
+        )
     }
 
     private var shareURL: URL? {

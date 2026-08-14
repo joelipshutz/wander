@@ -2567,6 +2567,62 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNil(saved?.userPlace.historicalWantedAt)
     }
 
+    func testProviderBusinessMetadataEnrichmentPersistsAndPreservesValidValues() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        let candidate = PlaceCandidate(
+            id: "mapkit_anajak_thai",
+            name: "Anajak Thai",
+            category: "restaurant",
+            address: "14704 Ventura Blvd",
+            locality: "Sherman Oaks",
+            region: "CA",
+            latitude: 34.15182,
+            longitude: -118.45363,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit_anajak_thai",
+            confidence: 0.92
+        )
+        _ = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual
+        )
+        let placeID = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Anajak Thai" }?.place.id
+        )
+
+        XCTAssertTrue(
+            store.applyProviderBusinessMetadata(
+                placeID: placeID,
+                metadata: PlaceBusinessMetadata(
+                    websiteURLString: "https://www.anajakthai.com",
+                    phoneNumber: "+1 (818) 501-4201",
+                    timeZoneIdentifier: "America/Los_Angeles"
+                )
+            )
+        )
+        XCTAssertFalse(
+            store.applyProviderBusinessMetadata(
+                placeID: placeID,
+                metadata: PlaceBusinessMetadata(
+                    websiteURLString: "https://wrong.example",
+                    phoneNumber: "+1 213 555 0100",
+                    timeZoneIdentifier: "America/New_York"
+                )
+            )
+        )
+
+        let saved = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.place.canonicalName == "Anajak Thai" }
+        )
+        XCTAssertEqual(saved.place.websiteURLString, "https://www.anajakthai.com")
+        XCTAssertEqual(saved.place.phoneNumber, "+1 (818) 501-4201")
+        XCTAssertEqual(saved.place.timeZoneIdentifier, "America/Los_Angeles")
+        XCTAssertEqual(saved.place.syncState, .pendingCreate)
+    }
+
     func testCurrentLocationCandidatesUseInjectedResolver() async throws {
         let resolver = FakePlaceResolver(
             currentLocationCandidates: [

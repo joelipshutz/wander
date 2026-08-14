@@ -5831,6 +5831,40 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
+    func applyProviderBusinessMetadata(placeID: String, metadata: PlaceBusinessMetadata) -> Bool {
+        var didChange = false
+        var seenPlaces = Set<ObjectIdentifier>()
+        let candidatePlaces = places + remoteVisiblePlaceCache.map(\.place)
+
+        for place in candidatePlaces where place.id == placeID
+            || place.localID == placeID
+            || place.serverID == placeID {
+            guard seenPlaces.insert(ObjectIdentifier(place)).inserted else { continue }
+
+            let stored = PlaceBusinessMetadata(
+                websiteURLString: place.websiteURLString,
+                phoneNumber: place.phoneNumber,
+                timeZoneIdentifier: place.timeZoneIdentifier
+            )
+            let merged = stored.mergingMissingValues(from: metadata)
+            guard merged != stored else { continue }
+
+            place.websiteURLString = merged.websiteURLString
+            place.phoneNumber = merged.phoneNumber
+            place.timeZoneIdentifier = merged.timeZoneIdentifier
+            place.localUpdatedAt = .now
+            place.updatedAt = .now
+            didChange = true
+        }
+
+        if didChange {
+            objectWillChange.send()
+            persist()
+        }
+        return didChange
+    }
+
+    @discardableResult
     func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo, backend: WanderBackend?) async -> SaveResult {
         let localResult = saveVisiblePlace(visiblePlace, status: status)
 

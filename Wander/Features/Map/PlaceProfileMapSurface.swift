@@ -433,6 +433,7 @@ private struct PlaceProfileFullView: View {
     @State private var selectedHeaderPhotoID: String?
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
     @State private var discoveredReservationAction: PlaceExternalAction?
+    @State private var recoveredBusinessMetadata: PlaceBusinessMetadata?
 
     var body: some View {
         GeometryReader { proxy in
@@ -548,8 +549,8 @@ private struct PlaceProfileFullView: View {
         .task(id: place.photoLookupKey) {
             await reloadGallery()
         }
-        .task(id: reservationLookupKey) {
-            await resolveReservationAction()
+        .task(id: businessActionLookupKey) {
+            await resolveBusinessActions()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -963,17 +964,43 @@ private struct PlaceProfileFullView: View {
     private var actionItems: [PlaceExternalAction] {
         PlaceProfileCopy.actionItems(
             for: place,
+            businessMetadata: effectiveBusinessMetadata,
             reservationAction: discoveredReservationAction
         )
     }
 
-    private var reservationLookupKey: String {
+    private var storedBusinessMetadata: PlaceBusinessMetadata {
+        PlaceBusinessMetadata(
+            websiteURLString: place.websiteURLString,
+            phoneNumber: place.phoneNumber,
+            timeZoneIdentifier: nil
+        )
+    }
+
+    private var effectiveBusinessMetadata: PlaceBusinessMetadata {
+        guard let recoveredBusinessMetadata else { return storedBusinessMetadata }
+        return storedBusinessMetadata.mergingMissingValues(from: recoveredBusinessMetadata)
+    }
+
+    private var businessMetadataRequest: PlaceBusinessMetadataRequest {
+        PlaceBusinessMetadataRequest(
+            placeID: place.id,
+            name: place.name,
+            address: place.address,
+            locality: place.locality,
+            region: place.region,
+            latitude: place.latitude,
+            longitude: place.longitude,
+            sourceProvider: place.sourceProvider,
+            sourceProviderPlaceID: place.sourceProviderPlaceID
+        )
+    }
+
+    private var businessActionLookupKey: String {
         [
-            place.id,
-            place.name,
-            place.locality,
-            place.region,
+            businessMetadataRequest.lookupKey,
             place.websiteURLString,
+            place.phoneNumber,
             place.actionLinksJSON,
             place.category,
             place.primaryCategory,
@@ -995,11 +1022,22 @@ private struct PlaceProfileFullView: View {
             .contains { classification.contains($0) }
     }
 
-    private func resolveReservationAction() async {
+    private func resolveBusinessActions() async {
         discoveredReservationAction = nil
+        recoveredBusinessMetadata = nil
+        var metadata = storedBusinessMetadata
+
+        if metadata.needsRecovery,
+           let recovered = try? await MapKitPlaceBusinessMetadataResolver().resolve(businessMetadataRequest) {
+            guard !Task.isCancelled else { return }
+            metadata = metadata.mergingMissingValues(from: recovered)
+            recoveredBusinessMetadata = metadata
+            store.applyProviderBusinessMetadata(placeID: place.id, metadata: metadata)
+        }
+
         let action = await PlaceExternalLinks.discoverReservationAction(
             actionLinksJSON: place.actionLinksJSON,
-            websiteURLString: place.websiteURLString,
+            websiteURLString: metadata.websiteURLString,
             placeName: place.name,
             locality: place.locality,
             region: place.region,
@@ -2262,28 +2300,23 @@ private enum PlaceProfileCopy {
 
     static func actionItems(
         for place: PlaceSheetPlace,
+        businessMetadata: PlaceBusinessMetadata? = nil,
         reservationAction: PlaceExternalAction? = nil
     ) -> [PlaceExternalAction] {
-        var actions: [PlaceExternalAction] = []
-        if let latitude = place.latitude,
-           let longitude = place.longitude,
-           let directions = PlaceExternalLinks.directionsAction(placeName: place.name, latitude: latitude, longitude: longitude) {
-            actions.append(directions)
-        }
-
-        let businessActions = PlaceExternalLinks.visibleBusinessActions(
+        let metadata = businessMetadata ?? PlaceBusinessMetadata(
             websiteURLString: place.websiteURLString,
             phoneNumber: place.phoneNumber,
-            actionLinksJSON: place.actionLinksJSON
+            timeZoneIdentifier: nil
         )
-        .filter { $0.kind == .website || $0.kind == .call }
-
-        actions.append(contentsOf: businessActions)
-        if let reservation = reservationAction
-            ?? PlaceExternalLinks.reservationAction(actionLinksJSON: place.actionLinksJSON) {
-            actions.append(reservation)
-        }
-        return actions
+        return PlaceExternalLinks.placeProfileActions(
+            placeName: place.name,
+            latitude: place.latitude,
+            longitude: place.longitude,
+            websiteURLString: metadata.websiteURLString,
+            phoneNumber: metadata.phoneNumber,
+            actionLinksJSON: place.actionLinksJSON,
+            reservationAction: reservationAction
+        )
     }
 
     static func shareURL(for place: PlaceSheetPlace) -> URL? {
