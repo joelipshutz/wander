@@ -28859,3 +28859,103 @@ checkpoint. Next: receive the final red-team verdict, run the full unit suite,
 commit/push, merge only after payload checks pass, snapshot the build-144
 manifest from `testflight/build-143`, then create and merge the build-number PR
 before archiving the exact candidate.
+
+## 2026-08-14 14:14 PDT - Codex - REC-180 App Store 1.0 launch gates
+
+Agent: Codex
+Branch: `codex/rec-180-app-store-1-0`
+Worktree: `/private/tmp/recme-app-store-1-0`
+Linear: `REC-180` (`In Progress`)
+Mission Control: unavailable at `http://localhost:4000`
+
+Goal: preserve every existing account and row while completing the production
+Clerk/Supabase cutover, preparing build 147 as marketing version 1.0, and
+submitting rec.me to App Review.
+
+Starting state and coordination:
+
+- The isolated release branch starts from exact verified TestFlight build 146,
+  tag `testflight/build-146`, commit `fd244075`. Joe's checkout remains on
+  `joe/phone-build-latest` with an unrelated untracked `tmp/` directory and was
+  not modified.
+- PR #411 is open as a draft, mergeable, and has a passing trusted payload
+  check. `project.yml` and the generated Xcode project declare marketing
+  version 1.0 and build 147. The branch must remain unmerged until the production
+  identity/data continuity and reviewer-account gates pass.
+- The complete release candidate previously passed 1,151 unit tests and 34 UI
+  tests with zero failures, a clean Release simulator build, and all six
+  deterministic App Store screenshot flows.
+
+Completed safeguards and live evidence:
+
+- Created and verified an encrypted AES-256 off-device copy of the complete
+  pre-cutover backup in iCloud Drive. The recovery key is stored in macOS
+  Keychain; decrypted archive listing, SHA-256 integrity, and iCloud sync status
+  were verified. The source Supabase project and both local backups remain
+  untouched.
+- The Clerk public backup contains all six development users and confirms zero
+  production users. Password-hash export still requires authenticated access to
+  the owning Clerk dashboard before the lossless import can run.
+- App Store Connect read-back shows version 1.0 in Prepare for Submission,
+  manual release enabled, six screenshots complete, metadata/review contact and
+  reviewer walkthrough saved, and build 146 valid in TestFlight as marketing
+  version 0.1. Apple therefore requires the equivalent build 147 archive for
+  version 1.0.
+- Verified the live PostHog project setting discards client IP data. The App
+  Privacy questionnaire is fully drafted but remains deliberately unpublished
+  until the exact signed archive and production configuration are verified.
+- Sent a support verification probe to `getrec.me@gmail.com`; delivery has not
+  bounced, but authenticated receipt/reply remains pending.
+- Re-ran the live App Store read-only audit and every release reconciliation
+  dry run. Version 1.0 remains Prepare for Submission with manual release, free
+  US-only availability, the evidence-backed age questionnaire, exact metadata,
+  and six complete 1320x2868 screenshots. Build 146 remains valid as 0.1 and no
+  build 147 exists yet; demo credentials remain the only missing review-detail
+  fields.
+- Reverified the public launch surface. The home, support, privacy,
+  privacy-choices, terms, community, import-help, extensions, and AASA endpoints
+  all return HTTP 200 over valid TLS. The AASA app ID matches the release team
+  and bundle ID, and the public support/legal pages publish the intended Gmail
+  address.
+- At Joe's request, added Canada through a dry-run-first, additive App Store
+  availability update. Read-back verifies exactly `CAN` + `USA`, free pricing,
+  no pre-order, and no automatic future-territory enrollment. No existing
+  territory, account, credential, or backend data changed. The release script
+  now supports repeatable `--add-territory` operations while preserving and
+  verifying all current territories. Mexico remains disabled pending its
+  regional storefront/localization and compliance review.
+- Attempted to create the requested Canada/Mexico Linear ticket, but Linear
+  rejected it because the workspace has reached its Free-plan issue limit. The
+  work and Mexico follow-up are captured in REC-180 comment
+  `28559ea6-6e11-4af0-9441-f2bd1bdae385` until a ticket slot is available.
+- Strengthened the hosted smoke path to exercise an operator claiming and
+  resolving a real rollback-only report, then verify closure, the 24-month
+  retention window, and all three audit events. The direct database endpoint is
+  IPv6-only from this machine and could not resolve over the available route;
+  the linked Management API is the supported fallback. Its strict 71-assertion
+  `community_moderation.sql` suite passed against the hosted source project,
+  including assignment, resolution, audit, retention, rate limiting, and
+  account-deletion behavior. The transaction rolled back and retained no test
+  content.
+
+Current blockers and continuation:
+
+- The existing Supabase organization is on Free with two active projects, so a
+  third green project cannot be created there. Upgrading that organization would
+  be materially more expensive than originally expected. A separate `rec.me`
+  organization is the safest isolation path, but exact user approval is required
+  before creating that persistent external account container. Do not pause or
+  alter either existing active project.
+- Clerk is waiting at sign-in for the account that owns app
+  `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9`; the already signed-in known Google accounts
+  did not own it. Gmail is waiting at the password screen for
+  `getrec.me@gmail.com`. Do not request, inspect, or store either password.
+- The existing APNs credential has previously authenticated successfully. A
+  backup-safety handoff to Ryan must omit credential material and requires exact
+  approval for the Slack destination/message before sending.
+- After the user completes those approvals/sign-ins: create the isolated green
+  project, restore and validate the database, export/import Clerk password
+  hashes with a six-of-six identity audit, create the reviewer account, update
+  release configuration, re-run hosted smoke tests, merge PR #411, archive and
+  upload exact build 147, publish privacy answers, attach the build, submit
+  version 1.0, and verify App Store Connect reports Waiting for Review.

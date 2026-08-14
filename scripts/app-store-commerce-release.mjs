@@ -8,6 +8,7 @@ const DEFAULTS = {
   appId: "6776850787",
   envPath: "/Users/joelipshutz/.openclaw/workspace/.env.keys",
   territory: "USA",
+  addTerritories: [],
 };
 
 function parseArgs(argv) {
@@ -31,6 +32,9 @@ function parseArgs(argv) {
         break;
       case "--territory":
         options.territory = next().toUpperCase();
+        break;
+      case "--add-territory":
+        options.addTerritories.push(next().toUpperCase());
         break;
       case "--help":
       case "-h":
@@ -169,14 +173,25 @@ async function resolveState(api, options) {
         `/appPriceSchedules/${priceSchedule.data.id}/manualPrices?include=appPricePoint,territory&limit=200`,
       )
     : null;
-  if (!(territories.data ?? []).some((territory) => territory.id === options.territory)) {
-    throw new Error(`Unknown App Store territory: ${options.territory}`);
+  const requestedTerritories = [options.territory, ...options.addTerritories];
+  const knownTerritories = new Set((territories.data ?? []).map((territory) => territory.id));
+  for (const territory of requestedTerritories) {
+    if (!knownTerritories.has(territory)) {
+      throw new Error(`Unknown App Store territory: ${territory}`);
+    }
   }
+  const territoryAvailabilities = availability?.data
+    ? await api(
+        `/appAvailabilities/${availability.data.id}/territoryAvailabilities?include=territory&limit=200`,
+        { apiBase: "https://api.appstoreconnect.apple.com/v2" },
+      )
+    : null;
   return {
     priceSchedule,
     availability,
     freePricePoint,
     manualPrices,
+    territoryAvailabilities,
     territories: territories.data ?? [],
   };
 }
@@ -204,7 +219,32 @@ function hasFreeLaunchPrice(state, options) {
   );
 }
 
+function territoryId(availability) {
+  return availability.relationships?.territory?.data?.id ?? null;
+}
+
+function availableTerritories(state) {
+  return (state.territoryAvailabilities?.data ?? [])
+    .filter((availability) => availability.attributes?.available)
+    .map(territoryId)
+    .filter(Boolean)
+    .sort();
+}
+
+function requestedAvailability(state, options) {
+  const current = availableTerritories(state);
+  const additions = [...new Set(options.addTerritories)]
+    .filter((territory) => !current.includes(territory))
+    .sort();
+  const target = [...new Set([
+    ...(state.availability?.data ? current : [options.territory]),
+    ...options.addTerritories,
+  ])].sort();
+  return { current, additions, target };
+}
+
 function plan(state, options) {
+  const availabilityPlan = requestedAvailability(state, options);
   return {
     appId: options.appId,
     launchTerritory: options.territory,
@@ -217,7 +257,9 @@ function plan(state, options) {
     },
     availability: {
       configured: Boolean(state.availability?.data),
-      target: [options.territory],
+      current: availabilityPlan.current,
+      additions: availabilityPlan.additions,
+      target: availabilityPlan.target,
       availableInNewTerritories: false,
       preOrderEnabled: false,
     },
@@ -252,13 +294,14 @@ async function createFreePriceSchedule(api, state, options) {
 }
 
 async function createAvailability(api, state, options) {
+  const available = new Set([options.territory, ...options.addTerritories]);
   const included = state.territories.map((territory) => {
     const availabilityId = `\${launch-availability-${territory.id}}`;
     return {
       type: "territoryAvailabilities",
       id: availabilityId,
       attributes: {
-        available: territory.id === options.territory,
+        available: available.has(territory.id),
         preOrderEnabled: false,
       },
       relationships: {
@@ -285,11 +328,33 @@ async function createAvailability(api, state, options) {
   });
 }
 
+async function addTerritoryAvailability(api, state, territory) {
+  const availability = (state.territoryAvailabilities?.data ?? [])
+    .find((candidate) => territoryId(candidate) === territory);
+  if (!availability) {
+    throw new Error(`No territory availability resource found for ${territory}`);
+  }
+  if (availability.attributes?.available) return;
+  await api(`/territoryAvailabilities/${availability.id}`, {
+    method: "PATCH",
+    body: {
+      data: {
+        type: "territoryAvailabilities",
+        id: availability.id,
+        attributes: {
+          available: true,
+          preOrderEnabled: false,
+        },
+      },
+    },
+  });
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    console.log("Usage: node scripts/app-store-commerce-release.mjs [--apply] [--app-id <id>] [--territory <id>] [--env <path>]");
-    console.log("Defaults to a read-only US-first plan: free, no pre-order, and no automatic new territories.");
+    console.log("Usage: node scripts/app-store-commerce-release.mjs [--apply] [--app-id <id>] [--territory <base-id>] [--add-territory <id>] [--env <path>]");
+    console.log("Defaults to a read-only US-first plan. --add-territory is repeatable and preserves every currently available territory.");
     return;
   }
 
@@ -300,32 +365,36 @@ async function main() {
   if (!options.apply) return;
 
   if (before.priceSchedule?.data && !hasFreeLaunchPrice(before, options)) {
-    throw new Error("An existing price schedule is present, but its US launch price is not free");
+    throw new Error(`An existing price schedule is present, but its ${options.territory} launch price is not free`);
   }
 
   if (!before.priceSchedule?.data) await createFreePriceSchedule(api, before, options);
   if (!before.availability?.data) await createAvailability(api, before, options);
+  if (before.availability?.data) {
+    for (const territory of [...new Set(options.addTerritories)]) {
+      await addTerritoryAvailability(api, before, territory);
+    }
+  }
 
   const after = await resolveState(api, options);
   if (!after.priceSchedule?.data || !after.availability?.data || !hasFreeLaunchPrice(after, options)) {
     throw new Error("Post-apply verification failed: price schedule or availability is still absent");
   }
-  const territoryAvailabilities = await api(
-    `/appAvailabilities/${after.availability.data.id}/territoryAvailabilities?include=territory&limit=200`,
-    { apiBase: "https://api.appstoreconnect.apple.com/v2" },
-  );
-  const availableTerritories = (territoryAvailabilities.data ?? [])
+  const verifiedTerritories = availableTerritories(after);
+  const expectedTerritories = requestedAvailability(before, options).target;
+  const availableWithoutPreOrder = (after.territoryAvailabilities?.data ?? [])
     .filter((item) => item.attributes?.available)
-    .map((item) => item.relationships?.territory?.data?.id)
-    .filter(Boolean)
-    .sort();
+    .every((item) => item.attributes?.preOrderEnabled === false);
   if (
     after.availability.data.attributes?.availableInNewTerritories !== false
-    || JSON.stringify(availableTerritories) !== JSON.stringify([options.territory])
+    || JSON.stringify(verifiedTerritories) !== JSON.stringify(expectedTerritories)
+    || !availableWithoutPreOrder
   ) {
     throw new Error(`Post-apply availability verification failed: ${JSON.stringify({
       availableInNewTerritories: after.availability.data.attributes?.availableInNewTerritories,
-      availableTerritories,
+      availableTerritories: verifiedTerritories,
+      expectedTerritories,
+      availableWithoutPreOrder,
     })}`);
   }
   console.log(JSON.stringify({
@@ -334,7 +403,7 @@ async function main() {
       priceScheduleId: after.priceSchedule.data.id,
       availabilityId: after.availability.data.id,
       price: "FREE",
-      availableTerritories,
+      availableTerritories: verifiedTerritories,
       availableInNewTerritories: false,
       preOrderEnabled: false,
     },
