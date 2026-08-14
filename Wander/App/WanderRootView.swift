@@ -1963,6 +1963,11 @@ struct WanderRootView: View {
     }
 
     static func resolvedFixtureMode(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtureMode {
+        #if DEBUG
+        if arguments.contains("-WanderUseStorefrontFixtures") {
+            return .storefront
+        }
+        #endif
         if arguments.contains("-WanderUsePerformanceFixtures") {
             return .performance
         }
@@ -1979,6 +1984,8 @@ struct WanderRootView: View {
             WanderFixtures.empty()
         case .demo:
             WanderFixtures.seed()
+        case .storefront:
+            WanderFixtures.storefront()
         case .performance:
             WanderFixtures.performanceScale()
         }
@@ -1994,8 +2001,16 @@ struct WanderRootView: View {
         let fixturesStartedAt = CFAbsoluteTimeGetCurrent()
         let fixtures = resolvedFixtures(mode: fixtureMode)
         let fixturesFinishedAt = CFAbsoluteTimeGetCurrent()
+        #if DEBUG
+        let placeResolver: any PlaceCandidateResolving = fixtureMode == .storefront
+            ? StorefrontPlaceResolver()
+            : MapKitPlaceResolver()
+        #else
+        let placeResolver: any PlaceCandidateResolving = MapKitPlaceResolver()
+        #endif
         let store = WanderStore(
             fixtures: fixtures,
+            placeResolver: placeResolver,
             parser: parser,
             analytics: analytics,
             persistence: persistence
@@ -2239,6 +2254,7 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
 enum WanderFixtureMode: Equatable {
     case empty
     case demo
+    case storefront
     case performance
 }
 

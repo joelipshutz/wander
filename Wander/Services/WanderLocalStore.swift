@@ -1915,9 +1915,9 @@ final class WanderStore: ObservableObject {
             .filter { !$0.owner.isPrivateProfile }
             .filter { !isMuted(userID: $0.owner.id) }
 
-        func place(ownerID: String, name: String) -> VisiblePlace? {
+        func place(ownerID: String, placeID: String) -> VisiblePlace? {
             followedPlaces.first {
-                $0.owner.id == ownerID && $0.place.canonicalName == name
+                $0.owner.id == ownerID && $0.place.id == placeID
             }
         }
 
@@ -1929,10 +1929,10 @@ final class WanderStore: ObservableObject {
             profile(for: userID).map(shell(for:))
         }
 
-        let mayaBarNido = place(ownerID: "user_maya", name: "Bar Nido")
-        let ryanNoodles = place(ownerID: "user_ryan", name: "Larchmont Noodles")
-        let demoFernDesk = place(ownerID: "user_demo", name: "Fern Desk Coffee")
-        let ryanJuniper = place(ownerID: "user_ryan", name: "Juniper Table")
+        let mayaBarNido = place(ownerID: "user_maya", placeID: "place_bar_nido")
+        let ryanNoodles = place(ownerID: "user_ryan", placeID: "place_noodles")
+        let demoFernDesk = place(ownerID: "user_demo", placeID: "place_fern_desk_coffee")
+        let ryanJuniper = place(ownerID: "user_ryan", placeID: "place_juniper_table")
         let mayaList = visiblePlaceLists.first { $0.id == "list_maya_sunset" }
         let ryanList = visiblePlaceLists.first { $0.id == "list_ryan_brooklyn_tables" }
 

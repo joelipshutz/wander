@@ -23,8 +23,8 @@ struct FeedScreen: View {
     }
 
     private let tickerSuggestions = [
-        "Joe's favorite coffee shops in LA",
-        "Maya's date night spots",
+        "friends' favorite coffee shops",
+        "date night spots from people you follow",
         "quiet work cafes with wifi",
         "friends' sunset hikes"
     ]
