@@ -15,6 +15,7 @@ struct WanderApp: App {
     @StateObject private var mapCaptureBackend: WanderBackend
     #endif
     private let analytics: AnalyticsClient
+    private let analyticsLifecycle: AppAnalyticsLifecycleTracker
     private let discoverParser: any LLMFilterParser
 
     init() {
@@ -25,9 +26,11 @@ struct WanderApp: App {
         } else {
             analyticsClient = NoopAnalyticsClient()
         }
-        analytics = analyticsClient
+        let contextualAnalytics = ContextualAnalyticsClient(client: analyticsClient)
+        analytics = contextualAnalytics
+        analyticsLifecycle = AppAnalyticsLifecycleTracker(analytics: contextualAnalytics)
         _pushNotifications = StateObject(
-            wrappedValue: PushNotificationManager(analytics: analyticsClient)
+            wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
         )
         let authStore: AuthSessionStore
         #if DEBUG
@@ -57,7 +60,7 @@ struct WanderApp: App {
             wrappedValue: AppEntryCoordinator(
                 auth: authStore,
                 backend: backendStore,
-                analytics: analyticsClient
+                analytics: contextualAnalytics
             )
         )
         #if DEBUG
@@ -75,7 +78,7 @@ struct WanderApp: App {
             } else if let inviteMockupPage = InviteMockupPage.resolved() {
                 InviteMockupRoot(page: inviteMockupPage)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
-                ClerkNativeAuthView(mode: .signUp)
+                ClerkNativeAuthView(mode: .signIn)
                     .environmentObject(auth)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
@@ -109,7 +112,12 @@ struct WanderApp: App {
     }
 
     private var appRoot: some View {
-        AppEntryView(coordinator: entryCoordinator, analytics: analytics, parser: discoverParser)
+        AppEntryView(
+            coordinator: entryCoordinator,
+            analytics: analytics,
+            analyticsLifecycle: analyticsLifecycle,
+            parser: discoverParser
+        )
             .environmentObject(auth)
             .environmentObject(backend)
             .environmentObject(pushNotifications)

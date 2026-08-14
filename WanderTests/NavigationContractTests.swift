@@ -21,7 +21,8 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(app.contains("AppEntryView(coordinator: entryCoordinator, analytics: analytics, parser: discoverParser)"))
+        XCTAssertTrue(app.contains("AppEntryView("))
+        XCTAssertTrue(app.contains("analyticsLifecycle: analyticsLifecycle"))
         XCTAssertTrue(entry.contains("case .signedOut:"))
         XCTAssertTrue(entry.contains("LoggedOutCarouselView(analytics: analytics)"))
         XCTAssertTrue(entry.contains("auth.beginSignIn(mode: .signUp)"))
@@ -49,21 +50,44 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("guard isSessionValidated,"))
     }
 
-    func testNativeAuthPresentsAppleBeforeClerkManagedAlternatives() throws {
+    func testNativeAuthPresentsAppleGoogleAndEmailWithoutGenericClerkSheet() throws {
         let authView = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Auth/NativeAuthFlowView.swift"
+            )
+        )
+        let authGate = try String(
             contentsOf: projectRoot.appendingPathComponent(
                 "Wander/Features/Auth/AuthGateSheet.swift"
             )
         )
+        let clerkService = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Services/Auth/ClerkAuthService.swift"
+            )
+        )
 
-        let appleCTA = try XCTUnwrap(authView.range(of: "auth.continueWithApple"))
-        let alternativesCTA = try XCTUnwrap(authView.range(of: "auth.useOtherMethod"))
+        let methodPickerStart = try XCTUnwrap(authView.range(of: "private var methodPicker"))
+        let methodPickerEnd = try XCTUnwrap(authView.range(of: "private var authHeader"))
+        let methodPicker = String(authView[methodPickerStart.lowerBound..<methodPickerEnd.lowerBound])
+        let appleCTA = try XCTUnwrap(methodPicker.range(of: "appleButton"))
+        let googleCTA = try XCTUnwrap(methodPicker.range(of: "googleButton"))
+        let emailField = try XCTUnwrap(methodPicker.range(of: "TextField("))
 
-        XCTAssertLessThan(appleCTA.lowerBound, alternativesCTA.lowerBound)
-        XCTAssertTrue(authView.contains("await auth.signInWithApple()"))
+        XCTAssertLessThan(appleCTA.lowerBound, googleCTA.lowerBound)
+        XCTAssertLessThan(googleCTA.lowerBound, emailField.lowerBound)
+        XCTAssertTrue(authView.contains("auth.continueWithApple"))
+        XCTAssertTrue(authView.contains("auth.continueWithGoogle"))
+        XCTAssertTrue(authView.contains("accessibilityIdentifier(\"auth.email\")"))
+        XCTAssertTrue(authView.contains("auth.authenticate(with: provider)"))
         XCTAssertTrue(authView.contains("ASAuthorizationAppleIDButton"))
-        XCTAssertTrue(authView.contains("Use email or Google"))
-        XCTAssertTrue(authView.contains("AuthView(mode: clerkMode"))
+        XCTAssertTrue(authView.contains("Sign in with Google"))
+        XCTAssertTrue(authView.contains("Continue with email"))
+        XCTAssertFalse(authGate.contains("AuthView("))
+        XCTAssertTrue(clerkService.contains("signInWithApple(transferable: false)"))
+        XCTAssertTrue(clerkService.contains("signInWithOAuth("))
+        XCTAssertTrue(clerkService.contains("provider: .google"))
+        XCTAssertTrue(clerkService.contains("transferable: false"))
     }
 
     func testNavigationModelRetainsAddRouteWhileHeaderExperimentOwnsVisibleEntryPoint() throws {

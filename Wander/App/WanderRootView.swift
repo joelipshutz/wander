@@ -445,6 +445,23 @@ struct WanderRootView: View {
         .environmentObject(store)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
+        .task(id: selectedTab) {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.appSurfaceViewed,
+                    properties: ["surface": selectedTab.rawValue]
+                )
+            )
+            if selectedTab == .profile {
+                analytics.track(
+                    .engagement(
+                        need: .status,
+                        action: .ownProfileViewed,
+                        surface: "profile"
+                    )
+                )
+            }
+        }
         .onChange(of: activityNavigation.commentsRoute?.id) { _, requestID in
             if requestID != nil {
                 selectedTab = .discover
@@ -851,6 +868,12 @@ struct WanderRootView: View {
         addLaunchRequest = nil
         addSheetDetent = addSheetRestingDetent
         isPresentingAdd = true
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.appSurfaceViewed,
+                properties: ["surface": "add"]
+            )
+        )
     }
 
     private func restorePlaceSaveDraftIfNeeded() {

@@ -229,7 +229,12 @@ final class AppEntryCoordinator: ObservableObject {
             firstVisitWalkthroughEligible: true
         )
         analytics.identify(userID: session.userID)
-        analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.onboardingCompleted, properties: [:]))
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.onboardingCompleted,
+                properties: ["server_confirmed": serverConfirmed ? "true" : "false"]
+            )
+        )
         state = .ready(session: session, firstVisitWalkthroughEligible: true)
     }
 

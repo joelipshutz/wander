@@ -27,11 +27,12 @@ If you are working in Joe's local workspace, the repo path is:
 `project.yml` is the source of truth for the Xcode project.
 
 The tracked `Wander/Config/Auth.xcconfig` contains the public Clerk publishable key
-and Supabase anon key for the current alpha backend. These are client-side
-publishable values and are required for simulator, device, and TestFlight builds.
+and Supabase anon key for the current alpha backend. The rec.me PostHog project
+token remains in the ignored local override. These are client-side publishable
+values and are required for simulator, device, and TestFlight builds.
 
-If you need to point a local build at a different Clerk/Supabase project, create
-the ignored override config:
+To populate the rec.me PostHog token or point a local build at alternate client
+projects, create the ignored override config:
 
 ```bash
 set -a
@@ -40,6 +41,8 @@ set +a
 cat > Wander/Config/LocalAuth.xcconfig <<EOF
 WANDER_CLERK_PUBLISHABLE_KEY = $WANDER_CLERK_PUBLISHABLE_KEY
 WANDER_SUPABASE_PUBLISHABLE_KEY = $WANDER_SUPABASE_ANON_KEY
+WANDER_POSTHOG_PROJECT_TOKEN = $WANDER_POSTHOG_PROJECT_TOKEN
+WANDER_POSTHOG_HOST = https:/$()/us.i.posthog.com
 EOF
 ```
 
@@ -80,7 +83,10 @@ xcodebuild build \
 checked in as non-secret project defaults for the Wander alpha project.
 
 Do not commit `Wander/Config/LocalAuth.xcconfig`; it is intentionally ignored and
-only for local overrides.
+only for local overrides. A TestFlight release worktree must create this file
+before archive and verify the signed app's `WANDER_POSTHOG_PROJECT_TOKEN` is
+non-empty without printing the value. Release worktrees do not inherit ignored
+files from another checkout.
 
 ## Widget And Share Extensions
 

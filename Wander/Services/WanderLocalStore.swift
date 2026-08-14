@@ -331,6 +331,7 @@ final class WanderStore: ObservableObject {
     private let parser: any LLMFilterParser
     private let placeResolver: PlaceCandidateResolving
     private let analytics: AnalyticsClient
+    var productAnalytics: AnalyticsClient { analytics }
     private let persistence: WanderStorePersistence?
     private var persistenceDeferralDepth = 0
     private var persistenceRequestedWhileDeferred = false
@@ -819,6 +820,21 @@ final class WanderStore: ObservableObject {
             sourceVisitID: sourceVisitID,
             inviteeUserIDs: normalizedInvitees
         )
+        let properties = ["invitee_count": "\(normalizedInvitees.count)"]
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.sharedVisitInvitesQueued,
+                properties: properties
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .connect,
+                action: .sharedVisitInvitesQueued,
+                surface: "check_in",
+                properties: properties
+            )
+        )
     }
 
     func queueSharedVisitInviteeReconciliation(sourceVisitID: String, inviteeUserIDs: [String]) {
@@ -1171,6 +1187,19 @@ final class WanderStore: ObservableObject {
                 ]
             )
         )
+        if kind == .dailyTakeover {
+            analytics.track(
+                .engagement(
+                    need: .status,
+                    action: .saveStreakAdvanced,
+                    surface: "save_streak",
+                    properties: [
+                        "status": status.rawValue,
+                        "streak_count": "\(updatedSummary.currentCount)"
+                    ]
+                )
+            )
+        }
         if recoveryDate != nil {
             analytics.track(
                 AnalyticsEvent(
@@ -1628,7 +1657,10 @@ final class WanderStore: ObservableObject {
 
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
-        else { return true }
+        else {
+            trackActivityLike(requestedLike, outcome: "local_only")
+            return true
+        }
 
         pendingActivityLikeIDs.insert(activityID)
         defer { pendingActivityLikeIDs.remove(activityID) }
@@ -1637,6 +1669,7 @@ final class WanderStore: ObservableObject {
                 activityID: activityID,
                 isLiked: requestedLike
             )
+            trackActivityLike(requestedLike, outcome: "succeeded")
             return true
         } catch {
             activityEngagementByID[activityID] = previous
@@ -1716,6 +1749,7 @@ final class WanderStore: ObservableObject {
                     createdAt: comment.createdAt
                 )
             }
+            trackActivityCommentCreated(outcome: "local_only")
             return true
         }
 
@@ -1728,6 +1762,7 @@ final class WanderStore: ObservableObject {
                 return lhs.id < rhs.id
             }
             activityEngagementByID[activityID] = result.engagement
+            trackActivityCommentCreated(outcome: "succeeded")
             return true
         } catch {
             activityCommentsByID[activityID]?.removeAll { $0.id == pendingID }
@@ -1735,6 +1770,45 @@ final class WanderStore: ObservableObject {
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
             return false
         }
+    }
+
+    private func trackActivityLike(_ isLiked: Bool, outcome: String) {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.activityLikeChanged,
+                properties: [
+                    "is_liked": isLiked ? "true" : "false",
+                    "outcome": outcome
+                ]
+            )
+        )
+        if isLiked {
+            analytics.track(
+                .engagement(
+                    need: .connect,
+                    action: .activityLiked,
+                    surface: "activity",
+                    properties: ["outcome": outcome]
+                )
+            )
+        }
+    }
+
+    private func trackActivityCommentCreated(outcome: String) {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.activityCommentCreated,
+                properties: ["outcome": outcome]
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .connect,
+                action: .activityCommented,
+                surface: "activity",
+                properties: ["outcome": outcome]
+            )
+        )
     }
 
     @discardableResult
@@ -2276,6 +2350,21 @@ final class WanderStore: ObservableObject {
         )
         placeLists.append(list)
         replaceCollaborators(for: list, with: collaboratorUserIDs, createdAt: now)
+        let properties = [
+            "visibility": visibility.rawValue,
+            "collaborator_count": "\(Set(collaboratorUserIDs).count)"
+        ]
+        analytics.track(
+            AnalyticsEvent(name: WanderAnalyticsEvents.placeListCreated, properties: properties)
+        )
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .listCreated,
+                surface: "lists",
+                properties: properties
+            )
+        )
         persist()
         return list
     }
@@ -3393,6 +3482,24 @@ final class WanderStore: ObservableObject {
                 previousSummary: streakSummaryBeforeSave
             )
         }
+        let acceptanceProperties = [
+            "created_new_place": createdNewUserPlace ? "true" : "false",
+            "photo_count": "\(result.photoCopies.count)"
+        ]
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.sharedVisitAccepted,
+                properties: acceptanceProperties
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .status,
+                action: .sharedVisitAccepted,
+                surface: "shared_visit",
+                properties: acceptanceProperties
+            )
+        )
         objectWillChange.send()
         persist()
         return visit
@@ -3896,6 +4003,17 @@ final class WanderStore: ObservableObject {
                 ]
             )
         )
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .checkInCreated,
+                surface: "check_in",
+                properties: [
+                    "is_repeat": isRepeatCheckIn ? "true" : "false",
+                    "visibility": userPlace.visibility.rawValue
+                ]
+            )
+        )
 
         objectWillChange.send()
         persist()
@@ -3978,7 +4096,6 @@ final class WanderStore: ObservableObject {
                 properties: ["date_changed": visitedAt == nil ? "false" : "true"]
             )
         )
-
         objectWillChange.send()
         persist()
         return visit
@@ -4392,10 +4509,21 @@ final class WanderStore: ObservableObject {
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverParseFailed,
-                    properties: ["error": remoteErrorMessage(error)]
+                    properties: ["error_category": analyticsErrorCategory(error)]
                 )
             )
             return fallback
+        }
+    }
+
+    private func analyticsErrorCategory(_ error: Error) -> String {
+        switch error {
+        case is URLError:
+            "network"
+        case is DecodingError:
+            "decoding"
+        default:
+            "other"
         }
     }
 
@@ -4700,6 +4828,14 @@ final class WanderStore: ObservableObject {
             AnalyticsEvent(
                 name: WanderAnalyticsEvents.placeSaved,
                 properties: ["source_type": sourceType.rawValue, "visibility": resolvedVisibility.rawValue, "status": status.rawValue]
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .placeSaved,
+                surface: "add",
+                properties: ["source_type": sourceType.rawValue, "status": status.rawValue]
             )
         )
         recordNewSaveForStreak(
@@ -5591,6 +5727,7 @@ final class WanderStore: ObservableObject {
                 syncState: .pendingCreate
             )
         )
+        trackFollowCreated(source: source, outcome: "local_only")
         persist()
     }
 
@@ -5603,6 +5740,7 @@ final class WanderStore: ObservableObject {
         }
 
         guard let backend else {
+            trackFollowCreated(source: source, outcome: "queued")
             persist()
             return false
         }
@@ -5617,6 +5755,7 @@ final class WanderStore: ObservableObject {
             persist()
             await refreshRemoteSocialGraph(backend: backend)
             await refreshRemoteVisiblePlaces(backend: backend)
+            trackFollowCreated(source: source, outcome: "succeeded")
             return true
         } catch {
             follow.syncStateRaw = SyncState.failed.rawValue
@@ -5626,6 +5765,21 @@ final class WanderStore: ObservableObject {
             persist()
             return false
         }
+    }
+
+    private func trackFollowCreated(source: FollowSource, outcome: String) {
+        let properties = ["source": source.rawValue, "outcome": outcome]
+        analytics.track(
+            AnalyticsEvent(name: WanderAnalyticsEvents.followCreated, properties: properties)
+        )
+        analytics.track(
+            .engagement(
+                need: .connect,
+                action: .followCreated,
+                surface: source.rawValue,
+                properties: ["outcome": outcome]
+            )
+        )
     }
 
     func unfollow(userID: String) {
