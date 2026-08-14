@@ -290,6 +290,7 @@ enum NotificationDestination: Equatable {
     case activityComments(id: String)
     case sharedVisit(participantID: String, generation: Int)
     case drafts(extractionJobID: String?)
+    case importReview(batchIDs: [String])
     case discover
 }
 
@@ -612,6 +613,9 @@ final class PushNotificationManager: ObservableObject {
             return .sharedVisit(participantID: participantID, generation: generation)
         case "capture_ready":
             return .drafts(extractionJobID: data?["extraction_job_id"] as? String)
+        case "import_finished":
+            let batchIDs = data?["batch_ids"] as? [String] ?? []
+            return batchIDs.isEmpty ? nil : .importReview(batchIDs: batchIDs)
         case "followed_activity_digest":
             return .discover
         default:
@@ -746,6 +750,54 @@ final class PushNotificationManager: ObservableObject {
             .filter { $0.hasPrefix(WannaGoReminderPlanner.notificationIdentifierPrefix) }
         guard !identifiers.isEmpty else { return }
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    func notifyImportFinished(
+        batchIDs: [String],
+        savedCount: Int,
+        needsReviewCount: Int
+    ) async {
+        guard !batchIDs.isEmpty else { return }
+        await refreshAuthorizationStatus()
+        guard canRegisterForRemoteNotifications else { return }
+
+        let content = UNMutableNotificationContent()
+        if savedCount == 0 {
+            content.title = "Your import needs a quick review"
+        } else {
+            content.title = savedCount == 1
+                ? "1 place saved"
+                : "\(savedCount) places saved"
+        }
+        if needsReviewCount > 0 {
+            content.body = "Open rec.me to verify what was saved and review \(needsReviewCount) more."
+        } else {
+            content.body = "Open rec.me to verify the places from your import."
+        }
+        content.sound = .default
+        let eventID = "local-import-\(UUID().uuidString.lowercased())"
+        content.userInfo = [
+            "recme": [
+                "event_id": eventID,
+                "notification_type": "import_finished",
+                "data": ["batch_ids": batchIDs]
+            ]
+        ]
+        do {
+            try await UNUserNotificationCenter.current().add(
+                UNNotificationRequest(
+                    identifier: eventID,
+                    content: content,
+                    trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+                )
+            )
+        } catch {
+            #if DEBUG
+            WanderDebugLog.imports.error(
+                "import completion notification failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+        }
     }
 
     func reconcileSaveStreakReminder(

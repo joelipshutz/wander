@@ -2941,6 +2941,10 @@ final class RemoteRepositoryTests: XCTestCase {
             .sharedVisit(participantID: "participant-1", generation: 4)
         )
         XCTAssertEqual(destination("capture_ready", data: ["extraction_job_id": "job-1"]), .drafts(extractionJobID: "job-1"))
+        XCTAssertEqual(
+            destination("import_finished", data: ["batch_ids": ["batch-1", "batch-2"]]),
+            .importReview(batchIDs: ["batch-1", "batch-2"])
+        )
         XCTAssertEqual(destination("followed_activity_digest"), .discover)
     }
 

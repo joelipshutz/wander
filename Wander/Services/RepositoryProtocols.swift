@@ -105,7 +105,7 @@ struct LinkPlaceInput: Equatable {
     let rawValue: String
 }
 
-struct PlaceCandidate: Identifiable, Equatable, Codable {
+struct PlaceCandidate: Identifiable, Equatable, Codable, Sendable {
     let id: String
     let name: String
     let category: String
@@ -994,6 +994,13 @@ struct SaveResult: Equatable {
         self.syncState = syncState
         self.placeID = placeID
     }
+}
+
+struct ExistingImportSave: Equatable {
+    let userPlaceID: String
+    let status: PlaceStatus
+    let syncState: SyncState
+    let placeID: String?
 }
 
 struct SourceArtifactDraft: Equatable {

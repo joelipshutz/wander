@@ -193,6 +193,7 @@
 		D308F93EA22C89FAB562DE2B /* WanderNearbyWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */; };
 		D43B1F7D234DF0F60BB44306 /* ActivityEngagementModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E194BD10847F361AB8D779BC /* ActivityEngagementModels.swift */; };
 		D55392171C53C7CDE1E7B7FD /* WanderWidgetConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */; };
+		D6468D4C63E01EF6E089EEDE /* PlaceImportAutoSaveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A663850B3B751A275E69A4D7 /* PlaceImportAutoSaveCoordinator.swift */; };
 		D659F5CBC1EEB692D6216008 /* VisibilityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBB1E0FFAE279FBB7C42FEF /* VisibilityPolicy.swift */; };
 		D67757E669AFA604566E6542 /* TrustedPlaceSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 875E330C1764F10B9298E2EF /* TrustedPlaceSearchTests.swift */; };
 		D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E5D0878CAA5887921E1ED1 /* CategoryTaxonomyMockups.swift */; };
@@ -409,6 +410,7 @@
 		A090198414BF253FB326D960 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		A1D4B71B065016C4A086B3CC /* ProfileSocialGraphScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSocialGraphScreen.swift; sourceTree = "<group>"; };
 		A28E93E5F5EB428888C45B36 /* AddQuestionTemplates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddQuestionTemplates.swift; sourceTree = "<group>"; };
+		A663850B3B751A275E69A4D7 /* PlaceImportAutoSaveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceImportAutoSaveCoordinator.swift; sourceTree = "<group>"; };
 		A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceCategoryTests.swift; sourceTree = "<group>"; };
 		A71C4596873A503C9978BFC8 /* PlaceProfileMapSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceProfileMapSurface.swift; sourceTree = "<group>"; };
 		A89D9500AD233DA43B3ACEF7 /* WanderWidgetSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetSnapshotTests.swift; sourceTree = "<group>"; };
@@ -980,6 +982,7 @@
 				F2FCB4F57A21DA1C9CBAA1AD /* MapRegionFitter.swift */,
 				D5A0C8AFCFBDE5C371CED21E /* PhotoPlaceTextExtractor.swift */,
 				56F0D3D160FF8337D43E3C2F /* PlaceExternalLinks.swift */,
+				A663850B3B751A275E69A4D7 /* PlaceImportAutoSaveCoordinator.swift */,
 				9F0B6B10FCA35BC2BBC333BC /* PlaceImportCandidateMatcher.swift */,
 				8E8DC0A8E7A20017527489A9 /* PlaceImportParser.swift */,
 				1C4A6BBFEC984756BBE9A7E5 /* PlaceImportStore.swift */,
@@ -1298,6 +1301,7 @@
 				85AADE6CC89E67EF821CA62E /* PhotoPlaceTextExtractor.swift in Sources */,
 				540000F274D1FCB982BDC69F /* PlaceActivityMockups.swift in Sources */,
 				89DD4F9F93B8FFA91B6B350B /* PlaceExternalLinks.swift in Sources */,
+				D6468D4C63E01EF6E089EEDE /* PlaceImportAutoSaveCoordinator.swift in Sources */,
 				F439A7C2190C5DE57693A3FD /* PlaceImportCandidateMatcher.swift in Sources */,
 				6BA93655CF0B8C26582726FC /* PlaceImportModels.swift in Sources */,
 				4A22B42F0D3DFB823F938E9D /* PlaceImportParser.swift in Sources */,
@@ -1612,7 +1616,7 @@
 		98BE6269A1618DE2ECCB47B5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 143;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.1;
@@ -1629,7 +1633,7 @@
 		98C77DC356FB1881F7298017 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 143;
+				CURRENT_PROJECT_VERSION = 144;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 0.1;

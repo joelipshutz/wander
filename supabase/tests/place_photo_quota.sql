@@ -25,8 +25,13 @@ select is(
   'quota RPC is security definer'
 );
 select ok(
-  'search_path=public, app' = any(
-    (select proconfig from pg_proc where oid = 'public.consume_place_photo_quota()'::regprocedure)
+  coalesce(
+    (
+      select proconfig @> array['search_path=public, app']
+      from pg_proc
+      where oid = 'public.consume_place_photo_quota()'::regprocedure
+    ),
+    false
   ),
   'quota RPC pins its search path'
 );
@@ -47,25 +52,31 @@ select throws_ok(
 
 reset role;
 truncate table app.place_photo_request_counters;
+insert into app.place_photo_request_counters (scope, period_key, request_count)
+values
+  ('global', to_char(statement_timestamp() at time zone 'UTC', 'YYYY-MM'), 900),
+  ('user:user_quota_test', to_char(statement_timestamp() at time zone 'UTC', 'YYYY-MM-DD'), 120);
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'user_quota_test', true);
-select ok(public.consume_place_photo_quota(), 'authenticated request is admitted below the caps');
+select ok(
+  public.consume_place_photo_quota(),
+  'authenticated request is admitted despite legacy counters at their former limits'
+);
+select is(
+  (
+    select bool_and(public.consume_place_photo_quota())
+    from generate_series(1, 250)
+  ),
+  true,
+  'repeated authenticated requests are admitted without an application-side cap'
+);
 
 reset role;
-insert into app.place_photo_request_counters (scope, period_key, request_count)
-values ('user:user_quota_test', to_char(statement_timestamp() at time zone 'UTC', 'YYYY-MM-DD'), 120)
-on conflict (scope) do update set period_key = excluded.period_key, request_count = excluded.request_count;
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'user_quota_test', true);
-select is(public.consume_place_photo_quota(), false, 'per-user daily cap rejects additional requests');
-
-reset role;
-truncate table app.place_photo_request_counters;
-insert into app.place_photo_request_counters (scope, period_key, request_count)
-values ('global', to_char(statement_timestamp() at time zone 'UTC', 'YYYY-MM'), 900);
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'user_quota_test', true);
-select is(public.consume_place_photo_quota(), false, 'global monthly cap rejects paid-overage requests');
+select is(
+  (select count(*) from app.place_photo_request_counters),
+  2::bigint,
+  'admission no longer mutates the legacy counter table'
+);
 
 select * from finish();
 rollback;

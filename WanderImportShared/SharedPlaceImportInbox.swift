@@ -13,6 +13,25 @@ enum SharedPlaceImportPayloadKind: String, Codable, Equatable, Sendable {
     case file
 }
 
+enum SharedPlaceImportSaveMode: String, Codable, Equatable, Sendable {
+    case wanna
+    case checkIn = "check_in"
+}
+
+struct SharedPlaceImportSaveIntent: Codable, Equatable, Sendable {
+    let mode: SharedPlaceImportSaveMode
+    let ratingScore: Double?
+
+    init(mode: SharedPlaceImportSaveMode = .wanna, ratingScore: Double? = nil) {
+        self.mode = mode
+        self.ratingScore = mode == .checkIn
+            ? ratingScore.map { min(5, max(1, $0)) }
+            : nil
+    }
+
+    static let wanna = SharedPlaceImportSaveIntent()
+}
+
 struct SharedPlaceImportEnvelopeItem: Codable, Equatable, Sendable {
     let kind: SharedPlaceImportPayloadKind
     let source: SharedPlaceImportSource
@@ -48,24 +67,33 @@ struct SharedPlaceImportEnvelopeItem: Codable, Equatable, Sendable {
 }
 
 struct SharedPlaceImportEnvelope: Codable, Equatable, Sendable {
-    static let currentVersion = 2
+    static let currentVersion = 3
     static let supportedVersions = 1...currentVersion
 
     let version: Int
     let deliveryID: String
     let createdAt: Date
     let items: [SharedPlaceImportEnvelopeItem]
+    let saveIntent: SharedPlaceImportSaveIntent?
 
     init(
         version: Int = SharedPlaceImportEnvelope.currentVersion,
         deliveryID: String = UUID().uuidString.lowercased(),
         createdAt: Date = .now,
-        items: [SharedPlaceImportEnvelopeItem]
+        items: [SharedPlaceImportEnvelopeItem],
+        saveIntent: SharedPlaceImportSaveIntent? = nil
     ) {
         self.version = version
         self.deliveryID = deliveryID
         self.createdAt = createdAt
         self.items = items
+        self.saveIntent = saveIntent
+    }
+
+    /// Version 1 and 2 captures predate extension auto-save and must retain
+    /// their original review-before-save behavior.
+    var requestsAutomaticSave: Bool {
+        version >= 3 && saveIntent != nil
     }
 }
 
@@ -209,6 +237,7 @@ struct SharedPlaceImportInbox: Sendable {
     @discardableResult
     func capture(
         _ inputs: [SharedPlaceImportCaptureInput],
+        saveIntent: SharedPlaceImportSaveIntent? = nil,
         deliveryID: String = UUID().uuidString.lowercased(),
         createdAt: Date = .now,
         fileManager: FileManager = .default
@@ -348,7 +377,8 @@ struct SharedPlaceImportInbox: Sendable {
             let envelope = SharedPlaceImportEnvelope(
                 deliveryID: deliveryID,
                 createdAt: createdAt,
-                items: envelopeItems
+                items: envelopeItems,
+                saveIntent: saveIntent
             )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
