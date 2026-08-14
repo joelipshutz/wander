@@ -4,6 +4,12 @@ Owner: REC-170
 
 Warehouse and dashboard surface: PostHog
 
+Live project: [rec.me / ID 557259](https://us.posthog.com/project/557259)
+
+Live dashboard: [rec.me Product Funnel / ID 1994904](https://us.posthog.com/project/557259/dashboard/1994904)
+
+Account/project registry: `/Users/joelipshutz/Developer/grayline/ops/service-account-registry.json`
+
 Client contract version: `analytics_schema_version=2`
 
 ## Why PostHog
@@ -91,6 +97,11 @@ Prefer enums, booleans, counts, lengths, coarse error categories, internal build
 
 The script uses only rec.me-specific credentials. It intentionally does not fall back to generic `POSTHOG_*` variables, because this machine also has credentials for other products.
 
+The live project belongs to the `Grayline Studio` PostHog organization under
+Joe's `jolipshutz@gmail.com` Google login. Secret values stay in
+`/Users/joelipshutz/.openclaw/workspace/.env.keys`; the cross-project registry
+records only env-var references and safe project identifiers.
+
 ```bash
 cd scripts
 npm run analytics:check
@@ -115,6 +126,10 @@ For every analytics change:
 5. In a non-production/test account, perform the changed action and inspect the PostHog live event. Confirm schema/build properties and confirm private payload values are absent.
 6. Re-run `npm --prefix scripts run analytics:apply` if an insight or metric changed, then open every affected tile and verify it returns without a query error.
 7. Check volumes after the next TestFlight release. Treat zero events, impossible conversion above 100%, duplicate bursts, or missing build numbers as release blockers for the affected metric.
+8. Before uploading a release archive, resolve the app's `Info.plist` and verify
+   `WANDER_POSTHOG_PROJECT_TOKEN` is non-empty without printing its value. A
+   release worktree does not inherit the ignored `LocalAuth.xcconfig` from any
+   other checkout.
 
 ## Future-agent change rules
 
