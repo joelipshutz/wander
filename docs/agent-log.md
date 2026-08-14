@@ -28916,3 +28916,14 @@ Implementation validation, 2026-08-14 02:07 PDT:
   clipping or crowding.
 - No project generation, build-number bump, archive, upload, TestFlight state,
   backend, or Slack state changed. This is an app-code review handoff only.
+
+Review handoff, 2026-08-14 02:08 PDT:
+
+- Committed the implementation as `ad6356a1` (`feat: extend streak confetti
+  rain`) and pushed `codex/rec-122-confetti-motion`.
+- Updated PR #396 with the implementation and validation evidence, then moved
+  it from draft to ready for review:
+  https://github.com/joelipshutz/wander/pull/396.
+- Linked the ready PR from Linear REC-122, added the validation summary, and
+  moved the issue to In Review. Merge and any later TestFlight release remain
+  intentionally separate actions.
