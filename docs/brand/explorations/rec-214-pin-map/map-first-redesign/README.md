@@ -58,3 +58,11 @@ The `small-size/` folder contains 180 px and 87 px reductions.
 Advance **AJ** first, with **AL** as the bolder comparator and **AH** as the
 conservative route. Exact built-in image-generation prompts are in
 `prompts.md`.
+
+## Tight Liquid Glass follow-up
+
+Ryan selected AH–AK for an Apple Icon Composer pass, then asked for closer map
+crops and only one or two pins. The finished editable `.icon` documents,
+Composer-rendered review PNGs, 180/87 px checks, and exact source-edit prompts
+are documented in [`icon-composer/`](icon-composer/README.md). `rec.me` stays
+locked to the center in every direction.
