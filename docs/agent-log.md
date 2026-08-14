@@ -28858,3 +28858,24 @@ Handoff:
   `Wander/Features/Streak/SaveStreakCelebrationView.swift`, add focused motion
   contract coverage, and run simulator visual QA before moving REC-122 to
   In Review.
+
+Refinement, 2026-08-14 01:24 PDT:
+
+- Joe rejected the radial burst direction and asked to keep the current rain,
+  slow it to about 0.70x, make that the default, add more confetti, and keep it
+  arriving longer.
+- Surgically evolved the same live prototype. The new default is 80 pieces on
+  the shipping top-down path, 0.70x travel speed, and a one-second distributed
+  arrival window. The last piece completes around 3.33 seconds versus the
+  current preset's roughly 1.91-second last finish.
+- Preserved the exact Current A/B option and replaced the burst controls with
+  rain speed, arrival window, and piece count. Replay, 0.5x playback, frame
+  scrubbing, keyboard controls, and Reduce Motion behavior remain available.
+- Verified the revised default at 375, 768, and 1440 pixels with no horizontal
+  overflow or console errors. A scrubbed 2.70-second frame still shows a small,
+  restrained set of late pieces near the bottom instead of an already-empty
+  screen. Final stills are `more-rain-mid-frame.png` and
+  `more-rain-late-frame.png` beside the HTML artifact.
+- The local preview remains `http://127.0.0.1:8765/finalized.html`. Production
+  SwiftUI, tests, project generation, build number, backend, TestFlight, and
+  Slack remain untouched; REC-122 and draft PR #396 stay open for motion review.
