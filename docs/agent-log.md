@@ -28959,3 +28959,18 @@ Current blockers and continuation:
   release configuration, re-run hosted smoke tests, merge PR #411, archive and
   upload exact build 147, publish privacy answers, attach the build, submit
   version 1.0, and verify App Store Connect reports Waiting for Review.
+
+Checkpoint, 2026-08-14 14:31 PDT:
+
+- Committed and pushed the Canada availability automation, strengthened
+  moderation smoke, launch-readiness evidence, and this coordination log as
+  `a55c9d0a` (`chore: add Canada launch availability`). PR #411 remains a draft,
+  mergeable, and its trusted payload validation is green at that exact head.
+- Validation: `node --check` passed for both changed scripts;
+  `git diff --check` passed; the App Store commerce dry run, apply, and read-back
+  all verified `CAN` + `USA`; and the strict hosted 71-assertion moderation
+  pgTAP suite passed in a rolled-back transaction.
+- App Store submission has not occurred. Version 1.0 remains Prepare for
+  Submission because production auth/data continuity, mailbox reply, safety
+  ownership, populated reviewer credentials, signed build 147, and final privacy
+  publication remain required.
