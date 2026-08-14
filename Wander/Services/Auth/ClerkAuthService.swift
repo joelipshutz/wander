@@ -300,6 +300,39 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
     }
 
+    func authenticateWithPassword(
+        emailAddress: String,
+        password: String
+    ) async throws -> NativeAuthOutcome {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+
+        do {
+            let signIn = try await Clerk.shared.auth.signInWithPassword(
+                identifier: emailAddress,
+                password: password
+            )
+            guard signIn.status == .complete else {
+                return .requiresAdditionalVerification
+            }
+
+            await refreshSession()
+            guard case .signedIn = state else {
+                throw AuthSessionError.sessionUnavailable
+            }
+            return .completed
+        } catch let error as ClerkAPIError where Self.invalidCredentialCodes.contains(error.code) {
+            throw AuthSessionError.invalidCredentials
+        } catch {
+            throw Self.authError(from: error)
+        }
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
     func resetPendingEmailVerification() {
         #if canImport(ClerkKit)
         pendingEmailVerification = nil
@@ -409,6 +442,15 @@ final class ClerkAuthService: AuthSessionProviding {
     private static let invalidVerificationCodeCodes: Set<String> = [
         "form_code_incorrect",
         "verification_failed",
+    ]
+
+    private static let invalidCredentialCodes: Set<String> = [
+        "form_identifier_not_found",
+        "invitation_account_not_exists",
+        "form_password_incorrect",
+        "form_password_or_identifier_incorrect",
+        "form_password_validation_failed",
+        "no_password_set",
     ]
 
     private static func authError(from error: Error) -> Error {

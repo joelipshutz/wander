@@ -1091,7 +1091,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["onboarding.getStarted"].isHittable)
     }
 
-    func testLoggedOutLoginExposesAppleGoogleAndEmailWithoutClerkSheet() {
+    func testLoggedOutLoginExposesAppleGoogleEmailAndPasswordWithoutClerkSheet() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthUITest"]
         app.launch()
@@ -1100,10 +1100,12 @@ final class OnboardingUITests: XCTestCase {
         let google = app.buttons["auth.continueWithGoogle"]
         let email = app.textFields["auth.email"]
         let emailContinue = app.buttons["auth.continueWithEmail"]
+        let usePassword = app.buttons["auth.usePassword"]
         XCTAssertTrue(apple.waitForExistence(timeout: 4))
         XCTAssertTrue(google.exists)
         XCTAssertTrue(email.exists)
         XCTAssertTrue(emailContinue.exists)
+        XCTAssertTrue(usePassword.exists)
         XCTAssertTrue(apple.isHittable)
         XCTAssertTrue(google.isHittable)
         XCTAssertLessThan(apple.frame.minY, google.frame.minY)
@@ -1119,6 +1121,31 @@ final class OnboardingUITests: XCTestCase {
                 RunLoop.current.run(until: Date().addingTimeInterval(0.5))
             }
         }
+
+        if !usePassword.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(usePassword.isHittable)
+        usePassword.tap()
+
+        let passwordEmail = app.textFields["auth.passwordEmail"]
+        let password = app.secureTextFields["auth.password"]
+        let passwordSubmit = app.buttons["auth.signInWithPassword"]
+        let leavePassword = app.buttons["auth.leavePassword"]
+        XCTAssertTrue(passwordEmail.waitForExistence(timeout: 2))
+        XCTAssertTrue(password.exists)
+        XCTAssertTrue(passwordSubmit.exists)
+        XCTAssertTrue(leavePassword.exists)
+        XCTAssertTrue(passwordEmail.isHittable)
+        XCTAssertTrue(password.isHittable)
+
+        let passwordScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        passwordScreenshot.name = "REC-180 App Review password sign-in"
+        passwordScreenshot.lifetime = .keepAlways
+        add(passwordScreenshot)
+
+        leavePassword.tap()
+        XCTAssertTrue(apple.waitForExistence(timeout: 2))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-259 native Welcome back auth"

@@ -215,6 +215,7 @@ enum AuthSessionError: Error, Equatable {
     case emailAlreadyInUse
     case invalidVerificationCode
     case emailVerificationUnavailable
+    case invalidCredentials
 }
 
 enum NativeAuthMode: String, Equatable {
@@ -255,6 +256,7 @@ protocol AuthSessionProviding: AnyObject {
     func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeAuthOutcome
     func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws
     func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome
+    func authenticateWithPassword(emailAddress: String, password: String) async throws -> NativeAuthOutcome
     func resetPendingEmailVerification()
     func signOut() async throws
     func deleteAccount() async throws
@@ -272,6 +274,10 @@ extension AuthSessionProviding {
     }
 
     func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome {
+        throw AuthSessionError.notConfigured
+    }
+
+    func authenticateWithPassword(emailAddress: String, password: String) async throws -> NativeAuthOutcome {
         throw AuthSessionError.notConfigured
     }
 
@@ -298,6 +304,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published private(set) var activeSocialAuthProvider: NativeSocialAuthProvider?
     @Published private(set) var isSendingEmailCode = false
     @Published private(set) var isVerifyingEmailCode = false
+    @Published private(set) var isSigningInWithPassword = false
     @Published private(set) var emailVerificationAddress: String?
     @Published private(set) var nativeAuthError: String?
     @Published private(set) var isSigningOut = false
@@ -334,7 +341,10 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     }
 
     var isPerformingNativeAuth: Bool {
-        activeSocialAuthProvider != nil || isSendingEmailCode || isVerifyingEmailCode
+        activeSocialAuthProvider != nil
+            || isSendingEmailCode
+            || isVerifyingEmailCode
+            || isSigningInWithPassword
     }
 
     func sessionChanges() -> AsyncStream<AuthState> {
@@ -517,6 +527,57 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         nativeAuthError = nil
     }
 
+    @discardableResult
+    func signInWithPassword(
+        emailAddress rawEmailAddress: String,
+        password rawPassword: String
+    ) async -> NativeAuthOutcome? {
+        guard provider.canPresentNativeAuth else {
+            nativeAuthError = "Password sign-in is not available in this build."
+            return nil
+        }
+
+        let emailAddress = rawEmailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.looksLikeEmailAddress(emailAddress) else {
+            nativeAuthError = "Enter a valid email address."
+            return nil
+        }
+        guard !rawPassword.isEmpty else {
+            nativeAuthError = "Enter your password."
+            return nil
+        }
+
+        nativeAuthError = nil
+        isNativeAuthAttemptActive = true
+        isSigningInWithPassword = true
+        defer { isSigningInWithPassword = false }
+
+        do {
+            let outcome = try await provider.authenticateWithPassword(
+                emailAddress: emailAddress,
+                password: rawPassword
+            )
+            if outcome == .completed {
+                synchronizeState(provider.state)
+                guard state.isSignedIn else {
+                    nativeAuthError = "Password sign-in didn’t finish. Try again or use another method."
+                    return nil
+                }
+            } else {
+                nativeAuthError = "This account needs another verification step. Use email or another sign-in method."
+            }
+            return outcome
+        } catch AuthSessionError.invalidCredentials, AuthSessionError.accountNotFound {
+            nativeAuthError = "Email or password didn’t match."
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error("password sign-in failed")
+            #endif
+            nativeAuthError = "Password sign-in didn’t finish. Check your connection and try again."
+        }
+        return nil
+    }
+
     func supabaseAccessToken() async throws -> String {
         #if DEBUG
         WanderDebugLog.remote.debug("auth store supabase token requested state=\(self.state.debugSummary, privacy: .public)")
@@ -589,6 +650,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         activeSocialAuthProvider = nil
         isSendingEmailCode = false
         isVerifyingEmailCode = false
+        isSigningInWithPassword = false
         emailVerificationAddress = nil
         nativeAuthError = nil
         provider.resetPendingEmailVerification()
@@ -656,11 +718,15 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     private let emailVerificationSession: AuthSession?
     private let emailCodeFailure: Error?
     private let emailVerificationFailure: Error?
+    private let passwordAuthOutcome: NativeAuthOutcome
+    private let passwordAuthSession: AuthSession?
+    private let passwordAuthFailure: Error?
     private let sessionChangeStream: AsyncStream<AuthState>
     private let sessionChangeContinuation: AsyncStream<AuthState>.Continuation
     private(set) var requestedSocialAuth: [NativeSocialAuthRequest] = []
     private(set) var requestedEmailCodes: [(emailAddress: String, mode: NativeAuthMode)] = []
     private(set) var verifiedEmailCodes: [String] = []
+    private(set) var requestedPasswordSignInEmails: [String] = []
     private(set) var didResetPendingEmailVerification = false
 
     init(
@@ -674,7 +740,10 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
         emailVerificationOutcome: NativeAuthOutcome = .completed,
         emailVerificationSession: AuthSession? = nil,
         emailCodeFailure: Error? = nil,
-        emailVerificationFailure: Error? = nil
+        emailVerificationFailure: Error? = nil,
+        passwordAuthOutcome: NativeAuthOutcome = .completed,
+        passwordAuthSession: AuthSession? = nil,
+        passwordAuthFailure: Error? = nil
     ) {
         let (stream, continuation) = AsyncStream<AuthState>.makeStream()
         self.state = state
@@ -688,6 +757,9 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
         self.emailVerificationSession = emailVerificationSession
         self.emailCodeFailure = emailCodeFailure
         self.emailVerificationFailure = emailVerificationFailure
+        self.passwordAuthOutcome = passwordAuthOutcome
+        self.passwordAuthSession = passwordAuthSession
+        self.passwordAuthFailure = passwordAuthFailure
         self.sessionChangeStream = stream
         self.sessionChangeContinuation = continuation
     }
@@ -738,6 +810,21 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
             sessionChangeContinuation.yield(state)
         }
         return emailVerificationOutcome
+    }
+
+    func authenticateWithPassword(
+        emailAddress: String,
+        password: String
+    ) async throws -> NativeAuthOutcome {
+        requestedPasswordSignInEmails.append(emailAddress)
+        if let passwordAuthFailure {
+            throw passwordAuthFailure
+        }
+        if passwordAuthOutcome == .completed, let passwordAuthSession {
+            state = .signedIn(passwordAuthSession)
+            sessionChangeContinuation.yield(state)
+        }
+        return passwordAuthOutcome
     }
 
     func resetPendingEmailVerification() {
