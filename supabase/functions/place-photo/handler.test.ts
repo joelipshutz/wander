@@ -1,6 +1,6 @@
 import { handleRequest, type PlacePhotoDependencies } from "./handler.ts";
 
-const fixedNow = new Date("2026-08-31T05:30:00.000Z");
+const fixedNow = new Date("2026-08-14T05:30:00.000Z");
 
 Deno.test("place-photo stores a provider image once and reuses the private server cache", async () => {
   const calls: Array<{ url: string; method: string }> = [];
@@ -108,7 +108,7 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
   const writtenRow = cachedRow as unknown as Record<string, unknown>;
   assertEquals(writtenRow.content_type, "image/jpeg");
   assertEquals(writtenRow.byte_size, 4);
-  assertEquals(writtenRow.expires_at, "2027-02-28T05:30:00.000Z");
+  assertEquals("expires_at" in writtenRow, false);
   assertEquals(storageCacheControl, "86400");
   assertEquals(signedURLExpirySeconds, 86_400);
 
@@ -129,7 +129,7 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
   );
 });
 
-Deno.test("place-photo deletes an expired cached image before refreshing it", async () => {
+Deno.test("place-photo reuses legacy cache rows without applying their former expiry", async () => {
   let deletedStorageObject = false;
   let deletedMetadata = false;
   let searchCount = 0;
@@ -179,6 +179,15 @@ Deno.test("place-photo deletes an expired cached image before refreshing it", as
         if (method === "POST") return new Response(null, { status: 201 });
       }
       if (
+        url.includes("/storage/v1/object/sign/google-place-photo-cache/") &&
+        method === "POST"
+      ) {
+        return Response.json({
+          signedURL:
+            "/storage/v1/object/sign/google-place-photo-cache/aa/cache.img?token=test",
+        });
+      }
+      if (
         url.includes("/storage/v1/object/google-place-photo-cache/") &&
         method === "DELETE"
       ) {
@@ -202,11 +211,11 @@ Deno.test("place-photo deletes an expired cached image before refreshing it", as
     },
   };
 
-  const response = await handleRequest(metadataRequest(), dependencies);
+  const response = await handleRequest(photoRequest(), dependencies);
   assertEquals(response.status, 200);
-  assertEquals(searchCount, 1);
-  assert(deletedStorageObject, "expired Storage object was not deleted");
-  assert(deletedMetadata, "expired cache metadata was not deleted");
+  assertEquals(searchCount, 0);
+  assertEquals(deletedStorageObject, false);
+  assertEquals(deletedMetadata, false);
 });
 
 function photoRequest(): Request {
@@ -224,23 +233,6 @@ function photoRequest(): Request {
       source_provider: "mapkit",
       source_provider_place_id: "mapkit-woodcat",
       requires_photo: true,
-    }),
-  });
-}
-
-function metadataRequest(): Request {
-  const request = photoRequest();
-  return new Request(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: JSON.stringify({
-      name: "Woodcat Coffee",
-      address: "1532 Sunset Blvd, Los Angeles, CA",
-      latitude: 34.0777,
-      longitude: -118.2588,
-      source_provider: "mapkit",
-      source_provider_place_id: "mapkit-woodcat",
-      requires_photo: false,
     }),
   });
 }

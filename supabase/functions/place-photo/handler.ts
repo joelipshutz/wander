@@ -9,7 +9,6 @@ import {
 
 const googlePlacesBaseURL = "https://places.googleapis.com/v1";
 const cacheBucket = "google-place-photo-cache";
-const cacheLifetimeMonths = 6;
 const signedURLLifetimeSeconds = 24 * 60 * 60;
 const maximumCachedImageBytes = 10 * 1_024 * 1_024;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
@@ -42,7 +41,6 @@ type CachedPhotoRow = {
   source_photo_url: string | null;
   flag_content_url: string | null;
   fetched_at: string;
-  expires_at: string;
   last_accessed_at: string;
 };
 
@@ -99,21 +97,15 @@ export async function handleRequest(
   if (supabase.serviceRoleKey) {
     const cached = await readCachedPhoto(cacheKey, supabase, dependencies);
     if (cached) {
-      if (
-        new Date(cached.expires_at).getTime() > dependencies.now().getTime()
-      ) {
-        const payload = await cachedPayload(
-          cached,
-          input,
-          supabase,
-          dependencies,
-        );
-        if (payload) {
-          console.log("place_photo_cache_hit");
-          return Response.json(payload, { headers: noStoreHeaders });
-        }
-      } else {
-        await deleteCachedPhoto(cached, supabase, dependencies);
+      const payload = await cachedPayload(
+        cached,
+        input,
+        supabase,
+        dependencies,
+      );
+      if (payload) {
+        console.log("place_photo_cache_hit");
+        return Response.json(payload, { headers: noStoreHeaders });
       }
     }
   }
@@ -377,7 +369,6 @@ function cacheRow(
     source_photo_url: payload.source_photo_url,
     flag_content_url: payload.flag_content_url,
     fetched_at: fetchedAt.toISOString(),
-    expires_at: addCalendarMonths(fetchedAt, cacheLifetimeMonths).toISOString(),
     last_accessed_at: fetchedAt.toISOString(),
   };
 }
@@ -399,37 +390,6 @@ async function upsertCacheRow(
     body: JSON.stringify(row),
   });
   if (!response.ok) throw new Error(`cache_write_status_${response.status}`);
-}
-
-async function deleteCachedPhoto(
-  row: CachedPhotoRow,
-  supabase: SupabaseConfiguration,
-  dependencies: PlacePhotoDependencies,
-): Promise<void> {
-  try {
-    if (row.object_path) {
-      await dependencies.fetch(
-        `${supabase.url}/storage/v1/object/${cacheBucket}/${
-          encodeStoragePath(row.object_path)
-        }`,
-        { method: "DELETE", headers: serviceHeaders(supabase) },
-      );
-    }
-    const endpoint = new URL(
-      `${supabase.url}/rest/v1/google_place_photo_cache`,
-    );
-    endpoint.searchParams.set("cache_key", `eq.${row.cache_key}`);
-    await dependencies.fetch(endpoint, {
-      method: "DELETE",
-      headers: serviceHeaders(supabase),
-    });
-    console.log("place_photo_cache_expired");
-  } catch (error) {
-    console.warn(
-      "place_photo_cache_delete_failed",
-      error instanceof Error ? error.message : "unknown_error",
-    );
-  }
 }
 
 async function downloadCacheableImage(
@@ -494,20 +454,6 @@ async function uploadCachedImage(
     },
   );
   if (!response.ok) throw new Error(`cache_upload_status_${response.status}`);
-}
-
-function addCalendarMonths(date: Date, months: number): Date {
-  const result = new Date(date.getTime());
-  const originalDay = result.getUTCDate();
-  result.setUTCDate(1);
-  result.setUTCMonth(result.getUTCMonth() + months);
-  const finalDayOfTargetMonth = new Date(Date.UTC(
-    result.getUTCFullYear(),
-    result.getUTCMonth() + 1,
-    0,
-  )).getUTCDate();
-  result.setUTCDate(Math.min(originalDay, finalDayOfTargetMonth));
-  return result;
 }
 
 async function signedStorageURL(

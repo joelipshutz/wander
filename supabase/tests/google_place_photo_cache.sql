@@ -68,14 +68,21 @@ select ok(
   'service role has only the cache metadata privileges needed by the Edge Function'
 );
 select ok(
-  exists(
+  not exists(
     select 1
     from pg_constraint
     where conrelid = 'public.google_place_photo_cache'::regclass
       and conname = 'google_place_photo_cache_expiry_check'
-      and pg_get_constraintdef(oid) like '%6 mons%'
+  )
+  and exists(
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'google_place_photo_cache'
+      and column_name = 'expires_at'
+      and is_nullable = 'YES'
   ),
-  'cache metadata enforces the six-month refresh boundary'
+  'cache metadata has no automatic expiry boundary'
 );
 
 select * from finish();
