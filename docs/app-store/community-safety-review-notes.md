@@ -1,6 +1,6 @@
 # App Review notes — community safety
 
-Use this as the source for the App Review Notes field. Replace the bracketed launch-owner placeholders before submission.
+Use `reviewer-notes.txt` as the source for the App Review Notes field. This file retains the operational safety detail and launch-owner placeholders that must be resolved before submission.
 
 ## Reviewer walkthrough
 
@@ -34,7 +34,7 @@ Support contact supplied in App Store Connect: `[verified monitored address]`
 
 The public Support page currently publishes `support@getrec.me`; verify receipt and ownership before replacing the placeholder above.
 
-Do not submit the build until those three fields are complete and the production moderation migration and live queue test have been verified.
+Do not submit the build until those three fields are complete, the production moderation migration and live queue test have been verified, and the dedicated review account can enter a populated fictional graph without requiring an external inbox, phone, or one-time code.
 
 ## Suggested App Review Notes copy
 
