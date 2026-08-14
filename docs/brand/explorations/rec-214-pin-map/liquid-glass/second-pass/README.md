@@ -70,3 +70,9 @@ Advance **M** first, with **J** retained as the more realistic comparator and
 **K** as the typography challenger. Do not build new Icon Composer layer sets
 for all five; wait until one of M/J/K is selected, then tune that direction in
 Icon Composer. Exact built-in image-generation prompts are in `prompts.md`.
+
+## Pin silhouette follow-up
+
+The focused [pin iterations](pin-iterations/README.md) use J as the base and
+change only the coral glass marker. They test four broader silhouettes at
+1024 px, 180 px, and 87 px without replacing the production AppIcon.
