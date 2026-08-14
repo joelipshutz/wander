@@ -320,6 +320,7 @@ struct WanderRootView: View {
     @State private var saveStreakCelebrationTask: Task<Void, Never>?
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @State private var importAutoSaveTask: Task<Void, Never>?
+    @State private var automaticImportOwnerUserID: String?
     @State private var queuedAutomaticImportBatchIDs: Set<String> = []
     @State private var completedAutomaticImportBatchIDs: Set<String> = []
     @State private var restoredPlaceSaveDraftOwnerID: String?
@@ -688,14 +689,16 @@ struct WanderRootView: View {
             routeNotification(request)
         }
         .onChange(of: auth.state) { _, state in
+            let nextUserID = state.session?.userID
+            if let automaticImportOwnerUserID,
+               automaticImportOwnerUserID != nextUserID {
+                cancelAutomaticPlaceImports(clearVerificationQueue: true)
+            }
             if let userID = state.session?.userID {
                 importStore.bind(to: userID)
             }
             if !state.isSignedIn {
-                importAutoSaveTask?.cancel()
-                importAutoSaveTask = nil
-                queuedAutomaticImportBatchIDs.removeAll()
-                completedAutomaticImportBatchIDs.removeAll()
+                cancelAutomaticPlaceImports(clearVerificationQueue: true)
                 placeSaveDraftStore.clear()
                 restoredPlaceSaveDraftOwnerID = nil
             }
@@ -1002,20 +1005,35 @@ struct WanderRootView: View {
     }
 
     private func resumeAutomaticPlaceImports() {
+        completedAutomaticImportBatchIDs.formUnion(
+            PlaceImportAutoSavePolicy.pendingVerificationBatchIDs(
+                in: importStore.batches
+            )
+        )
         enqueueAutomaticPlaceImports(
             batchIDs: importStore.batches
                 .filter(\.shouldSaveAutomatically)
                 .map(\.id)
         )
+        presentPendingImportVerificationIfPossible()
     }
 
     private func enqueueAutomaticPlaceImports(batchIDs: [String]) {
-        guard !batchIDs.isEmpty else { return }
+        guard !batchIDs.isEmpty,
+              let expectedUserID = auth.state.session?.userID,
+              store.currentUser.id == expectedUserID
+        else { return }
         queuedAutomaticImportBatchIDs.formUnion(batchIDs)
         guard importAutoSaveTask == nil else { return }
+        automaticImportOwnerUserID = expectedUserID
         let backgroundTaskID = UIApplication.shared.beginBackgroundTask(
             withName: "rec.me place import",
-            expirationHandler: nil
+            expirationHandler: {
+                Task { @MainActor in
+                    guard automaticImportOwnerUserID == expectedUserID else { return }
+                    importAutoSaveTask?.cancel()
+                }
+            }
         )
 
         importAutoSaveTask = Task { @MainActor in
@@ -1023,16 +1041,30 @@ struct WanderRootView: View {
                 if backgroundTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(backgroundTaskID)
                 }
+                if automaticImportOwnerUserID == expectedUserID {
+                    importAutoSaveTask = nil
+                    automaticImportOwnerUserID = nil
+                }
             }
             while !Task.isCancelled, !queuedAutomaticImportBatchIDs.isEmpty {
+                guard auth.state.session?.userID == expectedUserID,
+                      store.currentUser.id == expectedUserID
+                else { return }
                 let nextBatchIDs = queuedAutomaticImportBatchIDs.sorted()
                 queuedAutomaticImportBatchIDs.subtract(nextBatchIDs)
                 let result = await PlaceImportAutoSaveCoordinator.process(
                     batchIDs: nextBatchIDs,
                     importStore: importStore,
-                    store: store
+                    store: store,
+                    expectedUserID: expectedUserID,
+                    isAuthorized: {
+                        auth.state.session?.userID == expectedUserID
+                    }
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled,
+                      auth.state.session?.userID == expectedUserID,
+                      store.currentUser.id == expectedUserID
+                else { return }
                 if result.hasResult {
                     completedAutomaticImportBatchIDs.formUnion(result.batchIDs)
                     if scenePhase == .active {
@@ -1050,7 +1082,16 @@ struct WanderRootView: View {
                     }
                 }
             }
-            importAutoSaveTask = nil
+        }
+    }
+
+    private func cancelAutomaticPlaceImports(clearVerificationQueue: Bool) {
+        importAutoSaveTask?.cancel()
+        importAutoSaveTask = nil
+        automaticImportOwnerUserID = nil
+        queuedAutomaticImportBatchIDs.removeAll()
+        if clearVerificationQueue {
+            completedAutomaticImportBatchIDs.removeAll()
         }
     }
 

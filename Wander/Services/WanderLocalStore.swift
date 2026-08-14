@@ -1006,6 +1006,15 @@ final class WanderStore: ObservableObject {
         return try operation()
     }
 
+    /// Coalesces a group of local mutations into one snapshot write. Keep the
+    /// operation synchronous so unrelated main-actor work cannot become part
+    /// of the batch while it is suspended.
+    func performBatchedLocalMutations<Result>(
+        _ operation: () throws -> Result
+    ) rethrows -> Result {
+        try withDeferredPersistence(operation)
+    }
+
     func apply(authState: AuthState) {
         switch authState {
         case .signedIn(let session), .offline(let session, _):
@@ -2267,6 +2276,60 @@ final class WanderStore: ObservableObject {
         }
 
         return ListPlaceAddResult(outcome: .added, createdWantSave: createdWantSave, shouldExplainAutoSave: createdWantSave)
+    }
+
+    /// Adds an already-owned place to a list without rebuilding the visible
+    /// place projection. Import batches use this inside a deferred-persistence
+    /// transaction after saving the corresponding user place.
+    @discardableResult
+    func addCurrentUserPlace(
+        userPlaceID: String,
+        to list: LocalPlaceList
+    ) -> ListPlaceAddResult {
+        guard canAddPlaces(to: list),
+              let userPlace = currentUserPlace(matching: userPlaceID)
+        else {
+            return ListPlaceAddResult(
+                outcome: .permissionDenied,
+                createdWantSave: false,
+                shouldExplainAutoSave: false
+            )
+        }
+        guard !listItems(for: list).contains(where: { item in
+            item.placeID == userPlace.placeID
+                || item.ownerUserPlaceID == userPlace.id
+                || item.sourceUserPlaceID == userPlace.id
+        }) else {
+            return ListPlaceAddResult(
+                outcome: .alreadyInList,
+                createdWantSave: false,
+                shouldExplainAutoSave: false
+            )
+        }
+
+        let item = LocalPlaceListItem(
+            localID: "local_list_item_\(slug(list.id))_\(slug(userPlace.placeID))_\(placeListItems.count + 1)",
+            listID: list.id,
+            placeID: userPlace.placeID,
+            ownerUserPlaceID: userPlace.id,
+            sourceUserPlaceID: userPlace.id,
+            addedByUserID: currentUser.id,
+            syncState: .pendingCreate
+        )
+        placeListItems.append(item)
+        if let index = placeLists.firstIndex(where: { $0.id == list.id }) {
+            placeLists[index].updatedAt = .now
+            if canManage(placeLists[index]) {
+                placeLists[index].syncStateRaw = SyncState.pendingUpdate.rawValue
+            }
+            placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
+        }
+        persist()
+        return ListPlaceAddResult(
+            outcome: .added,
+            createdWantSave: false,
+            shouldExplainAutoSave: false
+        )
     }
 
     func addCandidate(_ candidate: PlaceCandidate, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
@@ -4870,6 +4933,15 @@ final class WanderStore: ObservableObject {
                     placeID: existingPlace.serverID
                 )
             }
+            return saveCandidate(
+                candidate,
+                status: .been,
+                visibility: existingUserPlace.visibility,
+                note: existingUserPlace.note,
+                sourceType: sourceType,
+                ratingScore: ratingScore,
+                visitedAt: visitedAt
+            )
         }
 
         return saveCandidate(

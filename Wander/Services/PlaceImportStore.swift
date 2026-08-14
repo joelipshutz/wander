@@ -778,6 +778,8 @@ final class PlaceImportStore: ObservableObject {
     private var ownerUserID: String?
     private var processingTasks: [String: Task<Void, Never>] = [:]
     private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
+    private var persistenceDeferralDepth = 0
+    private var persistenceRequestedWhileDeferred = false
 
     init(
         persistence: any PlaceImportPersisting = FilePlaceImportPersistence(),
@@ -1346,6 +1348,21 @@ final class PlaceImportStore: ObservableObject {
         synchronizeBatch(items[index].batchID)
     }
 
+    /// Coalesces a synchronous import mutation batch into one durable snapshot.
+    func performBatchedMutations<Result>(
+        _ operation: () throws -> Result
+    ) rethrows -> Result {
+        persistenceDeferralDepth += 1
+        defer {
+            persistenceDeferralDepth -= 1
+            if persistenceDeferralDepth == 0, persistenceRequestedWhileDeferred {
+                persistenceRequestedWhileDeferred = false
+                persist()
+            }
+        }
+        return try operation()
+    }
+
     func recordReceipt(
         batchID: String,
         entries: [PlaceImportReceiptEntry],
@@ -1692,6 +1709,10 @@ final class PlaceImportStore: ObservableObject {
     }
 
     private func persist() {
+        if persistenceDeferralDepth > 0 {
+            persistenceRequestedWhileDeferred = true
+            return
+        }
         do {
             // A resolver upgrade is intentionally staged in memory. Persist each group's
             // previous rows until its network-dependent refresh commits so an unrelated

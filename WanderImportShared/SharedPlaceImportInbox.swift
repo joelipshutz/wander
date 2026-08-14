@@ -92,7 +92,9 @@ struct SharedPlaceImportEnvelope: Codable, Equatable, Sendable {
 
     /// Version 1 and 2 captures predate extension auto-save and must retain
     /// their original review-before-save behavior.
-    var requestsAutomaticSave: Bool { saveIntent != nil }
+    var requestsAutomaticSave: Bool {
+        version >= 3 && saveIntent != nil
+    }
 }
 
 enum SharedPlaceImportCaptureInput: Equatable, Sendable {

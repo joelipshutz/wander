@@ -2,20 +2,21 @@ import UIKit
 
 final class ShareViewController: UIViewController {
     private enum Palette {
-        static let canvas = UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1)
-        static let ink = UIColor(red: 0.15, green: 0.13, blue: 0.11, alpha: 1)
-        static let muted = UIColor(red: 0.36, green: 0.33, blue: 0.29, alpha: 1)
-        static let terracotta = UIColor(red: 0.78, green: 0.29, blue: 0.18, alpha: 1)
-        static let terracottaDark = UIColor(red: 0.60, green: 0.20, blue: 0.13, alpha: 1)
-        static let sand = UIColor(red: 0.93, green: 0.88, blue: 0.79, alpha: 1)
-        static let border = UIColor(red: 0.86, green: 0.82, blue: 0.75, alpha: 1)
-        static let error = UIColor(red: 0.66, green: 0.17, blue: 0.13, alpha: 1)
+        static let canvas = UIColor(red: 243 / 255, green: 223 / 255, blue: 202 / 255, alpha: 1)
+        static let ink = UIColor(red: 44 / 255, green: 33 / 255, blue: 24 / 255, alpha: 1)
+        static let muted = UIColor(red: 123 / 255, green: 101 / 255, blue: 85 / 255, alpha: 1)
+        static let terracotta = UIColor(red: 212 / 255, green: 111 / 255, blue: 77 / 255, alpha: 1)
+        static let terracottaDark = UIColor(red: 169 / 255, green: 79 / 255, blue: 53 / 255, alpha: 1)
+        static let border = UIColor(red: 219 / 255, green: 194 / 255, blue: 170 / 255, alpha: 1)
+        static let error = UIColor(red: 184 / 255, green: 74 / 255, blue: 58 / 255, alpha: 1)
     }
 
     private static let countdownDuration: TimeInterval = 5
 
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
+    private let composerScrollView = UIScrollView()
     private let composerContent = UIStackView()
+    private let errorScrollView = UIScrollView()
     private let errorContent = UIStackView()
     private let captureTitleLabel = UILabel()
     private let captureDetailLabel = UILabel()
@@ -32,6 +33,20 @@ final class ShareViewController: UIViewController {
     private var inputs: [SharedPlaceImportCaptureInput] = []
     private var ratingScore: Int?
     private var isSubmitting = false
+
+    private var requiresExplicitSubmission: Bool {
+        UIAccessibility.isVoiceOverRunning || UIAccessibility.isSwitchControlRunning
+    }
+
+    private func scaledFont(
+        size: CGFloat,
+        weight: UIFont.Weight,
+        textStyle: UIFont.TextStyle
+    ) -> UIFont {
+        UIFontMetrics(forTextStyle: textStyle).scaledFont(
+            for: .systemFont(ofSize: size, weight: weight)
+        )
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -63,24 +78,24 @@ final class ShareViewController: UIViewController {
 
         let eyebrow = UILabel()
         eyebrow.text = "ADD TO REC.ME"
-        eyebrow.font = .systemFont(ofSize: 12, weight: .black)
+        eyebrow.font = scaledFont(size: 12, weight: .black, textStyle: .caption2)
         eyebrow.textColor = Palette.terracottaDark
         eyebrow.adjustsFontForContentSizeCategory = true
 
         let title = UILabel()
         title.text = "Save this place"
-        title.font = .systemFont(ofSize: 27, weight: .black)
+        title.font = scaledFont(size: 27, weight: .black, textStyle: .title1)
         title.textColor = Palette.ink
         title.adjustsFontForContentSizeCategory = true
 
-        captureTitleLabel.font = .systemFont(ofSize: 17, weight: .bold)
+        captureTitleLabel.font = scaledFont(size: 17, weight: .bold, textStyle: .headline)
         captureTitleLabel.textColor = Palette.ink
-        captureTitleLabel.numberOfLines = 2
+        captureTitleLabel.numberOfLines = 0
         captureTitleLabel.adjustsFontForContentSizeCategory = true
 
         captureDetailLabel.font = .preferredFont(forTextStyle: .subheadline)
         captureDetailLabel.textColor = Palette.muted
-        captureDetailLabel.numberOfLines = 3
+        captureDetailLabel.numberOfLines = 0
         captureDetailLabel.adjustsFontForContentSizeCategory = true
 
         let preview = UIStackView(arrangedSubviews: [captureTitleLabel, captureDetailLabel])
@@ -103,7 +118,7 @@ final class ShareViewController: UIViewController {
 
         let ratingLabel = UILabel()
         ratingLabel.text = "Rating (optional)"
-        ratingLabel.font = .systemFont(ofSize: 13, weight: .bold)
+        ratingLabel.font = scaledFont(size: 13, weight: .bold, textStyle: .caption1)
         ratingLabel.textColor = Palette.muted
 
         ratingButtons.axis = .horizontal
@@ -135,7 +150,8 @@ final class ShareViewController: UIViewController {
         primaryContainer.addSubview(primaryFillView)
         primaryButton.translatesAutoresizingMaskIntoConstraints = false
         primaryButton.setTitleColor(.white, for: .normal)
-        primaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .black)
+        primaryButton.titleLabel?.font = scaledFont(size: 17, weight: .black, textStyle: .headline)
+        primaryButton.titleLabel?.adjustsFontForContentSizeCategory = true
         primaryButton.addTarget(self, action: #selector(submitNow), for: .touchUpInside)
         primaryButton.accessibilityIdentifier = "share-extension-primary"
         primaryContainer.addSubview(primaryButton)
@@ -162,7 +178,8 @@ final class ShareViewController: UIViewController {
 
         let cancelButton = UIButton(type: .system)
         cancelButton.setTitle("Cancel", for: .normal)
-        cancelButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        cancelButton.titleLabel?.font = scaledFont(size: 16, weight: .semibold, textStyle: .body)
+        cancelButton.titleLabel?.adjustsFontForContentSizeCategory = true
         cancelButton.tintColor = Palette.muted
         cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         cancelButton.addTarget(self, action: #selector(cancelShare), for: .touchUpInside)
@@ -182,14 +199,21 @@ final class ShareViewController: UIViewController {
         composerContent.axis = .vertical
         composerContent.spacing = 10
         composerContent.accessibilityIdentifier = "share-extension-composer"
-        view.addSubview(composerContent)
+        composerScrollView.translatesAutoresizingMaskIntoConstraints = false
+        composerScrollView.alwaysBounceVertical = false
+        view.addSubview(composerScrollView)
+        composerScrollView.addSubview(composerContent)
 
         NSLayoutConstraint.activate([
-            composerContent.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
-            composerContent.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
-            composerContent.topAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.topAnchor, constant: 18),
-            composerContent.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -10),
-            composerContent.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor)
+            composerScrollView.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
+            composerScrollView.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
+            composerScrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            composerScrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            composerContent.leadingAnchor.constraint(equalTo: composerScrollView.contentLayoutGuide.leadingAnchor),
+            composerContent.trailingAnchor.constraint(equalTo: composerScrollView.contentLayoutGuide.trailingAnchor),
+            composerContent.topAnchor.constraint(equalTo: composerScrollView.contentLayoutGuide.topAnchor, constant: 18),
+            composerContent.bottomAnchor.constraint(equalTo: composerScrollView.contentLayoutGuide.bottomAnchor, constant: -10),
+            composerContent.widthAnchor.constraint(equalTo: composerScrollView.frameLayoutGuide.widthAnchor)
         ])
     }
 
@@ -197,8 +221,10 @@ final class ShareViewController: UIViewController {
         guard errorContent.superview == nil else { return }
         let title = UILabel()
         title.text = "Couldn’t save to rec.me"
-        title.font = .systemFont(ofSize: 22, weight: .black)
+        title.font = scaledFont(size: 22, weight: .black, textStyle: .title2)
         title.textColor = Palette.ink
+        title.numberOfLines = 0
+        title.adjustsFontForContentSizeCategory = true
 
         errorLabel.font = .preferredFont(forTextStyle: .body)
         errorLabel.textColor = Palette.error
@@ -218,11 +244,20 @@ final class ShareViewController: UIViewController {
         errorContent.translatesAutoresizingMaskIntoConstraints = false
         errorContent.axis = .vertical
         errorContent.spacing = 16
-        view.addSubview(errorContent)
+        errorScrollView.translatesAutoresizingMaskIntoConstraints = false
+        errorScrollView.alwaysBounceVertical = false
+        view.addSubview(errorScrollView)
+        errorScrollView.addSubview(errorContent)
         NSLayoutConstraint.activate([
-            errorContent.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
-            errorContent.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
-            errorContent.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor)
+            errorScrollView.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor, constant: 8),
+            errorScrollView.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor, constant: -8),
+            errorScrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            errorScrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            errorContent.leadingAnchor.constraint(equalTo: errorScrollView.contentLayoutGuide.leadingAnchor),
+            errorContent.trailingAnchor.constraint(equalTo: errorScrollView.contentLayoutGuide.trailingAnchor),
+            errorContent.topAnchor.constraint(equalTo: errorScrollView.contentLayoutGuide.topAnchor, constant: 18),
+            errorContent.bottomAnchor.constraint(equalTo: errorScrollView.contentLayoutGuide.bottomAnchor, constant: -10),
+            errorContent.widthAnchor.constraint(equalTo: errorScrollView.frameLayoutGuide.widthAnchor)
         ])
     }
 
@@ -230,7 +265,9 @@ final class ShareViewController: UIViewController {
         countdownWorkItem?.cancel()
         isSubmitting = false
         loadingIndicator.isHidden = false
+        composerScrollView.isHidden = true
         composerContent.isHidden = true
+        errorScrollView.isHidden = true
         errorContent.isHidden = true
         guard let extensionContext else {
             showError(SharedPlaceImportInboxError.noSupportedContent.localizedDescription)
@@ -259,7 +296,9 @@ final class ShareViewController: UIViewController {
         captureTitleLabel.text = summary.title
         captureDetailLabel.text = summary.detail
         loadingIndicator.isHidden = true
+        composerScrollView.isHidden = false
         errorContent.isHidden = true
+        errorScrollView.isHidden = true
         composerContent.isHidden = false
         updateModeUI()
         view.layoutIfNeeded()
@@ -273,6 +312,13 @@ final class ShareViewController: UIViewController {
         primaryFillView.layer.removeAllAnimations()
         primaryFillWidth?.constant = 0
         view.layoutIfNeeded()
+        if requiresExplicitSubmission {
+            primaryContainer.backgroundColor = Palette.terracotta
+            primaryFillWidth?.constant = primaryContainer.bounds.width
+            view.layoutIfNeeded()
+            return
+        }
+        primaryContainer.backgroundColor = Palette.terracotta.withAlphaComponent(0.72)
         primaryFillWidth?.constant = primaryContainer.bounds.width
         UIView.animate(
             withDuration: Self.countdownDuration,
@@ -333,9 +379,11 @@ final class ShareViewController: UIViewController {
     private func showError(_ message: String) {
         configureErrorIfNeeded()
         loadingIndicator.isHidden = true
+        composerScrollView.isHidden = true
         composerContent.isHidden = true
         errorLabel.text = message
         retryButton.isEnabled = true
+        errorScrollView.isHidden = false
         errorContent.isHidden = false
         UIAccessibility.post(notification: .announcement, argument: message)
     }

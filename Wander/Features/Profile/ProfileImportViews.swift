@@ -756,7 +756,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
             )
 
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(receipt.entries) { entry in
                     verificationRow(entry)
                     .padding(.horizontal, WanderTheme.spacing3)

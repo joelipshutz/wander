@@ -188,6 +188,17 @@ final class SharedPlaceImportInboxTests: XCTestCase {
         XCTAssertEqual(try inbox.scan().entries.first?.envelope.saveIntent, envelope.saveIntent)
     }
 
+    func testOlderEnvelopeVersionNeverRequestsAutomaticSave() {
+        let envelope = SharedPlaceImportEnvelope(
+            version: 2,
+            deliveryID: "legacy-with-new-field",
+            items: [],
+            saveIntent: SharedPlaceImportSaveIntent(mode: .checkIn, ratingScore: 4)
+        )
+
+        XCTAssertFalse(envelope.requestsAutomaticSave)
+    }
+
     func testScanQuarantinesCorruptAndExpiresOldEnvelopes() throws {
         let root = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

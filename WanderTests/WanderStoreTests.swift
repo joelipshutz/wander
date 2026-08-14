@@ -2988,6 +2988,99 @@ final class WanderStoreTests: XCTestCase {
         )
     }
 
+    func testAutomaticCheckInImportEnrichesAnExistingWannaExactlyOnce() {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "mapkit_import_wanna_upgrade",
+            name: "Import Upgrade Cafe",
+            category: "coffee",
+            latitude: 34.11111,
+            longitude: -118.22222,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "import-upgrade-cafe",
+            confidence: 0.99
+        )
+        let first = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "want to try",
+            sourceType: .manual
+        )
+
+        let imported = store.saveImportedCandidate(
+            candidate,
+            status: .been,
+            visibility: .selfOnly,
+            note: "went today",
+            sourceType: .link,
+            ratingScore: 4
+        )
+
+        XCTAssertEqual(imported.userPlaceID, first.userPlaceID)
+        XCTAssertEqual(store.visits(for: first.userPlaceID).count, 1)
+        XCTAssertEqual(store.visits(for: first.userPlaceID).first?.ratingScore, 4)
+        XCTAssertEqual(store.visits(for: first.userPlaceID).first?.note, "want to try")
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.note,
+            "want to try"
+        )
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.visibility,
+            .followers
+        )
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.status,
+            .been
+        )
+    }
+
+    func testAutomaticWannaImportNeverDowngradesAnExistingCheckIn() {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "mapkit_import_been_preserved",
+            name: "Been Preserved Cafe",
+            category: "coffee",
+            latitude: 34.22222,
+            longitude: -118.33333,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "been-preserved-cafe",
+            confidence: 0.99
+        )
+        let first = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "original memory",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+        let originalVisits = store.visits(for: first.userPlaceID)
+
+        let imported = store.saveImportedCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: "imported",
+            sourceType: .link
+        )
+
+        XCTAssertEqual(imported.userPlaceID, first.userPlaceID)
+        XCTAssertEqual(store.visits(for: first.userPlaceID), originalVisits)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.status,
+            .been
+        )
+    }
+
     func testFirstVisitPhotoForPlaceUsesEarliestUsablePhoto() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

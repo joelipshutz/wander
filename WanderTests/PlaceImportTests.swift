@@ -30,6 +30,58 @@ final class PlaceImportBulkStatusActionTests: XCTestCase {
 }
 
 final class PlaceImportAutoSavePolicyTests: XCTestCase {
+    func testCompletedAutomaticImportRestoresUnpresentedVerificationAfterRelaunch() {
+        let pendingReceipt = PlaceImportReceipt(
+            batchID: "pending",
+            sourceName: "Instagram",
+            entries: [
+                PlaceImportReceiptEntry(
+                    itemID: "item",
+                    displayName: "Maru Coffee",
+                    displayArea: "Los Angeles",
+                    status: .wannaGo,
+                    outcome: .added,
+                    userPlaceID: "saved-place"
+                )
+            ],
+            destinationListID: nil
+        )
+        var pending = PlaceImportBatch(
+            id: "pending",
+            source: .instagram,
+            sourceName: "Instagram",
+            createdAt: Date(timeIntervalSince1970: 10),
+            totalCount: 1,
+            receipt: pendingReceipt,
+            automaticSaveRequested: true
+        )
+        pending.automaticSaveCompletedAt = Date(timeIntervalSince1970: 20)
+
+        var alreadyPresented = PlaceImportBatch(
+            id: "presented",
+            source: .instagram,
+            sourceName: "Instagram",
+            createdAt: Date(timeIntervalSince1970: 5),
+            totalCount: 1,
+            receipt: PlaceImportReceipt(
+                batchID: "presented",
+                sourceName: "Instagram",
+                entries: pendingReceipt.entries,
+                destinationListID: nil,
+                presentedAt: Date(timeIntervalSince1970: 15)
+            ),
+            automaticSaveRequested: true
+        )
+        alreadyPresented.automaticSaveCompletedAt = Date(timeIntervalSince1970: 12)
+
+        XCTAssertEqual(
+            PlaceImportAutoSavePolicy.pendingVerificationBatchIDs(
+                in: [alreadyPresented, pending]
+            ),
+            ["pending"]
+        )
+    }
+
     func testWannaAutoSavesEverySelectedConfidentMatch() {
         let first = readyItem(id: "first")
         let second = readyItem(id: "second")
@@ -150,6 +202,160 @@ final class PlaceImportAutoSavePolicyTests: XCTestCase {
             selectedCandidateID: candidate.id,
             isIncludedInImport: isIncluded
         )
+    }
+}
+
+@MainActor
+final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
+    func testFortyFivePlaceImportPersistsEachStoreOnce() async {
+        let batchID = "google-list"
+        let items = (1...45).map { index in
+            let candidate = PlaceCandidate(
+                id: "candidate-\(index)",
+                name: "Bakery \(index)",
+                category: "bakery",
+                latitude: 34 + Double(index) / 10_000,
+                longitude: -118 - Double(index) / 10_000,
+                sourceProvider: "google_maps",
+                sourceProviderPlaceID: "google-place-\(index)",
+                confidence: 1
+            )
+            return PlaceImportItem(
+                id: "item-\(index)",
+                batchID: batchID,
+                source: .googleMaps,
+                seed: PlaceImportSeed(
+                    rawText: candidate.name,
+                    nameHint: candidate.name,
+                    areaHint: "Los Angeles",
+                    sourceURLString: nil,
+                    sourceLine: index,
+                    latitude: candidate.latitude,
+                    longitude: candidate.longitude,
+                    sourceProvider: candidate.sourceProvider,
+                    sourceProviderPlaceID: candidate.sourceProviderPlaceID
+                ),
+                state: .ready,
+                candidates: [candidate],
+                selectedCandidateID: candidate.id
+            )
+        }
+        let importPersistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(
+                ownerUserID: "user_live",
+                batches: [
+                    PlaceImportBatch(
+                        id: batchID,
+                        source: .googleMaps,
+                        sourceName: "Ryan’s Bakeries",
+                        state: .ready,
+                        totalCount: items.count,
+                        processedCount: items.count,
+                        automaticSaveRequested: true,
+                        requestedStatus: .wannaGo
+                    )
+                ],
+                items: items
+            )
+        )
+        let importStore = PlaceImportStore(
+            persistence: importPersistence,
+            resolver: FakePlaceImportResolver()
+        )
+        var storeSaveCount = 0
+        let persistence = WanderStorePersistence(
+            load: { nil },
+            save: { _ in storeSaveCount += 1 }
+        )
+        let store = WanderStore(
+            fixtures: WanderFixtures.empty(),
+            persistence: persistence
+        )
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")
+            )
+        )
+        storeSaveCount = 0
+
+        let result = await PlaceImportAutoSaveCoordinator.process(
+            batchIDs: [batchID],
+            importStore: importStore,
+            store: store,
+            expectedUserID: "user_live",
+            isAuthorized: { true }
+        )
+
+        XCTAssertEqual(result.addedCount, 45)
+        XCTAssertEqual(result.needsReviewCount, 0)
+        XCTAssertEqual(store.currentUserVisiblePlaces.count, 45)
+        XCTAssertEqual(store.visiblePlaceLists.first?.cachedItemCount, 45)
+        XCTAssertEqual(storeSaveCount, 1)
+        XCTAssertEqual(importPersistence.saveCount, 1)
+        XCTAssertNotNil(importStore.batches.first?.automaticSaveCompletedAt)
+        XCTAssertEqual(importStore.batches.first?.receipt?.entries.count, 45)
+    }
+
+    func testAccountMismatchStopsBeforeAnyImportMutation() async {
+        let batchID = "account-a-batch"
+        let candidate = placeImportCandidate(name: "Maru")
+        let item = PlaceImportItem(
+            id: "maru",
+            batchID: batchID,
+            source: .instagram,
+            seed: PlaceImportSeed(
+                rawText: candidate.name,
+                nameHint: candidate.name,
+                areaHint: nil,
+                sourceURLString: nil,
+                sourceLine: 0
+            ),
+            state: .ready,
+            candidates: [candidate],
+            selectedCandidateID: candidate.id
+        )
+        let importPersistence = InMemoryPlaceImportPersistence(
+            snapshot: PlaceImportSnapshot(
+                ownerUserID: "account-a",
+                batches: [
+                    PlaceImportBatch(
+                        id: batchID,
+                        source: .instagram,
+                        sourceName: "Instagram",
+                        state: .ready,
+                        totalCount: 1,
+                        processedCount: 1,
+                        automaticSaveRequested: true,
+                        requestedStatus: .wannaGo
+                    )
+                ],
+                items: [item]
+            )
+        )
+        let importStore = PlaceImportStore(
+            persistence: importPersistence,
+            resolver: FakePlaceImportResolver()
+        )
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "account-b", displayName: "B", handle: "b")
+            )
+        )
+
+        let result = await PlaceImportAutoSaveCoordinator.process(
+            batchIDs: [batchID],
+            importStore: importStore,
+            store: store,
+            expectedUserID: "account-a",
+            isAuthorized: { false }
+        )
+
+        XCTAssertFalse(result.hasResult)
+        XCTAssertTrue(store.currentUserVisiblePlaces.isEmpty)
+        XCTAssertEqual(importStore.item(id: item.id)?.state, .ready)
+        XCTAssertNil(importStore.batches.first?.automaticSaveCompletedAt)
+        XCTAssertEqual(importPersistence.saveCount, 0)
     }
 }
 
