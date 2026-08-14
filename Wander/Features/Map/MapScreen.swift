@@ -4351,7 +4351,9 @@ struct MapPlaceSaveContext: Identifiable {
         _ candidate: PlaceCandidate,
         sourceType: AddSourceType,
         status: PlaceStatus,
-        defaultVisibility: PlaceVisibility
+        defaultVisibility: PlaceVisibility,
+        ratingScore: Double? = nil,
+        note: String = ""
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
@@ -4360,8 +4362,8 @@ struct MapPlaceSaveContext: Identifiable {
             hasPriorCheckIn: false,
             initialStatus: status,
             initialVisibility: defaultVisibility,
-            initialRatingScore: nil,
-            initialNote: "",
+            initialRatingScore: status == .been ? ratingScore : nil,
+            initialNote: note,
             initialPlannedDate: nil,
             initialAnswers: [:],
             initialPersonalLabels: [],
@@ -4971,6 +4973,15 @@ func persistScopedVisitOrWantSubmission(
         ) else {
             return (nil, nil)
         }
+        if submission.status == .wannaGo {
+            guard let transitioned = store.changeImportedSaveStatus(
+                userPlaceID: updatedVisit.userPlaceID,
+                to: .wannaGo
+            ) else {
+                return (nil, nil)
+            }
+            return (transitioned, nil)
+        }
         if let backend {
             _ = await store.syncVisit(visitID: updatedVisit.id, backend: backend)
         }
@@ -4978,11 +4989,12 @@ func persistScopedVisitOrWantSubmission(
     case .editWant(let visiblePlace):
         let result = await store.saveCandidate(
             submission.candidate,
-            status: .wannaGo,
+            status: submission.status,
             visibility: submission.visibility,
             note: submission.note,
             sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
-            ratingScore: nil,
+            ratingScore: submission.status == .been ? submission.ratingScore : nil,
+            visitedAt: submission.visitedAt,
             plannedDate: submission.plannedDate,
             attributes: submission.attributes,
             backend: backend

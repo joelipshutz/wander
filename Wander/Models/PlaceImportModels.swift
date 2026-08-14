@@ -1,6 +1,6 @@
 import Foundation
 
-enum PlaceImportSource: String, Codable, CaseIterable, Equatable, Hashable, Identifiable {
+enum PlaceImportSource: String, Codable, CaseIterable, Equatable, Hashable, Identifiable, Sendable {
     case googleMaps = "google_maps"
     case instagram
     case tiktok
@@ -269,7 +269,7 @@ enum PlaceImportDestinationListName {
     }
 }
 
-struct PlaceImportSeed: Codable, Equatable, Identifiable {
+struct PlaceImportSeed: Codable, Equatable, Identifiable, Sendable {
     let id: String
     let rawText: String
     let nameHint: String?
@@ -321,6 +321,10 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var processedCount: Int
     var destinationListID: String?
     var receipt: PlaceImportReceipt?
+    var automaticSaveRequested: Bool?
+    var automaticSaveCompletedAt: Date?
+    var requestedStatusRaw: String?
+    var requestedRatingScore: Double?
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -333,7 +337,11 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         totalCount: Int,
         processedCount: Int = 0,
         destinationListID: String? = nil,
-        receipt: PlaceImportReceipt? = nil
+        receipt: PlaceImportReceipt? = nil,
+        automaticSaveRequested: Bool? = nil,
+        automaticSaveCompletedAt: Date? = nil,
+        requestedStatus: PlaceStatus? = nil,
+        requestedRatingScore: Double? = nil
     ) {
         self.id = id
         self.source = source
@@ -346,6 +354,18 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.processedCount = processedCount
         self.destinationListID = destinationListID
         self.receipt = receipt
+        self.automaticSaveRequested = automaticSaveRequested
+        self.automaticSaveCompletedAt = automaticSaveCompletedAt
+        requestedStatusRaw = requestedStatus?.rawValue
+        self.requestedRatingScore = requestedStatus == .been ? requestedRatingScore : nil
+    }
+
+    var requestedStatus: PlaceStatus {
+        requestedStatusRaw.flatMap(PlaceStatus.init(rawValue:)) ?? .wannaGo
+    }
+
+    var shouldSaveAutomatically: Bool {
+        automaticSaveRequested == true && automaticSaveCompletedAt == nil
     }
 }
 

@@ -63,6 +63,9 @@ enum SharedPlaceImportInboxDrainer {
 
         for entry in scan.entries {
             do {
+                let requestedStatus: PlaceStatus = entry.envelope.saveIntent?.mode == .checkIn
+                    ? .been
+                    : .wannaGo
                 for (index, item) in entry.envelope.items.enumerated() {
                     let deliveryID = "\(entry.envelope.deliveryID):\(index)"
                     let wasAlreadyImported = store.batch(captureDeliveryID: deliveryID) != nil
@@ -75,7 +78,10 @@ enum SharedPlaceImportInboxDrainer {
                             urlString: sourceURLString,
                             caption: item.contextText,
                             sourceName: item.suggestedName,
-                            captureDeliveryID: deliveryID
+                            captureDeliveryID: deliveryID,
+                            automaticSaveRequested: entry.envelope.requestsAutomaticSave,
+                            requestedStatus: requestedStatus,
+                            requestedRatingScore: entry.envelope.saveIntent?.ratingScore
                         )
                     } else {
                         let contents = try contents(for: item, inbox: inbox)
@@ -83,7 +89,10 @@ enum SharedPlaceImportInboxDrainer {
                             source: source,
                             text: contents.text,
                             sourceName: contents.fileName,
-                            captureDeliveryID: deliveryID
+                            captureDeliveryID: deliveryID,
+                            automaticSaveRequested: entry.envelope.requestsAutomaticSave,
+                            requestedStatus: requestedStatus,
+                            requestedRatingScore: entry.envelope.saveIntent?.ratingScore
                         )
                     }
                     if !batchIDs.contains(batchID) {
