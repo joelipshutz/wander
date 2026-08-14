@@ -181,10 +181,6 @@ function resource(type, id, attributes) {
   return { data: { type, id, attributes } };
 }
 
-function relationship(type, id) {
-  return { data: { type, id } };
-}
-
 function pickCategory(categories, id) {
   const category = categories.find((candidate) => candidate.id === id);
   if (!category) throw new Error(`App Store category not found: ${id}`);
@@ -196,7 +192,8 @@ function summarize(resourceValue) {
 }
 
 async function resolveState(api, options) {
-  const [infos, versions, categories] = await Promise.all([
+  const [app, infos, versions, categories] = await Promise.all([
+    api(`/apps/${options.appId}?fields[apps]=name,bundleId,contentRightsDeclaration`),
     api(`/apps/${options.appId}/appInfos?limit=10`),
     api(`/apps/${options.appId}/appStoreVersions?filter[versionString]=${encodeURIComponent(options.version)}&filter[platform]=IOS&limit=10`),
     api("/appCategories?limit=200"),
@@ -218,6 +215,7 @@ async function resolveState(api, options) {
   if (!infoLocalization || !versionLocalization) throw new Error("Missing editable en-US localization");
 
   return {
+    app: app.data,
     info,
     version,
     infoLocalization,
@@ -231,6 +229,11 @@ async function resolveState(api, options) {
 
 function plan(state) {
   return {
+    app: {
+      id: state.app.id,
+      beforeContentRightsDeclaration: state.app.attributes?.contentRightsDeclaration ?? null,
+      afterContentRightsDeclaration: "USES_THIRD_PARTY_CONTENT",
+    },
     appInfoLocalization: {
       id: state.infoLocalization.id,
       before: {
@@ -276,6 +279,12 @@ function plan(state) {
 }
 
 async function applyPlan(api, state) {
+  await api(`/apps/${state.app.id}`, {
+    method: "PATCH",
+    body: resource("apps", state.app.id, {
+      contentRightsDeclaration: "USES_THIRD_PARTY_CONTENT",
+    }),
+  });
   await api(`/appInfoLocalizations/${state.infoLocalization.id}`, {
     method: "PATCH",
     body: resource("appInfoLocalizations", state.infoLocalization.id, {
@@ -298,13 +307,28 @@ async function applyPlan(api, state) {
     method: "PATCH",
     body: resource("appStoreVersions", state.version.id, { releaseType: "MANUAL" }),
   });
-  await api(`/appInfos/${state.info.id}/relationships/primaryCategory`, {
+  await api(`/appInfos/${state.info.id}`, {
     method: "PATCH",
-    body: relationship("appCategories", state.desiredPrimaryCategory.id),
-  });
-  await api(`/appInfos/${state.info.id}/relationships/secondaryCategory`, {
-    method: "PATCH",
-    body: relationship("appCategories", state.desiredSecondaryCategory.id),
+    body: {
+      data: {
+        type: "appInfos",
+        id: state.info.id,
+        relationships: {
+          primaryCategory: {
+            data: {
+              type: "appCategories",
+              id: state.desiredPrimaryCategory.id,
+            },
+          },
+          secondaryCategory: {
+            data: {
+              type: "appCategories",
+              id: state.desiredSecondaryCategory.id,
+            },
+          },
+        },
+      },
+    },
   });
 }
 
@@ -325,12 +349,14 @@ async function main() {
   const after = await resolveState(api, options);
   const verification = plan(after);
   const expected = {
+    contentRightsDeclaration: verification.app.afterContentRightsDeclaration,
     appInfoLocalization: verification.appInfoLocalization.after,
     versionLocalization: verification.versionLocalization.after,
     releaseType: verification.version.afterReleaseType,
     categories: verification.categories.after,
   };
   const actual = {
+    contentRightsDeclaration: verification.app.beforeContentRightsDeclaration,
     appInfoLocalization: verification.appInfoLocalization.before,
     versionLocalization: {
       locale: after.versionLocalization.attributes?.locale,

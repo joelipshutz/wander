@@ -386,7 +386,7 @@ function runLinkedSmokeChecks(
     if (migrationTestPath) {
       console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${migrationTestPath}`);
     } else {
-      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
+      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider admission, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -619,10 +619,41 @@ begin
     and p.proname = 'consume_place_photo_quota'
     and pg_get_function_identity_arguments(p.oid) = '';
   if valid is distinct from true then
-    raise exception 'place-photo quota metadata contract failed';
+    raise exception 'place-photo provider admission metadata contract failed';
   end if;
 end
 $quota_metadata$;
+
+do $google_photo_cache_metadata$
+declare
+  valid boolean;
+begin
+  select
+    exists(
+      select 1
+      from storage.buckets b
+      where b.id = 'google-place-photo-cache'
+        and not b.public
+        and b.file_size_limit = 10485760
+    )
+    and c.relrowsecurity
+    and c.relforcerowsecurity
+    and not has_table_privilege('anon', c.oid, 'select')
+    and not has_table_privilege('authenticated', c.oid, 'select')
+    and has_table_privilege('service_role', c.oid, 'select')
+    and has_table_privilege('service_role', c.oid, 'insert')
+    and has_table_privilege('service_role', c.oid, 'update')
+    and has_table_privilege('service_role', c.oid, 'delete')
+  into valid
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relname = 'google_place_photo_cache';
+  if valid is distinct from true then
+    raise exception 'Google place photo cache security contract failed';
+  end if;
+end
+$google_photo_cache_metadata$;
 
 do $profile_metadata$
 declare
@@ -688,8 +719,59 @@ begin
 end
 $member_profile_metadata$;
 
+do $identity_continuity_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and exists (
+      select 1
+      from unnest(coalesce(p.proconfig, array[]::text[])) setting
+      where setting in ('search_path=', 'search_path=""')
+    )
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and (
+      select relrowsecurity
+      from pg_class
+      where oid = 'public.clerk_identity_mappings'::regclass
+    )
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'select')
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'insert')
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'update')
+    and has_table_privilege('service_role', 'public.clerk_identity_mappings', 'delete')
+    and not has_table_privilege('anon', 'public.clerk_identity_mappings', 'select')
+    and not has_table_privilege('authenticated', 'public.clerk_identity_mappings', 'select')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app'
+    and p.proname = 'current_user_id'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if valid is distinct from true then
+    raise exception 'Clerk identity continuity metadata contract failed';
+  end if;
+end
+$identity_continuity_metadata$;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_new_production_subject', true);
+select set_config('request.jwt.claim.canonical_user_id', ${smokeUser}, true);
+do $identity_continuity_behavior$
+begin
+  if app.current_user_id() is distinct from ${smokeUser} then
+    raise exception 'canonical production identity did not resolve to the existing profile';
+  end if;
+  if not exists (select 1 from public.profiles where id = ${smokeUser}) then
+    raise exception 'canonical production identity could not read the existing profile';
+  end if;
+end
+$identity_continuity_behavior$;
+
+reset role;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.canonical_user_id', '', true);
 select set_config('request.jwt.claim.role', 'authenticated', true);
 
 do $check_in_behavior$
@@ -958,7 +1040,7 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 do $quota_behavior$
 begin
   if public.consume_place_photo_quota() is distinct from true then
-    raise exception 'place-photo quota rejected an authenticated request below the caps';
+    raise exception 'place-photo provider admission rejected an authenticated request';
   end if;
 end
 $quota_behavior$;

@@ -1,12 +1,13 @@
 # rec.me Production Blue/Green Cutover and Undo Runbook
 
-Status: pre-cutover. Backups are in progress; no traffic has moved.
+Status: pre-cutover. A fresh local backup was captured on 2026-08-14; the Clerk password-hash export, second off-device copy, green target, and traffic switch remain blocked gates. No traffic has moved.
 
 ## Fixed identities
 
 - Source/rollback Supabase project: `wander` (`rugmtlgufrhlxwfkumhw`), `us-west-2`.
 - Intended target name: `recme-production`, same Supabase organization and region.
-- Private backup root: `/Users/joelipshutz/.private_backups/recme/2026-08-01-pre-production-cutover/`.
+- Fresh private backup root: `/Users/joelipshutz/.private_backups/recme/2026-08-14-pre-launch-cutover/`.
+- Independent older recovery point: `/Users/joelipshutz/.private_backups/recme/2026-08-01-pre-production-cutover/`.
 - Source must not be reset, deleted, paused, or repurposed during the cutover and rollback window.
 
 ## What “undo” means
@@ -24,7 +25,7 @@ The backup is complete only when all of these exist and validate:
 
 - `database/database-full-v2.custom`: final verified compressed PostgreSQL logical dump containing all accessible schemas and data, including `app`, `public`, `auth`, cron, Realtime, Storage metadata, Vault ciphertext, and the migration ledger. `database-full.custom` is an earlier independent point-in-time snapshot retained for redundancy.
 - `database/globals-and-roles.sql`: global roles without role passwords.
-- `storage/`: every object byte from `visit-photos` and `profile-avatars`.
+- `storage/`: every object byte from every source bucket. The 2026-08-14 inventory contains `visit-photos`, `profile-avatars`, and `google-place-photo-cache`; do not rely on an older fixed bucket list.
 - `config/source-repo-config.tar.gz`: migrations, Edge Function source, Supabase config, hosted smoke test, and current iOS auth config.
 - `config/hosted-functions.json`: deployed function inventory.
 - `config/hosted-secret-digests.json`: hosted secret names/digests. Supabase does not return secret values after creation.
@@ -33,6 +34,8 @@ The backup is complete only when all of these exist and validate:
 - `manifests/source-inventory.txt`: exact source counts/config/security metadata.
 - `manifests/SHA256SUMS`: checksum of every backup artifact except the checksum file itself.
 - `manifests/verification.txt`: dump parse, file count, permissions, and checksum verification results.
+- `manifests/dump-row-counts.txt` and `manifests/live-row-counts.txt`: non-secret evidence that the dump contains every comparable source row at capture time.
+- `clerk/development-users-public.json` and `clerk/production-users-public.json`: owner-only before/after inventories used by the account-continuity audit. The password-hash CSV joins this folder only after the Dashboard export passes the audit below.
 
 Do not put the private backup or secret file in Git, Slack, Linear, a PR, or a shared cloud folder.
 
@@ -46,7 +49,7 @@ All database commands are read-only against the source. Use the Supabase session
 
 1. Run the full custom dump and role dump.
 2. Run `scripts/production-cutover-inventory.sql` against the source and save its output.
-3. Download both Storage buckets recursively.
+3. Read the bucket inventory, then download every Storage bucket recursively. Never assume the historical two-bucket list is complete.
 4. Archive the source-controlled backend/configuration files.
 5. Export deployed function inventory and secret names/digests.
 6. Generate SHA-256 checksums.
@@ -61,13 +64,27 @@ Supabase's database clone does not finish the application clone. After the targe
 
 1. Record the target ref, database password, API URL, anon key, and service-role key in the private key store.
 2. Confirm hosted migration parity and run `scripts/production-cutover-inventory.sql` on source and target.
-3. Recreate/copy the two Storage buckets and upload every backed-up object; compare object paths, counts, byte sizes, and sampled SHA-256 hashes.
+3. Recreate/copy every inventoried Storage bucket and upload every backed-up object; compare object paths, counts, byte sizes, and sampled SHA-256 hashes.
 4. Deploy every Edge Function from source control with its existing `verify_jwt` setting.
 5. Re-enter each Edge Function secret from its authoritative private source; compare names and hosted digests where available.
 6. Recreate scheduled jobs, Auth/Third-Party Auth settings, Realtime/API limits, network restrictions, and any dashboard-only settings.
-7. Configure the production Clerk issuer/domain and production Clerk webhook. Clerk development users cannot be transferred; the 11 development profiles remain preserved but must not be assumed to identify production Clerk users.
+7. Configure the production Clerk issuer/domain, signed `canonical_user_id` claim, and production Clerk webhook. Import the six verified development users only through the lossless procedure below; never create replacements by email alone.
 8. Run focused pgTAP metadata assertions and the full hosted rollback smoke test against the target.
 9. Validate production tokens through profile mirror, save/sync, visibility, follow/block, Storage, notifications, and account deletion using non-production fixtures inside rolled-back transactions where supported.
+
+## Lossless Clerk account migration gate
+
+The six active Clerk development users all have passwords and verified email addresses. Their source records are now tagged with public metadata `canonical_user_id` equal to the existing Clerk ID. This tag is non-destructive and leaves the current app unchanged.
+
+Do not import any production user until all of these steps pass:
+
+1. Sign into the correct Clerk owner workspace and export all development users from **Settings → User Exports**. Save the CSV only under the owner-only `clerk/` backup folder; never commit, upload to Slack/Linear, or paste it into chat.
+2. Build the audited private JSON input with `node scripts/clerk-account-continuity-audit.mjs --export-csv <private-export.csv> --source-json <development-users-public.json> --prepare-import-json <new-private-import.json> --expected-count 6`. It must report six password digests, six verified primary emails, and six matching stable-ID tags. The builder restores public/private/unsafe metadata from the source API inventory as JSON objects, because Dashboard CSV exports may omit metadata and CSV strings are not a safe metadata input to the migration tool. It refuses to overwrite an existing output file and sets mode `0600`. Any missing hash, hasher, verified email, source match, or ID is a hard stop.
+3. Use Clerk's official `migration-tool` pinned to commit `bbf75584668e9f10a239b545adbce57e1308c974` with that audited private JSON file. Its Clerk transformer sets each production user's `external_id` to the exported development `id` and imports the password digest/hasher plus object metadata. Target only the empty production instance and require passwords.
+4. OAuth connections are not copied. Because the one current Google-linked account also has a migrated password, it retains immediate email/password access; verify Clerk's verified-email account linking lets the same person reconnect Google without creating a second account.
+5. Export fresh source/production public inventories and run `node scripts/clerk-account-continuity-audit.mjs --source-json <dev.json> --target-json <prod.json> --expected-count 6`. It must prove 6/6 external-ID mappings, metadata mappings, password-enabled accounts, and email matches.
+6. On the green target, verify each production identity resolves to its existing profile and exact owned-data counts. Check user places, visits, lists/memberships, follows, activity comments/likes, notification state, source artifacts, and Storage visibility. A count mismatch is a hard stop.
+7. Keep the development Clerk instance and source Supabase project intact for rollback. Do not delete development users after launch.
 
 ## Go/no-go gate before traffic
 
@@ -76,10 +93,10 @@ Do not change Release configuration until every item is true:
 - Source backup and second encrypted copy verify.
 - Source remains healthy and unchanged except for explicitly reviewed compatibility settings.
 - Target database counts/security metadata match the intended migration policy.
-- All 27 current Storage objects are present and sampled hashes match.
+- Every Storage object in the latest source inventory is present; object counts, total bytes, and sampled hashes match. The 2026-08-14 snapshot contains 53 objects across three buckets.
 - Functions, secrets, scheduled jobs, Auth, Realtime, API, and network settings are inventoried and recreated.
 - Clerk production tokens work against target RLS/RPC paths.
-- The alpha-user strategy is explicit: preserve only, map with verified ownership, or remove from the target after preserving the backup. No automatic ID matching.
+- The six active Clerk users pass the lossless export and 6/6 production mapping audits above; no email-only or guessed ID matching is allowed.
 - A rollback build/config exists and has passed the same smoke tests.
 - A short write-freeze window and an owner for monitoring are scheduled.
 

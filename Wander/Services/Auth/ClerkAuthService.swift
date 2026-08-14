@@ -11,6 +11,7 @@ final class ClerkAuthService: AuthSessionProviding {
     private(set) var state: AuthState = .loading
     private let configuration: WanderBackendConfiguration
     private let sessionCache: AuthSessionCache
+    private static let canonicalUserIDMetadataKey = "canonical_user_id"
 
     #if canImport(ClerkKit)
     typealias SessionResolver = @MainActor () async throws -> AuthSession?
@@ -299,6 +300,39 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
     }
 
+    func authenticateWithPassword(
+        emailAddress: String,
+        password: String
+    ) async throws -> NativeAuthOutcome {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+
+        do {
+            let signIn = try await Clerk.shared.auth.signInWithPassword(
+                identifier: emailAddress,
+                password: password
+            )
+            guard signIn.status == .complete else {
+                return .requiresAdditionalVerification
+            }
+
+            await refreshSession()
+            guard case .signedIn = state else {
+                throw AuthSessionError.sessionUnavailable
+            }
+            return .completed
+        } catch let error as ClerkAPIError where Self.invalidCredentialCodes.contains(error.code) {
+            throw AuthSessionError.invalidCredentials
+        } catch {
+            throw Self.authError(from: error)
+        }
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
     func resetPendingEmailVerification() {
         #if canImport(ClerkKit)
         pendingEmailVerification = nil
@@ -410,6 +444,15 @@ final class ClerkAuthService: AuthSessionProviding {
         "verification_failed",
     ]
 
+    private static let invalidCredentialCodes: Set<String> = [
+        "form_identifier_not_found",
+        "invitation_account_not_exists",
+        "form_password_incorrect",
+        "form_password_or_identifier_incorrect",
+        "form_password_validation_failed",
+        "no_password_set",
+    ]
+
     private static func authError(from error: Error) -> Error {
         guard let clerkError = error as? ClerkAPIError else { return error }
         if accountNotFoundCodes.contains(clerkError.code) {
@@ -451,7 +494,10 @@ final class ClerkAuthService: AuthSessionProviding {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         return AuthSession(
-            userID: user.id,
+            userID: resolvedUserID(
+                clerkUserID: user.id,
+                canonicalUserID: user.publicMetadata?[canonicalUserIDMetadataKey]?.stringValue
+            ),
             displayName: name.isEmpty ? user.username : name,
             handle: user.username,
             email: user.primaryEmailAddress?.emailAddress,
@@ -459,4 +505,10 @@ final class ClerkAuthService: AuthSessionProviding {
         )
     }
     #endif
+
+    static func resolvedUserID(clerkUserID: String, canonicalUserID: String?) -> String {
+        guard let canonicalUserID else { return clerkUserID }
+        let trimmed = canonicalUserID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? clerkUserID : trimmed
+    }
 }

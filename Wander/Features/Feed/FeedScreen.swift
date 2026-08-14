@@ -23,8 +23,8 @@ struct FeedScreen: View {
     }
 
     private let tickerSuggestions = [
-        "Joe's favorite coffee shops in LA",
-        "Maya's date night spots",
+        "friends' favorite coffee shops",
+        "date night spots from people you follow",
         "quiet work cafes with wifi",
         "friends' sunset hikes"
     ]
@@ -176,7 +176,7 @@ struct FeedScreen: View {
                 )
             }
 
-            FeedSectionHeading(title: "Your feed", detail: freshnessDetail)
+            FeedSectionHeading(title: "See your friends’ check-ins here", detail: freshnessDetail)
             FeedActivityList(
                 activity: page.activity,
                 openProfile: openProfile,
@@ -195,7 +195,7 @@ struct FeedScreen: View {
         } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
             FeedRefreshRecoveryState(retry: refresh)
         } else {
-            FeedSectionHeading(title: "Your feed")
+            FeedSectionHeading(title: "See your friends’ check-ins here")
             FeedEmptyState(
                 recommendations: peopleRecommendations,
                 followingProfileIDs: followingProfileIDs,
@@ -1705,7 +1705,7 @@ private struct FeedLoadingState: View {
                         .frame(width: 184, height: 218)
                 }
             }
-            FeedSectionHeading(title: "Your feed")
+            FeedSectionHeading(title: "See your friends’ check-ins here")
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -1730,7 +1730,7 @@ private struct FeedRefreshRecoveryState: View {
             FeedSectionHeading(title: "Featured for you")
             FeedRecoveryFeaturedRail()
 
-            FeedSectionHeading(title: "Your feed", detail: "Unavailable")
+            FeedSectionHeading(title: "See your friends’ check-ins here", detail: "Unavailable")
             FeedRecoveryActivityList()
 
             FeedRetryRow(

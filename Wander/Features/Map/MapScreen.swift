@@ -2378,6 +2378,11 @@ struct MapScreen: View {
     }
 
     private func currentUserCoordinate() async -> (latitude: Double, longitude: Double)? {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderUseStorefrontFixtures") {
+            return (Self.defaultRegion.center.latitude, Self.defaultRegion.center.longitude)
+        }
+        #endif
         do {
             let location = try await CoreLocationProvider().currentLocation()
             return (location.coordinate.latitude, location.coordinate.longitude)
@@ -4351,7 +4356,9 @@ struct MapPlaceSaveContext: Identifiable {
         _ candidate: PlaceCandidate,
         sourceType: AddSourceType,
         status: PlaceStatus,
-        defaultVisibility: PlaceVisibility
+        defaultVisibility: PlaceVisibility,
+        ratingScore: Double? = nil,
+        note: String = ""
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
@@ -4360,8 +4367,8 @@ struct MapPlaceSaveContext: Identifiable {
             hasPriorCheckIn: false,
             initialStatus: status,
             initialVisibility: defaultVisibility,
-            initialRatingScore: nil,
-            initialNote: "",
+            initialRatingScore: status == .been ? ratingScore : nil,
+            initialNote: note,
             initialPlannedDate: nil,
             initialAnswers: [:],
             initialPersonalLabels: [],
@@ -4971,6 +4978,15 @@ func persistScopedVisitOrWantSubmission(
         ) else {
             return (nil, nil)
         }
+        if submission.status == .wannaGo {
+            guard let transitioned = store.changeImportedSaveStatus(
+                userPlaceID: updatedVisit.userPlaceID,
+                to: .wannaGo
+            ) else {
+                return (nil, nil)
+            }
+            return (transitioned, nil)
+        }
         if let backend {
             _ = await store.syncVisit(visitID: updatedVisit.id, backend: backend)
         }
@@ -4978,11 +4994,12 @@ func persistScopedVisitOrWantSubmission(
     case .editWant(let visiblePlace):
         let result = await store.saveCandidate(
             submission.candidate,
-            status: .wannaGo,
+            status: submission.status,
             visibility: submission.visibility,
             note: submission.note,
             sourceType: AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual,
-            ratingScore: nil,
+            ratingScore: submission.status == .been ? submission.ratingScore : nil,
+            visitedAt: submission.visitedAt,
             plannedDate: submission.plannedDate,
             attributes: submission.attributes,
             backend: backend
@@ -5254,6 +5271,95 @@ enum CheckInDatePickerSelection {
     }
 }
 
+private final class CheckInDateTrayPresentation: ObservableObject {
+    @Published var isExpanded = false
+}
+
+private struct MapCheckInDateSection: View {
+    @Binding var visitedAt: Date
+    @ObservedObject var presentation: CheckInDateTrayPresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("when")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            VStack(spacing: 0) {
+                Button {
+                    presentation.isExpanded.toggle()
+                } label: {
+                    HStack(spacing: WanderTheme.spacing3) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .frame(width: 38, height: 38)
+                            .background(WanderTheme.terracottaTint.color)
+                            .clipShape(Circle())
+
+                        Text(visitedAt.formatted(date: .abbreviated, time: .omitted))
+                            .font(.system(size: 14, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .rotationEffect(.degrees(presentation.isExpanded ? 180 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: presentation.isExpanded)
+                    }
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minHeight: 58)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("save.checkInDateDisclosure")
+                .accessibilityLabel("Check-in date")
+                .accessibilityValue(
+                    "\(visitedAt.formatted(date: .long, time: .omitted)), "
+                        + (presentation.isExpanded ? "Expanded" : "Collapsed")
+                )
+
+                if presentation.isExpanded {
+                    VStack(spacing: 0) {
+                        Divider().background(WanderTheme.borderHairline.color)
+
+                        MultiDatePicker(
+                            "Check-in date",
+                            selection: Binding(
+                                get: {
+                                    CheckInDatePickerSelection.calendarSelection(for: visitedAt)
+                                },
+                                set: { selection in
+                                    visitedAt = CheckInDatePickerSelection.resolvedDate(
+                                        from: selection,
+                                        currentDate: visitedAt
+                                    )
+                                    presentation.isExpanded = false
+                                }
+                            ),
+                            in: ..<Date.now
+                        )
+                        .labelsHidden()
+                        .tint(WanderTheme.terracotta.color)
+                        .padding(.horizontal, WanderTheme.spacing2)
+                        .padding(.bottom, WanderTheme.spacing2)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("save.checkInDatePicker")
+                }
+            }
+            .background(WanderTheme.surfaceRaised.color)
+            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+            .overlay(
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                    .stroke(WanderTheme.borderHairline.color)
+            )
+        }
+    }
+}
+
 struct MapPlaceSaveFlowSheet: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var context: MapPlaceSaveContext
@@ -5282,7 +5388,7 @@ struct MapPlaceSaveFlowSheet: View {
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
     @State private var visitedAt: Date
-    @State private var isShowingCheckInDatePicker = false
+    @State private var checkInDateTrayPresentation = CheckInDateTrayPresentation()
     @State private var plannedDate: Date?
     @State private var isShowingPlannedDatePicker = false
     @State private var isSaving = false
@@ -5634,7 +5740,10 @@ struct MapPlaceSaveFlowSheet: View {
             candidateCard
 
             if selectedStatus == .been {
-                checkInDateSection
+                MapCheckInDateSection(
+                    visitedAt: $visitedAt,
+                    presentation: checkInDateTrayPresentation
+                )
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
             } else {
@@ -5652,21 +5761,21 @@ struct MapPlaceSaveFlowSheet: View {
                     .id(WalkthroughTargetID.saveRating)
                     .walkthroughTarget(.saveRating)
 
-                if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
-                    sharedVisitInviteSection
-                        .disabled(!canInviteFriends)
-                        .id(WalkthroughTargetID.saveFriends)
-                        .walkthroughTarget(.saveFriends)
-                }
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
+                        sharedVisitInviteSection
+                            .disabled(!canInviteFriends)
+                    }
 
-                if context.allowsPhotoAttachments {
-                    MapSaveVisitPhotoSection(
-                        canAddPhotos: true,
-                        photos: $visitPhotoAttachments
-                    )
-                    .id(WalkthroughTargetID.savePhotos)
-                    .walkthroughTarget(.savePhotos)
+                    if context.allowsPhotoAttachments {
+                        MapSaveVisitPhotoSection(
+                            canAddPhotos: true,
+                            photos: $visitPhotoAttachments
+                        )
+                    }
                 }
+                .id(WalkthroughTargetID.saveFriends)
+                .walkthroughTarget(.saveFriends)
             }
 
             optionalDetailsDisclosure
@@ -5904,8 +6013,7 @@ struct MapPlaceSaveFlowSheet: View {
         return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Button {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
-                    isShowingOptionalDetails = true
-                    walkthroughs.perform(.saveMoreOptions)
+                    return
                 } else {
                     isShowingOptionalDetails.toggle()
                 }
@@ -5973,7 +6081,7 @@ struct MapPlaceSaveFlowSheet: View {
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
-                    ? "Required for this walkthrough. Opens the optional note, fit questions, tags, and privacy fields."
+                    ? "This walkthrough points out where optional note, fit, tag, and privacy fields live. Use Next to continue."
                     : "Optional. Continue without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)
@@ -6024,77 +6132,6 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var ratingSection: some View {
         PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
-    }
-
-    private var checkInDateSection: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("when")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-
-            VStack(spacing: 0) {
-                Button {
-                    isShowingCheckInDatePicker.toggle()
-                } label: {
-                    HStack(spacing: WanderTheme.spacing3) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .frame(width: 38, height: 38)
-                            .background(WanderTheme.terracottaTint.color)
-                            .clipShape(Circle())
-
-                        Text(visitedAt.formatted(date: .abbreviated, time: .omitted))
-                            .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-
-                        Spacer()
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .rotationEffect(.degrees(isShowingCheckInDatePicker ? 180 : 0))
-                            .animation(.easeInOut(duration: 0.18), value: isShowingCheckInDatePicker)
-                    }
-                    .padding(.horizontal, WanderTheme.spacing3)
-                    .frame(minHeight: 58)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Check-in date")
-                .accessibilityValue(visitedAt.formatted(date: .long, time: .omitted))
-
-                if isShowingCheckInDatePicker {
-                    Divider().background(WanderTheme.borderHairline.color)
-
-                    MultiDatePicker(
-                        "Check-in date",
-                        selection: Binding(
-                            get: {
-                                CheckInDatePickerSelection.calendarSelection(for: visitedAt)
-                            },
-                            set: { selection in
-                                visitedAt = CheckInDatePickerSelection.resolvedDate(
-                                    from: selection,
-                                    currentDate: visitedAt
-                                )
-                                isShowingCheckInDatePicker = false
-                            }
-                        ),
-                        in: ..<Date.now
-                    )
-                    .tint(WanderTheme.terracotta.color)
-                    .padding(.horizontal, WanderTheme.spacing2)
-                    .padding(.bottom, WanderTheme.spacing2)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
-            .background(WanderTheme.surfaceRaised.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(WanderTheme.borderHairline.color)
-            )
-        }
     }
 
     private var canInviteFriends: Bool {

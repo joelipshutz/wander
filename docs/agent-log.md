@@ -28927,3 +28927,96 @@ Review handoff, 2026-08-14 02:08 PDT:
 - Linked the ready PR from Linear REC-122, added the validation summary, and
   moved the issue to In Review. Merge and any later TestFlight release remain
   intentionally separate actions.
+## 2026-08-14 02:36 PDT - Codex - REC-227 background import autosave release
+
+Agent: Codex
+Branch: `codex/rec-227-background-autosave`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-227-background-autosave`
+Linear: `REC-227` (`In Review`), release tracker `REC-240` (`In Progress`)
+Mission Control: `65ec5c4e-a905-4771-b265-2f91a32c2b9a` (`review`)
+
+Goal: ship the redesigned Google Maps / Instagram / TikTok share flow in the
+combined TestFlight build 144, including compact Wanna / Check In capture,
+durable local-first processing, background continuation, notification, and
+per-item verification through the regular Add details editor.
+
+Coordination and implementation:
+
+- Worked in the existing isolated REC-227 worktree and PR #385. The original
+  `joe/phone-build-latest` checkout and its untracked `tmp/` directory were not
+  touched. Merged latest `origin/main` so the release also contains PR #398.
+- Hardened account ownership and cancellation around automatic commits,
+  restored unpresented verification receipts after relaunch, prevented legacy
+  v1/v2 envelopes from silently opting into autosave, and coalesced 45-place
+  local/import persistence to one write per store.
+- Final release red-team found four edge cases. Fixed Optional Details being
+  overwritten by top-level Wanna / Check In changes by transitioning the live
+  memory in place; preserved edited note, category, tags, visibility, date, and
+  rating staging; and made the regular edit context honor status changes.
+- Protected prior memories and same-import duplicates with the exact store
+  identity matcher plus defensive shared-save removal checks. A renamed place
+  whose provider identity already exists is now receipt-labeled `existing`,
+  never `added`.
+- Removed fire-and-forget verification sync that could cross account sessions.
+  Local changes remain durable and the root's account-scoped signed-in
+  maintenance owns remote reconciliation.
+- Large Google Maps batches now resolve with bounded concurrency of six instead
+  of serial MapKit waits. Background expiration cancels active lookups, returns
+  only in-flight rows to the durable queue, and resumes them on the next runtime
+  window. The extension still cannot launch the host app by itself; a future
+  server runner remains the honest limitation for completing while rec.me is
+  never opened.
+
+Validation so far:
+
+- Full pre-red-team `WanderTests`: 1,138 passed, 0 failed on iPhone 16 Plus /
+  iOS 18.6.
+- Focused blocker regression pass: 5 passed, then expanded import regression
+  group: 47 passed, 0 failed.
+- The 45-place concurrency probe confirms more than one and no more than six
+  simultaneous resolutions. The 45-place commit regression still verifies 45
+  saves/list members with exactly one WanderStore and one PlaceImportStore
+  persistence write.
+- `git diff --check` passes. Existing Xcode warnings about Supabase date
+  formatters and traditional headermaps are unrelated.
+- Final post-red-team `WanderTests`: 1,143 passed, 0 failed, 0 skipped on
+  iPhone 16 Plus / iOS 18.6 (`Test-Wander-2026.08.14_02-37-46--0700.xcresult`).
+  The final release red-team returned no remaining blockers.
+
+Release state: PR #385 is not yet merged and no build number, archive, upload,
+TestFlight attachment, tag, or Slack release note has been created at this
+checkpoint. Next: receive the final red-team verdict, run the full unit suite,
+commit/push, merge only after payload checks pass, snapshot the build-144
+manifest from `testflight/build-143`, then create and merge the build-number PR
+before archiving the exact candidate.
+
+## 2026-08-14 14:27 PDT - Codex - REC-122 confetti TestFlight release
+
+Agent: Codex
+Branch: `codex/rec-122-confetti-motion`
+Worktree: `/private/tmp/recme-streak-confetti-prototype`
+Linear: `REC-122` (`In Review`)
+Mission Control: unavailable; `localhost:4000` refused the required task API
+request.
+
+Goal: land PR #396 and package the approved slower, denser streak-confetti rain
+into the next explicit rec.me TestFlight build, including current `main`, full
+release validation, App Store Connect attachment, Linear closeout, and the
+required tester note.
+
+Starting release state:
+
+- Joe explicitly requested “push to tf,” authorizing merge, build-number bump,
+  signed archive/upload, TestFlight helper actions, and the tester-facing Slack
+  note for this release.
+- The feature branch was clean at `9cc26860`; Joe's active
+  `joe/phone-build-latest` checkout remains untouched with its pre-existing
+  untracked `tmp/` directory.
+- Latest `origin/main` is `fd244075`, tagged `testflight/build-146`, with
+  `CURRENT_PROJECT_VERSION` 146. The branch was behind that release baseline;
+  merging current main produced only the expected append-only conflict in this
+  log. Both histories were preserved verbatim.
+- Release gate: run the repo-owned `recme-pr-review-merge-release` workflow and
+  gstack pre-landing review, update the branch to current main, rerun relevant
+  validation, squash-merge PR #396 only with no blocker, then create build 147
+  from exact latest main. Do not change marketing version or App Store listing.

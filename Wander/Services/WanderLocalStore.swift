@@ -1006,6 +1006,15 @@ final class WanderStore: ObservableObject {
         return try operation()
     }
 
+    /// Coalesces a group of local mutations into one snapshot write. Keep the
+    /// operation synchronous so unrelated main-actor work cannot become part
+    /// of the batch while it is suspended.
+    func performBatchedLocalMutations<Result>(
+        _ operation: () throws -> Result
+    ) rethrows -> Result {
+        try withDeferredPersistence(operation)
+    }
+
     func apply(authState: AuthState) {
         switch authState {
         case .signedIn(let session), .offline(let session, _):
@@ -1906,9 +1915,9 @@ final class WanderStore: ObservableObject {
             .filter { !$0.owner.isPrivateProfile }
             .filter { !isMuted(userID: $0.owner.id) }
 
-        func place(ownerID: String, name: String) -> VisiblePlace? {
+        func place(ownerID: String, placeID: String) -> VisiblePlace? {
             followedPlaces.first {
-                $0.owner.id == ownerID && $0.place.canonicalName == name
+                $0.owner.id == ownerID && $0.place.id == placeID
             }
         }
 
@@ -1920,10 +1929,10 @@ final class WanderStore: ObservableObject {
             profile(for: userID).map(shell(for:))
         }
 
-        let mayaBarNido = place(ownerID: "user_maya", name: "Bar Nido")
-        let ryanNoodles = place(ownerID: "user_ryan", name: "Larchmont Noodles")
-        let demoFernDesk = place(ownerID: "user_demo", name: "Fern Desk Coffee")
-        let ryanJuniper = place(ownerID: "user_ryan", name: "Juniper Table")
+        let mayaBarNido = place(ownerID: "user_maya", placeID: "place_bar_nido")
+        let ryanNoodles = place(ownerID: "user_ryan", placeID: "place_noodles")
+        let demoFernDesk = place(ownerID: "user_demo", placeID: "place_fern_desk_coffee")
+        let ryanJuniper = place(ownerID: "user_ryan", placeID: "place_juniper_table")
         let mayaList = visiblePlaceLists.first { $0.id == "list_maya_sunset" }
         let ryanList = visiblePlaceLists.first { $0.id == "list_ryan_brooklyn_tables" }
 
@@ -2267,6 +2276,60 @@ final class WanderStore: ObservableObject {
         }
 
         return ListPlaceAddResult(outcome: .added, createdWantSave: createdWantSave, shouldExplainAutoSave: createdWantSave)
+    }
+
+    /// Adds an already-owned place to a list without rebuilding the visible
+    /// place projection. Import batches use this inside a deferred-persistence
+    /// transaction after saving the corresponding user place.
+    @discardableResult
+    func addCurrentUserPlace(
+        userPlaceID: String,
+        to list: LocalPlaceList
+    ) -> ListPlaceAddResult {
+        guard canAddPlaces(to: list),
+              let userPlace = currentUserPlace(matching: userPlaceID)
+        else {
+            return ListPlaceAddResult(
+                outcome: .permissionDenied,
+                createdWantSave: false,
+                shouldExplainAutoSave: false
+            )
+        }
+        guard !listItems(for: list).contains(where: { item in
+            item.placeID == userPlace.placeID
+                || item.ownerUserPlaceID == userPlace.id
+                || item.sourceUserPlaceID == userPlace.id
+        }) else {
+            return ListPlaceAddResult(
+                outcome: .alreadyInList,
+                createdWantSave: false,
+                shouldExplainAutoSave: false
+            )
+        }
+
+        let item = LocalPlaceListItem(
+            localID: "local_list_item_\(slug(list.id))_\(slug(userPlace.placeID))_\(placeListItems.count + 1)",
+            listID: list.id,
+            placeID: userPlace.placeID,
+            ownerUserPlaceID: userPlace.id,
+            sourceUserPlaceID: userPlace.id,
+            addedByUserID: currentUser.id,
+            syncState: .pendingCreate
+        )
+        placeListItems.append(item)
+        if let index = placeLists.firstIndex(where: { $0.id == list.id }) {
+            placeLists[index].updatedAt = .now
+            if canManage(placeLists[index]) {
+                placeLists[index].syncStateRaw = SyncState.pendingUpdate.rawValue
+            }
+            placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
+        }
+        persist()
+        return ListPlaceAddResult(
+            outcome: .added,
+            createdWantSave: false,
+            shouldExplainAutoSave: false
+        )
     }
 
     func addCandidate(_ candidate: PlaceCandidate, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
@@ -4844,6 +4907,129 @@ final class WanderStore: ObservableObject {
             savedAt: savedAt,
             previousSummary: streakSummaryBeforeSave
         )
+        persist()
+        return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
+    }
+
+    /// Import is idempotent. A repeated import may enrich a Wanna with its
+    /// first Check In, but it must never create another visit for a place that
+    /// is already Been or overwrite details the user previously entered.
+    @discardableResult
+    func saveImportedCandidate(
+        _ candidate: PlaceCandidate,
+        status: PlaceStatus,
+        visibility: PlaceVisibility,
+        note: String?,
+        sourceType: AddSourceType,
+        ratingScore: Double? = nil,
+        visitedAt: Date = .now
+    ) -> SaveResult {
+        if let existingPlace = place(matching: candidate),
+           let existingUserPlace = currentUserPlace(for: existingPlace) {
+            if existingUserPlace.status == .been || status == .wannaGo {
+                return SaveResult(
+                    userPlaceID: existingUserPlace.id,
+                    syncState: existingUserPlace.syncState,
+                    placeID: existingPlace.serverID
+                )
+            }
+            return saveCandidate(
+                candidate,
+                status: .been,
+                visibility: existingUserPlace.visibility,
+                note: existingUserPlace.note,
+                sourceType: sourceType,
+                ratingScore: ratingScore,
+                visitedAt: visitedAt
+            )
+        }
+
+        return saveCandidate(
+            candidate,
+            status: status,
+            visibility: visibility,
+            note: note,
+            sourceType: sourceType,
+            ratingScore: ratingScore,
+            visitedAt: visitedAt
+        )
+    }
+
+    func existingImportSave(matching candidate: PlaceCandidate) -> ExistingImportSave? {
+        guard let place = place(matching: candidate),
+              let userPlace = currentUserPlace(for: place)
+        else { return nil }
+        return ExistingImportSave(
+            userPlaceID: userPlace.id,
+            status: userPlace.status,
+            syncState: userPlace.syncState,
+            placeID: place.serverID
+        )
+    }
+
+    /// Changes the status of a save created by an import without rebuilding it
+    /// from the import's stale candidate fields. Verification can follow an
+    /// Optional Details edit, so the current place memory is authoritative.
+    @discardableResult
+    func changeImportedSaveStatus(
+        userPlaceID: String,
+        to status: PlaceStatus,
+        ratingScore: Double? = nil,
+        visitedAt: Date = .now
+    ) -> SaveResult? {
+        guard let userPlace = currentUserPlace(matching: userPlaceID) else {
+            return nil
+        }
+        guard userPlace.status != status else {
+            return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
+        }
+
+        let now = Date.now
+        if status == .been {
+            let currentAttributes = attributeDrafts(for: userPlace.id)
+            _ = createVisit(
+                userPlaceID: userPlace.id,
+                visitedAt: visitedAt,
+                note: userPlace.note,
+                ratingScore: ratingScore,
+                attributes: currentAttributes,
+                visibility: userPlace.visibility
+            )
+            return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
+        }
+
+        // A Check In's editor stores its details on the visit. Carry those
+        // details forward to Wanna before removing the visits, while leaving
+        // the current category override and visibility untouched.
+        let latestVisit = visits(for: userPlace.id).max { lhs, rhs in
+            if lhs.visitedAt != rhs.visitedAt {
+                return lhs.visitedAt < rhs.visitedAt
+            }
+            return lhs.createdAt < rhs.createdAt
+        }
+        let currentAttributes = latestVisit.map {
+            VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: $0.attributeAnswersJSON)
+        } ?? attributeDrafts(for: userPlace.id)
+
+        userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
+        if let latestVisit {
+            userPlace.note = latestVisit.note
+        }
+        userPlace.ratingSignal = ratingSignal(from: currentAttributes)
+        userPlace.ratingScore = nil
+        userPlace.recommendedScore = nil
+        userPlace.recommendedCount = 0
+        userPlace.visitedAt = nil
+        userPlace.plannedDate = nil
+        userPlace.updatedAt = now
+        userPlace.localUpdatedAt = now
+        userPlace.lastSyncError = nil
+        userPlace.syncStateRaw = userPlace.serverID == nil
+            ? SyncState.pendingCreate.rawValue
+            : SyncState.pendingUpdate.rawValue
+        replaceAttributes(for: userPlace.id, with: currentAttributes, syncState: userPlace.syncState)
+        softDeleteVisits(for: userPlace.id, at: now)
+        objectWillChange.send()
         persist()
         return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
     }

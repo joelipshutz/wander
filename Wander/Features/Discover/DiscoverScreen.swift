@@ -924,7 +924,7 @@ struct DiscoverScreen: View {
         else { return nil }
         let relaxed = submittedPlacesQuery
             .replacingOccurrences(
-                of: #"\b(favou?rite|best|loved|highly\s+rated)\b"#,
+                of: #"\b(favou?rite|best|loved|highly\s+rated|worth\s+crossing\s+town\s+for)\b"#,
                 with: "visited",
                 options: [.regularExpression, .caseInsensitive]
             )

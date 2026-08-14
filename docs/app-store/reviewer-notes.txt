@@ -1,0 +1,23 @@
+rec.me is a trusted-people social map for remembering places and discovering them through people the user trusts. Use the dedicated review credentials supplied above; they must open a populated, fictional review account and must not require access to an external inbox, phone, or one-time code.
+
+Core walkthrough:
+1. Map shows the review account's saved places and places shared by its trusted graph. Select a pin to open the place profile.
+2. Feed shows friends' place memories. Open an item to view its place and comments.
+3. Search supports place/people lookup and natural-language trusted search.
+4. Add lets the reviewer search for a place, save it, add memory details, and choose visibility.
+5. Lists supports private/shared place collections and collaboration.
+6. Profile → Settings contains privacy controls, Legal & Safety, and permanent account deletion.
+
+Community safety:
+- To report a profile, open another person's profile, open the actions menu, and choose Report.
+- Activity/place memories, comments, photos, and other people's shared lists also expose Report from their actions menu or accessibility actions.
+- Report confirmation offers Block this person. Blocking removes that person and their content from social and discovery surfaces.
+- Community Guidelines and Support are under Profile → Settings → Legal & Safety.
+
+Permissions and fallbacks:
+- Location is optional. Deny it to continue with manual place search and the browsable map.
+- Contacts is requested only after a contextual primer; denying it preserves username search and sharing.
+- Camera/photo access is requested only after the reviewer chooses a photo action; place saving works without it.
+- Notifications are optional and the core app remains available if denied.
+
+The backend is live. The share extension stages user-selected links or text for import into rec.me. Widgets may show nearby/saved-place context when their relevant permissions and data are available. Support and safety contact: getrec.me@gmail.com.

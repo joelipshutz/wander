@@ -860,6 +860,16 @@ struct ActivityCommentsRouteScreen: View {
         .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24, coordinateSpace: .global)
+                .onEnded { value in
+                    guard value.startLocation.x <= 24,
+                          value.translation.width >= 96,
+                          abs(value.translation.height) <= 80
+                    else { return }
+                    activityNavigation.dismiss(requestID: requestID)
+                }
+        )
     }
 
     private var currentRoute: ActivityCommentsRoute? {

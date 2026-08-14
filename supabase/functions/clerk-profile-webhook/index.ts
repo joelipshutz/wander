@@ -1,13 +1,18 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { purgeAccountStorage } from "./account-purge.ts";
+import {
+  canonicalProfileIDFromPayload,
+  registerClerkIdentityMapping,
+  resolveCanonicalProfileID,
+  type ClerkIdentityPayload,
+} from "./identity.ts";
 
 type ClerkEmailAddress = {
   id?: string;
   email_address?: string;
 };
 
-type ClerkUser = {
-  id: string;
+type ClerkUser = ClerkIdentityPayload & {
   username?: string | null;
   first_name?: string | null;
   last_name?: string | null;
@@ -19,12 +24,11 @@ type ClerkUser = {
   updated_at?: number | string | null;
 };
 
-type ClerkDeletedUser = {
-  id: string;
+type ClerkDeletedUser = ClerkIdentityPayload & {
   deleted?: boolean;
 };
 
-type ClerkWebhookEvent =
+type ClerkProfileWebhookEvent =
   | {
     type: "user.created" | "user.updated";
     data: ClerkUser;
@@ -34,7 +38,10 @@ type ClerkWebhookEvent =
     type: "user.deleted";
     data: ClerkDeletedUser;
     timestamp?: number | string | null;
-  }
+  };
+
+type ClerkWebhookEvent =
+  | ClerkProfileWebhookEvent
   | {
     type: string;
     data?: { id?: string };
@@ -85,7 +92,9 @@ async function handleRequest(req: Request): Promise<Response> {
   case "user.created":
   case "user.updated":
   case "user.deleted":
-    return Response.json(await mirrorClerkProfile(req.headers, event));
+    return Response.json(
+      await mirrorClerkProfile(req.headers, event as ClerkProfileWebhookEvent),
+    );
   default:
     return Response.json({ ok: true, action: "ignored", event_type: event.type });
   }
@@ -129,9 +138,10 @@ function svixSecretBytes(secret: string): Uint8Array {
 }
 
 async function hmacSha256Base64(payload: string, secretBytes: Uint8Array): Promise<string> {
+  const secretBuffer = new Uint8Array(secretBytes).buffer;
   const key = await crypto.subtle.importKey(
     "raw",
-    secretBytes,
+    secretBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -171,12 +181,15 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function mirrorClerkProfile(headers: Headers, event: ClerkWebhookEvent): Promise<unknown> {
+async function mirrorClerkProfile(headers: Headers, event: ClerkProfileWebhookEvent): Promise<unknown> {
   const user = event.data;
   const isDelete = event.type === "user.deleted";
   const mirroredEventTimestamp = eventTimestamp(event, headers);
-  if (isDelete && user?.id) {
-    await purgeAccountStorage(user.id, mirroredEventTimestamp, supabaseFetch);
+  const profileID = isDelete
+    ? await resolveCanonicalProfileID(user, supabaseFetch)
+    : canonicalProfileIDFromPayload(user) ?? user.id;
+  if (isDelete) {
+    await purgeAccountStorage(profileID, mirroredEventTimestamp, supabaseFetch);
   }
   const response = await supabaseFetch("/rest/v1/rpc/mirror_clerk_profile", {
     method: "POST",
@@ -187,7 +200,7 @@ async function mirrorClerkProfile(headers: Headers, event: ClerkWebhookEvent): P
       event_id: headers.get("svix-id"),
       event_type: event.type,
       event_timestamp: mirroredEventTimestamp,
-      profile_id: user?.id,
+      profile_id: profileID,
       desired_handle: !isDelete && user ? profileHandle(user as ClerkUser) : null,
       desired_display_name: !isDelete && user ? displayName(user as ClerkUser) : null,
       desired_avatar_url: !isDelete && user ? (user as ClerkUser).image_url ?? (user as ClerkUser).profile_image_url ?? null : null,
@@ -196,6 +209,13 @@ async function mirrorClerkProfile(headers: Headers, event: ClerkWebhookEvent): P
 
   if (!response.ok) {
     throw new Error(`profile_mirror_failed:${response.status}:${await response.text()}`);
+  }
+
+  if (!isDelete) {
+    // This separate idempotent write deliberately happens after mirroring so
+    // the profile foreign key exists. If it fails, Svix retries the event;
+    // duplicate profile events are safe and the mapping write is retried.
+    await registerClerkIdentityMapping(user.id, profileID, supabaseFetch);
   }
 
   return await response.json();

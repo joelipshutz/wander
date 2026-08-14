@@ -6,6 +6,33 @@ import ClerkKit
 
 @MainActor
 final class AuthSessionTests: XCTestCase {
+    func testCanonicalProductionUserIDPreservesExistingAccountIdentity() {
+        XCTAssertEqual(
+            ClerkAuthService.resolvedUserID(
+                clerkUserID: "user_new_production",
+                canonicalUserID: " user_existing_profile "
+            ),
+            "user_existing_profile"
+        )
+    }
+
+    func testCanonicalProductionUserIDFallsBackForNewAndLegacyAccounts() {
+        XCTAssertEqual(
+            ClerkAuthService.resolvedUserID(
+                clerkUserID: "user_new_account",
+                canonicalUserID: nil
+            ),
+            "user_new_account"
+        )
+        XCTAssertEqual(
+            ClerkAuthService.resolvedUserID(
+                clerkUserID: "user_legacy_account",
+                canonicalUserID: "  "
+            ),
+            "user_legacy_account"
+        )
+    }
+
     func testRequireSignInRunsActionWhenSignedIn() {
         let provider = PreviewAuthSessionProvider(
             state: .signedIn(AuthSession(userID: "user_123", displayName: "Joe", handle: "joe")),
@@ -248,6 +275,102 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(
             store.nativeAuthError,
             "We couldn’t find an account for that email. Try Apple or Google, or create an account."
+        )
+    }
+
+    func testPasswordLoginCompletesDedicatedAccountWithoutChangingEmailCodeFlow() async {
+        let session = AuthSession(
+            userID: "user_app_review",
+            displayName: "rec.me Reviewer",
+            handle: "reviewer"
+        )
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            passwordAuthSession: session
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let outcome = await store.signInWithPassword(
+            emailAddress: " reviewer@example.com ",
+            password: "private-review-password"
+        )
+
+        XCTAssertEqual(outcome, .completed)
+        XCTAssertEqual(provider.requestedPasswordSignInEmails, ["reviewer@example.com"])
+        XCTAssertTrue(provider.requestedEmailCodes.isEmpty)
+        XCTAssertEqual(store.state, .signedIn(session))
+        XCTAssertTrue(store.isSessionValidated)
+        XCTAssertFalse(store.isPresentingNativeAuth)
+        XCTAssertFalse(store.isSigningInWithPassword)
+        XCTAssertNil(store.nativeAuthError)
+    }
+
+    func testPasswordLoginValidatesFieldsBeforeCallingProvider() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let invalidEmailOutcome = await store.signInWithPassword(
+            emailAddress: "not-an-email",
+            password: "password"
+        )
+        XCTAssertNil(invalidEmailOutcome)
+        XCTAssertEqual(store.nativeAuthError, "Enter a valid email address.")
+        XCTAssertTrue(provider.requestedPasswordSignInEmails.isEmpty)
+
+        let emptyPasswordOutcome = await store.signInWithPassword(
+            emailAddress: "reviewer@example.com",
+            password: ""
+        )
+        XCTAssertNil(emptyPasswordOutcome)
+        XCTAssertEqual(store.nativeAuthError, "Enter your password.")
+        XCTAssertTrue(provider.requestedPasswordSignInEmails.isEmpty)
+    }
+
+    func testPasswordLoginUsesPrivacyPreservingCredentialError() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            passwordAuthFailure: AuthSessionError.invalidCredentials
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let outcome = await store.signInWithPassword(
+            emailAddress: "missing@example.com",
+            password: "incorrect"
+        )
+
+        XCTAssertNil(outcome)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertEqual(store.nativeAuthError, "Email or password didn’t match.")
+        XCTAssertFalse(store.isSigningInWithPassword)
+    }
+
+    func testPasswordLoginRejectsReviewerAccountThatNeedsAnotherFactor() async {
+        let provider = PreviewAuthSessionProvider(
+            state: .signedOut,
+            canPresentNativeAuth: true,
+            passwordAuthOutcome: .requiresAdditionalVerification
+        )
+        let store = AuthSessionStore(provider: provider)
+        store.beginSignIn(mode: .signIn)
+
+        let outcome = await store.signInWithPassword(
+            emailAddress: "reviewer@example.com",
+            password: "password"
+        )
+
+        XCTAssertEqual(outcome, .requiresAdditionalVerification)
+        XCTAssertTrue(store.isPresentingNativeAuth)
+        XCTAssertEqual(
+            store.nativeAuthError,
+            "This account needs another verification step. Use email or another sign-in method."
         )
     }
 

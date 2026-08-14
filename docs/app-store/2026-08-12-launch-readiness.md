@@ -1,6 +1,6 @@
 # rec.me App Store launch readiness
 
-Updated: 2026-08-13
+Updated: 2026-08-14
 
 Owner issue: [REC-186](https://linear.app/recme/issue/REC-186/prepare-recme-app-store-product-page-and-review-package)
 
@@ -24,7 +24,7 @@ Recommended first-frame promise:
 
 ![Six-panel rec.me App Store storyboard](concepts/v1/recme-app-store-storyboard-v1.png)
 
-The six panels use current, working rec.me UI rather than invented product screens. The visual system uses the existing cream, terracotta, sky, sun, serif, and black brand language. Before final export, fixture names and content should be replaced with a small public-safe fictional social graph and every screenshot should be recaptured from the release candidate.
+The six panels use current, working rec.me UI rather than invented product screens. The visual system uses the existing cream, terracotta, sky, sun, serif, and black brand language. The dedicated Debug-only storefront fixture and capture pipeline are documented in `screenshot-capture-runbook.md`; final upload assets must still be recaptured from the exact release candidate and approved before upload.
 
 Joe approved the visual direction and first-frame promise on 2026-08-12. This approval locks the narrative and art direction; it does not authorize App Store upload or submission. The final pixels remain gated on the production release candidate and public-safe fixture recapture.
 
@@ -59,38 +59,42 @@ Recent public reviews reinforce four product requirements:
 
 ## Live App Store Connect audit
 
-Read-only snapshot refreshed 2026-08-13. No App Store data was changed.
+Snapshot refreshed after verified App Store Connect updates on 2026-08-14.
 
 | Surface | Current state | Launch action |
 |---|---|---|
 | App/version | `rec.me`, version `1.0`, Prepare for Submission | Keep public version 1.0 |
-| Uploaded builds | Builds 127–136 are valid but all report marketing version `0.1` | Change `MARKETING_VERSION` to `1.0`, test, archive, and upload a new candidate |
-| Release behavior | Automatic after approval (`AFTER_APPROVAL`) | Switch to manual release before submission |
+| Uploaded builds | Builds 136–145 are valid but all report marketing version `0.1` | Change `MARKETING_VERSION` to `1.0`, test, archive, and upload a new candidate only after production cutover |
+| Release behavior | Manual (`MANUAL`) | Complete; keep manual release through review |
 | Subtitle | `Places from people you trust` | Keep; it is concrete, differentiated, and within the 30-character limit |
 | Screenshots | 0 screenshots / 0 sets | Finalize and upload the approved six-panel 6.9-inch set |
-| Categories | None selected | Primary: Social Networking. Secondary: Travel |
-| Age rating | Not completed | Complete the questionnaire honestly; UGC/social behavior must be represented |
-| Privacy | Privacy policy URL and privacy choices URL missing | Use the live getrec.me URLs and complete labels from the production data-flow audit |
-| Support/marketing URLs | Missing | Add `https://getrec.me/support` and `https://getrec.me/` |
-| Review information | Missing | Add contact, demo account, and reviewer walkthrough |
-| Description/keywords | Drafts exist but need final copy | Replace with the product-page draft below after feature verification |
-| Latest binary | Build 136 is valid, iOS 17+, export encryption false | Not selectable for version 1.0 because of the marketing-version mismatch |
+| Categories | Primary: Social Networking. Secondary: Travel | Complete |
+| Age rating | Questionnaire complete; UGC, messaging/comments, and social media declared. Apple calculates 13+ globally, 15+/16+ where regional rules require it | Complete; keep answers aligned with the release product |
+| Content rights | Uses third-party content | Complete; accurately covers user content and licensed place/photo data |
+| Privacy URLs | `https://getrec.me/privacy` and `https://getrec.me/privacy-choices` | Complete; App Privacy labels still require the dashboard form and exact archive reconciliation |
+| Support/marketing URLs | `https://getrec.me/support` and `https://getrec.me/` | Update the published contact to `getrec.me@gmail.com`, then verify inbound mail and an authenticated reply |
+| Price and availability | Free; United States only; no pre-order; no automatic new-territory enrollment | Complete for the US-first launch; expand deliberately after regional compliance review |
+| Review information | Missing | Add contact and a populated review account that does not depend on an external inbox/OTP. The app now has an additive password sign-in path for existing password-enabled accounts; the walkthrough is committed in `reviewer-notes.txt`, and `scripts/app-store-review-release.mjs` can create/verify the private App Store Connect record without printing credentials |
+| Description/keywords | Final draft applied and read back from App Store Connect | Reverify against the final candidate before submission |
+| Latest binary | Build 145 is valid, iOS 17+, export encryption false | Not selectable for version 1.0 because of the marketing-version mismatch |
 
 The linked in-app pages currently return HTTP 200: support, privacy, terms, community standards, and privacy choices. The `getrec.me` launch-site PR [#10](https://github.com/joelipshutz/recme-site/pull/10) is merged and deployed. It adds the safety-report fallback and moderation appeal paths, the 24-month safety-report retention disclosure, accessibility and responsive fixes, and a safe TestFlight-to-App-Store CTA switch.
 
-The reversible metadata mutation is scripted in `scripts/app-store-metadata-release.mjs`. It defaults to a read-only plan and requires `--apply` before it changes App Store Connect. The 2026-08-13 dry run verified the exact editable version and localization IDs plus the intended before/after values; applying it still requires explicit external-account approval.
+The reversible changes are scripted in `scripts/app-store-metadata-release.mjs`, `scripts/app-store-age-rating-release.mjs`, and `scripts/app-store-commerce-release.mjs`. Each defaults to a read-only plan and requires `--apply`. On 2026-08-14, all three were applied and verified by App Store Connect read-back.
 
 ## Hard submission blockers
 
 | Gate | Evidence | Required before submission |
 |---|---|---|
-| [REC-182](https://linear.app/recme/issue/REC-182/switch-recme-to-production-clerk-and-supabase-auth) — production auth | Release currently inherits the tracked Clerk test key and `.clerk.accounts.dev` host | Use production Clerk/Supabase configuration and production Associated Domains; validate sign-in, deletion, and a clean-device session |
-| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | [PR #381](https://github.com/joelipshutz/wander/pull/381) is merged, with 1,107 iOS tests, a Release build, 71/71 rollback-only hosted assertions, and the full hosted rollback smoke passing. The exact production target was confirmed, a 401,951-byte schema backup was taken, and the migration dry run selected only `20260813010000_community_moderation.sql`. The 24-month disclosure is now live at `https://getrec.me/privacy`. Production application is awaiting the environment's explicit write approval. | Approve and apply the reviewed migration, verify it live, complete one report-to-resolution exercise, name primary/backup safety reviewers, and test the support mailbox |
+| [REC-182](https://linear.app/recme/issue/REC-182/switch-recme-to-production-clerk-and-supabase-auth) — production auth | Release currently inherits the tracked Clerk test key and `.clerk.accounts.dev` host. The app-side password path is implemented without changing Apple, Google, or email-code sign-in | Use production Clerk/Supabase configuration and production Associated Domains; enable password sign-in alongside the existing strategies; validate the six existing identities, sign-in, deletion, and a clean-device session |
+| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | [PR #381](https://github.com/joelipshutz/wander/pull/381) is merged. Migration `20260813010000_community_moderation` is already present on the linked hosted project, and the full rollback-only hosted smoke passed on 2026-08-14, including report submission, private moderation queue/evidence, and rate limiting. | Complete one live report-to-resolution exercise without retaining test content, name primary/backup safety reviewers, and verify `getrec.me@gmail.com` can receive and reply reliably |
 | [REC-185](https://linear.app/recme/issue/REC-185/complete-app-privacy-manifest-labels-and-permission-audit) — privacy | [PR #380](https://github.com/joelipshutz/wander/pull/380) is merged; app and share-extension manifests are on `main`, and 1,097 tests plus the Release build passed before merge | Verify PostHog project-level IP capture, inspect the signed archive privacy report, and complete App Store privacy labels from the audited data-flow matrix |
-| [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | [PR #304](https://github.com/joelipshutz/wander/pull/304) is merged, restoring repository parity with the already deployed hardening migration and preserving the rollback smoke harness | Complete monitoring ownership, quota alerts, APNs delivery, backups/rollback, deletion cleanup, and the REC-182 production cutover |
+| [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | [PR #304](https://github.com/joelipshutz/wander/pull/304) is merged, restoring repository parity with the already deployed hardening migration and preserving the rollback smoke harness | Complete monitoring ownership, quota alerts, APNs delivery, deletion cleanup, and the REC-182 production cutover. A fresh pre-cutover source backup is verified under `.private_backups`; do not replace or delete it during cutover |
+| Support mailbox | Joe selected `getrec.me@gmail.com` as the primary launch support and App Review contact, with `joe@grayline-studio.com` as fallback. This removes Google Workspace and mail-DNS setup from the launch path | Update the public Support page and App Store Connect contact, then verify inbound mail and an authenticated reply before submission |
+| App Store final fields | App Privacy labels and App Review contact/demo details are incomplete. Privacy remains a dashboard task; review details are supported by the API | Sign in to App Store Connect to publish the evidence-backed privacy answers. Configure the monitored review contact and no-OTP production review account in local secrets, then dry-run/apply `scripts/app-store-review-release.mjs` |
 | Version/build compatibility | Store version is 1.0; all uploaded binaries are 0.1 | Generate and upload a new 1.0 build only after the other release gates are closed |
 
-Apple's UGC guideline requires objectionable-content filtering, reporting with timely response, blocking abusive users, and published contact information. The product and backend controls are now merged, but the gate remains blocked until the migration is deployed, the queue is staffed, the mailbox is tested, and the workflow is exercised end to end.
+Apple's UGC guideline requires objectionable-content filtering, reporting with timely response, blocking abusive users, and published contact information. The product, backend controls, and hosted migration are in place. The remaining operational gate is a staffed queue, working mailbox, and one verified end-to-end report-to-resolution exercise.
 
 ## Product-page copy draft
 
@@ -151,24 +155,53 @@ The final notes should include:
 
 Do not put real customer credentials or private user data in this document or source control.
 
+### Private review-record release path
+
+Keep these values only in `/Users/joelipshutz/.openclaw/workspace/.env.keys`:
+
+```text
+ASC_REVIEW_CONTACT_FIRST_NAME
+ASC_REVIEW_CONTACT_LAST_NAME
+ASC_REVIEW_CONTACT_PHONE
+ASC_REVIEW_CONTACT_EMAIL
+ASC_REVIEW_DEMO_ACCOUNT_REQUIRED=true
+ASC_REVIEW_DEMO_ACCOUNT_NAME
+ASC_REVIEW_DEMO_ACCOUNT_PASSWORD
+```
+
+The review account must be a dedicated, fictional, populated production account that Apple can enter with the supplied credentials alone. An email OTP sent to a mailbox Apple cannot access is not a usable review login.
+
+Follow `reviewer-account-runbook.md` for the lossless setup. Do not convert an existing tester account, change its primary email, unlink an identity, or use Clerk test mode. The production gate is closed only after the dedicated account signs in with its password from a clean device without client-trust, MFA, email, or phone verification.
+
+The tool reads `reviewer-notes.txt`, redacts contact/account values from all output, and defaults to a read-only plan:
+
+```bash
+node scripts/app-store-review-release.mjs
+node scripts/app-store-review-release.mjs --apply
+```
+
+Do not run `--apply` until the mailbox, production auth cutover, review-account login, and fictional graph have all been verified.
+
 ## Release sequence
 
 1. **Complete:** positioning, first-frame copy, and six-panel storyboard direction approved 2026-08-12.
 2. **Complete:** PRs #380, #381, and #304 are merged and their `main` manifest runs passed.
-3. Apply and verify the reviewed moderation migration after explicit production-write approval; then complete the named-owner, mailbox, retention-disclosure, and live report-resolution checks.
-4. Complete REC-182's explicit production Clerk/Supabase cutover and clean-device validation.
-5. Replace concept fixtures with public-safe release fixtures and recapture the approved six-panel set from the release candidate.
-6. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA.
-7. Archive, upload, and process the 1.0 release candidate.
-8. Complete App Store Connect metadata, categories, rating, privacy, agreements, pricing/availability, review account, and manual-release setting.
-9. Run a final pre-submission audit, then submit for review under the launch authorization.
+3. **Complete:** App Store product copy, URLs, categories, manual release, content-rights declaration, 13+ questionnaire, free pricing, and US-first availability were applied and verified on 2026-08-14.
+4. Publish and verify `getrec.me@gmail.com`; name safety owners and complete one live report-to-resolution exercise.
+5. Complete REC-182's lossless production Clerk/Supabase cutover and clean-device validation. Preserve the verified source backup and canonical IDs; do not switch traffic until all 6 existing account mappings validate.
+6. Enable production password sign-in additively, create and populate the isolated reviewer account using `reviewer-account-runbook.md`, and prove clean-device login without OTP/MFA. Publish App Privacy answers after signing in to App Store Connect. Create the private App Review record with `scripts/app-store-review-release.mjs` only after the contact and account are verified.
+7. Replace concept fixtures with public-safe release fixtures and recapture the approved six-panel set from the release candidate.
+8. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA. The two deterministic launch UI failures were resolved in PR #405; its full run passed 1,145 unit tests and 28 UI tests with zero failures.
+9. Archive, upload, process, and attach the 1.0 release candidate.
+10. Run a final pre-submission audit, then submit for review under the launch authorization.
 
 ## Validation performed for this audit
 
 - Latest `origin/main` built successfully on an iPhone 16 Plus simulator running iOS 18.6.
 - Current Map, Feed, search, place detail, Add, Lists, Profile, and import surfaces were exercised and captured.
 - All concept panels were verified as opaque 1320 × 2868 PNGs.
-- The App Store Connect audit was read-only and redacts review credentials.
+- App Store Connect metadata, rating, content-rights, price, and availability changes were applied through dry-run-first scripts and verified by API read-back.
+- The hosted Supabase smoke remained rollback-only and passed after confirming the moderation migration was already deployed.
 - App targets are iPhone-only.
 - Current legal/support URLs were checked live.
 

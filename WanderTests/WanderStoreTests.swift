@@ -2947,6 +2947,140 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(restoredPhoto?.height, 900)
     }
 
+    func testAutomaticImportDoesNotCreateASecondCheckInForAnExistingBeenPlace() {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "mapkit_import_idempotency",
+            name: "Import Idempotency Cafe",
+            category: "coffee",
+            latitude: 34.12345,
+            longitude: -118.54321,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "import-idempotency-cafe",
+            confidence: 0.99
+        )
+        let first = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "original memory",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+        let originalVisits = store.visits(for: first.userPlaceID)
+
+        let imported = store.saveImportedCandidate(
+            candidate,
+            status: .been,
+            visibility: .selfOnly,
+            note: "imported memory",
+            sourceType: .link,
+            ratingScore: 2
+        )
+
+        XCTAssertEqual(imported.userPlaceID, first.userPlaceID)
+        XCTAssertEqual(store.visits(for: first.userPlaceID), originalVisits)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.visibility,
+            .followers
+        )
+    }
+
+    func testAutomaticCheckInImportEnrichesAnExistingWannaExactlyOnce() {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "mapkit_import_wanna_upgrade",
+            name: "Import Upgrade Cafe",
+            category: "coffee",
+            latitude: 34.11111,
+            longitude: -118.22222,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "import-upgrade-cafe",
+            confidence: 0.99
+        )
+        let first = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "want to try",
+            sourceType: .manual
+        )
+
+        let imported = store.saveImportedCandidate(
+            candidate,
+            status: .been,
+            visibility: .selfOnly,
+            note: "went today",
+            sourceType: .link,
+            ratingScore: 4
+        )
+
+        XCTAssertEqual(imported.userPlaceID, first.userPlaceID)
+        XCTAssertEqual(store.visits(for: first.userPlaceID).count, 1)
+        XCTAssertEqual(store.visits(for: first.userPlaceID).first?.ratingScore, 4)
+        XCTAssertEqual(store.visits(for: first.userPlaceID).first?.note, "want to try")
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.note,
+            "want to try"
+        )
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.visibility,
+            .followers
+        )
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.status,
+            .been
+        )
+    }
+
+    func testAutomaticWannaImportNeverDowngradesAnExistingCheckIn() {
+        let store = makeStore()
+        let candidate = PlaceCandidate(
+            id: "mapkit_import_been_preserved",
+            name: "Been Preserved Cafe",
+            category: "coffee",
+            latitude: 34.22222,
+            longitude: -118.33333,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "been-preserved-cafe",
+            confidence: 0.99
+        )
+        let first = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "original memory",
+            sourceType: .manual,
+            ratingScore: 5
+        )
+        let originalVisits = store.visits(for: first.userPlaceID)
+
+        let imported = store.saveImportedCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: "imported",
+            sourceType: .link
+        )
+
+        XCTAssertEqual(imported.userPlaceID, first.userPlaceID)
+        XCTAssertEqual(store.visits(for: first.userPlaceID), originalVisits)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first(where: {
+                $0.userPlace.id == first.userPlaceID
+            })?.userPlace.status,
+            .been
+        )
+    }
+
     func testFirstVisitPhotoForPlaceUsesEarliestUsablePhoto() {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -3762,6 +3896,90 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(updatedVisiblePlace.categoryEmoji, "☕️")
         XCTAssertEqual(updatedVisiblePlace.userPlace.categoryOverrideSource, PlaceCategorySource.user.rawValue)
         XCTAssertEqual(updatedVisiblePlace.userPlace.syncState, .pendingCreate)
+    }
+
+    func testImportStatusChangePreservesOptionalDetailsInsteadOfRebuildingStaleCandidate() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let originalCandidate = PlaceCandidate(
+            id: "mapkit_import_optional_details",
+            name: "Imported Place",
+            category: WanderPlaceCategory.restaurantsFood,
+            primaryCategory: WanderPlaceCategory.restaurantsFood,
+            subcategory: "Restaurant",
+            latitude: 34.0407,
+            longitude: -118.2354,
+            confidence: 0.98
+        )
+        let result = store.saveCandidate(
+            originalCandidate,
+            status: .been,
+            visibility: .mutuals,
+            note: "stale import note",
+            sourceType: .link
+        )
+        let originalVisit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        let coffeeAssignment = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            subcategory: "Coffee shop",
+            source: PlaceCategorySource.user.rawValue,
+            confidence: 1,
+            rawProviderType: "restaurant"
+        )
+        let editedAttributes = [
+            PlaceAttributeDraft(
+                questionKey: "coffee_tags",
+                valueType: "multi_tag",
+                stringValues: ["quiet", "wifi solid"]
+            )
+        ]
+        _ = try XCTUnwrap(
+            store.updateVisit(
+                visitID: originalVisit.id,
+                note: "edited in Optional Details",
+                attributes: editedAttributes,
+                categoryCandidate: originalCandidate.recategorized(as: coffeeAssignment),
+                visibility: .selfOnly,
+                replacesNote: true
+            )
+        )
+
+        _ = try XCTUnwrap(
+            store.changeImportedSaveStatus(userPlaceID: result.userPlaceID, to: .wannaGo)
+        )
+        var visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        XCTAssertEqual(visiblePlace.userPlace.status, .wannaGo)
+        XCTAssertEqual(visiblePlace.userPlace.note, "edited in Optional Details")
+        XCTAssertEqual(visiblePlace.userPlace.visibility, .selfOnly)
+        XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(visiblePlace.effectiveSubcategory, "Coffee shop")
+        XCTAssertEqual(
+            store.attributes(for: result.userPlaceID).first { $0.questionKey == "coffee_tags" }?.valueJSON,
+            "[\"quiet\",\"wifi solid\"]"
+        )
+        XCTAssertTrue(store.visits(for: result.userPlaceID).isEmpty)
+
+        _ = try XCTUnwrap(
+            store.changeImportedSaveStatus(
+                userPlaceID: result.userPlaceID,
+                to: .been,
+                ratingScore: 4.5
+            )
+        )
+        visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+        let restoredVisit = try XCTUnwrap(store.visits(for: result.userPlaceID).first)
+        XCTAssertEqual(visiblePlace.userPlace.status, .been)
+        XCTAssertEqual(visiblePlace.effectiveCategory, WanderPlaceCategory.coffeeTeaSweets)
+        XCTAssertEqual(restoredVisit.note, "edited in Optional Details")
+        XCTAssertEqual(restoredVisit.ratingScore, 4.5)
+        XCTAssertEqual(
+            VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: restoredVisit.attributeAnswersJSON),
+            editedAttributes
+        )
     }
 
     func testVisitAttributeAnswerDraftsRoundTripForDefaults() {

@@ -11,11 +11,14 @@ struct NativeAuthFlowView: View {
 
     @State private var emailAddress = ""
     @State private var verificationCode = ""
+    @State private var password = ""
+    @State private var isUsingPassword = false
     @FocusState private var focusedField: Field?
 
     private enum Field {
         case email
         case code
+        case password
     }
 
     private var title: String {
@@ -44,6 +47,8 @@ struct NativeAuthFlowView: View {
                 Group {
                     if let verificationAddress = auth.emailVerificationAddress {
                         emailCodeForm(address: verificationAddress)
+                    } else if isUsingPassword {
+                        passwordSignInForm
                     } else {
                         methodPicker
                     }
@@ -147,6 +152,19 @@ struct NativeAuthFlowView: View {
                 .disabled(auth.isPerformingNativeAuth)
                 .opacity(auth.isPerformingNativeAuth ? 0.72 : 1)
                 .accessibilityIdentifier("auth.continueWithEmail")
+
+                if mode != .signUp {
+                    Button("Use a password") {
+                        auth.cancelEmailVerification()
+                        isUsingPassword = true
+                        focusedField = .email
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                    .disabled(auth.isPerformingNativeAuth)
+                    .accessibilityIdentifier("auth.usePassword")
+                }
             }
 
             authError
@@ -260,6 +278,131 @@ struct NativeAuthFlowView: View {
                 .frame(height: 1)
         }
         .accessibilityHidden(true)
+    }
+
+    private var passwordSignInForm: some View {
+        VStack(spacing: WanderTheme.spacing4) {
+            VStack(spacing: WanderTheme.spacing3) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: 68, height: 68)
+                    .background(WanderTheme.terracottaTint.color)
+                    .clipShape(Circle())
+
+                Text("Sign in with password")
+                    .font(WanderTheme.editorialDisplay(size: 30, weight: .bold))
+
+                Text("Use the email and password for this account.")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, WanderTheme.spacing4)
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                Text("Email")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+
+                TextField("you@example.com", text: $emailAddress)
+                    .font(.system(size: 16, weight: .medium))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.emailAddress)
+                    .textContentType(.emailAddress)
+                    .submitLabel(.next)
+                    .focused($focusedField, equals: .email)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .frame(minHeight: 52)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .overlay(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                    )
+                    .accessibilityIdentifier("auth.passwordEmail")
+                    .onSubmit { focusedField = .password }
+
+                Text("Password")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+
+                SecureField("Password", text: $password)
+                    .font(.system(size: 16, weight: .medium))
+                    .textContentType(.password)
+                    .submitLabel(.go)
+                    .focused($focusedField, equals: .password)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .frame(minHeight: 52)
+                    .background(WanderTheme.surfaceRaised.color)
+                    .overlay(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+                    )
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                    )
+                    .accessibilityIdentifier("auth.password")
+                    .onSubmit(signInWithPassword)
+
+                Button(action: signInWithPassword) {
+                    ZStack {
+                        Text("Sign in")
+                            .font(.system(size: 16, weight: .bold))
+                        if auth.isSigningInWithPassword {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .tint(WanderTheme.textOnAction.color)
+                            }
+                        }
+                    }
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(WanderTheme.terracotta.color)
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: WanderTheme.radiusMedium,
+                            style: .continuous
+                        )
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(auth.isPerformingNativeAuth)
+                .opacity(auth.isPerformingNativeAuth ? 0.72 : 1)
+                .accessibilityIdentifier("auth.signInWithPassword")
+            }
+
+            authError
+
+            Button("Use another sign-in method") {
+                password = ""
+                isUsingPassword = false
+                auth.cancelEmailVerification()
+                focusedField = .email
+            }
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .disabled(auth.isPerformingNativeAuth)
+            .accessibilityIdentifier("auth.leavePassword")
+        }
     }
 
     private func emailCodeForm(address: String) -> some View {
@@ -378,6 +521,19 @@ struct NativeAuthFlowView: View {
     private func verifyEmailCode() {
         focusedField = nil
         Task { await auth.verifyEmailCode(verificationCode) }
+    }
+
+    private func signInWithPassword() {
+        focusedField = nil
+        Task {
+            let outcome = await auth.signInWithPassword(
+                emailAddress: emailAddress,
+                password: password
+            )
+            if outcome == .completed {
+                password = ""
+            }
+        }
     }
 }
 
