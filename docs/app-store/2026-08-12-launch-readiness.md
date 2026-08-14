@@ -74,7 +74,7 @@ Snapshot refreshed after verified App Store Connect updates on 2026-08-14.
 | Privacy URLs | `https://getrec.me/privacy` and `https://getrec.me/privacy-choices` | Complete; App Privacy labels still require the dashboard form and exact archive reconciliation |
 | Support/marketing URLs | `https://getrec.me/support` and `https://getrec.me/` | Complete; the published support address still needs a working mailbox |
 | Price and availability | Free; United States only; no pre-order; no automatic new-territory enrollment | Complete for the US-first launch; expand deliberately after regional compliance review |
-| Review information | Missing | Add contact, demo account, and reviewer walkthrough |
+| Review information | Missing | Add contact and a populated review account that does not depend on an external inbox/OTP. The walkthrough is now committed in `reviewer-notes.txt`, and `scripts/app-store-review-release.mjs` can create/verify the private App Store Connect record without printing credentials |
 | Description/keywords | Final draft applied and read back from App Store Connect | Reverify against the final candidate before submission |
 | Latest binary | Build 145 is valid, iOS 17+, export encryption false | Not selectable for version 1.0 because of the marketing-version mismatch |
 
@@ -91,7 +91,7 @@ The reversible changes are scripted in `scripts/app-store-metadata-release.mjs`,
 | [REC-185](https://linear.app/recme/issue/REC-185/complete-app-privacy-manifest-labels-and-permission-audit) — privacy | [PR #380](https://github.com/joelipshutz/wander/pull/380) is merged; app and share-extension manifests are on `main`, and 1,097 tests plus the Release build passed before merge | Verify PostHog project-level IP capture, inspect the signed archive privacy report, and complete App Store privacy labels from the audited data-flow matrix |
 | [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | [PR #304](https://github.com/joelipshutz/wander/pull/304) is merged, restoring repository parity with the already deployed hardening migration and preserving the rollback smoke harness | Complete monitoring ownership, quota alerts, APNs delivery, deletion cleanup, and the REC-182 production cutover. A fresh pre-cutover source backup is verified under `.private_backups`; do not replace or delete it during cutover |
 | Support mailbox | DNS has no MX records and apex SPF is `v=spf1 -all`, so `support@getrec.me` cannot receive mail | Provision the mailbox, then verify inbound mail, reply, SPF, DKIM, and DMARC before submission |
-| App Store dashboard-only fields | App Privacy labels and App Review contact/demo details are incomplete; browser sessions currently require Apple sign-in | Sign in to App Store Connect, publish the evidence-backed privacy answers, and enter a monitored contact plus production review account |
+| App Store final fields | App Privacy labels and App Review contact/demo details are incomplete. Privacy remains a dashboard task; review details are supported by the API | Sign in to App Store Connect to publish the evidence-backed privacy answers. Configure the monitored review contact and no-OTP production review account in local secrets, then dry-run/apply `scripts/app-store-review-release.mjs` |
 | Version/build compatibility | Store version is 1.0; all uploaded binaries are 0.1 | Generate and upload a new 1.0 build only after the other release gates are closed |
 
 Apple's UGC guideline requires objectionable-content filtering, reporting with timely response, blocking abusive users, and published contact information. The product, backend controls, and hosted migration are in place. The remaining operational gate is a staffed queue, working mailbox, and one verified end-to-end report-to-resolution exercise.
@@ -155,6 +155,31 @@ The final notes should include:
 
 Do not put real customer credentials or private user data in this document or source control.
 
+### Private review-record release path
+
+Keep these values only in `/Users/joelipshutz/.openclaw/workspace/.env.keys`:
+
+```text
+ASC_REVIEW_CONTACT_FIRST_NAME
+ASC_REVIEW_CONTACT_LAST_NAME
+ASC_REVIEW_CONTACT_PHONE
+ASC_REVIEW_CONTACT_EMAIL
+ASC_REVIEW_DEMO_ACCOUNT_REQUIRED=true
+ASC_REVIEW_DEMO_ACCOUNT_NAME
+ASC_REVIEW_DEMO_ACCOUNT_PASSWORD
+```
+
+The review account must be a dedicated, fictional, populated production account that Apple can enter with the supplied credentials alone. An email OTP sent to a mailbox Apple cannot access is not a usable review login.
+
+The tool reads `reviewer-notes.txt`, redacts contact/account values from all output, and defaults to a read-only plan:
+
+```bash
+node scripts/app-store-review-release.mjs
+node scripts/app-store-review-release.mjs --apply
+```
+
+Do not run `--apply` until the mailbox, production auth cutover, review-account login, and fictional graph have all been verified.
+
 ## Release sequence
 
 1. **Complete:** positioning, first-frame copy, and six-panel storyboard direction approved 2026-08-12.
@@ -162,9 +187,9 @@ Do not put real customer credentials or private user data in this document or so
 3. **Complete:** App Store product copy, URLs, categories, manual release, content-rights declaration, 13+ questionnaire, free pricing, and US-first availability were applied and verified on 2026-08-14.
 4. Make `support@getrec.me` operational; name safety owners and complete one live report-to-resolution exercise.
 5. Complete REC-182's lossless production Clerk/Supabase cutover and clean-device validation. Preserve the verified source backup and canonical IDs; do not switch traffic until all 6 existing account mappings validate.
-6. Publish App Privacy answers and App Review contact/demo details after signing in to App Store Connect.
+6. Publish App Privacy answers after signing in to App Store Connect. Create the private App Review record with `scripts/app-store-review-release.mjs` only after the contact and populated no-OTP production review account are verified.
 7. Replace concept fixtures with public-safe release fixtures and recapture the approved six-panel set from the release candidate.
-8. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA. Resolve both deterministic launch UI failures first.
+8. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA. The two deterministic launch UI failures were resolved in PR #405; its full run passed 1,145 unit tests and 28 UI tests with zero failures.
 9. Archive, upload, process, and attach the 1.0 release candidate.
 10. Run a final pre-submission audit, then submit for review under the launch authorization.
 
