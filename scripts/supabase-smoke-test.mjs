@@ -386,7 +386,7 @@ function runLinkedSmokeChecks(
     if (migrationTestPath) {
       console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${migrationTestPath}`);
     } else {
-      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider-quota, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
+      console.log("Supabase smoke test passed: linked profile, mute, photo visibility, preferred-photo, provider admission, Shared Visits, cuisine inference, and Discover profile recommendation contracts are valid.");
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -619,7 +619,7 @@ begin
     and p.proname = 'consume_place_photo_quota'
     and pg_get_function_identity_arguments(p.oid) = '';
   if valid is distinct from true then
-    raise exception 'place-photo quota metadata contract failed';
+    raise exception 'place-photo provider admission metadata contract failed';
   end if;
 end
 $quota_metadata$;
@@ -958,7 +958,7 @@ select set_config('request.jwt.claim.role', 'authenticated', true);
 do $quota_behavior$
 begin
   if public.consume_place_photo_quota() is distinct from true then
-    raise exception 'place-photo quota rejected an authenticated request below the caps';
+    raise exception 'place-photo provider admission rejected an authenticated request';
   end if;
 end
 $quota_behavior$;
