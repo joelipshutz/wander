@@ -82,3 +82,9 @@ change only the coral glass marker. They test four broader silhouettes at
 The [ten-direction creative riff](creative-riff/README.md) uses the wider N pin
 composition as a loose anchor, then explores realistic and invented globes,
 radically different marker shapes, and glossy, satin, and fully matte finishes.
+
+## Non-glass follow-up
+
+The [six-direction non-glass pass](non-glass/README.md) removes transparency,
+refraction, and liquid effects entirely. It compares ceramic, letterpress,
+opaque enamel, wood inlay, leather, and stone.
