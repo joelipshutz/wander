@@ -29040,3 +29040,42 @@ Review and validation checkpoint:
 - Earlier branch validation remains current for the feature scope: 1,126 unit
   tests passed, visual QA passed on iPhone 16 Plus and iPhone 16e, and the UI
   suite's two failures were pre-existing unrelated onboarding checks.
+
+Final release outcome (15:38 PDT):
+
+- Squash-merged feature PR #396 as `d08263fc`, then merged the metadata-only
+  build bump PR #412 as exact release commit
+  `d215a9007527385140d2c2fe4d4c55c7898e9188`. Build advanced once from 146
+  to 147; marketing version remained 0.1.
+- The machine manifest reconciled PR #396 as the sole shipped change and PR
+  #412 as its release operation from `testflight/build-146`. The final ledger
+  was advanced to `testflight/build-147` with zero pending commits.
+- Exact-candidate validation: the post-main-merge focused streak suite passed
+  17/17. The full exact-candidate unit target compiled successfully, but two
+  concurrent Xcode jobs collided on the simulator and the run entered Xcode's
+  diagnostics path before reporting test results. Both release-owned jobs and
+  only their disposable caches were stopped/cleaned; the unrelated REC-246
+  worktree and validation were not touched. Earlier full feature-branch unit
+  validation remains 1,126/1,126 passed.
+- Created the signed Release archive at
+  `/private/tmp/Wander-0.1-build147.xcarchive`. Archive and embedded app
+  metadata independently confirmed rec.me 0.1 (147), bundle
+  `com.grayline.wander`, and team `Y7TVK75RZ8`. Xcode archive validation
+  succeeded; a standalone local `codesign --verify` reported the machine's
+  distribution trust-chain warning, while Xcode export and App Store Connect
+  accepted the unchanged signed archive.
+- Uploaded with `/private/tmp/recme-build147-export-options.plist`, using
+  `destination=upload`, `method=app-store-connect`, automatic signing, symbols,
+  and `manageAppVersionAndBuildNumber=false`. Xcode reported `Uploaded Wander`
+  and `EXPORT SUCCEEDED` with no build-number drift.
+- App Store Connect indexed build 147 as `VALID`, set
+  `usesNonExemptEncryption=false`, published the reconciled What to Test copy,
+  attached the build to public group `rec.me Alpha`, and approved external beta
+  review. Public link: `https://testflight.apple.com/join/knEhRa6t`.
+- Updated REC-122 with the release evidence and left it Done. Posted the
+  required tester-facing release note in `#testflight-feedback`:
+  `https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1786747073457649`.
+- Mission Control remained unavailable because `localhost:4000` refused the
+  required API request. No known confetti-specific issue remains; testers were
+  asked to check the longer first-save rain, unchanged same-day pop, and Reduce
+  Motion behavior.
