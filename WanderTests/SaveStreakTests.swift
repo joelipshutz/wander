@@ -46,6 +46,30 @@ final class SaveStreakCalculatorTests: XCTestCase {
         )
     }
 
+    func testWelcomeConfettiUsesApprovedSlowerLongerRainRecipe() throws {
+        let motion = SaveStreakConfettiMotion.welcome
+
+        XCTAssertEqual(motion.pieceCount, 80)
+        XCTAssertEqual(motion.travelScale, 1, accuracy: 0.001)
+        XCTAssertEqual(motion.speedScale, 0.70, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(motion.arrivalWindow), 1, accuracy: 0.001)
+        XCTAssertEqual(motion.delay(for: 0), 0, accuracy: 0.001)
+        XCTAssertEqual(motion.delay(for: 79), 1, accuracy: 0.001)
+        XCTAssertEqual(motion.travelDuration(for: 4), 1.63 / 0.70, accuracy: 0.001)
+        XCTAssertEqual(motion.latestEndTime, 1.63 / 0.70 + 1, accuracy: 0.001)
+    }
+
+    func testSameDayConfettiPopKeepsItsShortShippingRecipe() {
+        let motion = SaveStreakConfettiMotion.sameDayPop
+
+        XCTAssertEqual(motion.pieceCount, 30)
+        XCTAssertEqual(motion.travelScale, 0.62, accuracy: 0.001)
+        XCTAssertEqual(motion.speedScale, 1, accuracy: 0.001)
+        XCTAssertNil(motion.arrivalWindow)
+        XCTAssertEqual(motion.delay(for: 8), 0.28, accuracy: 0.001)
+        XCTAssertEqual(motion.travelDuration(for: 4), 1.63, accuracy: 0.001)
+    }
+
     func testCelebrationPresentationUsesNumericDayStreakLanguage() {
         XCTAssertEqual(
             SaveStreakCelebrationPresentation.visualCount(for: 4),

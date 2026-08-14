@@ -28879,3 +28879,40 @@ Refinement, 2026-08-14 01:24 PDT:
 - The local preview remains `http://127.0.0.1:8765/finalized.html`. Production
   SwiftUI, tests, project generation, build number, backend, TestFlight, and
   Slack remain untouched; REC-122 and draft PR #396 stay open for motion review.
+
+Implementation start, 2026-08-14 01:43 PDT:
+
+- Joe approved the refined slower-rain prototype and authorized production
+  implementation with “go.” The target remains 80 top-down pieces, 0.70x
+  travel speed, and a one-second distributed arrival window.
+- Fetched and merged latest `origin/main` (`ed9e9988`, TestFlight build 143)
+  before editing. The merge only updated the generated project/build number
+  files and did not overlap the streak surface.
+- Expected implementation files are
+  `Wander/Features/Streak/SaveStreakCelebrationView.swift`, focused contracts in
+  `WanderTests/SaveStreakTests.swift`, and this append-only coordination log.
+  The short same-day confetti pop will retain its existing timing because its
+  presentation window is intentionally only 720 ms.
+
+Implementation validation, 2026-08-14 02:07 PDT:
+
+- Added an explicit welcome motion recipe with 80 top-down pieces, 0.70x
+  travel speed, and an even one-second arrival window. The last piece finishes
+  at roughly 3.33 seconds, keeping the approved late confetti tail visible.
+- Kept the existing short same-day pop isolated at 30 pieces, 0.62 travel
+  scale, original timing, and no extended arrival window. Added focused tests
+  that lock both recipes so the two celebration contexts cannot drift together.
+- Focused `SaveStreakCalculatorTests` passed: 17 tests, 0 failures. The full
+  unit suite passed twice: 1,126 tests, 0 failures.
+- The UI suite completed 25 of 27 tests successfully. Two unrelated existing
+  UI tests produced three assertion failures in `OnboardingUITests.swift`:
+  `testCommentsEdgeSwipeReturnsToPreviousFeedPage` at lines 985-986 and
+  `testFirstAddActionGuidesThroughSaveBeforeReturningToMap` at line 651. No
+  streak or confetti UI test failed. Result bundle:
+  `DerivedData-focused/Logs/Test/Test-Wander-2026.08.14_01-58-39--0700.xcresult`.
+- Visually replayed the production takeover on iPhone 16 Plus and iPhone 16e,
+  both on iOS 18.6. The slower rain reads as a fuller welcome, its late tail is
+  clear, the ticket/copy/button remain readable, and neither size showed
+  clipping or crowding.
+- No project generation, build-number bump, archive, upload, TestFlight state,
+  backend, or Slack state changed. This is an app-code review handoff only.

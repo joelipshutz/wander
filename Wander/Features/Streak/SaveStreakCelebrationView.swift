@@ -159,7 +159,7 @@ struct SaveStreakCelebrationView: View {
 
 struct SaveStreakConfettiPopView: View {
     var body: some View {
-        SaveStreakConfettiLayer(pieceCount: 30, travelScale: 0.62)
+        SaveStreakConfettiLayer(motion: .sameDayPop)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -334,22 +334,58 @@ private struct SaveStreakWeekCard: View {
     }
 }
 
-private struct SaveStreakConfettiLayer: View {
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+struct SaveStreakConfettiMotion: Equatable {
     let pieceCount: Int
     let travelScale: CGFloat
+    let speedScale: Double
+    let arrivalWindow: Double?
+
+    static let welcome = SaveStreakConfettiMotion(
+        pieceCount: 80,
+        travelScale: 1,
+        speedScale: 0.70,
+        arrivalWindow: 1
+    )
+
+    static let sameDayPop = SaveStreakConfettiMotion(
+        pieceCount: 30,
+        travelScale: 0.62,
+        speedScale: 1,
+        arrivalWindow: nil
+    )
+
+    func travelDuration(for index: Int) -> Double {
+        let shippingDuration = 1.15 + Double(index % 5) * 0.12
+        return shippingDuration / max(speedScale, 0.01)
+    }
+
+    func delay(for index: Int) -> Double {
+        guard let arrivalWindow else {
+            return Double(index % 9) * 0.035
+        }
+        guard pieceCount > 1 else { return 0 }
+        return arrivalWindow * Double(index) / Double(pieceCount - 1)
+    }
+
+    var latestEndTime: Double {
+        (0..<pieceCount).map { delay(for: $0) + travelDuration(for: $0) }.max() ?? 0
+    }
+}
+
+private struct SaveStreakConfettiLayer: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    let motion: SaveStreakConfettiMotion
 
     @State private var isFalling = false
 
-    init(pieceCount: Int = 46, travelScale: CGFloat = 1) {
-        self.pieceCount = pieceCount
-        self.travelScale = travelScale
+    init(motion: SaveStreakConfettiMotion = .welcome) {
+        self.motion = motion
     }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                ForEach(0..<pieceCount, id: \.self) { index in
+                ForEach(0..<motion.pieceCount, id: \.self) { index in
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(colors[index % colors.count])
                         .frame(
@@ -360,7 +396,7 @@ private struct SaveStreakConfettiLayer: View {
                         .position(
                             x: proxy.size.width * horizontalFraction(index),
                             y: isFalling
-                                ? proxy.size.height * endVerticalFraction(index) * travelScale
+                                ? proxy.size.height * endVerticalFraction(index) * motion.travelScale
                                 : -24 - CGFloat(index % 7) * 16
                         )
                         .opacity(isFalling ? 0.06 : 1)
@@ -401,8 +437,8 @@ private struct SaveStreakConfettiLayer: View {
     }
 
     private func animation(_ index: Int) -> Animation {
-        .easeIn(duration: 1.15 + Double(index % 5) * 0.12)
-            .delay(Double(index % 9) * 0.035)
+        .easeIn(duration: motion.travelDuration(for: index))
+            .delay(motion.delay(for: index))
     }
 }
 
