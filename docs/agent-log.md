@@ -28796,3 +28796,52 @@ Handoff:
   environment, run `npm --prefix scripts run analytics:apply`, open each managed
   tile to confirm the live query succeeds, then mark the PR ready and move
   REC-170 / Mission Control to Done after merge or final acceptance.
+
+## 2026-08-14 00:49 PDT - Codex - REC-122 Confetti Motion Prototype
+
+Agent: Codex using `design-html`
+Branch: `codex/rec-122-confetti-motion`
+Worktree: `/private/tmp/recme-streak-confetti-prototype`
+Linear: `REC-122` (`In Progress`)
+Mission Control: unavailable (`localhost:4000` refused the connection)
+
+Goal: prototype a more explosive, slightly longer streak-confetti motion before
+changing production SwiftUI, with replayable controls that make the timing and
+motion tradeoffs easy to understand.
+
+Starting state and coordination:
+
+- Started clean from exact `origin/main` commit `475f094c`; Joe's active
+  `joe/phone-build-latest` checkout is 201 commits behind with an untracked
+  `tmp/` directory and remains untouched.
+- Reopened the existing owning issue REC-122 and recorded that this phase is a
+  disposable motion study only. No production streak code changes are
+  authorized until Joe reviews the prototype.
+- Current implementation uses 46 pieces falling from above for 1.15–1.63
+  seconds with per-piece delays up to 280 ms. The same-day pop uses 30 pieces,
+  0.62 travel scale, and a 720 ms overlay lifetime.
+- Expected project file: this append-only log only. The interactive prototype
+  lives in the private gstack design-artifact directory outside the repo.
+
+Prototype checkpoint:
+
+- Built a self-contained interactive motion lab at
+  `/Users/joelipshutz/.gstack/projects/Wandernametbd/designs/streak-confetti-motion-20260814/finalized.html`.
+  It recreates the shipping streak takeover closely enough to judge the motion,
+  without changing any production SwiftUI.
+- The A/B control reproduces the current top-down 46-piece fall and a proposed
+  68-piece fan burst from behind the ticket. The proposed starting point uses
+  1.25x launch strength, a small 100–180 ms second wave, gravity, and a late
+  fade over 2.25 seconds. Sliders expose burst strength, duration, and density;
+  a scrubber and 0.5x playback make the motion inspectable frame by frame.
+- Verified live replay, A/B switching, sliders, scrubber, 0.5x playback,
+  keyboard controls, Reduce Motion behavior, and zero browser-console errors.
+  Viewport checks at 375, 768, and 1440 pixels found no horizontal overflow,
+  overlap, clipped controls, or unreadable phone content.
+- Saved matching 0.45-second stills as `current-rain-frame.png` and
+  `proposed-burst-frame.png` beside the HTML. The contrast is intentional:
+  current confetti is still entering from the top while the proposal has
+  already spread outward around the ticket.
+- No app source, tests, project generation, build number, backend, TestFlight,
+  or Slack state changed. REC-122 remains In Progress pending Joe's motion
+  review; production implementation is deliberately deferred.
