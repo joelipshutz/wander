@@ -1,6 +1,6 @@
 # rec.me App Store launch readiness
 
-Updated: 2026-08-13
+Updated: 2026-08-14
 
 Owner issue: [REC-186](https://linear.app/recme/issue/REC-186/prepare-recme-app-store-product-page-and-review-package)
 
@@ -59,38 +59,42 @@ Recent public reviews reinforce four product requirements:
 
 ## Live App Store Connect audit
 
-Read-only snapshot refreshed 2026-08-13. No App Store data was changed.
+Snapshot refreshed after verified App Store Connect updates on 2026-08-14.
 
 | Surface | Current state | Launch action |
 |---|---|---|
 | App/version | `rec.me`, version `1.0`, Prepare for Submission | Keep public version 1.0 |
-| Uploaded builds | Builds 127–136 are valid but all report marketing version `0.1` | Change `MARKETING_VERSION` to `1.0`, test, archive, and upload a new candidate |
-| Release behavior | Automatic after approval (`AFTER_APPROVAL`) | Switch to manual release before submission |
+| Uploaded builds | Builds 136–145 are valid but all report marketing version `0.1` | Change `MARKETING_VERSION` to `1.0`, test, archive, and upload a new candidate only after production cutover |
+| Release behavior | Manual (`MANUAL`) | Complete; keep manual release through review |
 | Subtitle | `Places from people you trust` | Keep; it is concrete, differentiated, and within the 30-character limit |
 | Screenshots | 0 screenshots / 0 sets | Finalize and upload the approved six-panel 6.9-inch set |
-| Categories | None selected | Primary: Social Networking. Secondary: Travel |
-| Age rating | Not completed | Complete the questionnaire honestly; UGC/social behavior must be represented |
-| Privacy | Privacy policy URL and privacy choices URL missing | Use the live getrec.me URLs and complete labels from the production data-flow audit |
-| Support/marketing URLs | Missing | Add `https://getrec.me/support` and `https://getrec.me/` |
+| Categories | Primary: Social Networking. Secondary: Travel | Complete |
+| Age rating | Questionnaire complete; UGC, messaging/comments, and social media declared. Apple calculates 13+ globally, 15+/16+ where regional rules require it | Complete; keep answers aligned with the release product |
+| Content rights | Uses third-party content | Complete; accurately covers user content and licensed place/photo data |
+| Privacy URLs | `https://getrec.me/privacy` and `https://getrec.me/privacy-choices` | Complete; App Privacy labels still require the dashboard form and exact archive reconciliation |
+| Support/marketing URLs | `https://getrec.me/support` and `https://getrec.me/` | Complete; the published support address still needs a working mailbox |
+| Price and availability | Free; United States only; no pre-order; no automatic new-territory enrollment | Complete for the US-first launch; expand deliberately after regional compliance review |
 | Review information | Missing | Add contact, demo account, and reviewer walkthrough |
-| Description/keywords | Drafts exist but need final copy | Replace with the product-page draft below after feature verification |
-| Latest binary | Build 136 is valid, iOS 17+, export encryption false | Not selectable for version 1.0 because of the marketing-version mismatch |
+| Description/keywords | Final draft applied and read back from App Store Connect | Reverify against the final candidate before submission |
+| Latest binary | Build 145 is valid, iOS 17+, export encryption false | Not selectable for version 1.0 because of the marketing-version mismatch |
 
 The linked in-app pages currently return HTTP 200: support, privacy, terms, community standards, and privacy choices. The `getrec.me` launch-site PR [#10](https://github.com/joelipshutz/recme-site/pull/10) is merged and deployed. It adds the safety-report fallback and moderation appeal paths, the 24-month safety-report retention disclosure, accessibility and responsive fixes, and a safe TestFlight-to-App-Store CTA switch.
 
-The reversible metadata mutation is scripted in `scripts/app-store-metadata-release.mjs`. It defaults to a read-only plan and requires `--apply` before it changes App Store Connect. The 2026-08-13 dry run verified the exact editable version and localization IDs plus the intended before/after values; applying it still requires explicit external-account approval.
+The reversible changes are scripted in `scripts/app-store-metadata-release.mjs`, `scripts/app-store-age-rating-release.mjs`, and `scripts/app-store-commerce-release.mjs`. Each defaults to a read-only plan and requires `--apply`. On 2026-08-14, all three were applied and verified by App Store Connect read-back.
 
 ## Hard submission blockers
 
 | Gate | Evidence | Required before submission |
 |---|---|---|
 | [REC-182](https://linear.app/recme/issue/REC-182/switch-recme-to-production-clerk-and-supabase-auth) — production auth | Release currently inherits the tracked Clerk test key and `.clerk.accounts.dev` host | Use production Clerk/Supabase configuration and production Associated Domains; validate sign-in, deletion, and a clean-device session |
-| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | [PR #381](https://github.com/joelipshutz/wander/pull/381) is merged, with 1,107 iOS tests, a Release build, 71/71 rollback-only hosted assertions, and the full hosted rollback smoke passing. The exact production target was confirmed, a 401,951-byte schema backup was taken, and the migration dry run selected only `20260813010000_community_moderation.sql`. The 24-month disclosure is now live at `https://getrec.me/privacy`. Production application is awaiting the environment's explicit write approval. | Approve and apply the reviewed migration, verify it live, complete one report-to-resolution exercise, name primary/backup safety reviewers, and test the support mailbox |
+| [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | [PR #381](https://github.com/joelipshutz/wander/pull/381) is merged. Migration `20260813010000_community_moderation` is already present on the linked hosted project, and the full rollback-only hosted smoke passed on 2026-08-14, including report submission, private moderation queue/evidence, and rate limiting. | Complete one live report-to-resolution exercise without retaining test content, name primary/backup safety reviewers, and make `support@getrec.me` receive and reply reliably |
 | [REC-185](https://linear.app/recme/issue/REC-185/complete-app-privacy-manifest-labels-and-permission-audit) — privacy | [PR #380](https://github.com/joelipshutz/wander/pull/380) is merged; app and share-extension manifests are on `main`, and 1,097 tests plus the Release build passed before merge | Verify PostHog project-level IP capture, inspect the signed archive privacy report, and complete App Store privacy labels from the audited data-flow matrix |
-| [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | [PR #304](https://github.com/joelipshutz/wander/pull/304) is merged, restoring repository parity with the already deployed hardening migration and preserving the rollback smoke harness | Complete monitoring ownership, quota alerts, APNs delivery, backups/rollback, deletion cleanup, and the REC-182 production cutover |
+| [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | [PR #304](https://github.com/joelipshutz/wander/pull/304) is merged, restoring repository parity with the already deployed hardening migration and preserving the rollback smoke harness | Complete monitoring ownership, quota alerts, APNs delivery, deletion cleanup, and the REC-182 production cutover. A fresh pre-cutover source backup is verified under `.private_backups`; do not replace or delete it during cutover |
+| Support mailbox | DNS has no MX records and apex SPF is `v=spf1 -all`, so `support@getrec.me` cannot receive mail | Provision the mailbox, then verify inbound mail, reply, SPF, DKIM, and DMARC before submission |
+| App Store dashboard-only fields | App Privacy labels and App Review contact/demo details are incomplete; browser sessions currently require Apple sign-in | Sign in to App Store Connect, publish the evidence-backed privacy answers, and enter a monitored contact plus production review account |
 | Version/build compatibility | Store version is 1.0; all uploaded binaries are 0.1 | Generate and upload a new 1.0 build only after the other release gates are closed |
 
-Apple's UGC guideline requires objectionable-content filtering, reporting with timely response, blocking abusive users, and published contact information. The product and backend controls are now merged, but the gate remains blocked until the migration is deployed, the queue is staffed, the mailbox is tested, and the workflow is exercised end to end.
+Apple's UGC guideline requires objectionable-content filtering, reporting with timely response, blocking abusive users, and published contact information. The product, backend controls, and hosted migration are in place. The remaining operational gate is a staffed queue, working mailbox, and one verified end-to-end report-to-resolution exercise.
 
 ## Product-page copy draft
 
@@ -155,20 +159,22 @@ Do not put real customer credentials or private user data in this document or so
 
 1. **Complete:** positioning, first-frame copy, and six-panel storyboard direction approved 2026-08-12.
 2. **Complete:** PRs #380, #381, and #304 are merged and their `main` manifest runs passed.
-3. Apply and verify the reviewed moderation migration after explicit production-write approval; then complete the named-owner, mailbox, retention-disclosure, and live report-resolution checks.
-4. Complete REC-182's explicit production Clerk/Supabase cutover and clean-device validation.
-5. Replace concept fixtures with public-safe release fixtures and recapture the approved six-panel set from the release candidate.
-6. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA.
-7. Archive, upload, and process the 1.0 release candidate.
-8. Complete App Store Connect metadata, categories, rating, privacy, agreements, pricing/availability, review account, and manual-release setting.
-9. Run a final pre-submission audit, then submit for review under the launch authorization.
+3. **Complete:** App Store product copy, URLs, categories, manual release, content-rights declaration, 13+ questionnaire, free pricing, and US-first availability were applied and verified on 2026-08-14.
+4. Make `support@getrec.me` operational; name safety owners and complete one live report-to-resolution exercise.
+5. Complete REC-182's lossless production Clerk/Supabase cutover and clean-device validation. Preserve the verified source backup and canonical IDs; do not switch traffic until all 6 existing account mappings validate.
+6. Publish App Privacy answers and App Review contact/demo details after signing in to App Store Connect.
+7. Replace concept fixtures with public-safe release fixtures and recapture the approved six-panel set from the release candidate.
+8. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA. Resolve both deterministic launch UI failures first.
+9. Archive, upload, process, and attach the 1.0 release candidate.
+10. Run a final pre-submission audit, then submit for review under the launch authorization.
 
 ## Validation performed for this audit
 
 - Latest `origin/main` built successfully on an iPhone 16 Plus simulator running iOS 18.6.
 - Current Map, Feed, search, place detail, Add, Lists, Profile, and import surfaces were exercised and captured.
 - All concept panels were verified as opaque 1320 × 2868 PNGs.
-- The App Store Connect audit was read-only and redacts review credentials.
+- App Store Connect metadata, rating, content-rights, price, and availability changes were applied through dry-run-first scripts and verified by API read-back.
+- The hosted Supabase smoke remained rollback-only and passed after confirming the moderation migration was already deployed.
 - App targets are iPhone-only.
 - Current legal/support URLs were checked live.
 

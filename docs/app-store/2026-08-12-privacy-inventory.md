@@ -1,6 +1,6 @@
 # rec.me App Store privacy inventory
 
-Updated: 2026-08-12
+Updated: 2026-08-14
 
 Owner: [REC-185](https://linear.app/recme/issue/REC-185/complete-app-store-privacy-manifests-labels-and-permission-audit)
 
@@ -9,7 +9,7 @@ This is the source-of-truth draft for the App Store privacy questionnaire. It de
 ## Decisions
 
 - Keep PostHog for launch, with tracking, replay, screen capture, element capture, surveys, crash autocapture, lifecycle autocapture, swizzling, and automatic person-property capture disabled. rec.me sends only explicit allowlisted events and identifies them with the internal auth user ID.
-- Add `$geoip_disable = true` to every PostHog event before it is queued. Also verify the PostHog project-level IP capture setting is disabled before submission; the current scoped local API credential belongs to another Grayline project and cannot read rec.me's setting.
+- Add `$geoip_disable = true` to every PostHog event before it is queued. Also verify the PostHog project-level IP capture setting is disabled before submission. The rec.me personal API key currently returns `403` because it lacks `project:read`; the generic local key belongs to a different project and cannot substitute for that check.
 - Declare no tracking and do not request App Tracking Transparency permission. rec.me does not combine its data with third-party data for targeted advertising, advertising measurement, or data-broker sharing.
 - Keep native Contacts. Access follows a contextual primer and reads name and phone fields locally. Address-book data is never uploaded or analytics-logged; selected phone numbers go only to Apple's Messages composer. The server-side social graph is still disclosed as Contacts because Apple's category includes social graphs.
 - Do not declare device precise location as collected. Current location is used on-device for nearby MapKit results and the nearby widget, and is not uploaded or analytics-logged. Saved businesses carry their own place coordinates, which are place metadata rather than a device location trail.
@@ -92,6 +92,8 @@ Do not declare precise or coarse device location unless the production archive o
 - Xcode scans eight privacy manifests in the Release bundle: rec.me, the share extension, PostHog, PHPLCrashReporter, PhoneNumberKit, TikTok OpenSDK Core/Share, and Swift Crypto.
 
 This is strong pre-archive validation, not the final signed-candidate privacy report. Production auth, moderation, backend, and version gates still need to close before the archive-level preflight below.
+
+The privacy-policy and privacy-choices URLs are live in App Store Connect as of 2026-08-14. The App Privacy questionnaire itself remains unpublished because the current browser sessions require Apple sign-in and the final signed archive does not yet exist.
 
 ## Exact-candidate preflight
 
