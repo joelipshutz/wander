@@ -50,7 +50,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("guard isSessionValidated,"))
     }
 
-    func testNativeAuthPresentsAppleGoogleAndEmailWithoutGenericClerkSheet() throws {
+    func testNativeAuthPresentsAppleGoogleEmailAndPasswordWithoutGenericClerkSheet() throws {
         let authView = try String(
             contentsOf: projectRoot.appendingPathComponent(
                 "Wander/Features/Auth/NativeAuthFlowView.swift"
@@ -83,11 +83,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(authView.contains("ASAuthorizationAppleIDButton"))
         XCTAssertTrue(authView.contains("Sign in with Google"))
         XCTAssertTrue(authView.contains("Continue with email"))
+        XCTAssertTrue(authView.contains("Button(\"Use a password\")"))
+        XCTAssertTrue(authView.contains("SecureField(\"Password\""))
+        XCTAssertTrue(authView.contains("auth.signInWithPassword"))
+        XCTAssertTrue(authView.contains("accessibilityIdentifier(\"auth.password\")"))
         XCTAssertFalse(authGate.contains("AuthView("))
         XCTAssertTrue(clerkService.contains("signInWithApple(transferable: false)"))
         XCTAssertTrue(clerkService.contains("signInWithOAuth("))
         XCTAssertTrue(clerkService.contains("provider: .google"))
         XCTAssertTrue(clerkService.contains("transferable: false"))
+        XCTAssertTrue(clerkService.contains("signInWithPassword("))
+        XCTAssertTrue(clerkService.contains("identifier: emailAddress"))
     }
 
     func testNavigationModelRetainsAddRouteWhileHeaderExperimentOwnsVisibleEntryPoint() throws {

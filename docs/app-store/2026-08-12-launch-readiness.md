@@ -74,7 +74,7 @@ Snapshot refreshed after verified App Store Connect updates on 2026-08-14.
 | Privacy URLs | `https://getrec.me/privacy` and `https://getrec.me/privacy-choices` | Complete; App Privacy labels still require the dashboard form and exact archive reconciliation |
 | Support/marketing URLs | `https://getrec.me/support` and `https://getrec.me/` | Complete; the published support address still needs a working mailbox |
 | Price and availability | Free; United States only; no pre-order; no automatic new-territory enrollment | Complete for the US-first launch; expand deliberately after regional compliance review |
-| Review information | Missing | Add contact and a populated review account that does not depend on an external inbox/OTP. The walkthrough is now committed in `reviewer-notes.txt`, and `scripts/app-store-review-release.mjs` can create/verify the private App Store Connect record without printing credentials |
+| Review information | Missing | Add contact and a populated review account that does not depend on an external inbox/OTP. The app now has an additive password sign-in path for existing password-enabled accounts; the walkthrough is committed in `reviewer-notes.txt`, and `scripts/app-store-review-release.mjs` can create/verify the private App Store Connect record without printing credentials |
 | Description/keywords | Final draft applied and read back from App Store Connect | Reverify against the final candidate before submission |
 | Latest binary | Build 145 is valid, iOS 17+, export encryption false | Not selectable for version 1.0 because of the marketing-version mismatch |
 
@@ -86,7 +86,7 @@ The reversible changes are scripted in `scripts/app-store-metadata-release.mjs`,
 
 | Gate | Evidence | Required before submission |
 |---|---|---|
-| [REC-182](https://linear.app/recme/issue/REC-182/switch-recme-to-production-clerk-and-supabase-auth) — production auth | Release currently inherits the tracked Clerk test key and `.clerk.accounts.dev` host | Use production Clerk/Supabase configuration and production Associated Domains; validate sign-in, deletion, and a clean-device session |
+| [REC-182](https://linear.app/recme/issue/REC-182/switch-recme-to-production-clerk-and-supabase-auth) — production auth | Release currently inherits the tracked Clerk test key and `.clerk.accounts.dev` host. The app-side password path is implemented without changing Apple, Google, or email-code sign-in | Use production Clerk/Supabase configuration and production Associated Domains; enable password sign-in alongside the existing strategies; validate the six existing identities, sign-in, deletion, and a clean-device session |
 | [REC-183](https://linear.app/recme/issue/REC-183/close-app-store-ugc-safety-and-moderation-gaps) — UGC safety | [PR #381](https://github.com/joelipshutz/wander/pull/381) is merged. Migration `20260813010000_community_moderation` is already present on the linked hosted project, and the full rollback-only hosted smoke passed on 2026-08-14, including report submission, private moderation queue/evidence, and rate limiting. | Complete one live report-to-resolution exercise without retaining test content, name primary/backup safety reviewers, and make `support@getrec.me` receive and reply reliably |
 | [REC-185](https://linear.app/recme/issue/REC-185/complete-app-privacy-manifest-labels-and-permission-audit) — privacy | [PR #380](https://github.com/joelipshutz/wander/pull/380) is merged; app and share-extension manifests are on `main`, and 1,097 tests plus the Release build passed before merge | Verify PostHog project-level IP capture, inspect the signed archive privacy report, and complete App Store privacy labels from the audited data-flow matrix |
 | [REC-187](https://linear.app/recme/issue/REC-187/harden-recme-production-backend-and-operations-for-launch) — backend/ops | [PR #304](https://github.com/joelipshutz/wander/pull/304) is merged, restoring repository parity with the already deployed hardening migration and preserving the rollback smoke harness | Complete monitoring ownership, quota alerts, APNs delivery, deletion cleanup, and the REC-182 production cutover. A fresh pre-cutover source backup is verified under `.private_backups`; do not replace or delete it during cutover |
@@ -171,6 +171,8 @@ ASC_REVIEW_DEMO_ACCOUNT_PASSWORD
 
 The review account must be a dedicated, fictional, populated production account that Apple can enter with the supplied credentials alone. An email OTP sent to a mailbox Apple cannot access is not a usable review login.
 
+Follow `reviewer-account-runbook.md` for the lossless setup. Do not convert an existing tester account, change its primary email, unlink an identity, or use Clerk test mode. The production gate is closed only after the dedicated account signs in with its password from a clean device without client-trust, MFA, email, or phone verification.
+
 The tool reads `reviewer-notes.txt`, redacts contact/account values from all output, and defaults to a read-only plan:
 
 ```bash
@@ -187,7 +189,7 @@ Do not run `--apply` until the mailbox, production auth cutover, review-account 
 3. **Complete:** App Store product copy, URLs, categories, manual release, content-rights declaration, 13+ questionnaire, free pricing, and US-first availability were applied and verified on 2026-08-14.
 4. Make `support@getrec.me` operational; name safety owners and complete one live report-to-resolution exercise.
 5. Complete REC-182's lossless production Clerk/Supabase cutover and clean-device validation. Preserve the verified source backup and canonical IDs; do not switch traffic until all 6 existing account mappings validate.
-6. Publish App Privacy answers after signing in to App Store Connect. Create the private App Review record with `scripts/app-store-review-release.mjs` only after the contact and populated no-OTP production review account are verified.
+6. Enable production password sign-in additively, create and populate the isolated reviewer account using `reviewer-account-runbook.md`, and prove clean-device login without OTP/MFA. Publish App Privacy answers after signing in to App Store Connect. Create the private App Review record with `scripts/app-store-review-release.mjs` only after the contact and account are verified.
 7. Replace concept fixtures with public-safe release fixtures and recapture the approved six-panel set from the release candidate.
 8. Set version 1.0, increment the build, regenerate the project, and run the full test suite plus small/large-phone visual QA. The two deterministic launch UI failures were resolved in PR #405; its full run passed 1,145 unit tests and 28 UI tests with zero failures.
 9. Archive, upload, process, and attach the 1.0 release candidate.
