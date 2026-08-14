@@ -64,6 +64,64 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapSource.friends.systemImage, "person.2.fill")
     }
 
+    func testPinFilterTransitionStaysInsideTheMicroInteractionBudget() {
+        XCTAssertEqual(MapPinFilterTransitionStyle.duration, 0.16, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(MapPinFilterTransitionStyle.hiddenScale, 0.90)
+        XCTAssertLessThan(MapPinFilterTransitionStyle.hiddenScale, 1)
+        XCTAssertLessThan(MapPinFilterTransitionStyle.fadeOutDuration, MapPinFilterTransitionStyle.fadeInDuration)
+    }
+
+    func testFilterTransitionIsScopedToPinsAndKeepsLiquidGlass() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let theme = try String(
+            contentsOf: root.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let filterChipSource = try XCTUnwrap(
+            map.components(separatedBy: "private struct MapSourceFilterChip: View {").last?
+                .components(separatedBy: "private struct MapMoreFilterChip: View {").first
+        )
+
+        XCTAssertFalse(filterChipSource.contains(".scaleEffect("))
+        XCTAssertTrue(map.contains("visibleTransitionGroupKeys?.contains(group.key)"))
+        XCTAssertTrue(map.contains("MapPinFilterTransitionStyle.hiddenScale"))
+        XCTAssertFalse(map.contains("incomingGroups + departingGroups"))
+        XCTAssertTrue(theme.contains("if #available(iOS 26.0, *) {"))
+        XCTAssertFalse(theme.contains("isElevated"))
+    }
+
+    func testMapSearchCapsuleStaysFlatWhileFilterPillsKeepLiquidGlass() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let searchBarSource = try XCTUnwrap(
+            map.components(separatedBy: "private struct SearchBar: View {").last?
+                .components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier: ViewModifier {").first
+        )
+        let searchSurfaceSource = try XCTUnwrap(
+            map.components(separatedBy: "private struct MapSearchCapsuleSurfaceModifier: ViewModifier {").last?
+                .components(separatedBy: "private struct MapSearchCancelButton: View {").first
+        )
+        let filterChipSource = try XCTUnwrap(
+            map.components(separatedBy: "private struct MapSourceFilterChip: View {").last?
+                .components(separatedBy: "private struct MapMoreFilterChip: View {").first
+        )
+
+        XCTAssertTrue(searchBarSource.contains(".mapSearchCapsuleSurface()"))
+        XCTAssertFalse(searchBarSource.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: Capsule())"))
+        XCTAssertFalse(searchSurfaceSource.contains(".glassEffect("))
+        XCTAssertFalse(searchSurfaceSource.contains(".shadow("))
+        XCTAssertTrue(filterChipSource.contains(".wanderGlassCapsule("))
+    }
+
     func testFeaturedIsTheOnlyDefaultSourceAndMoreDefaultsToAll() {
         let state = MapFilterState()
 

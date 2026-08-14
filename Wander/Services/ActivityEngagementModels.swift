@@ -41,6 +41,15 @@ struct ActivityEngagementSummary: Equatable {
             viewerHasLiked: viewerHasLiked
         )
     }
+
+    func removingComment() -> ActivityEngagementSummary {
+        ActivityEngagementSummary(
+            activityID: activityID,
+            likeCount: likeCount,
+            commentCount: commentCount - 1,
+            viewerHasLiked: viewerHasLiked
+        )
+    }
 }
 
 struct ActivityComment: Identifiable, Equatable {
@@ -206,7 +215,7 @@ struct ActivityEngagementMedia: Identifiable, Equatable {
     }
 }
 
-struct ActivityCommentsRoute: Identifiable {
+struct ActivityCommentsRoute: Identifiable, Hashable {
     let id: UUID
     let activityID: String
     var context: ActivityEngagementContext?
@@ -222,6 +231,14 @@ struct ActivityCommentsRoute: Identifiable {
         self.activityID = activityID
         self.context = context
         self.visiblePlace = visiblePlace
+    }
+
+    static func == (lhs: ActivityCommentsRoute, rhs: ActivityCommentsRoute) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }
 

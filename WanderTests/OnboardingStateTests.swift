@@ -15,11 +15,20 @@ final class OnboardingStateTests: XCTestCase {
         let store = OnboardingCompletionStore(defaults: defaults)
 
         store.setNextStep(.friends, for: "user_a")
-        store.markComplete(for: "user_a", needsServerCompletion: true)
+        store.markComplete(
+            for: "user_a",
+            needsServerCompletion: true,
+            firstVisitWalkthroughEligible: true
+        )
 
         XCTAssertEqual(
             store.state(for: "user_a"),
-            OnboardingLocalState(nextStep: .friends, isComplete: true, needsServerCompletion: true)
+            OnboardingLocalState(
+                nextStep: .friends,
+                isComplete: true,
+                needsServerCompletion: true,
+                isFirstVisitWalkthroughEligible: true
+            )
         )
         XCTAssertEqual(store.state(for: "user_b"), .fresh)
 
@@ -40,7 +49,7 @@ final class OnboardingStateTests: XCTestCase {
 
         XCTAssertEqual(
             AppEntryStateResolver.signedInState(session: session, localState: .fresh, remoteProfile: profile),
-            .ready(session: session)
+            .ready(session: session, firstVisitWalkthroughEligible: false)
         )
     }
 
@@ -76,7 +85,7 @@ final class OnboardingStateTests: XCTestCase {
                 ),
                 remoteProfile: nil
             ),
-            .ready(session: session)
+            .ready(session: session, firstVisitWalkthroughEligible: false)
         )
     }
 
@@ -94,8 +103,73 @@ final class OnboardingStateTests: XCTestCase {
                 localState: local,
                 message: "Saved map available offline"
             ),
-            .ready(session: session)
+            .ready(session: session, firstVisitWalkthroughEligible: false)
         )
+    }
+
+    func testNewUserCompletionEnablesFirstVisitWalkthrough() throws {
+        let session = AuthSession(userID: "new-user", displayName: "Maya", handle: "maya")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(provider: SuspendedRefreshAuthProvider(state: .signedIn(session))),
+            backend: WanderBackend(),
+            completionStore: completionStore
+        )
+
+        coordinator.completeOnboarding(for: session, serverConfirmed: true)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session, firstVisitWalkthroughEligible: true)
+        )
+        XCTAssertTrue(completionStore.state(for: session.userID).shouldEnableFirstVisitWalkthrough)
+
+        coordinator.completeFirstVisitWalkthrough(for: session)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session, firstVisitWalkthroughEligible: false)
+        )
+        XCTAssertFalse(completionStore.state(for: session.userID).shouldEnableFirstVisitWalkthrough)
+    }
+
+    func testExistingRemoteUserWithoutLocalStateNeverEnablesFirstVisitWalkthrough() {
+        let session = AuthSession(userID: "existing-user", displayName: "Joe", handle: "joe")
+        let profile = LocalProfile(
+            localID: "profile",
+            serverID: session.userID,
+            handle: "joe",
+            displayName: "Joe",
+            onboardingCompletedAt: Date()
+        )
+
+        XCTAssertEqual(
+            AppEntryStateResolver.signedInState(
+                session: session,
+                localState: .fresh,
+                remoteProfile: profile
+            ),
+            .ready(session: session, firstVisitWalkthroughEligible: false)
+        )
+    }
+
+    func testLegacyCompletedLocalStateDefaultsToWalkthroughIneligible() throws {
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = "legacy-user"
+        let legacyJSON = """
+        {"nextStep":"notifications","isComplete":true,"needsServerCompletion":false}
+        """.data(using: .utf8)
+        defaults.set(legacyJSON, forKey: "recme.onboarding.v1.\(userID)")
+
+        let state = OnboardingCompletionStore(defaults: defaults).state(for: userID)
+
+        XCTAssertTrue(state.isComplete)
+        XCTAssertFalse(state.shouldEnableFirstVisitWalkthrough)
     }
 
     func testIncompleteUserKeepsOfflineRecoveryInsteadOfBypassingOnboarding() {
@@ -131,7 +205,11 @@ final class OnboardingStateTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let completionStore = OnboardingCompletionStore(defaults: defaults)
-        completionStore.markComplete(for: session.userID, needsServerCompletion: false)
+        completionStore.markComplete(
+            for: session.userID,
+            needsServerCompletion: false,
+            firstVisitWalkthroughEligible: false
+        )
         let coordinator = AppEntryCoordinator(
             auth: auth,
             backend: WanderBackend(),
@@ -139,7 +217,10 @@ final class OnboardingStateTests: XCTestCase {
         )
 
         await coordinator.start()
-        XCTAssertEqual(coordinator.state, .ready(session: session))
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session, firstVisitWalkthroughEligible: false)
+        )
 
         auth.beginSessionValidation()
         provider.shouldSuspendRefresh = true
@@ -153,13 +234,16 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertTrue(provider.isRefreshSuspended)
         XCTAssertEqual(
             coordinator.state,
-            .ready(session: session),
+            .ready(session: session, firstVisitWalkthroughEligible: false),
             "Foreground validation must not replace WanderRootView with the launch screen."
         )
 
         provider.resumeRefresh()
         await refreshTask.value
-        XCTAssertEqual(coordinator.state, .ready(session: session))
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session, firstVisitWalkthroughEligible: false)
+        )
     }
 
     func testLocationPermissionPolicySkipsAlreadyAuthorizedUsers() {

@@ -5431,6 +5431,65 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visiblePlace.userPlace.sourceType, AddSourceType.manual.rawValue)
     }
 
+    @MainActor
+    func testCanonicalAddPlaceSubmissionCreatesAnotherVisitForExistingCheckIn() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let candidate = PlaceCandidate(
+            id: "mapkit_add_tab_repeat_visit",
+            name: "Repeat Visit Cafe",
+            category: "coffee",
+            latitude: 34.04,
+            longitude: -118.24,
+            confidence: 0.95
+        )
+        let firstSave = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "first visit",
+            sourceType: .manual,
+            ratingScore: 4,
+            visitedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let existingPlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == firstSave.userPlaceID }
+        )
+        let existingVisit = try XCTUnwrap(store.visits(for: firstSave.userPlaceID).first)
+        let context = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers,
+            currentUserSave: existingPlace,
+            latestVisit: existingVisit
+        ).resolvingExistingSave(selection: .been)
+        let submission = MapPlaceSaveSubmission(
+            context: context,
+            candidate: candidate,
+            status: .been,
+            visibility: .followers,
+            ratingScore: 5,
+            note: "tutorial revisit",
+            attributes: [],
+            photoAttachments: [],
+            inviteeUserIDs: [],
+            reconcilesSharedVisitInvitees: false,
+            visitedAt: Date(timeIntervalSince1970: 1_700_086_400)
+        )
+        let visitCountBeforeSave = store.visits(for: firstSave.userPlaceID).count
+
+        let result = await persistAddPlaceSaveSubmission(
+            submission,
+            store: store,
+            backend: nil
+        )
+
+        XCTAssertEqual(result?.userPlaceID, firstSave.userPlaceID)
+        XCTAssertEqual(store.currentUserVisiblePlaces.count, 1)
+        XCTAssertEqual(store.visits(for: firstSave.userPlaceID).count, visitCountBeforeSave + 1)
+        XCTAssertEqual(store.visits(for: firstSave.userPlaceID).first?.note, "tutorial revisit")
+    }
+
     func testFollowersAndFollowingUseGraphEdges() {
         let store = makeStore()
 
@@ -5904,6 +5963,55 @@ final class WanderStoreTests: XCTestCase {
 
         XCTAssertEqual(filters, DiscoverFilters(query: "anything"))
         XCTAssertEqual(analytics.events.map(\.name), [WanderAnalyticsEvents.discoverParseFailed])
+    }
+
+    func testProductActionsEmitCanonicalHumanNeedAnalyticsWithoutContent() async throws {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.seed(), analytics: analytics)
+
+        store.follow(userID: "user_analytics_probe", source: .profile)
+        _ = store.createPlaceList(
+            name: "Private list name",
+            description: "Private list description",
+            visibility: .stealth
+        )
+        _ = store.saveCandidate(
+            PlaceCandidate(
+                id: "analytics_probe_place",
+                name: "Private place name",
+                category: "coffee",
+                latitude: 34.05,
+                longitude: -118.24,
+                confidence: 0.9
+            ),
+            status: .wannaGo,
+            visibility: .selfOnly,
+            note: "Private note",
+            sourceType: .manual
+        )
+        _ = await store.toggleActivityLike(activityID: "local-analytics-activity", backend: nil)
+
+        let engagement = analytics.events.filter {
+            $0.name == WanderAnalyticsEvents.engagementActionPerformed
+        }
+        let needAndAction = Set(engagement.compactMap { event -> String? in
+            guard let need = event.properties["need"], let action = event.properties["action"] else {
+                return nil
+            }
+            return "\(need):\(action)"
+        })
+        XCTAssertTrue(needAndAction.contains("connect:follow_created"))
+        XCTAssertTrue(needAndAction.contains("connect:activity_liked"))
+        XCTAssertTrue(needAndAction.contains("expression:list_created"))
+        XCTAssertTrue(needAndAction.contains("expression:place_saved"))
+
+        let serializedProperties = analytics.events.flatMap(\.properties.values).joined(separator: " ")
+        XCTAssertFalse(serializedProperties.contains("Private list name"))
+        XCTAssertFalse(serializedProperties.contains("Private list description"))
+        XCTAssertFalse(serializedProperties.contains("Private place name"))
+        XCTAssertFalse(serializedProperties.contains("Private note"))
+        XCTAssertFalse(serializedProperties.contains("34.05"))
+        XCTAssertFalse(serializedProperties.contains("-118.24"))
     }
 
     func testDiscoverFreeTextSearchMatchesTrustedPlaceMemory() async {

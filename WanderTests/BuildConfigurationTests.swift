@@ -58,6 +58,60 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["WANDER_SUPABASE_URL"] as? String, "$(WANDER_SUPABASE_URL)")
     }
 
+    func testInstagramSharingUsesRegisteredMetaApp() throws {
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        let generatedProject = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj")
+        )
+        let plistData = try Data(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist")
+        )
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+        let querySchemes = try XCTUnwrap(plist["LSApplicationQueriesSchemes"] as? [String])
+
+        XCTAssertTrue(project.contains(#"WANDER_META_APP_ID: "1056841943950470""#))
+        XCTAssertTrue(generatedProject.contains("WANDER_META_APP_ID = 1056841943950470;"))
+        XCTAssertEqual(plist["WANDER_META_APP_ID"] as? String, "$(WANDER_META_APP_ID)")
+        XCTAssertTrue(querySchemes.contains("instagram"))
+        XCTAssertTrue(querySchemes.contains("instagram-stories"))
+        XCTAssertTrue(
+            try XCTUnwrap(plist["NSPhotoLibraryAddUsageDescription"] as? String)
+                .contains("Instagram")
+        )
+    }
+
+    func testSnapchatSharingUsesRegisteredStagingClient() throws {
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        let generatedProject = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj")
+        )
+        let plistData = try Data(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist")
+        )
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+        let querySchemes = try XCTUnwrap(plist["LSApplicationQueriesSchemes"] as? [String])
+
+        XCTAssertTrue(
+            project.contains(
+                "WANDER_SNAPCHAT_CLIENT_ID: 9ff6b79b-97ce-435c-bf7a-5176638246a0"
+            )
+        )
+        XCTAssertTrue(
+            generatedProject.contains(
+                #"WANDER_SNAPCHAT_CLIENT_ID = "9ff6b79b-97ce-435c-bf7a-5176638246a0";"#
+            )
+        )
+        XCTAssertEqual(
+            plist["WANDER_SNAPCHAT_CLIENT_ID"] as? String,
+            "$(WANDER_SNAPCHAT_CLIENT_ID)"
+        )
+        XCTAssertTrue(querySchemes.contains("snapchat"))
+    }
+
     func testInfoPlistRegistersProfileShareURLScheme() throws {
         let plistData = try Data(contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist"))
         let plist = try XCTUnwrap(
@@ -86,6 +140,25 @@ final class BuildConfigurationTests: XCTestCase {
         )
 
         XCTAssertTrue(associatedDomains.contains("applinks:getrec.me"))
+    }
+
+    func testAppEntitlementsEnableSignInWithApple() throws {
+        let entitlementsData = try Data(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Resources/Wander.entitlements"
+            )
+        )
+        let entitlements = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: entitlementsData,
+                format: nil
+            ) as? [String: Any]
+        )
+
+        XCTAssertEqual(
+            entitlements["com.apple.developer.applesignin"] as? [String],
+            ["Default"]
+        )
     }
 
     func testUserFacingBrandUsesRecmeWithoutChangingStableIdentifiers() throws {
@@ -243,6 +316,157 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(configuration.isConfigured)
     }
 
+    func testPostHogDisablesUnusedAutomaticCaptureSurfaces() {
+        #if canImport(PostHog)
+        let configuration = PostHogAnalyticsClient.sdkConfiguration(
+            projectToken: "phc_recme_project",
+            host: "https://us.i.posthog.com"
+        )
+
+        XCTAssertFalse(configuration.captureApplicationLifecycleEvents)
+        XCTAssertFalse(configuration.captureScreenViews)
+        XCTAssertFalse(configuration.captureElementInteractions)
+        XCTAssertFalse(configuration.enableSwizzling)
+        XCTAssertFalse(configuration.sessionReplay)
+        XCTAssertFalse(configuration.surveys)
+        XCTAssertFalse(configuration.errorTrackingConfig.autoCapture)
+        XCTAssertFalse(configuration.setDefaultPersonProperties)
+        #endif
+    }
+
+    func testAnalyticsPrivacySanitizerDropsPrivatePayloadsAndTruncatesValues() {
+        let event = WanderAnalyticsSchema.sanitized(
+            AnalyticsEvent(
+                name: "privacy_probe",
+                properties: [
+                    "place_name": "Private place",
+                    "note": "Private note",
+                    "phone_number": "+15551234567",
+                    "status": String(repeating: "a", count: 140)
+                ]
+            )
+        )
+
+        XCTAssertNil(event.properties["place_name"])
+        XCTAssertNil(event.properties["note"])
+        XCTAssertNil(event.properties["phone_number"])
+        XCTAssertEqual(event.properties["status"]?.count, 128)
+    }
+
+    func testContextualAnalyticsAddsSchemaAndBuildContext() throws {
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+        let analytics = ContextualAnalyticsClient(client: recording, platform: "ios_test")
+
+        analytics.track(AnalyticsEvent(name: "context_probe", properties: ["surface": "test"]))
+
+        let event = try XCTUnwrap(recording.events.first)
+        XCTAssertEqual(event.properties["analytics_schema_version"], WanderAnalyticsSchema.version)
+        XCTAssertEqual(event.properties["platform"], "ios_test")
+        XCTAssertNotNil(event.properties["app_version"])
+        XCTAssertNotNil(event.properties["build_number"])
+    }
+
+    @MainActor
+    func testLifecycleTracksFirstOpenOnlyOnceAndEveryColdSession() throws {
+        let suiteName = "BuildConfigurationTests.analytics.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recording = BuildConfigurationRecordingAnalyticsClient()
+
+        let firstTracker = AppAnalyticsLifecycleTracker(analytics: recording, defaults: defaults)
+        firstTracker.recordLaunch()
+        firstTracker.recordLaunch()
+        let secondTracker = AppAnalyticsLifecycleTracker(analytics: recording, defaults: defaults)
+        secondTracker.recordLaunch()
+
+        XCTAssertEqual(
+            recording.events.filter { $0.name == WanderAnalyticsEvents.appFirstOpened }.count,
+            1
+        )
+        XCTAssertEqual(
+            recording.events.filter { $0.name == WanderAnalyticsEvents.appSessionStarted }.count,
+            2
+        )
+    }
+
+    func testAcquisitionAttributionAllowListsAndSanitizesCampaignProperties() throws {
+        let url = try XCTUnwrap(
+            URL(string: "https://getrec.me/import/google?utm_source=tiktok&utm_campaign=summer%20launch&utm_term=private&utm_content=a%2Fb")
+        )
+        let attribution = try XCTUnwrap(AcquisitionAttribution(url: url))
+
+        XCTAssertEqual(attribution.properties["route"], "import")
+        XCTAssertEqual(attribution.properties["utm_source"], "tiktok")
+        XCTAssertEqual(attribution.properties["utm_campaign"], "summer launch")
+        XCTAssertEqual(attribution.properties["utm_content"], "ab")
+        XCTAssertNil(attribution.properties["utm_term"])
+        XCTAssertNil(attribution.properties["url"])
+    }
+
+    func testAnalyticsDashboardAndMaintenanceDocsStayCheckedIn() throws {
+        let dashboard = try String(
+            contentsOf: projectRoot.appendingPathComponent("scripts/posthog-product-dashboard.mjs")
+        )
+        let analyticsDocs = try String(
+            contentsOf: projectRoot.appendingPathComponent("docs/analytics.md")
+        )
+        let agentInstructions = try String(
+            contentsOf: projectRoot.appendingPathComponent("AGENTS.md")
+        )
+
+        for section in ["Acquisition", "Activation", "Engagement", "Retention", "Referrals", "Monetization"] {
+            XCTAssertTrue(dashboard.contains("title: \"\(section)\""))
+        }
+        XCTAssertTrue(analyticsDocs.contains("engagement_action_performed"))
+        XCTAssertTrue(agentInstructions.contains("## Analytics Maintenance"))
+    }
+
+    func testAppPrivacyManifestDeclaresAppOwnedDataAndRequiredReasons() throws {
+        let manifest = try privacyManifest("Wander/Resources/PrivacyInfo.xcprivacy")
+
+        XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
+        XCTAssertEqual(manifest["NSPrivacyTrackingDomains"] as? [String], [])
+        XCTAssertEqual(
+            try collectedDataTypes(in: manifest),
+            [
+                "NSPrivacyCollectedDataTypeContacts",
+                "NSPrivacyCollectedDataTypeDeviceID",
+                "NSPrivacyCollectedDataTypeEmailAddress",
+                "NSPrivacyCollectedDataTypeName",
+                "NSPrivacyCollectedDataTypeOtherUserContent",
+                "NSPrivacyCollectedDataTypePhoneNumber",
+                "NSPrivacyCollectedDataTypePhotosorVideos",
+                "NSPrivacyCollectedDataTypeSearchHistory",
+                "NSPrivacyCollectedDataTypeUserID"
+            ]
+        )
+        XCTAssertEqual(
+            try accessedAPIReasons(in: manifest),
+            [
+                "NSPrivacyAccessedAPICategoryFileTimestamp": ["C617.1"],
+                "NSPrivacyAccessedAPICategorySystemBootTime": ["35F9.1"],
+                "NSPrivacyAccessedAPICategoryUserDefaults": ["CA92.1"]
+            ]
+        )
+
+        for declaration in try collectedDataDeclarations(in: manifest) {
+            XCTAssertEqual(declaration["NSPrivacyCollectedDataTypeLinked"] as? Bool, true)
+            XCTAssertEqual(declaration["NSPrivacyCollectedDataTypeTracking"] as? Bool, false)
+        }
+    }
+
+    func testShareExtensionPrivacyManifestDeclaresOnlyContainerFileTimestamps() throws {
+        let manifest = try privacyManifest("WanderShareExtension/PrivacyInfo.xcprivacy")
+
+        XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false)
+        XCTAssertEqual(manifest["NSPrivacyTrackingDomains"] as? [String], [])
+        XCTAssertEqual(try collectedDataTypes(in: manifest), [])
+        XCTAssertEqual(
+            try accessedAPIReasons(in: manifest),
+            ["NSPrivacyAccessedAPICategoryFileTimestamp": ["C617.1"]]
+        )
+    }
+
     func testUnauthorizedRPCStatusRequiresOneFreshTokenRetry() {
         XCTAssertTrue(WanderSupabaseClient.requiresFreshToken(after: 401))
         XCTAssertTrue(WanderSupabaseClient.requiresFreshToken(after: 403))
@@ -254,6 +478,32 @@ final class BuildConfigurationTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func privacyManifest(_ relativePath: String) throws -> [String: Any] {
+        let data = try Data(contentsOf: projectRoot.appendingPathComponent(relativePath))
+        return try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        )
+    }
+
+    private func collectedDataDeclarations(in manifest: [String: Any]) throws -> [[String: Any]] {
+        try XCTUnwrap(manifest["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
+    }
+
+    private func collectedDataTypes(in manifest: [String: Any]) throws -> [String] {
+        try collectedDataDeclarations(in: manifest)
+            .compactMap { $0["NSPrivacyCollectedDataType"] as? String }
+            .sorted()
+    }
+
+    private func accessedAPIReasons(in manifest: [String: Any]) throws -> [String: [String]] {
+        let declarations = try XCTUnwrap(manifest["NSPrivacyAccessedAPITypes"] as? [[String: Any]])
+        return try Dictionary(uniqueKeysWithValues: declarations.map { declaration in
+            let category = try XCTUnwrap(declaration["NSPrivacyAccessedAPIType"] as? String)
+            let reasons = try XCTUnwrap(declaration["NSPrivacyAccessedAPITypeReasons"] as? [String])
+            return (category, reasons.sorted())
+        })
     }
 
     private static func xcconfigSettings(in contents: String) -> [String: String] {
@@ -269,4 +519,15 @@ final class BuildConfigurationTests: XCTestCase {
                 result[key] = value
             }
     }
+}
+
+private final class BuildConfigurationRecordingAnalyticsClient: AnalyticsClient {
+    private(set) var events: [AnalyticsEvent] = []
+
+    func track(_ event: AnalyticsEvent) {
+        events.append(event)
+    }
+
+    func identify(userID: String) {}
+    func resetIdentity() {}
 }

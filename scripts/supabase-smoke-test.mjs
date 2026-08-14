@@ -9,6 +9,7 @@ const DEFAULT_ENV_FILE = `${homedir()}/.openclaw/workspace/.env.keys`;
 const DEFAULT_SMOKE_USER_ID = "user_codex_supabase_smoke";
 const DEFAULT_SMOKE_COLLABORATOR_ID = "user_codex_supabase_smoke_collab";
 const DEFAULT_SMOKE_STRANGER_ID = "user_codex_supabase_smoke_stranger";
+const SUPABASE_CLI_PACKAGE = "supabase@2.109.1";
 const ENV_KEYS = new Set([
   "WANDER_SUPABASE_DB_URL",
   "WANDER_SUPABASE_PROJECT_REF",
@@ -69,13 +70,27 @@ async function main() {
       }
       if (options.migrationTest) {
         const testSQL = transactionBody(
-          loadStrictPgTapSQL(new URL(resolve(options.migrationTest), "file:")),
+          readFileSync(new URL(resolve(options.migrationTest), "file:"), "utf8"),
           "rollback",
         );
-        await client.query(testSQL);
+        const results = await client.query(testSQL);
+        const failures = (Array.isArray(results) ? results : [results])
+          .flatMap((result) => result.rows ?? [])
+          .flatMap((row) => Object.values(row))
+          .filter((message) => typeof message === "string" && message.startsWith("not ok"));
+        if (failures.length > 0) {
+          throw new Error(`pgTAP smoke failures:\n${failures.join("\n")}`);
+        }
         console.log(`Supabase migration preview passed its rollback-only pgTAP test: ${options.migrationTest}`);
       } else {
         await client.query(buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID));
+        await runProductionSecuritySmokeChecks(client);
+        await runCommunityModerationSmokeChecks(
+          client,
+          smokeUserID,
+          collaboratorUserID,
+          strangerUserID,
+        );
         await runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID);
         await runCheckInSmokeChecks(client, smokeUserID);
         await runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUserID);
@@ -97,6 +112,124 @@ async function main() {
   } finally {
     await client.end().catch(() => {});
   }
+}
+
+async function runCommunityModerationSmokeChecks(
+  client,
+  smokeUserID,
+  collaboratorUserID,
+  strangerUserID,
+) {
+  await client.query("reset role");
+  await client.query(
+    `
+      insert into public.follows (follower_user_id, followed_user_id, source)
+      values ($1, $2, 'profile')
+      on conflict (follower_user_id, followed_user_id) do nothing
+    `,
+    [smokeUserID, collaboratorUserID],
+  );
+  const target = await client.query(
+    `
+      select up.id::text as user_place_id
+      from public.user_places up
+      join public.places p on p.id = up.place_id
+      where up.user_id = $1
+        and p.source_provider = 'codex_smoke'
+        and p.source_provider_place_id = 'place-list-rpc-smoke'
+        and up.deleted_at is null
+      limit 1
+    `,
+    [collaboratorUserID],
+  );
+  const targetUserPlaceID = target.rows[0]?.user_place_id;
+  if (!targetUserPlaceID) {
+    throw new Error("community moderation smoke fixture is missing the collaborator place memory");
+  }
+
+  await setAuthenticatedUser(client, smokeUserID);
+  const submitted = await expectQuery(
+    client,
+    "authenticated report submission preserves the exact production payload",
+    `select public.submit_content_report($1, $2, $3, $4, $5) as report`,
+    [
+      "user_place",
+      targetUserPlaceID,
+      collaboratorUserID,
+      "harassment",
+      "Private report details may quote: go kill yourself.",
+    ],
+    (result) => Boolean(
+      result.rows[0]?.report?.report_id
+        && result.rows[0]?.report?.status === "queued"
+        && result.rows[0]?.report?.is_duplicate === false
+    ),
+  );
+  const reportID = submitted.rows[0].report.report_id;
+
+  await expectQuery(
+    client,
+    "duplicate report submission returns the existing private report",
+    `select public.submit_content_report($1, $2, $3, $4, null) as report`,
+    ["user_place", targetUserPlaceID, collaboratorUserID, "harassment"],
+    (result) => result.rows[0]?.report?.report_id === reportID
+      && result.rows[0]?.report?.is_duplicate === true,
+  );
+  await expectQueryFailure(
+    client,
+    "report submission rejects a spoofed content owner",
+    `select public.submit_content_report($1, $2, $3, $4, null)`,
+    ["user_place", targetUserPlaceID, strangerUserID, "other"],
+    /report_subject_not_visible/,
+  );
+
+  await client.query("reset role");
+  await expectQuery(
+    client,
+    "report queue remains private and captures moderation evidence",
+    `
+      select
+        report.status,
+        report.content_snapshot->>'note' as note,
+        count(event.id)::integer as event_count,
+        not has_table_privilege('authenticated', 'public.content_reports', 'select') as private_queue,
+        not has_function_privilege('anon', 'public.submit_content_report(text,text,text,text,text)', 'execute') as anon_denied
+      from public.content_reports report
+      left join public.moderation_report_events event on event.report_id = report.id
+      where report.id = $1::uuid
+      group by report.id
+    `,
+    [reportID],
+    (result) => result.rows[0]?.status === "queued"
+      && result.rows[0]?.note === "Smoke test fixture"
+      && result.rows[0]?.event_count === 1
+      && result.rows[0]?.private_queue === true
+      && result.rows[0]?.anon_denied === true,
+  );
+
+  await client.query(
+    `
+      insert into public.content_reports (
+        reporter_user_id, reported_user_id, subject_kind, subject_id, reason, content_snapshot
+      )
+      select $1, $2, 'profile', 'smoke-rate-' || sequence, 'spam', '{}'::jsonb
+      from generate_series(1, 29) as sequence
+    `,
+    [smokeUserID, collaboratorUserID],
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQueryFailure(
+    client,
+    "report submission enforces the hourly flood limit",
+    `select public.submit_content_report('profile', $1, $1, 'dangerous_content', null)`,
+    [collaboratorUserID],
+    /report_rate_limited/,
+  );
+  await client.query("reset role");
+  await client.query(
+    `delete from public.follows where follower_user_id = $1 and followed_user_id = $2`,
+    [smokeUserID, collaboratorUserID],
+  );
 }
 
 function parseArgs(args) {
@@ -236,8 +369,8 @@ function runLinkedSmokeChecks(
       mode: 0o600,
     });
     const result = spawnSync(
-      "pnpm",
-      ["dlx", "supabase", "db", "query", "--linked", "--file", filePath],
+      "npx",
+      ["--yes", SUPABASE_CLI_PACKAGE, "db", "query", "--linked", "--file", filePath],
       { cwd: process.cwd(), encoding: "utf8", env: process.env },
     );
     if (result.status !== 0) {
@@ -307,6 +440,8 @@ function buildLinkedSmokeSQL(
 begin;
 
 ${migrationPreviewSQL}
+
+${buildProductionSecuritySmokeSQL()}
 
 ${buildSmokeFixtureSQL(smokeUserID, collaboratorUserID, strangerUserID)}
 
@@ -788,7 +923,11 @@ begin
 
   select locality into visible_city
   from public.profile_visible_places(${smokeUser}, null, null)
-  where canonical_name = 'Codex Smoke Coffee'
+  where place_id = (
+    select id from public.places
+    where source_provider = 'codex_smoke'
+      and source_provider_place_id = 'place-list-rpc-smoke'
+  )
   limit 1;
   if visible_city is distinct from 'Los Angeles' then
     raise exception 'profile geography payload failed';
@@ -1289,6 +1428,73 @@ rollback;
 `;
 }
 
+function buildProductionSecuritySmokeSQL() {
+  return `
+do $production_security_smoke$
+begin
+  if has_function_privilege(
+    'anon',
+    'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+    'execute'
+  ) then
+    raise exception 'anonymous can execute public.mirror_clerk_profile';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+    'execute'
+  ) then
+    raise exception 'authenticated can execute public.mirror_clerk_profile';
+  end if;
+
+  if not has_function_privilege(
+    'service_role',
+    'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+    'execute'
+  ) then
+    raise exception 'service_role cannot execute public.mirror_clerk_profile';
+  end if;
+
+  if has_table_privilege('anon', 'public.analytics_events', 'insert') then
+    raise exception 'anonymous retains analytics_events insert';
+  end if;
+end;
+$production_security_smoke$;
+`;
+}
+
+async function runProductionSecuritySmokeChecks(client) {
+  await expectQuery(
+    client,
+    "production security grants",
+    `
+      select
+        has_function_privilege(
+          'anon',
+          'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+          'execute'
+        ) as anon_mirror,
+        has_function_privilege(
+          'authenticated',
+          'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+          'execute'
+        ) as authenticated_mirror,
+        has_function_privilege(
+          'service_role',
+          'public.mirror_clerk_profile(text,text,timestamptz,text,text,text,text)',
+          'execute'
+        ) as service_mirror,
+        has_table_privilege('anon', 'public.analytics_events', 'insert') as anon_analytics_insert
+    `,
+    [],
+    (result) => result.rows[0]?.anon_mirror === false
+      && result.rows[0]?.authenticated_mirror === false
+      && result.rows[0]?.service_mirror === true
+      && result.rows[0]?.anon_analytics_insert === false,
+  );
+}
+
 function loadEnvFile(filePath) {
   if (!filePath || !existsSync(filePath)) return;
 
@@ -1646,6 +1852,10 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
     subcategory: "Coffee shop",
     category_source: "deterministic",
     raw_provider_type: "coffee shop",
+    address: "1 Smoke Test Way",
+    locality: "Los Angeles",
+    region: "CA",
+    country: "United States",
     latitude: 34.052235,
     longitude: -118.243683,
     source_provider: "codex_smoke",
@@ -1940,27 +2150,7 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
   await expectQuery(
     client,
     "a second stable UUID creates a second active ticket",
-    `
-      with saved as (
-        select public.save_own_check_in(
-          $1::jsonb,
-          $2::jsonb,
-          $3::jsonb,
-          $4::jsonb,
-          null
-        )
-      )
-      select
-        count(*)::integer as ticket_count,
-        count(distinct feed.visit_id)::integer as feed_count
-      from public.place_visits visit
-      left join public.feed_events feed
-        on feed.visit_id = visit.id
-        and feed.event_type = 'place_been'
-      cross join saved
-      where visit.user_place_id = $5::uuid
-        and visit.deleted_at is null
-    `,
+    "select public.save_own_check_in($1::jsonb, $2::jsonb, $3::jsonb, $4::jsonb, null) as saved",
     [
       JSON.stringify(place),
       JSON.stringify({ ...userPlace, note: "latest check-in", rating_score: 5 }),
@@ -1972,34 +2162,66 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
         rating_score: 5,
         attribute_answers: attributes,
       }),
-      userPlaceID,
     ],
-    (result) => result.rows[0]?.ticket_count === 2 && result.rows[0]?.feed_count === 2,
+    (result) => result.rows[0]?.saved?.visit_id === secondVisitID,
   );
+  await expectQuery(
+    client,
+    "both stable UUIDs remain active tickets",
+    `
+      select count(*)::integer as ticket_count
+      from public.place_visits
+      where user_place_id = $1::uuid
+        and id = any($2::uuid[])
+        and deleted_at is null
+    `,
+    [userPlaceID, [firstVisitID, secondVisitID]],
+    (result) => result.rows[0]?.ticket_count === 2,
+  );
+
+  // feed_events is intentionally unavailable to authenticated clients. Check
+  // its internal projection as the privileged smoke-test session, then restore
+  // the owner claims before exercising the remaining public RPCs.
+  await client.query("reset role");
+  await expectQuery(
+    client,
+    "both active tickets project into distinct feed events",
+    `
+      select count(distinct visit_id)::integer as feed_count
+      from public.feed_events
+      where visit_id = any($1::uuid[])
+        and event_type = 'place_been'
+    `,
+    [[firstVisitID, secondVisitID]],
+    (result) => result.rows[0]?.feed_count === 2,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
 
   await expectQuery(
     client,
-    "deleting one of two tickets retains checked-in state and restores the remaining summary",
+    "deleting one of two tickets retains checked-in state",
+    "select public.delete_own_check_in($1::uuid) as result",
+    [secondVisitID],
+    (result) => result.rows[0]?.result?.transition === "been",
+  );
+  await expectQuery(
+    client,
+    "deleting one of two tickets restores the remaining summary",
     `
-      with deleted as (
-        select public.delete_own_check_in($1::uuid) as result
-      )
       select
-        deleted.result->>'transition' as transition,
         up.status,
         up.note,
         up.rating_score::double precision as rating_score,
         count(visit.id)::integer as ticket_count
-      from deleted
-      join public.user_places up on up.id = $2::uuid
+      from public.user_places up
       left join public.place_visits visit
         on visit.user_place_id = up.id
         and visit.deleted_at is null
-      group by deleted.result, up.status, up.note, up.rating_score
+      where up.id = $1::uuid
+      group by up.status, up.note, up.rating_score
     `,
-    [secondVisitID, userPlaceID],
-    (result) => result.rows[0]?.transition === "been"
-      && result.rows[0]?.status === "been"
+    [userPlaceID],
+    (result) => result.rows[0]?.status === "been"
       && result.rows[0]?.note === "first check-in"
       && result.rows[0]?.rating_score === 4
       && result.rows[0]?.ticket_count === 1,
@@ -2007,26 +2229,28 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
 
   await expectQuery(
     client,
-    "deleting the final ticket restores the historical Wanna snapshot atomically",
+    "deleting the final ticket transitions to historical Wanna",
+    "select public.delete_own_check_in($1::uuid) as result",
+    [firstVisitID],
+    (result) => result.rows[0]?.result?.transition === "wanna_go",
+  );
+  await expectQuery(
+    client,
+    "deleting the final ticket restores the historical Wanna snapshot",
     `
-      with deleted as (
-        select public.delete_own_check_in($1::uuid) as result
-      )
       select
-        deleted.result->>'transition' as transition,
         up.status,
         up.note,
         up.deleted_at,
         attr.value
-      from deleted
-      join public.user_places up on up.id = $2::uuid
+      from public.user_places up
       left join public.place_attributes attr
         on attr.user_place_id = up.id
         and attr.question_key = 'personal_labels'
+      where up.id = $1::uuid
     `,
-    [firstVisitID, userPlaceID],
-    (result) => result.rows[0]?.transition === "wanna_go"
-      && result.rows[0]?.status === "wanna_go"
+    [userPlaceID],
+    (result) => result.rows[0]?.status === "wanna_go"
       && result.rows[0]?.note === "want snapshot"
       && result.rows[0]?.deleted_at === null
       && JSON.stringify(result.rows[0]?.value) === JSON.stringify(["try soon"]),
@@ -2181,14 +2405,15 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
 
   await expectQuery(
     client,
+    "authenticated user can mute a profile",
+    "select public.mute_profile($1)",
+    [collaboratorUserID],
+    (result) => result.rowCount === 1,
+  );
+  await expectQuery(
+    client,
     "authenticated mute is owner-private and listable",
-    `
-      with muted as (select public.mute_profile($1))
-      select profiles.id
-      from public.muted_profiles() profiles
-      cross join muted
-      where profiles.id = $1
-    `,
+    "select id from public.muted_profiles() where id = $1",
     [collaboratorUserID],
     (result) => result.rows[0]?.id === collaboratorUserID,
   );
@@ -2214,6 +2439,11 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
       select locality, region, country, owner_avatar_url,
              visited_at, saved_at, created_at, updated_at
       from public.profile_visible_places($1, null, null)
+      where place_id = (
+        select id from public.places
+        where source_provider = 'codex_smoke'
+          and source_provider_place_id = 'place-list-rpc-smoke'
+      )
       limit 1
     `,
     [smokeUserID],
@@ -2230,14 +2460,23 @@ async function runProfileRedesignSmokeChecks(client, smokeUserID, collaboratorUs
   await expectQuery(
     client,
     "authenticated user can remove a mute",
-    `
-      with unmuted as (select public.unmute_profile($1))
-      select count(profiles.id)::integer as count
-      from unmuted
-      left join public.muted_profiles() profiles on profiles.id = $1
-    `,
+    "select public.unmute_profile($1)",
+    [collaboratorUserID],
+    (result) => result.rowCount === 1,
+  );
+  await expectQuery(
+    client,
+    "removed mute no longer appears in owner list",
+    "select count(*)::integer as count from public.muted_profiles() where id = $1",
     [collaboratorUserID],
     (result) => result.rows[0]?.count === 0,
+  );
+  await expectQuery(
+    client,
+    "profile privacy fixture resets before cross-surface checks",
+    "select public.update_own_profile(null, null, null, false, null, null, true) as profile",
+    [],
+    (result) => result.rows[0]?.profile?.is_private_profile === false,
   );
 
   await client.query("reset role");
@@ -2327,8 +2566,8 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
         ($2, $3, 'profile'),
         ($3, $4, 'profile'),
         ($2, $5, 'profile'),
-        ($6, $9, 'profile'),
-        ($9, $6, 'profile'),
+        ($6, $7, 'profile'),
+        ($7, $6, 'profile'),
         ($6, $5, 'profile')
       on conflict (follower_user_id, followed_user_id) do update
       set source = excluded.source, updated_at = now()
@@ -2341,8 +2580,6 @@ async function runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID) 
       fixture.shared,
       fixture.followed,
       fixture.private,
-      fixture.blocked,
-      fixture.blocker,
       fixture.fallback,
     ],
     (result) => result.rows.length === 7,
@@ -2674,7 +2911,7 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     [activityID],
     (result) => result.rows[0]?.engagement?.viewer_has_liked === true,
   );
-  await expectQuery(
+  const activityCommentResult = await expectQuery(
     client,
     "owner comments on list activity",
     "select public.add_activity_comment($1::uuid, $2) as result",
@@ -2689,6 +2926,33 @@ async function runPlaceListSmokeChecks(client, smokeUserID, collaboratorUserID, 
     (result) => result.rows[0]?.page?.comments?.some(
       (comment) => comment.body === "Smoke-tested list activity.",
     ) === true,
+  );
+  const activityCommentID = activityCommentResult.rows[0].result.comment.id;
+  await setAuthenticatedUser(client, collaboratorUserID);
+  await expectQueryFailure(
+    client,
+    "another user cannot delete the owner's activity comment",
+    "select public.delete_own_activity_comment($1::uuid) as engagement",
+    [activityCommentID],
+    /comment_not_found_or_not_owned/,
+  );
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "owner deletes their own activity comment",
+    "select public.delete_own_activity_comment($1::uuid) as engagement",
+    [activityCommentID],
+    (result) => result.rows[0]?.engagement?.activity_id === activityID
+      && result.rows[0]?.engagement?.comment_count === 0,
+  );
+  await expectQuery(
+    client,
+    "deleted activity comment stays deleted",
+    "select public.activity_comments($1::uuid, null, 50) as page",
+    [activityID],
+    (result) => result.rows[0]?.page?.comments?.some(
+      (comment) => comment.id === activityCommentID,
+    ) === false,
   );
 
   const collaboratorListID = await createSmokeList(client, "Codex smoke collaborator check");
@@ -3777,8 +4041,14 @@ function sqlString(value) {
 
 function sanitizeError(error, dbURL) {
   const message = error instanceof Error ? error.message : String(error);
+  const diagnostics = error && typeof error === "object"
+    ? [error.detail, error.where, error.position ? `position ${error.position}` : null]
+        .filter(Boolean)
+        .join("\n")
+    : "";
   const password = process.env.WANDER_SUPABASE_DB_PASSWORD;
-  let sanitized = message.replaceAll(dbURL, "[REDACTED_DB_URL]");
+  let sanitized = [message, diagnostics].filter(Boolean).join("\n")
+    .replaceAll(dbURL, "[REDACTED_DB_URL]");
   if (password) {
     sanitized = sanitized.replaceAll(password, "[REDACTED_DB_PASSWORD]");
   }

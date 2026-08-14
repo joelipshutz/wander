@@ -1,0 +1,11 @@
+{
+  "issue": "REC-259",
+  "capture_source": "Joe's 2026-08-13 physical-device reproduction plus exact origin/main source at eb587b19",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "reported_path": "signed out -> Already have an account? Log in -> Use email or Google -> Continue with my email",
+  "reported_problem": "the returning-user flow opened Clerk's generic AuthView and repeatedly reported that the email was already taken instead of signing the existing account in",
+  "pre_fix_ui": "Apple is the only native action; Google and email are hidden behind auth.useOtherMethod and ClerkKitUI AuthView",
+  "expected_ui": "Welcome back presents Sign in with Apple, Sign in with Google, and a visible email field with Continue without opening the generic Clerk auth sheet",
+  "account_linking_policy": "Clerk may automatically link provider identities only when it can prove a matching verified email; unmatched Apple private-relay identities must not be guessed or silently merged",
+  "release_scope": "merge the auth fix, then package the latest main into the next explicitly authorized TestFlight build"
+}

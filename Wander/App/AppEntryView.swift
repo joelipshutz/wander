@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+#if canImport(TikTokOpenSDKCore)
+import TikTokOpenSDKCore
+#endif
 
 struct AppEntryForegroundRefreshPolicy {
     static let graceInterval: TimeInterval = 30
@@ -61,6 +64,7 @@ struct AppEntryView: View {
     @ObservedObject var coordinator: AppEntryCoordinator
 
     let analytics: AnalyticsClient
+    let analyticsLifecycle: AppAnalyticsLifecycleTracker
     let parser: any LLMFilterParser
 
     @State private var didFinishInitialResolution = false
@@ -91,11 +95,15 @@ struct AppEntryView: View {
                     saveProgress: { coordinator.saveProgress($0, for: session) },
                     complete: { coordinator.completeOnboarding(for: session, serverConfirmed: $0) }
                 )
-            case .ready(let session):
+            case .ready(let session, let firstVisitWalkthroughEligible):
                 WanderRootView(
                     initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
                     initialSession: session,
                     isSessionValidated: auth.isSessionValidated,
+                    isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible,
+                    onFirstVisitWalkthroughCompleted: {
+                        coordinator.completeFirstVisitWalkthrough(for: session)
+                    },
                     deepLinkLaunchRequest: deepLinkInbox.request(
                         ifSessionValidated: auth.isSessionValidated
                     ),
@@ -137,6 +145,7 @@ struct AppEntryView: View {
                 .environmentObject(auth)
         }
         .task {
+            analyticsLifecycle.recordLaunch()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-WanderForceSignedOut") {
                 try? await auth.signOut()
@@ -168,6 +177,7 @@ struct AppEntryView: View {
                    case .ready = coordinator.state {
                     return
                 }
+                analyticsLifecycle.recordForegroundSession()
                 auth.beginSessionValidation()
                 Task { await coordinator.start(preservingReadyState: true) }
             case .inactive:
@@ -179,9 +189,26 @@ struct AppEntryView: View {
         .onOpenURL { url in
             receiveIncomingURL(url)
         }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL else { return }
+            receiveIncomingURL(url)
+        }
     }
 
     private func receiveIncomingURL(_ url: URL) {
+        #if canImport(TikTokOpenSDKCore)
+        if TikTokURLHandler.handleOpenURL(url) {
+            return
+        }
+        #endif
+        if let attribution = AcquisitionAttribution(url: url) {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.acquisitionLinkOpened,
+                    properties: attribution.properties
+                )
+            )
+        }
         if WanderRootView.sharedProfileRoute(for: url) != nil {
             if case .ready = coordinator.state {
                 deepLinkInbox.receive(url)

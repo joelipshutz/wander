@@ -15,6 +15,7 @@ struct WanderApp: App {
     @StateObject private var mapCaptureBackend: WanderBackend
     #endif
     private let analytics: AnalyticsClient
+    private let analyticsLifecycle: AppAnalyticsLifecycleTracker
     private let discoverParser: any LLMFilterParser
 
     init() {
@@ -25,11 +26,32 @@ struct WanderApp: App {
         } else {
             analyticsClient = NoopAnalyticsClient()
         }
-        analytics = analyticsClient
+        let contextualAnalytics = ContextualAnalyticsClient(client: analyticsClient)
+        analytics = contextualAnalytics
+        analyticsLifecycle = AppAnalyticsLifecycleTracker(analytics: contextualAnalytics)
         _pushNotifications = StateObject(
-            wrappedValue: PushNotificationManager(analytics: analyticsClient)
+            wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
         )
-        let authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        let authStore: AuthSessionStore
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest") {
+            authStore = AuthSessionStore(
+                provider: PreviewAuthSessionProvider(
+                    state: .signedIn(
+                        AuthSession(
+                            userID: "user_joe",
+                            displayName: "Joe",
+                            handle: "joe"
+                        )
+                    )
+                )
+            )
+        } else {
+            authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        }
+        #else
+        authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        #endif
         let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
         discoverParser = Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
         _auth = StateObject(wrappedValue: authStore)
@@ -38,7 +60,7 @@ struct WanderApp: App {
             wrappedValue: AppEntryCoordinator(
                 auth: authStore,
                 backend: backendStore,
-                analytics: analyticsClient
+                analytics: contextualAnalytics
             )
         )
         #if DEBUG
@@ -55,6 +77,9 @@ struct WanderApp: App {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
             } else if let inviteMockupPage = InviteMockupPage.resolved() {
                 InviteMockupRoot(page: inviteMockupPage)
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
+                ClerkNativeAuthView(mode: .signIn)
+                    .environmentObject(auth)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingUITestSignedOut") {
                 LoggedOutCarouselView(analytics: NoopAnalyticsClient(), getStarted: {}, logIn: {})
             } else if ProcessInfo.processInfo.arguments.contains("-WanderMapCapture") {
@@ -65,6 +90,8 @@ struct WanderApp: App {
                 PlacePhotoCarouselMockupRoot(page: carouselMockupPage)
             } else if let activityMockupPage = PlaceActivityMockupPage.resolved() {
                 PlaceActivityMockupRoot(page: activityMockupPage)
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderActivityShareMockup") {
+                ActivitySharePreviewMockupRoot()
             } else if PlaceImportAdaptiveMockupPage.isPresented {
                 PlaceImportAdaptiveMockupRoot()
                     .environmentObject(auth)
@@ -85,7 +112,12 @@ struct WanderApp: App {
     }
 
     private var appRoot: some View {
-        AppEntryView(coordinator: entryCoordinator, analytics: analytics, parser: discoverParser)
+        AppEntryView(
+            coordinator: entryCoordinator,
+            analytics: analytics,
+            analyticsLifecycle: analyticsLifecycle,
+            parser: discoverParser
+        )
             .environmentObject(auth)
             .environmentObject(backend)
             .environmentObject(pushNotifications)

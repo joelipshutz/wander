@@ -78,6 +78,16 @@ struct FeedScreen: View {
             .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
                 selectedPlaceDestination
             }
+            .navigationDestination(item: commentsRouteBinding) { route in
+                ActivityCommentsRouteScreen(
+                    requestID: route.id,
+                    retry: resolveCommentsRouteIfNeeded
+                )
+                .environmentObject(store)
+                .environmentObject(auth)
+                .environmentObject(backend)
+                .environmentObject(activityNavigation)
+            }
             .sheet(item: $placeSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
             }) { context in
@@ -97,21 +107,16 @@ struct FeedScreen: View {
             .onChange(of: selectedSurface) { _, _ in
                 walkthroughs.perform(.feedSurfaceSwitch)
             }
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
+                if target == .feedDiscoverSearch {
+                    selectedSurface = .places
+                }
+            }
             .onChange(of: isShowingSearch) { _, isShowing in
                 if !isShowing {
                     walkthroughs.activate(.feed)
                 }
             }
-        }
-        .fullScreenCover(item: commentsRouteBinding) { route in
-            ActivityCommentsRouteScreen(
-                requestID: route.id,
-                retry: resolveCommentsRouteIfNeeded
-            )
-            .environmentObject(store)
-            .environmentObject(auth)
-            .environmentObject(backend)
-            .environmentObject(activityNavigation)
         }
         .task(id: activityNavigation.commentsRoute?.id) {
             await resolveCommentsRouteIfNeeded()
@@ -122,10 +127,12 @@ struct FeedScreen: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    FeedSearchLauncher(placeholders: tickerSuggestions) {
-                        walkthroughs.activate(.feedSearch)
-                        isShowingSearch = true
-                    }
+                    FeedSearchLauncher(
+                        placeholders: tickerSuggestions,
+                        isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
+                        action: openDiscoverSearch
+                    )
+                    .walkthroughTarget(.feedDiscoverSearch)
 
                     content
                 }
@@ -144,6 +151,15 @@ struct FeedScreen: View {
                 scrollToFocusedActivity(focusedActivityID, proxy: proxy)
             }
         }
+    }
+
+    private func openDiscoverSearch() {
+        if walkthroughs.currentStep?.target == .feedDiscoverSearch {
+            walkthroughs.perform(.feedDiscoverSearch)
+            walkthroughs.consumeRequestedSurface(.feedSearch)
+        }
+        walkthroughs.activate(.feedSearch)
+        isShowingSearch = true
     }
 
     @ViewBuilder
@@ -572,12 +588,29 @@ private struct FeedPeopleSurface: View {
                 searchFieldFocused = false
             }
         }
-        .sheet(isPresented: $isPresentingContactInvites) {
+        .onChange(of: walkthroughs.isRequestingContactInvite, initial: true) { _, isRequested in
+            guard isRequested else { return }
+            searchFieldFocused = false
+            isPresentingContactInvites = true
+        }
+        .sheet(isPresented: $isPresentingContactInvites, onDismiss: {
+            walkthroughs.completeContactInviteRequest()
+        }) {
             ContactInviteSheet(
                 surface: .feedPeople,
                 contactProvider: store.contactProvider,
-                senderProfileID: store.currentUser.id
+                senderProfileID: store.currentUser.id,
+                walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
+                onPermissionDenied: walkthroughPermissionDeniedAction,
+                analytics: store.productAnalytics
             )
+        }
+    }
+
+    private var walkthroughPermissionDeniedAction: (() -> Void)? {
+        guard walkthroughs.isRequestingContactInvite else { return nil }
+        return {
+            isPresentingContactInvites = false
         }
     }
 
@@ -956,9 +989,12 @@ private struct FeedProfileRoute: Identifiable {
 }
 
 private struct FeedSearchLauncher: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let placeholders: [String]
+    let isWalkthroughTarget: Bool
     let action: () -> Void
     @State private var placeholderIndex = 0
+    @State private var isPulsing = false
 
     private var placeholder: String {
         guard !placeholders.isEmpty else { return "Search trusted places" }
@@ -989,6 +1025,34 @@ private struct FeedSearchLauncher: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Search trusted places")
         .accessibilityIdentifier("feed.searchLauncher")
+        .overlay {
+            if isWalkthroughTarget {
+                Capsule()
+                    .stroke(WanderTheme.terracotta.color, lineWidth: 2)
+                    .padding(-2)
+            }
+        }
+        .scaleEffect(
+            isWalkthroughTarget && !reduceMotion && isPulsing ? 1.025 : 1
+        )
+        .shadow(
+            color: isWalkthroughTarget
+                ? WanderTheme.terracotta.color.opacity(isPulsing ? 0.55 : 0.2)
+                : .clear,
+            radius: isWalkthroughTarget && isPulsing ? 12 : 3
+        )
+        .task(id: isWalkthroughTarget) {
+            isPulsing = false
+            guard isWalkthroughTarget, !reduceMotion else { return }
+            await Task.yield()
+            isPulsing = true
+        }
+        .animation(
+            isWalkthroughTarget && !reduceMotion
+                ? .easeInOut(duration: 1.15).repeatForever(autoreverses: true)
+                : .easeOut(duration: 0.2),
+            value: isPulsing
+        )
         .task {
             guard placeholders.count > 1 else { return }
             while !Task.isCancelled {

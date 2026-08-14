@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-10
+Last updated: 2026-08-12
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -37,7 +37,9 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 |---|---|---|
 | Native iOS | Locked | SwiftUI, iOS 17+, iPhone-first. |
 | XcodeGen | Locked | `project.yml` is source of truth. |
+| Instagram Feed direct handoff | Provisional for REC-271 | Ryan explicitly accepted the risk of trying the undocumented `instagram://library?LocalIdentifier=` route first so the rendered ticket can open already selected in Instagram. The app must save the ticket to Photos, keep `.igo` plus `com.instagram.exclusivegram` as the automatic fallback when the deep link cannot open, and retain the system share fallback behind that. Remove or revise this experiment if physical-device testing fails or Instagram/App Review rejects it. |
 | Clerk + Supabase | Locked | Clerk for identity/account, Supabase for data/RLS/PostGIS/storage/functions. |
+| Apple-first Clerk auth | Locked for REC-259 | The existing auth sheet opens on a rec.me-owned native Sign in with Apple CTA. Clerk remains the identity/session owner and handles Apple sign-in/sign-up transfer. Email, Google, verification, recovery, and any incomplete Apple continuation stay in Clerk's prebuilt `AuthView` behind **Use email or Google**; do not build a second independent account system or duplicate those flows. |
 | Clerk user id mapping | Locked | Store Clerk user ids as text `profiles.id` / owner fields. Supabase RLS reads the Clerk session token subject through `auth.jwt()->>'sub'`, with a local-test fallback to `request.jwt.claim.sub`. |
 | SwiftData local-first | Locked | Local cache, guest-local records, sync queue. |
 | Offline identity and own-map cache | Locked for REC-196 | After a transient Clerk refresh failure, the last confirmed identity may open only that user’s protected, locally cached own-map slice on the same device. The state is locally identified but not remotely validated: Supabase tokens, maintenance, push work, and deep links remain blocked until Clerk validates again. Confirmed sign-out, account deletion, or account switch clears the session-scoped cache. Social-map rows are not persisted by this contract; save retry and follow intent remain in REC-197 and REC-198. |
@@ -60,6 +62,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Share extension | Locked for REC-97, revised 2026-07-15 | The prior deferral is superseded for place imports. REC-97 includes a URL/text/file Share Extension behind `import_places_v1`; it writes bounded idempotent envelopes to an App Group and leaves authenticated upload, parsing, and network work to the host app. |
 | Multi-source place imports | Locked for REC-97 | Google Maps, Instagram, TikTok, and Text/Notes all feed one owner-private durable Import Inbox. Raw artifacts live in private storage and delete after seven days; scheduled workers use modular provider adapters, constrained evidence-grounded AI hints, and Apple Maps Server API resolution. Profile shows import progress and then Review Import. Each item remains private until the user chooses Been/Wanna and completes the regular shared save flow. Import commits are item-level, idempotent, and must return Already Saved without overwriting an existing save. |
 | Native Contacts | Locked for REC-224, superseding REC-132 Phase A | Contacts permission is requested only after an explicit contextual primer from an invite entry point. The provider reads name and phone fields only, filters out contacts without phone numbers, and does not upload or analytics-log address-book data. Denied access remains recoverable through Settings. |
+| Product analytics dashboard | Locked for REC-170 | The acquisition-to-referral dashboard lives in PostHog and is provisioned from `scripts/posthog-product-dashboard.mjs`. Explicit, privacy-safe events are the source of truth; PostHog autocapture remains disabled. Engagement is normalized to Connect, Expression, and Status. Referral measurement stops at invite handoff until attributed links exist, and Monetization remains visibly blank until a product decision defines it. |
 | Analytics provider | Locked for alpha | Use PostHog through the vendor-neutral analytics interface. Keep sync/auth diagnostics non-PII: counts, enum metadata, and internal auth user id only; no place names, notes, coordinates, emails, or handles. |
 | Sync conflict behavior | Locked v0.1 | Simple `updated_at`/server-wins plus local retry queue. |
 | Full onboarding | Locked for REC-132 Phase A | Logged-out users see a three-slide real-map carousel, then Clerk auth, required display name/username, optional photo, and skippable location, Contacts, trusted-friend, and notification steps. Existing users are backfilled complete. Phase B moves the optional activation steps into contextual tutorials. |

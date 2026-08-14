@@ -211,7 +211,6 @@ struct ListsScreen: View {
         ListDetailScreen(
             list: list,
             onEdit: { list in
-                walkthroughs.perform(.listActions)
                 walkthroughs.activate(.listEditor)
                 editorPresentation = .edit(list)
             },
@@ -827,6 +826,7 @@ private struct ListPreviewMosaic: View {
 
 private struct ListDetailScreen: View {
     @EnvironmentObject private var store: WanderStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.dismiss) private var dismiss
@@ -847,6 +847,7 @@ private struct ListDetailScreen: View {
     @State private var isShowingLeaveConfirmation = false
     @State private var isLeavingList = false
     @State private var isShowingLeaveError = false
+    @State private var reportSubject: CommunityReportSubject?
 
     init(
         list: PlaceListMock,
@@ -900,7 +901,6 @@ private struct ListDetailScreen: View {
 
                 if canAddPlaces {
                     Button {
-                        walkthroughs.perform(.listActions)
                         isAddingPlaces = true
                     } label: {
                         Image(systemName: "plus")
@@ -912,7 +912,6 @@ private struct ListDetailScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add places to list")
-                    .walkthroughTarget(.listActions)
                 }
 
                 if canManageList {
@@ -928,10 +927,9 @@ private struct ListDetailScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Edit list")
-                    .walkthroughTarget(canAddPlaces ? nil : .listActions)
                 }
 
-                if canLeaveList {
+                if !renderedList.isOwnedByCurrentUser {
                     if isLeavingList {
                         ProgressView()
                             .tint(WanderTheme.textInk.color)
@@ -939,10 +937,18 @@ private struct ListDetailScreen: View {
                             .accessibilityLabel("Leaving list")
                     } else {
                         Menu {
-                            Button(role: .destructive) {
-                                isShowingLeaveConfirmation = true
+                            if canLeaveList {
+                                Button(role: .destructive) {
+                                    isShowingLeaveConfirmation = true
+                                } label: {
+                                    Label("Leave List", systemImage: "rectangle.portrait.and.arrow.right")
+                                }
+                            }
+
+                            Button {
+                                presentListReport(renderedList)
                             } label: {
-                                Label("Leave List", systemImage: "rectangle.portrait.and.arrow.right")
+                                Label("Report list", systemImage: "exclamationmark.bubble")
                             }
                         } label: {
                             Image(systemName: "ellipsis")
@@ -1013,6 +1019,10 @@ private struct ListDetailScreen: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Try again later")
+        }
+        .sheet(item: $reportSubject) { subject in
+            CommunityReportSheet(subject: subject)
+                .environmentObject(backend)
         }
     }
 
@@ -1234,6 +1244,17 @@ private struct ListDetailScreen: View {
             serverID: sourceList?.serverID ?? list.sourceListID,
             name: displayList.name
         )
+    }
+
+    private func presentListReport(_ renderedList: PlaceListMock) {
+        auth.requireSignIn(for: .reportContent) {
+            reportSubject = CommunityReportSubject(
+                kind: .placeList,
+                subjectID: sourceList?.serverID ?? list.sourceListID ?? list.id,
+                reportedUserID: renderedList.ownerUserID,
+                context: "Report \(renderedList.ownerName)’s list “\(renderedList.name)”."
+            )
+        }
     }
 
     @MainActor
@@ -2556,7 +2577,8 @@ private struct FriendCollaboratorSearchContent: View {
             ContactInviteSheet(
                 surface: .listCollaborator(listName: listName),
                 contactProvider: store.contactProvider,
-                senderProfileID: store.currentUser.id
+                senderProfileID: store.currentUser.id,
+                analytics: store.productAnalytics
             )
         }
     }
@@ -2891,7 +2913,7 @@ private struct ListMapFullScreen: View {
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
         .onChange(of: walkthroughs.currentStep?.target) { previousTarget, target in
-            if previousTarget == .listMapPlace, target == .listActions {
+            if previousTarget == .listMapPlace, target == nil {
                 dismiss()
             }
         }
@@ -3643,6 +3665,7 @@ private struct ListEditorSheet: View {
     @State private var stagedCollaborators: [ListCollaboratorMock]
     @State private var isShowingFriendSearch = false
     @State private var isShowingDeleteConfirmation = false
+    @State private var contentErrorMessage: String?
     @State private var walkthroughScrollPosition: String?
     @FocusState private var focusedField: ListEditorFocus?
 
@@ -3684,7 +3707,7 @@ private struct ListEditorSheet: View {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(isEditing ? "edit list" : "new list")
                             .font(.system(size: 30, weight: .black, design: .rounded))
-                        Text(isEditing ? "Keep the name, privacy, and collaborators current." : "Name the plan, decide who can see it, then add places.")
+                        Text(isEditing ? "Keep the name, collaborators, and privacy current." : "Name the plan, invite collaborators, then choose privacy.")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -3705,10 +3728,18 @@ private struct ListEditorSheet: View {
                             .lineLimit(3...5)
                     }
 
-                    stealthToggle
-                        .id(ListEditorWalkthroughAnchor.privacy)
+                    if let contentErrorMessage {
+                        Label(contentErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(WanderTypography.emphasizedBody)
+                            .foregroundStyle(WanderTheme.stateError.color)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("listEditor.contentError")
+                    }
+
                     collaboratorsBlock
                         .id(ListEditorWalkthroughAnchor.collaborators)
+                    stealthToggle
+                        .id(ListEditorWalkthroughAnchor.privacy)
                 }
                 .padding(WanderTheme.spacing4)
                 .padding(.bottom, WanderTheme.spacing16 + WanderTheme.spacing16 + WanderTheme.spacing8)
@@ -3828,6 +3859,13 @@ private struct ListEditorSheet: View {
 
     private func saveAndDismiss() {
         guard !trimmedTitle.isEmpty else { return }
+        do {
+            try CommunityContentPolicy.validate(title, description)
+        } catch {
+            contentErrorMessage = error.localizedDescription
+            return
+        }
+        contentErrorMessage = nil
         onSave(
             ListEditorDraft(
                 title: title,

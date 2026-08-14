@@ -19629,6 +19629,70 @@ REC-122 follow-up completion, 2026-07-23 11:09 PDT:
   was performed. The merged fix is ready for a local signed phone build from
   latest `main` and will ride the next explicitly requested TestFlight batch.
 
+## 2026-08-11 23:48 PDT - Codex - REC-270 Map Filter Polish
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher`
+Branch: `codex/rec-270-map-polish`
+Worktree: `/private/tmp/recme-rec270-map-polish`
+Linear: `REC-270` (`In Progress`)
+
+Goal: add a restrained transition when switching the Map between Featured and
+Friends, and remove the unintended visual shadow under the search/filter header
+without changing pin rendering, filter membership, More behavior, or map camera
+position.
+
+Starting status and plan:
+
+- Started clean from exact `origin/main` commit `4468db56`; the stale, dirty
+  phone-build checkout and other active worktrees remain untouched.
+- This is isolated one-screen visual polish, so the engineering review gate is
+  not needed. The existing source/filter contracts and data paths remain intact.
+- The generic `ios-fix` state-server snapshot path is not available in this
+  repository; use before/after simulator screenshots plus focused interaction
+  coverage instead.
+- Mission Control task creation was attempted, but `localhost:4000` is not
+  running. Linear REC-270 is the active task record.
+
+Expected files: `Wander/Features/Map/MapScreen.swift`, the shared glass modifier
+only if needed to suppress Map-header shadows without changing other surfaces,
+focused Map tests, and this log.
+
+Checkpoint, 2026-08-12 00:10 PDT:
+
+- Added a Map-only flat option to the existing glass capsule treatment. Search,
+  add, Featured, Friends, More, and focused-search Cancel now keep their warm
+  translucent fill and border without the fallback drop shadow or iOS 26
+  elevated glass effect. Other glass controls keep their current elevation.
+- Featured/Friends source changes now use a 160 ms ease-in/out transition with
+  a restrained 2% scale change on the deselected pill. Reduce Motion disables
+  the animation. Pin rendering, source membership, More refinements, and camera
+  position are unchanged.
+- Visual QA passed on iPhone 16 Plus / iOS 18.6, iPhone 16e / iOS 18.6, and
+  iPhone 16e / iOS 26.2. Before/after screenshots confirmed the gray shadow band
+  under the Map header is gone without losing control contrast.
+- Focused `MapFilterSelectionTests` passed 7/7. The complete unit suite passed
+  1,068/1,068, and 23/24 UI tests passed, including both Map filter walkthrough
+  and source/More persistence tests. The sole UI failure is the unrelated
+  `testFirstAddActionGuidesThroughSaveBeforeReturningToMap`: its harness tries
+  to tap an offscreen eighth tag suggestion and reports an invalid activation
+  point. A direct rerun reproduced the same harness failure. No Add/save/tag
+  code changed in this branch.
+- Deleted only this task's temporary 1.8 GB DerivedData cache after validation
+  because the volume reached 126 MB free; screenshots remain in `/private/tmp`.
+
+Handoff, 2026-08-12 00:13 PDT:
+
+- Opened ready PR #365: https://github.com/joelipshutz/wander/pull/365.
+  Its required TestFlight `ship` payload validates successfully and records no
+  release operation in this PR.
+- Linear REC-270 is `In Review` with the PR, validation, visual QA, and known
+  unrelated UI-test harness failure documented.
+- The branch is rebased onto exact current `origin/main` commit `ec53ce77`; the
+  intervening Apple-first authentication change did not overlap this diff.
+- No merge, build-number change, TestFlight upload, or Slack release note was
+  performed. Next: review/merge PR #365, then include it in the next explicitly
+  requested TestFlight batch.
+
 REC-133 production implementation restart, 2026-07-23 11:22 PDT:
 
 - Agent/tool: Codex. Goal: convert the approved debug-only place-photo carousel
@@ -28598,3 +28662,137 @@ Outcome and validation:
   the simulator's unrelated first-run location prompt.
 - No schema, auth, signing, project membership, build-number, archive, upload,
   TestFlight, or tester-Slack action was taken.
+## 2026-08-13 10:35 PDT - Codex - REC-180 Site and App Store Metadata Gate
+
+Agent: Codex
+Branch: `codex/rec-180-launch-metadata`
+Worktree: `/private/tmp/recme-rec186-appstore`
+Linear: `REC-180` (`In Progress`)
+
+Goal: finish the launch-site and DNS handoff, refresh the live App Store
+Connect state, and preserve a safe, reproducible metadata update path while
+moving through every non-blocked launch gate.
+
+Starting state and coordination:
+
+- Refreshed and rebased this isolated branch onto exact `origin/main`
+  `7ba2a3c6`. The main checkout remains dirty with Joe-owned `tmp/` content and
+  was not touched.
+- Mission Control remained unavailable because `localhost:4000` was not
+  running. REC-180 is the existing Linear owner issue and remains In Progress.
+- `getrec.me` site PR #10 was squash-merged and auto-deployed as recme-site
+  commit `7f131ea1426712472dd696536b41861a3771b938`. Production is Ready on both
+  `getrec.me` and `www.getrec.me`; the live support page, launch legal copy,
+  and AASA response were browser-verified.
+- Public DNS was rechecked. The working Vercel A/CNAME records must remain.
+  Real blockers are a missing Clerk production instance/records and a missing
+  mail provider: the domain has no MX and publishes `v=spf1 -all`, so
+  `support@getrec.me` cannot currently receive or send authenticated mail.
+
+App Store Connect checkpoint:
+
+- Added `scripts/app-store-metadata-release.mjs`, which defaults to a read-only
+  plan and mutates only when passed `--apply`. It uses the existing local App
+  Store Connect credentials without printing secrets and verifies all values
+  after an apply.
+- `node --check` and `--help` passed. The live read-only run resolved rec.me
+  version 1.0 and confirmed the missing privacy/support/marketing URLs,
+  missing categories, automatic release behavior, and the intended finalized
+  copy.
+- Applying the reversible metadata was intentionally not performed because
+  the environment requires exact external-account approval for that mutation.
+  No App Store listing, release behavior, binary, submission, or production
+  backend data was changed in this checkpoint.
+
+Expected files: `scripts/app-store-metadata-release.mjs`,
+`docs/app-store/2026-08-12-launch-readiness.md`, and this log.
+
+Completion checkpoint, 2026-08-13 10:40 PDT:
+
+- Committed the validated release tool and updated launch evidence as
+  `9df2f9b8`, pushed `codex/rec-180-launch-metadata`, and opened ready PR #384:
+  https://github.com/joelipshutz/wander/pull/384.
+- The required TestFlight manifest classifies the change as excluded from the
+  next tester build because it changes release tooling and docs only. GitHub's
+  trusted payload validation passes.
+- Copy limits are valid: subtitle 28/30, promotional text 83/170, and keywords
+  91/100. `node --check`, `--help`, and the live read-only App Store Connect
+  plan all passed.
+- Removed only three disposable Xcode DerivedData caches after the disk reached
+  100%; this recovered 6.6 GiB. Source, signed archives, project files, and user
+  files were not removed.
+- PR #384 is ready to squash-merge. REC-180 remains In Progress because the
+  exact external changes listed above and the production auth/mail/backend
+  gates still require explicit account-level authorization or credentials.
+
+## 2026-08-13 15:56 PDT - Codex - REC-170 Product Analytics Dashboard
+
+Agent: Codex
+Branch: `codex/rec-170-analytics`
+Worktree: `/private/tmp/recme-rec170-analytics`
+Linear: `REC-170` (`In Progress`)
+Mission Control: `a10fe8a5-fd83-4263-a598-3c72f33fb2a6` (`in_progress`)
+
+Goal: turn Joe's acquisition/activation/engagement/retention/referral sketches
+into a complete analytics contract, instrument the shipping iOS flows, build a
+clear operating dashboard, validate capture, and leave maintenance rules for
+future agents. Monetization remains an explicit empty placeholder until a model
+is defined.
+
+Starting state and coordination:
+
+- Started from clean exact `origin/main` commit `eb587b19` in an isolated
+  worktree. Joe's `joe/phone-build-latest` checkout is 195 commits behind with
+  an untracked `tmp/` directory and remains untouched.
+- Existing urgent Linear issue REC-170 exactly owns this work. Expanded it with
+  the requested funnel and human-needs scope, assigned it to Joe, and moved it
+  from Backlog to In Progress. Related REC-171 remains separate follow-up scope
+  for a default analytics question-answering agent.
+- The KB has no prior rec.me analytics-dashboard synthesis. The repo already
+  locks PostHog behind a vendor-neutral interface and prohibits place names,
+  notes, coordinates, emails, handles, or other private payloads in analytics.
+- Expected files: analytics service/event contracts, onboarding/app/social/save/
+  invite call sites, focused analytics tests, a reproducible dashboard script
+  or configuration, analytics documentation and agent instructions, project
+  generation files only if source membership requires it, and this log. Exact
+  call sites will be narrowed after tracing current flows.
+- 2026-08-13 checkpoint: chose PostHog as the dashboard surface and a checked-in idempotent provisioning script as its source of truth. The existing machine credentials include a rec.me ingestion token, but the available personal API key is scoped to a different PostHog project, so no cross-project mutation was attempted. Live apply requires rec.me-specific `WANDER_POSTHOG_PROJECT_ID` and `WANDER_POSTHOG_PERSONAL_API_KEY`.
+- 2026-08-13 checkpoint: added schema-v2 common context/privacy filtering, first-open/session/tagged-link acquisition events, per-step onboarding events, activation follow/save events, and raw plus normalized Connect/Expression/Status events across saves, check-ins, follows, likes, comments, shares, lists, profile views, streaks, shared visits, and contact invites. The managed dashboard has Acquisition, Activation, Engagement, Retention, Referrals, and intentionally blank Monetization sections.
+- Validation checkpoint: `npm --prefix scripts run analytics:check` passes 4
+  tests, including a mocked end-to-end management-API apply that creates the
+  dashboard, attaches all 9 insights, creates all 6 section tiles through the
+  supported tile endpoints, and orders them. The script was checked against
+  PostHog's current OpenAPI schema. A safe schema-v2 ingestion probe returned
+  HTTP 200 `{"status":"Ok"}` without PII.
+- Focused `BuildConfigurationTests`: 26 passed, 0 failed. Focused canonical
+  product-action analytics test: 1 passed, 0 failed. The pre-rebase full suite
+  passed 1,120 tests; after rebasing onto exact latest `origin/main`
+  `acabb4ca` (build 140), full `WanderTests` passed 1,123 tests with 0 failures,
+  using iPhone 16 Plus / iOS 18.6 and `ONLY_ACTIVE_ARCH=YES`.
+  A first generic dual-architecture build reached the link phase but the disk
+  filled (`errno=28`); only this worktree's disposable DerivedData was removed,
+  then the active-architecture suite compiled and passed. The replacement
+  DerivedData caches were also removed after validation, leaving 4.8 GiB free.
+- Acquisition docs now state the rollout caveat: existing installs emit the
+  install-local first-open marker once on their first schema-v2 launch, so the
+  initial baseline must be filtered by build/release date. No install or
+  referral attribution is inferred beyond available data.
+- Live dashboard provisioning remains blocked only on rec.me-specific
+  `WANDER_POSTHOG_PROJECT_ID` and `WANDER_POSTHOG_PERSONAL_API_KEY`; the generic
+  personal API key belongs to another project and was intentionally not used.
+  No database, auth, payment, RLS, build-number, archive, upload, TestFlight, or
+  tester-Slack change was made.
+
+Handoff:
+
+- Committed the complete implementation as `bc075e57`, pushed
+  `codex/rec-170-analytics`, and opened draft PR #391:
+  https://github.com/joelipshutz/wander/pull/391. The PR carries a `ship`
+  TestFlight manifest because runtime analytics changed, but no build or release
+  action was requested or taken.
+- Linear REC-170 has the PR, validation, rollout caveat, and credential blocker.
+  Mission Control task `a10fe8a5-fd83-4263-a598-3c72f33fb2a6` is in Review.
+- Restart: add the two rec.me-specific management values to the local secret
+  environment, run `npm --prefix scripts run analytics:apply`, open each managed
+  tile to confirm the live query succeeds, then mark the PR ready and move
+  REC-170 / Mission Control to Done after merge or final acceptance.

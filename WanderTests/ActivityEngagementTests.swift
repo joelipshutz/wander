@@ -1,8 +1,301 @@
+import Photos
+import UIKit
 import XCTest
 @testable import Wander
 
 @MainActor
 final class ActivityEngagementTests: XCTestCase {
+    func testShareDestinationTrayUsesTheRequestedOrderAndRoutes() {
+        XCTAssertEqual(
+            ActivityShareDestination.allCases,
+            [
+                .messages,
+                .copyLink,
+                .instagramStory,
+                .instagramPost,
+                .tikTok,
+                .snapchat,
+                .save,
+                .more,
+            ]
+        )
+        XCTAssertEqual(ActivityShareDestination.messages.route, .messages)
+        XCTAssertEqual(ActivityShareDestination.copyLink.route, .copyLink)
+        XCTAssertEqual(ActivityShareDestination.instagramStory.route, .instagramStory)
+        XCTAssertEqual(ActivityShareDestination.instagramPost.route, .instagramPost)
+        XCTAssertEqual(ActivityShareDestination.tikTok.route, .tikTok)
+        XCTAssertEqual(ActivityShareDestination.snapchat.route, .snapchat)
+        XCTAssertEqual(ActivityShareDestination.save.route, .savePhoto)
+        XCTAssertEqual(ActivityShareDestination.more.route, .systemShare)
+    }
+
+    func testSharePhotoPermissionPolicyRequestsOnceThenSavesOrRoutesToSettings() {
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .notDetermined),
+            .requestAuthorization
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .authorized),
+            .save
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .limited),
+            .save
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .denied),
+            .showSettings
+        )
+        XCTAssertEqual(
+            ActivitySharePhotoPermissionPolicy.action(for: .restricted),
+            .showSettings
+        )
+    }
+
+    func testShareProviderConfigurationRejectsMissingBuildSettingPlaceholders() {
+        XCTAssertNil(ActivityShareProviderConfiguration.normalizedValue(nil))
+        XCTAssertNil(ActivityShareProviderConfiguration.normalizedValue("   "))
+        XCTAssertNil(
+            ActivityShareProviderConfiguration.normalizedValue("$(WANDER_TIKTOK_CLIENT_KEY)")
+        )
+        XCTAssertNil(
+            ActivityShareProviderConfiguration.normalizedValue("recme-tiktok-unconfigured")
+        )
+        XCTAssertEqual(
+            ActivityShareProviderConfiguration.normalizedValue("  provider-client-key  "),
+            "provider-client-key"
+        )
+        XCTAssertEqual(
+            ActivityShareProviderConfiguration.tikTokRedirectURI,
+            "https://getrec.me/share/tiktok"
+        )
+    }
+
+    func testInstagramFeedPrefersLibraryDeepLinkAndKeepsDocumentFallback() throws {
+        let localIdentifier = "A1B2C3/L0/001"
+        let deepLink = try XCTUnwrap(
+            ActivityShareInstagramFeedContract.deepLinkURL(localIdentifier: localIdentifier)
+        )
+        let components = try XCTUnwrap(
+            URLComponents(url: deepLink, resolvingAgainstBaseURL: false)
+        )
+
+        XCTAssertEqual(components.scheme, "instagram")
+        XCTAssertEqual(components.host, "library")
+        XCTAssertEqual(
+            components.queryItems,
+            [
+                URLQueryItem(name: "OpenInEditor", value: "1"),
+                URLQueryItem(name: "LocalIdentifier", value: localIdentifier),
+            ]
+        )
+        XCTAssertNil(ActivityShareInstagramFeedContract.deepLinkURL(localIdentifier: ""))
+        XCTAssertEqual(ActivityShareInstagramFeedContract.fileExtension, "igo")
+        XCTAssertEqual(
+            ActivityShareInstagramFeedContract.uniformTypeIdentifier,
+            "com.instagram.exclusivegram"
+        )
+    }
+
+    func testInstagramPostExplainsFullAccessOnceBeforeDirectSharing() {
+        XCTAssertEqual(
+            ActivityShareInstagramPhotoAccessGuidance.action(
+                hasAcknowledgedFullAccess: false
+            ),
+            .showPhotoAccessGuidance
+        )
+        XCTAssertEqual(
+            ActivityShareInstagramPhotoAccessGuidance.action(
+                hasAcknowledgedFullAccess: true
+            ),
+            .openDirectEditor
+        )
+        XCTAssertEqual(
+            ActivityShareInstagramPhotoAccessGuidance.settingsPath,
+            "Settings → Apps → Instagram → Photos → Full Access"
+        )
+    }
+
+    func testInstagramPostDirectHandoffFixtureDocumentsFallback() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: projectRoot.appendingPathComponent(
+                "WanderTests/Fixtures/ios-fix/rec-271-instagram-post-direct-handoff-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+
+        XCTAssertEqual(fixture["issue"] as? String, "REC-271")
+        XCTAssertTrue(
+            try XCTUnwrap(fixture["expected_behavior"] as? String)
+                .contains("instagram://library")
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(fixture["fallback_behavior"] as? String)
+                .contains("com.instagram.exclusivegram")
+        )
+    }
+
+    func testTikTokOutcomePolicyReportsSuccessDraftCancellationAndProviderFailures() {
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_000),
+            .shared
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_015),
+            .savedAsDraft
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_015),
+            .savedAsDraft
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -2, shareState: 20_001),
+            .cancelled
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: 0, shareState: 20_013),
+            .cancelled
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_008),
+            .failed(message: "TikTok rejected the share image resolution.")
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_004),
+            .failed(
+                message: "Sign in to the TikTok account enabled for this rec.me sandbox, then try again."
+            )
+        )
+        XCTAssertEqual(
+            ActivityShareTikTokOutcomePolicy.outcome(errorCode: -3, shareState: 20_001),
+            .failed(
+                message: "TikTok could not finish this share. Try again or use More to share another way."
+            )
+        )
+    }
+
+    func testActivitySharePNGAttachmentKeepsCanonicalLinkOutOfTheLocalMessagePath() throws {
+        let activityID = "41000000-0000-0000-0000-000000000001"
+        let fileURL = URL(fileURLWithPath: "/tmp/recme-activity-share.png")
+        let content = try XCTUnwrap(
+            WanderShareContent.activity(
+                activityID: activityID,
+                placeName: "Ada Street",
+                message: "See Judy's check-in"
+            )?.attachingPNG(at: fileURL)
+        )
+
+        XCTAssertEqual(content.items, [
+            URL(string: "https://getrec.me/activities/\(activityID)")!,
+            WanderShareContent.publicTestFlightURL,
+            fileURL,
+        ])
+        XCTAssertTrue(content.messageBody.contains("https://getrec.me/activities/\(activityID)"))
+        XCTAssertTrue(content.messageBody.contains(WanderShareContent.publicTestFlightURL.absoluteString))
+        XCTAssertFalse(content.messageBody.contains(fileURL.absoluteString))
+    }
+
+    func testMessagesPresentationPolicyBlocksAReentrantLaunch() {
+        XCTAssertTrue(
+            ActivityShareMessagePresentationPolicy.shouldBeginPresentation(isPending: false)
+        )
+        XCTAssertFalse(
+            ActivityShareMessagePresentationPolicy.shouldBeginPresentation(isPending: true)
+        )
+    }
+
+    func testMessagesPresentationPolicyFallsBackOnlyWhenMessageUIFails() {
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .cancelled),
+            .dismiss
+        )
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .sent),
+            .dismiss
+        )
+        XCTAssertEqual(
+            ActivityShareMessagePresentationPolicy.completionAction(for: .failed),
+            .openSystemShare
+        )
+    }
+
+    func testSharePreviewPresentationCapturesAnImmutableRouteAtTapTime() throws {
+        let context = ActivityEngagementContext(
+            activityID: "41000000-0000-0000-0000-000000000274",
+            actor: ProfileShell(
+                id: "user_joe",
+                handle: "joelipshutz",
+                displayName: "Joe Lipshutz",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .owner
+            ),
+            placeName: "Jade Rabbit",
+            placeServerID: "40000000-0000-0000-0000-000000000274",
+            placeDetail: "Chinese · Santa Monica · CA",
+            ticketKind: .checkIn,
+            occurredAt: Date(timeIntervalSince1970: 1_775_520_000),
+            note: "Did it again"
+        )
+        let routeID = UUID(uuidString: "51000000-0000-0000-0000-000000000274")!
+
+        let presentation = try XCTUnwrap(
+            ActivitySharePreviewPresentation(id: routeID, context: context)
+        )
+        let expectedContent = try XCTUnwrap(
+            WanderShareContent.activity(
+                activityID: context.activityID,
+                placeName: context.placeName,
+                message: context.shareMessage
+            )
+        )
+
+        XCTAssertEqual(presentation.id, routeID)
+        XCTAssertEqual(presentation.context, context)
+        XCTAssertEqual(presentation.content, expectedContent)
+    }
+
+    func testShareArtworkRendererUsesTheResolvedAvatarImage() throws {
+        let context = ActivityEngagementContext(
+            activityID: "41000000-0000-0000-0000-000000000002",
+            actor: ProfileShell(
+                id: "user_friend",
+                handle: "friend",
+                displayName: "Judy",
+                avatarURL: nil,
+                bio: nil,
+                relationship: .follower
+            ),
+            placeName: "Ada Street",
+            placeServerID: nil,
+            placeDetail: "Restaurant · Chicago, IL",
+            status: .been,
+            occurredAt: .now
+        )
+        let avatarImage = UIGraphicsImageRenderer(size: CGSize(width: 12, height: 12)).image {
+            UIColor.systemBlue.setFill()
+            $0.fill(CGRect(origin: .zero, size: CGSize(width: 12, height: 12)))
+        }
+
+        let fallbackArtwork = try XCTUnwrap(
+            ActivityShareArtworkRenderer.render(context: context)
+        )
+        let avatarArtwork = try XCTUnwrap(
+            ActivityShareArtworkRenderer.render(
+                context: context,
+                avatarImage: avatarImage
+            )
+        )
+
+        XCTAssertNotEqual(fallbackArtwork.pngData(), avatarArtwork.pngData())
+        XCTAssertEqual(avatarArtwork.size, CGSize(width: 360, height: 640))
+    }
+
     func testLikeMutationUpdatesTheVisibleCountAndCanUndo() async {
         let store = WanderStore(fixtures: .empty())
         let activityID = "local-activity"
@@ -52,6 +345,91 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(store.activityComments(for: activityID).map(\.body), ["Meet me on the patio."])
         XCTAssertEqual(store.activityEngagement(for: activityID).commentCount, 1)
         XCTAssertFalse(try XCTUnwrap(store.activityComments(for: activityID).first).isPending)
+    }
+
+    func testDeletingOwnCommentOptimisticallyRemovesItAndUsesRemoteCount() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = "40000000-0000-0000-0000-000000000101"
+        let comment = activityComment(
+            id: "50000000-0000-0000-0000-000000000101",
+            activityID: activityID,
+            authorID: store.currentUser.id,
+            relationship: .owner
+        )
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(
+                comments: [comment],
+                nextCursor: nil,
+                engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+            ),
+            deleteResult: .empty(activityID: activityID)
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let didRefresh = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        let didDelete = await store.deleteActivityComment(comment, backend: backend)
+
+        XCTAssertTrue(didDelete)
+        XCTAssertTrue(store.activityComments(for: activityID).isEmpty)
+        XCTAssertEqual(store.activityEngagement(for: activityID).commentCount, 0)
+        XCTAssertEqual(repository.deletedCommentIDs, [comment.id])
+    }
+
+    func testFailedRemoteCommentDeleteRestoresRowAndCount() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = "40000000-0000-0000-0000-000000000102"
+        let comment = activityComment(
+            id: "50000000-0000-0000-0000-000000000102",
+            activityID: activityID,
+            authorID: store.currentUser.id,
+            relationship: .owner
+        )
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(
+                comments: [comment],
+                nextCursor: nil,
+                engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+            ),
+            deleteError: ActivityEngagementTestError.expected
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let didRefresh = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        let didDelete = await store.deleteActivityComment(comment, backend: backend)
+
+        XCTAssertFalse(didDelete)
+        XCTAssertEqual(store.activityComments(for: activityID), [comment])
+        XCTAssertEqual(store.activityEngagement(for: activityID).commentCount, 1)
+        XCTAssertNotNil(store.activityEngagementError(for: activityID))
+    }
+
+    func testCommentDeleteIsUnavailableForAnotherAuthor() async {
+        let store = WanderStore(fixtures: .empty())
+        let activityID = "40000000-0000-0000-0000-000000000103"
+        let comment = activityComment(
+            id: "50000000-0000-0000-0000-000000000103",
+            activityID: activityID,
+            authorID: "user_friend",
+            relationship: .follower
+        )
+        let repository = ActivityEngagementRepositoryStub(
+            commentsPage: ActivityCommentsPage(
+                comments: [comment],
+                nextCursor: nil,
+                engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
+            )
+        )
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let didRefresh = await store.refreshActivityComments(activityID: activityID, backend: backend)
+        XCTAssertTrue(didRefresh)
+
+        XCTAssertFalse(store.canDeleteActivityComment(comment))
+        let didDelete = await store.deleteActivityComment(comment, backend: backend)
+        XCTAssertFalse(didDelete)
+        XCTAssertEqual(store.activityComments(for: activityID), [comment])
+        XCTAssertTrue(repository.deletedCommentIDs.isEmpty)
     }
 
     func testPlaceHistoryResolvesExplicitVisitBeforeParentEvent() async {
@@ -382,6 +760,28 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(store.followedFeedPage?.activity.first?.media.map(\.id), ["photo_1"])
         XCTAssertEqual(activityRepository.activityRequestCount, 1)
     }
+
+    private func activityComment(
+        id: String,
+        activityID: String,
+        authorID: String,
+        relationship: ViewerRelationship
+    ) -> ActivityComment {
+        ActivityComment(
+            id: id,
+            activityID: activityID,
+            author: ProfileShell(
+                id: authorID,
+                handle: "commenter",
+                displayName: "Commenter",
+                avatarURL: nil,
+                bio: nil,
+                relationship: relationship
+            ),
+            body: "Worth remembering.",
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+    }
 }
 
 private enum ActivityEngagementTestError: Error {
@@ -392,17 +792,27 @@ private enum ActivityEngagementTestError: Error {
 private final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     let placeMatches: [PlaceActivityEngagementMatch]
     let setLikeError: Error?
+    let commentsPage: ActivityCommentsPage?
+    let deleteResult: ActivityEngagementSummary?
+    let deleteError: Error?
     private(set) var activityRequestCount = 0
+    private(set) var deletedCommentIDs: [String] = []
     private var activityResponses: [Result<FeedActivity, Error>]
 
     init(
         placeMatches: [PlaceActivityEngagementMatch] = [],
         setLikeError: Error? = nil,
+        commentsPage: ActivityCommentsPage? = nil,
+        deleteResult: ActivityEngagementSummary? = nil,
+        deleteError: Error? = nil,
         activityResult: FeedActivity? = nil,
         activityResponses: [Result<FeedActivity, Error>]? = nil
     ) {
         self.placeMatches = placeMatches
         self.setLikeError = setLikeError
+        self.commentsPage = commentsPage
+        self.deleteResult = deleteResult
+        self.deleteError = deleteError
         self.activityResponses = activityResponses
             ?? activityResult.map { [.success($0)] }
             ?? []
@@ -436,7 +846,7 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
     }
 
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
-        ActivityCommentsPage(
+        commentsPage ?? ActivityCommentsPage(
             comments: [],
             nextCursor: nil,
             engagement: .empty(activityID: activityID)
@@ -462,6 +872,13 @@ private final class ActivityEngagementRepositoryStub: ActivityEngagementReposito
             comment: comment,
             engagement: ActivityEngagementSummary(activityID: activityID, commentCount: 1)
         )
+    }
+
+    func deleteComment(commentID: String) async throws -> ActivityEngagementSummary {
+        deletedCommentIDs.append(commentID)
+        if let deleteError { throw deleteError }
+        guard let deleteResult else { throw ActivityEngagementTestError.expected }
+        return deleteResult
     }
 }
 

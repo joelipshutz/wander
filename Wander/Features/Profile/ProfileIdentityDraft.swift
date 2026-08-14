@@ -65,8 +65,12 @@ enum ProfileIdentitySubmissionError: Error, Equatable {
     case invalidIdentity
     case signedOut
     case unavailable
+    case contentNotAllowed
 
     static func map(_ error: Error) -> ProfileIdentitySubmissionError {
+        if error is CommunityContentPolicyError {
+            return .contentNotAllowed
+        }
         guard let remoteError = error as? WanderRemoteError else {
             return .unavailable
         }
@@ -80,6 +84,9 @@ enum ProfileIdentitySubmissionError: Error, Equatable {
             }
             if normalized.contains("invalid_handle") || normalized.contains("invalid_display_name") {
                 return .invalidIdentity
+            }
+            if normalized.contains("content_not_allowed") {
+                return .contentNotAllowed
             }
             return .unavailable
         case .notConfigured, .notImplemented:
@@ -97,6 +104,8 @@ enum ProfileIdentitySubmissionError: Error, Equatable {
             "Your session ended. Log in again to continue."
         case .unavailable:
             "We couldn’t save your profile. Check your connection and try again."
+        case .contentNotAllowed:
+            "That text can’t be shared on rec.me. Please revise it and try again."
         }
     }
 }

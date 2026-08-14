@@ -1139,6 +1139,39 @@ final class WanderPlaceCategoryTests: XCTestCase {
         }
     }
 
+    func testBarsNightlifeIncludesCiderSakeAndGameBars() throws {
+        let expectedSubcategories = ["Cider bar", "Sake bar", "Game bar"]
+        let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.barsNightlife)
+
+        XCTAssertTrue(expectedSubcategories.allSatisfy(suggestions.contains))
+        XCTAssertEqual(WanderPlaceCategory.normalizedPrimaryCategory("cider bar"), WanderPlaceCategory.barsNightlife)
+        XCTAssertEqual(WanderPlaceCategory.normalizedPrimaryCategory("sake bar"), WanderPlaceCategory.barsNightlife)
+        XCTAssertEqual(WanderPlaceCategory.normalizedPrimaryCategory("game bar"), WanderPlaceCategory.barsNightlife)
+
+        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.barsNightlife)
+        let barsAndPubs = try XCTUnwrap(groups.first { $0.title == "Bars & pubs" })
+        let wineAndGaming = try XCTUnwrap(groups.first { $0.title == "Wine & gaming" })
+
+        XCTAssertTrue(barsAndPubs.subcategories.contains("Cider bar"))
+        XCTAssertTrue(barsAndPubs.subcategories.contains("Sake bar"))
+        XCTAssertTrue(wineAndGaming.subcategories.contains("Game bar"))
+
+        let emojiBySubcategory = [
+            "Cider bar": "🍎",
+            "Sake bar": "🍶",
+            "Game bar": "🎮"
+        ]
+        for (subcategory, expectedEmoji) in emojiBySubcategory {
+            let assignment = PlaceCategoryAssignment(
+                primaryCategory: WanderPlaceCategory.barsNightlife,
+                subcategory: subcategory,
+                source: PlaceCategorySource.user.rawValue,
+                confidence: 1
+            )
+            XCTAssertEqual(WanderPlaceCategory.emoji(for: assignment), expectedEmoji, subcategory)
+        }
+    }
+
     func testRestaurantsFoodUsesCuisineOnlyGroups() throws {
         let groups = WanderPlaceCategory.restaurantCuisineGroups()
 

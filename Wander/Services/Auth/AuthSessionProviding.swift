@@ -129,6 +129,7 @@ enum AuthGateIntent: String, Equatable, Identifiable {
     case socialActivity
     case followPeople
     case manageBlocks
+    case reportContent
     case manageNotifications
     case syncPending
 
@@ -171,6 +172,13 @@ enum AuthGateIntent: String, Equatable, Identifiable {
                 primaryAction: "Sign in",
                 secondaryAction: "Cancel"
             )
+        case .reportContent:
+            AuthGateCopy(
+                title: "Sign in to send a report",
+                message: "Reports need an account so our safety team can investigate abuse and prevent duplicate reports.",
+                primaryAction: "Sign in",
+                secondaryAction: "Cancel"
+            )
         case .manageNotifications:
             AuthGateCopy(
                 title: "Sign in for notifications",
@@ -201,6 +209,12 @@ enum AuthSessionError: Error, Equatable {
     case notSignedIn
     case notConfigured
     case tokenUnavailable
+    case cancelled
+    case sessionUnavailable
+    case accountNotFound
+    case emailAlreadyInUse
+    case invalidVerificationCode
+    case emailVerificationUnavailable
 }
 
 enum NativeAuthMode: String, Equatable {
@@ -209,12 +223,39 @@ enum NativeAuthMode: String, Equatable {
     case signUp
 }
 
+enum NativeSocialAuthProvider: String, Equatable {
+    case apple
+    case google
+
+    var displayName: String {
+        switch self {
+        case .apple: "Apple"
+        case .google: "Google"
+        }
+    }
+}
+
+struct NativeSocialAuthRequest: Equatable {
+    let provider: NativeSocialAuthProvider
+    let mode: NativeAuthMode
+}
+
+enum NativeAuthOutcome: Equatable {
+    case completed
+    case requiresExistingAccountVerification
+    case requiresAdditionalVerification
+}
+
 @MainActor
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
     var canPresentNativeAuth: Bool { get }
     func sessionChanges() -> AsyncStream<AuthState>
     func refreshSession() async
+    func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeAuthOutcome
+    func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws
+    func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome
+    func resetPendingEmailVerification()
     func signOut() async throws
     func deleteAccount() async throws
     func supabaseAccessToken() async throws -> String
@@ -222,6 +263,20 @@ protocol AuthSessionProviding: AnyObject {
 }
 
 extension AuthSessionProviding {
+    func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeAuthOutcome {
+        throw AuthSessionError.notConfigured
+    }
+
+    func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws {
+        throw AuthSessionError.notConfigured
+    }
+
+    func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome {
+        throw AuthSessionError.notConfigured
+    }
+
+    func resetPendingEmailVerification() {}
+
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
     }
@@ -240,6 +295,11 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published var activeGate: AuthGateRequest?
     @Published var isPresentingNativeAuth = false
     @Published private(set) var activeNativeAuthMode: NativeAuthMode = .signInOrUp
+    @Published private(set) var activeSocialAuthProvider: NativeSocialAuthProvider?
+    @Published private(set) var isSendingEmailCode = false
+    @Published private(set) var isVerifyingEmailCode = false
+    @Published private(set) var emailVerificationAddress: String?
+    @Published private(set) var nativeAuthError: String?
     @Published private(set) var isSigningOut = false
     @Published private(set) var signOutError: String?
     @Published private(set) var isSessionValidated = false
@@ -271,6 +331,10 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     var canPresentNativeAuth: Bool {
         provider.canPresentNativeAuth
+    }
+
+    var isPerformingNativeAuth: Bool {
+        activeSocialAuthProvider != nil || isSendingEmailCode || isVerifyingEmailCode
     }
 
     func sessionChanges() -> AsyncStream<AuthState> {
@@ -314,6 +378,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     func beginSignIn(mode: NativeAuthMode = .signInOrUp) {
         activeGate = nil
+        resetNativeAuthForm()
         if provider.canPresentNativeAuth {
             activeNativeAuthMode = mode
             isNativeAuthAttemptActive = true
@@ -327,6 +392,129 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     func nativeAuthDidDismiss() {
         isNativeAuthAttemptActive = false
         isPresentingNativeAuth = false
+        resetNativeAuthForm()
+    }
+
+    @discardableResult
+    func authenticate(with socialProvider: NativeSocialAuthProvider) async -> NativeAuthOutcome? {
+        guard provider.canPresentNativeAuth else {
+            nativeAuthError = "Sign in is not available in this build."
+            return nil
+        }
+
+        nativeAuthError = nil
+        isNativeAuthAttemptActive = true
+        activeSocialAuthProvider = socialProvider
+        defer { activeSocialAuthProvider = nil }
+
+        do {
+            let outcome = try await provider.authenticate(
+                with: socialProvider,
+                mode: activeNativeAuthMode
+            )
+            if outcome == .completed {
+                synchronizeState(provider.state)
+                guard state.isSignedIn else {
+                    nativeAuthError = "\(socialProvider.displayName) sign-in didn’t finish. Try again or use another method."
+                    return nil
+                }
+            } else {
+                nativeAuthError = incompleteSocialAuthMessage(
+                    provider: socialProvider,
+                    outcome: outcome
+                )
+            }
+            return outcome
+        } catch AuthSessionError.cancelled, is CancellationError {
+            return nil
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error(
+                "social sign-in failed provider=\(socialProvider.rawValue, privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            nativeAuthError = "\(socialProvider.displayName) sign-in didn’t finish. Try again or use another method."
+            return nil
+        }
+    }
+
+    func sendEmailCode(to rawEmailAddress: String) async -> Bool {
+        guard provider.canPresentNativeAuth else {
+            nativeAuthError = "Email sign-in is not available in this build."
+            return false
+        }
+
+        let emailAddress = rawEmailAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.looksLikeEmailAddress(emailAddress) else {
+            nativeAuthError = "Enter a valid email address."
+            return false
+        }
+
+        nativeAuthError = nil
+        isNativeAuthAttemptActive = true
+        isSendingEmailCode = true
+        defer { isSendingEmailCode = false }
+
+        do {
+            try await provider.sendEmailCode(to: emailAddress, mode: activeNativeAuthMode)
+            emailVerificationAddress = emailAddress
+            return true
+        } catch AuthSessionError.accountNotFound {
+            nativeAuthError = "We couldn’t find an account for that email. Try Apple or Google, or create an account."
+        } catch AuthSessionError.emailAlreadyInUse {
+            nativeAuthError = "That email already has an account. Go back and log in instead."
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error(
+                "email code send failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            nativeAuthError = "We couldn’t send a code. Check the email and try again."
+        }
+        return false
+    }
+
+    @discardableResult
+    func verifyEmailCode(_ rawCode: String) async -> NativeAuthOutcome? {
+        let code = rawCode.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !code.isEmpty else {
+            nativeAuthError = "Enter the code from your email."
+            return nil
+        }
+
+        nativeAuthError = nil
+        isVerifyingEmailCode = true
+        defer { isVerifyingEmailCode = false }
+
+        do {
+            let outcome = try await provider.verifyEmailCode(code)
+            if outcome == .completed {
+                synchronizeState(provider.state)
+                guard state.isSignedIn else {
+                    nativeAuthError = "Email sign-in didn’t finish. Try again."
+                    return nil
+                }
+            } else {
+                nativeAuthError = "This account needs another verification step. Try Apple or Google, or contact support."
+            }
+            return outcome
+        } catch AuthSessionError.invalidVerificationCode {
+            nativeAuthError = "That code isn’t right. Check the email and try again."
+        } catch {
+            #if DEBUG
+            WanderDebugLog.remote.error(
+                "email code verification failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
+            )
+            #endif
+            nativeAuthError = "We couldn’t verify that code. Try again."
+        }
+        return nil
+    }
+
+    func cancelEmailVerification() {
+        provider.resetPendingEmailVerification()
+        emailVerificationAddress = nil
+        nativeAuthError = nil
     }
 
     func supabaseAccessToken() async throws -> String {
@@ -397,6 +585,42 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         synchronizeState(provider.state)
     }
 
+    private func resetNativeAuthForm() {
+        activeSocialAuthProvider = nil
+        isSendingEmailCode = false
+        isVerifyingEmailCode = false
+        emailVerificationAddress = nil
+        nativeAuthError = nil
+        provider.resetPendingEmailVerification()
+    }
+
+    private func incompleteSocialAuthMessage(
+        provider: NativeSocialAuthProvider,
+        outcome: NativeAuthOutcome
+    ) -> String {
+        switch outcome {
+        case .completed:
+            return ""
+        case .requiresExistingAccountVerification:
+            return "We couldn’t match that \(provider.displayName) login to an existing account. Sign in with your original method first, then connect \(provider.displayName) in Settings."
+        case .requiresAdditionalVerification:
+            return "This \(provider.displayName) account needs another verification step. Try email or your other sign-in method."
+        }
+    }
+
+    private static func looksLikeEmailAddress(_ value: String) -> Bool {
+        let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              !parts[0].isEmpty,
+              parts[1].contains("."),
+              !parts[1].hasPrefix("."),
+              !parts[1].hasSuffix(".")
+        else {
+            return false
+        }
+        return true
+    }
+
     private func synchronizeState(_ state: AuthState) {
         self.state = state
         if case .signedIn = state {
@@ -425,15 +649,45 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     let canPresentNativeAuth: Bool
     private let token: String?
     private let signOutError: Error?
+    private let nativeAuthOutcome: NativeAuthOutcome
+    private let nativeAuthSession: AuthSession?
+    private let nativeAuthFailure: Error?
+    private let emailVerificationOutcome: NativeAuthOutcome
+    private let emailVerificationSession: AuthSession?
+    private let emailCodeFailure: Error?
+    private let emailVerificationFailure: Error?
     private let sessionChangeStream: AsyncStream<AuthState>
     private let sessionChangeContinuation: AsyncStream<AuthState>.Continuation
+    private(set) var requestedSocialAuth: [NativeSocialAuthRequest] = []
+    private(set) var requestedEmailCodes: [(emailAddress: String, mode: NativeAuthMode)] = []
+    private(set) var verifiedEmailCodes: [String] = []
+    private(set) var didResetPendingEmailVerification = false
 
-    init(state: AuthState = .signedOut, canPresentNativeAuth: Bool = false, token: String? = nil, signOutError: Error? = nil) {
+    init(
+        state: AuthState = .signedOut,
+        canPresentNativeAuth: Bool = false,
+        token: String? = nil,
+        signOutError: Error? = nil,
+        nativeAuthOutcome: NativeAuthOutcome = .completed,
+        nativeAuthSession: AuthSession? = nil,
+        nativeAuthFailure: Error? = nil,
+        emailVerificationOutcome: NativeAuthOutcome = .completed,
+        emailVerificationSession: AuthSession? = nil,
+        emailCodeFailure: Error? = nil,
+        emailVerificationFailure: Error? = nil
+    ) {
         let (stream, continuation) = AsyncStream<AuthState>.makeStream()
         self.state = state
         self.canPresentNativeAuth = canPresentNativeAuth
         self.token = token
         self.signOutError = signOutError
+        self.nativeAuthOutcome = nativeAuthOutcome
+        self.nativeAuthSession = nativeAuthSession
+        self.nativeAuthFailure = nativeAuthFailure
+        self.emailVerificationOutcome = emailVerificationOutcome
+        self.emailVerificationSession = emailVerificationSession
+        self.emailCodeFailure = emailCodeFailure
+        self.emailVerificationFailure = emailVerificationFailure
         self.sessionChangeStream = stream
         self.sessionChangeContinuation = continuation
     }
@@ -450,6 +704,45 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     func sessionChanges() -> AsyncStream<AuthState> { sessionChangeStream }
 
     func refreshSession() async {}
+
+    func authenticate(
+        with provider: NativeSocialAuthProvider,
+        mode: NativeAuthMode
+    ) async throws -> NativeAuthOutcome {
+        requestedSocialAuth.append(.init(provider: provider, mode: mode))
+        if let nativeAuthFailure {
+            throw nativeAuthFailure
+        }
+        if nativeAuthOutcome == .completed, let nativeAuthSession {
+            state = .signedIn(nativeAuthSession)
+            sessionChangeContinuation.yield(state)
+        }
+        return nativeAuthOutcome
+    }
+
+    func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws {
+        requestedEmailCodes.append((emailAddress, mode))
+        if let emailCodeFailure {
+            throw emailCodeFailure
+        }
+        didResetPendingEmailVerification = false
+    }
+
+    func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome {
+        verifiedEmailCodes.append(code)
+        if let emailVerificationFailure {
+            throw emailVerificationFailure
+        }
+        if emailVerificationOutcome == .completed, let emailVerificationSession {
+            state = .signedIn(emailVerificationSession)
+            sessionChangeContinuation.yield(state)
+        }
+        return emailVerificationOutcome
+    }
+
+    func resetPendingEmailVerification() {
+        didResetPendingEmailVerification = true
+    }
 
     func signOut() async throws {
         if let signOutError {

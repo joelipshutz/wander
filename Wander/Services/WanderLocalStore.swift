@@ -109,32 +109,47 @@ struct CurrentUserCalendarProjection {
     }
 
     func profileStats(currentUserID: String, friends: Int) -> ProfileStats {
-        let representativePlaces = VisiblePlaceGrouping.representativePlaces(
+        let groups = VisiblePlaceGrouping.groups(
             from: visiblePlaces,
             currentUserID: currentUserID
         )
-        let checkedInPlaces = representativePlaces.filter {
-            $0.userPlace.status == .been && $0.userPlace.deletedAt == nil
+        let visitsByUserPlaceID = Dictionary(
+            grouping: visits.filter { $0.deletedAt == nil },
+            by: \.userPlaceID
+        )
+        let ownerPlacesByGroup = groups.map { group in
+            group.places.filter {
+                $0.owner.id == currentUserID && $0.userPlace.deletedAt == nil
+            }
         }
-        let checkInCount = checkedInPlaces.reduce(into: 0) { count, visiblePlace in
-            let referenceIDs = Set(
-                [
-                    visiblePlace.userPlace.id,
-                    visiblePlace.userPlace.localID,
-                    visiblePlace.userPlace.serverID
-                ].compactMap { $0 }
-            )
-            let matchingVisitCount = visits.filter {
-                $0.deletedAt == nil && referenceIDs.contains($0.userPlaceID)
-            }.count
-            count += max(matchingVisitCount, 1)
+        let checkedInGroups = ownerPlacesByGroup.compactMap { ownerPlaces -> [VisiblePlace]? in
+            let checkedInPlaces = ownerPlaces.filter { $0.userPlace.status == .been }
+            return checkedInPlaces.isEmpty ? nil : checkedInPlaces
+        }
+        let checkInCount = checkedInGroups.reduce(into: 0) { count, checkedInPlaces in
+            let referenceIDs = checkedInPlaces.reduce(into: Set<String>()) {
+                result, checkedInPlace in
+                result.formUnion(
+                    [
+                        checkedInPlace.userPlace.id,
+                        checkedInPlace.userPlace.localID,
+                        checkedInPlace.userPlace.serverID
+                    ].compactMap { $0 }
+                )
+            }
+            let matchingVisitIDs = referenceIDs.reduce(into: Set<String>()) {
+                result, referenceID in
+                result.formUnion((visitsByUserPlaceID[referenceID] ?? []).map(\.id))
+            }
+            count += max(matchingVisitIDs.count, 1)
         }
 
         return ProfileStats(
-            been: checkedInPlaces.count,
+            been: checkedInGroups.count,
             checkIns: checkInCount,
-            wanna: representativePlaces.filter {
-                $0.userPlace.status == .wannaGo && $0.userPlace.deletedAt == nil
+            wanna: ownerPlacesByGroup.filter { ownerPlaces in
+                !ownerPlaces.contains { $0.userPlace.status == .been }
+                    && ownerPlaces.contains { $0.userPlace.status == .wannaGo }
             }.count,
             friends: friends
         )
@@ -269,6 +284,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var placeActivityEngagementMatches: [PlaceActivityEngagementMatch] = []
     @Published private(set) var activityEngagementErrorByID: [String: String] = [:]
     private var pendingActivityLikeIDs = Set<String>()
+    private var pendingActivityCommentDeletionIDs = Set<String>()
     @Published private(set) var lastDiscoverFilters = DiscoverFilters(query: "")
     private(set) var lastDiscoverParseSource: DiscoverParseSource = .deterministic
     @Published private(set) var discoverPeopleRecommendationsState: DiscoverPeopleRecommendationsState = .idle
@@ -315,6 +331,7 @@ final class WanderStore: ObservableObject {
     private let parser: any LLMFilterParser
     private let placeResolver: PlaceCandidateResolving
     private let analytics: AnalyticsClient
+    var productAnalytics: AnalyticsClient { analytics }
     private let persistence: WanderStorePersistence?
     private var persistenceDeferralDepth = 0
     private var persistenceRequestedWhileDeferred = false
@@ -803,6 +820,21 @@ final class WanderStore: ObservableObject {
             sourceVisitID: sourceVisitID,
             inviteeUserIDs: normalizedInvitees
         )
+        let properties = ["invitee_count": "\(normalizedInvitees.count)"]
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.sharedVisitInvitesQueued,
+                properties: properties
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .connect,
+                action: .sharedVisitInvitesQueued,
+                surface: "check_in",
+                properties: properties
+            )
+        )
     }
 
     func queueSharedVisitInviteeReconciliation(sourceVisitID: String, inviteeUserIDs: [String]) {
@@ -1045,6 +1077,7 @@ final class WanderStore: ObservableObject {
             placeActivityEngagementMatches = []
             activityEngagementErrorByID = [:]
             pendingActivityLikeIDs = []
+            pendingActivityCommentDeletionIDs = []
             lastRemoteError = nil
             profiles = []
             follows = []
@@ -1154,6 +1187,19 @@ final class WanderStore: ObservableObject {
                 ]
             )
         )
+        if kind == .dailyTakeover {
+            analytics.track(
+                .engagement(
+                    need: .status,
+                    action: .saveStreakAdvanced,
+                    surface: "save_streak",
+                    properties: [
+                        "status": status.rawValue,
+                        "streak_count": "\(updatedSummary.currentCount)"
+                    ]
+                )
+            )
+        }
         if recoveryDate != nil {
             analytics.track(
                 AnalyticsEvent(
@@ -1248,6 +1294,7 @@ final class WanderStore: ObservableObject {
     }
 
     func updateCurrentUserDetails(_ update: ProfileDetailsUpdate, backend: WanderBackend?) async throws {
+        try CommunityContentPolicy.validate(update.displayName, update.handle, update.bio, update.homeArea)
         guard let backend, backend.profileRepository != nil else {
             updateCurrentUserProfile(
                 displayName: update.displayName,
@@ -1312,6 +1359,7 @@ final class WanderStore: ObservableObject {
         placeActivityEngagementMatches = []
         activityEngagementErrorByID = [:]
         pendingActivityLikeIDs = []
+        pendingActivityCommentDeletionIDs = []
         lastRemoteError = nil
         lastDiscoverFilters = DiscoverFilters(query: "")
         lastDiscoverParseSource = .deterministic
@@ -1520,6 +1568,12 @@ final class WanderStore: ObservableObject {
         activityEngagementErrorByID[activityID]
     }
 
+    func canDeleteActivityComment(_ comment: ActivityComment) -> Bool {
+        comment.author.id == currentUser.id
+            && !comment.isPending
+            && !pendingActivityCommentDeletionIDs.contains(comment.id)
+    }
+
     func isActivityLikePending(_ activityID: String) -> Bool {
         pendingActivityLikeIDs.contains(activityID)
     }
@@ -1603,7 +1657,10 @@ final class WanderStore: ObservableObject {
 
         guard UUID(uuidString: activityID) != nil,
               let repository = backend?.activityEngagementRepository
-        else { return true }
+        else {
+            trackActivityLike(requestedLike, outcome: "local_only")
+            return true
+        }
 
         pendingActivityLikeIDs.insert(activityID)
         defer { pendingActivityLikeIDs.remove(activityID) }
@@ -1612,6 +1669,7 @@ final class WanderStore: ObservableObject {
                 activityID: activityID,
                 isLiked: requestedLike
             )
+            trackActivityLike(requestedLike, outcome: "succeeded")
             return true
         } catch {
             activityEngagementByID[activityID] = previous
@@ -1628,20 +1686,28 @@ final class WanderStore: ObservableObject {
 
         do {
             let page = try await repository.comments(activityID: activityID, before: nil, limit: 50)
-            activityCommentsByID[activityID] = page.comments.sorted { lhs, rhs in
+            let pendingDeletedComments = page.comments.filter {
+                pendingActivityCommentDeletionIDs.contains($0.id)
+            }
+            activityCommentsByID[activityID] = page.comments.filter {
+                !pendingActivityCommentDeletionIDs.contains($0.id)
+            }.sorted { lhs, rhs in
                 if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
                 return lhs.id < rhs.id
+            }
+            let refreshedEngagement = pendingDeletedComments.reduce(page.engagement) { summary, _ in
+                summary.removingComment()
             }
             if pendingActivityLikeIDs.contains(activityID) {
                 let optimistic = activityEngagement(for: activityID)
                 activityEngagementByID[activityID] = ActivityEngagementSummary(
                     activityID: activityID,
                     likeCount: optimistic.likeCount,
-                    commentCount: page.engagement.commentCount,
+                    commentCount: refreshedEngagement.commentCount,
                     viewerHasLiked: optimistic.viewerHasLiked
                 )
             } else {
-                activityEngagementByID[activityID] = page.engagement
+                activityEngagementByID[activityID] = refreshedEngagement
             }
             activityEngagementErrorByID[activityID] = nil
             return true
@@ -1683,6 +1749,7 @@ final class WanderStore: ObservableObject {
                     createdAt: comment.createdAt
                 )
             }
+            trackActivityCommentCreated(outcome: "local_only")
             return true
         }
 
@@ -1695,11 +1762,84 @@ final class WanderStore: ObservableObject {
                 return lhs.id < rhs.id
             }
             activityEngagementByID[activityID] = result.engagement
+            trackActivityCommentCreated(outcome: "succeeded")
             return true
         } catch {
             activityCommentsByID[activityID]?.removeAll { $0.id == pendingID }
             activityEngagementByID[activityID] = previousSummary
             activityEngagementErrorByID[activityID] = remoteErrorMessage(error)
+            return false
+        }
+    }
+
+    private func trackActivityLike(_ isLiked: Bool, outcome: String) {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.activityLikeChanged,
+                properties: [
+                    "is_liked": isLiked ? "true" : "false",
+                    "outcome": outcome
+                ]
+            )
+        )
+        if isLiked {
+            analytics.track(
+                .engagement(
+                    need: .connect,
+                    action: .activityLiked,
+                    surface: "activity",
+                    properties: ["outcome": outcome]
+                )
+            )
+        }
+    }
+
+    private func trackActivityCommentCreated(outcome: String) {
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.activityCommentCreated,
+                properties: ["outcome": outcome]
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .connect,
+                action: .activityCommented,
+                surface: "activity",
+                properties: ["outcome": outcome]
+            )
+        )
+    }
+
+    @discardableResult
+    func deleteActivityComment(_ comment: ActivityComment, backend: WanderBackend?) async -> Bool {
+        guard canDeleteActivityComment(comment),
+              let previousIndex = activityComments(for: comment.activityID).firstIndex(where: { $0.id == comment.id })
+        else { return false }
+
+        let previousSummary = activityEngagement(for: comment.activityID)
+        activityCommentsByID[comment.activityID]?.remove(at: previousIndex)
+        activityEngagementByID[comment.activityID] = previousSummary.removingComment()
+        activityEngagementErrorByID[comment.activityID] = nil
+
+        guard UUID(uuidString: comment.id) != nil,
+              UUID(uuidString: comment.activityID) != nil,
+              let repository = backend?.activityEngagementRepository
+        else { return true }
+
+        pendingActivityCommentDeletionIDs.insert(comment.id)
+        defer { pendingActivityCommentDeletionIDs.remove(comment.id) }
+        do {
+            activityEngagementByID[comment.activityID] = try await repository.deleteComment(commentID: comment.id)
+            return true
+        } catch {
+            var restoredComments = activityComments(for: comment.activityID)
+            if !restoredComments.contains(where: { $0.id == comment.id }) {
+                restoredComments.insert(comment, at: min(previousIndex, restoredComments.count))
+            }
+            activityCommentsByID[comment.activityID] = restoredComments
+            activityEngagementByID[comment.activityID] = previousSummary
+            activityEngagementErrorByID[comment.activityID] = remoteErrorMessage(error)
             return false
         }
     }
@@ -2192,7 +2332,10 @@ final class WanderStore: ObservableObject {
         collaboratorUserIDs: [String] = []
     ) -> LocalPlaceList? {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return nil }
+        guard !trimmedName.isEmpty,
+              CommunityContentPolicy.allows(trimmedName),
+              CommunityContentPolicy.allows(description)
+        else { return nil }
 
         let now = Date.now
         let list = LocalPlaceList(
@@ -2207,6 +2350,21 @@ final class WanderStore: ObservableObject {
         )
         placeLists.append(list)
         replaceCollaborators(for: list, with: collaboratorUserIDs, createdAt: now)
+        let properties = [
+            "visibility": visibility.rawValue,
+            "collaborator_count": "\(Set(collaboratorUserIDs).count)"
+        ]
+        analytics.track(
+            AnalyticsEvent(name: WanderAnalyticsEvents.placeListCreated, properties: properties)
+        )
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .listCreated,
+                surface: "lists",
+                properties: properties
+            )
+        )
         persist()
         return list
     }
@@ -2221,6 +2379,8 @@ final class WanderStore: ObservableObject {
     ) -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty,
+              CommunityContentPolicy.allows(trimmedName),
+              CommunityContentPolicy.allows(description),
               let index = placeLists.firstIndex(where: { $0.id == id || $0.localID == id || $0.serverID == id }),
               canManage(placeLists[index])
         else { return false }
@@ -3322,6 +3482,24 @@ final class WanderStore: ObservableObject {
                 previousSummary: streakSummaryBeforeSave
             )
         }
+        let acceptanceProperties = [
+            "created_new_place": createdNewUserPlace ? "true" : "false",
+            "photo_count": "\(result.photoCopies.count)"
+        ]
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.sharedVisitAccepted,
+                properties: acceptanceProperties
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .status,
+                action: .sharedVisitAccepted,
+                surface: "shared_visit",
+                properties: acceptanceProperties
+            )
+        )
         objectWillChange.send()
         persist()
         return visit
@@ -3825,6 +4003,17 @@ final class WanderStore: ObservableObject {
                 ]
             )
         )
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .checkInCreated,
+                surface: "check_in",
+                properties: [
+                    "is_repeat": isRepeatCheckIn ? "true" : "false",
+                    "visibility": userPlace.visibility.rawValue
+                ]
+            )
+        )
 
         objectWillChange.send()
         persist()
@@ -3907,7 +4096,6 @@ final class WanderStore: ObservableObject {
                 properties: ["date_changed": visitedAt == nil ? "false" : "true"]
             )
         )
-
         objectWillChange.send()
         persist()
         return visit
@@ -4321,10 +4509,21 @@ final class WanderStore: ObservableObject {
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.discoverParseFailed,
-                    properties: ["error": remoteErrorMessage(error)]
+                    properties: ["error_category": analyticsErrorCategory(error)]
                 )
             )
             return fallback
+        }
+    }
+
+    private func analyticsErrorCategory(_ error: Error) -> String {
+        switch error {
+        case is URLError:
+            "network"
+        case is DecodingError:
+            "decoding"
+        default:
+            "other"
         }
     }
 
@@ -4629,6 +4828,14 @@ final class WanderStore: ObservableObject {
             AnalyticsEvent(
                 name: WanderAnalyticsEvents.placeSaved,
                 properties: ["source_type": sourceType.rawValue, "visibility": resolvedVisibility.rawValue, "status": status.rawValue]
+            )
+        )
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .placeSaved,
+                surface: "add",
+                properties: ["source_type": sourceType.rawValue, "status": status.rawValue]
             )
         )
         recordNewSaveForStreak(
@@ -5485,6 +5692,7 @@ final class WanderStore: ObservableObject {
                 syncState: .pendingCreate
             )
         )
+        trackFollowCreated(source: source, outcome: "local_only")
         persist()
     }
 
@@ -5497,6 +5705,7 @@ final class WanderStore: ObservableObject {
         }
 
         guard let backend else {
+            trackFollowCreated(source: source, outcome: "queued")
             persist()
             return false
         }
@@ -5511,6 +5720,7 @@ final class WanderStore: ObservableObject {
             persist()
             await refreshRemoteSocialGraph(backend: backend)
             await refreshRemoteVisiblePlaces(backend: backend)
+            trackFollowCreated(source: source, outcome: "succeeded")
             return true
         } catch {
             follow.syncStateRaw = SyncState.failed.rawValue
@@ -5520,6 +5730,21 @@ final class WanderStore: ObservableObject {
             persist()
             return false
         }
+    }
+
+    private func trackFollowCreated(source: FollowSource, outcome: String) {
+        let properties = ["source": source.rawValue, "outcome": outcome]
+        analytics.track(
+            AnalyticsEvent(name: WanderAnalyticsEvents.followCreated, properties: properties)
+        )
+        analytics.track(
+            .engagement(
+                need: .connect,
+                action: .followCreated,
+                surface: source.rawValue,
+                properties: ["outcome": outcome]
+            )
+        )
     }
 
     func unfollow(userID: String) {

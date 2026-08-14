@@ -340,6 +340,8 @@ struct WanderRootView: View {
         initialSharedProfileRoute: SharedProfileRoute? = nil,
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
+        isFirstVisitWalkthroughEligible: Bool = false,
+        onFirstVisitWalkthroughCompleted: @escaping () -> Void = {},
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
@@ -376,7 +378,10 @@ struct WanderRootView: View {
         )
         _walkthroughs = StateObject(
             wrappedValue: FirstVisitWalkthroughCoordinator(
-                isEnabled: fixtureMode == .empty || launchArguments.contains("-WanderEnableWalkthroughs")
+                isEnabled: (
+                    fixtureMode == .empty && isFirstVisitWalkthroughEligible
+                ) || launchArguments.contains("-WanderEnableWalkthroughs"),
+                onCompleted: onFirstVisitWalkthroughCompleted
             )
         )
         _addSheetDetent = State(
@@ -437,6 +442,23 @@ struct WanderRootView: View {
         .environmentObject(store)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
+        .task(id: selectedTab) {
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.appSurfaceViewed,
+                    properties: ["surface": selectedTab.rawValue]
+                )
+            )
+            if selectedTab == .profile {
+                analytics.track(
+                    .engagement(
+                        need: .status,
+                        action: .ownProfileViewed,
+                        surface: "profile"
+                    )
+                )
+            }
+        }
         .onChange(of: activityNavigation.commentsRoute?.id) { _, requestID in
             if requestID != nil {
                 selectedTab = .discover
@@ -836,6 +858,12 @@ struct WanderRootView: View {
         addLaunchRequest = nil
         addSheetDetent = addSheetRestingDetent
         isPresentingAdd = true
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.appSurfaceViewed,
+                properties: ["surface": "add"]
+            )
+        )
     }
 
     private func restorePlaceSaveDraftIfNeeded() {
@@ -1261,7 +1289,7 @@ struct WanderRootView: View {
         case .profile:
             selectedTab = .profile
             isPresentingAdd = false
-        case .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+        case .placeDetail, .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
             break
         }
 
@@ -1301,7 +1329,7 @@ struct WanderRootView: View {
     }
 
     private var walkthroughTabBarTargetVerticalOffset: CGFloat {
-        if #available(iOS 26.0, *) { 6 } else { 2 }
+        if #available(iOS 26.0, *) { 12 } else { 8 }
     }
 
     private var walkthroughTabBarTargetHorizontalInset: CGFloat {

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
 #if canImport(ClerkKit)
 import ClerkKit
 #endif
@@ -13,6 +16,11 @@ final class ClerkAuthService: AuthSessionProviding {
     typealias SessionResolver = @MainActor () async throws -> AuthSession?
     private let resolveAuthoritativeSession: SessionResolver
     private var refreshGeneration = 0
+    private enum PendingEmailVerification {
+        case signIn(SignIn)
+        case signUp(SignUp)
+    }
+    private var pendingEmailVerification: PendingEmailVerification?
 
     init(
         configuration: WanderBackendConfiguration,
@@ -140,6 +148,163 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
     }
 
+    func authenticate(
+        with provider: NativeSocialAuthProvider,
+        mode: NativeAuthMode
+    ) async throws -> NativeAuthOutcome {
+        #if canImport(ClerkKit) && canImport(AuthenticationServices)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+
+        do {
+            let result: TransferFlowResult
+            switch (provider, mode) {
+            case (.apple, .signIn):
+                result = try await Clerk.shared.auth.signInWithApple(transferable: false)
+            case (.apple, .signInOrUp):
+                result = try await Clerk.shared.auth.signInWithApple()
+            case (.apple, .signUp):
+                result = try await Clerk.shared.auth.signUpWithApple()
+            case (.google, .signIn):
+                result = try await Clerk.shared.auth.signInWithOAuth(
+                    provider: .google,
+                    transferable: false
+                )
+            case (.google, .signInOrUp):
+                result = try await Clerk.shared.auth.signInWithOAuth(provider: .google)
+            case (.google, .signUp):
+                result = try await Clerk.shared.auth.signUpWithOAuth(provider: .google)
+            }
+
+            let outcome: NativeAuthOutcome
+            switch result {
+            case .signIn(let signIn):
+                if signIn.status == .complete {
+                    outcome = .completed
+                } else if mode == .signIn {
+                    outcome = .requiresExistingAccountVerification
+                } else {
+                    outcome = .requiresAdditionalVerification
+                }
+            case .signUp(let signUp):
+                if signUp.status == .complete {
+                    outcome = .completed
+                } else if mode == .signIn {
+                    outcome = .requiresExistingAccountVerification
+                } else {
+                    outcome = .requiresAdditionalVerification
+                }
+            }
+
+            guard outcome == .completed else { return outcome }
+            await refreshSession()
+            guard case .signedIn = state else {
+                throw AuthSessionError.sessionUnavailable
+            }
+            return .completed
+        } catch let error as ASAuthorizationError where error.code == .canceled {
+            throw AuthSessionError.cancelled
+        } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+            throw AuthSessionError.cancelled
+        } catch is CancellationError {
+            throw AuthSessionError.cancelled
+        } catch {
+            throw Self.authError(from: error)
+        }
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
+    func sendEmailCode(to emailAddress: String, mode: NativeAuthMode) async throws {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+
+        do {
+            switch mode {
+            case .signIn:
+                let signIn = try await Clerk.shared.auth.signInWithEmailCode(
+                    emailAddress: emailAddress
+                )
+                pendingEmailVerification = .signIn(signIn)
+            case .signUp:
+                var signUp = try await Clerk.shared.auth.signUp(
+                    emailAddress: emailAddress,
+                    legalAccepted: true
+                )
+                signUp = try await signUp.sendEmailCode()
+                pendingEmailVerification = .signUp(signUp)
+            case .signInOrUp:
+                do {
+                    let signIn = try await Clerk.shared.auth.signInWithEmailCode(
+                        emailAddress: emailAddress
+                    )
+                    pendingEmailVerification = .signIn(signIn)
+                } catch let error as ClerkAPIError where Self.accountNotFoundCodes.contains(error.code) {
+                    var signUp = try await Clerk.shared.auth.signUp(
+                        emailAddress: emailAddress,
+                        legalAccepted: true
+                    )
+                    signUp = try await signUp.sendEmailCode()
+                    pendingEmailVerification = .signUp(signUp)
+                }
+            }
+        } catch {
+            pendingEmailVerification = nil
+            throw Self.authError(from: error)
+        }
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
+    func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome {
+        #if canImport(ClerkKit)
+        guard let pendingEmailVerification else {
+            throw AuthSessionError.emailVerificationUnavailable
+        }
+
+        do {
+            let outcome: NativeAuthOutcome
+            switch pendingEmailVerification {
+            case .signIn(let signIn):
+                let updatedSignIn = try await signIn.verifyCode(code)
+                self.pendingEmailVerification = .signIn(updatedSignIn)
+                outcome = updatedSignIn.status == .complete
+                    ? .completed
+                    : .requiresAdditionalVerification
+            case .signUp(let signUp):
+                let updatedSignUp = try await signUp.verifyEmailCode(code)
+                self.pendingEmailVerification = .signUp(updatedSignUp)
+                outcome = updatedSignUp.status == .complete
+                    ? .completed
+                    : .requiresAdditionalVerification
+            }
+
+            guard outcome == .completed else { return outcome }
+            self.pendingEmailVerification = nil
+            await refreshSession()
+            guard case .signedIn = state else {
+                throw AuthSessionError.sessionUnavailable
+            }
+            return .completed
+        } catch {
+            throw Self.authError(from: error)
+        }
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
+    func resetPendingEmailVerification() {
+        #if canImport(ClerkKit)
+        pendingEmailVerification = nil
+        #endif
+    }
+
     func signOut() async throws {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
@@ -230,6 +395,35 @@ final class ClerkAuthService: AuthSessionProviding {
     }
 
     #if canImport(ClerkKit)
+    private static let accountNotFoundCodes: Set<String> = [
+        "form_identifier_not_found",
+        "invitation_account_not_exists",
+    ]
+
+    private static let emailAlreadyInUseCodes: Set<String> = [
+        "form_identifier_exists",
+        "form_param_value_already_exists",
+    ]
+
+    private static let invalidVerificationCodeCodes: Set<String> = [
+        "form_code_incorrect",
+        "verification_failed",
+    ]
+
+    private static func authError(from error: Error) -> Error {
+        guard let clerkError = error as? ClerkAPIError else { return error }
+        if accountNotFoundCodes.contains(clerkError.code) {
+            return AuthSessionError.accountNotFound
+        }
+        if emailAlreadyInUseCodes.contains(clerkError.code) {
+            return AuthSessionError.emailAlreadyInUse
+        }
+        if invalidVerificationCodeCodes.contains(clerkError.code) {
+            return AuthSessionError.invalidVerificationCode
+        }
+        return error
+    }
+
     private static func resolveCurrentSession() async throws -> AuthSession? {
         _ = try await Clerk.shared.refreshClient()
         guard let session = Clerk.shared.session,
