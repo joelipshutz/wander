@@ -20,4 +20,4 @@ Permissions and fallbacks:
 - Camera/photo access is requested only after the reviewer chooses a photo action; place saving works without it.
 - Notifications are optional and the core app remains available if denied.
 
-The backend is live. The share extension stages user-selected links or text for import into rec.me. Widgets may show nearby/saved-place context when their relevant permissions and data are available. Support and safety contact: support@getrec.me.
+The backend is live. The share extension stages user-selected links or text for import into rec.me. Widgets may show nearby/saved-place context when their relevant permissions and data are available. Support and safety contact: getrec.me@gmail.com.
