@@ -100,3 +100,12 @@ The `small-size/` folder contains direct 180 px and 87 px reductions.
 Advance **D** and **G** into real Icon Composer tuning first. D is the safest
 brand evolution; G is the clearest alternate-font experiment. Keep H as a
 globe-forward challenger. Prompts are recorded in `prompts.md`.
+
+## Proper-serif / realistic-globe follow-up
+
+Ryan's next review asked for a calmer, more proper lowercase serif in the
+spirit of Beli's restrained app-icon typography, plus a realistic enlarged
+Earth half-dome with a natural palette instead of rainbow color. Five follow-up
+directions (I–M) live in [`second-pass/`](second-pass/README.md). Direction M is
+the strongest balance of proper typography, real globe meaning, and visible
+Liquid Glass material.
