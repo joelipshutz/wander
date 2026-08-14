@@ -28797,6 +28797,136 @@ Handoff:
   tile to confirm the live query succeeds, then mark the PR ready and move
   REC-170 / Mission Control to Done after merge or final acceptance.
 
+## 2026-08-14 00:49 PDT - Codex - REC-122 Confetti Motion Prototype
+
+Agent: Codex using `design-html`
+Branch: `codex/rec-122-confetti-motion`
+Worktree: `/private/tmp/recme-streak-confetti-prototype`
+Linear: `REC-122` (`In Progress`)
+Mission Control: unavailable (`localhost:4000` refused the connection)
+
+Goal: prototype a more explosive, slightly longer streak-confetti motion before
+changing production SwiftUI, with replayable controls that make the timing and
+motion tradeoffs easy to understand.
+
+Starting state and coordination:
+
+- Started clean from exact `origin/main` commit `475f094c`; Joe's active
+  `joe/phone-build-latest` checkout is 201 commits behind with an untracked
+  `tmp/` directory and remains untouched.
+- Reopened the existing owning issue REC-122 and recorded that this phase is a
+  disposable motion study only. No production streak code changes are
+  authorized until Joe reviews the prototype.
+- Current implementation uses 46 pieces falling from above for 1.15–1.63
+  seconds with per-piece delays up to 280 ms. The same-day pop uses 30 pieces,
+  0.62 travel scale, and a 720 ms overlay lifetime.
+- Expected project file: this append-only log only. The interactive prototype
+  lives in the private gstack design-artifact directory outside the repo.
+
+Prototype checkpoint:
+
+- Built a self-contained interactive motion lab at
+  `/Users/joelipshutz/.gstack/projects/Wandernametbd/designs/streak-confetti-motion-20260814/finalized.html`.
+  It recreates the shipping streak takeover closely enough to judge the motion,
+  without changing any production SwiftUI.
+- The A/B control reproduces the current top-down 46-piece fall and a proposed
+  68-piece fan burst from behind the ticket. The proposed starting point uses
+  1.25x launch strength, a small 100–180 ms second wave, gravity, and a late
+  fade over 2.25 seconds. Sliders expose burst strength, duration, and density;
+  a scrubber and 0.5x playback make the motion inspectable frame by frame.
+- Verified live replay, A/B switching, sliders, scrubber, 0.5x playback,
+  keyboard controls, Reduce Motion behavior, and zero browser-console errors.
+  Viewport checks at 375, 768, and 1440 pixels found no horizontal overflow,
+  overlap, clipped controls, or unreadable phone content.
+- Saved matching 0.45-second stills as `current-rain-frame.png` and
+  `proposed-burst-frame.png` beside the HTML. The contrast is intentional:
+  current confetti is still entering from the top while the proposal has
+  already spread outward around the ticket.
+- No app source, tests, project generation, build number, backend, TestFlight,
+  or Slack state changed. REC-122 remains In Progress pending Joe's motion
+  review; production implementation is deliberately deferred.
+
+Handoff:
+
+- Committed and pushed the coordination record as `d39ad4d6` on
+  `codex/rec-122-confetti-motion`; opened draft PR #396:
+  https://github.com/joelipshutz/wander/pull/396. Linked the draft from Linear
+  REC-122.
+- Restart: open the local prototype, compare Current and Proposed at 1x and
+  0.5x, adjust the three sliders if desired, and record the approved values.
+  Then translate only the approved particle recipe into
+  `Wander/Features/Streak/SaveStreakCelebrationView.swift`, add focused motion
+  contract coverage, and run simulator visual QA before moving REC-122 to
+  In Review.
+
+Refinement, 2026-08-14 01:24 PDT:
+
+- Joe rejected the radial burst direction and asked to keep the current rain,
+  slow it to about 0.70x, make that the default, add more confetti, and keep it
+  arriving longer.
+- Surgically evolved the same live prototype. The new default is 80 pieces on
+  the shipping top-down path, 0.70x travel speed, and a one-second distributed
+  arrival window. The last piece completes around 3.33 seconds versus the
+  current preset's roughly 1.91-second last finish.
+- Preserved the exact Current A/B option and replaced the burst controls with
+  rain speed, arrival window, and piece count. Replay, 0.5x playback, frame
+  scrubbing, keyboard controls, and Reduce Motion behavior remain available.
+- Verified the revised default at 375, 768, and 1440 pixels with no horizontal
+  overflow or console errors. A scrubbed 2.70-second frame still shows a small,
+  restrained set of late pieces near the bottom instead of an already-empty
+  screen. Final stills are `more-rain-mid-frame.png` and
+  `more-rain-late-frame.png` beside the HTML artifact.
+- The local preview remains `http://127.0.0.1:8765/finalized.html`. Production
+  SwiftUI, tests, project generation, build number, backend, TestFlight, and
+  Slack remain untouched; REC-122 and draft PR #396 stay open for motion review.
+
+Implementation start, 2026-08-14 01:43 PDT:
+
+- Joe approved the refined slower-rain prototype and authorized production
+  implementation with “go.” The target remains 80 top-down pieces, 0.70x
+  travel speed, and a one-second distributed arrival window.
+- Fetched and merged latest `origin/main` (`ed9e9988`, TestFlight build 143)
+  before editing. The merge only updated the generated project/build number
+  files and did not overlap the streak surface.
+- Expected implementation files are
+  `Wander/Features/Streak/SaveStreakCelebrationView.swift`, focused contracts in
+  `WanderTests/SaveStreakTests.swift`, and this append-only coordination log.
+  The short same-day confetti pop will retain its existing timing because its
+  presentation window is intentionally only 720 ms.
+
+Implementation validation, 2026-08-14 02:07 PDT:
+
+- Added an explicit welcome motion recipe with 80 top-down pieces, 0.70x
+  travel speed, and an even one-second arrival window. The last piece finishes
+  at roughly 3.33 seconds, keeping the approved late confetti tail visible.
+- Kept the existing short same-day pop isolated at 30 pieces, 0.62 travel
+  scale, original timing, and no extended arrival window. Added focused tests
+  that lock both recipes so the two celebration contexts cannot drift together.
+- Focused `SaveStreakCalculatorTests` passed: 17 tests, 0 failures. The full
+  unit suite passed twice: 1,126 tests, 0 failures.
+- The UI suite completed 25 of 27 tests successfully. Two unrelated existing
+  UI tests produced three assertion failures in `OnboardingUITests.swift`:
+  `testCommentsEdgeSwipeReturnsToPreviousFeedPage` at lines 985-986 and
+  `testFirstAddActionGuidesThroughSaveBeforeReturningToMap` at line 651. No
+  streak or confetti UI test failed. Result bundle:
+  `DerivedData-focused/Logs/Test/Test-Wander-2026.08.14_01-58-39--0700.xcresult`.
+- Visually replayed the production takeover on iPhone 16 Plus and iPhone 16e,
+  both on iOS 18.6. The slower rain reads as a fuller welcome, its late tail is
+  clear, the ticket/copy/button remain readable, and neither size showed
+  clipping or crowding.
+- No project generation, build-number bump, archive, upload, TestFlight state,
+  backend, or Slack state changed. This is an app-code review handoff only.
+
+Review handoff, 2026-08-14 02:08 PDT:
+
+- Committed the implementation as `ad6356a1` (`feat: extend streak confetti
+  rain`) and pushed `codex/rec-122-confetti-motion`.
+- Updated PR #396 with the implementation and validation evidence, then moved
+  it from draft to ready for review:
+  https://github.com/joelipshutz/wander/pull/396.
+- Linked the ready PR from Linear REC-122, added the validation summary, and
+  moved the issue to In Review. Merge and any later TestFlight release remain
+  intentionally separate actions.
 ## 2026-08-14 02:36 PDT - Codex - REC-227 background import autosave release
 
 Agent: Codex
@@ -28859,3 +28989,54 @@ checkpoint. Next: receive the final red-team verdict, run the full unit suite,
 commit/push, merge only after payload checks pass, snapshot the build-144
 manifest from `testflight/build-143`, then create and merge the build-number PR
 before archiving the exact candidate.
+
+## 2026-08-14 14:27 PDT - Codex - REC-122 confetti TestFlight release
+
+Agent: Codex
+Branch: `codex/rec-122-confetti-motion`
+Worktree: `/private/tmp/recme-streak-confetti-prototype`
+Linear: `REC-122` (`In Review`)
+Mission Control: unavailable; `localhost:4000` refused the required task API
+request.
+
+Goal: land PR #396 and package the approved slower, denser streak-confetti rain
+into the next explicit rec.me TestFlight build, including current `main`, full
+release validation, App Store Connect attachment, Linear closeout, and the
+required tester note.
+
+Starting release state:
+
+- Joe explicitly requested “push to tf,” authorizing merge, build-number bump,
+  signed archive/upload, TestFlight helper actions, and the tester-facing Slack
+  note for this release.
+- The feature branch was clean at `9cc26860`; Joe's active
+  `joe/phone-build-latest` checkout remains untouched with its pre-existing
+  untracked `tmp/` directory.
+- Latest `origin/main` is `fd244075`, tagged `testflight/build-146`, with
+  `CURRENT_PROJECT_VERSION` 146. The branch was behind that release baseline;
+  merging current main produced only the expected append-only conflict in this
+  log. Both histories were preserved verbatim.
+- Release gate: run the repo-owned `recme-pr-review-merge-release` workflow and
+  gstack pre-landing review, update the branch to current main, rerun relevant
+  validation, squash-merge PR #396 only with no blocker, then create build 147
+  from exact latest main. Do not change marketing version or App Store listing.
+
+Review and validation checkpoint:
+
+- Merged `origin/main` at build 146 into the feature branch and reviewed the
+  exact resulting diff. The implementation remains limited to the approved
+  first-save confetti recipe plus its regression tests; the same-day pop and
+  Reduce Motion behavior remain unchanged.
+- Pre-landing review completed across correctness, maintainability, design,
+  testing, and adversarial/red-team lenses with no actionable findings or
+  merge blockers. Two future-only test-hardening ideas were recorded as
+  informational: arbitrary zero/one-piece recipes and a structural call-site
+  mapping test. Neither is a reachable production risk in the current static
+  presets.
+- Post-merge focused validation passed on iPhone 16 Plus / iOS 18.6: 17
+  `SaveStreakCalculatorTests`, 0 failures
+  (`Test-Wander-2026.08.14_14-31-36--0700.xcresult`). Simulator-only Clerk
+  keychain warnings were non-critical and did not affect the run.
+- Earlier branch validation remains current for the feature scope: 1,126 unit
+  tests passed, visual QA passed on iPhone 16 Plus and iPhone 16e, and the UI
+  suite's two failures were pre-existing unrelated onboarding checks.
