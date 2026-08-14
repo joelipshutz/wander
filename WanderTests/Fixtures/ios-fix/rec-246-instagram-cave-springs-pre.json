@@ -1,0 +1,24 @@
+{
+  "issue": "REC-246",
+  "source_url": "https://www.instagram.com/p/DbPM9o1mzbL/",
+  "reported_builds": [145, 146],
+  "reported_behavior": "The rebuilt Instagram import flow does not produce the correct reviewable places for this public post.",
+  "expected_behavior": "The import review presents Cave Springs and Castle Crags State Park when provider resolution succeeds, retains Castle Dome honestly when reviewable, rejects source chrome, and requires the user to confirm before saving.",
+  "authoritative_public_metadata": {
+    "author": "CAVE SPRINGS RESORT (@cavespringsdunsmuir)",
+    "published_at": "2026-07-25",
+    "caption": "Castle Crags might just be Northern California’s best-kept secret. Forget the crowds at Yosemite. Meet the Dolomites of Northern California. Here’s our favorite way to spend the day: Coffee at Cave Springs; 15-minute drive to Castle Crags State Park; Hike to Castle Dome; Head back to Cave Springs for a swim in the river, dinner, and a quiet evening under the stars. If you’re planning a stay with us, make sure Castle Crags is on your itinerary. Just 15 minutes from Cave Springs.",
+    "named_places": [
+      "Cave Springs",
+      "Castle Crags State Park",
+      "Castle Dome"
+    ]
+  },
+  "root_cause_hypothesis": "The public metadata fetch succeeds, but the client hint parser does not recognize common itinerary-list forms such as Coffee at, drive to, Hike to, Head back to, or X is on your itinerary.",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; the physical-device report plus current public Open Graph metadata are the pre-fix source of truth",
+  "completion_regression": {
+    "reported_copy": "View on map",
+    "expected_copy": "Done",
+    "expected_action": "dismiss the import flow after the receipt is visible"
+  }
+}

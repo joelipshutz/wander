@@ -29507,3 +29507,31 @@ Validation and handoff:
   manifest against the new exact `main`, then archive/upload build 149. No
   second build-number bump is needed because this fix changes tests/docs only
   and build 149 has not been uploaded.
+## 2026-08-14 14:37 PDT - Codex - REC-246 Instagram extraction regression
+
+Agent: Codex
+Branch: `codex/rec-246-instagram-extraction`
+Worktree: `/private/tmp/recme-rec246-instagram-extraction`
+Linear: `REC-246` (`In Progress`)
+Mission Control: unavailable (`localhost:4000` refused the required create request)
+
+Goal: make the production Instagram extraction path work for
+`https://www.instagram.com/p/DbPM9o1mzbL/`, change the in-app import completion
+action from `View on map` to `Done`, validate the real post path, and ship the
+combined fix in the next safe TestFlight build.
+
+Starting state and coordination:
+
+- Started from clean exact `origin/main` commit `fd244075` (TestFlight build 146)
+  in an isolated worktree. Joe's stale `joe/phone-build-latest` checkout and its
+  untracked `tmp/` directory remain untouched.
+- A new Linear issue could not be created because the workspace reached its free
+  issue limit. Reused the focused existing regression issue REC-246, expanded it
+  with the exact URL and Done-CTA requirement, raised it to Urgent, assigned it
+  to Joe, and moved it to In Progress.
+- Public Instagram HTML currently exposes creator-authored metadata for Cave
+  Springs Resort. The caption explicitly names Cave Springs, Castle Crags State
+  Park, and Castle Dome. This is reproduction evidence, not a hardcoded fix.
+- Expected files: social metadata/hint extraction, import completion UI, focused
+  fixtures/tests, project files only if source membership changes, TestFlight
+  release manifest/build metadata, and this log.

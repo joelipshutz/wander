@@ -3696,6 +3696,37 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
         XCTAssertEqual(metadata.thumbnailURL, URL(string: "https://example.com/cover.jpg"))
     }
 
+    func testCaveSpringsInstagramPostExtractsEveryCreatorNamedPlace() throws {
+        let html = """
+        <html><head>
+        <meta property="og:title" content="CAVE SPRINGS RESORT on Instagram: &quot;Castle Crags might just be Northern California&#x2019;s best-kept secret.&quot;">
+        <meta property="og:description" content="1,229 likes, 36 comments - cavespringsdunsmuir on July 25, 2026: &quot;Castle Crags might just be Northern California&#x2019;s best-kept secret.
+
+        Here&#x2019;s our favorite way to spend the day:
+
+        Coffee at Cave Springs
+        15-minute drive to Castle Crags State Park
+        Hike to Castle Dome
+        Head back to Cave Springs for a swim in the river, dinner, and a quiet evening under the stars.
+
+        If you&#x2019;re planning a stay with us, make sure Castle Crags is on your itinerary.
+
+        Just 15 minutes from Cave Springs.&quot;.">
+        </head></html>
+        """
+        let metadata = try XCTUnwrap(PublicSocialHTMLMetadataParser.metadata(from: html))
+
+        let hints = SocialImportEvidencePlanner.reviewHints(
+            SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+        )
+
+        XCTAssertEqual(
+            Set(hints.map(\.name)),
+            Set(["Cave Springs", "Castle Crags State Park", "Castle Dome"])
+        )
+        XCTAssertTrue(hints.allSatisfy { $0.evidence == .itineraryPhrase })
+    }
+
     func testCandidateMatcherTreatsRestaurantSuffixAsTheSamePlaceName() {
         let candidate = placeImportCandidate(name: "Mendocino Farms")
 
