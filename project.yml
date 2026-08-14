@@ -42,15 +42,35 @@ schemes:
       config: Debug
     test:
       config: Debug
+      commandLineArguments:
+        "-WanderMapCapture": true
+        "-WanderUseDemoFixtures": true
       targets:
         - WanderTests
-        - WanderUITests
+        - name: WanderUITests
+          skippedTests:
+            - OnboardingNUXUITests
+            - OnboardingWalkthroughUITests
+            - OnboardingAuthUITests
     profile:
       config: Release
     analyze:
       config: Debug
     archive:
       config: Release
+  WanderOnboarding:
+    build:
+      targets:
+        Wander: all
+        WanderUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - name: WanderUITests
+          selectedTests:
+            - OnboardingNUXUITests
+            - OnboardingWalkthroughUITests
+            - OnboardingAuthUITests
 targets:
   Wander:
     type: application

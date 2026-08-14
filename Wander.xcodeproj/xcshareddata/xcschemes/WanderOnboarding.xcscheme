@@ -23,48 +23,6 @@
          </BuildActionEntry>
          <BuildActionEntry
             buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "AE294465F9516B04DD43A25A"
-               BuildableName = "WanderNearbyWidgets.appex"
-               BlueprintName = "WanderNearbyWidgets"
-               ReferencedContainer = "container:Wander.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "37043FFD3A7F40BE4ED75C0F"
-               BuildableName = "WanderShareExtension.appex"
-               BlueprintName = "WanderShareExtension"
-               ReferencedContainer = "container:Wander.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0A325A118755573578F89F15"
-               BuildableName = "WanderTests.xctest"
-               BlueprintName = "WanderTests"
-               ReferencedContainer = "container:Wander.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
             buildForRunning = "NO"
             buildForProfiling = "NO"
             buildForArchiving = "NO"
@@ -77,27 +35,13 @@
                ReferencedContainer = "container:Wander.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3EB8B4EBA82BA89478F45844"
-               BuildableName = "WanderWidgets.appex"
-               BlueprintName = "WanderWidgets"
-               ReferencedContainer = "container:Wander.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "NO"
+      shouldUseLaunchSchemeArgsEnv = "YES"
       onlyGenerateCoverageForSpecifiedTargets = "NO">
       <MacroExpansion>
          <BuildableReference
@@ -111,18 +55,8 @@
       <Testables>
          <TestableReference
             skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0A325A118755573578F89F15"
-               BuildableName = "WanderTests.xctest"
-               BlueprintName = "WanderTests"
-               ReferencedContainer = "container:Wander.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
+            parallelizable = "NO"
+            useTestSelectionWhitelist = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "8C330C6117AF2935F6EFE207"
@@ -130,7 +64,7 @@
                BlueprintName = "WanderUITests"
                ReferencedContainer = "container:Wander.xcodeproj">
             </BuildableReference>
-            <SkippedTests>
+            <SelectedTests>
                <Test
                   Identifier = "OnboardingNUXUITests">
                </Test>
@@ -140,18 +74,10 @@
                <Test
                   Identifier = "OnboardingAuthUITests">
                </Test>
-            </SkippedTests>
+            </SelectedTests>
          </TestableReference>
       </Testables>
       <CommandLineArguments>
-         <CommandLineArgument
-            argument = "-WanderMapCapture"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
-            argument = "-WanderUseDemoFixtures"
-            isEnabled = "YES">
-         </CommandLineArgument>
       </CommandLineArguments>
    </TestAction>
    <LaunchAction
@@ -174,8 +100,6 @@
             ReferencedContainer = "container:Wander.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <CommandLineArguments>
-      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -193,8 +117,6 @@
             ReferencedContainer = "container:Wander.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <CommandLineArguments>
-      </CommandLineArguments>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">

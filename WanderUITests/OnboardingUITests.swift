@@ -1,7 +1,7 @@
 import XCTest
 
 @MainActor
-final class OnboardingUITests: XCTestCase {
+final class FeatureShareUITests: XCTestCase {
     func testInstagramPostExplainsFullPhotoAccessBeforeDirectShare() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -32,7 +32,10 @@ final class OnboardingUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
+}
 
+@MainActor
+final class OnboardingNUXUITests: XCTestCase {
     func testSecondLaunchImportLessonOpensImportFromPage() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -300,7 +303,10 @@ final class OnboardingUITests: XCTestCase {
         )
         XCTAssertTrue(app.buttons["Lists"].isSelected)
     }
+}
 
+@MainActor
+final class FeatureMapUITests: XCTestCase {
     func testMapMorePeopleIncludesYouAndPersistsAcrossSourceSwitch() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -354,7 +360,10 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertEqual(you.value as? String, "Selected")
     }
+}
 
+@MainActor
+final class OnboardingWalkthroughUITests: XCTestCase {
     func testFeedActivityExplanationUsesNext() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -924,7 +933,10 @@ final class OnboardingUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
+}
 
+@MainActor
+final class FeatureUITests: XCTestCase {
     func testPrimaryTabTapNavigatesToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -1136,7 +1148,10 @@ final class OnboardingUITests: XCTestCase {
         backButton.tap()
         XCTAssertTrue(launcher.waitForExistence(timeout: 3))
     }
+}
 
+@MainActor
+final class OnboardingAuthUITests: XCTestCase {
     func testLoggedOutCarouselAutoAdvancesAndKeepsActionsVisible() {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderOnboardingUITestSignedOut"]
