@@ -5652,21 +5652,21 @@ struct MapPlaceSaveFlowSheet: View {
                     .id(WalkthroughTargetID.saveRating)
                     .walkthroughTarget(.saveRating)
 
-                if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
-                    sharedVisitInviteSection
-                        .disabled(!canInviteFriends)
-                        .id(WalkthroughTargetID.saveFriends)
-                        .walkthroughTarget(.saveFriends)
-                }
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
+                        sharedVisitInviteSection
+                            .disabled(!canInviteFriends)
+                    }
 
-                if context.allowsPhotoAttachments {
-                    MapSaveVisitPhotoSection(
-                        canAddPhotos: true,
-                        photos: $visitPhotoAttachments
-                    )
-                    .id(WalkthroughTargetID.savePhotos)
-                    .walkthroughTarget(.savePhotos)
+                    if context.allowsPhotoAttachments {
+                        MapSaveVisitPhotoSection(
+                            canAddPhotos: true,
+                            photos: $visitPhotoAttachments
+                        )
+                    }
                 }
+                .id(WalkthroughTargetID.saveFriends)
+                .walkthroughTarget(.saveFriends)
             }
 
             optionalDetailsDisclosure
@@ -5904,8 +5904,7 @@ struct MapPlaceSaveFlowSheet: View {
         return VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Button {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
-                    isShowingOptionalDetails = true
-                    walkthroughs.perform(.saveMoreOptions)
+                    return
                 } else {
                     isShowingOptionalDetails.toggle()
                 }
@@ -5973,7 +5972,7 @@ struct MapPlaceSaveFlowSheet: View {
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
-                    ? "Required for this walkthrough. Opens the optional note, fit questions, tags, and privacy fields."
+                    ? "This walkthrough points out where optional note, fit, tag, and privacy fields live. Use Next to continue."
                     : "Optional. Continue without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)

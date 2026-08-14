@@ -208,12 +208,6 @@ private struct OnboardingIdentityView: View {
         OnboardingStepScaffold(step: .identity) {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
-                    OnboardingHeadline(
-                        eyebrow: "MAKE IT YOURS",
-                        title: "Create your place identity",
-                        message: "A name and username help friends recognize you. The photo is optional."
-                    )
-
                     HStack(spacing: WanderTheme.spacing4) {
                         PhotosPicker(selection: $selectedPhoto, matching: .images) {
                             ZStack(alignment: .bottomTrailing) {
@@ -291,7 +285,7 @@ private struct OnboardingIdentityView: View {
                                 }
                             }
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(availability == .unavailable ? WanderTheme.stateError.color : WanderTheme.textMuted.color)
+                            .foregroundStyle(availabilityFeedbackColor)
                         }
                     }
 
@@ -335,6 +329,17 @@ private struct OnboardingIdentityView: View {
                     photoCropSelection = nil
                 }
             )
+        }
+    }
+
+    private var availabilityFeedbackColor: Color {
+        switch availability {
+        case .available:
+            WanderTheme.stateSuccess.color
+        case .unavailable:
+            WanderTheme.stateError.color
+        case .checking, .idle:
+            WanderTheme.textMuted.color
         }
     }
 
@@ -920,23 +925,27 @@ private struct OnboardingTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
             HStack(spacing: 2) {
                 if let prefix {
-                    Text(prefix).font(.system(size: 18, weight: .bold))
+                    Text(prefix).font(.system(size: 16, weight: .bold))
                 }
                 TextField(prompt, text: $text)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 16, weight: .medium))
                     .textInputAutocapitalization(capitalization)
                     .autocorrectionDisabled(autocorrectionDisabled)
                     .submitLabel(.next)
             }
         }
-        .padding(.horizontal, WanderTheme.spacing4)
-        .frame(minHeight: 72)
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+        .frame(minHeight: 58)
         .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-        .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(WanderTheme.borderHairline.color))
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
     }
 }
