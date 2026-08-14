@@ -70,3 +70,10 @@ composition mockups and their small-size reductions live in
 [`liquid-glass/`](liquid-glass/README.md). Each direction also includes four
 flat 1024 px layers prepared for Icon Composer import; the canonical AppIcon
 master remains unchanged.
+
+## Map-first redesign
+
+Ryan later requested a complete reset that intentionally supersedes the
+original no-roads / no-folded-map constraint. Five full-bleed, navigation-style
+map concepts using the supplied rec.me wordmark reference live in
+[`map-first-redesign/`](map-first-redesign/README.md).
