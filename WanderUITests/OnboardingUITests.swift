@@ -1192,4 +1192,50 @@ final class OnboardingUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
+
+    func testCheckInCalendarTrayPresentationLatency() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures"
+        ]
+        app.launch()
+
+        let addButton = app.buttons["map.headerAdd"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
+
+        let searchField = app.textFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 3))
+        searchField.tap()
+        searchField.typeText("Maru Coffee\n")
+
+        let saveButton = app.buttons["Save"]
+        XCTAssertTrue(saveButton.waitForExistence(timeout: 6))
+        saveButton.tap()
+
+        let checkInChoice = app.buttons["check in"]
+        XCTAssertTrue(checkInChoice.waitForExistence(timeout: 3))
+        checkInChoice.tap()
+        app.buttons["continue to details"].tap()
+
+        let disclosure = app.buttons["save.checkInDateDisclosure"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 3))
+
+        let start = ProcessInfo.processInfo.systemUptime
+        disclosure.tap()
+        XCTAssertTrue((disclosure.value as? String)?.contains("Expanded") == true)
+        let picker = app.descendants(matching: .any)["save.checkInDatePicker"]
+        XCTAssertTrue(picker.exists)
+        let elapsed = ProcessInfo.processInfo.systemUptime - start
+
+        XCTContext.runActivity(named: String(format: "Calendar tray presented in %.3f seconds", elapsed)) { _ in }
+        print(String(format: "REC241_CALENDAR_TRAY_LATENCY_SECONDS=%.3f", elapsed))
+        XCTAssertLessThan(elapsed, 1.0)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-241 responsive check-in calendar tray"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
 }
