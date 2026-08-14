@@ -29020,3 +29020,23 @@ Starting release state:
   gstack pre-landing review, update the branch to current main, rerun relevant
   validation, squash-merge PR #396 only with no blocker, then create build 147
   from exact latest main. Do not change marketing version or App Store listing.
+
+Review and validation checkpoint:
+
+- Merged `origin/main` at build 146 into the feature branch and reviewed the
+  exact resulting diff. The implementation remains limited to the approved
+  first-save confetti recipe plus its regression tests; the same-day pop and
+  Reduce Motion behavior remain unchanged.
+- Pre-landing review completed across correctness, maintainability, design,
+  testing, and adversarial/red-team lenses with no actionable findings or
+  merge blockers. Two future-only test-hardening ideas were recorded as
+  informational: arbitrary zero/one-piece recipes and a structural call-site
+  mapping test. Neither is a reachable production risk in the current static
+  presets.
+- Post-merge focused validation passed on iPhone 16 Plus / iOS 18.6: 17
+  `SaveStreakCalculatorTests`, 0 failures
+  (`Test-Wander-2026.08.14_14-31-36--0700.xcresult`). Simulator-only Clerk
+  keychain warnings were non-critical and did not affect the run.
+- Earlier branch validation remains current for the feature scope: 1,126 unit
+  tests passed, visual QA passed on iPhone 16 Plus and iPhone 16e, and the UI
+  suite's two failures were pre-existing unrelated onboarding checks.
