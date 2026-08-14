@@ -624,6 +624,37 @@ begin
 end
 $quota_metadata$;
 
+do $google_photo_cache_metadata$
+declare
+  valid boolean;
+begin
+  select
+    exists(
+      select 1
+      from storage.buckets b
+      where b.id = 'google-place-photo-cache'
+        and not b.public
+        and b.file_size_limit = 10485760
+    )
+    and c.relrowsecurity
+    and c.relforcerowsecurity
+    and not has_table_privilege('anon', c.oid, 'select')
+    and not has_table_privilege('authenticated', c.oid, 'select')
+    and has_table_privilege('service_role', c.oid, 'select')
+    and has_table_privilege('service_role', c.oid, 'insert')
+    and has_table_privilege('service_role', c.oid, 'update')
+    and has_table_privilege('service_role', c.oid, 'delete')
+  into valid
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relname = 'google_place_photo_cache';
+  if valid is distinct from true then
+    raise exception 'Google place photo cache security contract failed';
+  end if;
+end
+$google_photo_cache_metadata$;
+
 do $profile_metadata$
 declare
   valid boolean;
