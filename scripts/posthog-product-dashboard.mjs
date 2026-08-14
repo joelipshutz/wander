@@ -261,7 +261,11 @@ async function upsertInsight(projectID, dashboardID, definition, existing) {
     tags: [MANAGED_TAG, tag],
     dashboards: [dashboardID],
   };
-  const match = existing.find((item) => item.tags?.includes(tag));
+  const match = existing.find(
+    (item) =>
+      item.tags?.includes(tag) ||
+      (item.tags?.includes(MANAGED_TAG) && item.name === definition.name),
+  );
   if (match) {
     return api(`/api/projects/${projectID}/insights/${match.id}/`, { method: "PATCH", body: payload });
   }
@@ -322,11 +326,13 @@ async function applyDashboard() {
         body: dashboardPayload,
       });
 
-  const created = await Promise.all(
-    insights.map((definition) =>
-      upsertInsight(projectID, dashboard.id, definition, existingInsights),
-    ),
-  );
+  // PostHog creates missing tags while saving an insight. Concurrent writes for
+  // several new managed tags can race and leave an otherwise-created insight
+  // without its canonical tag, so serialize these idempotent upserts.
+  const created = [];
+  for (const definition of insights) {
+    created.push(await upsertInsight(projectID, dashboard.id, definition, existingInsights));
+  }
   let currentDashboard = await api(`/api/projects/${projectID}/dashboards/${dashboard.id}/`);
   const sectionTiles = [];
   for (const section of sections) {
