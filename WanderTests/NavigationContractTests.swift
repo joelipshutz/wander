@@ -1494,7 +1494,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(detailsContent.contains("saveAsSection"))
         XCTAssertTrue(detailsContent.contains("placeTypeSection"))
         XCTAssertTrue(detailsContent.contains("if selectedStatus == .been"))
-        XCTAssertTrue(detailsContent.contains("checkInDateSection"))
+        XCTAssertTrue(detailsContent.contains("MapCheckInDateSection("))
         XCTAssertTrue(detailsContent.contains("ratingSection"))
         XCTAssertTrue(detailsContent.contains("sharedVisitInviteSection"))
         XCTAssertTrue(detailsContent.contains("MapSaveVisitPhotoSection("))
@@ -1659,9 +1659,9 @@ final class NavigationContractTests: XCTestCase {
         )
         let checkInDateSection = try XCTUnwrap(
             mapScreen
-                .components(separatedBy: "private var checkInDateSection: some View")
+                .components(separatedBy: "private struct MapCheckInDateSection: View")
                 .last?
-                .components(separatedBy: "private var canInviteFriends: Bool")
+                .components(separatedBy: "struct MapPlaceSaveFlowSheet: View")
                 .first
         )
 
@@ -1678,9 +1678,13 @@ final class NavigationContractTests: XCTestCase {
             )
         )
         XCTAssertTrue(checkInDateSection.contains("CheckInDatePickerSelection.resolvedDate("))
-        XCTAssertTrue(checkInDateSection.contains("isShowingCheckInDatePicker.toggle()"))
-        XCTAssertTrue(checkInDateSection.contains("isShowingCheckInDatePicker = false"))
-        XCTAssertTrue(mapScreen.contains("@State private var isShowingCheckInDatePicker = false"))
+        XCTAssertTrue(mapScreen.contains("@State private var checkInDateTrayPresentation"))
+        XCTAssertTrue(checkInDateSection.contains("@ObservedObject var presentation"))
+        XCTAssertTrue(checkInDateSection.contains("presentation.isExpanded.toggle()"))
+        XCTAssertTrue(checkInDateSection.contains("presentation.isExpanded = false"))
+        XCTAssertTrue(checkInDateSection.contains(".contentShape(Rectangle())"))
+        XCTAssertTrue(mapScreen.contains("presentation: checkInDateTrayPresentation"))
+        XCTAssertFalse(mapScreen.contains("@State private var isShowingCheckInDatePicker"))
         XCTAssertFalse(checkInDateSection.contains(".datePickerStyle(.compact)"))
         XCTAssertFalse(checkInDateSection.contains(".hourAndMinute"))
         XCTAssertFalse(checkInDateSection.contains("Defaults to now."))
