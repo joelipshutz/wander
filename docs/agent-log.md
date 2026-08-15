@@ -29398,3 +29398,28 @@ Handoff - 2026-08-14 19:03 PDT:
   committed and pushed. Other pre-existing stashes and Joe's original checkout
   remain untouched. No known NUX-specific blocker remains. No merge or release
   action was taken.
+
+Landing checkpoint - 2026-08-14 19:21 PDT:
+
+- Joe explicitly authorized merging the two REC-236 PRs. Reviewed PR #415 at
+  exact head `7220e3f1` against current `main`: the diff is limited to the
+  intended onboarding UI, navigation, animation, accessibility, and regression
+  coverage; it contains no auth, database, privacy, signing, dependency, or
+  project-configuration change. Existing exact-head evidence is 1,155 unit and
+  35 UI tests, plus the combined-stack 1,158 unit and 38 UI tests and two-size
+  screenshot review. No blocking source, state, cancellation, safe-area,
+  Dynamic Type, tap-target, or scope finding remained.
+- Squash-merged PR #415 as `3656337afa2b12bef03569a30ffa6b88f2023a1a`.
+  Rebased PR #416 with `--onto origin/main` so the two duplicated #415 commits
+  were removed and only the off-by-default flag, account retirement, durable
+  dismissals, regression coverage, and this append-only handoff remain.
+- The rebased #416 tree hash is exactly
+  `2b54531f8b6b2710c04b759ce2d1d5d9f765ea59`, byte-for-byte identical to the
+  previously validated #416 tree. `git diff --check` passes. The prior 1,196-test
+  full pass, 38 focused post-build-148 tests, and compact-device visual QA
+  therefore cover the exact product/test content being pushed after rebase.
+- Next: commit this chronological landing note, force-push #416 with lease,
+  verify its latest hosted payload check and mergeability, then squash-merge.
+  REC-236 remains In Review because Joe also explicitly requested build 149 and
+  the App Store release; no TestFlight or App Store action occurs until #416 is
+  merged and the exact latest-main release gate passes.
