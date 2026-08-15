@@ -30078,3 +30078,7 @@ PR handoff - 2026-08-15 14:35 PDT:
 - This PR is the approved design/spec handoff only. It does not merge, bump the
   build number, archive, upload, attach a TestFlight build, or post tester-facing
   release notes.
+- The configured artifacts-only gstack sync was not pushed: the external
+  `gstack-artifacts-joelipshutz` repository requires separate payload-specific
+  authorization. The PNGs, board, approval record, and taste profile remain
+  available locally under the documented canonical gstack path.
