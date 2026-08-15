@@ -310,12 +310,15 @@ struct AddScreen: View {
 
     private var compactSourceContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            header
-            suggestedPlaces
+            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                header
+                suggestedPlaces
 
-            if let resolutionMessage {
-                InlineMessage(text: resolutionMessage)
+                if let resolutionMessage {
+                    InlineMessage(text: resolutionMessage)
+                }
             }
+            .walkthroughTarget(.addSearch)
 
             Spacer(minLength: 0)
         }
@@ -444,7 +447,7 @@ struct AddScreen: View {
                 showsPhotoLibrary = true
             }
         )
-        .walkthroughTarget(.addSearch)
+        .walkthroughEmphasis(.addSearch)
     }
 
     private var suggestedPlaces: some View {
@@ -505,6 +508,7 @@ struct AddScreen: View {
 
             if hasMore {
                 Button {
+                    walkthroughs.perform(.addSearch)
                     expandSheet()
                     Task {
                         await resolveCurrentLocationCandidates()
@@ -806,6 +810,7 @@ struct AddScreen: View {
     }
 
     private func openSuggestedCandidate(_ candidate: PlaceCandidate) {
+        walkthroughs.perform(.addSearch)
         expandSheet()
         selectedSource = .currentLocation
         candidates = [candidate]

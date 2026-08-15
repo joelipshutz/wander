@@ -6,6 +6,7 @@ private enum ProfileHomeScrollAnchor {
     static let identity = "profile.identity"
     static let activity = "profile.activity"
     static let calendar = "profile.calendar"
+    static let map = "profile.map"
 }
 
 enum ProfileActivityFilter: String, CaseIterable, Identifiable, Hashable {
@@ -252,6 +253,7 @@ struct ProfileMemberActions {
 }
 
 struct ProfileOwnerHome: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let profile: LocalProfile
     let viewerProfile: LocalProfile
@@ -332,6 +334,7 @@ struct ProfileOwnerHome: View {
                     ownerLabel: ownerLabel,
                     summaryAction: mapSummaryAction
                 )
+                .id(ProfileHomeScrollAnchor.map)
             }
             .scrollTargetLayout()
             .padding(.horizontal, WanderTheme.spacing4)
@@ -356,16 +359,41 @@ struct ProfileOwnerHome: View {
             else { return }
             onCalendarScrollRequestHandled(calendarScrollRequestID)
         }
-        .onChange(of: walkthroughs.currentStep?.target) { _, target in
+        .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
             guard mode.isOwner else { return }
+            let destination: String?
             switch target {
             case .profileActivity:
-                profileScrollPosition = ProfileHomeScrollAnchor.activity
+                destination = ProfileHomeScrollAnchor.activity
+            case .profileCalendar:
+                destination = ProfileHomeScrollAnchor.calendar
+            case .profileMap:
+                destination = ProfileHomeScrollAnchor.map
             case .profileSettings, .profileSocial, .profileShare:
-                profileScrollPosition = ProfileHomeScrollAnchor.identity
+                destination = ProfileHomeScrollAnchor.identity
             default:
-                break
+                destination = nil
             }
+            guard let destination else { return }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.62)) {
+                profileScrollPosition = destination
+            }
+        }
+        .task(id: walkthroughs.currentStep?.id) {
+            guard mode.isOwner,
+                  walkthroughs.activeSurface == .profile,
+                  walkthroughs.currentStep?.automaticallyAdvances == true
+            else { return }
+
+            let delay = reduceMotion
+                ? FirstVisitWalkthroughContent.reducedMotionProfileAutoAdvanceDelayMilliseconds
+                : FirstVisitWalkthroughContent.profileAutoAdvanceDelayMilliseconds
+            try? await Task.sleep(for: .milliseconds(delay))
+            guard !Task.isCancelled,
+                  walkthroughs.activeSurface == .profile,
+                  walkthroughs.currentStep?.automaticallyAdvances == true
+            else { return }
+            walkthroughs.advancePassiveStep()
         }
         .wanderScreen()
         .toolbar(.hidden, for: .navigationBar)
@@ -404,7 +432,7 @@ struct ProfileOwnerHome: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Share profile")
-                        .walkthroughTarget(mode.isOwner ? .profileShare : nil)
+                        .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
                     }
 
                     if mode.isOwner {
@@ -430,6 +458,7 @@ struct ProfileOwnerHome: View {
                         }
                     }
                 }
+                .walkthroughTarget(mode.isOwner ? .profileShare : nil)
             }
 
             Group {
@@ -495,7 +524,7 @@ struct ProfileOwnerHome: View {
             }
             .padding(.vertical, WanderTheme.spacing1)
             .wanderGlassPanel(cornerRadius: 22)
-            .walkthroughTarget(mode.isOwner ? .profileSocial : nil)
+            .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
         }
     }
 
@@ -854,23 +883,26 @@ private struct ProfileRecentActivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("Activity")
-                .font(WanderTypography.editorialMajorSectionTitle)
-                .accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                Text("Activity")
+                    .font(WanderTypography.editorialMajorSectionTitle)
+                    .accessibilityAddTraits(.isHeader)
 
-            ProfileActivityFilterControl(
-                selection: Binding(
-                    get: { filter },
-                    set: { newFilter in
-                        if newFilter != filter {
-                            walkthroughs.perform(.profileActivity)
+                ProfileActivityFilterControl(
+                    selection: Binding(
+                        get: { filter },
+                        set: { newFilter in
+                            if newFilter != filter {
+                                walkthroughs.perform(.profileActivity)
+                            }
+                            filter = newFilter
                         }
-                        filter = newFilter
-                    }
-                ),
-                checkInCount: checkInCount,
-                wannaCount: wannaCount
-            )
+                    ),
+                    checkInCount: checkInCount,
+                    wannaCount: wannaCount
+                )
+            }
+            .walkthroughTarget(.profileActivity)
 
             VStack(spacing: 0) {
                 if filteredItems.isEmpty {
@@ -922,7 +954,8 @@ private struct ProfileRecentActivitySection: View {
             }
             .buttonStyle(.plain)
         }
-        .walkthroughTarget(.profileActivity)
+        .walkthroughEmphasis(.profileActivity)
+        .accessibilityIdentifier("profile.walkthrough.activitySection")
     }
 
     private var emptyStateText: String {
@@ -1201,6 +1234,7 @@ private struct ProfileCalendarSection: View {
                     ProfileMonthButton(systemImage: "chevron.right") { shiftMonth(1) }
                 }
             }
+            .walkthroughTarget(.profileCalendar)
 
             HStack(spacing: 0) {
                 ProfileCalendarMetric(value: insights.monthSpotCount, label: "spots ranked")
@@ -1254,6 +1288,8 @@ private struct ProfileCalendarSection: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
         .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall).stroke(WanderTheme.borderHairline.color))
+        .walkthroughEmphasis(.profileCalendar)
+        .accessibilityIdentifier("profile.walkthrough.calendarSection")
     }
 
     private var monthTitle: String {
@@ -1468,6 +1504,7 @@ private struct ProfileMapSection: View {
                     .accessibilityHint("Available when the map image is ready")
                 }
             }
+            .walkthroughTarget(.profileMap)
 
             ProfileMapSnapshotView(
                 points: insights.mapPoints,
@@ -1522,6 +1559,8 @@ private struct ProfileMapSection: View {
         .padding(WanderTheme.spacing4)
         .background(WanderTheme.surfaceBone.color.opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
+        .walkthroughEmphasis(.profileMap)
+        .accessibilityIdentifier("profile.walkthrough.mapSection")
     }
 
     private var mapShareContent: WanderShareContent? {

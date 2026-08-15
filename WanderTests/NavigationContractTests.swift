@@ -1389,6 +1389,16 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains(".onChange(of: importStore.summary.hasPendingImports)"))
         XCTAssertTrue(importViews.contains("if summary.hasPendingImports"))
         XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
+        XCTAssertTrue(
+            importViews.contains(
+                "Text(\"Import places from Google Maps, Instagram, TikTok, and more.\")"
+            )
+        )
+        XCTAssertTrue(
+            importViews.contains(
+                ".accessibilityLabel(\"Import places from Google Maps, Instagram, TikTok, and more.\")"
+            )
+        )
         XCTAssertTrue(importViews.contains("TextEditor(text: $input)"))
         XCTAssertTrue(importViews.contains("enqueueUnified(text: input)"))
         XCTAssertTrue(importViews.contains("reviewAction(batchIDs)"))
@@ -1522,10 +1532,14 @@ final class NavigationContractTests: XCTestCase {
         let moreOptionsTarget = try XCTUnwrap(
             optionalDetails.range(of: ".walkthroughTarget(.saveMoreOptions)")
         )
+        let moreOptionsEmphasis = try XCTUnwrap(
+            optionalDetails.range(of: ".walkthroughEmphasis(.saveMoreOptions)")
+        )
         let chevron = try XCTUnwrap(optionalDetails.range(of: "Image(systemName: \"chevron.down\")"))
         let buttonEnd = try XCTUnwrap(optionalDetails.range(of: ".buttonStyle(.plain)"))
-        XCTAssertGreaterThan(moreOptionsTarget.lowerBound, chevron.lowerBound)
-        XCTAssertLessThan(moreOptionsTarget.lowerBound, buttonEnd.lowerBound)
+        XCTAssertGreaterThan(moreOptionsEmphasis.lowerBound, chevron.lowerBound)
+        XCTAssertLessThan(moreOptionsEmphasis.lowerBound, buttonEnd.lowerBound)
+        XCTAssertGreaterThan(moreOptionsTarget.lowerBound, buttonEnd.lowerBound)
         XCTAssertEqual(
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
@@ -2611,7 +2625,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("activePlaceSearchHeader"))
         XCTAssertTrue(source.contains("Back to Discover"))
         XCTAssertTrue(source.contains("private func exitPlaceSearch()"))
-        XCTAssertTrue(source.contains("private func clearPlaceSearch()"))
+        XCTAssertTrue(source.contains("private func clearPlaceSearch(focusField: Bool = true)"))
         XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
         XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
         XCTAssertTrue(source.contains("Try a search"))
@@ -2919,6 +2933,30 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapPicker.contains(".wanderGlassCapsule(tone:"))
         XCTAssertEqual(screen.components(separatedBy: "recentActivity: profileActivityItems").count - 1, 2)
         XCTAssertEqual(screen.components(separatedBy: "viewerProfile: store.currentUser").count - 1, 2)
+    }
+
+    func testThirdLaunchDeviceLessonUsesACompactNonScrollingEditorialPanel() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Onboarding/FirstVisitWalkthrough.swift"
+            )
+        )
+        let overlay = try sourceSection(
+            source,
+            after: "private struct DeviceFeaturesWalkthroughOverlay: View",
+            before: "private struct DeviceFeatureInstruction: View"
+        )
+
+        XCTAssertFalse(overlay.contains("ScrollView"))
+        XCTAssertTrue(overlay.contains(".font(WanderTypography.editorialCardTitle)"))
+        XCTAssertTrue(overlay.contains(".frame(maxWidth: 344)"))
+        XCTAssertTrue(overlay.contains(".wanderGlassCapsule(tone: .accent)"))
+        XCTAssertFalse(overlay.contains(".scaleEffect(reduceMotion ? 1 :"))
+        XCTAssertFalse(
+            source.contains(
+                ".animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingDeviceFeaturesLesson)"
+            )
+        )
     }
 
     private var projectRoot: URL {

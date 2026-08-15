@@ -455,7 +455,7 @@ struct DiscoverScreen: View {
         searchFieldFocused = false
     }
 
-    private func clearPlaceSearch() {
+    private func clearPlaceSearch(focusField: Bool = true) {
         cancelPlaceSearchWork()
         placesQuery = ""
         submittedPlacesQuery = nil
@@ -463,7 +463,20 @@ struct DiscoverScreen: View {
         placeResults = DiscoverResults(places: [], profiles: [])
         isPlaceSearchLoading = false
         isPlaceSearchRefining = false
-        searchFieldFocused = true
+        searchFieldFocused = focusField
+    }
+
+    private func handlePlaceSearchBack() {
+        switch walkthroughs.currentStep?.target {
+        case .feedSearchResultsBack:
+            walkthroughs.perform(.feedSearchResultsBack)
+            clearPlaceSearch(focusField: false)
+        case .feedSearchExitBack:
+            walkthroughs.perform(.feedSearchExitBack)
+            exitPlaceSearch()
+        default:
+            exitPlaceSearch()
+        }
     }
 
     private func submitPlaceSearch() {
@@ -473,6 +486,8 @@ struct DiscoverScreen: View {
     private func submitPlaceSearch(source: String) {
         let query = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
+
+        walkthroughs.perform(.feedSmartSearch)
 
         cancelPlaceSearchWork()
         let submissionID = UUID()
@@ -675,7 +690,7 @@ struct DiscoverScreen: View {
             accessibilityIdentifier: "discover.placesSearchField",
             onFocus: activatePlaceSearch,
             onSubmit: submitPlaceSearch,
-            onClear: clearPlaceSearch
+            onClear: { clearPlaceSearch() }
         )
         .focused($searchFieldFocused)
     }
@@ -696,14 +711,17 @@ struct DiscoverScreen: View {
 
     private var activePlaceSearchHeader: some View {
         HStack(spacing: WanderTheme.spacing2) {
-            Button(action: exitPlaceSearch) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 22, weight: .black))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            if !hidesSearchBackDuringWalkthroughChoice {
+                Button(action: handlePlaceSearchBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                }
+                .accessibilityLabel(onClose == nil ? "Back to Discover" : "Back to Feed")
+                .accessibilityIdentifier("discover.searchBack")
+                .walkthroughTargetAndEmphasis(walkthroughSearchBackTarget)
             }
-            .accessibilityLabel(onClose == nil ? "Back to Discover" : "Back to Feed")
-            .accessibilityIdentifier("discover.searchBack")
 
             DiscoverSearchField(
                 text: $placesQuery,
@@ -713,10 +731,27 @@ struct DiscoverScreen: View {
                 accessibilityIdentifier: "discover.placesSearchField",
                 onFocus: {},
                 onSubmit: submitPlaceSearch,
-                onClear: clearPlaceSearch
+                onClear: { clearPlaceSearch() }
             )
             .focused($searchFieldFocused)
-            .walkthroughTarget(.feedSearchField)
+            .walkthroughTargets([.feedSearchField, .feedSmartSearch])
+        }
+    }
+
+    private var hidesSearchBackDuringWalkthroughChoice: Bool {
+        guard walkthroughs.activeSurface == .feedSearch else { return false }
+        return walkthroughs.currentStep?.target == .feedSearchField
+            || walkthroughs.currentStep?.target == .feedSmartSearch
+    }
+
+    private var walkthroughSearchBackTarget: WalkthroughTargetID? {
+        switch walkthroughs.currentStep?.target {
+        case .feedSearchResultsBack:
+            .feedSearchResultsBack
+        case .feedSearchExitBack:
+            .feedSearchExitBack
+        default:
+            nil
         }
     }
 
@@ -826,7 +861,6 @@ struct DiscoverScreen: View {
                 ) {
                     ForEach(suggestedSearches) { suggestion in
                         Button {
-                            walkthroughs.perform(.feedSmartSearch)
                             placesQuery = suggestion.query
                             store.trackDiscoverSearchEvent(
                                 WanderAnalyticsEvents.discoverSearchExampleSelected,
