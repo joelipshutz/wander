@@ -49,6 +49,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(lesson.waitForExistence(timeout: 5))
         XCTAssertTrue(openImport.isHittable)
         XCTAssertTrue(app.buttons["Import help"].exists)
+        XCTAssertTrue(app.buttons["walkthrough.dismiss.importLesson"].isHittable)
 
         let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         promptScreenshot.name = "REC-236 second-launch Import From prompt"
@@ -63,6 +64,80 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-236 second-launch Import From destination"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    func testImportLessonDismissRetiresAllWalkthroughPrompts() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderShowImportWalkthrough"
+        ]
+        app.launch()
+
+        let lesson = app.descendants(matching: .any)["walkthrough.importLesson"]
+        let dismiss = app.buttons["walkthrough.dismiss.importLesson"]
+        XCTAssertTrue(lesson.waitForExistence(timeout: 5))
+        XCTAssertTrue(dismiss.isHittable)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+
+        let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        promptScreenshot.name = "REC-236 import walkthrough with dismiss"
+        promptScreenshot.lifetime = .keepAlways
+        add(promptScreenshot)
+
+        dismiss.tap()
+
+        XCTAssertTrue(lesson.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
+
+        let dismissedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        dismissedScreenshot.name = "REC-236 import walkthrough dismissed"
+        dismissedScreenshot.lifetime = .keepAlways
+        add(dismissedScreenshot)
+
+        app.terminate()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs"
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["map.headerAdd"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["walkthrough.importLesson"].exists)
+        XCTAssertFalse(app.buttons["Dismiss walkthrough"].exists)
+    }
+
+    func testCoachMarkDismissRetiresAllWalkthroughPrompts() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs"
+        ]
+        app.launch()
+
+        let coachMark = app.descendants(matching: .any)["walkthrough.map.mapAdd"]
+        let dismiss = app.buttons["walkthrough.dismiss.map.mapAdd"]
+        XCTAssertTrue(coachMark.waitForExistence(timeout: 5))
+        XCTAssertTrue(dismiss.isHittable)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+
+        let promptScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        promptScreenshot.name = "REC-236 coach mark with dismiss"
+        promptScreenshot.lifetime = .keepAlways
+        add(promptScreenshot)
+
+        dismiss.tap()
+
+        XCTAssertTrue(coachMark.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
     }
 
     func testFirstMapCoachMarkPointsToAddButtonWithoutOversizedCard() {
@@ -518,6 +593,43 @@ final class OnboardingUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testWalkthroughContactInviteCloseDismissesTheEntireNux() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderWalkthroughTarget",
+            "feedInvite"
+        ]
+        app.launch()
+
+        let coachMark = app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
+        XCTAssertTrue(coachMark.waitForExistence(timeout: 6))
+        XCTAssertTrue(app.buttons["Next"].isHittable)
+        app.buttons["Next"].tap()
+
+        let dismiss = app.buttons["walkthrough.dismiss.contactInvite"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 4))
+        XCTAssertTrue(dismiss.isHittable)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-236 contact invite walkthrough dismiss"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        dismiss.tap()
+
+        XCTAssertTrue(dismiss.waitForNonExistence(timeout: 3))
+        XCTAssertFalse(coachMark.exists)
+        XCTAssertFalse(app.buttons["Dismiss walkthrough"].exists)
+    }
+
     func testListsUsesTwoClearPageAutoAdvancingLessons() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -944,6 +1056,11 @@ final class OnboardingUITests: XCTestCase {
             app.descendants(matching: .any)["walkthrough.deviceFeatures.shareExtension"].exists
         )
 
+        let dismiss = app.buttons["walkthrough.dismiss.deviceFeatures"]
+        XCTAssertTrue(dismiss.isHittable)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(dismiss.frame.height, 44)
+
         let windowFrame = app.windows.firstMatch.frame
         XCTAssertGreaterThanOrEqual(card.frame.minY, windowFrame.minY)
         XCTAssertLessThanOrEqual(card.frame.maxY, windowFrame.maxY)
@@ -958,11 +1075,12 @@ final class OnboardingUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
 
-        complete.tap()
-        XCTAssertFalse(
+        dismiss.tap()
+        XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.deviceFeatures"]
-                .waitForExistence(timeout: 1)
+                .waitForNonExistence(timeout: 3)
         )
+        XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
     }
 
     func testPrimaryTabTapNavigatesToFeed() {
