@@ -3,6 +3,51 @@ import XCTest
 
 @MainActor
 final class RemoteRepositoryTests: XCTestCase {
+    func testRemoteRegistrationRefreshRequiresAccountConsentAndSystemPermission() {
+        XCTAssertTrue(PushNotificationManager.shouldRefreshRemoteRegistration(
+            isSignedIn: true,
+            backendCanRegister: true,
+            pushEnabled: true,
+            authorizationStatus: .authorized
+        ))
+        XCTAssertFalse(PushNotificationManager.shouldRefreshRemoteRegistration(
+            isSignedIn: true,
+            backendCanRegister: true,
+            pushEnabled: false,
+            authorizationStatus: .authorized
+        ))
+        XCTAssertFalse(PushNotificationManager.shouldRefreshRemoteRegistration(
+            isSignedIn: true,
+            backendCanRegister: true,
+            pushEnabled: true,
+            authorizationStatus: .denied
+        ))
+    }
+
+    func testSharedVisitOutboxNoticeIsOwnerScopedAndIncludesEmptyReconciliations() {
+        let pending = [
+            PendingSharedVisitInvite(
+                id: "pending-invite",
+                ownerUserID: "user_joe",
+                sourceVisitID: "visit_1",
+                inviteeUserIDs: [],
+                createdAt: .now
+            )
+        ]
+
+        XCTAssertEqual(
+            SharedVisitOutboxNotice.message(
+                pendingInvites: pending,
+                ownerUserID: "user_joe"
+            ),
+            "Friend updates are still sending. rec.me will keep retrying."
+        )
+        XCTAssertNil(SharedVisitOutboxNotice.message(
+            pendingInvites: pending,
+            ownerUserID: "user_ryan"
+        ))
+    }
+
     func testRPCRefreshesTheClerkTokenOnceAfterUnauthorizedResponse() async throws {
         FeedRPCURLProtocol.reset(
             responses: [
