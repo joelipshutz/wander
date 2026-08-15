@@ -396,73 +396,82 @@ struct ProfileOwnerHome: View {
 
     private var identitySection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(spacing: WanderTheme.spacing1) {
-                if let backAction {
-                    ProfileHeaderActionButton(
-                        systemImage: "chevron.left",
-                        accessibilityLabel: "Back",
-                        action: backAction
-                    )
+            profileNavigationRow
+            profileIdentityBlock
+        }
+    }
+
+    private var profileNavigationRow: some View {
+        HStack(spacing: WanderTheme.spacing1) {
+            if let backAction {
+                ProfileHeaderActionButton(
+                    systemImage: "chevron.left",
+                    accessibilityLabel: "Back",
+                    action: backAction
+                )
+            }
+
+            Text("@\(profile.handle)")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Spacer(minLength: 0)
+
+            if mode.isOwner {
+                ProfileInvitationButton(
+                    pendingInvitationCount: sharedVisitInvitationCount,
+                    action: sharedVisitInvitationsAction
+                )
+                ProfileHeaderActionButton(
+                    systemImage: "pencil",
+                    accessibilityLabel: "Edit profile",
+                    action: editAction
+                )
+            }
+
+            if let shareContent = WanderShareContent.profile(
+                serverID: profile.serverID,
+                displayName: profile.displayName,
+                handle: profile.handle
+            ) {
+                WanderShareButton(content: shareContent, onTap: shareAction) {
+                    ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Share profile")
+                .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+            }
 
-                Text("@\(profile.handle)")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-
-                Spacer(minLength: 0)
-
-                if mode.isOwner {
-                    ProfileInvitationButton(
-                        pendingInvitationCount: sharedVisitInvitationCount,
-                        action: sharedVisitInvitationsAction
-                    )
-                    ProfileHeaderActionButton(
-                        systemImage: "pencil",
-                        accessibilityLabel: "Edit profile",
-                        action: editAction
-                    )
-                }
-
-                if let shareContent = WanderShareContent.profile(
-                    serverID: profile.serverID,
-                    displayName: profile.displayName,
-                    handle: profile.handle
+            if mode.isOwner {
+                ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
+                    .walkthroughTarget(.profileSettings)
+            } else if let memberActions {
+                ProfileHeaderActionButton(
+                    systemImage: "ellipsis",
+                    accessibilityLabel: "More profile actions"
                 ) {
-                    WanderShareButton(content: shareContent, onTap: shareAction) {
-                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Share profile")
-                    .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+                    showsMemberActions.toggle()
                 }
-
-                if mode.isOwner {
-                    ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
-                        .walkthroughTarget(.profileSettings)
-                } else if let memberActions {
-                    ProfileHeaderActionButton(
-                        systemImage: "ellipsis",
-                        accessibilityLabel: "More profile actions"
-                    ) {
-                        showsMemberActions.toggle()
-                    }
-                    .popover(
-                        isPresented: $showsMemberActions,
-                        attachmentAnchor: .rect(.bounds),
-                        arrowEdge: .top
-                    ) {
-                        ProfileMemberActionsPopover(
-                            actions: memberActions,
-                            dismiss: { showsMemberActions = false }
-                        )
-                        .presentationCompactAdaptation(.popover)
-                    }
+                .popover(
+                    isPresented: $showsMemberActions,
+                    attachmentAnchor: .rect(.bounds),
+                    arrowEdge: .top
+                ) {
+                    ProfileMemberActionsPopover(
+                        actions: memberActions,
+                        dismiss: { showsMemberActions = false }
+                    )
+                    .presentationCompactAdaptation(.popover)
                 }
             }
-            .walkthroughTarget(mode.isOwner ? .profileShare : nil)
+        }
+        .walkthroughTarget(mode.isOwner ? .profileShare : nil)
+    }
 
+    private var profileIdentityBlock: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 Group {
                     if mode.isOwner {
@@ -506,7 +515,7 @@ struct ProfileOwnerHome: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let homeArea = normalized(profile.homeArea) {
                     Text(homeArea)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(WanderTheme.textInk.color)
                 }
 
@@ -538,11 +547,10 @@ struct ProfileOwnerHome: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(WanderTheme.spacing3)
-        .background(
-            WanderTheme.surfaceRaised.color,
-            in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-        )
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.vertical, WanderTheme.spacing3)
+        .background(WanderTheme.surfaceRaised.color)
+        .padding(.horizontal, -WanderTheme.spacing4)
     }
 
     private var profileAvatar: some View {
@@ -701,12 +709,8 @@ private struct ProfileInvitationButton: View {
                 .overlay(alignment: .topTrailing) {
                     if badgeState.isVisible {
                         Circle()
-                            .fill(WanderTheme.stateError.color)
+                            .fill(Color(uiColor: .systemRed))
                             .frame(width: 10, height: 10)
-                            .overlay {
-                                Circle()
-                                    .stroke(WanderTheme.surfaceRaised.color, lineWidth: 2)
-                            }
                             .offset(x: -1, y: 1)
                             .accessibilityHidden(true)
                     }

@@ -2863,6 +2863,16 @@ final class NavigationContractTests: XCTestCase {
             after: "private var identitySection: some View {",
             before: "private var profileAvatar: some View"
         )
+        let navigationRow = try sourceSection(
+            home,
+            after: "private var profileNavigationRow: some View {",
+            before: "private var profileIdentityBlock: some View"
+        )
+        let identityBlock = try sourceSection(
+            home,
+            after: "private var profileIdentityBlock: some View {",
+            before: "private var profileAvatar: some View"
+        )
         let recentActivity = try sourceSection(
             home,
             after: "private struct ProfileRecentActivitySection: View",
@@ -2874,8 +2884,8 @@ final class NavigationContractTests: XCTestCase {
         let activityIndex = try XCTUnwrap(body.range(of: "ProfileRecentActivitySection")?.lowerBound)
         let mapIndex = try XCTUnwrap(body.range(of: "ProfileMapSection")?.lowerBound)
         let calendarIndex = try XCTUnwrap(body.range(of: "ProfileCalendarSection")?.lowerBound)
-        let invitationButtonIndex = try XCTUnwrap(identity.range(of: "ProfileInvitationButton(")?.lowerBound)
-        let editButtonIndex = try XCTUnwrap(identity.range(of: "accessibilityLabel: \"Edit profile\"")?.lowerBound)
+        let invitationButtonIndex = try XCTUnwrap(navigationRow.range(of: "ProfileInvitationButton(")?.lowerBound)
+        let editButtonIndex = try XCTUnwrap(navigationRow.range(of: "accessibilityLabel: \"Edit profile\"")?.lowerBound)
         let invitationButton = try sourceSection(
             home,
             after: "private struct ProfileInvitationButton: View",
@@ -2889,29 +2899,32 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(body.contains("ProfileSharedVisitInboxRow"))
         XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
-        XCTAssertTrue(identity.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
-        XCTAssertTrue(identity.contains("Text(\"@\\(profile.handle)\")"))
-        XCTAssertTrue(identity.contains("pendingInvitationCount: sharedVisitInvitationCount"))
-        XCTAssertTrue(identity.contains("Text(profile.displayName)"))
-        XCTAssertTrue(identity.contains("ProfileGraphCountButton(value: followerCount"))
-        XCTAssertTrue(identity.contains("normalized(profile.homeArea)"))
-        XCTAssertTrue(identity.contains("normalized(profile.bio)"))
-        XCTAssertTrue(identity.contains("Text(memberSinceText)"))
+        XCTAssertTrue(navigationRow.contains("Text(\"@\\(profile.handle)\")"))
+        XCTAssertTrue(navigationRow.contains("pendingInvitationCount: sharedVisitInvitationCount"))
+        XCTAssertFalse(navigationRow.contains("WanderTheme.surfaceRaised.color"))
+        XCTAssertTrue(identityBlock.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(identityBlock.contains("Text(profile.displayName)"))
+        XCTAssertTrue(identityBlock.contains("ProfileGraphCountButton(value: followerCount"))
+        XCTAssertTrue(identityBlock.contains("normalized(profile.homeArea)"))
+        XCTAssertTrue(identityBlock.contains(".font(.system(size: 15, weight: .bold))"))
+        XCTAssertTrue(identityBlock.contains("normalized(profile.bio)"))
+        XCTAssertTrue(identityBlock.contains("Text(memberSinceText)"))
         XCTAssertLessThan(
-            try XCTUnwrap(identity.range(of: "normalized(profile.homeArea)")?.lowerBound),
-            try XCTUnwrap(identity.range(of: "normalized(profile.bio)")?.lowerBound)
+            try XCTUnwrap(identityBlock.range(of: "normalized(profile.homeArea)")?.lowerBound),
+            try XCTUnwrap(identityBlock.range(of: "normalized(profile.bio)")?.lowerBound)
         )
         XCTAssertLessThan(
-            try XCTUnwrap(identity.range(of: "normalized(profile.bio)")?.lowerBound),
-            try XCTUnwrap(identity.range(of: "Text(memberSinceText)")?.lowerBound)
+            try XCTUnwrap(identityBlock.range(of: "normalized(profile.bio)")?.lowerBound),
+            try XCTUnwrap(identityBlock.range(of: "Text(memberSinceText)")?.lowerBound)
         )
-        XCTAssertTrue(identity.contains("WanderTheme.surfaceRaised.color"))
+        XCTAssertTrue(identityBlock.contains(".background(WanderTheme.surfaceRaised.color)"))
+        XCTAssertTrue(identityBlock.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
         XCTAssertTrue(home.contains("private let profileAvatarSize: CGFloat = 86"))
         XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"envelope\")"))
         XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
         XCTAssertTrue(invitationButton.contains("Circle()"))
-        XCTAssertTrue(invitationButton.contains("WanderTheme.stateError.color"))
-        XCTAssertTrue(invitationButton.contains("WanderTheme.surfaceRaised.color"))
+        XCTAssertTrue(invitationButton.contains("Color(uiColor: .systemRed)"))
+        XCTAssertFalse(invitationButton.contains(".stroke("))
         XCTAssertTrue(invitationButton.contains("profile.checkInInvitations"))
         XCTAssertFalse(invitationButton.contains("Text("))
         XCTAssertTrue(screen.contains("sharedVisitInvitationsAction: { showsVisitInvitations = true }"))
