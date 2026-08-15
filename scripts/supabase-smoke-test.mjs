@@ -102,7 +102,8 @@ async function main() {
           strangerUserID,
         );
         await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
-        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, batched surface snapshots, lists, photo visibility, and Discover profile recommendations are valid.");
+        await runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID);
+        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, batched surface snapshots, lists, photo visibility, Discover profile recommendations, and global rec.me place search are valid.");
       }
     } finally {
       await client.query("rollback");
@@ -112,6 +113,86 @@ async function main() {
   } finally {
     await client.end().catch(() => {});
   }
+}
+
+async function runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID) {
+  await client.query("reset role");
+  await client.query(
+    `
+      insert into public.places (
+        canonical_name, category, primary_category, subcategory, raw_provider_type,
+        category_source, locality, region, country, latitude, longitude, source_provider,
+        source_provider_place_id, confidence
+      )
+      values (
+        'Codex Global Search Coffee', 'coffee_tea_sweets', 'coffee_tea_sweets',
+        'coffee_shop', 'cafe', 'provider', 'Los Angeles', 'CA', 'US', 34.0524, -118.2438,
+        'mapkit', 'codex-global-search-coffee', 1
+      )
+      on conflict (source_provider, source_provider_place_id) do update
+      set canonical_name = excluded.canonical_name,
+          primary_category = excluded.primary_category,
+          subcategory = excluded.subcategory,
+          updated_at = now()
+    `,
+  );
+  await client.query(
+    `
+      insert into public.user_places (
+        user_id, place_id, status, visibility, rating_score, source_type, deleted_at
+      )
+      select $1, place.id, 'been', 'followers', 5, 'social_seed', null
+      from public.places as place
+      where place.source_provider = 'mapkit'
+        and place.source_provider_place_id = 'codex-global-search-coffee'
+      on conflict (user_id, place_id) do update
+      set status = excluded.status,
+          visibility = excluded.visibility,
+          rating_score = excluded.rating_score,
+          deleted_at = null,
+          updated_at = now()
+    `,
+    [strangerUserID],
+  );
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "authenticated global Discover search preserves canonical provider identity",
+    `select * from public.search_recme_places($1, $2, $3, $4, $5, $6)`,
+    ["Codex Global Search", ["coffee_tea_sweets"], "Los Angeles", true, "everyone", 20],
+    (result) => result.rows.length === 1
+      && result.rows[0]?.canonical_name === "Codex Global Search Coffee"
+      && result.rows[0]?.source_provider === "mapkit"
+      && result.rows[0]?.source_provider_place_id === "codex-global-search-coffee"
+      && !("user_id" in result.rows[0])
+      && !("note" in result.rows[0])
+      && !("rating_score" in result.rows[0])
+      && !("visibility" in result.rows[0]),
+  );
+
+  await expectQuery(
+    client,
+    "global Discover search metadata remains privacy locked",
+    `
+      select
+        p.prosecdef,
+        exists (
+          select 1
+          from unnest(coalesce(p.proconfig, array[]::text[])) as setting
+          where setting ~ '^search_path=(""|)$'
+        ) as empty_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_allowed,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc as p
+      where p.oid = 'public.search_recme_places(text,text[],text,boolean,text,integer)'::regprocedure
+    `,
+    [],
+    (result) => result.rows[0]?.prosecdef === true
+      && result.rows[0]?.empty_search_path === true
+      && result.rows[0]?.authenticated_allowed === true
+      && result.rows[0]?.anon_denied === true,
+  );
 }
 
 async function runCommunityModerationSmokeChecks(

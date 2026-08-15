@@ -29585,3 +29585,99 @@ Final validation checkpoint (22:11 PDT):
   active iPhone 16 Plus and booted REC-236/REC-166 simulators were preserved.
 - PR #421 is the merge vehicle. This remains merge-only: no build-number bump,
   TestFlight upload, tag, or Slack release note is authorized in this session.
+## 2026-08-14 19:31 PDT - Codex - REC-225 global Discover search follow-up
+
+Agent: Codex using `plan-eng-review` and the repo-owned search/TestFlight
+feedback workflow
+Branch: `codex/rec-225-global-search`
+Worktree: `/private/tmp/recme-rec225-global-search`
+Linear: `REC-225` (`In Progress`)
+Mission Control: unavailable; `localhost:4000` refused the task API
+
+Goal: correct the shipped Discover search regression and change the corpus so
+place search can discover every privacy-eligible rec.me save, while ranking the
+current user's and followed/friend saves higher by default and treating an
+explicit friends phrase as a hard social scope.
+
+Starting state and coordination:
+
+- Started clean from exact `origin/main` commit `426f2c7a`, rec.me 1.0 build
+  149. Joe's `joe/phone-build-latest` checkout remains isolated, 223 commits
+  behind, with its pre-existing untracked `tmp/` directory untouched.
+- TestFlight feedback on the promoted query “coffee worth crossing town for”
+  exposed two deterministic client regressions: the walkthrough advanced to
+  Lists after the tap, and unconsumed intent words became required literal
+  tokens. The focused shipped UI test passed because it encoded the tab change
+  instead of asserting useful results or an honest empty state.
+- Joe clarified the product contract: Discover place search should search the
+  full rec.me corpus that the viewer is permitted to discover, bias own and
+  followed/friend evidence by default, and apply friend intent explicitly.
+  Existing blocks and private-content visibility must remain authoritative.
+- The required engineering review is running before implementation because
+  this changes backend retrieval, privacy projection, shared ranking semantics,
+  latency, and cross-screen walkthrough behavior.
+
+Expected files: the REC-225 search design/plan, a narrow Supabase migration and
+hosted smoke coverage if global retrieval needs a new RPC, repository protocol
+and remote implementation files, trusted-place ranking/query code, Discover UI
+and walkthrough tests, focused search/backend tests, and this append-only log.
+
+### 2026-08-14 21:16 PDT checkpoint
+
+- Added one shared client request model and repository boundary for global
+  Discover place retrieval. The authenticated Discover surface now runs local
+  refinement and the hosted lookup concurrently, cancels stale requests, keeps
+  the user in Discover, and preserves original provider identity when merging
+  duplicate venues.
+- The deterministic parser now consumes the full promoted intent phrase
+  `worth crossing town for`; the tap on `coffee worth crossing town for`
+  produces immediate useful local results instead of appearing inert.
+- Added hosted `public.search_recme_places`, a generated search vector with a
+  GIN index, strict authenticated/service-role grants, pinned empty
+  `search_path`, and viewer identity derived only from authenticated claims.
+  Search spans every eligible rec.me user's discoverable save, excludes
+  self-only saves, private/deleted profiles, deleted saves, and blocks in either
+  direction, and returns canonical venue facts rather than another user's note,
+  rating, or save details.
+- Ranking keeps lexical relevance primary, then applies bounded affinity for
+  the current user, mutual friends, and followed users. An explicit friends
+  phrase is a hard mutual-only scope. The first release is restricted to the
+  approved public place categories/providers.
+- No feature flag was added for REC-225. Search becomes the standard Discover
+  behavior when the client code ships. A separate, already-hosted
+  `first_visit_nux` migration from active REC-236 work was referenced only
+  temporarily to reconcile hosted migration history before applying REC-225;
+  it is not in this branch and does not gate search.
+- Applied migration `20260815024338_discover_global_recme_place_search.sql` to
+  the linked hosted project. Its 16-case rollback-only pgTAP suite passed, and
+  the complete hosted rollback-only smoke suite passed, including provider
+  identity preservation and function security metadata.
+- Generic simulator build passed. Focused client coverage passed 21 tests with
+  0 failures; the ranking performance regression measured p95 around 29 ms
+  against a 50 ms ceiling. A full run completed 196 unit tests with 0 failures,
+  then the existing UI runner repeatedly restarted on unrelated timeouts. The
+  branch is being rebased onto newly advanced `origin/main` before final
+  focused/UI validation and PR handoff.
+
+### 2026-08-14 21:41 PDT validation and handoff
+
+- Rebased onto exact current `origin/main` `ac9740bb`, rec.me 1.0 build 150.
+  The only conflict was this append-only coordination log; all app and test
+  source merged cleanly. `git diff --check` and the smoke-test JavaScript
+  syntax check pass.
+- The rebased build compiled the changed Discover, parser, repository, store,
+  and remote-search source without errors. A final seven-test rerun was
+  interrupted by Xcode before execution after the machine reached effectively
+  zero free disk space; the same search set had already passed before rebase,
+  and the full pre-rebase run completed 196 unit tests with 0 failures. This is
+  recorded as an environment gap rather than a test pass.
+- Hosted validation remains authoritative for the new security boundary: the
+  migration's 16 pgTAP cases and the full rollback-only Supabase smoke suite
+  both passed after the function was applied to the linked production project.
+- Mission Control remained unavailable on a final retry. Linear REC-225 has the
+  implementation/privacy checkpoint and remains `In Progress` until the ready
+  PR is opened, when it should move to `In Review`.
+- No TestFlight build number was changed and no client binary was uploaded.
+  The backend function is live, but users do not receive this behavior until
+  the client PR merges and a later explicitly requested TestFlight release
+  packages it. REC-225 has no feature flag.

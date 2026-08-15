@@ -142,6 +142,44 @@ final class TrustedPlaceSearchTests: XCTestCase {
         XCTAssertTrue(query.allowsConsumedOnlyMatches)
     }
 
+    func testPlannerConsumesWorthCrossingTownForAsOneOpinionPhrase() {
+        let filters = DeterministicFilterParser.filters(
+            query: "coffee worth crossing town for",
+            schema: DiscoverFilterSchema()
+        )
+
+        let query = TrustedPlaceSearchQuery(
+            filters.query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+        let request = DiscoverRecmePlaceSearchPlanner.request(
+            query: filters.query,
+            filters: filters
+        )
+
+        XCTAssertTrue(query.requiredTokens.isEmpty)
+        XCTAssertEqual(request.query, "")
+        XCTAssertEqual(request.categories, [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertTrue(request.favoriteOnly)
+        XCTAssertEqual(request.scope, .everyone)
+    }
+
+    func testRecmePlannerTreatsFriendsAsHardMutualScope() {
+        let filters = DeterministicFilterParser.filters(
+            query: "friends coffee",
+            schema: DiscoverFilterSchema()
+        )
+
+        let request = DiscoverRecmePlaceSearchPlanner.request(
+            query: filters.query,
+            filters: filters
+        )
+
+        XCTAssertEqual(request.scope, .friends)
+        XCTAssertEqual(request.categories, [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(request.query, "")
+    }
+
     func testPlannerUsesDeterministicParserCategoryAndRelationshipAliases() {
         let filters = DiscoverFilters(
             query: "hikes in LA from people",

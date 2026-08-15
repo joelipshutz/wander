@@ -105,6 +105,38 @@ struct LinkPlaceInput: Equatable {
     let rawValue: String
 }
 
+enum RecmePlaceSearchScope: String, Codable, Equatable, Sendable {
+    case everyone
+    case mine
+    case friends
+    case following
+}
+
+struct RecmePlaceSearchRequest: Equatable, Sendable {
+    let query: String
+    let categories: [String]
+    let area: String?
+    let favoriteOnly: Bool
+    let scope: RecmePlaceSearchScope
+    let limit: Int
+
+    init(
+        query: String,
+        categories: [String] = [],
+        area: String? = nil,
+        favoriteOnly: Bool = false,
+        scope: RecmePlaceSearchScope = .everyone,
+        limit: Int = 20
+    ) {
+        self.query = query
+        self.categories = categories
+        self.area = area
+        self.favoriteOnly = favoriteOnly
+        self.scope = scope
+        self.limit = min(max(limit, 1), 20)
+    }
+}
+
 struct PlaceCandidate: Identifiable, Equatable, Codable, Sendable {
     let id: String
     let name: String
@@ -1592,12 +1624,17 @@ protocol PlaceCandidateResolving {
 @MainActor
 protocol PlaceRepository {
     func places(in viewport: MapViewport) async throws -> [VisiblePlace]
+    func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
     func resolveCurrentLocation() async throws -> [PlaceCandidate]
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
     func sharedPlace(id: String) async throws -> PlaceCandidate?
 }
 
 extension PlaceRepository {
+    func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
+        throw WanderRemoteError.notImplemented("rec.me place search")
+    }
+
     func sharedPlace(id: String) async throws -> PlaceCandidate? {
         throw WanderRemoteError.notImplemented("shared place resolution")
     }

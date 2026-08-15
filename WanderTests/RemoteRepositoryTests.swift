@@ -1297,6 +1297,57 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[0].body["input_identifier"] as? String, placeID)
     }
 
+    func testRecmePlaceSearchReturnsCanonicalCandidatesWithoutMemoryDetails() async throws {
+        let rpc = RecordingRPC()
+        let placeID = "8bdfb34e-521e-4bc8-8466-0315adf12a5a"
+        rpc.responses["search_recme_places"] = """
+        [
+          {
+            "id": "\(placeID)",
+            "canonical_name": "Community Coffee",
+            "category": "coffee_tea_sweets",
+            "primary_category": "coffee_tea_sweets",
+            "subcategory": "coffee_shop",
+            "category_source": "provider",
+            "category_confidence": 0.98,
+            "raw_provider_type": "cafe",
+            "address": "123 Sunset Boulevard",
+            "locality": "Los Angeles",
+            "region": "CA",
+            "country": "US",
+            "latitude": 34.05,
+            "longitude": -118.24,
+            "source_provider": "google_places",
+            "source_provider_place_id": "community-coffee",
+            "confidence": 0.97
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabasePlaceRepository(rpc: rpc)
+
+        let places = try await repository.searchRecmePlaces(
+            RecmePlaceSearchRequest(
+                query: "community",
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                area: "Los Angeles",
+                favoriteOnly: true,
+                scope: .friends,
+                limit: 100
+            )
+        )
+
+        XCTAssertEqual(places.map(\.name), ["Community Coffee"])
+        XCTAssertEqual(places[0].sourceProvider, "google_places")
+        XCTAssertEqual(places[0].sourceProviderPlaceID, "community-coffee")
+        XCTAssertEqual(rpc.calls.map(\.name), ["search_recme_places"])
+        XCTAssertEqual(rpc.calls[0].body["input_query"] as? String, "community")
+        XCTAssertEqual(rpc.calls[0].body["input_categories"] as? [String], [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(rpc.calls[0].body["input_area"] as? String, "Los Angeles")
+        XCTAssertEqual(rpc.calls[0].body["input_favorite_only"] as? Bool, true)
+        XCTAssertEqual(rpc.calls[0].body["input_scope"] as? String, "friends")
+        XCTAssertEqual(rpc.calls[0].body["input_limit"] as? Int, 20)
+    }
+
     func testSocialGraphRepositoriesCallExpectedRPCs() async throws {
         let rpc = RecordingRPC()
         let graphJSON = """
