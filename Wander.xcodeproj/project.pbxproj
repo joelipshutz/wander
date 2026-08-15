@@ -143,6 +143,7 @@
 		91D33D33FA34ACECBA280146 /* FeedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C904029812CF4369275B29FA /* FeedScreen.swift */; };
 		93E16EB26DD015377F5B2D9A /* rec-274-messages-composer-dismissal-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = B4CFACA664252A3BBDF70791 /* rec-274-messages-composer-dismissal-pre.json */; };
 		940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */; };
+		951634B967546BAA6394E0A8 /* rec-253-community-personalized-featured-post.json in Resources */ = {isa = PBXBuildFile; fileRef = 5D8CC526097B987E95522A42 /* rec-253-community-personalized-featured-post.json */; };
 		9565F34F79FCEEC7883DFF23 /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
 		9783D57D5D22581B19B01C05 /* MapKitPlaceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C22D299879CD27950355753 /* MapKitPlaceResolver.swift */; };
 		97DA8BB449DC58D55A4DD2ED /* FirstVisitWalkthrough.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3A3B59E94C99CDA86C1B466 /* FirstVisitWalkthrough.swift */; };
@@ -165,6 +166,7 @@
 		A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F89709D2B0AA70D438C03C /* AuthSessionProviding.swift */; };
 		A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */; };
 		A8710E56BE6DB7AA89C9AD66 /* ContactProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5665DF2A481AC9A45CE315E /* ContactProvider.swift */; };
+		A8A8F191163DE3166FE3CEA0 /* rec-253-community-personalized-featured-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 849D2FAFEA465CB5DE06C0C2 /* rec-253-community-personalized-featured-pre.json */; };
 		AD4AA98EFE3113857F5A9854 /* MapRegionFitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2FCB4F57A21DA1C9CBAA1AD /* MapRegionFitter.swift */; };
 		AF13291EF0063A544605486A /* PlaceExternalLinksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E7CF0A6F81DB6C5DAFC4B17 /* PlaceExternalLinksTests.swift */; };
 		AF5D0849C43DDC7D8AA7A9BF /* LocalModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CED7D1302D938DD4775E8816 /* LocalModels.swift */; };
@@ -201,6 +203,7 @@
 		D659F5CBC1EEB692D6216008 /* VisibilityPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFBB1E0FFAE279FBB7C42FEF /* VisibilityPolicy.swift */; };
 		D67757E669AFA604566E6542 /* TrustedPlaceSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 875E330C1764F10B9298E2EF /* TrustedPlaceSearchTests.swift */; };
 		D74C628657DB5DC13C5CB1ED /* CategoryTaxonomyMockups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14E5D0878CAA5887921E1ED1 /* CategoryTaxonomyMockups.swift */; };
+		D8628DF273B8141B59DA7F6A /* rec-246-instagram-cave-springs-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 34DE6ED508A4DF46B4F9BBD0 /* rec-246-instagram-cave-springs-pre.json */; };
 		D9FCF52D475EBCA65171FC4A /* OnboardingLocationMapPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03B626117566DC2BBAA50BF9 /* OnboardingLocationMapPreview.swift */; };
 		DB1ADA31521F086BAA7D9A92 /* WanderSupabaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E12138B68E0CBFA73B271D /* WanderSupabaseClient.swift */; };
 		DBDA10E305A15751087B1BB0 /* WanderWidgetSnapshotPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159538D8F8224999DF1BB697 /* WanderWidgetSnapshotPublisher.swift */; };
@@ -336,6 +339,7 @@
 		3483D9CDDB48DA65E279CFF8 /* WanderActionButtonControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderActionButtonControlTests.swift; sourceTree = "<group>"; };
 		34905E496D66A68FF5ACC37A /* rec-227-adaptive-import-flow-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-227-adaptive-import-flow-pre.json"; sourceTree = "<group>"; };
 		34977B260344994771BCC93E /* AuthSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSessionTests.swift; sourceTree = "<group>"; };
+		34DE6ED508A4DF46B4F9BBD0 /* rec-246-instagram-cave-springs-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-246-instagram-cave-springs-pre.json"; sourceTree = "<group>"; };
 		3697512B32B506276A012FE2 /* MapRegionFitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapRegionFitterTests.swift; sourceTree = "<group>"; };
 		37422B8F2E5F0D4CBE2C20BA /* ProfileOwnerHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileOwnerHome.swift; sourceTree = "<group>"; };
 		386CEC6A26C58634D12C1B39 /* rec-215-list-header-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-215-list-header-pre.json"; sourceTree = "<group>"; };
@@ -364,6 +368,7 @@
 		5A4CBE5F7AC41BC3C52B6337 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
 		5CFDAE87A1D0B86C01D2FFC2 /* LinkPlaceParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParserTests.swift; sourceTree = "<group>"; };
 		5D2998E89FC3805E187D600C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		5D8CC526097B987E95522A42 /* rec-253-community-personalized-featured-post.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-253-community-personalized-featured-post.json"; sourceTree = "<group>"; };
 		5DE3ECCD11166CE37B3FE1AC /* PhotoZoomStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoZoomStateTests.swift; sourceTree = "<group>"; };
 		5E0513E538B756870944C1F6 /* WanderCheckInControlIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderCheckInControlIntent.swift; sourceTree = "<group>"; };
 		61E0DC7340E8C6EA795815B7 /* rec-228-import-row-selection-style-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-228-import-row-selection-style-pre.json"; sourceTree = "<group>"; };
@@ -395,6 +400,7 @@
 		82E12138B68E0CBFA73B271D /* WanderSupabaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderSupabaseClient.swift; sourceTree = "<group>"; };
 		840B49067A7E0AB076EEBB23 /* FeedModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedModelsTests.swift; sourceTree = "<group>"; };
 		840B7E03004D458695870EAF /* InviteMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteMockups.swift; sourceTree = "<group>"; };
+		849D2FAFEA465CB5DE06C0C2 /* rec-253-community-personalized-featured-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-253-community-personalized-featured-pre.json"; sourceTree = "<group>"; };
 		86041408E563554B57347025 /* LinkPlaceParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPlaceParser.swift; sourceTree = "<group>"; };
 		86E70265B6612F2CECA3C7A8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		875E330C1764F10B9298E2EF /* TrustedPlaceSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedPlaceSearchTests.swift; sourceTree = "<group>"; };
@@ -605,6 +611,9 @@
 				1BE0E4CCA52C155A2EFB2465 /* rec-228-bulk-status-coupling-post.png */,
 				7C1FAD2B72A87F4F90201955 /* rec-228-bulk-status-coupling-pre.json */,
 				0FEB786FE1F5CAD432194B30 /* rec-228-bulk-status-coupling-pre.png */,
+				34DE6ED508A4DF46B4F9BBD0 /* rec-246-instagram-cave-springs-pre.json */,
+				5D8CC526097B987E95522A42 /* rec-253-community-personalized-featured-post.json */,
+				849D2FAFEA465CB5DE06C0C2 /* rec-253-community-personalized-featured-pre.json */,
 				AB2DCB79E225061F89953A56 /* rec-259-native-login-linking-pre.json */,
 				53269BFD9AB143F47A3DDAC7 /* rec-268-comment-delete-photo-back-pre.json */,
 				D63FACD1E1CF46C5272B0344 /* rec-270-liquid-glass-pin-transition-post.png */,
@@ -1252,6 +1261,9 @@
 				268207FAA4721BCE51516935 /* rec-228-bulk-status-coupling-pre.json in Resources */,
 				18D6E77C3054DE54444A24BD /* rec-228-bulk-status-coupling-pre.png in Resources */,
 				9D71E27C136BBB3AAE7D7C6E /* rec-228-import-row-selection-style-pre.json in Resources */,
+				D8628DF273B8141B59DA7F6A /* rec-246-instagram-cave-springs-pre.json in Resources */,
+				951634B967546BAA6394E0A8 /* rec-253-community-personalized-featured-post.json in Resources */,
+				A8A8F191163DE3166FE3CEA0 /* rec-253-community-personalized-featured-pre.json in Resources */,
 				544468DBCE5DC0461C1F52D4 /* rec-259-native-login-linking-pre.json in Resources */,
 				9A6DFD48687FBB95DD158E3C /* rec-268-comment-delete-photo-back-pre.json in Resources */,
 				CE0E108A9243224B04BDAD02 /* rec-270-liquid-glass-pin-transition-post.png in Resources */,
@@ -1636,7 +1648,7 @@
 		98BE6269A1618DE2ECCB47B5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 151;
+				CURRENT_PROJECT_VERSION = 152;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
@@ -1653,7 +1665,7 @@
 		98C77DC356FB1881F7298017 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 151;
+				CURRENT_PROJECT_VERSION = 152;
 				DEVELOPMENT_TEAM = Y7TVK75RZ8;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
