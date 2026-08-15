@@ -928,18 +928,41 @@ final class OnboardingUITests: XCTestCase {
         )
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.deviceFeatures.extensionsGuide"]
-                .exists
+                .isHittable
+        )
+        let card = app.descendants(matching: .any)["walkthrough.deviceFeatures.card"]
+        let complete = app.descendants(matching: .any)["walkthrough.deviceFeatures.complete"]
+        XCTAssertTrue(card.exists)
+        XCTAssertTrue(complete.isHittable)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.deviceFeatures.actionButton"].exists
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.deviceFeatures.complete"]
-                .exists
+            app.descendants(matching: .any)["walkthrough.deviceFeatures.widgets"].exists
         )
-        XCTAssertTrue(app.staticTexts["Share into rec.me"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.deviceFeatures.shareExtension"].exists
+        )
+
+        let windowFrame = app.windows.firstMatch.frame
+        XCTAssertGreaterThanOrEqual(card.frame.minY, windowFrame.minY)
+        XCTAssertLessThanOrEqual(card.frame.maxY, windowFrame.maxY)
+
+        let cardFrameBeforeSwipe = card.frame
+        app.swipeUp()
+        XCTAssertEqual(card.frame.minY, cardFrameBeforeSwipe.minY, accuracy: 1)
+        XCTAssertEqual(card.frame.maxY, cardFrameBeforeSwipe.maxY, accuracy: 1)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-236 third-launch device extensions lesson"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        complete.tap()
+        XCTAssertFalse(
+            app.descendants(matching: .any)["walkthrough.deviceFeatures"]
+                .waitForExistence(timeout: 1)
+        )
     }
 
     func testPrimaryTabTapNavigatesToFeed() {

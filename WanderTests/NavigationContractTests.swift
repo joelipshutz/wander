@@ -2935,6 +2935,30 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(screen.components(separatedBy: "viewerProfile: store.currentUser").count - 1, 2)
     }
 
+    func testThirdLaunchDeviceLessonUsesACompactNonScrollingEditorialPanel() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Onboarding/FirstVisitWalkthrough.swift"
+            )
+        )
+        let overlay = try sourceSection(
+            source,
+            after: "private struct DeviceFeaturesWalkthroughOverlay: View",
+            before: "private struct DeviceFeatureInstruction: View"
+        )
+
+        XCTAssertFalse(overlay.contains("ScrollView"))
+        XCTAssertTrue(overlay.contains(".font(WanderTypography.editorialCardTitle)"))
+        XCTAssertTrue(overlay.contains(".frame(maxWidth: 344)"))
+        XCTAssertTrue(overlay.contains(".wanderGlassCapsule(tone: .accent)"))
+        XCTAssertFalse(overlay.contains(".scaleEffect(reduceMotion ? 1 :"))
+        XCTAssertFalse(
+            source.contains(
+                ".animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingDeviceFeaturesLesson)"
+            )
+        )
+    }
+
     private var projectRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

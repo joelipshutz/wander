@@ -959,12 +959,10 @@ extension View {
                 DeviceFeaturesWalkthroughOverlay {
                     coordinator.completeDeviceFeaturesLesson()
                 }
-                .transition(.opacity)
                 .zIndex(2_000)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingImportLesson)
-        .animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingDeviceFeaturesLesson)
     }
 }
 
@@ -1051,7 +1049,7 @@ private struct ImportWalkthroughOverlay: View {
 
 private struct DeviceFeaturesWalkthroughOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isBreathing = false
+    @State private var isActionButtonPulsing = false
     let onComplete: () -> Void
 
     var body: some View {
@@ -1059,92 +1057,134 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
             WalkthroughFullScreenScrim()
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     ZStack {
                         Circle()
+                            .fill(WanderTheme.terracotta.color.opacity(0.18))
+                            .frame(width: 42, height: 42)
+                            .scaleEffect(
+                                reduceMotion ? 1 : (isActionButtonPulsing ? 1.12 : 0.88)
+                            )
+                            .opacity(
+                                reduceMotion ? 1 : (isActionButtonPulsing ? 0.42 : 0.12)
+                            )
+                            .animation(
+                                reduceMotion
+                                    ? nil
+                                    : .easeInOut(duration: 1.35).repeatForever(autoreverses: true),
+                                value: isActionButtonPulsing
+                            )
+
+                        Circle()
                             .fill(WanderTheme.terracotta.color)
-                            .frame(width: 52, height: 52)
+                            .frame(width: 36, height: 36)
+
                         Image(systemName: "hand.tap.fill")
-                            .font(.system(size: 22, weight: .black))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(WanderTheme.textOnAction.color)
                     }
+                    .frame(width: 44, height: 44)
 
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("Keep rec.me one press away")
-                            .font(.system(.title2, design: .rounded, weight: .black))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("rec.me, one press away")
+                            .font(WanderTypography.editorialCardTitle)
                             .foregroundStyle(WanderTheme.textInk.color)
-                        Text("Set these up once, then save or find a place without hunting for the app.")
-                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+
+                        Text("Set these up once for faster saves.")
+                            .font(WanderTypography.metadata)
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                }
+                .padding(.bottom, WanderTheme.spacing3)
 
+                Divider()
+                    .overlay(WanderTheme.borderHairline.color)
+
+                VStack(spacing: 0) {
                     DeviceFeatureInstruction(
                         systemImage: "button.programmable",
-                        title: "Action Button & Control Center",
-                        instruction: "Open Settings → Action Button → Controls, then choose rec.me Check In. You can add the same control from Control Center."
+                        title: "Action Button + Controls",
+                        instruction: "Choose rec.me Check In for a one-press save.",
+                        accessibilityIdentifier: "walkthrough.deviceFeatures.actionButton"
                     )
+
+                    Divider()
+                        .padding(.leading, 40)
+                        .overlay(WanderTheme.borderHairline.color)
 
                     DeviceFeatureInstruction(
                         systemImage: "square.grid.2x2.fill",
-                        title: "Home & Lock Screen widgets",
-                        instruction: "Long-press your screen, tap Edit or +, search rec.me, then choose Quick Add, Search, Activity, or Nearby."
+                        title: "Home + Lock Screen widgets",
+                        instruction: "Keep Quick Add, Search, Activity, or Nearby in view.",
+                        accessibilityIdentifier: "walkthrough.deviceFeatures.widgets"
                     )
+
+                    Divider()
+                        .padding(.leading, 40)
+                        .overlay(WanderTheme.borderHairline.color)
 
                     DeviceFeatureInstruction(
                         systemImage: "square.and.arrow.up.fill",
-                        title: "Share into rec.me",
-                        instruction: "From Maps, Instagram, TikTok, or Safari, tap Share → rec.me. Your captures open in a private review where you choose what to keep."
+                        title: "Share extension",
+                        instruction: "Send places from Maps, Instagram, TikTok, or Safari.",
+                        accessibilityIdentifier: "walkthrough.deviceFeatures.shareExtension"
                     )
+                }
 
+                HStack(spacing: WanderTheme.spacing2) {
                     Link(destination: WalkthroughHelpDestination.extensions) {
-                        Label("See the extensions guide", systemImage: "safari")
-                            .font(.system(size: 14, weight: .black))
+                        Label("Setup guide", systemImage: "arrow.up.right")
+                            .font(WanderTypography.label)
                             .foregroundStyle(WanderTheme.terracottaDark.color)
-                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Opens getrec.me/extensions")
                     .accessibilityIdentifier("walkthrough.deviceFeatures.extensionsGuide")
 
-                    Button("Got it", action: onComplete)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(WanderTheme.terracotta.color)
-                        .clipShape(Capsule())
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("walkthrough.deviceFeatures.complete")
+                    Spacer(minLength: WanderTheme.spacing2)
+
+                    Button(action: onComplete) {
+                        HStack(spacing: 6) {
+                            Text("Got it")
+                            Image(systemName: "arrow.right")
+                        }
+                        .font(WanderTypography.control)
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(minWidth: 104, minHeight: 44)
+                        .contentShape(Capsule())
+                        .wanderGlassCapsule(tone: .accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("walkthrough.deviceFeatures.complete")
                 }
-                .padding(WanderTheme.spacing4)
-                .background(
-                    WanderTheme.surfaceBone.color,
-                    in: RoundedRectangle(cornerRadius: 28, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(WanderTheme.textInk.color.opacity(0.08), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.vertical, WanderTheme.spacing8)
-                .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.015 : 0.985))
+                .padding(.top, WanderTheme.spacing2)
             }
-            .scrollIndicators(.hidden)
+            .padding(WanderTheme.spacing4)
+            .frame(maxWidth: 344)
+            .background(
+                WanderTheme.surfaceBone.color,
+                in: RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
+                    .stroke(WanderTheme.terracotta.color.opacity(0.24), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+            .padding(.horizontal, WanderTheme.spacing4)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("walkthrough.deviceFeatures.card")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("walkthrough.deviceFeatures")
         .onAppear {
             guard !reduceMotion else { return }
-            isBreathing = true
+            isActionButtonPulsing = true
         }
-        .animation(
-            reduceMotion
-                ? nil
-                : .easeInOut(duration: 2.4).repeatForever(autoreverses: true),
-            value: isBreathing
-        )
     }
 }
 
@@ -1152,29 +1192,30 @@ private struct DeviceFeatureInstruction: View {
     let systemImage: String
     let title: String
     let instruction: String
+    let accessibilityIdentifier: String
 
     var body: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(WanderTheme.terracottaDark.color)
-                .frame(width: 32, height: 32)
+                .frame(width: 28, height: 28)
                 .background(WanderTheme.terracotta.color.opacity(0.12), in: Circle())
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(.subheadline, design: .rounded, weight: .black))
+                    .font(WanderTypography.editorialCompactTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text(instruction)
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(WanderTheme.spacing3)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
