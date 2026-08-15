@@ -29423,3 +29423,44 @@ Landing checkpoint - 2026-08-14 19:21 PDT:
   REC-236 remains In Review because Joe also explicitly requested build 149 and
   the App Store release; no TestFlight or App Store action occurs until #416 is
   merged and the exact latest-main release gate passes.
+
+## 2026-08-14 19:25 PDT - Codex - App Store 1.0 / TestFlight build 149
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-149`
+Worktree: `/private/tmp/recme-testflight-build-149`
+Linear: `REC-180` and `REC-236` (`In Review`)
+Mission Control: unavailable; `localhost:4000` refused the task API
+
+Goal: package every classified change on exact latest `main` into rec.me 1.0
+build 149, run the complete release and production-data safety gates, upload and
+attach the build to TestFlight, then use the same signed candidate for App Store
+submission if final privacy, review-account, mailbox, and App Store checks pass.
+
+Starting state and release scope:
+
+- Joe explicitly requested “everything in main” and “push to TF,” authorizing
+  the build-number bump, signed archive/upload, TestFlight attachment, tester
+  note, and continuation through the already-authorized App Store launch gates.
+- Exact pre-bump cutoff is `fbe792cdcbbb29b77c6dfd70e54689d9119e1c05`,
+  containing production-auth/data-continuity PR #411, onboarding polish PR #415,
+  and the off-by-default NUX/durable-dismiss PR #416. No open PR is being
+  cherry-picked or implicitly added; the release source is the complete current
+  `main` tree.
+- Machine manifest snapshot from `testflight/build-147` to the cutoff passed
+  with no missing, duplicate, or red entries. PR #413 is correctly excluded as
+  prior-release documentation; #411, #415, and #416 are classified `ship`.
+  Snapshot and reconciliation artifacts are under
+  `/private/tmp/recme-build149-manifest/`.
+- Marketing version remains `1.0`. Build number advances once from 148 to 149 as
+  Joe requested. The existing hosted Supabase `wander` project remains the live
+  database; this release performs no reset, clone, account deletion, identity
+  remap, destructive migration, or tester-data rewrite.
+- Release gate: regenerate and audit the Xcode project; commit/push a metadata-
+  only PR; validate and merge it; then run the full exact-candidate iOS suite,
+  hosted rollback-only database smoke, Clerk continuity/reviewer-login checks,
+  signed archive/privacy inspection, and upload with
+  `manageAppVersionAndBuildNumber=false`.
+
+Expected tracked files: `project.yml`, generated
+`Wander.xcodeproj/project.pbxproj`, and this append-only log.
