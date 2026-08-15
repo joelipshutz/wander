@@ -326,6 +326,7 @@ struct WanderRootView: View {
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var didApplyWalkthroughLaunchConfiguration = false
+    @State private var didRetireDisabledWalkthroughEligibility = false
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -337,6 +338,8 @@ struct WanderRootView: View {
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
+    private let shouldRetireDisabledWalkthroughEligibility: Bool
+    private let onFirstVisitWalkthroughCompleted: () -> Void
 
     init(
         initialTab: WanderTab? = nil,
@@ -358,6 +361,13 @@ struct WanderRootView: View {
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
         self.analytics = analytics
+        self.shouldRetireDisabledWalkthroughEligibility =
+            FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility(
+                isEligible: isFirstVisitWalkthroughEligible,
+                isUsingLiveData: fixtureMode == .empty,
+                launchArguments: launchArguments
+            )
+        self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
@@ -382,9 +392,11 @@ struct WanderRootView: View {
         )
         _walkthroughs = StateObject(
             wrappedValue: FirstVisitWalkthroughCoordinator(
-                isEnabled: (
-                    fixtureMode == .empty && isFirstVisitWalkthroughEligible
-                ) || launchArguments.contains("-WanderEnableWalkthroughs"),
+                isEnabled: FirstVisitWalkthroughFeatureFlag.isEnabled(
+                    isEligible: isFirstVisitWalkthroughEligible,
+                    isUsingLiveData: fixtureMode == .empty,
+                    launchArguments: launchArguments
+                ),
                 onCompleted: onFirstVisitWalkthroughCompleted
             )
         )
@@ -1364,6 +1376,14 @@ struct WanderRootView: View {
     }
 
     private func configureWalkthroughsForCurrentUser() {
+        if shouldRetireDisabledWalkthroughEligibility {
+            if !didRetireDisabledWalkthroughEligibility {
+                didRetireDisabledWalkthroughEligibility = true
+                onFirstVisitWalkthroughCompleted()
+            }
+            return
+        }
+
         walkthroughs.setUserID(store.currentUser.id)
         if !didApplyWalkthroughLaunchConfiguration {
             didApplyWalkthroughLaunchConfiguration = true

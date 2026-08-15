@@ -603,6 +603,7 @@ private struct FeedPeopleSurface: View {
                 contactProvider: store.contactProvider,
                 senderProfileID: store.currentUser.id,
                 walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
+                onWalkthroughDismiss: walkthroughDismissAction,
                 onPermissionDenied: walkthroughPermissionDeniedAction,
                 analytics: store.productAnalytics
             )
@@ -613,6 +614,13 @@ private struct FeedPeopleSurface: View {
         guard walkthroughs.isRequestingContactInvite else { return nil }
         return {
             isPresentingContactInvites = false
+        }
+    }
+
+    private var walkthroughDismissAction: (() -> Void)? {
+        guard walkthroughs.isRequestingContactInvite else { return nil }
+        return {
+            walkthroughs.dismissEntireWalkthrough()
         }
     }
 

@@ -490,6 +490,45 @@ enum FirstVisitWalkthroughContent {
     }
 }
 
+enum FirstVisitWalkthroughFeatureFlag {
+    static let isRolloutEnabledByDefault = false
+
+#if DEBUG
+    static let allowsLaunchArgumentOverride = true
+#else
+    static let allowsLaunchArgumentOverride = false
+#endif
+
+    static func isEnabled(
+        isEligible: Bool,
+        isUsingLiveData: Bool,
+        launchArguments: [String],
+        isRolloutEnabled: Bool = isRolloutEnabledByDefault,
+        allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
+    ) -> Bool {
+        (allowsLaunchOverride && launchArguments.contains("-WanderEnableWalkthroughs"))
+            || (isRolloutEnabled && isEligible && isUsingLiveData)
+    }
+
+    static func shouldRetireEligibility(
+        isEligible: Bool,
+        isUsingLiveData: Bool,
+        launchArguments: [String],
+        isRolloutEnabled: Bool = isRolloutEnabledByDefault,
+        allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
+    ) -> Bool {
+        isEligible
+            && isUsingLiveData
+            && !isEnabled(
+                isEligible: isEligible,
+                isUsingLiveData: isUsingLiveData,
+                launchArguments: launchArguments,
+                isRolloutEnabled: isRolloutEnabled,
+                allowsLaunchOverride: allowsLaunchOverride
+            )
+    }
+}
+
 struct FirstVisitWalkthroughStore {
     let defaults: UserDefaults
     let version: Int
@@ -545,6 +584,14 @@ struct FirstVisitWalkthroughStore {
 
     func markDeviceFeaturesLessonComplete(for userID: String) {
         defaults.set(true, forKey: deviceFeaturesCompletionKey(userID: userID))
+    }
+
+    func markEntireWalkthroughComplete(for userID: String) {
+        for surface in WalkthroughSurface.allCases {
+            markComplete(for: userID, surface: surface)
+        }
+        markImportLessonComplete(for: userID)
+        markDeviceFeaturesLessonComplete(for: userID)
     }
 
     func hasCompletedEntireWalkthrough(for userID: String) -> Bool {
@@ -815,6 +862,21 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         notifyCompletionIfNeeded()
     }
 
+    func dismissEntireWalkthrough() {
+        guard isEnabled else { return }
+        store.markEntireWalkthroughComplete(for: userID)
+        activeSurface = nil
+        currentStepIndex = 0
+        requestedSurface = nil
+        isImportLessonEligible = false
+        isDeviceFeaturesLessonEligible = false
+        isPresentingImportLesson = false
+        isPresentingDeviceFeaturesLesson = false
+        tutorialUserPlaceID = nil
+        isRequestingContactInvite = false
+        notifyCompletionIfNeeded()
+    }
+
     func consumeRequestedSurface(_ surface: WalkthroughSurface) {
         guard requestedSurface == surface else { return }
         requestedSurface = nil
@@ -949,16 +1011,21 @@ extension View {
     ) -> some View {
         overlay {
             if coordinator.isPresentingImportLesson {
-                ImportWalkthroughOverlay {
-                    coordinator.completeImportLesson()
-                    onOpenImport()
-                }
+                ImportWalkthroughOverlay(
+                    onDismiss: coordinator.dismissEntireWalkthrough,
+                    onOpenImport: {
+                        coordinator.completeImportLesson()
+                        onOpenImport()
+                    }
+                )
                 .transition(.opacity)
                 .zIndex(2_000)
             } else if coordinator.isPresentingDeviceFeaturesLesson {
-                DeviceFeaturesWalkthroughOverlay {
-                    coordinator.completeDeviceFeaturesLesson()
-                }
+                DeviceFeaturesWalkthroughOverlay(
+                    onDismiss: coordinator.dismissEntireWalkthrough,
+                    onComplete: coordinator.completeDeviceFeaturesLesson
+                )
+                .transition(.opacity)
                 .zIndex(2_000)
             }
         }
@@ -980,6 +1047,7 @@ enum ImportWalkthroughContent {
 private struct ImportWalkthroughOverlay: View {
     @Environment(\.openURL) private var openURL
 
+    let onDismiss: () -> Void
     let onOpenImport: () -> Void
 
     var body: some View {
@@ -1009,6 +1077,11 @@ private struct ImportWalkthroughOverlay: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Import help")
                     .accessibilityHint("Opens import help on getrec.me")
+
+                    WalkthroughDismissButton(
+                        accessibilityIdentifier: "walkthrough.dismiss.importLesson",
+                        action: onDismiss
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -1050,6 +1123,7 @@ private struct ImportWalkthroughOverlay: View {
 private struct DeviceFeaturesWalkthroughOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isActionButtonPulsing = false
+    let onDismiss: () -> Void
     let onComplete: () -> Void
 
     var body: some View {
@@ -1096,6 +1170,13 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    Spacer(minLength: 0)
+
+                    WalkthroughDismissButton(
+                        accessibilityIdentifier: "walkthrough.dismiss.deviceFeatures",
+                        action: onDismiss
+                    )
                 }
                 .padding(.bottom, WanderTheme.spacing3)
 
@@ -1219,6 +1300,26 @@ private struct DeviceFeatureInstruction: View {
     }
 }
 
+private struct WalkthroughDismissButton: View {
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 44, height: 44)
+                .background(WanderTheme.surfaceSand.color, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Dismiss walkthrough")
+        .accessibilityHint("Stops walkthrough prompts for this account")
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
 private struct FirstVisitWalkthroughModifier: ViewModifier {
     @ObservedObject var coordinator: FirstVisitWalkthroughCoordinator
     let surface: WalkthroughSurface
@@ -1256,6 +1357,7 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                                     in: proxy
                                 ),
                                 containerSize: proxy.size,
+                                onDismiss: coordinator.dismissEntireWalkthrough,
                                 onBack: step.allowsBackNavigation && coordinator.canGoBack
                                     ? { coordinator.goBack() }
                                     : nil,
@@ -1387,6 +1489,7 @@ private struct FirstVisitWalkthroughOverlay: View {
     let targetFrames: [CGRect]
     let emphasisFrames: [CGRect]
     let containerSize: CGSize
+    let onDismiss: () -> Void
     let onBack: (() -> Void)?
     let onNext: () -> Void
 
@@ -1494,6 +1597,13 @@ private struct FirstVisitWalkthroughOverlay: View {
                             .font(.system(.headline, design: .rounded, weight: .bold))
                             .foregroundStyle(WanderTheme.textInk.color)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 0)
+
+                        WalkthroughDismissButton(
+                            accessibilityIdentifier: "walkthrough.dismiss.\(step.id)",
+                            action: onDismiss
+                        )
                     }
                     if !step.message.isEmpty {
                         Text(step.message)

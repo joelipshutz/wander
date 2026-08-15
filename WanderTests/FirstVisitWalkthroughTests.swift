@@ -280,6 +280,133 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
     }
 
+    func testWalkthroughRolloutIsOffByDefaultButSupportsExplicitTestOverride() {
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: []
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: false,
+                isUsingLiveData: true,
+                launchArguments: [],
+                isRolloutEnabled: true
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: true,
+                isUsingLiveData: false,
+                launchArguments: [],
+                isRolloutEnabled: true
+            )
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: [],
+                isRolloutEnabled: true
+            )
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: false,
+                isUsingLiveData: false,
+                launchArguments: ["-WanderEnableWalkthroughs"]
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: ["-WanderEnableWalkthroughs"],
+                allowsLaunchOverride: false
+            )
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: [],
+                allowsLaunchOverride: false
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: [],
+                isRolloutEnabled: true,
+                allowsLaunchOverride: false
+            )
+        )
+    }
+
+    func testDismissPermanentlyCompletesEveryWalkthroughForTheCurrentAccount() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        var completionCount = 0
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "existing-user",
+            store: store,
+            onCompleted: { completionCount += 1 }
+        )
+
+        coordinator.registerLaunch(forceImportLesson: true)
+        XCTAssertTrue(coordinator.isPresentingImportLesson)
+
+        coordinator.dismissEntireWalkthrough()
+
+        XCTAssertFalse(coordinator.isPresentingLaunchLesson)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.requestedSurface)
+        XCTAssertTrue(store.hasCompletedEntireWalkthrough(for: "existing-user"))
+        XCTAssertTrue(
+            WalkthroughSurface.allCases.allSatisfy {
+                store.isComplete(for: "existing-user", surface: $0)
+            }
+        )
+        XCTAssertEqual(completionCount, 1)
+
+        coordinator.dismissEntireWalkthrough()
+        XCTAssertEqual(completionCount, 1)
+
+        let nextLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "existing-user",
+            store: store
+        )
+        nextLaunch.registerLaunch()
+        nextLaunch.presentLaunchLessonIfEligible()
+        nextLaunch.activate(.map)
+        XCTAssertFalse(nextLaunch.isPresentingLaunchLesson)
+        XCTAssertNil(nextLaunch.activeSurface)
+    }
+
+    func testDismissDuringContactInviteRetiresInsteadOfAdvancingTheWalkthrough() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "existing-user",
+            store: store
+        )
+
+        coordinator.forceActivate(.feedInvite)
+        coordinator.advancePassiveStep()
+        XCTAssertTrue(coordinator.isRequestingContactInvite)
+
+        coordinator.dismissEntireWalkthrough()
+        coordinator.completeContactInviteRequest()
+
+        XCTAssertFalse(coordinator.isRequestingContactInvite)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.requestedSurface)
+        XCTAssertTrue(store.hasCompletedEntireWalkthrough(for: "existing-user"))
+    }
+
     func testCompletedEntireNuxRetiresAccountEligibility() throws {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)

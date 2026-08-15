@@ -29276,3 +29276,101 @@ Final release outcome (15:38 PDT):
   required API request. No known confetti-specific issue remains; testers were
   asked to check the longer first-save rain, unchanged same-day pop, and Reduce
   Motion behavior.
+
+## 2026-08-14 18:20 PDT - Codex - REC-236 NUX disable and dismissal follow-up
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher`,
+`plan-eng-review`, and the `plan-design-review` lens
+Branch: `codex/rec-236-disable-nux`
+Worktree: `/private/tmp/recme-rec236-disable-nux`
+Linear: `REC-236` (`In Progress`)
+Mission Control: `0f47c59e-851d-4d80-b8bb-5e559b4fc911`
+
+Goal: diagnose why Joe's established main account received
+the interruptive post-auth NUX in TestFlight build 147, put that NUX behind an
+off-by-default feature flag, add an explicit dismiss control to the import
+prompt and every equivalent blocking prompt, and validate the result with
+regular and compact simulator screenshots.
+
+Starting state and coordination:
+
+- Started from clean `origin/main` commit `887123d2` in a new isolated
+  worktree. Joe's `joe/phone-build-latest` checkout is 219 commits behind and
+  contains a pre-existing untracked `tmp/` directory; it remains untouched.
+- Ryan shipped the earlier REC-236 pass to `main` via PR #405 / commit
+  `bfc560b2` today. His larger polish pass is open as PR #415 on
+  `codex/rec-236-nux-polish`, so this follow-up overlaps
+  `FirstVisitWalkthrough.swift` and walkthrough host surfaces. The runtime-off
+  change will stay minimal and be reconciled against PR #415 before handoff.
+- Reused REC-236 because this is direct follow-up on the same NUX and the
+  workspace issue limit is already documented. Moved it to In Progress and
+  added the report, requested behavior, and branch coordination note.
+- Engineering review is required because the flag changes app-wide walkthrough
+  eligibility. Design review is limited to the requested dismissal affordance;
+  no competing visual direction is in scope.
+
+Expected files: `Wander/Features/Onboarding/FirstVisitWalkthrough.swift`, the
+walkthrough host/feature-flag boundary if separate, focused unit/UI tests,
+simulator screenshot artifacts outside the repo, and this append-only log.
+
+Checkpoint - 2026-08-14 18:52 PDT:
+
+- The required outside engineering-plan review found three material integration
+  risks: disabling presentation without retiring persisted eligibility would
+  defer the interruption until a future re-enable; the walkthrough-owned
+  Contacts invite sheet has its own close path; and validation must run on top
+  of Ryan's open PR #415 rather than against stale `main` behavior.
+- Updated the implementation intent accordingly: an eligible live account that
+  launches while the rollout flag is off is retired from this NUX, explicit
+  dismissals complete all walkthrough state for that account, and the Contacts
+  invite X uses the same durable dismissal. The branch will be stacked on
+  `origin/codex/rec-236-nux-polish` before build, UI, and screenshot validation.
+- The `-WanderEnableWalkthroughs` visual-test override will be Debug-only. No
+  analytics event is added: this mitigation changes an uninstrumented tutorial
+  system and introduces no new funnel/dashboard contract; dismissal persistence
+  is covered directly by unit and UI tests instead.
+
+Implementation and validation checkpoint - 2026-08-14 18:58 PDT:
+
+- Root cause confirmed in the build 147 code path: PR #405 advanced the
+  walkthrough content version from 8 to 9 while completion keys are versioned
+  by content version and Clerk user ID. The separate first-visit eligibility
+  bit stayed true until the entire multi-launch NUX completed. That combination
+  made established eligible users look incomplete under the new version, so a
+  second authenticated launch could present the import lesson even though the
+  account was not new. The screenshot matches that exact path; the app does not
+  use email as the walkthrough storage key.
+- Reconciled the fix directly on Ryan's open PR #415 head (`7220e3f1`). Added
+  `FirstVisitWalkthroughFeatureFlag`, off by default, with a Debug-only launch
+  override for deterministic UI coverage. When an eligible live account opens
+  while rollout is off, the app completes its eligibility once so re-enabling a
+  future walkthrough cannot surprise that account.
+- Added a shared 44-point, accessible X to the import lesson, device-features
+  lesson, and every coach card. The existing Contacts invite X now dismisses the
+  entire walkthrough when that sheet was opened by the NUX. A dismissal marks
+  every walkthrough surface and launch lesson complete for the current user,
+  clears coordinator state, and calls the existing completion callback once.
+- Focused unit validation passed 33/33 `FirstVisitWalkthroughTests`. Focused UI
+  validation passed 4/4 dismissal flows on iPhone 16 Plus / iOS 18.6 and 4/4 on
+  the smaller REC-166 iPhone 16e / iOS 18.6. The tests cover import, coach mark,
+  device lesson, and Contacts invite dismissal, assert 44-point hit targets,
+  and verify the import NUX stays gone after relaunch.
+- Visually reviewed ten simulator attachments across both phone sizes. Import
+  before/after, coach mark, Contacts invite, and device lesson were unclipped
+  and readable. Stable handoff copies are under
+  `/private/tmp/rec236-screenshots/`.
+- The first full run exposed one source-contract test with two stale string
+  assertions for the pre-flag root wiring; all 38 UI tests passed in that run.
+  Updated the contract to assert the new off-by-default flag and retirement
+  path. The required full rerun then passed 1,158 unit tests and 38 UI tests
+  (1,196 total, 0 failures) on iPhone 16 Plus / iOS 18.6:
+  `Test-Wander-2026.08.14_18-49-48--0700.xcresult`.
+- `xcodegen generate` succeeded and produced no tracked project change. The
+  first build attempt hit a full disk before compiling; removed only the failed
+  task's disposable DerivedData and Codex's recoverable Sparkle updater cache,
+  then reused an inactive DerivedData package/build cache. No source or user
+  data was removed.
+- No TestFlight build number, archive, upload, tester Slack message, merge, or
+  production flag change was performed. During validation `origin/main`
+  advanced to App Store build 148 (`e7f34342`); the branch must be rebased onto
+  that exact main before PR handoff.

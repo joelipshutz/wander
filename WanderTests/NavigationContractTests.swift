@@ -15,6 +15,11 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
+        let walkthrough = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Onboarding/FirstVisitWalkthrough.swift"
+            )
+        )
         let authStore = try String(
             contentsOf: projectRoot.appendingPathComponent(
                 "Wander/Services/Auth/AuthSessionProviding.swift"
@@ -43,8 +48,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(entry.contains("state.synchronize()"))
         XCTAssertFalse(authStore.contains("willEnterForegroundNotification"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
-        XCTAssertTrue(root.contains("fixtureMode == .empty && isFirstVisitWalkthroughEligible"))
-        XCTAssertTrue(root.contains("launchArguments.contains(\"-WanderEnableWalkthroughs\")"))
+        XCTAssertTrue(root.contains("FirstVisitWalkthroughFeatureFlag.isEnabled("))
+        XCTAssertTrue(root.contains("FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility("))
+        XCTAssertTrue(walkthrough.contains("static let isRolloutEnabledByDefault = false"))
+        XCTAssertTrue(walkthrough.contains("launchArguments.contains(\"-WanderEnableWalkthroughs\")"))
         XCTAssertTrue(root.contains(".task(id: isSessionValidated)"))
         XCTAssertTrue(root.contains("guard phase == .active, isSessionValidated else { return }"))
         XCTAssertTrue(root.contains("guard isSessionValidated,"))
