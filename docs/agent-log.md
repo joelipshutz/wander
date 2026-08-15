@@ -29464,3 +29464,46 @@ Starting state and release scope:
 
 Expected tracked files: `project.yml`, generated
 `Wander.xcodeproj/project.pbxproj`, and this append-only log.
+
+## 2026-08-14 19:52 PDT - Codex - Clerk publishable-key release test compatibility
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/clerk-key-base64-test`
+Worktree: `/private/tmp/recme-testflight-build-149`
+Linear: `REC-180` (`In Review`; dedicated issue creation remains blocked by the
+workspace's issue limit)
+
+Goal: unblock the build-149 release gate after the exact candidate exposed that
+`BuildConfigurationTests.testTrackedClerkPublishableKeyDecodesToDefaultFrontendAPI`
+assumed padded Base64 even though Clerk's valid production publishable key uses
+unpadded Base64.
+
+Starting state and safety constraints:
+
+- Exact source is merged `main` at
+  `426f2c7ada88376b0ce83ca01c191724bca0bdaa` (rec.me 1.0 build 149).
+- The isolated iPhone 16e UI suite passed 38/38. Unit tests passed 1,157/1,158;
+  the sole failure is the test decoder rejecting the tracked production Clerk
+  key before it can assert the expected `clerk.getrec.me$` payload.
+- This branch changes test decoding only. It does not alter the publishable key,
+  frontend API, app binary source, signing, Supabase, hosted data, or accounts.
+- Expected tracked files: `WanderTests/BuildConfigurationTests.swift` and this
+  append-only log.
+
+Validation and handoff:
+
+- Removed only the stale `com.grayline.wander` install from the dedicated
+  `REC-166 iPhone 16e` simulator after CoreSimulator rejected the first install;
+  no production or real-user data was touched.
+- The focused Clerk publishable-key regression passed from a fresh isolated
+  DerivedData directory.
+- The complete `WanderTests` suite passed: 1,158 tests, 0 failures.
+- The complete isolated UI suite for the same build-149 app source had already
+  passed: 38 tests, 0 failures.
+- Hosted Supabase smoke passed end-to-end inside its rollback-only transaction,
+  including auth, RPC grants, saves, check-ins, visibility, lists, photos, and
+  discovery. It left no fixture or behavior mutations behind.
+- PR #418 is ready for squash merge. After merge, regenerate the release
+  manifest against the new exact `main`, then archive/upload build 149. No
+  second build-number bump is needed because this fix changes tests/docs only
+  and build 149 has not been uploaded.
