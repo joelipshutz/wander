@@ -361,6 +361,46 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 allowsLaunchOverride: false
             )
         )
+        XCTAssertTrue(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: false,
+                isUsingLiveData: true,
+                launchArguments: [],
+                resolvedValue: false,
+                isEntitledDebugReplayRequested: true,
+                allowsLaunchOverride: false
+            )
+        )
+    }
+
+    func testDebugPreferencesAreAccountScopedAndReplayResetsOnlyThatAccount() throws {
+        let defaults = try makeDefaults()
+        let walkthroughStore = FirstVisitWalkthroughStore(defaults: defaults)
+        let preferences = FirstVisitWalkthroughDebugPreferences(defaults: defaults)
+
+        walkthroughStore.setProgress(2, for: "user_a", surface: .map)
+        walkthroughStore.markComplete(for: "user_a", surface: .map)
+        walkthroughStore.markComplete(for: "user_b", surface: .map)
+        XCTAssertNil(preferences.nuxOverride(for: "user_a"))
+        XCTAssertNil(preferences.nuxOverride(for: "user_b"))
+
+        preferences.setNUXEnabled(true, for: "user_a")
+
+        XCTAssertEqual(preferences.nuxOverride(for: "user_a"), true)
+        XCTAssertTrue(preferences.isReplayRequested(for: "user_a"))
+        XCTAssertEqual(walkthroughStore.progress(for: "user_a", surface: .map), 0)
+        XCTAssertFalse(walkthroughStore.isComplete(for: "user_a", surface: .map))
+        XCTAssertNil(preferences.nuxOverride(for: "user_b"))
+        XCTAssertFalse(preferences.isReplayRequested(for: "user_b"))
+        XCTAssertTrue(walkthroughStore.isComplete(for: "user_b", surface: .map))
+
+        preferences.clearReplayRequest(for: "user_a")
+        XCTAssertEqual(preferences.nuxOverride(for: "user_a"), true)
+        XCTAssertFalse(preferences.isReplayRequested(for: "user_a"))
+
+        preferences.setNUXEnabled(false, for: "user_a")
+        XCTAssertEqual(preferences.nuxOverride(for: "user_a"), false)
+        XCTAssertFalse(preferences.isReplayRequested(for: "user_a"))
     }
 
     func testDismissPermanentlyCompletesEveryWalkthroughForTheCurrentAccount() throws {
