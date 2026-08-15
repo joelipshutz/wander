@@ -29681,3 +29681,6 @@ and walkthrough tests, focused search/backend tests, and this append-only log.
   The backend function is live, but users do not receive this behavior until
   the client PR merges and a later explicitly requested TestFlight release
   packages it. REC-225 has no feature flag.
+- Ready PR #423: https://github.com/joelipshutz/wander/pull/423. Linear
+  REC-225 is `In Review` with the PR link, privacy contract, validation
+  evidence, disk-space test gap, and no-flag/no-TestFlight status recorded.
