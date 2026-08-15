@@ -48,6 +48,8 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case feedDiscoverSearch
     case feedSearchField
     case feedSmartSearch
+    case feedSearchResultsBack
+    case feedSearchExitBack
     case placeRatings
     case placeActions
     case placeHistory
@@ -63,6 +65,8 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case profileSocial
     case profileActivity
     case profileShare
+    case profileCalendar
+    case profileMap
 }
 
 enum WalkthroughAdvance: Equatable, Sendable {
@@ -83,6 +87,11 @@ enum WalkthroughCoachTheme: Equatable, Sendable {
     case celebration
 }
 
+enum WalkthroughSpotlightStyle: Equatable, Sendable {
+    case focused
+    case clearPage
+}
+
 struct WalkthroughStep: Identifiable, Equatable, Sendable {
     let surface: WalkthroughSurface
     let target: WalkthroughTargetID
@@ -93,13 +102,17 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
     let allowsBackNavigation: Bool
     let nextButtonTitle: String
     let coachTheme: WalkthroughCoachTheme
+    let spotlightStyle: WalkthroughSpotlightStyle
+    let automaticallyAdvances: Bool
 
     var id: String { "\(surface.rawValue).\(target.rawValue)" }
     var automaticallyRecoversWhenTargetIsMissing: Bool { advance == .action }
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 9
+    static let version = 10
+    static let profileAutoAdvanceDelayMilliseconds = 2_600
+    static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 2_200
     static let suppressedSurfaces: Set<WalkthroughSurface> = [.listDetail, .listEditor]
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
@@ -174,7 +187,7 @@ enum FirstVisitWalkthroughContent {
                 .add,
                 .addImport,
                 "Bring saves with you",
-                "Import From is where links, shared posts, and notes become places to review.",
+                "Import places from Google Maps, Instagram, TikTok, and more.",
                 advance: .next,
                 coachTheme: .save
             ),
@@ -236,7 +249,7 @@ enum FirstVisitWalkthroughContent {
                 .feed,
                 .feedActivity,
                 "See your friends’ check-ins here",
-                "Like, comment, share, and add people to make your trusted feed more useful.",
+                "Interact with your trusted feed with a like, comment, or share.",
                 advance: .next
             ),
             step(
@@ -246,6 +259,23 @@ enum FirstVisitWalkthroughContent {
                 "Tap search to open Discover and find places through the context your people saved.",
                 allowsBackNavigation: false,
                 coachTheme: .map
+            ),
+            step(
+                .feed,
+                .feedPeopleSearch,
+                "Find people you trust",
+                "Search a name or @username to build the circle behind your map and feed.",
+                advance: .next,
+                allowsTargetInteraction: true,
+                coachTheme: .social
+            ),
+            step(
+                .feed,
+                .feedInvite,
+                "rec.me gets better with your circle",
+                "Invite people whose taste you trust. The more of your circle that joins, the more useful every recommendation becomes.",
+                advance: .next,
+                coachTheme: .social
             )
         ],
         .feedSearch: [
@@ -261,18 +291,49 @@ enum FirstVisitWalkthroughContent {
                 .feedSearch,
                 .feedSmartSearch,
                 "Search the way you think",
-                "Tap an example to turn a natural-language need into filters and trusted results.",
+                "Tap an example or type your own search to turn a real-life need into trusted results.",
+                allowsBackNavigation: false,
                 coachTheme: .map
+            ),
+            step(
+                .feedSearch,
+                .feedSearchResultsBack,
+                "See how we understood your search",
+                "Review the trusted results and filters, then tap Back to return to the search ideas.",
+                allowsBackNavigation: false,
+                coachTheme: .map
+            ),
+            step(
+                .feedSearch,
+                .feedSearchExitBack,
+                "Back to your people",
+                "Tap Back once more. We’ll take you to the People side of Feed next.",
+                allowsBackNavigation: false,
+                coachTheme: .social
             )
         ],
         .lists: [
             step(
                 .lists,
                 .listsScope,
-                "Keep plans together",
-                "Save places into lists for trips, date nights, neighborhoods, and plans with friends.",
+                "Every kind of plan, one tap away",
+                "My Lists keeps your plans, Friends shows lists people share, and Collabs keeps shared planning together.",
                 advance: .next,
-                coachTheme: .lists
+                allowsBackNavigation: false,
+                coachTheme: .lists,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
+            ),
+            step(
+                .lists,
+                .listsOpenPlan,
+                "Turn saved places into a plan",
+                "Keep trips, date nights, neighborhoods, and anything else you want to revisit together.",
+                advance: .next,
+                allowsBackNavigation: false,
+                coachTheme: .lists,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
             )
         ],
         .listDetail: [],
@@ -280,33 +341,47 @@ enum FirstVisitWalkthroughContent {
         .profile: [
             step(
                 .profile,
-                .profileSettings,
-                "Make rec.me yours",
-                "Open settings for account, privacy, notifications, and app preferences.",
-                advance: .next
-            ),
-            step(
-                .profile,
-                .profileSocial,
-                "Your trusted circle",
-                "See who you follow and who follows your recommendations.",
+                .profileShare,
+                "Your profile connects your circle",
+                "Share your rec.me and keep up with the people whose taste you trust.",
                 advance: .next,
-                coachTheme: .social
+                allowsBackNavigation: false,
+                coachTheme: .social,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
             ),
             step(
                 .profile,
                 .profileActivity,
-                "Your place history",
-                "Filter recent activity to revisit saves, check-ins, and wanna places.",
+                "Your activity tells the story",
+                "Recent check-ins and Wanna saves stay easy to revisit.",
                 advance: .next,
-                coachTheme: .memory
+                allowsBackNavigation: false,
+                coachTheme: .memory,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
             ),
             step(
                 .profile,
-                .profileShare,
-                "Share your rec.me",
-                "Send your profile to friends whose taste you trust.",
-                advance: .next
+                .profileCalendar,
+                "Your calendar, at a glance",
+                "See when you checked in and how your months fill up over time.",
+                advance: .next,
+                allowsBackNavigation: false,
+                coachTheme: .memory,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
+            ),
+            step(
+                .profile,
+                .profileMap,
+                "Your map grows with you",
+                "Watch your places, cities, and memories come together on one map.",
+                advance: .next,
+                allowsBackNavigation: false,
+                coachTheme: .map,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
             )
         ],
         .placeDetail: [
@@ -395,7 +470,9 @@ enum FirstVisitWalkthroughContent {
         allowsTargetInteraction: Bool? = nil,
         allowsBackNavigation: Bool = true,
         nextButtonTitle: String = "Next",
-        coachTheme: WalkthroughCoachTheme = .standard
+        coachTheme: WalkthroughCoachTheme = .standard,
+        spotlightStyle: WalkthroughSpotlightStyle = .focused,
+        automaticallyAdvances: Bool = false
     ) -> WalkthroughStep {
         WalkthroughStep(
             surface: surface,
@@ -406,8 +483,49 @@ enum FirstVisitWalkthroughContent {
             allowsTargetInteraction: allowsTargetInteraction ?? (advance == .action),
             allowsBackNavigation: allowsBackNavigation,
             nextButtonTitle: nextButtonTitle,
-            coachTheme: coachTheme
+            coachTheme: coachTheme,
+            spotlightStyle: spotlightStyle,
+            automaticallyAdvances: automaticallyAdvances
         )
+    }
+}
+
+enum FirstVisitWalkthroughFeatureFlag {
+    static let isRolloutEnabledByDefault = false
+
+#if DEBUG
+    static let allowsLaunchArgumentOverride = true
+#else
+    static let allowsLaunchArgumentOverride = false
+#endif
+
+    static func isEnabled(
+        isEligible: Bool,
+        isUsingLiveData: Bool,
+        launchArguments: [String],
+        isRolloutEnabled: Bool = isRolloutEnabledByDefault,
+        allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
+    ) -> Bool {
+        (allowsLaunchOverride && launchArguments.contains("-WanderEnableWalkthroughs"))
+            || (isRolloutEnabled && isEligible && isUsingLiveData)
+    }
+
+    static func shouldRetireEligibility(
+        isEligible: Bool,
+        isUsingLiveData: Bool,
+        launchArguments: [String],
+        isRolloutEnabled: Bool = isRolloutEnabledByDefault,
+        allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
+    ) -> Bool {
+        isEligible
+            && isUsingLiveData
+            && !isEnabled(
+                isEligible: isEligible,
+                isUsingLiveData: isUsingLiveData,
+                launchArguments: launchArguments,
+                isRolloutEnabled: isRolloutEnabled,
+                allowsLaunchOverride: allowsLaunchOverride
+            )
     }
 }
 
@@ -466,6 +584,14 @@ struct FirstVisitWalkthroughStore {
 
     func markDeviceFeaturesLessonComplete(for userID: String) {
         defaults.set(true, forKey: deviceFeaturesCompletionKey(userID: userID))
+    }
+
+    func markEntireWalkthroughComplete(for userID: String) {
+        for surface in WalkthroughSurface.allCases {
+            markComplete(for: userID, surface: surface)
+        }
+        markImportLessonComplete(for: userID)
+        markDeviceFeaturesLessonComplete(for: userID)
     }
 
     func hasCompletedEntireWalkthrough(for userID: String) -> Bool {
@@ -736,6 +862,21 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         notifyCompletionIfNeeded()
     }
 
+    func dismissEntireWalkthrough() {
+        guard isEnabled else { return }
+        store.markEntireWalkthroughComplete(for: userID)
+        activeSurface = nil
+        currentStepIndex = 0
+        requestedSurface = nil
+        isImportLessonEligible = false
+        isDeviceFeaturesLessonEligible = false
+        isPresentingImportLesson = false
+        isPresentingDeviceFeaturesLesson = false
+        tutorialUserPlaceID = nil
+        isRequestingContactInvite = false
+        notifyCompletionIfNeeded()
+    }
+
     func consumeRequestedSurface(_ surface: WalkthroughSurface) {
         guard requestedSurface == surface else { return }
         requestedSurface = nil
@@ -768,13 +909,13 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         case .add, .saveFlow:
             .map
         case .feed:
-            .feedSearch
+            .lists
         case .listEditor:
             .lists
         case .listDetail:
             .profile
         case .feedSearch:
-            .lists
+            .feed
         case .lists:
             .profile
         case .profile:
@@ -791,22 +932,56 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 }
 
+private struct WalkthroughTargetAnchors {
+    var spotlights: [WalkthroughTargetID: [Anchor<CGRect>]] = [:]
+    var emphases: [WalkthroughTargetID: [Anchor<CGRect>]] = [:]
+}
+
 private struct WalkthroughTargetPreferenceKey: PreferenceKey {
-    static let defaultValue: [WalkthroughTargetID: Anchor<CGRect>] = [:]
+    static let defaultValue = WalkthroughTargetAnchors()
 
     static func reduce(
-        value: inout [WalkthroughTargetID: Anchor<CGRect>],
-        nextValue: () -> [WalkthroughTargetID: Anchor<CGRect>]
+        value: inout WalkthroughTargetAnchors,
+        nextValue: () -> WalkthroughTargetAnchors
     ) {
-        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+        let next = nextValue()
+        for (target, anchors) in next.spotlights {
+            value.spotlights[target, default: []].append(contentsOf: anchors)
+        }
+        for (target, anchors) in next.emphases {
+            value.emphases[target, default: []].append(contentsOf: anchors)
+        }
     }
 }
 
 extension View {
     func walkthroughTarget(_ target: WalkthroughTargetID?) -> some View {
-        anchorPreference(key: WalkthroughTargetPreferenceKey.self, value: .bounds) { anchor in
-            guard let target else { return [:] }
-            return [target: anchor]
+        transformAnchorPreference(key: WalkthroughTargetPreferenceKey.self, value: .bounds) { value, anchor in
+            guard let target else { return }
+            value.spotlights[target, default: []].append(anchor)
+        }
+    }
+
+    func walkthroughTargets(_ targets: [WalkthroughTargetID]) -> some View {
+        transformAnchorPreference(key: WalkthroughTargetPreferenceKey.self, value: .bounds) { value, anchor in
+            for target in targets {
+                value.spotlights[target, default: []].append(anchor)
+            }
+        }
+    }
+
+    func walkthroughEmphasis(_ target: WalkthroughTargetID?) -> some View {
+        transformAnchorPreference(key: WalkthroughTargetPreferenceKey.self, value: .bounds) { value, anchor in
+            guard let target else { return }
+            value.emphases[target, default: []].append(anchor)
+        }
+    }
+
+    func walkthroughTargetAndEmphasis(_ target: WalkthroughTargetID?) -> some View {
+        transformAnchorPreference(key: WalkthroughTargetPreferenceKey.self, value: .bounds) { value, anchor in
+            guard let target else { return }
+            value.spotlights[target, default: []].append(anchor)
+            value.emphases[target, default: []].append(anchor)
         }
     }
 
@@ -836,22 +1011,25 @@ extension View {
     ) -> some View {
         overlay {
             if coordinator.isPresentingImportLesson {
-                ImportWalkthroughOverlay {
-                    coordinator.completeImportLesson()
-                    onOpenImport()
-                }
+                ImportWalkthroughOverlay(
+                    onDismiss: coordinator.dismissEntireWalkthrough,
+                    onOpenImport: {
+                        coordinator.completeImportLesson()
+                        onOpenImport()
+                    }
+                )
                 .transition(.opacity)
                 .zIndex(2_000)
             } else if coordinator.isPresentingDeviceFeaturesLesson {
-                DeviceFeaturesWalkthroughOverlay {
-                    coordinator.completeDeviceFeaturesLesson()
-                }
+                DeviceFeaturesWalkthroughOverlay(
+                    onDismiss: coordinator.dismissEntireWalkthrough,
+                    onComplete: coordinator.completeDeviceFeaturesLesson
+                )
                 .transition(.opacity)
                 .zIndex(2_000)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingImportLesson)
-        .animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingDeviceFeaturesLesson)
     }
 }
 
@@ -869,6 +1047,7 @@ enum ImportWalkthroughContent {
 private struct ImportWalkthroughOverlay: View {
     @Environment(\.openURL) private var openURL
 
+    let onDismiss: () -> Void
     let onOpenImport: () -> Void
 
     var body: some View {
@@ -898,6 +1077,11 @@ private struct ImportWalkthroughOverlay: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Import help")
                     .accessibilityHint("Opens import help on getrec.me")
+
+                    WalkthroughDismissButton(
+                        accessibilityIdentifier: "walkthrough.dismiss.importLesson",
+                        action: onDismiss
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -938,7 +1122,8 @@ private struct ImportWalkthroughOverlay: View {
 
 private struct DeviceFeaturesWalkthroughOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isBreathing = false
+    @State private var isActionButtonPulsing = false
+    let onDismiss: () -> Void
     let onComplete: () -> Void
 
     var body: some View {
@@ -946,92 +1131,141 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
             WalkthroughFullScreenScrim()
                 .ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .center, spacing: WanderTheme.spacing3) {
                     ZStack {
                         Circle()
+                            .fill(WanderTheme.terracotta.color.opacity(0.18))
+                            .frame(width: 42, height: 42)
+                            .scaleEffect(
+                                reduceMotion ? 1 : (isActionButtonPulsing ? 1.12 : 0.88)
+                            )
+                            .opacity(
+                                reduceMotion ? 1 : (isActionButtonPulsing ? 0.42 : 0.12)
+                            )
+                            .animation(
+                                reduceMotion
+                                    ? nil
+                                    : .easeInOut(duration: 1.35).repeatForever(autoreverses: true),
+                                value: isActionButtonPulsing
+                            )
+
+                        Circle()
                             .fill(WanderTheme.terracotta.color)
-                            .frame(width: 52, height: 52)
+                            .frame(width: 36, height: 36)
+
                         Image(systemName: "hand.tap.fill")
-                            .font(.system(size: 22, weight: .black))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(WanderTheme.textOnAction.color)
                     }
+                    .frame(width: 44, height: 44)
 
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("Keep rec.me one press away")
-                            .font(.system(.title2, design: .rounded, weight: .black))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("rec.me, one press away")
+                            .font(WanderTypography.editorialCardTitle)
                             .foregroundStyle(WanderTheme.textInk.color)
-                        Text("Set these up once, then save or find a place without hunting for the app.")
-                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+
+                        Text("Set these up once for faster saves.")
+                            .font(WanderTypography.metadata)
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
+                    Spacer(minLength: 0)
+
+                    WalkthroughDismissButton(
+                        accessibilityIdentifier: "walkthrough.dismiss.deviceFeatures",
+                        action: onDismiss
+                    )
+                }
+                .padding(.bottom, WanderTheme.spacing3)
+
+                Divider()
+                    .overlay(WanderTheme.borderHairline.color)
+
+                VStack(spacing: 0) {
                     DeviceFeatureInstruction(
                         systemImage: "button.programmable",
-                        title: "Action Button & Control Center",
-                        instruction: "Open Settings → Action Button → Controls, then choose rec.me Check In. You can add the same control from Control Center."
+                        title: "Action Button + Controls",
+                        instruction: "Choose rec.me Check In for a one-press save.",
+                        accessibilityIdentifier: "walkthrough.deviceFeatures.actionButton"
                     )
+
+                    Divider()
+                        .padding(.leading, 40)
+                        .overlay(WanderTheme.borderHairline.color)
 
                     DeviceFeatureInstruction(
                         systemImage: "square.grid.2x2.fill",
-                        title: "Home & Lock Screen widgets",
-                        instruction: "Long-press your screen, tap Edit or +, search rec.me, then choose Quick Add, Search, Activity, or Nearby."
+                        title: "Home + Lock Screen widgets",
+                        instruction: "Keep Quick Add, Search, Activity, or Nearby in view.",
+                        accessibilityIdentifier: "walkthrough.deviceFeatures.widgets"
                     )
+
+                    Divider()
+                        .padding(.leading, 40)
+                        .overlay(WanderTheme.borderHairline.color)
 
                     DeviceFeatureInstruction(
                         systemImage: "square.and.arrow.up.fill",
-                        title: "Share into rec.me",
-                        instruction: "From Maps, Instagram, TikTok, or Safari, tap Share → rec.me. Your captures open in a private review where you choose what to keep."
+                        title: "Share extension",
+                        instruction: "Send places from Maps, Instagram, TikTok, or Safari.",
+                        accessibilityIdentifier: "walkthrough.deviceFeatures.shareExtension"
                     )
+                }
 
+                HStack(spacing: WanderTheme.spacing2) {
                     Link(destination: WalkthroughHelpDestination.extensions) {
-                        Label("See the extensions guide", systemImage: "safari")
-                            .font(.system(size: 14, weight: .black))
+                        Label("Setup guide", systemImage: "arrow.up.right")
+                            .font(WanderTypography.label)
                             .foregroundStyle(WanderTheme.terracottaDark.color)
-                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Opens getrec.me/extensions")
                     .accessibilityIdentifier("walkthrough.deviceFeatures.extensionsGuide")
 
-                    Button("Got it", action: onComplete)
-                        .font(.system(size: 16, weight: .black))
-                        .foregroundStyle(WanderTheme.textOnAction.color)
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                        .background(WanderTheme.terracotta.color)
-                        .clipShape(Capsule())
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("walkthrough.deviceFeatures.complete")
+                    Spacer(minLength: WanderTheme.spacing2)
+
+                    Button(action: onComplete) {
+                        HStack(spacing: 6) {
+                            Text("Got it")
+                            Image(systemName: "arrow.right")
+                        }
+                        .font(WanderTypography.control)
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(minWidth: 104, minHeight: 44)
+                        .contentShape(Capsule())
+                        .wanderGlassCapsule(tone: .accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("walkthrough.deviceFeatures.complete")
                 }
-                .padding(WanderTheme.spacing4)
-                .background(
-                    WanderTheme.surfaceBone.color,
-                    in: RoundedRectangle(cornerRadius: 28, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(WanderTheme.textInk.color.opacity(0.08), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.vertical, WanderTheme.spacing8)
-                .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.015 : 0.985))
+                .padding(.top, WanderTheme.spacing2)
             }
-            .scrollIndicators(.hidden)
+            .padding(WanderTheme.spacing4)
+            .frame(maxWidth: 344)
+            .background(
+                WanderTheme.surfaceBone.color,
+                in: RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
+                    .stroke(WanderTheme.terracotta.color.opacity(0.24), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
+            .padding(.horizontal, WanderTheme.spacing4)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("walkthrough.deviceFeatures.card")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("walkthrough.deviceFeatures")
         .onAppear {
             guard !reduceMotion else { return }
-            isBreathing = true
+            isActionButtonPulsing = true
         }
-        .animation(
-            reduceMotion
-                ? nil
-                : .easeInOut(duration: 2.4).repeatForever(autoreverses: true),
-            value: isBreathing
-        )
     }
 }
 
@@ -1039,29 +1273,50 @@ private struct DeviceFeatureInstruction: View {
     let systemImage: String
     let title: String
     let instruction: String
+    let accessibilityIdentifier: String
 
     var body: some View {
         HStack(alignment: .top, spacing: WanderTheme.spacing3) {
             Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(WanderTheme.terracottaDark.color)
-                .frame(width: 32, height: 32)
+                .frame(width: 28, height: 28)
                 .background(WanderTheme.terracotta.color.opacity(0.12), in: Circle())
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(.subheadline, design: .rounded, weight: .black))
+                    .font(WanderTypography.editorialCompactTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text(instruction)
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(WanderTheme.spacing3)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(WanderTheme.surfaceRaised.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+private struct WalkthroughDismissButton: View {
+    let accessibilityIdentifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .black))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .frame(width: 44, height: 44)
+                .background(WanderTheme.surfaceSand.color, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Dismiss walkthrough")
+        .accessibilityHint("Stops walkthrough prompts for this account")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
@@ -1077,21 +1332,32 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                 isPresented: coordinator.isRequestingContactInvite
                     && coordinator.activeSurface == surface
             )
-            .overlayPreferenceValue(WalkthroughTargetPreferenceKey.self) { targets in
+            .overlayPreferenceValue(WalkthroughTargetPreferenceKey.self) { anchors in
                 GeometryReader { proxy in
                     if
                         coordinator.activeSurface == surface,
                         let step = coordinator.currentStep,
-                        let anchor = targets[step.target]
+                        let targetFrame = resolvedWalkthroughFrame(
+                            anchors.spotlights[step.target],
+                            in: proxy
+                        )
                     {
-                        let targetFrame = proxy[anchor]
                         if targetFrame.intersects(CGRect(origin: .zero, size: proxy.size)),
                            targetFrame.width > 0,
                            targetFrame.height > 0 {
                             FirstVisitWalkthroughOverlay(
                                 step: step,
                                 targetFrame: targetFrame,
+                                targetFrames: resolvedWalkthroughFrames(
+                                    anchors.spotlights[step.target],
+                                    in: proxy
+                                ),
+                                emphasisFrames: resolvedWalkthroughFrames(
+                                    anchors.emphases[step.target],
+                                    in: proxy
+                                ),
                                 containerSize: proxy.size,
+                                onDismiss: coordinator.dismissEntireWalkthrough,
                                 onBack: step.allowsBackNavigation && coordinator.canGoBack
                                     ? { coordinator.goBack() }
                                     : nil,
@@ -1109,6 +1375,26 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                 .ignoresSafeArea()
                 .zIndex(1_000)
             }
+    }
+
+    private func resolvedWalkthroughFrame(
+        _ anchors: [Anchor<CGRect>]?,
+        in proxy: GeometryProxy
+    ) -> CGRect? {
+        let frames = resolvedWalkthroughFrames(anchors, in: proxy)
+        guard let first = frames.first else { return nil }
+        return frames.dropFirst().reduce(first) { $0.union($1) }
+    }
+
+    private func resolvedWalkthroughFrames(
+        _ anchors: [Anchor<CGRect>]?,
+        in proxy: GeometryProxy
+    ) -> [CGRect] {
+        guard let anchors, !anchors.isEmpty else { return [] }
+        let bounds = CGRect(origin: .zero, size: proxy.size)
+        return anchors
+            .map { proxy[$0] }
+            .filter { $0.width > 0 && $0.height > 0 && $0.intersects(bounds) }
     }
 }
 
@@ -1195,14 +1481,22 @@ struct WalkthroughCoachMarkLayout: Equatable {
 private struct FirstVisitWalkthroughOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var measuredCardSize = CGSize(width: 280, height: 104)
+    @State private var hasNarrowedFeaturedSpotlight = false
+    @State private var isFeaturedCoachVisible = false
 
     let step: WalkthroughStep
     let targetFrame: CGRect
+    let targetFrames: [CGRect]
+    let emphasisFrames: [CGRect]
     let containerSize: CGSize
+    let onDismiss: () -> Void
     let onBack: (() -> Void)?
     let onNext: () -> Void
 
     private var cardWidth: CGFloat {
+        if step.target == .mapFeatured || step.target == .mapFriends {
+            return min(326, max(240, containerSize.width - 32))
+        }
         let characterCount = step.title.count + step.message.count
         let preferred: CGFloat
         if characterCount < 80 {
@@ -1217,7 +1511,7 @@ private struct FirstVisitWalkthroughOverlay: View {
 
     private var layout: WalkthroughCoachMarkLayout {
         WalkthroughCoachMarkLayout(
-            targetFrame: targetFrame,
+            targetFrame: activeTargetFrame,
             containerSize: containerSize,
             cardSize: CGSize(width: cardWidth, height: max(measuredCardSize.height, 1)),
             spotlightInset: spotlightInset
@@ -1227,22 +1521,52 @@ private struct FirstVisitWalkthroughOverlay: View {
     private var spotlightInset: CGFloat {
         switch step.target {
         case .addSearch:
-            18
+            6
         case .addPlace, .addImport:
             12
+        case .mapTabs:
+            3
         default:
             8
         }
     }
 
+    private var activeTargetFrame: CGRect {
+        guard step.target == .mapFeatured,
+              reduceMotion || hasNarrowedFeaturedSpotlight,
+              let emphasisFrame = emphasisFrames.first
+        else { return targetFrame }
+        return emphasisFrame
+    }
+
+    private var isCoachVisible: Bool {
+        step.target != .mapFeatured || reduceMotion || isFeaturedCoachVisible
+    }
+
+    private var isCompactFilterCoach: Bool {
+        step.target == .mapFeatured || step.target == .mapFriends
+    }
+
+    private var visibleEmphasisFrames: [CGRect] {
+        if step.spotlightStyle == .clearPage {
+            return emphasisFrames.isEmpty ? targetFrames : emphasisFrames
+        }
+        if step.target == .mapFeatured, !reduceMotion, !hasNarrowedFeaturedSpotlight {
+            return []
+        }
+        return emphasisFrames
+    }
+
     var body: some View {
         ZStack {
-            WalkthroughScrim(
-                spotlightFrame: layout.spotlightFrame,
-                containerSize: containerSize,
-                cornerRadius: step.target == .mapTabs ? 34 : WanderTheme.radiusLarge
-            )
+            if step.spotlightStyle == .focused {
+                WalkthroughScrim(
+                    spotlightFrame: layout.spotlightFrame,
+                    containerSize: containerSize,
+                    cornerRadius: step.target == .mapTabs ? 34 : WanderTheme.radiusLarge
+                )
                 .allowsHitTesting(false)
+            }
 
             WalkthroughTouchShield(
                 containerSize: containerSize,
@@ -1250,8 +1574,20 @@ private struct FirstVisitWalkthroughOverlay: View {
                 allowsSpotlightInteraction: step.allowsTargetInteraction
             )
 
+            ForEach(Array(visibleEmphasisFrames.enumerated()), id: \.offset) { _, frame in
+                WalkthroughEmphasisRing(
+                    frame: frame,
+                    cornerRadius: emphasisCornerRadius(for: frame)
+                )
+                .allowsHitTesting(false)
+                .transition(.opacity.combined(with: .scale(scale: 0.94)))
+            }
+
             ZStack(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                VStack(
+                    alignment: .leading,
+                    spacing: isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing2
+                ) {
                     HStack(alignment: .center, spacing: WanderTheme.spacing2) {
                         if step.coachTheme != .standard {
                             WalkthroughCoachThemeBadge(theme: step.coachTheme)
@@ -1261,6 +1597,13 @@ private struct FirstVisitWalkthroughOverlay: View {
                             .font(.system(.headline, design: .rounded, weight: .bold))
                             .foregroundStyle(WanderTheme.textInk.color)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 0)
+
+                        WalkthroughDismissButton(
+                            accessibilityIdentifier: "walkthrough.dismiss.\(step.id)",
+                            action: onDismiss
+                        )
                     }
                     if !step.message.isEmpty {
                         Text(step.message)
@@ -1269,7 +1612,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    if onBack != nil || step.advance == .next {
+                    if onBack != nil || (step.advance == .next && !step.automaticallyAdvances) {
                         HStack(spacing: WanderTheme.spacing2) {
                             Spacer(minLength: 0)
 
@@ -1287,7 +1630,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                                 .accessibilityIdentifier("walkthrough.back.\(step.id)")
                             }
 
-                            if step.advance == .next {
+                            if step.advance == .next && !step.automaticallyAdvances {
                                 Button(action: onNext) {
                                     Image(systemName: "arrow.right")
                                         .font(.system(size: 14, weight: .black))
@@ -1304,7 +1647,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.vertical, WanderTheme.spacing3)
+                .padding(.vertical, isCompactFilterCoach ? WanderTheme.spacing2 : WanderTheme.spacing3)
                 .frame(width: cardWidth, alignment: .leading)
                 .background {
                     ZStack {
@@ -1360,6 +1703,10 @@ private struct FirstVisitWalkthroughOverlay: View {
                 alignment: .topLeading
             )
             .position(x: layout.cardFrame.midX, y: layout.cardFrame.midY)
+            .opacity(isCoachVisible ? 1 : 0)
+            .offset(y: isCoachVisible ? 0 : -10)
+            .allowsHitTesting(isCoachVisible)
+            .accessibilityHidden(!isCoachVisible)
             .onPreferenceChange(WalkthroughCardSizePreferenceKey.self) { size in
                 guard size.width > 0, size.height > 0 else { return }
                 measuredCardSize = size
@@ -1370,6 +1717,34 @@ private struct FirstVisitWalkthroughOverlay: View {
         }
         .frame(width: containerSize.width, height: containerSize.height)
         .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: step.id)
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.52, dampingFraction: 0.88),
+            value: activeTargetFrame
+        )
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.84),
+            value: isFeaturedCoachVisible
+        )
+        .task(id: step.id) {
+            hasNarrowedFeaturedSpotlight = false
+            isFeaturedCoachVisible = false
+            guard step.target == .mapFeatured, !reduceMotion else { return }
+            try? await Task.sleep(for: .milliseconds(950))
+            guard !Task.isCancelled else { return }
+            hasNarrowedFeaturedSpotlight = true
+            try? await Task.sleep(for: .milliseconds(520))
+            guard !Task.isCancelled else { return }
+            isFeaturedCoachVisible = true
+        }
+    }
+
+    private func emphasisCornerRadius(for frame: CGRect) -> CGFloat {
+        switch step.target {
+        case .addSearch, .saveStatus, .saveMoreOptions, .mapFeatured:
+            frame.height / 2
+        default:
+            WanderTheme.radiusLarge
+        }
     }
 }
 
@@ -1456,6 +1831,37 @@ private struct WalkthroughCardSizePreferenceKey: PreferenceKey {
     }
 }
 
+private struct WalkthroughEmphasisRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing = false
+
+    let frame: CGRect
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .stroke(WanderTheme.categorySun.color, lineWidth: 3)
+            .frame(width: frame.width + 8, height: frame.height + 8)
+            .position(x: frame.midX, y: frame.midY)
+            .scaleEffect(reduceMotion ? 1 : (isPulsing ? 1.018 : 0.992))
+            .shadow(
+                color: WanderTheme.categorySun.color.opacity(isPulsing ? 0.72 : 0.32),
+                radius: isPulsing ? 11 : 5
+            )
+            .onAppear {
+                guard !reduceMotion else { return }
+                isPulsing = true
+            }
+            .animation(
+                reduceMotion
+                    ? nil
+                    : .easeInOut(duration: 1.15).repeatForever(autoreverses: true),
+                value: isPulsing
+            )
+            .accessibilityHidden(true)
+    }
+}
+
 struct WalkthroughScrim: View {
     let spotlightFrame: CGRect
     let containerSize: CGSize
@@ -1468,13 +1874,13 @@ struct WalkthroughScrim: View {
                 cornerRadius: cornerRadius
             )
                 .fill(.ultraThinMaterial, style: FillStyle(eoFill: true))
-                .opacity(0.68)
+                .opacity(0.54)
 
             WalkthroughScrimShape(
                 spotlightFrame: spotlightFrame,
                 cornerRadius: cornerRadius
             )
-                .fill(Color.black.opacity(0.22), style: FillStyle(eoFill: true))
+                .fill(Color.black.opacity(0.15), style: FillStyle(eoFill: true))
         }
         .frame(width: containerSize.width, height: containerSize.height)
     }

@@ -28990,6 +28990,203 @@ commit/push, merge only after payload checks pass, snapshot the build-144
 manifest from `testflight/build-143`, then create and merge the build-number PR
 before archiving the exact candidate.
 
+## 2026-08-14 14:14 PDT - Codex - REC-180 App Store 1.0 launch gates
+
+Agent: Codex
+Branch: `codex/rec-180-app-store-1-0`
+Worktree: `/private/tmp/recme-app-store-1-0`
+Linear: `REC-180` (`In Progress`)
+Mission Control: unavailable at `http://localhost:4000`
+
+Goal: preserve every existing account and row while completing the production
+Clerk/Supabase cutover, preparing build 147 as marketing version 1.0, and
+submitting rec.me to App Review.
+
+Starting state and coordination:
+
+- The isolated release branch starts from exact verified TestFlight build 146,
+  tag `testflight/build-146`, commit `fd244075`. Joe's checkout remains on
+  `joe/phone-build-latest` with an unrelated untracked `tmp/` directory and was
+  not modified.
+- PR #411 is open as a draft, mergeable, and has a passing trusted payload
+  check. `project.yml` and the generated Xcode project declare marketing
+  version 1.0 and build 147. The branch must remain unmerged until the production
+  identity/data continuity and reviewer-account gates pass.
+- The complete release candidate previously passed 1,151 unit tests and 34 UI
+  tests with zero failures, a clean Release simulator build, and all six
+  deterministic App Store screenshot flows.
+
+Completed safeguards and live evidence:
+
+- Created and verified an encrypted AES-256 off-device copy of the complete
+  pre-cutover backup in iCloud Drive. The recovery key is stored in macOS
+  Keychain; decrypted archive listing, SHA-256 integrity, and iCloud sync status
+  were verified. The source Supabase project and both local backups remain
+  untouched.
+- The Clerk public backup contains all six development users and confirms zero
+  production users. Password-hash export still requires authenticated access to
+  the owning Clerk dashboard before the lossless import can run.
+- App Store Connect read-back shows version 1.0 in Prepare for Submission,
+  manual release enabled, six screenshots complete, metadata/review contact and
+  reviewer walkthrough saved, and build 146 valid in TestFlight as marketing
+  version 0.1. Apple therefore requires the equivalent build 147 archive for
+  version 1.0.
+- Verified the live PostHog project setting discards client IP data. The App
+  Privacy questionnaire is fully drafted but remains deliberately unpublished
+  until the exact signed archive and production configuration are verified.
+- Sent a support verification probe to `getrec.me@gmail.com`; delivery has not
+  bounced, but authenticated receipt/reply remains pending.
+- Re-ran the live App Store read-only audit and every release reconciliation
+  dry run. Version 1.0 remains Prepare for Submission with manual release, free
+  US-only availability, the evidence-backed age questionnaire, exact metadata,
+  and six complete 1320x2868 screenshots. Build 146 remains valid as 0.1 and no
+  build 147 exists yet; demo credentials remain the only missing review-detail
+  fields.
+- Reverified the public launch surface. The home, support, privacy,
+  privacy-choices, terms, community, import-help, extensions, and AASA endpoints
+  all return HTTP 200 over valid TLS. The AASA app ID matches the release team
+  and bundle ID, and the public support/legal pages publish the intended Gmail
+  address.
+- At Joe's request, added Canada through a dry-run-first, additive App Store
+  availability update. Read-back verifies exactly `CAN` + `USA`, free pricing,
+  no pre-order, and no automatic future-territory enrollment. No existing
+  territory, account, credential, or backend data changed. The release script
+  now supports repeatable `--add-territory` operations while preserving and
+  verifying all current territories. Mexico remains disabled pending its
+  regional storefront/localization and compliance review.
+- Attempted to create the requested Canada/Mexico Linear ticket, but Linear
+  rejected it because the workspace has reached its Free-plan issue limit. The
+  work and Mexico follow-up are captured in REC-180 comment
+  `28559ea6-6e11-4af0-9441-f2bd1bdae385` until a ticket slot is available.
+- Strengthened the hosted smoke path to exercise an operator claiming and
+  resolving a real rollback-only report, then verify closure, the 24-month
+  retention window, and all three audit events. The direct database endpoint is
+  IPv6-only from this machine and could not resolve over the available route;
+  the linked Management API is the supported fallback. Its strict 71-assertion
+  `community_moderation.sql` suite passed against the hosted source project,
+  including assignment, resolution, audit, retention, rate limiting, and
+  account-deletion behavior. The transaction rolled back and retained no test
+  content.
+
+Current blockers and continuation:
+
+- The existing Supabase organization is on Free with two active projects, so a
+  third green project cannot be created there. Upgrading that organization would
+  be materially more expensive than originally expected. A separate `rec.me`
+  organization is the safest isolation path, but exact user approval is required
+  before creating that persistent external account container. Do not pause or
+  alter either existing active project.
+- Clerk is waiting at sign-in for the account that owns app
+  `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9`; the already signed-in known Google accounts
+  did not own it. Gmail is waiting at the password screen for
+  `getrec.me@gmail.com`. Do not request, inspect, or store either password.
+- The existing APNs credential has previously authenticated successfully. A
+  backup-safety handoff to Ryan must omit credential material and requires exact
+  approval for the Slack destination/message before sending.
+- After the user completes those approvals/sign-ins: create the isolated green
+  project, restore and validate the database, export/import Clerk password
+  hashes with a six-of-six identity audit, create the reviewer account, update
+  release configuration, re-run hosted smoke tests, merge PR #411, archive and
+  upload exact build 147, publish privacy answers, attach the build, submit
+  version 1.0, and verify App Store Connect reports Waiting for Review.
+
+Checkpoint, 2026-08-14 14:31 PDT:
+
+- Committed and pushed the Canada availability automation, strengthened
+  moderation smoke, launch-readiness evidence, and this coordination log as
+  `a55c9d0a` (`chore: add Canada launch availability`). PR #411 remains a draft,
+  mergeable, and its trusted payload validation is green at that exact head.
+- Validation: `node --check` passed for both changed scripts;
+  `git diff --check` passed; the App Store commerce dry run, apply, and read-back
+  all verified `CAN` + `USA`; and the strict hosted 71-assertion moderation
+  pgTAP suite passed in a rolled-back transaction.
+- App Store submission has not occurred. Version 1.0 remains Prepare for
+  Submission because production auth/data continuity, mailbox reply, safety
+  ownership, populated reviewer credentials, signed build 147, and final privacy
+  publication remain required.
+
+Checkpoint, 2026-08-14 17:36 PDT:
+
+- Verified live Supabase dashboard access under `joe@bondaiapp.com` to
+  organization `joe@bondaiapp.com's Org` (`kmuvkdjwociyvuuxnbqb`) and its
+  existing `wander` project (`rugmtlgufrhlxwfkumhw`). The earlier personal
+  Google session could not access either resource and was not used for any
+  mutation.
+- Updated the canonical non-secret Grayline registry at
+  `/Users/joelipshutz/Developer/grayline/ops/service-account-registry.json`
+  with the verified owner identity, Supabase organization/project, Clerk
+  app/development/production instance IDs, env-var references, and explicit
+  no-pause/no-delete/no-reset safeguards. No password, key, token, or recovery
+  value was stored.
+- Added the verified rec.me Clerk/Supabase owner rule to this project's agent
+  instructions so Codex, Claude, OpenClaw, and future contributors do not ask
+  Joe to cycle through unrelated accounts again. Clerk owner-dashboard login
+  remains the next user action; no account or production-data change has run.
+
+Checkpoint, 2026-08-14 18:12 PDT:
+
+- Completed the lossless Clerk production import. All 6 development users were
+  imported into the production instance with password digests, verified primary
+  emails, and stable canonical-profile mappings preserved. A one-user canary
+  passed before the remaining five were imported. The final Clerk API audit
+  reports 6/6 password-enabled, 6/6 verified-primary-email, 6/6 email parity,
+  and 6/6 canonical identity parity. Development users remain untouched.
+- Created owner-only local and encrypted iCloud rollback bundles containing the
+  original Clerk password-hash export, exact migration source, pre/post public
+  user snapshots, migration logs, live non-public configuration, database dump,
+  and checksum manifests. The final encrypted archive was independently
+  decrypted, listed, and checksum-verified. No credential material was added to
+  git or this log.
+- Created a separate free Supabase organization named `rec.me`, but project
+  creation is blocked because Supabase's two-project Free limit follows the
+  owner across organizations. No paid plan was purchased and no database was
+  created. To avoid a risky or unnecessary migration, launch will keep the
+  existing `wander` project (`rugmtlgufrhlxwfkumhw`) in place; no existing row,
+  object, account, or identifier is being moved, deleted, reset, or rewritten.
+- Applied only migration `20260814090000_clerk_identity_continuity.sql` to the
+  linked hosted source and verified the local/remote migration ledger. Hosted
+  metadata checks passed for invoker security, pinned `search_path`, execute
+  grants, 15/15 existing identity mappings, and canonical-claim precedence.
+  The rolled-back hosted smoke suite and all 4 Clerk continuity tests passed.
+- Deployed `clerk-profile-webhook` version 11 to the hosted source and verified
+  it ACTIVE by read-back. Created the production Clerk webhook endpoint for
+  exactly `user.created`, `user.updated`, and `user.deleted`; its signing secret
+  was captured into owner-only local storage without printing or committing it.
+- Started a compatibility update so the hosted webhook can validate both the
+  existing development signing secret and the new production signing secret
+  during the cutover. This preserves current TestFlight webhook delivery while
+  the version 1.0 binary moves to Clerk production.
+- Mission Control at `localhost:4000` returned no task payload during this
+  checkpoint; Linear REC-180 and draft PR #411 remain the durable trackers.
+
+Checkpoint, 2026-08-14 18:24 PDT:
+
+- Added the production webhook signing secret as
+  `CLERK_WEBHOOK_SIGNING_SECRET_SECONDARY` while retaining the original
+  development secret. Deployed the dual-signature handler as hosted Edge
+  Function version 13 and verified both development and production signatures
+  return HTTP 200 through non-mutating ignored-event probes. No profile, place,
+  mapping, or account row was created, edited, or deleted by the probes.
+- Updated the tracked iOS release configuration from Clerk development to the
+  production publishable key, frontend API `clerk.getrec.me`, and matching
+  web-credentials associated domain. The Supabase project URL and publishable
+  key remain unchanged, so no database move is part of this release.
+- `origin/main` now contains TestFlight build 147 (`d215a900`) as marketing
+  version 0.1 and records its successful upload in `887123d2`. App Store version
+  1.0 therefore advances to build 148; build 147 cannot be reused under a
+  different marketing version.
+- A focused `BuildConfigurationTests` run compiled the production-configured app
+  and dependencies but did not reach tests because the volume ran out of space
+  while generating the app dSYM. This is not a test pass or code failure. Removed
+  only the disposable 1.4 GB `DerivedData-release-config` cache; source,
+  accounts, database content, archives, and backups were untouched. Exact tests
+  must run again after reconciling with current `main` and ensuring sufficient
+  build space.
+- Joe directed this foundation to land before the other active database/product
+  changes. Merging to `main` does not alter the already-installed TestFlight 147
+  binary. The follow-on branch must keep the existing hosted `wander` project,
+  avoid resets/replacements, and rebase onto the resulting `main` before its own
+  migration and release validation.
 ## 2026-08-14 14:27 PDT - Codex - REC-122 confetti TestFlight release
 
 Agent: Codex
@@ -29079,3 +29276,191 @@ Final release outcome (15:38 PDT):
   required API request. No known confetti-specific issue remains; testers were
   asked to check the longer first-save rain, unchanged same-day pop, and Reduce
   Motion behavior.
+
+## 2026-08-14 18:20 PDT - Codex - REC-236 NUX disable and dismissal follow-up
+
+Agent: Codex using `recme-testflight-feedback-bug-catcher`,
+`plan-eng-review`, and the `plan-design-review` lens
+Branch: `codex/rec-236-disable-nux`
+Worktree: `/private/tmp/recme-rec236-disable-nux`
+Linear: `REC-236` (`In Progress`)
+Mission Control: `0f47c59e-851d-4d80-b8bb-5e559b4fc911`
+
+Goal: diagnose why Joe's established main account received
+the interruptive post-auth NUX in TestFlight build 147, put that NUX behind an
+off-by-default feature flag, add an explicit dismiss control to the import
+prompt and every equivalent blocking prompt, and validate the result with
+regular and compact simulator screenshots.
+
+Starting state and coordination:
+
+- Started from clean `origin/main` commit `887123d2` in a new isolated
+  worktree. Joe's `joe/phone-build-latest` checkout is 219 commits behind and
+  contains a pre-existing untracked `tmp/` directory; it remains untouched.
+- Ryan shipped the earlier REC-236 pass to `main` via PR #405 / commit
+  `bfc560b2` today. His larger polish pass is open as PR #415 on
+  `codex/rec-236-nux-polish`, so this follow-up overlaps
+  `FirstVisitWalkthrough.swift` and walkthrough host surfaces. The runtime-off
+  change will stay minimal and be reconciled against PR #415 before handoff.
+- Reused REC-236 because this is direct follow-up on the same NUX and the
+  workspace issue limit is already documented. Moved it to In Progress and
+  added the report, requested behavior, and branch coordination note.
+- Engineering review is required because the flag changes app-wide walkthrough
+  eligibility. Design review is limited to the requested dismissal affordance;
+  no competing visual direction is in scope.
+
+Expected files: `Wander/Features/Onboarding/FirstVisitWalkthrough.swift`, the
+walkthrough host/feature-flag boundary if separate, focused unit/UI tests,
+simulator screenshot artifacts outside the repo, and this append-only log.
+
+Checkpoint - 2026-08-14 18:52 PDT:
+
+- The required outside engineering-plan review found three material integration
+  risks: disabling presentation without retiring persisted eligibility would
+  defer the interruption until a future re-enable; the walkthrough-owned
+  Contacts invite sheet has its own close path; and validation must run on top
+  of Ryan's open PR #415 rather than against stale `main` behavior.
+- Updated the implementation intent accordingly: an eligible live account that
+  launches while the rollout flag is off is retired from this NUX, explicit
+  dismissals complete all walkthrough state for that account, and the Contacts
+  invite X uses the same durable dismissal. The branch will be stacked on
+  `origin/codex/rec-236-nux-polish` before build, UI, and screenshot validation.
+- The `-WanderEnableWalkthroughs` visual-test override will be Debug-only. No
+  analytics event is added: this mitigation changes an uninstrumented tutorial
+  system and introduces no new funnel/dashboard contract; dismissal persistence
+  is covered directly by unit and UI tests instead.
+
+Implementation and validation checkpoint - 2026-08-14 18:58 PDT:
+
+- Root cause confirmed in the build 147 code path: PR #405 advanced the
+  walkthrough content version from 8 to 9 while completion keys are versioned
+  by content version and Clerk user ID. The separate first-visit eligibility
+  bit stayed true until the entire multi-launch NUX completed. That combination
+  made established eligible users look incomplete under the new version, so a
+  second authenticated launch could present the import lesson even though the
+  account was not new. The screenshot matches that exact path; the app does not
+  use email as the walkthrough storage key.
+- Reconciled the fix directly on Ryan's open PR #415 head (`7220e3f1`). Added
+  `FirstVisitWalkthroughFeatureFlag`, off by default, with a Debug-only launch
+  override for deterministic UI coverage. When an eligible live account opens
+  while rollout is off, the app completes its eligibility once so re-enabling a
+  future walkthrough cannot surprise that account.
+- Added a shared 44-point, accessible X to the import lesson, device-features
+  lesson, and every coach card. The existing Contacts invite X now dismisses the
+  entire walkthrough when that sheet was opened by the NUX. A dismissal marks
+  every walkthrough surface and launch lesson complete for the current user,
+  clears coordinator state, and calls the existing completion callback once.
+- Focused unit validation passed 33/33 `FirstVisitWalkthroughTests`. Focused UI
+  validation passed 4/4 dismissal flows on iPhone 16 Plus / iOS 18.6 and 4/4 on
+  the smaller REC-166 iPhone 16e / iOS 18.6. The tests cover import, coach mark,
+  device lesson, and Contacts invite dismissal, assert 44-point hit targets,
+  and verify the import NUX stays gone after relaunch.
+- Visually reviewed ten simulator attachments across both phone sizes. Import
+  before/after, coach mark, Contacts invite, and device lesson were unclipped
+  and readable. Stable handoff copies are under
+  `/private/tmp/rec236-screenshots/`.
+- The first full run exposed one source-contract test with two stale string
+  assertions for the pre-flag root wiring; all 38 UI tests passed in that run.
+  Updated the contract to assert the new off-by-default flag and retirement
+  path. The required full rerun then passed 1,158 unit tests and 38 UI tests
+  (1,196 total, 0 failures) on iPhone 16 Plus / iOS 18.6:
+  `Test-Wander-2026.08.14_18-49-48--0700.xcresult`.
+- `xcodegen generate` succeeded and produced no tracked project change. The
+  first build attempt hit a full disk before compiling; removed only the failed
+  task's disposable DerivedData and Codex's recoverable Sparkle updater cache,
+  then reused an inactive DerivedData package/build cache. No source or user
+  data was removed.
+- No TestFlight build number, archive, upload, tester Slack message, merge, or
+  production flag change was performed. During validation `origin/main`
+  advanced to App Store build 148 (`e7f34342`); the branch must be rebased onto
+  that exact main before PR handoff.
+
+Handoff - 2026-08-14 19:03 PDT:
+
+- Rebased the complete Ryan + dismissal stack onto exact latest `origin/main`
+  build 148 (`e7f34342`) without conflict. Regenerated the Xcode project with no
+  tracked change. The rebased implementation commit is `cdf653d9`.
+- Post-rebase validation on iPhone 16 Plus / iOS 18.6 passed 34/34 focused unit
+  tests (the complete walkthrough suite plus the updated navigation contract)
+  and 4/4 focused dismissal UI tests. This supplements the earlier exact-stack
+  full pass of 1,196 tests and compact iPhone 16e screenshot pass.
+- Pushed `codex/rec-236-disable-nux` and opened ready PR #416:
+  `https://github.com/joelipshutz/wander/pull/416`. It is intentionally stacked
+  on Ryan's open PR #415 and should land after #415 so its diff contracts to the
+  off-by-default flag, account retirement, and dismissal follow-up.
+- Linked PR #416 from REC-236, posted the diagnosis and validation evidence,
+  and moved the issue to In Review. Marked Mission Control task
+  `0f47c59e-851d-4d80-b8bb-5e559b4fc911` done with the same outcome.
+- Captured the versioned-completion/unversioned-eligibility gotcha in the shared
+  KB at `kb/inbox/2026-08-14-recme-versioned-nux-eligibility.md`; GBrain sync
+  confirmed the source was current.
+- Removed the task-owned pre-rebase stash only after the implementation was
+  committed and pushed. Other pre-existing stashes and Joe's original checkout
+  remain untouched. No known NUX-specific blocker remains. No merge or release
+  action was taken.
+
+Landing checkpoint - 2026-08-14 19:21 PDT:
+
+- Joe explicitly authorized merging the two REC-236 PRs. Reviewed PR #415 at
+  exact head `7220e3f1` against current `main`: the diff is limited to the
+  intended onboarding UI, navigation, animation, accessibility, and regression
+  coverage; it contains no auth, database, privacy, signing, dependency, or
+  project-configuration change. Existing exact-head evidence is 1,155 unit and
+  35 UI tests, plus the combined-stack 1,158 unit and 38 UI tests and two-size
+  screenshot review. No blocking source, state, cancellation, safe-area,
+  Dynamic Type, tap-target, or scope finding remained.
+- Squash-merged PR #415 as `3656337afa2b12bef03569a30ffa6b88f2023a1a`.
+  Rebased PR #416 with `--onto origin/main` so the two duplicated #415 commits
+  were removed and only the off-by-default flag, account retirement, durable
+  dismissals, regression coverage, and this append-only handoff remain.
+- The rebased #416 tree hash is exactly
+  `2b54531f8b6b2710c04b759ce2d1d5d9f765ea59`, byte-for-byte identical to the
+  previously validated #416 tree. `git diff --check` passes. The prior 1,196-test
+  full pass, 38 focused post-build-148 tests, and compact-device visual QA
+  therefore cover the exact product/test content being pushed after rebase.
+- Next: commit this chronological landing note, force-push #416 with lease,
+  verify its latest hosted payload check and mergeability, then squash-merge.
+  REC-236 remains In Review because Joe also explicitly requested build 149 and
+  the App Store release; no TestFlight or App Store action occurs until #416 is
+  merged and the exact latest-main release gate passes.
+
+## 2026-08-14 19:25 PDT - Codex - App Store 1.0 / TestFlight build 149
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/testflight-build-149`
+Worktree: `/private/tmp/recme-testflight-build-149`
+Linear: `REC-180` and `REC-236` (`In Review`)
+Mission Control: unavailable; `localhost:4000` refused the task API
+
+Goal: package every classified change on exact latest `main` into rec.me 1.0
+build 149, run the complete release and production-data safety gates, upload and
+attach the build to TestFlight, then use the same signed candidate for App Store
+submission if final privacy, review-account, mailbox, and App Store checks pass.
+
+Starting state and release scope:
+
+- Joe explicitly requested “everything in main” and “push to TF,” authorizing
+  the build-number bump, signed archive/upload, TestFlight attachment, tester
+  note, and continuation through the already-authorized App Store launch gates.
+- Exact pre-bump cutoff is `fbe792cdcbbb29b77c6dfd70e54689d9119e1c05`,
+  containing production-auth/data-continuity PR #411, onboarding polish PR #415,
+  and the off-by-default NUX/durable-dismiss PR #416. No open PR is being
+  cherry-picked or implicitly added; the release source is the complete current
+  `main` tree.
+- Machine manifest snapshot from `testflight/build-147` to the cutoff passed
+  with no missing, duplicate, or red entries. PR #413 is correctly excluded as
+  prior-release documentation; #411, #415, and #416 are classified `ship`.
+  Snapshot and reconciliation artifacts are under
+  `/private/tmp/recme-build149-manifest/`.
+- Marketing version remains `1.0`. Build number advances once from 148 to 149 as
+  Joe requested. The existing hosted Supabase `wander` project remains the live
+  database; this release performs no reset, clone, account deletion, identity
+  remap, destructive migration, or tester-data rewrite.
+- Release gate: regenerate and audit the Xcode project; commit/push a metadata-
+  only PR; validate and merge it; then run the full exact-candidate iOS suite,
+  hosted rollback-only database smoke, Clerk continuity/reviewer-login checks,
+  signed archive/privacy inspection, and upload with
+  `manageAppVersionAndBuildNumber=false`.
+
+Expected tracked files: `project.yml`, generated
+`Wander.xcodeproj/project.pbxproj`, and this append-only log.

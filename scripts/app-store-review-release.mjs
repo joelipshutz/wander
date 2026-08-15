@@ -160,13 +160,13 @@ function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
-function desiredAttributes(options, requireComplete) {
+function desiredAttributes(options, requireComplete, fallbackContact = {}) {
   const notes = fs.readFileSync(options.notesPath, "utf8").trim();
   const demoRequiredRaw = env("ASC_REVIEW_DEMO_ACCOUNT_REQUIRED");
   const attributes = {
-    contactFirstName: env("ASC_REVIEW_CONTACT_FIRST_NAME"),
-    contactLastName: env("ASC_REVIEW_CONTACT_LAST_NAME"),
-    contactPhone: env("ASC_REVIEW_CONTACT_PHONE"),
+    contactFirstName: env("ASC_REVIEW_CONTACT_FIRST_NAME") || fallbackContact.contactFirstName || "",
+    contactLastName: env("ASC_REVIEW_CONTACT_LAST_NAME") || fallbackContact.contactLastName || "",
+    contactPhone: env("ASC_REVIEW_CONTACT_PHONE") || fallbackContact.contactPhone || "",
     contactEmail: env("ASC_REVIEW_CONTACT_EMAIL"),
     demoAccountRequired: demoRequiredRaw
       ? parseBoolean(demoRequiredRaw, "ASC_REVIEW_DEMO_ACCOUNT_REQUIRED")
@@ -231,6 +231,16 @@ async function resolveState(api, options) {
   return { version, reviewDetail: response.data };
 }
 
+async function resolveBetaReviewContact(api, options) {
+  const response = await api(
+    `/apps/${options.appId}/betaAppReviewDetail?fields[betaAppReviewDetails]=contactFirstName,contactLastName,contactPhone,contactEmail`,
+  ).catch((error) => {
+    if (error.body?.errors?.some((item) => item.status === "404")) return { data: null };
+    throw error;
+  });
+  return response.data?.attributes ?? {};
+}
+
 async function apply(api, state, attributes) {
   if (state.reviewDetail) {
     return api(`/appStoreReviewDetails/${state.reviewDetail.id}`, {
@@ -270,9 +280,12 @@ async function main() {
   }
 
   loadEnv(options.envPath);
-  const desired = desiredAttributes(options, options.apply);
   const api = createClient(createToken());
-  const before = await resolveState(api, options);
+  const [before, betaReviewContact] = await Promise.all([
+    resolveState(api, options),
+    resolveBetaReviewContact(api, options),
+  ]);
+  const desired = desiredAttributes(options, options.apply, betaReviewContact);
   console.log(JSON.stringify({
     mode: options.apply ? "apply" : "dry-run",
     version: { id: before.version.id, versionString: before.version.attributes?.versionString },

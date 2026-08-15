@@ -342,6 +342,12 @@ organization, project, dashboard, region, or env-var reference changes. The
 registry must contain identifiers and secret references only—never token or API
 key values.
 
+rec.me Clerk and Supabase owner access uses the verified
+`joe@bondaiapp.com` Google identity. Clerk app/instance IDs, the Supabase
+organization and project refs, and the current production-cutover state live in
+the registry. Do not substitute Joe's personal or SwayGenie Google identities,
+and do not infer a different owner from a local token name.
+
 rec.me analytics currently belongs to the `Grayline Studio` PostHog organization
 under Joe's `jolipshutz@gmail.com` Google login: project `rec.me` / ID `557259`,
 dashboard `rec.me Product Funnel` / ID `1994904`. Use only the rec.me-specific

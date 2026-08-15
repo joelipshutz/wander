@@ -24,7 +24,7 @@ struct AddImportEntrySection: View {
                         Text("Import from")
                             .font(.system(size: 15, weight: .black))
                             .foregroundStyle(WanderTheme.textInk.color)
-                        Text("Instagram, Google Maps, TikTok, Notes & more")
+                        Text("Import places from Google Maps, Instagram, TikTok, and more.")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .lineLimit(2)
@@ -58,7 +58,7 @@ struct AddImportEntrySection: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Import from Instagram, Google Maps, TikTok, Notes, and more")
+            .accessibilityLabel("Import places from Google Maps, Instagram, TikTok, and more.")
             .accessibilityHint("Opens import sources")
         }
     }

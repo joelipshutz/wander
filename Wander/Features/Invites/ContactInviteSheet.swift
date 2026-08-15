@@ -97,6 +97,7 @@ struct ContactInviteSheet: View {
     let senderProfileID: String?
     let canDismiss: Bool
     let walkthroughSelectionGoal: Int?
+    let onWalkthroughDismiss: (() -> Void)?
     let onPermissionDenied: (() -> Void)?
     let analytics: AnalyticsClient
 
@@ -126,6 +127,7 @@ struct ContactInviteSheet: View {
         senderProfileID: String? = nil,
         canDismiss: Bool = true,
         walkthroughSelectionGoal: Int? = nil,
+        onWalkthroughDismiss: (() -> Void)? = nil,
         onPermissionDenied: (() -> Void)? = nil,
         analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
@@ -134,6 +136,7 @@ struct ContactInviteSheet: View {
         self.senderProfileID = senderProfileID
         self.canDismiss = canDismiss
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
+        self.onWalkthroughDismiss = onWalkthroughDismiss
         self.onPermissionDenied = onPermissionDenied
         self.analytics = analytics
         _contacts = State(initialValue: contacts)
@@ -149,6 +152,7 @@ struct ContactInviteSheet: View {
         senderProfileID: String? = nil,
         canDismiss: Bool = true,
         walkthroughSelectionGoal: Int? = nil,
+        onWalkthroughDismiss: (() -> Void)? = nil,
         onPermissionDenied: (() -> Void)? = nil,
         analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
@@ -157,6 +161,7 @@ struct ContactInviteSheet: View {
         self.senderProfileID = senderProfileID
         self.canDismiss = canDismiss
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
+        self.onWalkthroughDismiss = onWalkthroughDismiss
         self.onPermissionDenied = onPermissionDenied
         self.analytics = analytics
         _contacts = State(initialValue: [])
@@ -269,7 +274,10 @@ struct ContactInviteSheet: View {
 
             HStack {
                 Button {
-                    if canDismiss { dismiss() }
+                    if canDismiss {
+                        onWalkthroughDismiss?()
+                        dismiss()
+                    }
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 17, weight: .black))
@@ -280,7 +288,14 @@ struct ContactInviteSheet: View {
                         .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 8, y: 3)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close")
+                .accessibilityLabel(
+                    onWalkthroughDismiss == nil ? "Close" : "Dismiss walkthrough"
+                )
+                .accessibilityIdentifier(
+                    onWalkthroughDismiss == nil
+                        ? "invite.close"
+                        : "walkthrough.dismiss.contactInvite"
+                )
 
                 Spacer()
 

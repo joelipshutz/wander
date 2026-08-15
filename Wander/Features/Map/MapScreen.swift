@@ -20,26 +20,25 @@ enum MapWalkthroughMemoryPolicy {
     static func preferredVisiblePlace(
         from visiblePlaces: [VisiblePlace],
         tutorialUserPlaceID: String?,
-        currentUserID: String
+        currentUserID _: String
     ) -> VisiblePlace? {
         if let tutorialUserPlaceID,
            let tutorialSave = visiblePlaces.first(where: {
-               $0.userPlace.id == tutorialUserPlaceID
+               matchesTutorialSave($0, tutorialUserPlaceID: tutorialUserPlaceID)
            }) {
             return tutorialSave
         }
 
-        return visiblePlaces
-            .filter {
-                $0.owner.id == currentUserID && $0.userPlace.status == .been
-            }
-            .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
-            .first
-            ?? visiblePlaces
-                .filter { $0.userPlace.status == .been }
-                .sorted { $0.userPlace.savedAt > $1.userPlace.savedAt }
-                .first
-            ?? visiblePlaces.first
+        return nil
+    }
+
+    static func matchesTutorialSave(
+        _ visiblePlace: VisiblePlace,
+        tutorialUserPlaceID: String
+    ) -> Bool {
+        visiblePlace.userPlace.id == tutorialUserPlaceID
+            || visiblePlace.userPlace.localID == tutorialUserPlaceID
+            || visiblePlace.userPlace.serverID == tutorialUserPlaceID
     }
 
     static func supportsFullPlaceCardTour(_ visiblePlace: VisiblePlace) -> Bool {
@@ -469,7 +468,10 @@ struct MapScreen: View {
                                         }
                                         .buttonStyle(.plain)
                                         .walkthroughTarget(
-                                            source == .featured ? .mapFeatured : .mapFriends
+                                            source == .friends ? .mapFriends : nil
+                                        )
+                                        .walkthroughEmphasis(
+                                            source == .featured ? .mapFeatured : nil
                                         )
                                     }
 
@@ -496,6 +498,7 @@ struct MapScreen: View {
                                         .presentationCompactAdaptation(.popover)
                                     }
                                 }
+                                .walkthroughTarget(.mapFeatured)
                                 .padding(.horizontal, WanderTheme.spacing3)
                                 .padding(.vertical, WanderTheme.spacing1)
                             }
@@ -1139,7 +1142,8 @@ struct MapScreen: View {
                 PlaceSaveSummary(
                     visiblePlace: selectedPlace,
                     attributes: selectedPlace.attributes,
-                    viewerFollowsOwner: store.viewerFollows(selectedPlace.owner.id)
+                    viewerFollowsOwner: store.viewerFollows(selectedPlace.owner.id),
+                    displayNoteOverride: walkthroughDisplayNoteOverride(for: selectedPlace)
                 )
             ]
         }
@@ -1151,7 +1155,8 @@ struct MapScreen: View {
             PlaceSaveSummary(
                 visiblePlace: visiblePlace,
                 attributes: visiblePlace.attributes,
-                viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id)
+                viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id),
+                displayNoteOverride: walkthroughDisplayNoteOverride(for: visiblePlace)
             )
         }
     }
@@ -1159,6 +1164,22 @@ struct MapScreen: View {
     private func saveSummaries(for candidate: PlaceCandidate) -> [PlaceSaveSummary] {
         guard let matchingPlace = visiblePlace(matching: candidate) else { return [] }
         return saveSummaries(for: matchingPlace)
+    }
+
+    private func walkthroughDisplayNoteOverride(for visiblePlace: VisiblePlace) -> String? {
+        guard let tutorialUserPlaceID = walkthroughs.tutorialUserPlaceID,
+              let activeSurface = walkthroughs.activeSurface,
+              [WalkthroughSurface.map, .placeDetail].contains(activeSurface),
+              MapWalkthroughMemoryPolicy.matchesTutorialSave(
+                  visiblePlace,
+                  tutorialUserPlaceID: tutorialUserPlaceID
+              ),
+              visiblePlace.userPlace.note?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty != false
+        else { return nil }
+
+        return "Worth remembering—and an easy place to recommend when someone asks."
     }
 
     private var tasteSummaries: [PlaceSaveSummary] {
@@ -1284,16 +1305,6 @@ struct MapScreen: View {
     }
 
     private func presentWalkthroughPlaceDetail() {
-        let selectedMemory = selectedPlace ?? walkthroughFallbackMemory
-        if let selectedMemory,
-           !MapWalkthroughMemoryPolicy.supportsFullPlaceCardTour(selectedMemory) {
-            routedVisiblePlace = nil
-            selectedPlaceGroupKey = nil
-            selectedSearchCandidateID = nil
-            walkthroughFallbackMemory = MapWalkthroughMemoryPolicy.realisticFallback(
-                owner: store.currentUser
-            )
-        }
         isPlaceProfilePresented = hasSelectedProfile
     }
 
@@ -5563,6 +5574,7 @@ struct MapPlaceSaveFlowSheet: View {
                             detailsContent
                         }
                     }
+                    .walkthroughTarget(step == .confirm ? .saveStatus : nil)
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, WanderTheme.spacing3)
                     .padding(.bottom, WanderTheme.spacing6)
@@ -5720,7 +5732,7 @@ struct MapPlaceSaveFlowSheet: View {
                         }
                     }
                 }
-                .walkthroughTarget(.saveStatus)
+                .walkthroughEmphasis(.saveStatus)
             }
 
             if hasSelectedStatus {
@@ -6065,7 +6077,7 @@ struct MapPlaceSaveFlowSheet: View {
                             : .clear,
                         radius: isWalkthroughTarget && isMoreOptionsArrowPulsing ? 11 : 4
                     )
-                    .walkthroughTarget(.saveMoreOptions)
+                    .walkthroughEmphasis(.saveMoreOptions)
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -6077,6 +6089,7 @@ struct MapPlaceSaveFlowSheet: View {
                 )
             }
             .buttonStyle(.plain)
+            .walkthroughTarget(.saveMoreOptions)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(

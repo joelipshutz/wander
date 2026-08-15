@@ -9,7 +9,7 @@ const DEFAULT_ENV_FILE = `${homedir()}/.openclaw/workspace/.env.keys`;
 const DEFAULT_SMOKE_USER_ID = "user_codex_supabase_smoke";
 const DEFAULT_SMOKE_COLLABORATOR_ID = "user_codex_supabase_smoke_collab";
 const DEFAULT_SMOKE_STRANGER_ID = "user_codex_supabase_smoke_stranger";
-const SUPABASE_CLI_PACKAGE = "supabase@2.109.1";
+const SUPABASE_CLI_PACKAGE = "supabase@2.114.0";
 const ENV_KEYS = new Set([
   "WANDER_SUPABASE_DB_URL",
   "WANDER_SUPABASE_PROJECT_REF",
@@ -207,6 +207,64 @@ async function runCommunityModerationSmokeChecks(
       && result.rows[0]?.anon_denied === true,
   );
 
+  await client.query("set local role service_role");
+  await expectQuery(
+    client,
+    "service-role operator can claim the live moderation report",
+    `
+      update public.content_reports
+      set
+        status = 'reviewing',
+        priority = 'urgent',
+        assigned_to = 'recme-launch-smoke'
+      where id = $1::uuid
+      returning status, priority, assigned_to
+    `,
+    [reportID],
+    (result) => result.rows[0]?.status === "reviewing"
+      && result.rows[0]?.priority === "urgent"
+      && result.rows[0]?.assigned_to === "recme-launch-smoke",
+  );
+  await expectQuery(
+    client,
+    "service-role operator can resolve the live moderation report",
+    `
+      update public.content_reports
+      set
+        status = 'resolved',
+        resolution_action = 'no_violation',
+        resolution_notes = 'Rollback-only launch workflow verification.'
+      where id = $1::uuid
+      returning status, resolution_action, closed_at, retention_expires_at
+    `,
+    [reportID],
+    (result) => result.rows[0]?.status === "resolved"
+      && result.rows[0]?.resolution_action === "no_violation"
+      && Boolean(result.rows[0]?.closed_at)
+      && Boolean(result.rows[0]?.retention_expires_at),
+  );
+  await expectQuery(
+    client,
+    "resolved live moderation report has the complete audit trail and retention window",
+    `
+      select
+        report.status,
+        report.closed_at is not null as closed,
+        report.retention_expires_at = report.closed_at + interval '24 months' as retention_matches,
+        count(event.id)::integer as event_count
+      from public.content_reports report
+      left join public.moderation_report_events event on event.report_id = report.id
+      where report.id = $1::uuid
+      group by report.id
+    `,
+    [reportID],
+    (result) => result.rows[0]?.status === "resolved"
+      && result.rows[0]?.closed === true
+      && result.rows[0]?.retention_matches === true
+      && result.rows[0]?.event_count === 3,
+  );
+  await client.query("reset role");
+
   await client.query(
     `
       insert into public.content_reports (
@@ -368,9 +426,20 @@ function runLinkedSmokeChecks(
       encoding: "utf8",
       mode: 0o600,
     });
+    const projectSelector = process.env.WANDER_SUPABASE_PROJECT_REF
+      ? ["--linked", "--project-ref", process.env.WANDER_SUPABASE_PROJECT_REF]
+      : ["--linked"];
     const result = spawnSync(
       "npx",
-      ["--yes", SUPABASE_CLI_PACKAGE, "db", "query", "--linked", "--file", filePath],
+      [
+        "--yes",
+        SUPABASE_CLI_PACKAGE,
+        "db",
+        "query",
+        ...projectSelector,
+        "--file",
+        filePath,
+      ],
       { cwd: process.cwd(), encoding: "utf8", env: process.env },
     );
     if (result.status !== 0) {
@@ -463,11 +532,86 @@ create temporary table smoke_user_place_delete_result (
 ) on commit drop;
 grant select, insert, update on smoke_user_place_delete_result to authenticated;
 
+create temporary table smoke_moderation_report (
+  report_id uuid primary key
+) on commit drop;
+grant select, insert on smoke_moderation_report to authenticated, service_role;
+
 insert into public.follows (follower_user_id, followed_user_id, source)
 values
   (${collaboratorUser}, ${smokeUser}, 'profile'),
   (${smokeUser}, ${collaboratorUser}, 'profile')
 on conflict (follower_user_id, followed_user_id) do nothing;
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', ${smokeUser}, true);
+select set_config('request.jwt.claim.role', 'authenticated', true);
+
+insert into smoke_moderation_report (report_id)
+select (
+  public.submit_content_report(
+    'user_place',
+    up.id::text,
+    ${collaboratorUser},
+    'harassment',
+    'Rollback-only launch moderation workflow verification.'
+  )->>'report_id'
+)::uuid
+from public.user_places up
+join public.places p on p.id = up.place_id
+where up.user_id = ${collaboratorUser}
+  and p.source_provider = 'codex_smoke'
+  and p.source_provider_place_id = 'place-list-rpc-smoke'
+  and up.deleted_at is null
+limit 1;
+
+reset role;
+set local role service_role;
+
+update public.content_reports
+set
+  status = 'reviewing',
+  priority = 'urgent',
+  assigned_to = 'recme-launch-smoke'
+where id = (select report_id from smoke_moderation_report);
+
+update public.content_reports
+set
+  status = 'resolved',
+  resolution_action = 'no_violation',
+  resolution_notes = 'Rollback-only launch workflow verification.'
+where id = (select report_id from smoke_moderation_report);
+
+do $linked_moderation_resolution$
+declare
+  report_status text;
+  report_closed boolean;
+  retention_matches boolean;
+  event_count integer;
+begin
+  select
+    report.status,
+    report.closed_at is not null,
+    report.retention_expires_at = report.closed_at + interval '24 months',
+    count(event.id)::integer
+  into report_status, report_closed, retention_matches, event_count
+  from public.content_reports report
+  left join public.moderation_report_events event on event.report_id = report.id
+  where report.id = (select report_id from smoke_moderation_report)
+  group by report.id;
+
+  if report_status is distinct from 'resolved'
+     or report_closed is distinct from true
+     or retention_matches is distinct from true
+     or event_count is distinct from 3 then
+    raise exception 'linked moderation resolution failed status=% closed=% retention=% events=%',
+      report_status, report_closed, retention_matches, event_count;
+  end if;
+end
+$linked_moderation_resolution$;
+
+reset role;
 
 update public.user_places up
 set status = 'been', visibility = 'followers', deleted_at = null
