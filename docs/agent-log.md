@@ -29901,3 +29901,57 @@ Completion — 2026-08-15 13:23 PDT:
 - This merge did not increment build 151, archive or upload a binary, attach a
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
+## 2026-08-15 10:42 PDT - Codex - Check-in typography and CTA exploration
+
+Agent: Codex using `design-shotgun`
+Branch: `codex/checkin-cta-exploration`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/checkin-cta-exploration`
+Starting commit: `bc3ddf3e` (latest `origin/main` when the worktree was created)
+Linear: dedicated issue creation attempted and blocked by the workspace free-issue limit
+Mission Control: unavailable; `localhost:4000` refused the required create request and the documented LaunchAgent was not loaded
+
+Goal: mock distinct, app-coherent options for the check-in UI before production
+implementation. The exploration covers the typography, the large bottom
+confirmation CTA family, the compact contextual Check in / Wanna action family,
+and inline interaction patterns that remove the current separate status-choice
+screen while fitting the wider rec.me app.
+
+Starting state and constraints:
+
+- Joe's original checkout is on stale `joe/phone-build-latest` with an untracked
+  `tmp/` directory; it remains untouched. This isolated worktree was created from
+  latest `origin/main` because many agents are working in parallel.
+- Prior approved design decisions remain inputs: the streak celebration's ticket
+  language, the constrained Apple-native editorial typography boundary, the airy
+  ratings rail, and the existing Feed/People direction.
+- `DESIGN.md` remains authoritative: warm map-first utility, editorial serif only
+  for named/editorial content, native sans for controls and metadata, terracotta
+  user/action semantics, compact-phone support, Dynamic Type, and 44-point targets.
+- Current implementation uses `MapPlaceSaveFlowSheet`: an initial status-choice
+  step with Check in / Wanna pills, a separate detail step, and a generic
+  terracotta `WanderPrimaryButton` footer. Map and Feed both present this flow as
+  a large sheet; place profiles expose a compact plus/edit action that routes into
+  the same sheet.
+- Joe explicitly added that the result must fit within the wider app. Treat this
+  as a shared design-system and interaction-hierarchy exploration, not a one-off
+  check-in skin.
+- Design artifacts must remain outside the repo under
+  `~/.gstack/projects/joelipshutz-wander/designs/`. No production UI code changes
+  are authorized until Joe approves a direction.
+
+Expected tracked file: this append-only coordination log. Expected untracked
+design artifacts: comparison PNGs and board under the required gstack design
+directory.
+
+Concept checkpoint - 2026-08-15 11:08 PDT:
+
+- Joe chose three full-system directions rather than a check-in-only treatment.
+  Each mock will show the compact place action, its inline expanded state, and
+  a representative large bottom confirmation CTA in the wider app.
+- Approved for generation: A `Editorial Fold` (warm editorial accordion), B
+  `Native Action Dock` (restrained native utility dock), and C `Ticket Transform`
+  (existing collectible-ticket grammar applied to the interaction itself).
+- All directions keep Check in and Wanna together on the originating place
+  surface; none uses the current standalone status-choice screen.
+- Generation directory:
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/checkin-cta-system-20260815`.
