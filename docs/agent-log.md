@@ -29681,6 +29681,33 @@ and walkthrough tests, focused search/backend tests, and this append-only log.
   The backend function is live, but users do not receive this behavior until
   the client PR merges and a later explicitly requested TestFlight release
   packages it. REC-225 has no feature flag.
+
+Merge gate - 2026-08-15 11:15 PDT:
+
+- Joe explicitly authorized merging PR #423 and asked for the current
+  TestFlight status plus a status note in `#testflight-feedback`; he did not ask
+  for a new TestFlight build or release.
+- Refetched `origin` and rebased onto exact current `origin/main` at `bc3ddf3e`,
+  which includes the build-151 preparation, notification reliability, and
+  Instagram extraction follow-up. The only conflict was this append-only agent
+  log; all app and test source merged automatically. Both chronological log
+  entries were preserved.
+- `git diff --check origin/main...HEAD` passes and the 16-file delta remains
+  limited to REC-225 search, its hosted migration/smoke coverage, focused tests,
+  plan, and coordination log. Direct source/privacy/data-flow review found no
+  new blocker from the intervening main changes.
+- Focused current-main validation compiled the complete app and test targets,
+  including every changed REC-225 source file. The iPhone 16 Plus simulator
+  process was then killed before XCTest established its connection (`Early
+  unexpected exit ... before establishing connection`), so this retry is not
+  counted as a test pass. No assertion ran or failed. Merge confidence relies
+  on the already-passing 21/21 exact REC-225 focused tests, the pre-rebase
+  196/196 unit pass, the current-main compile, and the hosted 16-case pgTAP plus
+  full rollback-only smoke passes.
+- Current `main` is rec.me 1.0 build 151. REC-225 is not in that binary because
+  PR #423 is still unmerged at this checkpoint. This remains merge-only: do not
+  bump the build number, archive, upload, attach a TestFlight build, or describe
+  REC-225 as live in TestFlight.
 - Ready PR #423: https://github.com/joelipshutz/wander/pull/423. Linear
   REC-225 is `In Review` with the PR link, privacy contract, validation
   evidence, disk-space test gap, and no-flag/no-TestFlight status recorded.
