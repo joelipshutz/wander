@@ -280,12 +280,42 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
     }
 
-    func testWalkthroughRolloutIsOffByDefaultButSupportsExplicitTestOverride() {
+    func testCoordinatorCanEnableAfterRemoteResolutionAndStopsWhenDisabled() throws {
+        let defaults = try makeDefaults()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "remote-user",
+            store: FirstVisitWalkthroughStore(defaults: defaults),
+            isEnabled: false
+        )
+
+        coordinator.forceActivate(.mapAdd)
+        XCTAssertNil(coordinator.currentStep)
+
+        coordinator.setEnabled(true)
+        coordinator.forceActivate(.mapAdd)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapAdd)
+
+        coordinator.setEnabled(false)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.currentStep)
+        XCTAssertFalse(coordinator.isPresentingLaunchLesson)
+    }
+
+    func testWalkthroughWaitsForRemoteFlagAndSupportsExplicitTestOverride() {
         XCTAssertFalse(
             FirstVisitWalkthroughFeatureFlag.isEnabled(
                 isEligible: true,
                 isUsingLiveData: true,
-                launchArguments: []
+                launchArguments: [],
+                resolvedValue: nil
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: [],
+                resolvedValue: false
             )
         )
         XCTAssertFalse(
@@ -293,7 +323,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 isEligible: false,
                 isUsingLiveData: true,
                 launchArguments: [],
-                isRolloutEnabled: true
+                resolvedValue: true
             )
         )
         XCTAssertFalse(
@@ -301,7 +331,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 isEligible: true,
                 isUsingLiveData: false,
                 launchArguments: [],
-                isRolloutEnabled: true
+                resolvedValue: true
             )
         )
         XCTAssertTrue(
@@ -309,14 +339,15 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 isEligible: true,
                 isUsingLiveData: true,
                 launchArguments: [],
-                isRolloutEnabled: true
+                resolvedValue: true
             )
         )
         XCTAssertTrue(
             FirstVisitWalkthroughFeatureFlag.isEnabled(
                 isEligible: false,
                 isUsingLiveData: false,
-                launchArguments: ["-WanderEnableWalkthroughs"]
+                launchArguments: ["-WanderEnableWalkthroughs"],
+                resolvedValue: nil
             )
         )
         XCTAssertFalse(
@@ -324,14 +355,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 isEligible: true,
                 isUsingLiveData: true,
                 launchArguments: ["-WanderEnableWalkthroughs"],
-                allowsLaunchOverride: false
-            )
-        )
-        XCTAssertTrue(
-            FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility(
-                isEligible: true,
-                isUsingLiveData: true,
-                launchArguments: [],
+                resolvedValue: true,
                 allowsLaunchOverride: false
             )
         )
@@ -340,7 +364,25 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 isEligible: true,
                 isUsingLiveData: true,
                 launchArguments: [],
-                isRolloutEnabled: true,
+                resolvedValue: nil,
+                allowsLaunchOverride: false
+            )
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: [],
+                resolvedValue: false,
+                allowsLaunchOverride: false
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility(
+                isEligible: true,
+                isUsingLiveData: true,
+                launchArguments: [],
+                resolvedValue: true,
                 allowsLaunchOverride: false
             )
         )

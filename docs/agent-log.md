@@ -29423,3 +29423,36 @@ Landing checkpoint - 2026-08-14 19:21 PDT:
   REC-236 remains In Review because Joe also explicitly requested build 149 and
   the App Store release; no TestFlight or App Store action occurs until #416 is
   merged and the exact latest-main release gate passes.
+
+## 2026-08-14 19:25 PDT - Codex - REC-236 Supabase feature-flag platform
+
+Agent: Codex using `recme-linear-log-triage` and the backend/security lens from
+`plan-eng-review`
+Branch: `codex/rec-236-feature-flags`
+Worktree: `/private/tmp/recme-rec236-feature-flags`
+Linear: `REC-236` (`In Progress`)
+
+Goal: replace PR #416's temporary app-local global-off NUX constant with a
+small reusable Supabase feature-flag platform. The platform must support a
+global default plus account-specific overrides, expose only the authenticated
+account's resolved values to the iOS client, fail closed while unresolved, and
+set Joe's hosted profile override for `first_visit_nux` to disabled.
+
+Starting state and coordination:
+
+- PR #415 merged as `3656337a`; PR #416 merged as `fbe792cd`. Started a new
+  isolated worktree from exact `origin/main` after both merges. Joe's original
+  checkout and the prior REC-236 worktree remain untouched.
+- Joe explicitly clarified that the global-off constant should be removed, not
+  retained as a second control plane. Supabase becomes the source of truth:
+  global `first_visit_nux` default on, Joe-only override off.
+- REC-236 was reopened to In Progress with the revised scope. This follow-up
+  does not merge, bump a build, archive, upload, or release.
+- Security contract: authenticated clients can read their own resolved flags
+  but cannot choose another user id or write defaults/overrides. Loading and
+  remote failure hide the NUX; only an explicit resolved false may retire the
+  current account's walkthrough eligibility.
+
+Expected files: a Supabase migration and hosted smoke coverage, a reusable iOS
+feature-flag service/repository boundary, NUX root wiring, focused unit and
+contract tests, and this log.

@@ -1,8 +1,24 @@
 import Foundation
 
+enum FeatureFlagKey: String, CaseIterable, Hashable {
+    case firstVisitNUX = "first_visit_nux"
+}
+
+enum FeatureFlagResolution: Equatable {
+    case unresolved
+    case resolved(userID: String, values: [FeatureFlagKey: Bool])
+    case failed(userID: String)
+}
+
+@MainActor
+protocol FeatureFlagRepository {
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: Bool]
+}
+
 @MainActor
 final class WanderBackend: ObservableObject {
     let configuration: WanderBackendConfiguration
+    let featureFlagRepository: (any FeatureFlagRepository)?
     let profileRepository: (any ProfileRepository)?
     let profileAvatarRepository: (any ProfileAvatarRepository)?
     let followRepository: (any FollowRepository)?
@@ -22,6 +38,7 @@ final class WanderBackend: ObservableObject {
     let placePhotoRepository: (any PlacePhotoRepository)?
     let notificationRepository: (any NotificationRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
+    @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var placePhotoCache: [String: PlacePhoto] = [:]
     private var placePhotoTasks: [String: Task<PlacePhoto, Error>] = [:]
     private let placePhotoImageCache: NSCache<NSString, NSData> = {
@@ -37,6 +54,7 @@ final class WanderBackend: ObservableObject {
 
         if configuration.isSupabaseConfigured {
             let client = WanderSupabaseClient(configuration: configuration, authSession: authSession)
+            self.featureFlagRepository = SupabaseFeatureFlagRepository(table: client)
             self.profileRepository = SupabaseProfileRepository(rpc: client)
             self.profileAvatarRepository = SupabaseProfileAvatarRepository(rpc: client, storage: client)
             self.followRepository = SupabaseFollowRepository(rpc: client)
@@ -58,6 +76,7 @@ final class WanderBackend: ObservableObject {
             self.notificationRepository = SupabaseNotificationRepository(rpc: client)
             self.sharedVisitRepository = SupabaseSharedVisitRepository(rpc: client, table: client, storage: client)
         } else {
+            self.featureFlagRepository = nil
             self.profileRepository = nil
             self.profileAvatarRepository = nil
             self.followRepository = nil
@@ -105,9 +124,11 @@ final class WanderBackend: ObservableObject {
         listSuggestionRepository: (any ListSuggestionRepository)? = nil,
         placePhotoRepository: (any PlacePhotoRepository)? = nil,
         notificationRepository: (any NotificationRepository)? = nil,
-        sharedVisitRepository: (any SharedVisitRepository)? = nil
+        sharedVisitRepository: (any SharedVisitRepository)? = nil,
+        featureFlagRepository: (any FeatureFlagRepository)? = nil
     ) {
         self.configuration = configuration
+        self.featureFlagRepository = featureFlagRepository
         self.profileRepository = profileRepository
         self.profileAvatarRepository = profileAvatarRepository
         self.followRepository = followRepository
@@ -130,7 +151,8 @@ final class WanderBackend: ObservableObject {
     }
 
     var canUseRemoteData: Bool {
-        profileRepository != nil
+        featureFlagRepository != nil
+            || profileRepository != nil
             || profileAvatarRepository != nil
             || followRepository != nil
             || blockRepository != nil
@@ -149,6 +171,34 @@ final class WanderBackend: ObservableObject {
             || placePhotoRepository != nil
             || notificationRepository != nil
             || sharedVisitRepository != nil
+    }
+
+    func refreshFeatureFlags(for userID: String) async {
+        guard let featureFlagRepository else {
+            featureFlagResolution = .failed(userID: userID)
+            return
+        }
+
+        do {
+            let values = try await featureFlagRepository.resolvedFlags(for: userID)
+            try Task.checkCancellation()
+            featureFlagResolution = .resolved(userID: userID, values: values)
+        } catch is CancellationError {
+            return
+        } catch {
+            featureFlagResolution = .failed(userID: userID)
+        }
+    }
+
+    func clearFeatureFlags() {
+        featureFlagResolution = .unresolved
+    }
+
+    func featureFlag(_ key: FeatureFlagKey, for userID: String) -> Bool? {
+        guard case .resolved(let resolvedUserID, let values) = featureFlagResolution,
+              resolvedUserID == userID
+        else { return nil }
+        return values[key]
     }
 
     var canSyncProfileAvatars: Bool {

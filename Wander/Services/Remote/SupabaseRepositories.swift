@@ -1,5 +1,43 @@
 import Foundation
 
+private struct RemoteFeatureFlagDTO: Decodable {
+    let key: String
+    let userID: String?
+    let enabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case userID = "user_id"
+        case enabled
+    }
+}
+
+struct SupabaseFeatureFlagRepository: FeatureFlagRepository {
+    private let table: RemoteTableCalling
+
+    init(table: RemoteTableCalling) {
+        self.table = table
+    }
+
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: Bool] {
+        let rows: [RemoteFeatureFlagDTO] = try await table.select(
+            table: "feature_flags",
+            queryItems: [URLQueryItem(name: "select", value: "key,user_id,enabled")]
+        )
+
+        var values: [FeatureFlagKey: Bool] = [:]
+        for row in rows where row.userID == nil {
+            guard let key = FeatureFlagKey(rawValue: row.key) else { continue }
+            values[key] = row.enabled
+        }
+        for row in rows where row.userID == userID {
+            guard let key = FeatureFlagKey(rawValue: row.key) else { continue }
+            values[key] = row.enabled
+        }
+        return values
+    }
+}
+
 struct SupabaseProfileRepository: ProfileRepository {
     private let rpc: RemoteProcedureCalling
 
