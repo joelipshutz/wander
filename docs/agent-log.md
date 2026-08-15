@@ -29883,3 +29883,21 @@ Rebased validation — 2026-08-15 13:24 PDT:
   generated drift was excluded from PR #426; the feature-flag work adds no new
   Xcode project membership. `git diff --check` passes and no conflict markers
   remain.
+
+Completion — 2026-08-15 13:23 PDT:
+
+- Ready PR #426 passed both refreshed `validate-pr-payload` checks and was
+  squash-merged to `main` as
+  `f6fdfc0cd6d9ff5ba60731db182f7cf61ba628bb`. `origin/main` contains the merge;
+  the remote implementation branch was deleted. GitHub's optional local branch
+  cleanup only reported that another isolated worktree already owns `main`.
+- The post-merge TestFlight manifest `sync-main` workflow passed for the exact
+  merge commit: https://github.com/joelipshutz/wander/actions/runs/31906504776.
+  REC-236 is Done with the merge, 263/263 focused iOS result, hosted 10/10 pgTAP
+  result, and no-release status recorded in Linear.
+- Removed the task-only `REC236 Merge Review` simulator and its 1.6 GB
+  DerivedData cache after validation. Both were disposable and rebuildable; no
+  source, archive, production data, or user data was removed.
+- This merge did not increment build 151, archive or upload a binary, attach a
+  TestFlight build, or post tester-facing release notes. The feature-flag client
+  will ship only in a later explicitly authorized release.
