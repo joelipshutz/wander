@@ -29955,3 +29955,25 @@ Concept checkpoint - 2026-08-15 11:08 PDT:
   surface; none uses the current standalone status-choice screen.
 - Generation directory:
   `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/checkin-cta-system-20260815`.
+
+Mock generation checkpoint - 2026-08-15 13:15 PDT:
+
+- Joe explicitly approved sending the three scoped UI briefs to OpenAI for
+  image generation. No repository contents, account data, or user data were
+  included. The generated images were inspected locally; no image-review upload
+  was performed.
+- Generated three complete 3-screen composites:
+  - `variant-A.png` - Editorial Fold: strongest editorial/native typography
+    balance, inline accordion, and capsule confirmation CTA.
+  - `variant-B.png` - Native Action Dock: most direct fit with the wider app,
+    persistent compact actions, expanding native drawer, and rounded-rectangle
+    confirmation CTA.
+  - `variant-C.png` - Ticket Transform: most branded/expressive direction,
+    transforming ticket module, and a shared ticket-family CTA treatment.
+- All three preserve the place profile while Check in expands, keep Wanna
+  available as a peer action, and demonstrate the large CTA family on a wider
+  Add/import confirmation surface.
+- Published the local comparison board at
+  `http://127.0.0.1:57867/boards/b-20260815-201111-cfqpdq/`.
+- No production SwiftUI files were changed. Next step is Joe's visual selection
+  and any requested hybridization before implementation planning or code edits.
