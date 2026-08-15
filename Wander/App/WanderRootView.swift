@@ -326,7 +326,6 @@ struct WanderRootView: View {
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var didApplyWalkthroughLaunchConfiguration = false
-    @State private var didRetireDisabledWalkthroughEligibility = false
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -338,7 +337,7 @@ struct WanderRootView: View {
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
-    private let shouldRetireDisabledWalkthroughEligibility: Bool
+    private let isFirstVisitWalkthroughEligible: Bool
     private let onFirstVisitWalkthroughCompleted: () -> Void
 
     init(
@@ -361,12 +360,7 @@ struct WanderRootView: View {
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
         self.analytics = analytics
-        self.shouldRetireDisabledWalkthroughEligibility =
-            FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility(
-                isEligible: isFirstVisitWalkthroughEligible,
-                isUsingLiveData: fixtureMode == .empty,
-                launchArguments: launchArguments
-            )
+        self.isFirstVisitWalkthroughEligible = isFirstVisitWalkthroughEligible
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
@@ -395,7 +389,8 @@ struct WanderRootView: View {
                 isEnabled: FirstVisitWalkthroughFeatureFlag.isEnabled(
                     isEligible: isFirstVisitWalkthroughEligible,
                     isUsingLiveData: fixtureMode == .empty,
-                    launchArguments: launchArguments
+                    launchArguments: launchArguments,
+                    resolvedValue: nil
                 ),
                 onCompleted: onFirstVisitWalkthroughCompleted
             )
@@ -641,6 +636,27 @@ struct WanderRootView: View {
 
     private var lifecycleRoot: some View {
         presentedRoot
+        .task(id: featureFlagLoadUserID) {
+            guard let userID = featureFlagLoadUserID else {
+                // Foreground validation deliberately preserves the last signed-in
+                // session. Keep that user's resolved flags stable while Clerk
+                // revalidates so walkthrough UI cannot disappear and reappear.
+                if auth.state.session == nil {
+                    backend.clearFeatureFlags()
+                    configureWalkthroughsForCurrentUser()
+                }
+                return
+            }
+
+            // A different account must fail closed while its own override loads;
+            // the tagged resolution prevents the previous account from leaking.
+            if backend.featureFlag(.firstVisitNUX, for: userID) == nil {
+                configureWalkthroughsForCurrentUser()
+            }
+            await backend.refreshFeatureFlags(for: userID)
+            guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
+            configureWalkthroughsForCurrentUser()
+        }
         .task(id: isSessionValidated) {
             guard isSessionValidated else {
                 cancelSignedInMaintenance()
@@ -1376,15 +1392,20 @@ struct WanderRootView: View {
     }
 
     private func configureWalkthroughsForCurrentUser() {
-        if shouldRetireDisabledWalkthroughEligibility {
-            if !didRetireDisabledWalkthroughEligibility {
-                didRetireDisabledWalkthroughEligibility = true
-                onFirstVisitWalkthroughCompleted()
-            }
-            return
-        }
+        let launchArguments = ProcessInfo.processInfo.arguments
+        let userID = auth.state.session?.userID ?? store.currentUser.id
+        let resolvedValue = backend.featureFlag(.firstVisitNUX, for: userID)
+        let isEnabled = FirstVisitWalkthroughFeatureFlag.isEnabled(
+            isEligible: isFirstVisitWalkthroughEligible,
+            isUsingLiveData: fixtureMode == .empty,
+            launchArguments: launchArguments,
+            resolvedValue: resolvedValue
+        )
+        walkthroughs.setEnabled(isEnabled)
 
-        walkthroughs.setUserID(store.currentUser.id)
+        guard isEnabled else { return }
+
+        walkthroughs.setUserID(userID)
         if !didApplyWalkthroughLaunchConfiguration {
             didApplyWalkthroughLaunchConfiguration = true
             if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
@@ -1399,7 +1420,6 @@ struct WanderRootView: View {
                 "-WanderShowDeviceFeaturesWalkthrough"
             )
         )
-        let launchArguments = ProcessInfo.processInfo.arguments
         if let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") {
             let valueIndex = launchArguments.index(after: flagIndex)
             if launchArguments.indices.contains(valueIndex),
@@ -1489,6 +1509,15 @@ struct WanderRootView: View {
 
     private var walkthroughTabBarTargetHorizontalInset: CGFloat {
         if #available(iOS 26.0, *) { 32 } else { 0 }
+    }
+
+    private var featureFlagLoadUserID: String? {
+        guard isSessionValidated,
+              fixtureMode == .empty,
+              !(FirstVisitWalkthroughFeatureFlag.allowsLaunchArgumentOverride
+                && ProcessInfo.processInfo.arguments.contains("-WanderEnableWalkthroughs"))
+        else { return nil }
+        return auth.state.session?.userID
     }
 
     private func handleDeepLinkPresentationDismissal(

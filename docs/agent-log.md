@@ -29730,3 +29730,156 @@ Completion - 2026-08-15 11:19 PDT:
 - Linear REC-225 has the merge, validation, TestFlight, and Slack receipt. It
   remains `In Review` because developer-only relevance evaluator PR #427 is
   still open; the user-facing global search implementation itself is merged.
+## 2026-08-14 19:25 PDT - Codex - REC-236 Supabase feature-flag platform
+
+Agent: Codex using `recme-linear-log-triage` and the backend/security lens from
+`plan-eng-review`
+Branch: `codex/rec-236-feature-flags`
+Worktree: `/private/tmp/recme-rec236-feature-flags`
+Linear: `REC-236` (`In Progress`)
+
+Goal: replace PR #416's temporary app-local global-off NUX constant with a
+small reusable Supabase feature-flag platform. The platform must support a
+global default plus account-specific overrides, expose only the authenticated
+account's resolved values to the iOS client, fail closed while unresolved, and
+set Joe's hosted profile override for `first_visit_nux` to disabled.
+
+Starting state and coordination:
+
+- PR #415 merged as `3656337a`; PR #416 merged as `fbe792cd`. Started a new
+  isolated worktree from exact `origin/main` after both merges. Joe's original
+  checkout and the prior REC-236 worktree remain untouched.
+- Joe explicitly clarified that the global-off constant should be removed, not
+  retained as a second control plane. Supabase becomes the source of truth:
+  global `first_visit_nux` default on, Joe-only override off.
+- REC-236 was reopened to In Progress with the revised scope. This follow-up
+  does not merge, bump a build, archive, upload, or release.
+- Security contract: authenticated clients can read their own resolved flags
+  but cannot choose another user id or write defaults/overrides. Loading,
+  remote failure, and an off value hide the NUX without consuming the
+  account's eligibility; only the user's explicit dismiss/completion persists.
+
+Expected files: a Supabase migration and hosted smoke coverage, a reusable iOS
+feature-flag service/repository boundary, NUX root wiring, focused unit and
+contract tests, and this log.
+
+Checkpoint — 2026-08-14 19:51 PDT:
+
+- Fast-forwarded the isolated branch to build-149 `main` (`426f2c7a`) and
+  resolved the append-only log overlap by preserving both chronological
+  entries. No product-code conflict occurred.
+- Implemented `public.feature_flags` as the sole control plane: null `user_id`
+  rows are global defaults; populated rows are per-profile overrides. Two
+  partial unique indexes enforce one row per scope. Authenticated clients have
+  SELECT only, RLS exposes global plus own rows, and anon has no access.
+- The iOS client performs one narrow GET per validated signed-in session,
+  requests only compiled-in keys, resolves own overrides over defaults in
+  memory, never polls, never blocks app launch, and hides the NUX on loading or
+  failure. Flag-off is reversible and does not consume walkthrough eligibility.
+  Removed the former app-local global-off constant entirely.
+- Applied hosted migration `20260815023000_feature_flags.sql`. The global
+  `first_visit_nux` row is enabled; the requested target profile resolved
+  uniquely and its override is disabled. Hosted metadata verification passed:
+  RLS on, two indexes, authenticated SELECT/no writes, anon no SELECT. A
+  rollback-only authenticated query saw exactly the global row and its own
+  override (`resolved_override=false`) with no cross-account row exposure.
+- Added 10 pgTAP assertions. The focused local SQL run was blocked because the
+  local Supabase Postgres instance is not running (`127.0.0.1:54322` refused);
+  hosted RLS/grant checks above cover the production contract directly.
+- The first focused iOS run compiled the new app and test code. New repository
+  and backend tests passed, including exactly one GET, own-override precedence,
+  fail-closed behavior, and cross-account isolation. The selected suites ran
+  217/218 before Xcode could not save the result bundle because the concurrent
+  build-149 release filled the disk. Removed only this task's disposable 1.6 GB
+  DerivedData; source stayed intact. Remaining assertion isolation and the
+  required full suite are pending adequate disk headroom.
+- Mission Control remained unavailable (`localhost:4000` connection refused).
+  REC-236 received a non-PII hosted-validation checkpoint and remains In
+  Progress. This follow-up still does not merge or release.
+
+Final validation and PR handoff — 2026-08-14 22:10 PDT:
+
+- Rebased cleanly onto current `origin/main` at `50f738e6`, which includes
+  build 151, the Icon Composer app icon, and notification-reliability changes.
+  `xcodegen generate` produced no branch diff in `project.yml` or the generated
+  Xcode project.
+- The focused feature-flag, first-visit walkthrough, and navigation contract
+  suites passed 220/220 on the dedicated `REC236 Feature Flags` iPhone 16 Plus
+  simulator. This includes one-request-per-session behavior, global/own
+  override precedence, fail-closed loading and failure, account isolation, and
+  preserving eligibility when the flag is off.
+- The complete isolated suite executed 1,211 tests: 1,209 passed. The two
+  remaining failures are unrelated existing UI timing assertions:
+  `testCheckInCalendarTrayPresentationLatency` missed its strict 1.0-second
+  threshold by 1.6 ms in the full run, and
+  `testProfileRunsAHandsFreeDemoInUnderFifteenSeconds` failed its completion
+  assertion. A fresh UI-only rebuild on an erased dedicated simulator
+  reproduced both (`1.114s` for the calendar tray), confirming they are not
+  feature-flag or NUX regressions.
+- Multiple concurrent agents wrote into a reused DerivedData path and filled
+  the disk during earlier attempts. Stopped only the misdirected build
+  processes, retired the collided cache, and completed the trustworthy focused
+  run plus the clean two-test isolation above. Removed only verified-inactive,
+  rebuildable Xcode DerivedData caches; no source, archive, production data, or
+  user data was deleted.
+- Hosted migration `20260815023000_feature_flags.sql` remains applied and local
+  and remote migration histories match. Hosted pgTAP passed 10/10, including
+  RLS visibility and write-denial assertions. The global `first_visit_nux`
+  default remains enabled and the requested account override remains disabled.
+  Local pgTAP remains unavailable because local Supabase Postgres is not
+  running; this is recorded as a tooling gap, not a pass.
+- The existing durable X dismiss behavior from PR #416 remains unchanged; this
+  backend/client follow-up has no new visual design delta requiring replacement
+  screenshots. Build 151 does not contain this feature-flag client. The branch
+  is for PR review only and still does not merge, bump, archive, upload, or
+  release.
+
+PR handoff — 2026-08-14 22:18 PDT:
+
+- Opened ready PR #426: `[REC-236] Add account-scoped Supabase feature flags`.
+  The required TestFlight payload check passed and GitHub reports the PR clean
+  and mergeable. REC-236 is In Review with the hosted rollout and validation
+  evidence attached.
+- Deleted the task-only simulator and final DerivedData cache after validation;
+  both were disposable and are rebuildable. No merge or release was performed.
+
+Merge review — 2026-08-15 12:05 PDT:
+
+- Joe explicitly requested a current-`main` coherence check and merge. Rebased
+  PR #426 onto `origin/main` at `dd07340d`, including REC-246 Instagram import,
+  REC-225 global search, and the completed-Clerk-session preservation fix. The
+  only rebase conflict was this append-only coordination log; all product,
+  repository, and test additions combined automatically and both log histories
+  were preserved.
+- The current Clerk flow retains the signed-in session while foreground
+  validation is pending. Adjusted the feature-flag lifecycle to retain that
+  account's tagged resolution during validation rather than clearing it and
+  briefly dismissing/re-presenting walkthrough UI. A signed-out or switched
+  account still fails closed, and each completed foreground validation performs
+  at most one narrow refresh with no polling or app-launch dependency.
+- Direct architecture, security, code-quality, test, and performance review
+  found no additional blocker: views stay behind the repository boundary; RLS
+  remains authoritative; resolutions are account-tagged; failure is silent and
+  off; and the existing dismiss behavior remains unchanged. Focused rebased
+  validation and hosted schema re-verification are pending before merge.
+- This remains merge-only. Do not bump build 151, archive, upload, attach a
+  TestFlight build, or send tester-facing release notes without a separate
+  explicit release request.
+
+Rebased validation — 2026-08-15 13:24 PDT:
+
+- Focused iPhone 16 Plus / iOS 18.6 validation passed 263/263 with zero skips
+  or expected failures across `FirstVisitWalkthroughTests`,
+  `RemoteRepositoryTests`, `NavigationContractTests`, and `AuthSessionTests`.
+  This covers the feature-flag resolution/account-isolation paths plus the
+  current Clerk refresh/session-preservation behavior on exact rebased code.
+- Linked Supabase migration history is aligned locally and remotely through
+  current `main` migration `20260815042000`, including feature flags at
+  `20260815023000`. Hosted rollback-only `feature_flags.sql` passed all 10
+  assertions again; the CLI returned `ok 10 - anonymous clients cannot read
+  flags` with a successful exit after the preceding RLS/grant assertions.
+- `xcodegen generate` exposed four generated references for REC-246's existing
+  screenshot JSON that current `main` has not committed. That unrelated
+  generated drift was excluded from PR #426; the feature-flag work adds no new
+  Xcode project membership. `git diff --check` passes and no conflict markers
+  remain.

@@ -3139,6 +3139,46 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.count, 1)
         XCTAssertEqual(rpc.calls.first?.body["input_details"] as? String, "They wrote: go kill yourself")
     }
+
+    func testFeatureFlagRepositoryAppliesOwnOverrideOverGlobalDefault() async throws {
+        let table = RecordingTable()
+        table.responses["GET:feature_flags"] = Data(
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
+        )
+        let repository = SupabaseFeatureFlagRepository(table: table)
+
+        let flags = try await repository.resolvedFlags(for: "user_test")
+
+        XCTAssertEqual(flags, [.firstVisitNUX: false])
+        XCTAssertEqual(table.calls.count, 1)
+        XCTAssertEqual(table.calls.first?.method, "GET")
+        XCTAssertEqual(table.calls.first?.table, "feature_flags")
+        XCTAssertEqual(
+            table.calls.first?.queryItems,
+            [
+                URLQueryItem(name: "select", value: "key,user_id,enabled"),
+                URLQueryItem(name: "key", value: "in.(first_visit_nux)")
+            ]
+        )
+    }
+
+    func testBackendFeatureFlagsFailClosedAndNeverLeakAcrossAccounts() async {
+        let repository = StubFeatureFlagRepository(
+            values: [.firstVisitNUX: true],
+            error: nil
+        )
+        let backend = WanderBackend(featureFlagRepository: repository)
+
+        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_a"))
+        await backend.refreshFeatureFlags(for: "user_a")
+        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user_a"), true)
+        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_b"))
+
+        repository.error = WanderRemoteError.invalidResponse("expected")
+        await backend.refreshFeatureFlags(for: "user_b")
+        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_b"))
+        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_a"))
+    }
 }
 
 private struct FeedRPCProbeParameters: Encodable {
@@ -3147,6 +3187,22 @@ private struct FeedRPCProbeParameters: Encodable {
 
 private struct FeedRPCProbe: Decodable, Equatable {
     let value: String
+}
+
+@MainActor
+private final class StubFeatureFlagRepository: FeatureFlagRepository {
+    let values: [FeatureFlagKey: Bool]
+    var error: Error?
+
+    init(values: [FeatureFlagKey: Bool], error: Error?) {
+        self.values = values
+        self.error = error
+    }
+
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: Bool] {
+        if let error { throw error }
+        return values
+    }
 }
 
 @MainActor

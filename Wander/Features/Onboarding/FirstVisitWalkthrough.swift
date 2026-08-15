@@ -491,8 +491,6 @@ enum FirstVisitWalkthroughContent {
 }
 
 enum FirstVisitWalkthroughFeatureFlag {
-    static let isRolloutEnabledByDefault = false
-
 #if DEBUG
     static let allowsLaunchArgumentOverride = true
 #else
@@ -503,29 +501,11 @@ enum FirstVisitWalkthroughFeatureFlag {
         isEligible: Bool,
         isUsingLiveData: Bool,
         launchArguments: [String],
-        isRolloutEnabled: Bool = isRolloutEnabledByDefault,
+        resolvedValue: Bool?,
         allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
     ) -> Bool {
         (allowsLaunchOverride && launchArguments.contains("-WanderEnableWalkthroughs"))
-            || (isRolloutEnabled && isEligible && isUsingLiveData)
-    }
-
-    static func shouldRetireEligibility(
-        isEligible: Bool,
-        isUsingLiveData: Bool,
-        launchArguments: [String],
-        isRolloutEnabled: Bool = isRolloutEnabledByDefault,
-        allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
-    ) -> Bool {
-        isEligible
-            && isUsingLiveData
-            && !isEnabled(
-                isEligible: isEligible,
-                isUsingLiveData: isUsingLiveData,
-                launchArguments: launchArguments,
-                isRolloutEnabled: isRolloutEnabled,
-                allowsLaunchOverride: allowsLaunchOverride
-            )
+            || (resolvedValue == true && isEligible && isUsingLiveData)
     }
 }
 
@@ -640,7 +620,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     private var isDeviceFeaturesLessonEligible = false
     private var didNotifyCompletion = false
     private let onCompleted: () -> Void
-    let isEnabled: Bool
+    @Published private(set) var isEnabled: Bool
 
     init(
         userID: String = "local-user",
@@ -652,6 +632,23 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         self.store = store
         self.isEnabled = isEnabled
         self.onCompleted = onCompleted
+    }
+
+    func setEnabled(_ isEnabled: Bool) {
+        guard self.isEnabled != isEnabled else { return }
+        self.isEnabled = isEnabled
+        guard !isEnabled else { return }
+
+        activeSurface = nil
+        currentStepIndex = 0
+        registeredLaunchUserID = nil
+        requestedSurface = nil
+        isImportLessonEligible = false
+        isDeviceFeaturesLessonEligible = false
+        isPresentingImportLesson = false
+        isPresentingDeviceFeaturesLesson = false
+        tutorialUserPlaceID = nil
+        isRequestingContactInvite = false
     }
 
     var currentStep: WalkthroughStep? {
