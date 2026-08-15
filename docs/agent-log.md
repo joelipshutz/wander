@@ -30027,3 +30027,22 @@ Merge review — 2026-08-15 15:58 PDT:
 - The detached build-153 candidate remains untouched and does not contain PR
   #434. This request is merge-only: do not bump again, archive, upload, attach,
   or announce a new TestFlight build as part of this merge.
+
+Completion — 2026-08-15 16:25 PDT:
+
+- Squash-merged ready PR #434 to `main` as
+  `3d83c469c445380f490076b69d87fc0a2b40cb65`. Verified `origin/main` contains
+  the merge and deleted the remote implementation branch. GitHub's optional
+  local branch cleanup only reported that another isolated worktree already
+  owns `main`; it did not affect the completed remote merge.
+- The post-merge manifest sync correctly created this merge as `ship`, but the
+  workflow remains red because earlier unrelated main commit `d62d7e99` is
+  unclassified. That pre-existing manifest blocker is tracked by GitHub issue
+  #342 and does not invalidate PR #434's passing payload checks or merge.
+- REC-236 is Done in Linear with PR, merge commit, focused 224/224, hosted
+  pgTAP 12/12, screenshots, hosted entitlement state, and no-release status.
+- Removed only the task's disposable post-rebase simulator and DerivedData
+  after stopping its disk-constrained redundant rerun. The active detached
+  build-153 candidate remained untouched. Build 153 predates and does not
+  contain PR #434; no build bump, archive, upload, TestFlight attachment, or
+  tester-facing Slack note was performed for this merge.
