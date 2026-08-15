@@ -30063,3 +30063,18 @@ Deep-flow completion checkpoint - 2026-08-15 14:25 PDT:
   is intentionally a design/spec handoff; implementation should rebase onto
   current `origin/main`, coordinate the listed high-conflict files, and create
   or attach a Linear issue once workspace capacity is available.
+
+PR handoff - 2026-08-15 14:35 PDT:
+
+- Rebased the design branch onto current `origin/main` at `1dcac5f4`. The only
+  conflict was this append-only coordination log; both main's REC-225/REC-236
+  history and this exploration's complete history were preserved. No product
+  source conflict occurred.
+- `git diff --check origin/main...HEAD` passes and no conflict markers remain.
+  No Xcode build/test was run because the tracked delta is documentation only
+  and production SwiftUI is unchanged.
+- Pushed `codex/checkin-cta-exploration` and opened ready PR #431:
+  https://github.com/joelipshutz/wander/pull/431
+- This PR is the approved design/spec handoff only. It does not merge, bump the
+  build number, archive, upload, attach a TestFlight build, or post tester-facing
+  release notes.
