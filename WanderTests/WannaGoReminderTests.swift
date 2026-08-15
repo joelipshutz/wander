@@ -602,10 +602,55 @@ final class WannaGoReminderTests: XCTestCase {
         XCTAssertEqual(
             analytics.events.map(\.name),
             [
+                WanderAnalyticsEvents.notificationOpened,
                 WanderAnalyticsEvents.saveStreakReminderOpened,
                 WanderAnalyticsEvents.saveStreakReminderCompletedSaveAfterOpen
             ]
         )
+        XCTAssertEqual(
+            analytics.events[0].properties,
+            [
+                "notification_type": "save_streak_reminder",
+                "delivery_channel": "local",
+                "route": "quick_capture"
+            ]
+        )
+        XCTAssertTrue(
+            Set(["event_id", "user_id", "place_id", "deeplink_url"])
+                .isDisjoint(with: analytics.events[0].properties.keys)
+        )
+    }
+
+    func testPushNotificationManagerRecordsOnePrivacySafeRemoteOpen() throws {
+        let suiteName = "RemoteNotificationAnalyticsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let analytics = ReminderRecordingAnalyticsClient()
+        let manager = PushNotificationManager(userDefaults: defaults, analytics: analytics)
+        let userInfo: [AnyHashable: Any] = [
+            "recme": [
+                "event_id": "10000000-0000-4000-8000-000000000001",
+                "notification_type": "followed_you",
+                "deeplink_url": "recme://people/private-actor-id",
+                "data": ["actor_user_id": "private-actor-id"]
+            ]
+        ]
+
+        XCTAssertTrue(manager.handleNotificationResponse(userInfo: userInfo, userID: "local-user-a"))
+        XCTAssertFalse(manager.handleNotificationResponse(userInfo: userInfo, userID: "local-user-a"))
+        XCTAssertEqual(analytics.events.count, 1)
+        XCTAssertEqual(
+            analytics.events[0],
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.notificationOpened,
+                properties: [
+                    "notification_type": "followed_you",
+                    "delivery_channel": "remote",
+                    "route": "profile"
+                ]
+            )
+        )
+        XCTAssertFalse(analytics.events[0].properties.values.contains("private-actor-id"))
     }
 
     func testSaveStreakProductionReconciliationDoesNotCancelDebugReminder() {

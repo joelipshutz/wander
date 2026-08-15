@@ -297,6 +297,27 @@ npx supabase db push --linked
 npx supabase functions deploy clerk-profile-webhook --project-ref "$WANDER_SUPABASE_PROJECT_REF" --no-verify-jwt --use-api
 ```
 
+The push notification worker sends privacy-preserving delivery and frequency
+aggregates to the rec.me PostHog project. Its Supabase secrets must use the same
+rec.me-specific values referenced by `docs/analytics.md`; never substitute a
+generic or another app's token:
+
+```bash
+npx supabase secrets set \
+  WANDER_POSTHOG_PROJECT_TOKEN="$WANDER_POSTHOG_PROJECT_TOKEN" \
+  WANDER_POSTHOG_HOST="https://us.i.posthog.com" \
+  --project-ref "$WANDER_SUPABASE_PROJECT_REF"
+npx supabase functions deploy push-notification-worker \
+  --project-ref "$WANDER_SUPABASE_PROJECT_REF" \
+  --no-verify-jwt \
+  --use-api
+```
+
+The worker must never send notification recipients, device tokens, APNs/event
+IDs, notification copy, deep links, or payload data to PostHog. The database
+snapshot RPC computes user-level counts internally and returns only aggregate
+summary and fixed histogram buckets.
+
 Local Supabase requires Docker. Docker is not currently available in this environment, so the local stack commands are blocked until Docker/OrbStack/Colima is installed and running:
 
 ```bash

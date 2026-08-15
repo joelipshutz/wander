@@ -29,6 +29,8 @@ PostHog autocapture, automatic screen/lifecycle capture, session replay, surveys
 | Retention | Do activated users come back? | Exact D1, D7, D14, and D30 `app_session_started` return after `onboarding_completed`. |
 | Referrals | Are users inviting others? | Invite sheet open → delivery start → successful Messages/share-sheet handoff. |
 | Monetization | What is the revenue loop? | Intentionally blank until the product has a monetization decision and event contract. |
+| Notification Operations | Are remote notifications healthy? | APNs-accepted volume, terminal notification acceptance rate, final device-token disposition, and aggregate remote taps. APNs acceptance is not proof of display. |
+| Notification Operations | Are users being over- or under-notified? | Latest 30-day average, p50, p90, maximum, and histogram across notification-eligible recipients, including the zero-notification bucket. |
 
 App Store impressions and downloads do not originate in the app. Reconcile those in App Store Connect when acquisition spend begins. Generic TestFlight links do not support deferred sender/campaign attribution, so referral install, signup, and activation are not claimed by this dashboard. Add those stages only after attributed links exist.
 
@@ -79,7 +81,24 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `contact_invite_sheet_opened` | Invite sheet opens | `surface` |
 | `contact_invite_delivery_started` | Messages/share sheet begins | `surface`, `delivery_mode`, `recipient_count` |
 | `contact_invite_completed` | Invite handoff sends, cancels, or fails | `surface`, `delivery_mode`, `outcome`, `sent_count` |
+| `notification_opened` | A routable local or remote notification response is accepted once by the authenticated app session | allowlisted `notification_type`; `delivery_channel`; coarse `route` |
 | `engagement_action_performed` | Any mapped engagement behavior succeeds | `need`, `action`, `surface`, coarse action-specific counts/outcome |
+
+The push worker also emits three server-side operational events. They use
+`platform=server`, `source=push_notification_worker`, and a constant
+`distinct_id=notification_operations`; the server analytics path never exports
+a recipient identifier.
+
+| Server event | When it fires | Allowed properties |
+|---|---|---|
+| `notification_delivery_processed` | After the database safely settles one APNs worker pass | allowlisted `notification_type`; `delivery_outcome`; `is_terminal`; attempt number; aggregate accepted/retryable/permanent token counts; coarse `failure_category` |
+| `notification_frequency_snapshot` | After a batch with at least one claimed notification | 30-day eligible-recipient count, accepted count, average, p50, p90, and maximum |
+| `notification_frequency_bucket_snapshot` | Seven rows emitted with the frequency summary | allowlisted bucket (`0`, `1`, `2-3`, `4-7`, `8-14`, `15-29`, `30+`), bucket order, aggregate recipient count |
+
+“Eligible recipient” means a profile that currently has push enabled and at
+least one active device token. The zero bucket is therefore meaningful. The
+snapshot RPC performs the per-recipient calculation inside Supabase and returns
+only aggregates to the Edge Function/PostHog.
 
 Existing operational events for sync, discovery, permissions, extraction, visibility, and streak reminders remain valid. Never rename an event or property in place: add the replacement, dual-emit for one released build where feasible, update the dashboard, then remove the old event in a later schema version.
 
@@ -92,6 +111,11 @@ Analytics must never receive:
 - auth tokens, backend payloads, photos, or private error messages.
 
 Prefer enums, booleans, counts, lengths, coarse error categories, internal build metadata, and opaque authenticated user IDs. `WanderAnalyticsSchema.sanitized` drops known forbidden property keys and truncates values, but that is defense in depth—not permission to create a sensitive property under a different name.
+
+Notification operations are stricter: never export recipient IDs, event IDs,
+actor IDs, APNs IDs, device tokens, notification title/body, deep links, or
+notification `data` from the server. Keep per-recipient frequency computation
+inside Supabase and export only the aggregate summary and fixed histogram.
 
 ## Provision the dashboard
 
@@ -113,7 +137,7 @@ npm run analytics:apply
 
 Optional: set `WANDER_POSTHOG_API_HOST`; the management API defaults to `https://us.posthog.com`. The ingestion host in the iOS app remains `https://us.i.posthog.com`.
 
-The apply command upserts resources tagged `recme:managed` and `recme:iac:*`. Edit the script, not managed PostHog tiles. The checked-in definition includes six visibly ordered sections: Acquisition, Activation, Engagement, Retention, Referrals, and blank Monetization.
+The apply command upserts resources tagged `recme:managed` and `recme:iac:*`. Edit the script, not managed PostHog tiles. The checked-in definition includes seven visibly ordered sections: Acquisition, Activation, Engagement, Retention, Referrals, blank Monetization, and bottom-of-dashboard Notification Operations.
 
 ## Validation checklist
 
@@ -130,6 +154,13 @@ For every analytics change:
    `WANDER_POSTHOG_PROJECT_TOKEN` is non-empty without printing its value. A
    release worktree does not inherit the ignored `LocalAuth.xcconfig` from any
    other checkout.
+9. For notification changes, also run the push-worker Deno tests and
+   `supabase/tests/notifications.sql`. Confirm the hosted Edge Function has the
+   rec.me-specific `WANDER_POSTHOG_PROJECT_TOKEN` and
+   `WANDER_POSTHOG_HOST=https://us.i.posthog.com` secrets before deployment.
+10. Trigger one test notification, then verify `notification_delivery_processed`
+    and all seven frequency buckets arrive without recipient or content fields.
+    Tap it and verify exactly one remote `notification_opened` event.
 
 ## Future-agent change rules
 
@@ -139,3 +170,6 @@ For every analytics change:
 - Keep acquisition attribution allowlisted and sanitized. Never capture an incoming URL wholesale.
 - Do not fill Monetization speculatively.
 - If a feature removes or changes a dashboard event, update the code, tests, this document, and `posthog-product-dashboard.mjs` in the same PR.
+- When adding a notification type, update its iOS analytics allowlist and keep
+  the server worker payload aggregate-only. Never solve frequency distribution
+  by sending recipient IDs or per-recipient rows to PostHog.
