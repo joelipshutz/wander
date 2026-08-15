@@ -67,13 +67,19 @@ async function handleRequest(req: Request): Promise<Response> {
     return Response.json({ error: "method_not_allowed" }, { status: 405 });
   }
 
-  const signingSecret = Deno.env.get("CLERK_WEBHOOK_SIGNING_SECRET");
-  if (!signingSecret) {
+  const signingSecrets = [
+    Deno.env.get("CLERK_WEBHOOK_SIGNING_SECRET"),
+    Deno.env.get("CLERK_WEBHOOK_SIGNING_SECRET_SECONDARY"),
+  ].filter((secret): secret is string => Boolean(secret?.trim()));
+  if (signingSecrets.length === 0) {
     return Response.json({ error: "missing_signing_secret" }, { status: 500 });
   }
 
   const body = await req.text();
-  if (!(await verifySvixSignature(req.headers, body, signingSecret))) {
+  const signatureChecks = await Promise.all(
+    signingSecrets.map((secret) => verifySvixSignature(req.headers, body, secret)),
+  );
+  if (!signatureChecks.some(Boolean)) {
     return Response.json({ error: "invalid_signature" }, { status: 401 });
   }
 

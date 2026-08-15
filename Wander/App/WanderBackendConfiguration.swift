@@ -1,8 +1,8 @@
 import Foundation
 
 struct WanderBackendConfiguration: Equatable {
-    static let defaultClerkPublishableKey = "pk_test_Z3Jvd2luZy1waGVhc2FudC0yMi5jbGVyay5hY2NvdW50cy5kZXYk"
-    static let defaultClerkFrontendAPI = "growing-pheasant-22.clerk.accounts.dev"
+    static let defaultClerkPublishableKey = "pk_live_Y2xlcmsuZ2V0cmVjLm1lJA"
+    static let defaultClerkFrontendAPI = "clerk.getrec.me"
     static let defaultSupabaseURLString = "https://rugmtlgufrhlxwfkumhw.supabase.co"
     static let defaultSupabasePublishableKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1Z210bGd1ZnJobHh3Zmt1bWh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MjcxNjEsImV4cCI6MjA5NjAwMzE2MX0.O0HUcTUaAV1aq3UBusp1ggQNvIgS_e2NEVYtHW6hnwo"
 

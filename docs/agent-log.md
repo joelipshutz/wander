@@ -28992,3 +28992,68 @@ Checkpoint, 2026-08-14 17:36 PDT:
   instructions so Codex, Claude, OpenClaw, and future contributors do not ask
   Joe to cycle through unrelated accounts again. Clerk owner-dashboard login
   remains the next user action; no account or production-data change has run.
+
+Checkpoint, 2026-08-14 18:12 PDT:
+
+- Completed the lossless Clerk production import. All 6 development users were
+  imported into the production instance with password digests, verified primary
+  emails, and stable canonical-profile mappings preserved. A one-user canary
+  passed before the remaining five were imported. The final Clerk API audit
+  reports 6/6 password-enabled, 6/6 verified-primary-email, 6/6 email parity,
+  and 6/6 canonical identity parity. Development users remain untouched.
+- Created owner-only local and encrypted iCloud rollback bundles containing the
+  original Clerk password-hash export, exact migration source, pre/post public
+  user snapshots, migration logs, live non-public configuration, database dump,
+  and checksum manifests. The final encrypted archive was independently
+  decrypted, listed, and checksum-verified. No credential material was added to
+  git or this log.
+- Created a separate free Supabase organization named `rec.me`, but project
+  creation is blocked because Supabase's two-project Free limit follows the
+  owner across organizations. No paid plan was purchased and no database was
+  created. To avoid a risky or unnecessary migration, launch will keep the
+  existing `wander` project (`rugmtlgufrhlxwfkumhw`) in place; no existing row,
+  object, account, or identifier is being moved, deleted, reset, or rewritten.
+- Applied only migration `20260814090000_clerk_identity_continuity.sql` to the
+  linked hosted source and verified the local/remote migration ledger. Hosted
+  metadata checks passed for invoker security, pinned `search_path`, execute
+  grants, 15/15 existing identity mappings, and canonical-claim precedence.
+  The rolled-back hosted smoke suite and all 4 Clerk continuity tests passed.
+- Deployed `clerk-profile-webhook` version 11 to the hosted source and verified
+  it ACTIVE by read-back. Created the production Clerk webhook endpoint for
+  exactly `user.created`, `user.updated`, and `user.deleted`; its signing secret
+  was captured into owner-only local storage without printing or committing it.
+- Started a compatibility update so the hosted webhook can validate both the
+  existing development signing secret and the new production signing secret
+  during the cutover. This preserves current TestFlight webhook delivery while
+  the version 1.0 binary moves to Clerk production.
+- Mission Control at `localhost:4000` returned no task payload during this
+  checkpoint; Linear REC-180 and draft PR #411 remain the durable trackers.
+
+Checkpoint, 2026-08-14 18:24 PDT:
+
+- Added the production webhook signing secret as
+  `CLERK_WEBHOOK_SIGNING_SECRET_SECONDARY` while retaining the original
+  development secret. Deployed the dual-signature handler as hosted Edge
+  Function version 13 and verified both development and production signatures
+  return HTTP 200 through non-mutating ignored-event probes. No profile, place,
+  mapping, or account row was created, edited, or deleted by the probes.
+- Updated the tracked iOS release configuration from Clerk development to the
+  production publishable key, frontend API `clerk.getrec.me`, and matching
+  web-credentials associated domain. The Supabase project URL and publishable
+  key remain unchanged, so no database move is part of this release.
+- `origin/main` now contains TestFlight build 147 (`d215a900`) as marketing
+  version 0.1 and records its successful upload in `887123d2`. App Store version
+  1.0 therefore advances to build 148; build 147 cannot be reused under a
+  different marketing version.
+- A focused `BuildConfigurationTests` run compiled the production-configured app
+  and dependencies but did not reach tests because the volume ran out of space
+  while generating the app dSYM. This is not a test pass or code failure. Removed
+  only the disposable 1.4 GB `DerivedData-release-config` cache; source,
+  accounts, database content, archives, and backups were untouched. Exact tests
+  must run again after reconciling with current `main` and ensuring sufficient
+  build space.
+- Joe directed this foundation to land before the other active database/product
+  changes. Merging to `main` does not alter the already-installed TestFlight 147
+  binary. The follow-on branch must keep the existing hosted `wander` project,
+  avoid resets/replacements, and rebase onto the resulting `main` before its own
+  migration and release validation.

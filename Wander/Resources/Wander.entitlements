@@ -7,7 +7,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:getrec.me</string>
-		<string>webcredentials:growing-pheasant-22.clerk.accounts.dev</string>
+		<string>webcredentials:clerk.getrec.me</string>
 	</array>
 	<key>com.apple.developer.applesignin</key>
 	<array>
