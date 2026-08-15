@@ -267,7 +267,7 @@ struct AddScreen: View {
                 PlaceImportAdaptiveReviewScreen(
                     importStore: importStore,
                     batchIDs: importReviewBatchIDs,
-                    onViewMap: onClose
+                    onDone: onClose
                 )
                 .environmentObject(store)
                 .environmentObject(auth)

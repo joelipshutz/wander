@@ -987,6 +987,7 @@ enum SocialPlaceHintExtractor {
         ]
         for pattern in patterns {
             for value in captures(pattern: pattern, in: text) {
+                guard !isRelativeLocationDescription(value) else { continue }
                 append(parsedHint(from: value, evidence: .explicitLocation), to: &output)
             }
         }
@@ -1014,12 +1015,15 @@ enum SocialPlaceHintExtractor {
 
     private static func appendPhraseHints(from text: String, to output: inout [SocialPlaceSearchHint]) {
         for value in captures(pattern: itineraryPattern, in: text) {
-            let cleaned = trimPhrase(value)
-            guard !isAttributionPhrase(cleaned) else { continue }
-            let evidence: SocialPlaceSearchHint.Evidence = cleaned.hasPrefix("@")
-                ? .itineraryHandle
-                : .itineraryPhrase
-            append(parsedHint(from: cleaned, evidence: evidence), to: &output)
+            appendItineraryHint(value, to: &output)
+        }
+
+        for pattern in creatorNamedItineraryPatterns {
+            for value in captures(pattern: pattern, in: text) {
+                let cleaned = trimPhrase(value)
+                guard isCreatorNamedDestination(cleaned) else { continue }
+                appendItineraryHint(cleaned, to: &output)
+            }
         }
 
         for value in captures(pattern: acquisitionPattern, in: text) {
@@ -1053,13 +1057,15 @@ enum SocialPlaceHintExtractor {
             return
         }
 
-        for value in captures(pattern: itineraryPattern, in: text) {
-            let cleaned = trimPhrase(value)
-            guard !isAttributionPhrase(cleaned) else { continue }
-            guard let hint = parsedHint(from: cleaned, evidence: .imageText),
-                  isStrongMediaPlaceName(hint.name)
-            else { continue }
-            append(hint, to: &output)
+        for pattern in [itineraryPattern] + creatorNamedItineraryPatterns {
+            for value in captures(pattern: pattern, in: text) {
+                let cleaned = trimPhrase(value)
+                guard !isAttributionPhrase(cleaned) else { continue }
+                guard let hint = parsedHint(from: cleaned, evidence: .imageText),
+                      isStrongMediaPlaceName(hint.name)
+                else { continue }
+                append(hint, to: &output)
+            }
         }
 
         for query in adjacentNameLineQueries(from: text)
@@ -1069,6 +1075,18 @@ enum SocialPlaceHintExtractor {
             else { continue }
             append(hint, to: &output)
         }
+    }
+
+    private static func appendItineraryHint(
+        _ rawValue: String,
+        to output: inout [SocialPlaceSearchHint]
+    ) {
+        let cleaned = trimPhrase(rawValue)
+        guard !isAttributionPhrase(cleaned) else { return }
+        let evidence: SocialPlaceSearchHint.Evidence = cleaned.hasPrefix("@")
+            ? .itineraryHandle
+            : .itineraryPhrase
+        append(parsedHint(from: cleaned, evidence: evidence), to: &output)
     }
 
     private static func adjacentNameLineQueries(from text: String) -> [String] {
@@ -1235,6 +1253,21 @@ enum SocialPlaceHintExtractor {
         }
     }
 
+    private static func isRelativeLocationDescription(_ value: String) -> Bool {
+        let pattern = #"(?i)^\s*(?:just\s+)?\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)(?:\s+(?:drive|walk|ride|trip))?\s+(?:away\s+)?(?:from|to)\b"#
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return false }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        return expression.firstMatch(in: value, range: range) != nil
+    }
+
+    private static func isCreatorNamedDestination(_ value: String) -> Bool {
+        if value.hasPrefix("@") { return true }
+        let words = value.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        guard (1...8).contains(words.count) else { return false }
+        return words.allSatisfy { $0.first?.isUppercase == true }
+    }
+
     private static func postWideArea(from metadata: SocialImportMetadata) -> String? {
         // Post-wide geography must come from post-level author copy. A state that only
         // appears in one carousel slide cannot safely constrain every other slide.
@@ -1312,7 +1345,12 @@ enum SocialPlaceHintExtractor {
         "shop", "spot", "the", "tiktok", "to", "try", "viral", "visit"
     ]
 
-    private static let itineraryPattern = #"(?i)\b(?:called|at|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|[#\n.!?]|$)"#
+    private static let itineraryPattern = #"(?i)\b(?:called|at|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)\b)|[#\n.!?]|$)"#
+
+    private static let creatorNamedItineraryPatterns = [
+        #"(?i)\b(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?|before|after|for|where|which|with)\b|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)\b|make\s+sure\b)|[#\n.!?]|$)"#,
+        #"(?i)\bmake\s+sure\s+(@?[^#\n.!?]{3,90}?)\s+is\s+(?:on|part\s+of)\s+(?:your|the)\s+itinerary(?=[#\n.!?]|$)"#
+    ]
 
     private static let acquisitionPattern = #"(?i)\b(?:grab|grabbing|get|getting|order|ordering|buy|buying|pick(?:ed|ing)?\s+up|rent|renting|eat|eating|drink|drinking|try|trying)\b[^#\n.!?]{0,70}?\bfrom\s+(@?[^#\n.!?]{3,90}?)(?=[#\n.!?]|$)"#
 

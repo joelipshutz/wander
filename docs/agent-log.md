@@ -29535,3 +29535,28 @@ Starting state and coordination:
 - Expected files: social metadata/hint extraction, import completion UI, focused
   fixtures/tests, project files only if source membership changes, TestFlight
   release manifest/build metadata, and this log.
+
+Implementation and validation checkpoint (21:29 PDT):
+
+- Root cause: Instagram HTML entity decoding flattens caption newlines before
+  place-hint parsing, while the prior itinerary grammar only recognized a
+  narrower set of line-shaped phrases. The post therefore reduced to the weak
+  `Castle Crags` itinerary mention and missed `Cave Springs`, `Castle Crags
+  State Park`, and `Castle Dome`.
+- Added bounded, source-agnostic itinerary-action parsing for creator-named
+  destinations (`drive/head/go/hike/walk/travel/return ... to ...`) and kept the
+  result gated to handles or short title-cased names. Explicit distance-only
+  pins such as `Just 15 minutes from Cave Springs` are now rejected instead of
+  becoming a fake place. No place name or Instagram shortcode is hardcoded in
+  production code.
+- Changed the completed import review primary action from `View on map` to
+  `Done`; it now closes the flow through the existing add-screen callback.
+- Focused iPhone 16 Plus / iOS 18.6 validation passed: the exact Cave Springs
+  fixture recovers all three creator-named places (2 extraction tests, 0
+  failures), and the adaptive import completion/navigation contract passed (1
+  test, 0 failures). Earlier attempts were infrastructure-only failures from
+  concurrent Xcode jobs exhausting temporary disk space; no application test
+  failed. The branch still requires rebase and post-rebase full validation
+  before landing.
+- Joe's latest instruction is merge-only. Do not bump a build number, upload to
+  TestFlight, attach a build, or post Slack release notes in this operation.

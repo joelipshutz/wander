@@ -3711,7 +3711,7 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
 
         If you&#x2019;re planning a stay with us, make sure Castle Crags is on your itinerary.
 
-        Just 15 minutes from Cave Springs.&quot;.">
+        📍 Just 15 minutes from Cave Springs.&quot;.">
         </head></html>
         """
         let metadata = try XCTUnwrap(PublicSocialHTMLMetadataParser.metadata(from: html))
@@ -3725,6 +3725,27 @@ final class SocialPlaceImportMetadataTests: XCTestCase {
             Set(["Cave Springs", "Castle Crags State Park", "Castle Dome"])
         )
         XCTAssertTrue(hints.allSatisfy { $0.evidence == .itineraryPhrase })
+    }
+
+    func testItineraryActionsRejectGenericDestinationsAndRelativeMapPins() {
+        let metadata = SocialImportMetadata(
+            title: nil,
+            caption: """
+            Hike to feel better.
+            Drive to the coast.
+            Head to Castle Dome.
+            📍 Just 15 minutes from Cave Springs.
+            """,
+            authorName: nil,
+            thumbnailURL: nil
+        )
+
+        let hints = SocialImportEvidencePlanner.reviewHints(
+            SocialPlaceHintExtractor.hints(from: metadata, recognizedTexts: [])
+        )
+
+        XCTAssertEqual(hints.map(\.name), ["Castle Dome"])
+        XCTAssertEqual(hints.first?.evidence, .itineraryPhrase)
     }
 
     func testCandidateMatcherTreatsRestaurantSuffixAsTheSamePlaceName() {

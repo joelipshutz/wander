@@ -265,7 +265,7 @@ struct PlaceImportHubScreen: View {
 struct PlaceImportAdaptiveReviewScreen: View {
     @ObservedObject var importStore: PlaceImportStore
     let batchIDs: [String]
-    let onViewMap: () -> Void
+    let onDone: () -> Void
 
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -777,9 +777,9 @@ struct PlaceImportAdaptiveReviewScreen: View {
             )
 
             WanderPrimaryButton(
-                title: "View on map",
-                systemImage: "map.fill",
-                action: onViewMap
+                title: "Done",
+                systemImage: "checkmark",
+                action: onDone
             )
         }
     }
@@ -3276,7 +3276,7 @@ struct PlaceImportAdaptiveMockupRoot: View {
             PlaceImportAdaptiveReviewScreen(
                 importStore: importStore,
                 batchIDs: [Self.batchID],
-                onViewMap: {}
+                onDone: {}
             )
         }
         .environmentObject(store)
