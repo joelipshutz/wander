@@ -358,6 +358,44 @@ final class PushNotificationManager: ObservableObject {
         }
     }
 
+    static func shouldRefreshRemoteRegistration(
+        isSignedIn: Bool,
+        backendCanRegister: Bool,
+        pushEnabled: Bool,
+        authorizationStatus: UNAuthorizationStatus
+    ) -> Bool {
+        let authorizationAllowsRegistration: Bool
+        switch authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            authorizationAllowsRegistration = true
+        case .denied, .notDetermined:
+            authorizationAllowsRegistration = false
+        @unknown default:
+            authorizationAllowsRegistration = false
+        }
+
+        return isSignedIn
+            && backendCanRegister
+            && pushEnabled
+            && authorizationAllowsRegistration
+    }
+
+    func refreshRemoteRegistrationIfNeeded(
+        backend: WanderBackend,
+        authState: AuthState
+    ) async {
+        await refreshAuthorizationStatus()
+        guard Self.shouldRefreshRemoteRegistration(
+            isSignedIn: authState.isSignedIn,
+            backendCanRegister: backend.canRegisterPushNotifications,
+            pushEnabled: pushEnabled,
+            authorizationStatus: authorizationStatus
+        ) else { return }
+
+        UIApplication.shared.registerForRemoteNotifications()
+        await registerStoredDeviceTokenIfPossible(backend: backend, authState: authState)
+    }
+
     func refreshAuthorizationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authorizationStatus = settings.authorizationStatus

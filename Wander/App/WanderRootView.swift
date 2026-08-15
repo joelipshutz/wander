@@ -1828,15 +1828,41 @@ struct WanderRootView: View {
                 WanderDebugLog.sync.debug("signed-in maintenance started user=\(WanderDebugLog.shortID(session.userID), privacy: .public) remote=\(backend.canUseRemoteData, privacy: .public)")
             }
             #endif
-            let didHydrateCurrentProfile = await store.refreshRemoteCurrentProfile(backend: backend)
-            guard didHydrateCurrentProfile,
-                  shouldContinueSignedInMaintenance(runID: runID, state: state)
-            else {
+            if backend.notificationRepository != nil,
+               let preferences = try? await backend.notificationPreferences() {
+                guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                    finishSignedInMaintenance(runID: runID)
+                    return
+                }
+                pushNotifications.applyNotificationPreferences(preferences)
+            }
+            await pushNotifications.refreshRemoteRegistrationIfNeeded(
+                backend: backend,
+                authState: state
+            )
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
             let syncedCount = await store.syncUnsyncedOwnPlaces(backend: backend)
             guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let uploadedPhotoCount = await store.retryPendingVisitPhotoUploads(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let sentInviteCount = await store.retryPendingSharedVisitInvites(backend: backend)
+            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
+                finishSignedInMaintenance(runID: runID)
+                return
+            }
+            let didHydrateCurrentProfile = await store.refreshRemoteCurrentProfile(backend: backend)
+            guard didHydrateCurrentProfile,
+                  shouldContinueSignedInMaintenance(runID: runID, state: state)
+            else {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
@@ -1853,27 +1879,12 @@ struct WanderRootView: View {
                     return
                 }
             }
-            await pushNotifications.registerStoredDeviceTokenIfPossible(backend: backend, authState: state)
-            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
-                finishSignedInMaintenance(runID: runID)
-                return
-            }
             let syncedListCount = await store.syncPendingPlaceLists(backend: backend)
             guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
                 finishSignedInMaintenance(runID: runID)
                 return
             }
             await store.refreshRemotePlaceLists(backend: backend)
-            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
-                finishSignedInMaintenance(runID: runID)
-                return
-            }
-            let uploadedPhotoCount = await store.retryPendingVisitPhotoUploads(backend: backend)
-            guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
-                finishSignedInMaintenance(runID: runID)
-                return
-            }
-            let sentInviteCount = await store.retryPendingSharedVisitInvites(backend: backend)
             guard shouldContinueSignedInMaintenance(runID: runID, state: state) else {
                 finishSignedInMaintenance(runID: runID)
                 return

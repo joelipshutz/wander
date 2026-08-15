@@ -6,9 +6,9 @@ REC-60 establishes the first rec.me push notification pipeline. The immediate co
 
 1. A signed-in iOS device registers with `public.register_push_token`.
 2. Product-side Supabase triggers or service-role jobs call `app.queue_notification_event`.
-3. `app.queue_notification_event` checks the recipient profile, self-actions, blocks, active device tokens, preference buckets, and pending dedupe keys.
-4. `push-notification-worker` claims events with `public.claim_pending_push_notifications`, sends APNs payloads, and calls `public.mark_push_notification_result`.
-5. Retryable worker failures return events to `pending` with backoff. Expired claims are reclaimable, and exhausted claims fail.
+3. `app.queue_notification_event` checks the recipient profile, self-actions, blocks, preference buckets, and pending dedupe keys. A consented event can wait up to 24 hours for an active token instead of being discarded during a transient registration gap.
+4. `push-notification-worker` claims events with `public.claim_pending_push_notifications`, sends APNs payloads, and settles every device independently with `public.record_push_notification_delivery_results`.
+5. Retryable device failures return only unfinished tokens to `pending` with backoff. Expired claims are reclaimable, stale claim results are ignored, and exhausted events fail.
 6. Supabase Cron invokes the worker once per minute. The cron command reads `recme_project_url` and `recme_push_worker_secret` from Supabase Vault, so no runtime secret is committed to Git.
 
 ## Hosted Runtime Configuration
@@ -29,6 +29,7 @@ Before relying on a new notification in TestFlight:
 
 - Run the SQL notification tests or hosted rollback harness for `supabase/tests/notifications.sql`.
 - Run `deno check` for `supabase/functions/push-notification-worker/index.ts`.
+- Run `deno test supabase/functions/push-notification-worker/index.test.ts`.
 - Run an iOS build after `xcodegen generate`.
 - On a physical iPhone, sign in, open Profile -> Settings -> Notifications, allow notifications, and verify an active `notification_device_tokens` row for the account and APNs environment.
 - Trigger one real event, invoke `push-notification-worker`, and confirm the event reaches `sent`.
@@ -45,6 +46,8 @@ The producer sends only to followers who can read the associated `user_places` r
 Notification setup is one action in Profile -> Settings -> Notifications. Before setup, every category is shown off and disabled. **Allow notifications** requests iOS permission, enables every category, requests an APNs token, and registers any available stored token. **Disable notifications** turns off every backend category before deactivating the device token; iOS permission may remain granted because apps cannot revoke system permission themselves.
 
 New backend preference rows default every category to off. Existing rows keep their explicit values during schema upgrades. A stored APNs token may be reassigned invisibly to the currently signed-in account to prevent cross-account delivery, but no product event can queue until that account completes **Allow notifications** and enables its categories.
+
+On signed-in launch and foreground maintenance, the app asks APNs for the current environment's token again and upserts it only when both the backend account preference and iOS authorization still allow notifications. Token repair and the durable Shared Visit sender outbox run before profile hydration, so an unrelated profile refresh failure cannot suppress either recovery path. A pending Shared Visit outbox is shown on Map with a manual retry action until the server accepts the reconciliation.
 
 Notification taps resolve as follows:
 
@@ -66,11 +69,13 @@ The app parses `recme.deeplink_url` first and falls back to `notification_type` 
 
 `shared_visit` is queued when the owner of a persisted, non-stealth Been visit invites a mutual friend. It is controlled by the **Shared visits** setting, which is enabled with the rest of the categories during explicit notification enrollment. The title is `Shared visit`; the body is `<display name> saved <place> with you. Add your version of the visit.` The payload contains only participant, invitation-generation, group, source-visit, place, and actor IDs.
 
-The deep link is generation-aware. A pending invitation opens a prefilled Save This Place flow; an accepted invitation resolves to the recipient-owned visit; stale, declined, cancelled, or otherwise terminal generations do not expose their old snapshot. Generic `followed_place_visit` delivery waits two minutes so a more specific Shared Visit event can supersede it without sending two notifications for one save.
+The deep link is generation-aware. A pending invitation opens a prefilled Save This Place flow; an accepted invitation resolves to the recipient-owned visit; stale, declined, cancelled, or otherwise terminal generations do not expose their old snapshot. Generic `followed_place_visit` delivery waits 30 seconds so a more specific Shared Visit event can supersede it without making the fallback wait multiple worker cycles.
 
 Notification responses are synchronously buffered before the app delegate completion handler returns, drained after auth restoration, and deduplicated by event id. Shared Visit routing distinguishes a terminal missing invitation from a retryable auth/network failure, so a cold-launch tap remains pending and retries when the app becomes active instead of being silently consumed.
 
 Invitation delivery and acceptance are separate guarantees. The sender keeps an account-scoped local outbox until the source visit and all selected source photos are remotely available. The recipient's acceptance uses deterministic client IDs plus a server operation ledger, so foreground retries cannot create duplicate saves or visits.
+
+The local outbox survives app relaunch and retries immediately after the save under a short iOS background task, then again on signed-in launch/foreground. Force-quitting before the first server acknowledgement can still postpone the invitation until the sender next opens rec.me; the Map banner makes that state explicit rather than presenting the local save as fully delivered.
 
 ## Adding A Notification
 
@@ -81,7 +86,7 @@ Use this checklist for each new producer:
 3. Map the type in `app.notification_type_enabled`.
 4. Add one producer function or service-role job that builds title, body, deeplink, safe `data`, and a stable `dedupe_key`.
 5. Keep private notes, raw coordinates, auth data, email addresses, and raw private payloads out of `data`.
-6. Make self-actions, blocks, missing recipients, missing active tokens, and disabled preferences no-op before queueing.
+6. Make self-actions, blocks, missing recipients, and disabled preferences no-op before queueing. Missing active tokens remain pending only for the bounded 24-hour repair window.
 7. Add pgTAP coverage for the positive path and at least one no-push path.
 8. If the notification needs UI controls, add or reuse a Settings preference bucket.
 
@@ -90,6 +95,9 @@ Use this checklist for each new producer:
 - Default claim lease: 10 minutes.
 - Default max attempts: 5.
 - Retry backoff: 5 minutes per attempt, capped at 1 hour.
-- Automatic delivery cadence: once per minute, up to 100 claimed events per run.
+- Automatic delivery cadence: once per minute, up to 20 claimed events per run, processed concurrently with a five-second APNs timeout per device.
 - The worker response includes `claimed_count`, a `summary`, and per-event processing results.
-- Permanent APNs token failures deactivate tokens. Retryable APNs/transport failures are rescheduled until `max_attempts`.
+- `accepted_at` means APNs accepted the request; it does not prove the device displayed it. The worker stores Apple's `apns-id` for correlation.
+- Permanent token failures (`BadDeviceToken`, `DeviceTokenNotForTopic`, `ExpiredToken`, or `Unregistered`) deactivate only that token. Payload/topic/provider errors fail the event without deactivating the device. Retryable APNs/transport failures are rescheduled until `max_attempts`.
+- Every APNs request uses the notification event id as `apns-collapse-id`. This reduces duplicate presentation if APNs accepts a request but the worker crashes before database settlement; the transport remains at-least-once rather than claiming impossible end-to-end exactly-once delivery.
+- Deploy the database migration before the updated worker so the new claim token and per-device settlement RPC exist when the worker starts using them.

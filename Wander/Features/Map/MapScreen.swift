@@ -3,6 +3,17 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+enum SharedVisitOutboxNotice {
+    static func message(
+        pendingInvites: [PendingSharedVisitInvite],
+        ownerUserID: String
+    ) -> String? {
+        pendingInvites.contains(where: { $0.ownerUserID == ownerUserID })
+            ? "Friend updates are still sending. rec.me will keep retrying."
+            : nil
+    }
+}
+
 struct MapSaveFlowSelectionCoordinator {
     private var pendingResult: SaveResult?
 
@@ -450,6 +461,18 @@ struct MapScreen: View {
                         } else if let mapSearchMessage {
                             MapSearchMessage(text: mapSearchMessage)
                                 .padding(.horizontal, WanderTheme.spacing3)
+                        }
+                        if let pendingSharedVisitMessage = SharedVisitOutboxNotice.message(
+                            pendingInvites: store.pendingSharedVisitInvites,
+                            ownerUserID: store.currentUser.id
+                        ) {
+                            MapSearchMessage(
+                                text: pendingSharedVisitMessage,
+                                actionTitle: "Retry"
+                            ) {
+                                Task { await retryPendingSharedVisitOperations() }
+                            }
+                            .padding(.horizontal, WanderTheme.spacing3)
                         }
                         if !isMapSearchFocused {
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -1905,13 +1928,7 @@ struct MapScreen: View {
     ) async {
         guard !inviteeUserIDs.isEmpty, auth.isSignedIn, let sourceVisit else { return }
         store.queueSharedVisitInvites(sourceVisitID: sourceVisit.id, inviteeUserIDs: inviteeUserIDs)
-        _ = await store.retryPendingVisitPhotoUploads(backend: backend)
-        _ = await store.retryPendingSharedVisitInvites(backend: backend)
-        if store.pendingSharedVisitInvites.contains(where: {
-            $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
-        }) {
-            mapSearchMessage = "Checked in. Friend invites are queued and will retry automatically."
-        }
+        await retryPendingSharedVisitOperations()
     }
 
     private func reconcileSharedVisitInvitees(
@@ -1923,12 +1940,23 @@ struct MapScreen: View {
             sourceVisitID: sourceVisit.id,
             inviteeUserIDs: submission.inviteeUserIDs
         )
-        _ = await store.retryPendingSharedVisitInvites(backend: backend)
-        if store.pendingSharedVisitInvites.contains(where: {
-            $0.ownerUserID == store.currentUser.id && $0.sourceVisitID == sourceVisit.id
-        }) {
-            mapSearchMessage = "Check-in updated. Friend changes are queued and will retry automatically."
+        await retryPendingSharedVisitOperations()
+    }
+
+    @MainActor
+    private func retryPendingSharedVisitOperations() async {
+        let backgroundTaskID = UIApplication.shared.beginBackgroundTask(
+            withName: "rec.me shared visit delivery",
+            expirationHandler: nil
+        )
+        defer {
+            if backgroundTaskID != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTaskID)
+            }
         }
+
+        _ = await store.retryPendingVisitPhotoUploads(backend: backend)
+        _ = await store.retryPendingSharedVisitInvites(backend: backend)
     }
 
     private func acceptSharedVisit(
@@ -3267,18 +3295,39 @@ private struct MapTypeaheadRow: View {
 
 private struct MapSearchMessage: View {
     let text: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    init(
+        text: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.text = text
+        self.actionTitle = actionTitle
+        self.action = action
+    }
 
     var body: some View {
-        Text(text)
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(WanderTheme.textInk.color)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, WanderTheme.spacing3)
-            .padding(.vertical, WanderTheme.spacing2)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        HStack(spacing: WanderTheme.spacing2) {
+            Text(text)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(WanderTheme.pinSocial.color)
+                    .frame(minHeight: 44)
+            }
+        }
+        .padding(.leading, WanderTheme.spacing3)
+        .padding(.trailing, action == nil ? WanderTheme.spacing3 : WanderTheme.spacing2)
+        .padding(.vertical, action == nil ? WanderTheme.spacing2 : 0)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
     }
 }
 

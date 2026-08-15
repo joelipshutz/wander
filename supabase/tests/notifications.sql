@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(45);
+select plan(74);
 
 select is(
   (
@@ -172,13 +172,20 @@ select is(
   'disabled social graph preference suppresses follow push events'
 );
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_no_token_recipient', true);
+select public.update_notification_preferences(
+  '{"push_enabled":true,"social_graph_enabled":true}'::jsonb
+);
+reset role;
+
 insert into public.follows(follower_user_id, followed_user_id, source)
 values ('user_no_token_actor', 'user_no_token_recipient', 'profile');
 
 select is(
   (select count(*)::int from public.notification_events where recipient_user_id = 'user_no_token_recipient'),
-  0,
-  'users without active device tokens do not receive queued push events'
+  1,
+  'consented events wait for a device token instead of being discarded'
 );
 
 select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
@@ -250,26 +257,9 @@ values (
 );
 
 select is(
-  (select notification_type from public.notification_events where recipient_user_id = 'user_activity_follower' limit 1),
-  'followed_place_visit',
-  'a followed user saving a visited place queues an activity push'
-);
-
-select results_eq(
-  $$ select title, body from public.notification_events where recipient_user_id = 'user_activity_follower' limit 1 $$,
-  $$ values ('Activity Actor saved a place'::text, 'Bar Nido'::text) $$,
-  'followed-place push uses the actor and place copy'
-);
-
-select ok(
-  (
-    select data ?& array['visit_id', 'user_place_id', 'place_id', 'actor_user_id']
-      and not (data ?| array['note', 'rating_score', 'latitude', 'longitude'])
-    from public.notification_events
-    where recipient_user_id = 'user_activity_follower'
-    limit 1
-  ),
-  'followed-place payload includes routing ids and excludes private visit data'
+  (select count(*)::int from public.notification_events where recipient_user_id = 'user_activity_follower'),
+  0,
+  'the historical visit backfilled from a saved place does not generate a check-in push'
 );
 
 delete from public.notification_events;
@@ -284,9 +274,36 @@ values (
 );
 
 select is(
-  (select count(*)::int from public.notification_events where recipient_user_id = 'user_activity_follower'),
-  1,
-  'a later explicit check-in queues one new activity push'
+  (select notification_type from public.notification_events where recipient_user_id = 'user_activity_follower' limit 1),
+  'followed_place_visit',
+  'an explicit check-in queues an activity push'
+);
+
+select results_eq(
+  $$ select title, body from public.notification_events where recipient_user_id = 'user_activity_follower' limit 1 $$,
+  $$ values ('Activity Actor checked in'::text, 'Bar Nido'::text) $$,
+  'followed-place push uses current check-in copy'
+);
+
+select ok(
+  (
+    select data ?& array['visit_id', 'user_place_id', 'place_id', 'actor_user_id']
+      and not (data ?| array['note', 'rating_score', 'latitude', 'longitude'])
+    from public.notification_events
+    where recipient_user_id = 'user_activity_follower'
+    limit 1
+  ),
+  'followed-place payload includes routing ids and excludes private visit data'
+);
+
+select ok(
+  (
+    select not_before > now() and not_before <= now() + interval '35 seconds'
+    from public.notification_events
+    where recipient_user_id = 'user_activity_follower'
+    limit 1
+  ),
+  'generic check-in delivery uses only a 30-second Shared Visit supersession window'
 );
 
 delete from public.notification_events;
@@ -710,6 +727,411 @@ select is(
   'sent',
   'service worker can mark a claimed push event sent'
 );
+
+delete from public.notification_events;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
+select public.unregister_push_token(
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'sandbox'
+);
+
+select results_eq(
+  $$
+    select is_active, deactivation_reason
+    from public.notification_device_tokens
+    where user_id = 'user_notify_recipient' and environment = 'sandbox'
+  $$,
+  $$ values (false, 'client_unregistered'::text) $$,
+  'client unregister records why the token became inactive'
+);
+
+select public.register_push_token(
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'sandbox',
+  'com.grayline.wander'
+);
+
+select results_eq(
+  $$
+    select is_active, deactivation_reason, deactivated_at is null
+    from public.notification_device_tokens
+    where user_id = 'user_notify_recipient' and environment = 'sandbox'
+  $$,
+  $$ values (true, null::text, true) $$,
+  'registering again reactivates the token and clears deactivation metadata'
+);
+
+select public.register_push_token(
+  '9999999999999999999999999999999999999999999999999999999999999999',
+  'production',
+  'com.grayline.wander'
+);
+reset role;
+
+insert into public.notification_events(
+  recipient_user_id, actor_user_id, notification_type, title, body,
+  deeplink_url, data, dedupe_key, not_before
+) values (
+  'user_notify_recipient', 'user_notify_actor_enabled', 'followed_you',
+  'Actor Enabled followed you', 'Actor Enabled started following you.',
+  'recme://people/followers', '{}'::jsonb, 'delivery-reliability-mixed', now()
+);
+
+create temporary table notification_claim_snapshots (
+  label text primary key,
+  payload jsonb not null
+);
+grant select, insert on notification_claim_snapshots to service_role;
+
+set local role service_role;
+insert into notification_claim_snapshots(label, payload)
+values ('first', public.claim_pending_push_notifications(10));
+
+select is(
+  jsonb_array_length((select payload from notification_claim_snapshots where label = 'first')),
+  1,
+  'the first per-token delivery event is claimed once'
+);
+
+select ok(
+  coalesce((select payload->0->>'claim_token' <> '' from notification_claim_snapshots where label = 'first'), false),
+  'claims include an attempt identity token'
+);
+
+select is(
+  jsonb_array_length((select payload->0->'tokens' from notification_claim_snapshots where label = 'first')),
+  2,
+  'the claim includes both sandbox and production tokens'
+);
+
+select is(
+  public.record_push_notification_delivery_results(
+    ((select payload->0->>'event_id' from notification_claim_snapshots where label = 'first'))::uuid,
+    ((select payload->0->>'claim_token' from notification_claim_snapshots where label = 'first'))::uuid,
+    jsonb_build_array(
+      jsonb_build_object(
+        'token_id', (
+          select id from public.notification_device_tokens
+          where user_id = 'user_notify_recipient' and environment = 'sandbox' and is_active
+        ),
+        'status', 'accepted',
+        'http_status', 200,
+        'apns_id', '40000000-0000-4000-8000-000000000001'
+      ),
+      jsonb_build_object(
+        'token_id', (
+          select id from public.notification_device_tokens
+          where user_id = 'user_notify_recipient' and environment = 'production' and is_active
+        ),
+        'status', 'retryable_failure',
+        'http_status', 503,
+        'apns_reason', 'ServiceUnavailable',
+        'error_message', '503:ServiceUnavailable',
+        'apns_id', '40000000-0000-4000-8000-000000000002'
+      )
+    )
+  )->>'status',
+  'pending',
+  'one accepted token does not hide another token retry'
+);
+
+select results_eq(
+  $$
+    select status, accepted_at is not null
+    from public.notification_events
+    where dedupe_key = 'delivery-reliability-mixed'
+  $$,
+  $$ values ('pending'::text, true) $$,
+  'mixed delivery remains pending while recording APNs acceptance'
+);
+
+select results_eq(
+  $$
+    select environment, delivery.status
+    from public.notification_push_deliveries delivery
+    join public.notification_device_tokens token on token.id = delivery.token_id
+    where delivery.event_id = (
+      select id from public.notification_events where dedupe_key = 'delivery-reliability-mixed'
+    )
+    order by environment
+  $$,
+  $$ values
+    ('production'::text, 'retryable_failure'::text),
+    ('sandbox'::text, 'accepted'::text)
+  $$,
+  'delivery state is stored independently for each APNs environment'
+);
+
+update public.notification_events
+set not_before = now()
+where dedupe_key = 'delivery-reliability-mixed';
+
+insert into notification_claim_snapshots(label, payload)
+values ('second', public.claim_pending_push_notifications(10));
+
+select is(
+  jsonb_array_length((select payload->0->'tokens' from notification_claim_snapshots where label = 'second')),
+  1,
+  'a retry claim excludes the token Apple already accepted'
+);
+
+select isnt(
+  (select payload->0->>'claim_token' from notification_claim_snapshots where label = 'second'),
+  (select payload->0->>'claim_token' from notification_claim_snapshots where label = 'first'),
+  'a reclaimed event receives a new claim token'
+);
+
+select is(
+  public.record_push_notification_delivery_results(
+    ((select payload->0->>'event_id' from notification_claim_snapshots where label = 'first'))::uuid,
+    ((select payload->0->>'claim_token' from notification_claim_snapshots where label = 'first'))::uuid,
+    '[]'::jsonb
+  )->>'status',
+  'stale_claim',
+  'a stale worker cannot settle a newer attempt'
+);
+
+select is(
+  (
+    select attempt_count
+    from public.notification_push_deliveries delivery
+    join public.notification_device_tokens token on token.id = delivery.token_id
+    where delivery.event_id = (
+      select id from public.notification_events where dedupe_key = 'delivery-reliability-mixed'
+    ) and token.environment = 'sandbox'
+  ),
+  1,
+  'a stale result does not mutate stored delivery attempts'
+);
+
+select is(
+  public.record_push_notification_delivery_results(
+    ((select payload->0->>'event_id' from notification_claim_snapshots where label = 'second'))::uuid,
+    ((select payload->0->>'claim_token' from notification_claim_snapshots where label = 'second'))::uuid,
+    jsonb_build_array(jsonb_build_object(
+      'token_id', (
+        select id from public.notification_device_tokens
+        where user_id = 'user_notify_recipient' and environment = 'production' and is_active
+      ),
+      'status', 'permanent_token_failure',
+      'http_status', 410,
+      'apns_reason', 'Unregistered',
+      'error_message', '410:Unregistered',
+      'apns_id', '40000000-0000-4000-8000-000000000003'
+    ))
+  )->>'status',
+  'sent',
+  'an accepted token plus a permanently invalid token settles the event sent'
+);
+
+select results_eq(
+  $$
+    select is_active, deactivation_reason
+    from public.notification_device_tokens
+    where user_id = 'user_notify_recipient' and environment = 'production'
+  $$,
+  $$ values (false, 'Unregistered'::text) $$,
+  'only the permanently rejected production token is deactivated with its APNs reason'
+);
+
+select is(
+  (select status from public.notification_events where dedupe_key = 'delivery-reliability-mixed'),
+  'sent',
+  'the mixed-environment event reaches its terminal sent state'
+);
+
+insert into public.notification_events(
+  recipient_user_id, actor_user_id, notification_type, title, body,
+  deeplink_url, data, dedupe_key, not_before
+) values (
+  'user_notify_recipient', 'user_notify_actor_enabled', 'followed_you',
+  'Actor Enabled followed you', 'Actor Enabled started following you.',
+  'recme://people/followers', '{}'::jsonb, 'delivery-reliability-bad-event', now()
+);
+insert into notification_claim_snapshots(label, payload)
+values ('bad-event', public.claim_pending_push_notifications(10));
+
+select is(
+  public.record_push_notification_delivery_results(
+    ((select payload->0->>'event_id' from notification_claim_snapshots where label = 'bad-event'))::uuid,
+    ((select payload->0->>'claim_token' from notification_claim_snapshots where label = 'bad-event'))::uuid,
+    jsonb_build_array(jsonb_build_object(
+      'token_id', (
+        select id from public.notification_device_tokens
+        where user_id = 'user_notify_recipient' and environment = 'sandbox' and is_active
+      ),
+      'status', 'permanent_event_failure',
+      'http_status', 400,
+      'apns_reason', 'PayloadTooLarge',
+      'error_message', '400:PayloadTooLarge'
+    ))
+  )->>'status',
+  'failed',
+  'a permanent payload error fails the event instead of blaming the token'
+);
+
+select ok(
+  (select is_active from public.notification_device_tokens
+   where user_id = 'user_notify_recipient' and environment = 'sandbox'),
+  'a permanent event error does not deactivate a healthy device token'
+);
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
+select public.unregister_push_token(
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'sandbox'
+);
+reset role;
+
+insert into public.notification_events(
+  recipient_user_id, actor_user_id, notification_type, title, body,
+  deeplink_url, data, dedupe_key, not_before
+) values (
+  'user_notify_recipient', 'user_notify_actor_enabled', 'followed_you',
+  'Actor Enabled followed you', 'Actor Enabled started following you.',
+  'recme://people/followers', '{}'::jsonb, 'delivery-reliability-await-token', now()
+);
+
+select is(
+  (select count(*)::int from public.notification_events
+   where dedupe_key = 'delivery-reliability-await-token'),
+  1,
+  'a consented event is retained when the account temporarily has no active token'
+);
+
+set local role service_role;
+select is(
+  jsonb_array_length(public.claim_pending_push_notifications(10)),
+  0,
+  'an event waiting for token repair is not claimed prematurely'
+);
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
+select public.register_push_token(
+  '8888888888888888888888888888888888888888888888888888888888888888',
+  'production',
+  'com.grayline.wander'
+);
+reset role;
+
+set local role service_role;
+select is(
+  jsonb_array_length(public.claim_pending_push_notifications(10)),
+  1,
+  'registering a replacement token makes the retained event deliverable'
+);
+
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_notify_recipient', true);
+select public.register_push_token(
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  'sandbox',
+  'com.grayline.wander'
+);
+reset role;
+
+insert into public.notification_events(
+  recipient_user_id, actor_user_id, notification_type, title, body,
+  deeplink_url, data, dedupe_key, not_before, max_attempts
+) values (
+  'user_notify_recipient', 'user_notify_actor_enabled', 'followed_you',
+  'Actor Enabled followed you', 'Actor Enabled started following you.',
+  'recme://people/followers', '{}'::jsonb, 'delivery-reliability-exhausted-partial',
+  now(), 1
+);
+
+set local role service_role;
+insert into notification_claim_snapshots(label, payload)
+values ('exhausted-partial', public.claim_pending_push_notifications(10));
+
+select is(
+  public.record_push_notification_delivery_results(
+    ((select payload->0->>'event_id' from notification_claim_snapshots where label = 'exhausted-partial'))::uuid,
+    ((select payload->0->>'claim_token' from notification_claim_snapshots where label = 'exhausted-partial'))::uuid,
+    jsonb_build_array(
+      jsonb_build_object(
+        'token_id', (
+          select id from public.notification_device_tokens
+          where user_id = 'user_notify_recipient' and environment = 'sandbox' and is_active
+        ),
+        'status', 'accepted',
+        'http_status', 200
+      ),
+      jsonb_build_object(
+        'token_id', (
+          select id from public.notification_device_tokens
+          where user_id = 'user_notify_recipient' and environment = 'production' and is_active
+        ),
+        'status', 'retryable_failure',
+        'http_status', 503,
+        'apns_reason', 'ServiceUnavailable'
+      )
+    )
+  )->>'status',
+  'failed',
+  'an exhausted retry remains failed when one active token never accepted delivery'
+);
+
+select is(
+  (select status from public.notification_events
+   where dedupe_key = 'delivery-reliability-exhausted-partial'),
+  'failed',
+  'a success on one token cannot mask an exhausted active-token failure'
+);
+
+select ok(
+  (select relrowsecurity from pg_class where oid = 'public.notification_push_deliveries'::regclass),
+  'per-token delivery state has RLS enabled'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.notification_push_deliveries', 'select'),
+  'authenticated clients cannot read delivery diagnostics directly'
+);
+
+select ok(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.record_push_notification_delivery_results(uuid,uuid,jsonb)'::regprocedure
+  ),
+  'delivery settlement is security definer'
+);
+
+select ok(
+  (
+    select proconfig @> array['search_path=app, public']
+    from pg_proc
+    where oid = 'public.record_push_notification_delivery_results(uuid,uuid,jsonb)'::regprocedure
+  ),
+  'delivery settlement pins its search path'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.record_push_notification_delivery_results(uuid,uuid,jsonb)',
+    'execute'
+  ),
+  'authenticated clients cannot settle push deliveries'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.record_push_notification_delivery_results(uuid,uuid,jsonb)',
+    'execute'
+  ),
+  'only the service worker can call delivery settlement'
+);
+reset role;
 
 do $pgtap_finish$
 declare
