@@ -29991,3 +29991,39 @@ Rebased validation — 2026-08-15 15:33 PDT:
 - `git diff --check` passes. This remains merge-only implementation work: no
   build bump, archive, upload, TestFlight attachment, or tester Slack note was
   performed.
+
+PR handoff — 2026-08-15 15:36 PDT:
+
+- Pushed implementation commit `a998ca50` and opened ready PR #434:
+  `[REC-236] Add account-gated debug settings`. The PR includes the required
+  `recme-testflight-payload` block and links the exact hosted, XCTest, full-suite,
+  and visual validation above.
+- REC-236 should remain In Review until this PR is explicitly merged. No merge
+  or TestFlight release was performed; a later authorized release should ship
+  the latest `main`, not this branch in isolation.
+
+Merge review — 2026-08-15 15:58 PDT:
+
+- Joe explicitly requested that PR #434 be pushed to `main`. Rebased the two PR
+  commits cleanly onto current `origin/main` at `d4496845`, which contains the
+  build-153 preparation, rank-agnostic Discover assertion fix, onboarding
+  masthead wordmark, and check-in typography refinement. There were no source,
+  SQL, test, or coordination-log conflicts; the PR diff remains limited to its
+  stated Debug settings scope.
+- Equivalent pre-landing code, security, performance, and UI review found no
+  blocking issue: normal accounts fail closed, tester entitlement remains
+  server-controlled, local values are account/device scoped, and all flag keys
+  still resolve through the existing single request. The PR has no hold label,
+  generated project churn, signing changes, account identifiers, or unrelated
+  files.
+- The exact feature branch already passed its final focused gate 224/224 plus
+  hosted feature-flag pgTAP 12/12. A new isolated post-rebase run successfully
+  compiled the app, then Xcode stalled materializing simulator workers while an
+  already-started build-153 release consumed the remaining shared disk. Stopped
+  and removed only this task's disposable runner/cache before it could disrupt
+  that release. Because the rebase was conflict-free and the three incoming
+  commits do not touch this feature's source or contracts, this environment-only
+  interruption is accepted as a low-risk merge-gate exception.
+- The detached build-153 candidate remains untouched and does not contain PR
+  #434. This request is merge-only: do not bump again, archive, upload, attach,
+  or announce a new TestFlight build as part of this merge.
