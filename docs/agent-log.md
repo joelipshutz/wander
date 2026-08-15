@@ -29507,3 +29507,81 @@ Validation and handoff:
   manifest against the new exact `main`, then archive/upload build 149. No
   second build-number bump is needed because this fix changes tests/docs only
   and build 149 has not been uploaded.
+## 2026-08-14 14:37 PDT - Codex - REC-246 Instagram extraction regression
+
+Agent: Codex
+Branch: `codex/rec-246-instagram-extraction`
+Worktree: `/private/tmp/recme-rec246-instagram-extraction`
+Linear: `REC-246` (`In Progress`)
+Mission Control: unavailable (`localhost:4000` refused the required create request)
+
+Goal: make the production Instagram extraction path work for
+`https://www.instagram.com/p/DbPM9o1mzbL/`, change the in-app import completion
+action from `View on map` to `Done`, validate the real post path, and ship the
+combined fix in the next safe TestFlight build.
+
+Starting state and coordination:
+
+- Started from clean exact `origin/main` commit `fd244075` (TestFlight build 146)
+  in an isolated worktree. Joe's stale `joe/phone-build-latest` checkout and its
+  untracked `tmp/` directory remain untouched.
+- A new Linear issue could not be created because the workspace reached its free
+  issue limit. Reused the focused existing regression issue REC-246, expanded it
+  with the exact URL and Done-CTA requirement, raised it to Urgent, assigned it
+  to Joe, and moved it to In Progress.
+- Public Instagram HTML currently exposes creator-authored metadata for Cave
+  Springs Resort. The caption explicitly names Cave Springs, Castle Crags State
+  Park, and Castle Dome. This is reproduction evidence, not a hardcoded fix.
+- Expected files: social metadata/hint extraction, import completion UI, focused
+  fixtures/tests, project files only if source membership changes, TestFlight
+  release manifest/build metadata, and this log.
+
+Implementation and validation checkpoint (21:29 PDT):
+
+- Root cause: Instagram HTML entity decoding flattens caption newlines before
+  place-hint parsing, while the prior itinerary grammar only recognized a
+  narrower set of line-shaped phrases. The post therefore reduced to the weak
+  `Castle Crags` itinerary mention and missed `Cave Springs`, `Castle Crags
+  State Park`, and `Castle Dome`.
+- Added bounded, source-agnostic itinerary-action parsing for creator-named
+  destinations (`drive/head/go/hike/walk/travel/return ... to ...`) and kept the
+  result gated to handles or short title-cased names. Explicit distance-only
+  pins such as `Just 15 minutes from Cave Springs` are now rejected instead of
+  becoming a fake place. No place name or Instagram shortcode is hardcoded in
+  production code.
+- Changed the completed import review primary action from `View on map` to
+  `Done`; it now closes the flow through the existing add-screen callback.
+- Focused iPhone 16 Plus / iOS 18.6 validation passed: the exact Cave Springs
+  fixture recovers all three creator-named places (2 extraction tests, 0
+  failures), and the adaptive import completion/navigation contract passed (1
+  test, 0 failures). Earlier attempts were infrastructure-only failures from
+  concurrent Xcode jobs exhausting temporary disk space; no application test
+  failed. The branch still requires rebase and post-rebase full validation
+  before landing.
+- Joe's latest instruction is merge-only. Do not bump a build number, upload to
+  TestFlight, attach a build, or post Slack release notes in this operation.
+
+Final validation checkpoint (22:11 PDT):
+
+- Rebased first onto `origin/main` at `ac9740bb`, then `0ee9bf69`, and finally
+  latest main at `50f738e6` (build 151 release-prep baseline), preserving every
+  append-only log section.
+- The first complete `WanderTests` run exposed one compatibility regression:
+  the new itinerary boundary treated `Drive` inside `Skyline Drive Overlook`
+  as a new action. Narrowed movement boundaries to command phrases that end in
+  `to` (including `head back to`), preserving real place-name words while still
+  splitting flattened Instagram itinerary steps.
+- Focused post-rebase validation passed 6/6: the exact Cave Springs fixture,
+  the generic/distance-only false-positive guard, the Wyoming carousel caption,
+  MapKit alias/wrong-state handling, the existing nine-place Instagram carousel
+  upgrade, and the `Done` completion/navigation contract.
+- The complete `WanderTests` suite then passed on the exact build-151 rebased
+  candidate on iPhone 16 Plus / iOS 18.6: 1,174 tests, 0 failures, with
+  `TEST SUCCEEDED`. Final result bundle:
+  `/tmp/DerivedData-rec246/Logs/Test/Test-Wander-2026.08.14_22-21-21--0700.xcresult`.
+- Xcode twice stopped before test execution because the machine ran out of
+  temporary disk space. Removed only inactive disposable DerivedData plus three
+  shutdown task-specific simulators from completed REC-165/REC-191 work; the
+  active iPhone 16 Plus and booted REC-236/REC-166 simulators were preserved.
+- PR #421 is the merge vehicle. This remains merge-only: no build-number bump,
+  TestFlight upload, tag, or Slack release note is authorized in this session.
