@@ -1287,6 +1287,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
     }
 
+    func testDebugSettingsAreServerEntitledAndDoNotShipAnIdentityAllowlist() throws {
+        let profileSettings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/ProfileSettingsViews.swift"
+            )
+        )
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+
+        XCTAssertTrue(profileSettings.contains("Section(\"debug settings\")"))
+        XCTAssertTrue(profileSettings.contains("backend.featureFlag(.debugSettings, for: userID) == true"))
+        XCTAssertTrue(profileSettings.contains("server-entitled tester surface"))
+        XCTAssertTrue(profileSettings.contains("Label(\"first-visit NUX\""))
+        XCTAssertTrue(profileSettings.contains("settings.debug.firstVisitNUX"))
+        XCTAssertFalse(profileSettings.contains("settings.debug.replayNUX"))
+        XCTAssertFalse(profileSettings.contains("settings.debug.disableNUX"))
+        XCTAssertFalse(profileSettings.contains("jolipshutz"))
+        XCTAssertFalse(profileSettings.contains("ryan_lieblein"))
+        XCTAssertFalse(profileSettings.contains("@gmail.com"))
+        XCTAssertTrue(root.contains("isEntitledDebugReplayRequested: isReplayRequested"))
+        XCTAssertTrue(root.contains("walkthroughDebugPreferences.clearReplayRequest"))
+        XCTAssertTrue(root.contains("onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser"))
+    }
+
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
         let addScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")

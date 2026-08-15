@@ -2,12 +2,18 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(10);
+select plan(12);
 
 select is(
   (select enabled from public.feature_flags where key = 'first_visit_nux' and user_id is null),
   true,
   'first-visit NUX is globally enabled'
+);
+
+select is(
+  (select enabled from public.feature_flags where key = 'debug_settings' and user_id is null),
+  false,
+  'debug settings is globally disabled'
 );
 
 select ok(
@@ -45,6 +51,12 @@ select is(
   (select count(*)::integer from public.feature_flags where key = 'first_visit_nux'),
   2,
   'a user sees the global row and only their own override'
+);
+
+select is(
+  (select count(*)::integer from public.feature_flags where key = 'debug_settings'),
+  1,
+  'a normal user sees only the globally disabled debug-settings row'
 );
 
 select is(

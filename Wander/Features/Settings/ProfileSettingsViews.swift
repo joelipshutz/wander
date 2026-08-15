@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ProfileSettingsHome: View {
+    let onNUXDebugSettingsChanged: () -> Void
+
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -13,6 +15,14 @@ struct ProfileSettingsHome: View {
     @State private var showsFinalDeleteWarning = false
     @State private var isDeleting = false
     @State private var errorMessage: String?
+    @State private var isNUXEnabled = false
+    @State private var isNUXReplayQueued = false
+
+    private let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
+
+    init(onNUXDebugSettingsChanged: @escaping () -> Void = {}) {
+        self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
+    }
 
     var body: some View {
         NavigationStack {
@@ -20,6 +30,9 @@ struct ProfileSettingsHome: View {
                 accountSection
                 privacySection
                 supportSection
+                if isDebugSettingsEntitled {
+                    debugSettingsSection
+                }
 
                 Section {
                     Button(role: .destructive) {
@@ -72,6 +85,14 @@ struct ProfileSettingsHome: View {
                 Button("No, cancel", role: .cancel) {}
             } message: {
                 Text("You will not be able to recover the data associated with your account.")
+            }
+        }
+        .onChange(of: debugSettingsUserID, initial: true) { _, _ in
+            refreshDebugSettingsState()
+        }
+        .onChange(of: isDebugSettingsEntitled) { _, isEntitled in
+            if isEntitled {
+                refreshDebugSettingsState()
             }
         }
     }
@@ -190,6 +211,66 @@ struct ProfileSettingsHome: View {
                 destination: RecmeSettingsWebDestination.privacyChoices
             )
         }
+    }
+
+    // Debug settings is intentionally a server-entitled tester surface rather
+    // than an iOS identity allowlist or a #if DEBUG block. That keeps it hidden
+    // from normal accounts while letting Joe and Ryan test release/TestFlight builds.
+    private var isDebugSettingsEntitled: Bool {
+        guard let userID = debugSettingsUserID else { return false }
+        return backend.featureFlag(.debugSettings, for: userID) == true
+    }
+
+    private var debugSettingsUserID: String? {
+        auth.state.session?.userID
+    }
+
+    private var debugSettingsSection: some View {
+        Section("debug settings") {
+            Toggle(
+                isOn: Binding(
+                    get: { isNUXEnabled },
+                    set: { newValue in
+                        guard let userID = debugSettingsUserID else { return }
+                        walkthroughDebugPreferences.setNUXEnabled(newValue, for: userID)
+                        refreshDebugSettingsState()
+                        if !newValue {
+                            onNUXDebugSettingsChanged()
+                        }
+                    }
+                )
+            ) {
+                Label("first-visit NUX", systemImage: "sparkles.rectangle.stack")
+            }
+            .tint(WanderTheme.terracotta.color)
+            .accessibilityIdentifier("settings.debug.firstVisitNUX")
+
+            Text(debugNUXStatusMessage)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+        }
+    }
+
+    private var debugNUXStatusMessage: String {
+        if isNUXReplayQueued {
+            return "On for this account on this device. The NUX will restart on the next app launch."
+        }
+        if isNUXEnabled {
+            return "On for this account on this device. Switch it off and back on to replay it."
+        }
+        return "Off for this account on this device. Other users are unaffected."
+    }
+
+    private func refreshDebugSettingsState() {
+        guard let userID = debugSettingsUserID else {
+            isNUXEnabled = false
+            isNUXReplayQueued = false
+            return
+        }
+        isNUXEnabled = walkthroughDebugPreferences.nuxOverride(for: userID)
+            ?? backend.featureFlag(.firstVisitNUX, for: userID)
+            ?? false
+        isNUXReplayQueued = walkthroughDebugPreferences.isReplayRequested(for: userID)
     }
 
     private func settingsLink(
