@@ -1,12 +1,13 @@
 # rec.me Production Blue/Green Cutover and Undo Runbook
 
-Status: pre-cutover. A fresh local backup was captured on 2026-08-14; the Clerk password-hash export, second off-device copy, green target, and traffic switch remain blocked gates. No traffic has moved.
+Status: pre-cutover. A fresh local backup and an independently encrypted iCloud Drive copy were verified on 2026-08-14. The Clerk password-hash export, green target, and traffic switch remain blocked gates. No traffic has moved.
 
 ## Fixed identities
 
 - Source/rollback Supabase project: `wander` (`rugmtlgufrhlxwfkumhw`), `us-west-2`.
 - Intended target name: `recme-production`, same Supabase organization and region.
 - Fresh private backup root: `/Users/joelipshutz/.private_backups/recme/2026-08-14-pre-launch-cutover/`.
+- Encrypted off-device copy: `iCloud Drive/Grayline Backups/recme/2026-08-14-pre-launch-cutover.tar.gz.enc`; AES-256-CBC with PBKDF2, archive and SHA-256 sidecar mode `0600`, recovery passphrase stored in macOS Keychain service `com.grayline.recme.backup.2026-08-14`.
 - Independent older recovery point: `/Users/joelipshutz/.private_backups/recme/2026-08-01-pre-production-cutover/`.
 - Source must not be reset, deleted, paused, or repurposed during the cutover and rollback window.
 
@@ -56,9 +57,13 @@ All database commands are read-only against the source. Use the Supabase session
 7. Validate the dump with `pg_restore --list`; extract data-only SQL into a private temporary file and compare exact per-table row counts; verify checksums; compare remote and local Storage object counts and total bytes.
 8. Copy the entire private backup directory to a second encrypted location before traffic cutover. A single disk copy is not disaster recovery.
 
+Completed 2026-08-14: all source checksums passed before encryption; the decrypted stream produced a valid complete tar inventory; the encrypted 169 MB archive passed its SHA-256 sidecar; and iCloud Drive reported caught up after the copy.
+
 ## Create the green production project
 
 Preferred database path: Supabase Dashboard → source project → Backups → restore to a new project. Review the exact project name, organization, region, selected backup/PITR point, and displayed recurring cost before confirming. The action creates a second paid project and requires explicit confirmation at that screen.
+
+2026-08-14 creation checkpoint: the CLI refused to create `recme-production` before provisioning because both organization administrators already hold Supabase's maximum two active free projects. No target was created and no source project changed. Supabase's public pricing currently lists Pro at $25/month with $10/month of compute credits for one Micro project and additional Micro projects from $10/month. Keeping the two current active projects and adding green therefore appears to be about $45/month before overages, not the earlier ~$10 estimate; verify the checkout total before purchase. Creating the green target now requires either upgrading the existing organization at the exact displayed plan price or an explicitly approved alternative. Do not pause/delete another Grayline project to free a slot.
 
 Supabase's database clone does not finish the application clone. After the target exists:
 

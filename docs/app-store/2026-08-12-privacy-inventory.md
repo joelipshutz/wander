@@ -9,7 +9,7 @@ This is the source-of-truth draft for the App Store privacy questionnaire. It de
 ## Decisions
 
 - Keep PostHog for launch, with tracking, replay, screen capture, element capture, surveys, crash autocapture, lifecycle autocapture, swizzling, and automatic person-property capture disabled. rec.me sends only explicit allowlisted events and identifies them with the internal auth user ID.
-- Add `$geoip_disable = true` to every PostHog event before it is queued. Also verify the PostHog project-level IP capture setting is disabled before submission. The rec.me personal API key currently returns `403` because it lacks `project:read`; the generic local key belongs to a different project and cannot substitute for that check.
+- Add `$geoip_disable = true` to every PostHog event before it is queued. PostHog project `557259` was browser-verified on 2026-08-14 with **Discard client IP data** enabled. The rec.me personal API key still lacks `project:read`; the authenticated project setting is the current evidence source.
 - Declare no tracking and do not request App Tracking Transparency permission. rec.me does not combine its data with third-party data for targeted advertising, advertising measurement, or data-broker sharing.
 - Keep native Contacts. Access follows a contextual primer and reads name and phone fields locally. Address-book data is never uploaded or analytics-logged; selected phone numbers go only to Apple's Messages composer. The server-side social graph is still disclosed as Contacts because Apple's category includes social graphs.
 - Do not declare device precise location as collected. Current location is used on-device for nearby MapKit results and the nearby widget, and is not uploaded or analytics-logged. Saved businesses carry their own place coordinates, which are place metadata rather than a device location trail.
@@ -71,7 +71,7 @@ Mark these as collected and linked to the user, not used for tracking:
 
 Do not mark data as used for tracking. Do not declare advertising data, purchases, financial information, health/fitness, sensitive information, emails/text-message contents, audio, browsing history, environment scanning, hands, or head data.
 
-Do not declare precise or coarse device location unless the production archive or vendor configuration begins transmitting it. rec.me adds `$geoip_disable = true` to every PostHog event; the project-level IP capture setting still needs to be verified as disabled before submission.
+Do not declare precise or coarse device location unless the production archive or vendor configuration begins transmitting it. rec.me adds `$geoip_disable = true` to every PostHog event, and the project-level **Discard client IP data** setting was verified enabled on 2026-08-14.
 
 ## Permission audit
 
@@ -93,7 +93,7 @@ Do not declare precise or coarse device location unless the production archive o
 
 This is strong pre-archive validation, not the final signed-candidate privacy report. Production auth, moderation, backend, and version gates still need to close before the archive-level preflight below.
 
-The privacy-policy and privacy-choices URLs are live in App Store Connect as of 2026-08-14. The App Privacy questionnaire itself remains unpublished because the current browser sessions require Apple sign-in and the final signed archive does not yet exist.
+The privacy-policy and privacy-choices URLs are live in App Store Connect as of 2026-08-14. The complete App Privacy questionnaire is saved as a draft; publication remains gated on the final signed archive reconciliation.
 
 ## Exact-candidate preflight
 

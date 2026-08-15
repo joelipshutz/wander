@@ -140,6 +140,8 @@ final class BuildConfigurationTests: XCTestCase {
         )
 
         XCTAssertTrue(associatedDomains.contains("applinks:getrec.me"))
+        XCTAssertTrue(associatedDomains.contains("webcredentials:clerk.getrec.me"))
+        XCTAssertFalse(associatedDomains.contains(where: { $0.contains("clerk.accounts.dev") }))
     }
 
     func testAppEntitlementsEnableSignInWithApple() throws {

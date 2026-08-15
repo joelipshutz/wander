@@ -28990,6 +28990,203 @@ commit/push, merge only after payload checks pass, snapshot the build-144
 manifest from `testflight/build-143`, then create and merge the build-number PR
 before archiving the exact candidate.
 
+## 2026-08-14 14:14 PDT - Codex - REC-180 App Store 1.0 launch gates
+
+Agent: Codex
+Branch: `codex/rec-180-app-store-1-0`
+Worktree: `/private/tmp/recme-app-store-1-0`
+Linear: `REC-180` (`In Progress`)
+Mission Control: unavailable at `http://localhost:4000`
+
+Goal: preserve every existing account and row while completing the production
+Clerk/Supabase cutover, preparing build 147 as marketing version 1.0, and
+submitting rec.me to App Review.
+
+Starting state and coordination:
+
+- The isolated release branch starts from exact verified TestFlight build 146,
+  tag `testflight/build-146`, commit `fd244075`. Joe's checkout remains on
+  `joe/phone-build-latest` with an unrelated untracked `tmp/` directory and was
+  not modified.
+- PR #411 is open as a draft, mergeable, and has a passing trusted payload
+  check. `project.yml` and the generated Xcode project declare marketing
+  version 1.0 and build 147. The branch must remain unmerged until the production
+  identity/data continuity and reviewer-account gates pass.
+- The complete release candidate previously passed 1,151 unit tests and 34 UI
+  tests with zero failures, a clean Release simulator build, and all six
+  deterministic App Store screenshot flows.
+
+Completed safeguards and live evidence:
+
+- Created and verified an encrypted AES-256 off-device copy of the complete
+  pre-cutover backup in iCloud Drive. The recovery key is stored in macOS
+  Keychain; decrypted archive listing, SHA-256 integrity, and iCloud sync status
+  were verified. The source Supabase project and both local backups remain
+  untouched.
+- The Clerk public backup contains all six development users and confirms zero
+  production users. Password-hash export still requires authenticated access to
+  the owning Clerk dashboard before the lossless import can run.
+- App Store Connect read-back shows version 1.0 in Prepare for Submission,
+  manual release enabled, six screenshots complete, metadata/review contact and
+  reviewer walkthrough saved, and build 146 valid in TestFlight as marketing
+  version 0.1. Apple therefore requires the equivalent build 147 archive for
+  version 1.0.
+- Verified the live PostHog project setting discards client IP data. The App
+  Privacy questionnaire is fully drafted but remains deliberately unpublished
+  until the exact signed archive and production configuration are verified.
+- Sent a support verification probe to `getrec.me@gmail.com`; delivery has not
+  bounced, but authenticated receipt/reply remains pending.
+- Re-ran the live App Store read-only audit and every release reconciliation
+  dry run. Version 1.0 remains Prepare for Submission with manual release, free
+  US-only availability, the evidence-backed age questionnaire, exact metadata,
+  and six complete 1320x2868 screenshots. Build 146 remains valid as 0.1 and no
+  build 147 exists yet; demo credentials remain the only missing review-detail
+  fields.
+- Reverified the public launch surface. The home, support, privacy,
+  privacy-choices, terms, community, import-help, extensions, and AASA endpoints
+  all return HTTP 200 over valid TLS. The AASA app ID matches the release team
+  and bundle ID, and the public support/legal pages publish the intended Gmail
+  address.
+- At Joe's request, added Canada through a dry-run-first, additive App Store
+  availability update. Read-back verifies exactly `CAN` + `USA`, free pricing,
+  no pre-order, and no automatic future-territory enrollment. No existing
+  territory, account, credential, or backend data changed. The release script
+  now supports repeatable `--add-territory` operations while preserving and
+  verifying all current territories. Mexico remains disabled pending its
+  regional storefront/localization and compliance review.
+- Attempted to create the requested Canada/Mexico Linear ticket, but Linear
+  rejected it because the workspace has reached its Free-plan issue limit. The
+  work and Mexico follow-up are captured in REC-180 comment
+  `28559ea6-6e11-4af0-9441-f2bd1bdae385` until a ticket slot is available.
+- Strengthened the hosted smoke path to exercise an operator claiming and
+  resolving a real rollback-only report, then verify closure, the 24-month
+  retention window, and all three audit events. The direct database endpoint is
+  IPv6-only from this machine and could not resolve over the available route;
+  the linked Management API is the supported fallback. Its strict 71-assertion
+  `community_moderation.sql` suite passed against the hosted source project,
+  including assignment, resolution, audit, retention, rate limiting, and
+  account-deletion behavior. The transaction rolled back and retained no test
+  content.
+
+Current blockers and continuation:
+
+- The existing Supabase organization is on Free with two active projects, so a
+  third green project cannot be created there. Upgrading that organization would
+  be materially more expensive than originally expected. A separate `rec.me`
+  organization is the safest isolation path, but exact user approval is required
+  before creating that persistent external account container. Do not pause or
+  alter either existing active project.
+- Clerk is waiting at sign-in for the account that owns app
+  `app_3Eb3JbpbMDjOA2qKUCqfsZwfct9`; the already signed-in known Google accounts
+  did not own it. Gmail is waiting at the password screen for
+  `getrec.me@gmail.com`. Do not request, inspect, or store either password.
+- The existing APNs credential has previously authenticated successfully. A
+  backup-safety handoff to Ryan must omit credential material and requires exact
+  approval for the Slack destination/message before sending.
+- After the user completes those approvals/sign-ins: create the isolated green
+  project, restore and validate the database, export/import Clerk password
+  hashes with a six-of-six identity audit, create the reviewer account, update
+  release configuration, re-run hosted smoke tests, merge PR #411, archive and
+  upload exact build 147, publish privacy answers, attach the build, submit
+  version 1.0, and verify App Store Connect reports Waiting for Review.
+
+Checkpoint, 2026-08-14 14:31 PDT:
+
+- Committed and pushed the Canada availability automation, strengthened
+  moderation smoke, launch-readiness evidence, and this coordination log as
+  `a55c9d0a` (`chore: add Canada launch availability`). PR #411 remains a draft,
+  mergeable, and its trusted payload validation is green at that exact head.
+- Validation: `node --check` passed for both changed scripts;
+  `git diff --check` passed; the App Store commerce dry run, apply, and read-back
+  all verified `CAN` + `USA`; and the strict hosted 71-assertion moderation
+  pgTAP suite passed in a rolled-back transaction.
+- App Store submission has not occurred. Version 1.0 remains Prepare for
+  Submission because production auth/data continuity, mailbox reply, safety
+  ownership, populated reviewer credentials, signed build 147, and final privacy
+  publication remain required.
+
+Checkpoint, 2026-08-14 17:36 PDT:
+
+- Verified live Supabase dashboard access under `joe@bondaiapp.com` to
+  organization `joe@bondaiapp.com's Org` (`kmuvkdjwociyvuuxnbqb`) and its
+  existing `wander` project (`rugmtlgufrhlxwfkumhw`). The earlier personal
+  Google session could not access either resource and was not used for any
+  mutation.
+- Updated the canonical non-secret Grayline registry at
+  `/Users/joelipshutz/Developer/grayline/ops/service-account-registry.json`
+  with the verified owner identity, Supabase organization/project, Clerk
+  app/development/production instance IDs, env-var references, and explicit
+  no-pause/no-delete/no-reset safeguards. No password, key, token, or recovery
+  value was stored.
+- Added the verified rec.me Clerk/Supabase owner rule to this project's agent
+  instructions so Codex, Claude, OpenClaw, and future contributors do not ask
+  Joe to cycle through unrelated accounts again. Clerk owner-dashboard login
+  remains the next user action; no account or production-data change has run.
+
+Checkpoint, 2026-08-14 18:12 PDT:
+
+- Completed the lossless Clerk production import. All 6 development users were
+  imported into the production instance with password digests, verified primary
+  emails, and stable canonical-profile mappings preserved. A one-user canary
+  passed before the remaining five were imported. The final Clerk API audit
+  reports 6/6 password-enabled, 6/6 verified-primary-email, 6/6 email parity,
+  and 6/6 canonical identity parity. Development users remain untouched.
+- Created owner-only local and encrypted iCloud rollback bundles containing the
+  original Clerk password-hash export, exact migration source, pre/post public
+  user snapshots, migration logs, live non-public configuration, database dump,
+  and checksum manifests. The final encrypted archive was independently
+  decrypted, listed, and checksum-verified. No credential material was added to
+  git or this log.
+- Created a separate free Supabase organization named `rec.me`, but project
+  creation is blocked because Supabase's two-project Free limit follows the
+  owner across organizations. No paid plan was purchased and no database was
+  created. To avoid a risky or unnecessary migration, launch will keep the
+  existing `wander` project (`rugmtlgufrhlxwfkumhw`) in place; no existing row,
+  object, account, or identifier is being moved, deleted, reset, or rewritten.
+- Applied only migration `20260814090000_clerk_identity_continuity.sql` to the
+  linked hosted source and verified the local/remote migration ledger. Hosted
+  metadata checks passed for invoker security, pinned `search_path`, execute
+  grants, 15/15 existing identity mappings, and canonical-claim precedence.
+  The rolled-back hosted smoke suite and all 4 Clerk continuity tests passed.
+- Deployed `clerk-profile-webhook` version 11 to the hosted source and verified
+  it ACTIVE by read-back. Created the production Clerk webhook endpoint for
+  exactly `user.created`, `user.updated`, and `user.deleted`; its signing secret
+  was captured into owner-only local storage without printing or committing it.
+- Started a compatibility update so the hosted webhook can validate both the
+  existing development signing secret and the new production signing secret
+  during the cutover. This preserves current TestFlight webhook delivery while
+  the version 1.0 binary moves to Clerk production.
+- Mission Control at `localhost:4000` returned no task payload during this
+  checkpoint; Linear REC-180 and draft PR #411 remain the durable trackers.
+
+Checkpoint, 2026-08-14 18:24 PDT:
+
+- Added the production webhook signing secret as
+  `CLERK_WEBHOOK_SIGNING_SECRET_SECONDARY` while retaining the original
+  development secret. Deployed the dual-signature handler as hosted Edge
+  Function version 13 and verified both development and production signatures
+  return HTTP 200 through non-mutating ignored-event probes. No profile, place,
+  mapping, or account row was created, edited, or deleted by the probes.
+- Updated the tracked iOS release configuration from Clerk development to the
+  production publishable key, frontend API `clerk.getrec.me`, and matching
+  web-credentials associated domain. The Supabase project URL and publishable
+  key remain unchanged, so no database move is part of this release.
+- `origin/main` now contains TestFlight build 147 (`d215a900`) as marketing
+  version 0.1 and records its successful upload in `887123d2`. App Store version
+  1.0 therefore advances to build 148; build 147 cannot be reused under a
+  different marketing version.
+- A focused `BuildConfigurationTests` run compiled the production-configured app
+  and dependencies but did not reach tests because the volume ran out of space
+  while generating the app dSYM. This is not a test pass or code failure. Removed
+  only the disposable 1.4 GB `DerivedData-release-config` cache; source,
+  accounts, database content, archives, and backups were untouched. Exact tests
+  must run again after reconciling with current `main` and ensuring sufficient
+  build space.
+- Joe directed this foundation to land before the other active database/product
+  changes. Merging to `main` does not alter the already-installed TestFlight 147
+  binary. The follow-on branch must keep the existing hosted `wander` project,
+  avoid resets/replacements, and rebase onto the resulting `main` before its own
+  migration and release validation.
 ## 2026-08-14 14:27 PDT - Codex - REC-122 confetti TestFlight release
 
 Agent: Codex
