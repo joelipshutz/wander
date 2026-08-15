@@ -85,6 +85,44 @@ enum PlaceExternalLinks {
         return deduped(actions)
     }
 
+    static func placeProfileActions(
+        placeName: String,
+        latitude: Double?,
+        longitude: Double?,
+        websiteURLString: String?,
+        phoneNumber: String?,
+        actionLinksJSON: String?,
+        reservationAction: PlaceExternalAction? = nil
+    ) -> [PlaceExternalAction] {
+        var actions: [PlaceExternalAction] = []
+
+        if let latitude,
+           let longitude,
+           let directions = directionsAction(
+               placeName: placeName,
+               latitude: latitude,
+               longitude: longitude
+           ) {
+            actions.append(directions)
+        }
+
+        actions.append(
+            contentsOf: visibleBusinessActions(
+                websiteURLString: websiteURLString,
+                phoneNumber: phoneNumber,
+                actionLinksJSON: actionLinksJSON
+            )
+            .filter { $0.kind == .website || $0.kind == .call }
+        )
+
+        if let reservation = reservationAction
+            ?? PlaceExternalLinks.reservationAction(actionLinksJSON: actionLinksJSON) {
+            actions.append(reservation)
+        }
+
+        return dedupedByCapability(actions)
+    }
+
     static func googleMapsDirectionsURL(
         placeName: String,
         latitude: Double,
@@ -911,6 +949,13 @@ enum PlaceExternalLinks {
         }
 
         return deduped
+    }
+
+    private static func dedupedByCapability(_ actions: [PlaceExternalAction]) -> [PlaceExternalAction] {
+        var seen = Set<String>()
+        return actions.filter { action in
+            seen.insert(action.kind.rawValue).inserted
+        }
     }
 
     private static func trimmed(_ value: String?) -> String? {

@@ -2761,7 +2761,9 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(fullView.contains("@State private var discoveredReservationAction: PlaceExternalAction?"))
-        XCTAssertTrue(fullView.contains(".task(id: reservationLookupKey)"))
+        XCTAssertTrue(fullView.contains("@State private var recoveredBusinessMetadata: PlaceBusinessMetadata?"))
+        XCTAssertTrue(fullView.contains(".task(id: businessActionLookupKey)"))
+        XCTAssertTrue(fullView.contains("MapKitPlaceBusinessMetadataResolver().resolve(businessMetadataRequest)"))
         XCTAssertTrue(fullView.contains("PlaceExternalLinks.discoverReservationAction("))
         XCTAssertTrue(fullView.contains("reservationAction: discoveredReservationAction"))
     }

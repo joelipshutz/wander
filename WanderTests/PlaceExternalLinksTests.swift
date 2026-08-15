@@ -341,6 +341,124 @@ final class PlaceExternalLinksTests: XCTestCase {
         )
     }
 
+    func testPlaceProfileActionsExposeEveryAvailableCapability() throws {
+        let reservation = try XCTUnwrap(
+            PlaceExternalLinks.reservationAction(
+                url: URL(string: "https://www.opentable.com/r/anajak-thai-cuisine-sherman-oaks")
+            )
+        )
+
+        let actions = PlaceExternalLinks.placeProfileActions(
+            placeName: "Anajak Thai",
+            latitude: 34.15182,
+            longitude: -118.45363,
+            websiteURLString: "https://www.anajakthai.com",
+            phoneNumber: "+1 (818) 501-4201",
+            actionLinksJSON: nil,
+            reservationAction: reservation
+        )
+
+        XCTAssertEqual(actions.map(\.kind), [.directions, .website, .call, .reserve])
+        XCTAssertEqual(actions[0].url.host, "www.google.com")
+        XCTAssertEqual(actions[1].url.absoluteString, "https://www.anajakthai.com")
+        XCTAssertEqual(actions[2].url.absoluteString, "tel:+18185014201")
+        XCTAssertEqual(actions[3].url.host, "www.opentable.com")
+    }
+
+    func testPlaceProfileActionsHideOnlyUnavailableCapabilities() {
+        let actions = PlaceExternalLinks.placeProfileActions(
+            placeName: "Sparse Place",
+            latitude: 34.0,
+            longitude: -118.0,
+            websiteURLString: nil,
+            phoneNumber: "+1 213 555 0100",
+            actionLinksJSON: nil,
+            reservationAction: nil
+        )
+
+        XCTAssertEqual(actions.map(\.kind), [.directions, .call])
+    }
+
+    func testPlaceProfileKeepsWebsiteAndReservationWhenTheyShareAURL() throws {
+        let sharedURL = try XCTUnwrap(
+            URL(string: "https://www.opentable.com/r/anajak-thai-cuisine-sherman-oaks")
+        )
+        let reservation = try XCTUnwrap(PlaceExternalLinks.reservationAction(url: sharedURL))
+
+        let actions = PlaceExternalLinks.placeProfileActions(
+            placeName: "Anajak Thai",
+            latitude: nil,
+            longitude: nil,
+            websiteURLString: sharedURL.absoluteString,
+            phoneNumber: nil,
+            actionLinksJSON: nil,
+            reservationAction: reservation
+        )
+
+        XCTAssertEqual(actions.map(\.kind), [.website, .reserve])
+        XCTAssertEqual(actions.map(\.url), [sharedURL, sharedURL])
+    }
+
+    func testPlaceProfileUsesActionLinkWebsiteWithoutDuplicatingCapability() throws {
+        let encodedLinks = try XCTUnwrap(
+            String(
+                data: JSONEncoder().encode([
+                    PlaceActionLink(
+                        kind: .website,
+                        title: "Fallback site",
+                        urlString: "https://fallback.example",
+                        source: .backendExtraction,
+                        confidence: .exact
+                    )
+                ]),
+                encoding: .utf8
+            )
+        )
+
+        let fallbackActions = PlaceExternalLinks.placeProfileActions(
+            placeName: "Fallback Place",
+            latitude: nil,
+            longitude: nil,
+            websiteURLString: nil,
+            phoneNumber: nil,
+            actionLinksJSON: encodedLinks
+        )
+        XCTAssertEqual(fallbackActions.map(\.kind), [.website])
+        XCTAssertEqual(fallbackActions.first?.url.absoluteString, "https://fallback.example")
+
+        let preferredActions = PlaceExternalLinks.placeProfileActions(
+            placeName: "Fallback Place",
+            latitude: nil,
+            longitude: nil,
+            websiteURLString: "https://official.example",
+            phoneNumber: nil,
+            actionLinksJSON: encodedLinks
+        )
+        XCTAssertEqual(preferredActions.map(\.kind), [.website])
+        XCTAssertEqual(preferredActions.first?.url.absoluteString, "https://official.example")
+    }
+
+    func testAnajakRecoveredWebsiteDiscoversExactOpenTableReservation() async {
+        let action = await PlaceExternalLinks.discoverReservationAction(
+            actionLinksJSON: nil,
+            websiteURLString: "https://www.anajakthai.com",
+            placeName: "Anajak Thai",
+            locality: "Sherman Oaks",
+            region: "CA",
+            pageLoader: { request in
+                (
+                    Data(#"<a href="https://www.opentable.com/r/anajak-thai-cuisine-sherman-oaks">Book table</a>"#.utf8),
+                    request.url
+                )
+            }
+        )
+
+        XCTAssertEqual(
+            action?.url.absoluteString,
+            "https://www.opentable.com/r/anajak-thai-cuisine-sherman-oaks"
+        )
+    }
+
     func testReservationDiscoveryFollowsOfficialReservationPageToOpenTable() async throws {
         let action = await PlaceExternalLinks.discoverReservationAction(
             actionLinksJSON: nil,
