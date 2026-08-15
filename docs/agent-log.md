@@ -30082,3 +30082,24 @@ PR handoff - 2026-08-15 14:35 PDT:
   `gstack-artifacts-joelipshutz` repository requires separate payload-specific
   authorization. The PNGs, board, approval record, and taste profile remain
   available locally under the documented canonical gstack path.
+
+Launch-safe engineering plan follow-up - 2026-08-15 13:55 PDT:
+
+- Agent/tool: Codex using the `plan-eng-review` workflow.
+- Goal: turn the approved Editorial Fold and floating Check in/Wanna direction
+  into independently shippable implementation slices that do not put the 1.0
+  launch at risk. Joe explicitly prioritized typography and the smallest core
+  Add-flow CTA change before the persistent place-profile action system.
+- Branch/worktree: `codex/checkin-cta-exploration` in
+  `/Users/joelipshutz/Developer/Wander-worktrees/checkin-cta-exploration`.
+- Starting status: clean and tracking the pushed branch. The existing design
+  PR is #431. A dedicated Linear issue remains blocked by the recme workspace's
+  free-issue limit, and Mission Control was unavailable during the design pass.
+- Expected files: the approved design plan, a new engineering sequencing plan,
+  `docs/decisions.md` only if a new durable implementation decision is needed,
+  and this append-only log. No SwiftUI, model, persistence, auth, backend,
+  project, or release files will be changed in this planning pass.
+- Coordination note: active worktrees include separate REC-148 and REC-161
+  typography efforts plus multiple launch-gate/TestFlight worktrees. Their
+  scope and current status must be inspected before assigning typography work
+  to a new implementation slice.
