@@ -30031,3 +30031,35 @@ Generation permission checkpoint - 2026-08-15 13:42 PDT:
   rec.me UI briefs for the deeper Editorial Fold flow boards. No repository
   contents, credentials, analytics, account data, or private user data will be
   included.
+
+Deep-flow completion checkpoint - 2026-08-15 14:25 PDT:
+
+- Joe explicitly approved sending the design-only expanded flow briefs. No
+  repository contents, credentials, analytics, account data, or private user
+  data were included.
+- Generated and locally inspected four Editorial Fold flow boards:
+  - `editorial-flow-01-floating-actions.png`: unsaved, deep-scroll, and
+    existing-Wanna place-profile states with the action tray pinned above the
+    home indicator;
+  - `editorial-flow-02-checkin.png`: collapsed, compact expanded, taller
+    More-options/keyboard, loading/error, and post-save states;
+  - `editorial-flow-03-wanna-edit.png`: new Wanna, edit Wanna,
+    Wanna-to-check-in, repeat check-in, history/edit, draft, auth, and offline
+    contracts;
+  - `editorial-flow-04-entry-points.png`: single Add candidate, batch import,
+    shared invite, common system states, and the wider CTA relationship.
+- Corrected two generator mistakes before accepting the set: Check-in actions
+  cannot use sky/blue, and the app shell must remain exactly four tabs (Map,
+  Add, Discover, Profile). The final wider-app board has the correct four-tab
+  shell. The generated Wanna/edit board still renders some primary controls in
+  neutral espresso; the written contract is authoritative that all primary
+  confirmation actions use terracotta.
+- Refreshed the local comparison board at
+  `http://127.0.0.1:57867/boards/b-20260815-201111-cfqpdq/`.
+- Added the durable implementation handoff at
+  `docs/plans/2026-08-15-check-in-wanna-floating-actions-design.md` and locked
+  the product direction in `docs/decisions.md`.
+- No production SwiftUI, persistence, auth, or backend code changed. The branch
+  is intentionally a design/spec handoff; implementation should rebase onto
+  current `origin/main`, coordinate the listed high-conflict files, and create
+  or attach a Linear issue once workspace capacity is available.
