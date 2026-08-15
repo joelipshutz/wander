@@ -30021,3 +30021,13 @@ Approved direction and flow audit checkpoint - 2026-08-15 13:35 PDT:
   streak celebration handoff.
 - No production code was changed in this checkpoint. Next artifact is a deeper
   Editorial Fold flow set covering the normalized states above.
+
+Generation permission checkpoint - 2026-08-15 13:42 PDT:
+
+- The first expanded-flow image request was blocked before transmission because
+  the approved-A flow brief is a new, more detailed external payload than the
+  three original variant briefs. No expanded flow-state details were sent.
+- Paused mock generation pending Joe's explicit approval to send design-only
+  rec.me UI briefs for the deeper Editorial Fold flow boards. No repository
+  contents, credentials, analytics, account data, or private user data will be
+  included.
