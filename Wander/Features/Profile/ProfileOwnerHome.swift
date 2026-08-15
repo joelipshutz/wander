@@ -405,11 +405,17 @@ struct ProfileOwnerHome: View {
                     )
                 }
 
+                Text("@\(profile.handle)")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
                 Spacer(minLength: 0)
 
                 if mode.isOwner {
                     ProfileInvitationButton(
-                        hasPendingInvitations: sharedVisitInvitationCount > 0,
+                        pendingInvitationCount: sharedVisitInvitationCount,
                         action: sharedVisitInvitationsAction
                     )
                     ProfileHeaderActionButton(
@@ -473,19 +479,11 @@ struct ProfileOwnerHome: View {
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(profile.displayName)
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-
-                        Text("@\(profile.handle)")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
+                    Text(profile.displayName)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
 
                     HStack(spacing: 0) {
                         ProfileGraphCountButton(value: followerCount, label: "Followers") {
@@ -502,12 +500,15 @@ struct ProfileOwnerHome: View {
                     .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, WanderTheme.spacing2)
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(profileMetadata)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                if let homeArea = normalized(profile.homeArea) {
+                    Text(homeArea)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                }
 
                 if let bio = normalized(profile.bio) {
                     Text(bio)
@@ -515,6 +516,10 @@ struct ProfileOwnerHome: View {
                         .foregroundStyle(WanderTheme.textInk.color)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                Text(memberSinceText)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
             }
 
             if let relationship = mode.relationship {
@@ -533,6 +538,11 @@ struct ProfileOwnerHome: View {
                 .buttonStyle(.plain)
             }
         }
+        .padding(WanderTheme.spacing3)
+        .background(
+            WanderTheme.surfaceRaised.color,
+            in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+        )
     }
 
     private var profileAvatar: some View {
@@ -572,14 +582,10 @@ struct ProfileOwnerHome: View {
         relationship == .nonFollower ? "person.badge.plus" : "checkmark"
     }
 
-    private var profileMetadata: String {
+    private var memberSinceText: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
-        var values = ["Member since \(formatter.string(from: profile.createdAt))"]
-        if let homeArea = normalized(profile.homeArea) {
-            values.append(homeArea)
-        }
-        return values.joined(separator: "  •  ")
+        return "Member since \(formatter.string(from: profile.createdAt))"
     }
 
     private func normalized(_ value: String?) -> String? {
@@ -665,21 +671,41 @@ struct ProfileHeaderActionButton: View {
     }
 }
 
+struct ProfileInvitationBadgeState: Equatable {
+    let pendingInvitationCount: Int
+
+    init(pendingInvitationCount: Int) {
+        self.pendingInvitationCount = max(0, pendingInvitationCount)
+    }
+
+    var isVisible: Bool {
+        pendingInvitationCount > 0
+    }
+
+    var accessibilityValue: String {
+        isVisible ? "\(pendingInvitationCount) pending" : "No pending invitations"
+    }
+}
+
 private struct ProfileInvitationButton: View {
-    let hasPendingInvitations: Bool
+    let pendingInvitationCount: Int
     let action: () -> Void
+
+    private var badgeState: ProfileInvitationBadgeState {
+        ProfileInvitationBadgeState(pendingInvitationCount: pendingInvitationCount)
+    }
 
     var body: some View {
         Button(action: action) {
             ProfileHeaderActionLabel(systemImage: "envelope")
                 .overlay(alignment: .topTrailing) {
-                    if hasPendingInvitations {
+                    if badgeState.isVisible {
                         Circle()
                             .fill(WanderTheme.stateError.color)
                             .frame(width: 10, height: 10)
                             .overlay {
                                 Circle()
-                                    .stroke(WanderTheme.surfaceBone.color, lineWidth: 2)
+                                    .stroke(WanderTheme.surfaceRaised.color, lineWidth: 2)
                             }
                             .offset(x: -1, y: 1)
                             .accessibilityHidden(true)
@@ -688,8 +714,9 @@ private struct ProfileInvitationButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Check-in invitations")
-        .accessibilityValue(hasPendingInvitations ? "New invitations" : "No new invitations")
+        .accessibilityValue(badgeState.accessibilityValue)
         .accessibilityHint("Opens check-in invitations")
+        .accessibilityIdentifier("profile.checkInInvitations")
     }
 }
 
@@ -774,7 +801,7 @@ private struct ProfileGraphCountButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 2) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("\(value)")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(WanderTheme.textInk.color)
@@ -784,7 +811,11 @@ private struct ProfileGraphCountButton: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
             }
-            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: WanderTheme.tapMinimum,
+                alignment: .leading
+            )
         }
         .buttonStyle(.plain)
     }

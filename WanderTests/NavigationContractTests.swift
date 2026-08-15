@@ -1124,7 +1124,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discoverSearch.contains(".wanderGlassCapsule()"))
         XCTAssertFalse(discoverSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
-        XCTAssertTrue(profile.contains("Text(profile.displayName)\n                            .font(.system(size: 20, weight: .bold))"))
+        XCTAssertTrue(profile.contains("Text(profile.displayName)\n                        .font(.system(size: 18, weight: .bold))"))
         XCTAssertEqual(profile.components(separatedBy: "WanderTypography.editorialMajorSectionTitle").count - 1, 3)
         let profileStreak = try XCTUnwrap(
             profile.components(separatedBy: "private struct ProfileSaveStreakRow: View").last?
@@ -2890,18 +2890,32 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
         XCTAssertTrue(identity.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
-        XCTAssertTrue(identity.contains("hasPendingInvitations: sharedVisitInvitationCount > 0"))
-        XCTAssertTrue(identity.contains("Text(profile.displayName)"))
         XCTAssertTrue(identity.contains("Text(\"@\\(profile.handle)\")"))
+        XCTAssertTrue(identity.contains("pendingInvitationCount: sharedVisitInvitationCount"))
+        XCTAssertTrue(identity.contains("Text(profile.displayName)"))
         XCTAssertTrue(identity.contains("ProfileGraphCountButton(value: followerCount"))
-        XCTAssertTrue(identity.contains("Text(profileMetadata)"))
+        XCTAssertTrue(identity.contains("normalized(profile.homeArea)"))
         XCTAssertTrue(identity.contains("normalized(profile.bio)"))
+        XCTAssertTrue(identity.contains("Text(memberSinceText)"))
+        XCTAssertLessThan(
+            try XCTUnwrap(identity.range(of: "normalized(profile.homeArea)")?.lowerBound),
+            try XCTUnwrap(identity.range(of: "normalized(profile.bio)")?.lowerBound)
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(identity.range(of: "normalized(profile.bio)")?.lowerBound),
+            try XCTUnwrap(identity.range(of: "Text(memberSinceText)")?.lowerBound)
+        )
+        XCTAssertTrue(identity.contains("WanderTheme.surfaceRaised.color"))
         XCTAssertTrue(home.contains("private let profileAvatarSize: CGFloat = 86"))
         XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"envelope\")"))
-        XCTAssertTrue(invitationButton.contains("if hasPendingInvitations"))
+        XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
         XCTAssertTrue(invitationButton.contains("Circle()"))
         XCTAssertTrue(invitationButton.contains("WanderTheme.stateError.color"))
+        XCTAssertTrue(invitationButton.contains("WanderTheme.surfaceRaised.color"))
+        XCTAssertTrue(invitationButton.contains("profile.checkInInvitations"))
         XCTAssertFalse(invitationButton.contains("Text("))
+        XCTAssertTrue(screen.contains("sharedVisitInvitationsAction: { showsVisitInvitations = true }"))
+        XCTAssertTrue(screen.contains(".navigationDestination(isPresented: $showsVisitInvitations)"))
         XCTAssertTrue(recentActivity.contains("ProfileActivityFilterControl("))
         XCTAssertTrue(home.contains("case checkIns = \"check_ins\""))
         XCTAssertTrue(home.contains("case .checkIns: CheckInCopy.pluralTitle"))
@@ -2920,6 +2934,25 @@ final class NavigationContractTests: XCTestCase {
                 "scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)"
             )
         )
+    }
+
+    func testProfileInvitationBadgeStateTracksPendingInvitationCount() {
+        XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: 0).isVisible)
+        XCTAssertEqual(
+            ProfileInvitationBadgeState(pendingInvitationCount: 0).accessibilityValue,
+            "No pending invitations"
+        )
+
+        XCTAssertTrue(ProfileInvitationBadgeState(pendingInvitationCount: 1).isVisible)
+        XCTAssertEqual(
+            ProfileInvitationBadgeState(pendingInvitationCount: 1).accessibilityValue,
+            "1 pending"
+        )
+        XCTAssertEqual(
+            ProfileInvitationBadgeState(pendingInvitationCount: 4).accessibilityValue,
+            "4 pending"
+        )
+        XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: -1).isVisible)
     }
 
     func testOtherUserProfileUsesPersistentStandaloneInCommonGlassRowAndOwnerParity() throws {
