@@ -221,6 +221,46 @@ final class BuildConfigurationTests: XCTestCase {
         }
     }
 
+    func testIconComposerAppIconIsProjectBound() throws {
+        let iconDirectory = projectRoot.appendingPathComponent(
+            "Wander/Resources/AppIcon.icon",
+            isDirectory: true
+        )
+        let sourceURL = iconDirectory.appendingPathComponent(
+            "Assets/direction-an-santa-monica-coast-emojis.png"
+        )
+        let documentData = try Data(
+            contentsOf: iconDirectory.appendingPathComponent("icon.json")
+        )
+        let document = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: documentData) as? [String: Any]
+        )
+        let groups = try XCTUnwrap(document["groups"] as? [[String: Any]])
+        let group = try XCTUnwrap(groups.first)
+        let layers = try XCTUnwrap(group["layers"] as? [[String: Any]])
+        let layer = try XCTUnwrap(layers.first)
+        let sourceImage = try XCTUnwrap(
+            UIImage(data: Data(contentsOf: sourceURL))?.cgImage
+        )
+        let project = try String(
+            contentsOf: projectRoot.appendingPathComponent("project.yml")
+        )
+        let generatedProject = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander.xcodeproj/project.pbxproj")
+        )
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertEqual(group["blur-material"] as? Double, 0.5)
+        XCTAssertEqual(
+            layer["image-name"] as? String,
+            "direction-an-santa-monica-coast-emojis.png"
+        )
+        XCTAssertEqual(sourceImage.width, 1024)
+        XCTAssertEqual(sourceImage.height, 1024)
+        XCTAssertTrue(project.contains("ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon"))
+        XCTAssertTrue(generatedProject.contains("AppIcon.icon in Resources"))
+    }
+
     func testAppIconContractIsDiscoverableByFutureAgents() throws {
         let agents = try String(contentsOf: projectRoot.appendingPathComponent("AGENTS.md"))
         let contract = try String(contentsOf: projectRoot.appendingPathComponent("docs/brand/recme-app-icon.md"))
