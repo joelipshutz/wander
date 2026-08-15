@@ -30103,3 +30103,41 @@ Launch-safe engineering plan follow-up - 2026-08-15 13:55 PDT:
   typography efforts plus multiple launch-gate/TestFlight worktrees. Their
   scope and current status must be inspected before assigning typography work
   to a new implementation slice.
+
+Launch-safe engineering plan completion - 2026-08-15:
+
+- Audited current `origin/main` at `6085eb24`, the active worktree set, merged
+  typography PR #256, merged account-scoped feature-flag PR #426, the current
+  Add/import CTAs, `PlaceProfileFullScreen`, `MapPlaceSaveFlowSheet`, its nine
+  production call sites, save/draft/store tests, launch decisions, and known
+  TestFlight test noise.
+- Added
+  `docs/plans/2026-08-15-check-in-wanna-launch-safe-eng-plan.md`. The plan splits
+  delivery into three independent launch-polish PRs followed by a post-candidate
+  behavior train. Typography lands first, Add's non-committing `Save` label
+  becomes `Use this place` second, and the count-aware import confirmation joins
+  the existing terracotta capsule family third.
+- Floating place actions and the attached editor are explicitly not 1.0
+  blockers. They start behind a new off-by-default key on the already-merged
+  feature-flag platform, snapshot their route for each open profile, retain the
+  legacy sheet as a remote rollback path, and add one place state/entry point
+  per later PR. Production guests remain on legacy during the account-scoped
+  rollout rather than weakening feature-flag RLS.
+- The plan reuses the merged native editorial type roles,
+  `WanderPrimaryButton`, `MapPlaceSaveContext`, durable save drafts, current
+  submission/store/sync semantics, and full-screen place profile. It does not
+  propose a new font dependency, a second CTA component, a save data-model/RPC
+  change, anonymous flag access, or a batch-import navigation rewrite.
+- Wrote local QA and implementation-task artifacts under the canonical rec.me
+  gstack project directory. The automatic independent remote Codex review was
+  blocked before transmission because the engineering plan did not have
+  separate export approval; no plan content was sent and no workaround was
+  attempted.
+- Validation: `git diff --check` passed while drafting. No Xcode build/test was
+  run because this pass changes documentation only; every implementation slice
+  has focused, full-suite, two-device, Dynamic Type, rollback, and TestFlight
+  gates in the plan.
+- Next implementation step, only after plan approval: create fresh worktrees
+  from latest `origin/main` for baseline capture and S1 typography. Do not stack
+  implementation on this design/planning branch and do not merge, release, or
+  enable the behavior flag as part of this planning handoff.

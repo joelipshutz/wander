@@ -723,6 +723,8 @@ since this design branch was created.
 - TODOS.md updates: 0. S10 is already captured as an implementation task rather
   than a vague future TODO.
 - Failure modes: 0 silent critical gaps after tests and legacy fallback.
+- Outside voice: skipped. The remote Codex pass was blocked before
+  transmission because the plan had not received separate export approval.
 - Parallelization: 5 lanes; 3 launch-polish lanes may develop in parallel but
   merge sequentially, and the Map behavior lane is sequential.
 - Lake Score: complete behavior is retained, but it is delivered in reversible
@@ -733,7 +735,7 @@ since this design branch was created.
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | not run | Optional; product direction was already selected in the design pass |
-| Codex Review | `/codex review` | Independent second opinion | 0 | pending | Outside-voice pass runs after this plan is written |
+| Codex Review | `/codex review` | Independent second opinion | 0 | skipped | Remote plan export was not separately approved; no plan content was sent |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clear | Scope reduced, 25 test gaps assigned, 0 critical gaps |
 | Design Review | `/plan-design-review` | UI/UX gaps | 1 | clear | Approved Editorial Fold direction and expanded flow boards |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | not required | No tooling or developer-facing workflow introduced |
