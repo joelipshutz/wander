@@ -149,7 +149,9 @@ enum PlaceBusinessMetadataMatcher {
             score += 100
         } else if let requestNumber = streetNumber(in: requestAddress),
                   let candidateNumber = streetNumber(in: candidateAddress) {
-            score += requestNumber == candidateNumber ? 80 : -100
+            guard requestNumber == candidateNumber else { return nil }
+            guard streetNamesOverlap(requestAddress, candidateAddress) else { return nil }
+            score += 80
         }
 
         let requestLocality = normalized(request.locality)
@@ -171,9 +173,9 @@ enum PlaceBusinessMetadataMatcher {
         for request: PlaceBusinessMetadataRequest,
         candidate: PlaceBusinessMetadataCandidate
     ) -> CLLocationDistance {
-        let requestNumber = streetNumber(in: normalized(request.address))
-        let candidateNumber = streetNumber(in: normalized(candidate.address))
-        return requestNumber != nil && requestNumber == candidateNumber ? 2_000 : 750
+        let requestAddress = normalized(request.address)
+        let candidateAddress = normalized(candidate.address)
+        return !requestAddress.isEmpty && requestAddress == candidateAddress ? 2_000 : 750
     }
 
     private static func normalized(_ value: String?) -> String {
@@ -192,6 +194,21 @@ enum PlaceBusinessMetadataMatcher {
         normalizedAddress.split(separator: " ").first.map(String.init).flatMap { value in
             value.allSatisfy(\.isNumber) ? value : nil
         }
+    }
+
+    private static func streetNamesOverlap(_ lhs: String, _ rhs: String) -> Bool {
+        let ignoredTokens: Set<String> = [
+            "avenue", "ave", "boulevard", "blvd", "circle", "cir", "court", "ct",
+            "drive", "dr", "highway", "hwy", "lane", "ln", "parkway", "pkwy",
+            "place", "pl", "road", "rd", "street", "st", "suite", "way"
+        ]
+        let lhsTokens = Set(lhs.split(separator: " ").map(String.init))
+            .subtracting(ignoredTokens)
+            .filter { !$0.allSatisfy(\.isNumber) }
+        let rhsTokens = Set(rhs.split(separator: " ").map(String.init))
+            .subtracting(ignoredTokens)
+            .filter { !$0.allSatisfy(\.isNumber) }
+        return !lhsTokens.isDisjoint(with: rhsTokens)
     }
 }
 

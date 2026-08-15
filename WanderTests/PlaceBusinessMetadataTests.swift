@@ -74,6 +74,64 @@ final class PlaceBusinessMetadataTests: XCTestCase {
         XCTAssertNil(PlaceBusinessMetadataMatcher.bestCandidate(for: request, from: candidates))
     }
 
+    func testMatcherRejectsSameNameAtConflictingNearbyAddress() {
+        let request = PlaceBusinessMetadataRequest(
+            placeID: "place_chain_1",
+            name: "Same Name Cafe",
+            address: "100 Main Street",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.0500,
+            longitude: -118.2500,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: nil
+        )
+        let candidates = [
+            PlaceBusinessMetadataCandidate(
+                name: "Same Name Cafe",
+                address: "104 Main Street",
+                locality: "Los Angeles",
+                region: "CA",
+                latitude: 34.0501,
+                longitude: -118.2501,
+                websiteURLString: "https://wrong-branch.example",
+                phoneNumber: "+1 213 555 0100",
+                timeZoneIdentifier: "America/Los_Angeles"
+            )
+        ]
+
+        XCTAssertNil(PlaceBusinessMetadataMatcher.bestCandidate(for: request, from: candidates))
+    }
+
+    func testMatcherRejectsSameNumberOnDifferentNearbyStreet() {
+        let request = PlaceBusinessMetadataRequest(
+            placeID: "place_chain_1",
+            name: "Same Name Cafe",
+            address: "100 Main Street",
+            locality: "Los Angeles",
+            region: "CA",
+            latitude: 34.0500,
+            longitude: -118.2500,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: nil
+        )
+        let candidates = [
+            PlaceBusinessMetadataCandidate(
+                name: "Same Name Cafe",
+                address: "100 Broadway Avenue",
+                locality: "Los Angeles",
+                region: "CA",
+                latitude: 34.0501,
+                longitude: -118.2501,
+                websiteURLString: "https://wrong-branch.example",
+                phoneNumber: "+1 213 555 0100",
+                timeZoneIdentifier: "America/Los_Angeles"
+            )
+        ]
+
+        XCTAssertNil(PlaceBusinessMetadataMatcher.bestCandidate(for: request, from: candidates))
+    }
+
     func testRecoveredMetadataFillsOnlyMissingOrInvalidValues() {
         let stored = PlaceBusinessMetadata(
             websiteURLString: "not a website",

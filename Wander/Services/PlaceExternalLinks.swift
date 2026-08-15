@@ -110,8 +110,9 @@ enum PlaceExternalLinks {
             contentsOf: visibleBusinessActions(
                 websiteURLString: websiteURLString,
                 phoneNumber: phoneNumber,
-                actionLinksJSON: nil
+                actionLinksJSON: actionLinksJSON
             )
+            .filter { $0.kind == .website || $0.kind == .call }
         )
 
         if let reservation = reservationAction
@@ -953,7 +954,7 @@ enum PlaceExternalLinks {
     private static func dedupedByCapability(_ actions: [PlaceExternalAction]) -> [PlaceExternalAction] {
         var seen = Set<String>()
         return actions.filter { action in
-            seen.insert(action.id.lowercased()).inserted
+            seen.insert(action.kind.rawValue).inserted
         }
     }
 

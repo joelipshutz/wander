@@ -399,6 +399,45 @@ final class PlaceExternalLinksTests: XCTestCase {
         XCTAssertEqual(actions.map(\.url), [sharedURL, sharedURL])
     }
 
+    func testPlaceProfileUsesActionLinkWebsiteWithoutDuplicatingCapability() throws {
+        let encodedLinks = try XCTUnwrap(
+            String(
+                data: JSONEncoder().encode([
+                    PlaceActionLink(
+                        kind: .website,
+                        title: "Fallback site",
+                        urlString: "https://fallback.example",
+                        source: .backendExtraction,
+                        confidence: .exact
+                    )
+                ]),
+                encoding: .utf8
+            )
+        )
+
+        let fallbackActions = PlaceExternalLinks.placeProfileActions(
+            placeName: "Fallback Place",
+            latitude: nil,
+            longitude: nil,
+            websiteURLString: nil,
+            phoneNumber: nil,
+            actionLinksJSON: encodedLinks
+        )
+        XCTAssertEqual(fallbackActions.map(\.kind), [.website])
+        XCTAssertEqual(fallbackActions.first?.url.absoluteString, "https://fallback.example")
+
+        let preferredActions = PlaceExternalLinks.placeProfileActions(
+            placeName: "Fallback Place",
+            latitude: nil,
+            longitude: nil,
+            websiteURLString: "https://official.example",
+            phoneNumber: nil,
+            actionLinksJSON: encodedLinks
+        )
+        XCTAssertEqual(preferredActions.map(\.kind), [.website])
+        XCTAssertEqual(preferredActions.first?.url.absoluteString, "https://official.example")
+    }
+
     func testAnajakRecoveredWebsiteDiscoversExactOpenTableReservation() async {
         let action = await PlaceExternalLinks.discoverReservationAction(
             actionLinksJSON: nil,
