@@ -75,12 +75,22 @@ final class ClerkAuthService: AuthSessionProviding {
                 for await event in events {
                     guard !Task.isCancelled else { break }
                     switch event {
-                    case .signInCompleted, .signUpCompleted, .signedOut, .accountDeleted, .sessionChanged:
+                    case .signInCompleted, .signUpCompleted:
+                        // A completed auth response does not always include the
+                        // refreshed Clerk client. The initiating auth method
+                        // resolves that authoritative client before succeeding.
+                        // Publishing currentClientState() here can race that
+                        // refresh and incorrectly turn a valid login into a
+                        // signed-out result.
+                        break
+                    case .signedOut, .accountDeleted:
                         guard let self else { return }
-                        self.refreshGeneration &+= 1
+                        self.applyTerminalSignedOutState()
+                        continuation.yield(.signedOut)
+                    case .sessionChanged:
+                        guard let self else { return }
                         let state = Self.currentClientState()
-                        self.persistAuthoritativeState(state)
-                        self.state = state
+                        self.applyObservedClientState(state)
                         continuation.yield(state)
                     case .tokenRefreshed:
                         break
@@ -427,6 +437,23 @@ final class ClerkAuthService: AuthSessionProviding {
             break
         }
     }
+
+    #if canImport(ClerkKit)
+    /// Clerk emits `sessionChanged` while `refreshClient()` is still resolving.
+    /// Applying that observed state must not invalidate the refresh that caused
+    /// the event; the completed refresh remains the authoritative result.
+    func applyObservedClientState(_ state: AuthState) {
+        persistAuthoritativeState(state)
+        self.state = state
+    }
+
+    /// A terminal auth event is different from an observed client refresh: it
+    /// must prevent an older in-flight refresh from restoring a removed session.
+    func applyTerminalSignedOutState() {
+        refreshGeneration &+= 1
+        applyObservedClientState(.signedOut)
+    }
+    #endif
 
     #if canImport(ClerkKit)
     private static let accountNotFoundCodes: Set<String> = [

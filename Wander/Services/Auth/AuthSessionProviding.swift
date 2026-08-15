@@ -664,7 +664,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         case .completed:
             return ""
         case .requiresExistingAccountVerification:
-            return "We couldn’t match that \(provider.displayName) login to an existing account. Sign in with your original method first, then connect \(provider.displayName) in Settings."
+            return "We couldn’t match that \(provider.displayName) login to an existing account. Sign in with the method you originally used. Your saved places and people are still there."
         case .requiresAdditionalVerification:
             return "This \(provider.displayName) account needs another verification step. Try email or your other sign-in method."
         }

@@ -208,7 +208,7 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertNil(store.activeSocialAuthProvider)
         XCTAssertEqual(
             store.nativeAuthError,
-            "We couldn’t match that Apple login to an existing account. Sign in with your original method first, then connect Apple in Settings."
+            "We couldn’t match that Apple login to an existing account. Sign in with the method you originally used. Your saved places and people are still there."
         )
     }
 
@@ -546,6 +546,79 @@ final class AuthSessionTests: XCTestCase {
         await firstRefresh.value
         XCTAssertEqual(service.state, .signedIn(newerSession))
     }
+
+    #if canImport(ClerkKit)
+    func testObservedClientChangeDuringRefreshCannotDiscardAuthenticatedSession() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let refreshStarted = expectation(description: "authoritative refresh started")
+        var continuation: CheckedContinuation<AuthSession?, Never>?
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                await withCheckedContinuation { pendingContinuation in
+                    continuation = pendingContinuation
+                    refreshStarted.fulfill()
+                }
+            },
+            sessionCache: .disabled,
+            configureClerk: { $0 }
+        )
+
+        let refresh = Task { await service.refreshSession() }
+        await fulfillment(of: [refreshStarted], timeout: 1)
+
+        // Clerk's refreshClient() emits sessionChanged before its caller
+        // resumes. A stale client snapshot from that event must not invalidate
+        // the authoritative refresh that is still in flight.
+        service.applyObservedClientState(.signedOut)
+
+        let authenticatedSession = AuthSession(
+            userID: "user_authenticated",
+            displayName: "Authenticated",
+            handle: "authenticated"
+        )
+        continuation?.resume(returning: authenticatedSession)
+        await refresh.value
+
+        XCTAssertEqual(service.state, .signedIn(authenticatedSession))
+    }
+
+    func testTerminalSignOutInvalidatesInFlightAuthenticatedRefresh() async {
+        let configuration = WanderBackendConfiguration.current { key in
+            "$(\(key))"
+        }
+        let refreshStarted = expectation(description: "authoritative refresh started")
+        var continuation: CheckedContinuation<AuthSession?, Never>?
+        let service = ClerkAuthService(
+            configuration: configuration,
+            resolveSession: {
+                await withCheckedContinuation { pendingContinuation in
+                    continuation = pendingContinuation
+                    refreshStarted.fulfill()
+                }
+            },
+            sessionCache: .disabled,
+            configureClerk: { $0 }
+        )
+
+        let refresh = Task { await service.refreshSession() }
+        await fulfillment(of: [refreshStarted], timeout: 1)
+
+        service.applyTerminalSignedOutState()
+        continuation?.resume(
+            returning: AuthSession(
+                userID: "user_stale",
+                displayName: "Stale",
+                handle: "stale"
+            )
+        )
+        await refresh.value
+
+        XCTAssertEqual(service.state, .signedOut)
+    }
+    #endif
 
     func testCancelledSessionRefreshDoesNotReplaceValidatedState() async {
         let configuration = WanderBackendConfiguration.current { key in
