@@ -161,6 +161,7 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     let ratingScore: Double?
     let recommendedScore: Double?
     let recommendedCount: Int?
+    let communitySaveCount: Int?
     let categoryOverride: String?
     let subcategoryOverride: String?
     let categoryOverrideSource: String?
@@ -200,6 +201,7 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         case ratingScore = "rating_score"
         case recommendedScore = "recommended_score"
         case recommendedCount = "recommended_count"
+        case communitySaveCount = "community_save_count"
         case categoryOverride = "category_override"
         case subcategoryOverride = "subcategory_override"
         case categoryOverrideSource = "category_override_source"
@@ -216,9 +218,10 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             throw WanderRemoteError.invalidResponse("Unknown place visibility: \(visibility)")
         }
 
+        let isCommunityAggregate = ownerUserID == FeaturedCommunityPlaceSignal.ownerID
         let owner = LocalProfile(
             localID: ownerUserID,
-            serverID: ownerUserID,
+            serverID: isCommunityAggregate ? nil : ownerUserID,
             handle: ownerHandle,
             displayName: ownerDisplayName,
             avatarURL: ownerAvatarURL,
@@ -245,7 +248,7 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
         )
         let userPlace = LocalUserPlace(
             localID: userPlaceID,
-            serverID: userPlaceID,
+            serverID: isCommunityAggregate ? nil : userPlaceID,
             userID: ownerUserID,
             placeID: placeID,
             status: parsedStatus,
@@ -273,7 +276,8 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
             place: place,
             userPlace: userPlace,
             owner: owner,
-            attributes: attributes.map { $0.localAttribute(userPlaceID: userPlaceID) }
+            attributes: attributes.map { $0.localAttribute(userPlaceID: userPlaceID) },
+            communitySaveCount: communitySaveCount ?? 0
         )
     }
 }

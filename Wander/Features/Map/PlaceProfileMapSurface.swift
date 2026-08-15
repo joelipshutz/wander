@@ -342,7 +342,10 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var socialSaves: [PlaceSaveSummary] {
-        saves.filter { $0.visiblePlace.owner.id != currentUserID }
+        saves.filter {
+            $0.visiblePlace.owner.id != currentUserID
+                && !$0.visiblePlace.isCommunityAggregate
+        }
     }
 
     private var ticketAccentColor: Color {
@@ -399,7 +402,10 @@ private struct PlaceProfilePreviewCard: View {
 
     private func participantNames(limit: Int) -> [String] {
         saves
-            .filter { $0.visiblePlace.owner.id != currentUserID }
+            .filter {
+                $0.visiblePlace.owner.id != currentUserID
+                    && !$0.visiblePlace.isCommunityAggregate
+            }
             .map { firstName(for: $0.visiblePlace.owner) }
             .uniquePreservingOrder()
             .prefix(limit)
@@ -2104,7 +2110,7 @@ private struct PlaceProfileFacepile: View {
     }
 
     private var displaySaves: [PlaceSaveSummary] {
-        Array(saves.prefix(3))
+        Array(saves.filter { !$0.visiblePlace.isCommunityAggregate }.prefix(3))
     }
 
     private func color(for owner: LocalProfile) -> Color {

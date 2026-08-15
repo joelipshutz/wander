@@ -1254,6 +1254,62 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertNil(rpc.calls[0].body["owner_scope"] as Any?)
     }
 
+    func testFeaturedPlacesCallBoundedCommunityRPCAndMapAnonymousAggregate() async throws {
+        let rpc = RecordingRPC()
+        let placeID = "94000000-0000-0000-0000-000000000001"
+        rpc.responses["featured_places_in_view"] = """
+        [
+          {
+            "user_place_id": "\(placeID)",
+            "place_id": "\(placeID)",
+            "owner_user_id": "recme_featured_community",
+            "owner_handle": "recme",
+            "owner_display_name": "rec.me community",
+            "owner_avatar_url": null,
+            "canonical_name": "Community Noodles",
+            "category": "restaurants_food",
+            "primary_category": "restaurants_food",
+            "latitude": 34.061,
+            "longitude": -118.251,
+            "status": "been",
+            "visibility": "followers",
+            "note": null,
+            "visited_at": "2026-08-14T20:00:00Z",
+            "saved_at": "2026-08-14T20:00:00Z",
+            "created_at": "2026-08-14T20:00:00Z",
+            "updated_at": "2026-08-14T20:00:00Z",
+            "rating_signal": null,
+            "rating_score": null,
+            "recommended_score": 4.6,
+            "recommended_count": 11,
+            "community_save_count": 17,
+            "source_type": "featured_community_aggregate",
+            "attributes": []
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabasePlaceRepository(rpc: rpc)
+
+        let places = try await repository.featuredPlaces(
+            in: MapViewport(minLatitude: 34, minLongitude: -119, maxLatitude: 35, maxLongitude: -118)
+        )
+
+        let place = try XCTUnwrap(places.first)
+        XCTAssertTrue(place.isCommunityAggregate)
+        XCTAssertEqual(place.owner.id, FeaturedCommunityPlaceSignal.ownerID)
+        XCTAssertNil(place.owner.serverID)
+        XCTAssertNil(place.userPlace.serverID)
+        XCTAssertNil(place.userPlace.note)
+        XCTAssertTrue(place.attributes.isEmpty)
+        XCTAssertEqual(place.userPlace.recommendedScore, 4.6)
+        XCTAssertEqual(place.userPlace.recommendedCount, 11)
+        XCTAssertEqual(place.communitySaveCount, 17)
+        XCTAssertEqual(rpc.calls.map(\.name), ["featured_places_in_view"])
+        XCTAssertEqual(rpc.calls[0].body["min_lat"] as? Double, 34)
+        XCTAssertEqual(rpc.calls[0].body["max_lng"] as? Double, -118)
+        XCTAssertNil(rpc.calls[0].body["owner_scope"] as Any?)
+    }
+
     func testSharedPlaceLinkResolvesPublicVenueFacts() async throws {
         let rpc = RecordingRPC()
         let placeID = "7bdfb34e-521e-4bc8-8466-0315adf12a5a"

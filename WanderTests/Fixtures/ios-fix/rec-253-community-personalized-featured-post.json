@@ -1,0 +1,17 @@
+{
+  "issue": "REC-253",
+  "fixed_behavior": "Featured now considers bounded Been/check-in place groups from the broader eligible rec.me community, includes the viewer, prioritizes followed contributors, and lightly personalizes ranking from the viewer's own Wanna saves and 4+ ratings using locally available category, cuisine, and tag signals. Friends remains the viewer plus everyone they follow.",
+  "filter_contract": "Featured and Friends remain mutually exclusive source pills. More remains Category, People, and Status with All in every section. More selections intersect with the active source, source switching preserves them, and Featured plus Wanna intentionally returns no places.",
+  "privacy_contract": "Broader candidates require an active non-private profile, an Everyone/followers check-in, and no block in either direction. Community-only output is a synthetic canonical-place aggregate containing support count, aggregate rating, and recency; it never returns a stranger identity, real user-place id, note, answers, tags, or photos. Existing self/social rows retain their ordinary RLS-visible detail.",
+  "panning_contract": "Source switching and movement inside the prefetched viewport rerank locally. Leaving the buffer uses the existing 250 ms debounce and cancellation, keeps current pins visible, fetches one server-bounded candidate set, and swaps only after success.",
+  "performance_contract": "The server caps candidate place groups at 120, the client defensively caps rows before grouping and renders at most 24 groups, the taste profile is built once per ranking pass, and there is no per-place network or model work.",
+  "visual_contract": "No filter-pill, Liquid Glass, pin drawing, or pin-transition code changed. Synthetic community identity is excluded from facepiles, participant names, saver lists, and activity rows.",
+  "validation": {
+    "focused_ios": "11 Featured ranking, filter, viewport, DTO, and cache-isolation tests passed with zero failures; the 8,000-candidate ranking assertion completed inside its sub-two-second measured budget.",
+    "full_ios": "A pre-rebase run executed 1,165 tests with 1 unrelated failure in unpadded Clerk-key decoding; current main fixes that exact baseline test. Repeated latest-main reruns were cancelled during third-party package compilation because the shared machine reached zero free disk space, not because rec.me code or tests failed.",
+    "database": "17 rollback-only pgTAP assertions passed, including SECURITY DEFINER metadata, grants, block/private/status exclusions, anonymization, redaction, aggregate evidence, self/social retention, and the 120-group cap. The repository-wide hosted Supabase smoke suite also passed with the migration applied only inside a rollback.",
+    "static": "git diff --check and node --check scripts/supabase-smoke-test.mjs passed."
+  },
+  "release_boundary": "The Supabase migration was not applied, no branch was merged, and no TestFlight build was uploaded. Apply the migration before distributing an app build that expects broader Featured candidates; until then the client safely falls back to the existing social candidate set.",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration"
+}

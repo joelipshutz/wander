@@ -417,6 +417,11 @@ struct VisiblePlace: Identifiable {
     let userPlace: LocalUserPlace
     let owner: LocalProfile
     var attributes: [LocalPlaceAttribute] = []
+    var communitySaveCount: Int = 0
+
+    var isCommunityAggregate: Bool {
+        owner.id == FeaturedCommunityPlaceSignal.ownerID
+    }
 
     var categoryPresentation: VisiblePlaceCategoryPresentation {
         VisiblePlaceCategoryPresentationResolver.presentation(
@@ -470,6 +475,12 @@ struct VisiblePlace: Identifiable {
     var categoryEmoji: String {
         categoryPresentation.emoji
     }
+}
+
+enum FeaturedCommunityPlaceSignal {
+    static let ownerID = "recme_featured_community"
+    static let ownerHandle = "recme"
+    static let ownerDisplayName = "rec.me community"
 }
 
 extension LocalPlace {

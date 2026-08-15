@@ -1,0 +1,23 @@
+{
+  "issue": "REC-253",
+  "capture_source": "TestFlight build 149 source at 426f2c7a plus deterministic map-ranking fixture",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "reported_problem": "Featured discards every non-followed owner before ranking, so it cannot represent the broader rec.me community and has no signal for the viewer's saved-place tastes",
+  "production_boundary": "visible_places_in_view is SECURITY INVOKER and user_places RLS currently restricts ordinary viewport rows to the viewer's existing social visibility; a client-only selector change cannot populate non-followed community candidates",
+  "reproduction": {
+    "viewer": "user_joe",
+    "following": ["user_ben"],
+    "viewport_candidates": [
+      "Joe check-in",
+      "Ben check-in",
+      "non-followed community check-in",
+      "Ben Wanna"
+    ],
+    "actual_featured": ["Joe check-in", "Ben check-in"],
+    "missing_featured": ["non-followed community check-in"]
+  },
+  "expected_selection": "Featured considers bounded public rec.me Been/check-in place groups in the viewport, includes the viewer, boosts followed contributors, adds lightweight category/cuisine/tag fit from the viewer's own positive saves, then weighs community support, rating, and recency. Friends remains viewer plus everyone followed.",
+  "privacy_contract": "Self and social rows retain their RLS-visible details. Broader community candidates require a non-private active profile plus Everyone visibility, exclude either-direction blocks, and expose only an anonymous canonical-place signal with aggregate rating/support and recency; stranger identity, user-place ids, notes, tags, and answer attributes are never returned.",
+  "panning_contract": "Source switching performs no request. Inside the loaded expanded viewport, Featured reranks locally. Outside it, the existing 250 ms debounce cancels stale work, keeps current pins visible, fetches one bounded expanded-viewport candidate set, and swaps only after success.",
+  "performance_contract": "The backend caps the candidate set before transfer; the client builds one taste profile per ranking pass and performs no per-place network or model work. Final output remains capped at 24 place groups."
+}

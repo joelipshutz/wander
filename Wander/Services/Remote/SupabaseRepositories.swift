@@ -376,6 +376,19 @@ struct SupabasePlaceRepository: PlaceRepository {
         return rows.compactMap { $0.placeCandidate() }
     }
 
+    func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {
+        let rows: [RemoteVisiblePlaceDTO] = try await rpc.call(
+            "featured_places_in_view",
+            params: FeaturedPlacesParams(
+                minLat: viewport.minLatitude,
+                minLng: viewport.minLongitude,
+                maxLat: viewport.maxLatitude,
+                maxLng: viewport.maxLongitude
+            )
+        )
+        return try rows.map { try $0.visiblePlace() }
+    }
+
     func resolveCurrentLocation() async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("remote current location place resolution")
     }
@@ -2591,6 +2604,20 @@ private struct VisiblePlacesParams: Encodable {
         case statusFilter = "status_filter"
         case categoryFilter = "category_filter"
         case ownerScope = "owner_scope"
+    }
+}
+
+private struct FeaturedPlacesParams: Encodable {
+    let minLat: Double
+    let minLng: Double
+    let maxLat: Double
+    let maxLng: Double
+
+    enum CodingKeys: String, CodingKey {
+        case minLat = "min_lat"
+        case minLng = "min_lng"
+        case maxLat = "max_lat"
+        case maxLng = "max_lng"
     }
 }
 

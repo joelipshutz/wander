@@ -290,7 +290,7 @@ Observability policy:
 - The first native M2 UI pass is functionally wired but visually poor on simulator screenshots: map content appears undersized/letterboxed and controls are oversized/crowded. Treat this as the active UI bug.
 - `preview/follow-profile-settings-mocks/` is the approved visual baseline. Do not generate a competing design direction unless Joe explicitly asks.
 - Existing handoff mocks are a reference, not production code. Recreate the intent natively in SwiftUI.
-- UI copy says Everyone/Friends/Self, but backend values are `followers`/`mutuals`/`self`. "Everyone" means followers-visible in v0.1, not the public internet.
+- UI copy says Everyone/Friends/Self, but backend values are `followers`/`mutuals`/`self`. Ordinary profile/social reads still treat `followers` as followers-visible. REC-253 adds one narrow exception: Featured may use a non-private account's Everyone check-in only as an anonymous place-level aggregate; it does not expose the contributor or their save content.
 - Follow graph is one-way follows; friends are mutual follows.
 - Blocks are hard blocks: blocked users should disappear from search, lists, profiles, map results, and stale views.
 - There may be local Xcode signing/team edits in `Wander.xcodeproj/project.pbxproj` from opening the project. Do not commit project signing churn unless intentional.

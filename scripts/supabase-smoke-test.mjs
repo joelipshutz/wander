@@ -101,9 +101,10 @@ async function main() {
           collaboratorUserID,
           strangerUserID,
         );
+        await runFeaturedCommunitySmokeChecks(client, smokeUserID, strangerUserID);
         await runDiscoverProfileRecommendationSmokeChecks(client, smokeUserID);
         await runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID);
-        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, batched surface snapshots, lists, photo visibility, Discover profile recommendations, and global rec.me place search are valid.");
+        console.log("Supabase smoke test passed: profile updates, mutes, profile insights, semantic saves, Featured community aggregates, batched surface snapshots, lists, photo visibility, Discover profile recommendations, and global rec.me place search are valid.");
       }
     } finally {
       await client.query("rollback");
@@ -3698,6 +3699,143 @@ async function runSurfaceSnapshotSmokeChecks(
       /permission denied/,
     );
   }
+}
+
+async function runFeaturedCommunitySmokeChecks(client, smokeUserID, strangerUserID) {
+  await client.query("reset role");
+  await expectQuery(
+    client,
+    "Featured community RPC keeps its approved definer, timeout, and grant posture",
+    `
+      select
+        procedure.prosecdef as security_definer,
+        'search_path=public, app' = any(coalesce(procedure.proconfig, array[]::text[])) as pinned_search_path,
+        'statement_timeout=3s' = any(coalesce(procedure.proconfig, array[]::text[])) as bounded_timeout,
+        has_function_privilege('authenticated', procedure.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', procedure.oid, 'execute') as anon_denied
+      from pg_proc procedure
+      where procedure.oid = 'public.featured_places_in_view(double precision,double precision,double precision,double precision)'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  const fixture = await expectQuery(
+    client,
+    "create rolled-back Featured community aggregate fixture",
+    `
+      with upserted_place as (
+        insert into public.places (
+          canonical_name,
+          category,
+          primary_category,
+          latitude,
+          longitude,
+          source_provider,
+          source_provider_place_id
+        )
+        values (
+          'Codex Featured Community Smoke',
+          'restaurants_food',
+          'restaurants_food',
+          34.061,
+          -118.251,
+          'codex_smoke',
+          'featured-community-rpc-smoke'
+        )
+        on conflict (source_provider, source_provider_place_id) do update
+        set
+          canonical_name = excluded.canonical_name,
+          category = excluded.category,
+          primary_category = excluded.primary_category,
+          latitude = excluded.latitude,
+          longitude = excluded.longitude,
+          updated_at = now()
+        returning id
+      ), upserted_memory as (
+        insert into public.user_places (
+          user_id,
+          place_id,
+          status,
+          visibility,
+          note,
+          rating_score,
+          source_type,
+          deleted_at
+        )
+        select
+          $1,
+          upserted_place.id,
+          'been',
+          'followers',
+          'Never expose this stranger note',
+          4.5,
+          'manual',
+          null
+        from upserted_place
+        on conflict (user_id, place_id) do update
+        set
+          status = excluded.status,
+          visibility = excluded.visibility,
+          note = excluded.note,
+          rating_score = excluded.rating_score,
+          deleted_at = null,
+          updated_at = now()
+        returning place_id
+      )
+      select place_id::text
+      from upserted_memory
+    `,
+    [strangerUserID],
+    (result) => Boolean(result.rows[0]?.place_id),
+  );
+  const placeID = fixture.rows[0].place_id;
+
+  await setAuthenticatedUser(client, smokeUserID);
+  await expectQuery(
+    client,
+    "Featured viewport returns the exact anonymous aggregate production payload",
+    `
+      select
+        featured.user_place_id::text,
+        featured.place_id::text,
+        featured.owner_user_id,
+        featured.note,
+        featured.attributes,
+        featured.recommended_score,
+        featured.recommended_count,
+        featured.community_save_count
+      from public.featured_places_in_view(
+        34::double precision,
+        -118.4::double precision,
+        34.2::double precision,
+        -118.1::double precision
+      ) featured
+      where featured.place_id = $1::uuid
+    `,
+    [placeID],
+    (result) => {
+      const row = result.rows[0];
+      return row?.user_place_id === placeID
+        && row?.place_id === placeID
+        && row?.owner_user_id === "recme_featured_community"
+        && row?.note === null
+        && Array.isArray(row?.attributes)
+        && row.attributes.length === 0
+        && Number(row?.recommended_score) === 4.5
+        && row?.recommended_count === 1
+        && row?.community_save_count === 1;
+    },
+  );
+
+  await client.query("set local role anon");
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot call Featured community RPC",
+    "select public.featured_places_in_view(34::double precision, -118.4::double precision, 34.2::double precision, -118.1::double precision)",
+    [],
+    /permission denied/,
+  );
 }
 
 async function runFirstVisiblePlacePhotoChecks(

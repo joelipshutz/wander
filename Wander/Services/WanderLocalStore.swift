@@ -6206,6 +6206,27 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    /// Fetches the server-bounded community candidate set used only by
+    /// Featured. It intentionally leaves the profile-wide social cache alone.
+    func fetchRemoteFeaturedViewportPlaces(
+        in viewport: MapViewport,
+        backend: WanderBackend?
+    ) async -> [VisiblePlace]? {
+        guard let backend, backend.placeRepository != nil else { return nil }
+        let requestUserID = currentUser.id
+
+        do {
+            let visiblePlaces = try await backend.featuredPlaces(in: viewport)
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            lastRemoteError = nil
+            return visiblePlaces
+        } catch {
+            guard currentUser.id == requestUserID, !Task.isCancelled else { return nil }
+            lastRemoteError = remoteErrorMessage(error)
+            return nil
+        }
+    }
+
     func refreshRemoteWannaGoPlans(backend: WanderBackend?) async {
         guard let backend, backend.userPlaceRepository != nil else {
             return
