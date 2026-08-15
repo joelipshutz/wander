@@ -58,7 +58,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
-            [.profileShare, .profileActivity, .profileCalendar, .profileMap]
+            [.profileShare, .profileActivity, .profileMap, .profileCalendar]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.placeDetail]?.map(\.target),

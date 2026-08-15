@@ -285,6 +285,7 @@ struct ProfileOwnerHome: View {
     let onCalendarScrollRequestHandled: (UUID) -> Void
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
     @State private var profileScrollPosition: String?
+    private let profileAvatarSize: CGFloat = 86
 
     var body: some View {
         ScrollView {
@@ -307,12 +308,6 @@ struct ProfileOwnerHome: View {
                         ProfileSaveStreakRow(summary: saveStreak)
                     }
                 }
-                if mode.isOwner || sharedVisitInvitationCount > 0 {
-                    ProfileSharedVisitInboxRow(
-                        invitationCount: sharedVisitInvitationCount,
-                        action: sharedVisitInvitationsAction
-                    )
-                }
                 ProfileRecentActivitySection(
                     items: recentActivity,
                     checkInCount: stats.checkIns,
@@ -321,13 +316,6 @@ struct ProfileOwnerHome: View {
                     allActivityAction: allActivityAction
                 )
                 .id(ProfileHomeScrollAnchor.activity)
-                ProfileCalendarSection(
-                    insights: insights,
-                    selectedMonth: $selectedMonth,
-                    ownerLabel: ownerLabel,
-                    dateAction: calendarDateAction
-                )
-                .id(ProfileHomeScrollAnchor.calendar)
                 ProfileMapSection(
                     profile: profile,
                     insights: insights,
@@ -335,6 +323,13 @@ struct ProfileOwnerHome: View {
                     summaryAction: mapSummaryAction
                 )
                 .id(ProfileHomeScrollAnchor.map)
+                ProfileCalendarSection(
+                    insights: insights,
+                    selectedMonth: $selectedMonth,
+                    ownerLabel: ownerLabel,
+                    dateAction: calendarDateAction
+                )
+                .id(ProfileHomeScrollAnchor.calendar)
             }
             .scrollTargetLayout()
             .padding(.horizontal, WanderTheme.spacing4)
@@ -400,131 +395,143 @@ struct ProfileOwnerHome: View {
     }
 
     private var identitySection: some View {
-        VStack(spacing: WanderTheme.spacing4) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                    if let backAction {
-                        ProfileHeaderActionButton(
-                            systemImage: "chevron.left",
-                            accessibilityLabel: "Back",
-                            action: backAction
-                        )
-                    }
-
-                    Text(profile.displayName)
-                        .font(WanderTypography.editorialDisplay)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.75)
-
-                    Spacer(minLength: WanderTheme.spacing2)
-
-                    if mode.isOwner {
-                        ProfileHeaderActionButton(systemImage: "pencil", accessibilityLabel: "Edit profile", action: editAction)
-                    }
-
-                    if let shareContent = WanderShareContent.profile(
-                        serverID: profile.serverID,
-                        displayName: profile.displayName,
-                        handle: profile.handle
-                    ) {
-                        WanderShareButton(content: shareContent, onTap: shareAction) {
-                            ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Share profile")
-                        .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
-                    }
-
-                    if mode.isOwner {
-                        ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
-                            .walkthroughTarget(.profileSettings)
-                    } else if let memberActions {
-                        ProfileHeaderActionButton(
-                            systemImage: "ellipsis",
-                            accessibilityLabel: "More profile actions"
-                        ) {
-                            showsMemberActions.toggle()
-                        }
-                        .popover(
-                            isPresented: $showsMemberActions,
-                            attachmentAnchor: .rect(.bounds),
-                            arrowEdge: .top
-                        ) {
-                            ProfileMemberActionsPopover(
-                                actions: memberActions,
-                                dismiss: { showsMemberActions = false }
-                            )
-                            .presentationCompactAdaptation(.popover)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            HStack(spacing: WanderTheme.spacing1) {
+                if let backAction {
+                    ProfileHeaderActionButton(
+                        systemImage: "chevron.left",
+                        accessibilityLabel: "Back",
+                        action: backAction
+                    )
                 }
-                .walkthroughTarget(mode.isOwner ? .profileShare : nil)
-            }
 
-            Group {
+                Spacer(minLength: 0)
+
                 if mode.isOwner {
-                    Button(action: avatarAction) {
-                        profileAvatar
+                    ProfileInvitationButton(
+                        hasPendingInvitations: sharedVisitInvitationCount > 0,
+                        action: sharedVisitInvitationsAction
+                    )
+                    ProfileHeaderActionButton(
+                        systemImage: "pencil",
+                        accessibilityLabel: "Edit profile",
+                        action: editAction
+                    )
+                }
+
+                if let shareContent = WanderShareContent.profile(
+                    serverID: profile.serverID,
+                    displayName: profile.displayName,
+                    handle: profile.handle
+                ) {
+                    WanderShareButton(content: shareContent, onTap: shareAction) {
+                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)
-                    .disabled(isAvatarSaving)
-                    .accessibilityLabel(profile.avatarURL == nil ? "Add profile photo" : "Change profile photo")
-                } else {
-                    profileAvatar
-                        .accessibilityLabel("\(profile.displayName)'s profile photo")
+                    .accessibilityLabel("Share profile")
+                    .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+                }
+
+                if mode.isOwner {
+                    ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
+                        .walkthroughTarget(.profileSettings)
+                } else if let memberActions {
+                    ProfileHeaderActionButton(
+                        systemImage: "ellipsis",
+                        accessibilityLabel: "More profile actions"
+                    ) {
+                        showsMemberActions.toggle()
+                    }
+                    .popover(
+                        isPresented: $showsMemberActions,
+                        attachmentAnchor: .rect(.bounds),
+                        arrowEdge: .top
+                    ) {
+                        ProfileMemberActionsPopover(
+                            actions: memberActions,
+                            dismiss: { showsMemberActions = false }
+                        )
+                        .presentationCompactAdaptation(.popover)
+                    }
                 }
             }
+            .walkthroughTarget(mode.isOwner ? .profileShare : nil)
 
-            VStack(spacing: WanderTheme.spacing1) {
-                Text("@\(profile.handle)")
-                    .font(.system(size: 18, weight: .black))
+            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+                Group {
+                    if mode.isOwner {
+                        Button(action: avatarAction) {
+                            profileAvatar
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isAvatarSaving)
+                        .accessibilityLabel(profile.avatarURL == nil ? "Add profile photo" : "Change profile photo")
+                    } else {
+                        profileAvatar
+                            .accessibilityLabel("\(profile.displayName)'s profile photo")
+                    }
+                }
 
+                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(profile.displayName)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+
+                        Text("@\(profile.handle)")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+
+                    HStack(spacing: 0) {
+                        ProfileGraphCountButton(value: followerCount, label: "Followers") {
+                            graphAction(.followers)
+                        }
+                        ProfileGraphCountButton(value: followingCount, label: "Following") {
+                            graphAction(.following)
+                        }
+                        ProfileGraphCountButton(value: stats.friends, label: "Friends") {
+                            graphAction(.friends)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text(profileMetadata)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-                    .multilineTextAlignment(.center)
 
                 if let bio = normalized(profile.bio) {
                     Text(bio)
                         .font(.system(size: 15, weight: .medium))
-                        .multilineTextAlignment(.center)
-                        .padding(.top, WanderTheme.spacing1)
-                }
-
-                if let relationship = mode.relationship {
-                    Button(action: relationshipAction) {
-                        Label(relationshipTitle(relationship), systemImage: relationshipSymbol(relationship))
-                            .font(.system(size: 14, weight: .black))
-                            .padding(.horizontal, WanderTheme.spacing4)
-                            .frame(minHeight: WanderTheme.tapMinimum)
-                            .foregroundStyle(
-                                relationship == .nonFollower
-                                    ? WanderTheme.terracottaDark.color
-                                    : WanderTheme.textInk.color
-                            )
-                            .wanderGlassCapsule(tone: relationship == .nonFollower ? .accent : .neutral)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, WanderTheme.spacing2)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            HStack(spacing: 0) {
-                ProfileGraphCountButton(value: followerCount, label: "Followers") {
-                    graphAction(.followers)
+            if let relationship = mode.relationship {
+                Button(action: relationshipAction) {
+                    Label(relationshipTitle(relationship), systemImage: relationshipSymbol(relationship))
+                        .font(.system(size: 14, weight: .black))
+                        .padding(.horizontal, WanderTheme.spacing4)
+                        .frame(minHeight: WanderTheme.tapMinimum)
+                        .foregroundStyle(
+                            relationship == .nonFollower
+                                ? WanderTheme.terracottaDark.color
+                                : WanderTheme.textInk.color
+                        )
+                        .wanderGlassCapsule(tone: relationship == .nonFollower ? .accent : .neutral)
                 }
-                ProfileGraphDivider()
-                ProfileGraphCountButton(value: followingCount, label: "Following") {
-                    graphAction(.following)
-                }
-                ProfileGraphDivider()
-                ProfileGraphCountButton(value: stats.friends, label: "Friends") {
-                    graphAction(.friends)
-                }
+                .buttonStyle(.plain)
             }
-            .padding(.vertical, WanderTheme.spacing1)
-            .wanderGlassPanel(cornerRadius: 22)
-            .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
         }
     }
 
@@ -533,15 +540,15 @@ struct ProfileOwnerHome: View {
             WanderAvatar(
                 initials: profile.initials,
                 avatarURL: profile.avatarURL,
-                size: 132,
+                size: profileAvatarSize,
                 color: WanderTheme.avatarRyan.color
             )
-            .shadow(color: WanderTheme.textInk.color.opacity(0.12), radius: 12, y: 6)
+            .shadow(color: WanderTheme.textInk.color.opacity(0.1), radius: 8, y: 4)
 
             if isAvatarSaving && mode.isOwner {
                 Circle()
                     .fill(WanderTheme.textInk.color.opacity(0.42))
-                    .frame(width: 132, height: 132)
+                    .frame(width: profileAvatarSize, height: profileAvatarSize)
                 ProgressView()
                     .tint(WanderTheme.textOnAction.color)
             }
@@ -658,6 +665,34 @@ struct ProfileHeaderActionButton: View {
     }
 }
 
+private struct ProfileInvitationButton: View {
+    let hasPendingInvitations: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ProfileHeaderActionLabel(systemImage: "envelope")
+                .overlay(alignment: .topTrailing) {
+                    if hasPendingInvitations {
+                        Circle()
+                            .fill(WanderTheme.stateError.color)
+                            .frame(width: 10, height: 10)
+                            .overlay {
+                                Circle()
+                                    .stroke(WanderTheme.surfaceBone.color, lineWidth: 2)
+                            }
+                            .offset(x: -1, y: 1)
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Check-in invitations")
+        .accessibilityValue(hasPendingInvitations ? "New invitations" : "No new invitations")
+        .accessibilityHint("Opens check-in invitations")
+    }
+}
+
 private struct ProfileHeaderActionLabel: View {
     let systemImage: String
 
@@ -668,15 +703,6 @@ private struct ProfileHeaderActionLabel: View {
             .foregroundStyle(WanderTheme.textInk.color)
             .contentShape(Circle())
             .wanderGlassCapsule()
-    }
-}
-
-private struct ProfileGraphDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(WanderTheme.surfaceRaised.color.opacity(0.72))
-            .frame(width: 1, height: 34)
-            .accessibilityHidden(true)
     }
 }
 
@@ -750,13 +776,15 @@ private struct ProfileGraphCountButton: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Text("\(value)")
-                    .font(.system(size: 19, weight: .black))
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text(label)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
         }
         .buttonStyle(.plain)
     }

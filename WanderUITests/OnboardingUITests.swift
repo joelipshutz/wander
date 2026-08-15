@@ -688,15 +688,15 @@ final class OnboardingUITests: XCTestCase {
         )
         XCTAssertTrue(app.descendants(matching: .any)["profile.walkthrough.activitySection"].exists)
         XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.profile.profileCalendar"]
-                .waitForExistence(timeout: 4)
-        )
-        XCTAssertTrue(app.descendants(matching: .any)["profile.walkthrough.calendarSection"].exists)
-        XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.profile.profileMap"]
                 .waitForExistence(timeout: 4)
         )
         XCTAssertTrue(app.descendants(matching: .any)["profile.walkthrough.mapSection"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.profile.profileCalendar"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["profile.walkthrough.calendarSection"].exists)
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
                 .waitForExistence(timeout: 15)

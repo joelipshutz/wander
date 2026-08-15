@@ -363,23 +363,23 @@ enum FirstVisitWalkthroughContent {
             ),
             step(
                 .profile,
-                .profileCalendar,
-                "Your calendar, at a glance",
-                "See when you checked in and how your months fill up over time.",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .memory,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            ),
-            step(
-                .profile,
                 .profileMap,
                 "Your map grows with you",
                 "Watch your places, cities, and memories come together on one map.",
                 advance: .next,
                 allowsBackNavigation: false,
                 coachTheme: .map,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
+            ),
+            step(
+                .profile,
+                .profileCalendar,
+                "Your calendar, at a glance",
+                "See when you checked in and how your months fill up over time.",
+                advance: .next,
+                allowsBackNavigation: false,
+                coachTheme: .memory,
                 spotlightStyle: .clearPage,
                 automaticallyAdvances: true
             )

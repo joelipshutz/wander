@@ -1124,7 +1124,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discoverSearch.contains(".wanderGlassCapsule()"))
         XCTAssertFalse(discoverSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
-        XCTAssertTrue(profile.contains("Text(profile.displayName)\n                        .font(WanderTypography.editorialDisplay)"))
+        XCTAssertTrue(profile.contains("Text(profile.displayName)\n                            .font(.system(size: 20, weight: .bold))"))
         XCTAssertEqual(profile.components(separatedBy: "WanderTypography.editorialMajorSectionTitle").count - 1, 3)
         let profileStreak = try XCTUnwrap(
             profile.components(separatedBy: "private struct ProfileSaveStreakRow: View").last?
@@ -2843,7 +2843,7 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
-    func testOwnerProfileKeepsMobileLayoutWhileReorderingOnlyRequestedModules() throws {
+    func testOwnerProfileUsesCompactInstagramStyleHeaderAndRequestedSectionOrder() throws {
         let home = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
         )
@@ -2871,15 +2871,37 @@ final class NavigationContractTests: XCTestCase {
 
         let identityIndex = try XCTUnwrap(body.range(of: "identitySection")?.lowerBound)
         let streakIndex = try XCTUnwrap(body.range(of: "ProfileSaveStreakRow")?.lowerBound)
-        let invitationsIndex = try XCTUnwrap(body.range(of: "ProfileSharedVisitInboxRow")?.lowerBound)
         let activityIndex = try XCTUnwrap(body.range(of: "ProfileRecentActivitySection")?.lowerBound)
+        let mapIndex = try XCTUnwrap(body.range(of: "ProfileMapSection")?.lowerBound)
         let calendarIndex = try XCTUnwrap(body.range(of: "ProfileCalendarSection")?.lowerBound)
+        let invitationButtonIndex = try XCTUnwrap(identity.range(of: "ProfileInvitationButton(")?.lowerBound)
+        let editButtonIndex = try XCTUnwrap(identity.range(of: "accessibilityLabel: \"Edit profile\"")?.lowerBound)
+        let invitationButton = try sourceSection(
+            home,
+            after: "private struct ProfileInvitationButton: View",
+            before: "private struct ProfileHeaderActionLabel: View"
+        )
 
         XCTAssertLessThan(identityIndex, streakIndex)
-        XCTAssertLessThan(streakIndex, invitationsIndex)
-        XCTAssertLessThan(invitationsIndex, activityIndex)
-        XCTAssertLessThan(activityIndex, calendarIndex)
+        XCTAssertLessThan(streakIndex, activityIndex)
+        XCTAssertLessThan(activityIndex, mapIndex)
+        XCTAssertLessThan(mapIndex, calendarIndex)
+        XCTAssertFalse(body.contains("ProfileSharedVisitInboxRow"))
+        XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
+        XCTAssertTrue(identity.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(identity.contains("hasPendingInvitations: sharedVisitInvitationCount > 0"))
+        XCTAssertTrue(identity.contains("Text(profile.displayName)"))
+        XCTAssertTrue(identity.contains("Text(\"@\\(profile.handle)\")"))
+        XCTAssertTrue(identity.contains("ProfileGraphCountButton(value: followerCount"))
+        XCTAssertTrue(identity.contains("Text(profileMetadata)"))
+        XCTAssertTrue(identity.contains("normalized(profile.bio)"))
+        XCTAssertTrue(home.contains("private let profileAvatarSize: CGFloat = 86"))
+        XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"envelope\")"))
+        XCTAssertTrue(invitationButton.contains("if hasPendingInvitations"))
+        XCTAssertTrue(invitationButton.contains("Circle()"))
+        XCTAssertTrue(invitationButton.contains("WanderTheme.stateError.color"))
+        XCTAssertFalse(invitationButton.contains("Text("))
         XCTAssertTrue(recentActivity.contains("ProfileActivityFilterControl("))
         XCTAssertTrue(home.contains("case checkIns = \"check_ins\""))
         XCTAssertTrue(home.contains("case .checkIns: CheckInCopy.pluralTitle"))
@@ -2947,7 +2969,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(inCommonRow.contains(".wanderGlassPanel(cornerRadius: 22)"))
         XCTAssertTrue(inCommonRow.contains("viewerProfile.avatarURL"))
         XCTAssertTrue(inCommonRow.contains("profile.avatarURL"))
-        XCTAssertTrue(identity.contains(".wanderGlassPanel(cornerRadius: 22)"))
+        XCTAssertTrue(identity.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(identity.contains("ProfileGraphCountButton(value: followerCount"))
         XCTAssertTrue(identity.contains(".wanderGlassCapsule(tone:"))
         XCTAssertTrue(home.contains("private struct ProfileHeaderActionLabel: View"))
         XCTAssertTrue(home.contains(".wanderGlassCapsule()"))
