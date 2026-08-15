@@ -404,11 +404,7 @@ struct ProfileOwnerHome: View {
     private var profileNavigationRow: some View {
         HStack(spacing: WanderTheme.spacing1) {
             if let backAction {
-                ProfileHeaderActionButton(
-                    systemImage: "chevron.left",
-                    accessibilityLabel: "Back",
-                    action: backAction
-                )
+                ProfileBackButton(action: backAction)
             }
 
             Text("@\(profile.handle)")
@@ -547,10 +543,6 @@ struct ProfileOwnerHome: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, WanderTheme.spacing4)
-        .padding(.vertical, WanderTheme.spacing3)
-        .background(WanderTheme.surfaceRaised.color)
-        .padding(.horizontal, -WanderTheme.spacing4)
     }
 
     private var profileAvatar: some View {
@@ -676,6 +668,22 @@ struct ProfileHeaderActionButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct ProfileBackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum, alignment: .leading)
+                .foregroundStyle(WanderTheme.textInk.color)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back")
     }
 }
 

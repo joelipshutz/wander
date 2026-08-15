@@ -2873,6 +2873,11 @@ final class NavigationContractTests: XCTestCase {
             after: "private var profileIdentityBlock: some View {",
             before: "private var profileAvatar: some View"
         )
+        let backButton = try sourceSection(
+            home,
+            after: "private struct ProfileBackButton: View {",
+            before: "struct ProfileInvitationBadgeState: Equatable"
+        )
         let recentActivity = try sourceSection(
             home,
             after: "private struct ProfileRecentActivitySection: View",
@@ -2899,7 +2904,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(body.contains("ProfileSharedVisitInboxRow"))
         XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
+        XCTAssertTrue(navigationRow.contains("ProfileBackButton(action: backAction)"))
         XCTAssertTrue(navigationRow.contains("Text(\"@\\(profile.handle)\")"))
+        XCTAssertLessThan(
+            try XCTUnwrap(navigationRow.range(of: "ProfileBackButton(action: backAction)")?.lowerBound),
+            try XCTUnwrap(navigationRow.range(of: "Text(\"@\\(profile.handle)\")")?.lowerBound)
+        )
         XCTAssertTrue(navigationRow.contains("pendingInvitationCount: sharedVisitInvitationCount"))
         XCTAssertFalse(navigationRow.contains("WanderTheme.surfaceRaised.color"))
         XCTAssertTrue(identityBlock.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
@@ -2917,8 +2927,12 @@ final class NavigationContractTests: XCTestCase {
             try XCTUnwrap(identityBlock.range(of: "normalized(profile.bio)")?.lowerBound),
             try XCTUnwrap(identityBlock.range(of: "Text(memberSinceText)")?.lowerBound)
         )
-        XCTAssertTrue(identityBlock.contains(".background(WanderTheme.surfaceRaised.color)"))
-        XCTAssertTrue(identityBlock.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
+        XCTAssertFalse(identityBlock.contains(".background(WanderTheme.surfaceRaised.color)"))
+        XCTAssertFalse(identityBlock.contains(".padding(.horizontal, -WanderTheme.spacing4)"))
+        XCTAssertTrue(backButton.contains("Image(systemName: \"chevron.left\")"))
+        XCTAssertTrue(backButton.contains("width: WanderTheme.tapMinimum"))
+        XCTAssertTrue(backButton.contains(".buttonStyle(.plain)"))
+        XCTAssertFalse(backButton.contains(".wanderGlassCapsule"))
         XCTAssertTrue(home.contains("private let profileAvatarSize: CGFloat = 86"))
         XCTAssertTrue(invitationButton.contains("ProfileHeaderActionLabel(systemImage: \"envelope\")"))
         XCTAssertTrue(invitationButton.contains("if badgeState.isVisible"))
