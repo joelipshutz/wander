@@ -29560,3 +29560,28 @@ Implementation and validation checkpoint (21:29 PDT):
   before landing.
 - Joe's latest instruction is merge-only. Do not bump a build number, upload to
   TestFlight, attach a build, or post Slack release notes in this operation.
+
+Final validation checkpoint (22:11 PDT):
+
+- Rebased first onto `origin/main` at `ac9740bb`, then `0ee9bf69`, and finally
+  latest main at `50f738e6` (build 151 release-prep baseline), preserving every
+  append-only log section.
+- The first complete `WanderTests` run exposed one compatibility regression:
+  the new itinerary boundary treated `Drive` inside `Skyline Drive Overlook`
+  as a new action. Narrowed movement boundaries to command phrases that end in
+  `to` (including `head back to`), preserving real place-name words while still
+  splitting flattened Instagram itinerary steps.
+- Focused post-rebase validation passed 6/6: the exact Cave Springs fixture,
+  the generic/distance-only false-positive guard, the Wyoming carousel caption,
+  MapKit alias/wrong-state handling, the existing nine-place Instagram carousel
+  upgrade, and the `Done` completion/navigation contract.
+- The complete `WanderTests` suite then passed on the exact build-151 rebased
+  candidate on iPhone 16 Plus / iOS 18.6: 1,174 tests, 0 failures, with
+  `TEST SUCCEEDED`. Final result bundle:
+  `/tmp/DerivedData-rec246/Logs/Test/Test-Wander-2026.08.14_22-21-21--0700.xcresult`.
+- Xcode twice stopped before test execution because the machine ran out of
+  temporary disk space. Removed only inactive disposable DerivedData plus three
+  shutdown task-specific simulators from completed REC-165/REC-191 work; the
+  active iPhone 16 Plus and booted REC-236/REC-166 simulators were preserved.
+- PR #421 is the merge vehicle. This remains merge-only: no build-number bump,
+  TestFlight upload, tag, or Slack release note is authorized in this session.

@@ -1345,10 +1345,10 @@ enum SocialPlaceHintExtractor {
         "shop", "spot", "the", "tiktok", "to", "try", "viral", "visit"
     ]
 
-    private static let itineraryPattern = #"(?i)\b(?:called|at|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)\b)|[#\n.!?]|$)"#
+    private static let itineraryPattern = #"(?i)\b(?:called|at|visited|visit|trying|place is)\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?)[^#\n.!?]{0,60}\b(?:at|from|visited|visit)\s+|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\b)|[#\n.!?]|$)"#
 
     private static let creatorNamedItineraryPatterns = [
-        #"(?i)\b(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?|before|after|for|where|which|with)\b|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)\b|make\s+sure\b)|[#\n.!?]|$)"#,
+        #"(?i)\b(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\s+(@?[^#\n.!?]{3,90}?)(?=\s+(?:(?:and|then|afterwards?|before|after|for|where|which|with)\b|(?:\d{1,3}\s*(?:-\s*)?(?:minutes?|mins?|hours?|hrs?)\s+)?(?:drive|head|go|hike|walk|travel|return)(?:\s+back)?\s+to\b|make\s+sure\b)|[#\n.!?]|$)"#,
         #"(?i)\bmake\s+sure\s+(@?[^#\n.!?]{3,90}?)\s+is\s+(?:on|part\s+of)\s+(?:your|the)\s+itinerary(?=[#\n.!?]|$)"#
     ]
 
