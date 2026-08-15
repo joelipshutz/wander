@@ -70,3 +70,7 @@ locked to the center in every direction.
 Two zoomed-out AH Composer variants are included as well: one preserves the
 original black category glyphs, and AM replaces them with the exact in-app
 `☕️`, `🌳`, `🚲`, and `📚` emoji set.
+
+AN adds a location-specific Santa Monica coast iteration using only the
+reference map's street, beach, ocean, and park geometry. All source labels were
+excluded, and the four pins use the app's `🍽️`, `🌳`, `🥐`, and `🏖️` emoji set.

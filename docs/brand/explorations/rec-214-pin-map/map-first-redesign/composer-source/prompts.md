@@ -81,3 +81,24 @@ Text (verbatim): "rec.me"
 Typography: Preserve the existing lowercase black serif wordmark exactly as it appears, in exactly the same size and centered position.
 Constraints: Change only the four black glyphs inside the cream circular centers of the four existing pins. Keep every pin's terracotta outline, cream center, location, scale, perspective, and shadow unchanged. Keep the full map, streets, parks, water, coral roads, paper texture, colors, lighting, and wordmark unchanged. Center each emoji cleanly inside its original pin center at a readable size. Use each requested emoji exactly once. Exactly four pins total. No additional icons, text, pins, routes, labels, borders, baked gloss, rounded-square mask, watermark, or redesign. Full-bleed square output.
 ```
+
+## AN — Santa Monica coast
+
+```text
+Use case: compositing
+Asset type: square iOS app icon source for Apple Icon Composer
+Input images:
+- Image 1: exact rec.me visual-style reference. Preserve its warm cream paper-map illustration, pale gray fine streets, sage parks, pale blue water, terracotta map pins with cream circular centers, colorful native Apple-style emojis, subtle tactile paper texture, soft pin shadows, and exact centered black lowercase book-serif wordmark.
+- Image 2: location/map-geometry reference only. Use only its underlying coastal street, beach, ocean, and park arrangement. Do not copy its colors, labels, road names, place names, existing map icons, arrows, UI, or typography.
+Primary request: Create a new full-bleed square rec.me icon in Image 1's warm illustrated style, but redraw the map backdrop to follow Image 2's Santa Monica coastal geometry: a diagonal ocean and sandy beach edge running along the left/lower-left side, a rotated urban street grid inland, a broad diagonal avenue through the city, one prominent green park in the upper-right corresponding to Hotchkiss Park, and smaller coastal green park shapes near the beach.
+Pins: Use exactly four existing-style terracotta map pins with cream centers and native colorful emoji:
+- "🌳" centered on the prominent upper-right park at the Hotchkiss Park location.
+- "🍽️" in the upper-left/upper-middle inland location corresponding to Cobi's.
+- "🥐" in the lower-right inland location corresponding to Bread + Butter.
+- "🏖️" along the sandy beach edge on the left/lower-left.
+Text (verbatim): "rec.me"
+Typography: black lowercase proper book-serif, exactly once, large and locked to the exact geometric and optical center of the square canvas, matching Image 1.
+Composition/framing: top-down map, zoomed-out enough to show the recognizable diagonal coast, beach, street grid, and both main park zones. Keep all four pins clear of the centered wordmark. Preserve generous breathing room around the wordmark.
+Color palette/material: warm ivory paper land, muted gray-beige streets, coral/terracotta major avenues and pins, sage parks, soft sandy beach, pale coastal blue ocean. Matte source; Apple Icon Composer will add Liquid Glass.
+Constraints: Use Image 2 only for map layout and geographic relationships. No place names, no street names, no neighborhood names, no business names, no text other than "rec.me". Exactly four pins and exactly four requested emojis, each once. No additional points of interest, labels, route arrows, dots, badges, UI overlays, logos, borders, baked gloss, rounded-square mask, or watermark. Do not copy Image 2's dark theme or visual styling. Full-bleed 1:1 square.
+```

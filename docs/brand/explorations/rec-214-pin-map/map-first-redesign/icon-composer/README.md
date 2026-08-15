@@ -55,6 +55,15 @@ pin-center glyphs with the app's native emoji vocabulary: `☕️`, `🌳`, `�
 `📚`. Their source values are defined by `WanderPlaceCategory`/
 `WanderPlaceEmojiResolver` and rendered in-app by `WanderCategoryEmoji`.
 
+### AN — Santa Monica coast
+
+![AN — Santa Monica coast](../composer-export/direction-an-santa-monica-coast-emojis-liquid-glass.png)
+
+This redraws the reference's diagonal Santa Monica coast, beach, street grid,
+and park placement in rec.me's warm paper-map language. It contains no copied
+map labels or place names: only centered `rec.me` plus `🍽️`, `🌳`, `🥐`, and
+`🏖️` pins at the four requested relative locations.
+
 ## Apple Icon Composer recipe
 
 Editable documents live in [`final/`](final/). Each document uses one full-
@@ -78,12 +87,12 @@ rendered by Icon Composer's bundled `ictool` using the iOS Default rendition at
 mask; use the editable `.icon` documents—not the preview PNGs—for any future
 implementation. The 180 px and 87 px checks live in `composer-export/small-size/`.
 
-Validation: all six source masters are opaque 1024 × 1024 PNGs, every final
-document references its expected source asset, and all six Apple-rendered
+Validation: all seven source masters are opaque 1024 × 1024 PNGs, every final
+document references its expected source asset, and all seven Apple-rendered
 exports passed 180 px and 87 px visual review. For the four tight renders, a
 central-band pixel scan placed the dark wordmark center within 34 px of the
-512 × 512 canvas center; the two zoomed-out copies retain the centered source
-wordmark with a zero-translation Composer layer.
+512 × 512 canvas center; the three zoomed-out/coastal iterations retain the
+centered source wordmark with a zero-translation Composer layer.
 
 ## Recommendation
 
