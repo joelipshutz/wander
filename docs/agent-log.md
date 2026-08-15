@@ -28974,3 +28974,21 @@ Checkpoint, 2026-08-14 14:31 PDT:
   Submission because production auth/data continuity, mailbox reply, safety
   ownership, populated reviewer credentials, signed build 147, and final privacy
   publication remain required.
+
+Checkpoint, 2026-08-14 17:36 PDT:
+
+- Verified live Supabase dashboard access under `joe@bondaiapp.com` to
+  organization `joe@bondaiapp.com's Org` (`kmuvkdjwociyvuuxnbqb`) and its
+  existing `wander` project (`rugmtlgufrhlxwfkumhw`). The earlier personal
+  Google session could not access either resource and was not used for any
+  mutation.
+- Updated the canonical non-secret Grayline registry at
+  `/Users/joelipshutz/Developer/grayline/ops/service-account-registry.json`
+  with the verified owner identity, Supabase organization/project, Clerk
+  app/development/production instance IDs, env-var references, and explicit
+  no-pause/no-delete/no-reset safeguards. No password, key, token, or recovery
+  value was stored.
+- Added the verified rec.me Clerk/Supabase owner rule to this project's agent
+  instructions so Codex, Claude, OpenClaw, and future contributors do not ask
+  Joe to cycle through unrelated accounts again. Clerk owner-dashboard login
+  remains the next user action; no account or production-data change has run.
