@@ -29464,3 +29464,28 @@ Starting state and release scope:
 
 Expected tracked files: `project.yml`, generated
 `Wander.xcodeproj/project.pbxproj`, and this append-only log.
+
+## 2026-08-14 19:52 PDT - Codex - Clerk publishable-key release test compatibility
+
+Agent: Codex using `recme-pr-review-merge-release`
+Branch: `codex/clerk-key-base64-test`
+Worktree: `/private/tmp/recme-testflight-build-149`
+Linear: `REC-180` (`In Review`; dedicated issue creation remains blocked by the
+workspace's issue limit)
+
+Goal: unblock the build-149 release gate after the exact candidate exposed that
+`BuildConfigurationTests.testTrackedClerkPublishableKeyDecodesToDefaultFrontendAPI`
+assumed padded Base64 even though Clerk's valid production publishable key uses
+unpadded Base64.
+
+Starting state and safety constraints:
+
+- Exact source is merged `main` at
+  `426f2c7ada88376b0ce83ca01c191724bca0bdaa` (rec.me 1.0 build 149).
+- The isolated iPhone 16e UI suite passed 38/38. Unit tests passed 1,157/1,158;
+  the sole failure is the test decoder rejecting the tracked production Clerk
+  key before it can assert the expected `clerk.getrec.me$` payload.
+- This branch changes test decoding only. It does not alter the publishable key,
+  frontend API, app binary source, signing, Supabase, hosted data, or accounts.
+- Expected tracked files: `WanderTests/BuildConfigurationTests.swift` and this
+  append-only log.

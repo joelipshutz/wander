@@ -250,7 +250,9 @@ final class BuildConfigurationTests: XCTestCase {
     func testTrackedClerkPublishableKeyDecodesToDefaultFrontendAPI() throws {
         let clerkKey = WanderBackendConfiguration.defaultClerkPublishableKey
         let encoded = try XCTUnwrap(clerkKey.split(separator: "_").last).description
-        let decodedData = try XCTUnwrap(Data(base64Encoded: encoded))
+        let paddingCount = (4 - encoded.count % 4) % 4
+        let paddedEncoded = encoded + String(repeating: "=", count: paddingCount)
+        let decodedData = try XCTUnwrap(Data(base64Encoded: paddedEncoded))
         let decoded = try XCTUnwrap(String(data: decodedData, encoding: .utf8))
 
         XCTAssertEqual(decoded, "\(WanderBackendConfiguration.defaultClerkFrontendAPI)$")
