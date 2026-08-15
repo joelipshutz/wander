@@ -57,6 +57,35 @@ function assertSafeDatabaseUrl(value) {
   }
 }
 
+function createSupabaseClient(applicationName) {
+  loadLocalEnvironment();
+  const connectionString = databaseUrl();
+  assertSafeDatabaseUrl(connectionString);
+  return new Client({
+    connectionString,
+    ssl: existsSync(certificatePath)
+      ? { ca: readFileSync(certificatePath, "utf8"), rejectUnauthorized: true }
+      : { rejectUnauthorized: true },
+    application_name: applicationName,
+    connectionTimeoutMillis: 15_000,
+    query_timeout: 10_000,
+  });
+}
+
+export async function withReadOnlySupabase(task) {
+  const client = createSupabaseClient("recme_relevance_real_data");
+  await client.connect();
+  let transactionStarted = false;
+  try {
+    await client.query("begin read only");
+    transactionStarted = true;
+    return await task(client);
+  } finally {
+    if (transactionStarted) await client.query("rollback").catch(() => {});
+    await client.end().catch(() => {});
+  }
+}
+
 const setupSql = `
   create temporary table relevance_places (
     id text primary key,
@@ -203,18 +232,7 @@ export async function withSupabaseProviders(
   queryEmbeddings,
   task,
 ) {
-  loadLocalEnvironment();
-  const connectionString = databaseUrl();
-  assertSafeDatabaseUrl(connectionString);
-  const client = new Client({
-    connectionString,
-    ssl: existsSync(certificatePath)
-      ? { ca: readFileSync(certificatePath, "utf8"), rejectUnauthorized: true }
-      : { rejectUnauthorized: true },
-    application_name: "recme_relevance_lab",
-    connectionTimeoutMillis: 15_000,
-    query_timeout: 10_000,
-  });
+  const client = createSupabaseClient("recme_relevance_lab");
 
   await client.connect();
   let transactionStarted = false;

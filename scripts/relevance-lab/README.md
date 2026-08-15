@@ -22,6 +22,16 @@ npm --prefix scripts run relevance:run -- \
 
 The runner reads `OPENAI_API_KEY`, `WANDER_SUPABASE_DB_PASSWORD`, and `WANDER_SUPABASE_PROJECT_REF` from the current environment or `~/.openclaw/workspace/.env.keys`. It never prints them.
 
+## Prepare a real-data judgment pool
+
+```bash
+npm --prefix scripts run relevance:prepare-real
+```
+
+This reads the hosted corpus in a read-only transaction and writes ignored local artifacts under `scripts/relevance-lab/output/`: a blind click-to-grade HTML page, a Markdown fallback, and the machine scoring key. The embeddings contain canonical name, category, subcategory, coarse locality/region, and approved aggregated structured tags. Notes, free-text answers, personal labels, profile identity, addresses, photos, emails, and coordinates are neither selected nor sent to the embedding provider.
+
+The pool unions candidates from all three pipelines, randomizes their presentation, and hides which system returned each place. Replace every `?` in `real-judgments.md` with `0`, `1`, `2`, or `3`; the completed file becomes the real qrels input for the next scorecard.
+
 ## Decision rule
 
 Vectors earn a pgvector follow-up only when the hybrid pipeline improves semantic-query nDCG@5 by at least 0.05 over explicit reranking and does not regress named-person nDCG@5 by more than 0.02. That follow-up still needs anonymized real judgments before app integration.
