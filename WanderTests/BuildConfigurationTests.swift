@@ -221,6 +221,30 @@ final class BuildConfigurationTests: XCTestCase {
         }
     }
 
+    func testOnboardingMastheadUsesMapWordmarkAsset() throws {
+        let assetDirectory = projectRoot.appendingPathComponent(
+            "Wander/Resources/Assets.xcassets/RecmeMapWordmark.imageset",
+            isDirectory: true
+        )
+        let imageData = try Data(
+            contentsOf: assetDirectory.appendingPathComponent("RecmeMapWordmark.png")
+        )
+        let image = try XCTUnwrap(UIImage(data: imageData)?.cgImage)
+        let manifest = try String(
+            contentsOf: assetDirectory.appendingPathComponent("Contents.json")
+        )
+        let onboardingSource = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Onboarding/LoggedOutCarouselView.swift"
+            )
+        )
+
+        XCTAssertEqual(image.width, 896)
+        XCTAssertEqual(image.height, 200)
+        XCTAssertTrue(manifest.contains(#""filename" : "RecmeMapWordmark.png""#))
+        XCTAssertTrue(onboardingSource.contains(#"Image("RecmeMapWordmark")"#))
+    }
+
     func testIconComposerAppIconIsProjectBound() throws {
         let iconDirectory = projectRoot.appendingPathComponent(
             "Wander/Resources/AppIcon.icon",

@@ -77,8 +77,11 @@ struct LoggedOutCarouselView: View {
 
             VStack(spacing: 0) {
                 HStack {
-                    Text(AppBrand.displayName)
-                        .font(WanderTheme.editorialDisplay(size: 28, weight: .black))
+                    Image("RecmeMapWordmark")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 157, height: 35, alignment: .leading)
+                        .accessibilityLabel(AppBrand.displayName)
                     Spacer()
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
