@@ -29711,3 +29711,22 @@ Merge gate - 2026-08-15 11:15 PDT:
 - Ready PR #423: https://github.com/joelipshutz/wander/pull/423. Linear
   REC-225 is `In Review` with the PR link, privacy contract, validation
   evidence, disk-space test gap, and no-flag/no-TestFlight status recorded.
+
+Completion - 2026-08-15 11:19 PDT:
+
+- Hosted payload validation passed on rebased head `cb53cfd9`, and ready PR
+  #423 was squash-merged to `main` as `4c49118bcac2f1aabb8b20a1a937a12ad1dc33c0`.
+  GitHub's optional local branch cleanup reported only that `main` was already
+  checked out in another isolated worktree; the server-side merge completed.
+- A read-only App Store Connect audit at 2026-08-15 11:17 PDT confirmed rec.me
+  1.0 build 151 (`b41cf519-e227-4e39-985e-9670d3ed1e8c`) is uploaded,
+  `VALID`, not expired, and export-compliance complete. Build 151 was cut at
+  `50f738e6` before REC-225 merged, so the new search client is not in that
+  binary. No new build number, archive, upload, group attachment, or release
+  action was performed.
+- Posted the requested accurate status note in `#testflight-feedback`, clearly
+  separating build 151 from the merged-but-not-yet-released REC-225 behavior:
+  https://recmegroup.slack.com/archives/C0BAA7DG2AC/p1786817869950929.
+- Linear REC-225 has the merge, validation, TestFlight, and Slack receipt. It
+  remains `In Review` because developer-only relevance evaluator PR #427 is
+  still open; the user-facing global search implementation itself is merged.
