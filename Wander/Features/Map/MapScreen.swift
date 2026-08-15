@@ -201,6 +201,12 @@ struct MapScreen: View {
                 followedOwnerIDs: followedOwnerIDs,
                 refinements: mapFilterState.more
             )
+        case .you:
+            return MapFilterSelection.ownPlaces(
+                from: store.visiblePlaces(),
+                currentUserID: store.currentUser.id,
+                refinements: mapFilterState.more
+            )
         }
     }
 
@@ -299,6 +305,8 @@ struct MapScreen: View {
             return "No featured check-ins here yet."
         case .friends:
             return "No friends’ places yet."
+        case .you:
+            return "No places on your map yet."
         }
     }
 
@@ -487,56 +495,58 @@ struct MapScreen: View {
                             .padding(.horizontal, WanderTheme.spacing3)
                         }
                         if !isMapSearchFocused {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: WanderTheme.spacing1) {
-                                    ForEach(MapSource.allCases) { source in
-                                        Button {
-                                            selectMapSource(
-                                                source,
-                                                from: annotationGroups
-                                            )
-                                        } label: {
-                                            MapSourceFilterChip(
-                                                source: source,
-                                                isSelected: mapFilterState.source == source
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .walkthroughTarget(
-                                            source == .friends ? .mapFriends : nil
-                                        )
-                                        .walkthroughEmphasis(
-                                            source == .featured ? .mapFeatured : nil
-                                        )
-                                    }
-
+                            HStack(spacing: WanderTheme.spacing1) {
+                                ForEach(MapSource.allCases) { source in
                                     Button {
-                                        isMoreFiltersPresented.toggle()
+                                        selectMapSource(
+                                            source,
+                                            from: annotationGroups
+                                        )
                                     } label: {
-                                        MapMoreFilterChip(
-                                            activeSectionCount: mapFilterState.more.activeSectionCount,
-                                            isExpanded: isMoreFiltersPresented
+                                        MapSourceFilterChip(
+                                            source: source,
+                                            isSelected: mapFilterState.source == source
                                         )
                                     }
                                     .buttonStyle(.plain)
-                                    .walkthroughTarget(.mapMoreFilters)
-                                    .popover(
-                                        isPresented: $isMoreFiltersPresented,
-                                        attachmentAnchor: .rect(.bounds),
-                                        arrowEdge: .top
-                                    ) {
-                                        MapMoreFiltersPopover(
-                                            selection: moreFilterSelection,
-                                            peopleOptions: socialOwnerOptions,
-                                            dismiss: { isMoreFiltersPresented = false }
-                                        )
-                                        .presentationCompactAdaptation(.popover)
-                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityIdentifier("map.filter.\(source.rawValue)")
+                                    .walkthroughTarget(source.walkthroughTarget)
+                                    .walkthroughEmphasis(
+                                        source == .featured ? .mapFeatured : nil
+                                    )
                                 }
-                                .walkthroughTarget(.mapFeatured)
-                                .padding(.horizontal, WanderTheme.spacing3)
-                                .padding(.vertical, WanderTheme.spacing1)
+
+                                Button {
+                                    isMoreFiltersPresented.toggle()
+                                } label: {
+                                    MapMoreFilterChip(
+                                        activeSectionCount: mapFilterState.more.activeSectionCount,
+                                        isExpanded: isMoreFiltersPresented
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity)
+                                .accessibilityIdentifier("map.filter.more")
+                                .walkthroughTarget(.mapMoreFilters)
+                                .popover(
+                                    isPresented: $isMoreFiltersPresented,
+                                    attachmentAnchor: .rect(.bounds),
+                                    arrowEdge: .top
+                                ) {
+                                    MapMoreFiltersPopover(
+                                        selection: moreFilterSelection,
+                                        source: mapFilterState.source,
+                                        peopleOptions: socialOwnerOptions,
+                                        dismiss: { isMoreFiltersPresented = false }
+                                    )
+                                    .id(mapFilterState.source)
+                                    .presentationCompactAdaptation(.popover)
+                                }
                             }
+                            .walkthroughTarget(.mapFeatured)
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.vertical, WanderTheme.spacing1)
                             .frame(height: 48)
 
                             if let mapFilterEmptyMessage {
@@ -861,7 +871,8 @@ struct MapScreen: View {
     ) {
         guard mapFilterState.source != source else { return }
         routedVisiblePlace = nil
-        mapFilterState.source = source
+        isMoreFiltersPresented = false
+        mapFilterState.selectSource(source)
         transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
     }
 
@@ -2665,9 +2676,8 @@ struct MapScreen: View {
             return MapFilterState(source: defaultSource)
         }
 
-        return MapFilterState(
-            source: arguments[valueIndex] == "friends" ? .friends : .featured
-        )
+        let source = MapSource(rawValue: arguments[valueIndex]) ?? .featured
+        return MapFilterState(source: source)
     }
 
     static func resolvedInitialMoreFiltersPresentation(
@@ -2730,6 +2740,29 @@ enum MapHitTesting {
         markerPoints.contains { markerPoint in
             hypot(markerPoint.x - point.x, markerPoint.y - point.y) <= radius
         }
+    }
+}
+
+enum MapMoreFilterPolicy {
+    static let collapsedCategoryCount = 6
+
+    static func showsPeople(for source: MapSource) -> Bool {
+        switch source {
+        case .friends: true
+        case .featured, .you: false
+        }
+    }
+
+    static func showsStatus(for source: MapSource) -> Bool {
+        switch source {
+        case .featured: false
+        case .friends, .you: true
+        }
+    }
+
+    static func categories(showingAll: Bool) -> [String] {
+        guard !showingAll else { return WanderPlaceCategory.editableCategories }
+        return Array(WanderPlaceCategory.editableCategories.prefix(collapsedCategoryCount))
     }
 }
 
@@ -2876,6 +2909,12 @@ struct MapFilterState: Equatable {
 
     mutating func reset(to defaultSource: MapSource) {
         self = MapFilterState(source: defaultSource)
+    }
+
+    mutating func selectSource(_ source: MapSource) {
+        guard self.source != source else { return }
+        self.source = source
+        more = MapMoreFilterSelection()
     }
 }
 
@@ -3147,10 +3186,21 @@ enum MapFilterSelection {
         followedOwnerIDs: Set<String>,
         refinements: MapMoreFilterSelection
     ) -> [VisiblePlace] {
-        let eligibleOwnerIDs = followedOwnerIDs.union([currentUserID])
+        let eligibleOwnerIDs = followedOwnerIDs.subtracting([currentUserID])
         return applying(
             refinements,
             to: candidates.filter { eligibleOwnerIDs.contains($0.owner.id) }
+        )
+    }
+
+    static func ownPlaces(
+        from candidates: [VisiblePlace],
+        currentUserID: String,
+        refinements: MapMoreFilterSelection
+    ) -> [VisiblePlace] {
+        applying(
+            refinements,
+            to: candidates.filter { $0.owner.id == currentUserID }
         )
     }
 
@@ -3300,7 +3350,7 @@ enum MapSocialOwnerSelection {
         following: [LocalProfile]
     ) -> [MapSocialOwnerOption] {
         var seen = Set<String>()
-        let followedOptions = following.compactMap { profile -> MapSocialOwnerOption? in
+        return following.compactMap { profile -> MapSocialOwnerOption? in
             guard profile.id != currentUser.id, seen.insert(profile.id).inserted else { return nil }
             return MapSocialOwnerOption(
                 id: profile.id,
@@ -3311,14 +3361,6 @@ enum MapSocialOwnerSelection {
         .sorted {
             $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
-
-        return [
-            MapSocialOwnerOption(
-                id: currentUser.id,
-                displayName: "You",
-                handle: currentUser.handle
-            )
-        ] + followedOptions
     }
 }
 
@@ -3653,10 +3695,11 @@ private struct MapSourceFilterChip: View {
                 .font(.system(size: 11, weight: .bold))
             Text(source.title)
                 .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(height: 44)
+        .padding(.horizontal, WanderTheme.spacing1)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
@@ -3666,7 +3709,6 @@ private struct MapSourceFilterChip: View {
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityIdentifier("map.filter.\(source.rawValue)")
     }
 }
 
@@ -3680,24 +3722,25 @@ private struct MapMoreFilterChip: View {
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: "line.3.horizontal.decrease")
+            Image(systemName: isExpanded ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                 .font(.system(size: 11, weight: .bold))
+                .overlay(alignment: .topTrailing) {
+                    if activeSectionCount > 0 {
+                        Text("\(activeSectionCount)")
+                            .font(.system(size: 8, weight: .black))
+                            .foregroundStyle(WanderTheme.surfaceBone.color)
+                            .frame(width: 14, height: 14)
+                            .background(WanderTheme.terracotta.color, in: Circle())
+                            .offset(x: 8, y: -7)
+                    }
+                }
             Text("More")
                 .lineLimit(1)
-            if activeSectionCount > 0 {
-                Text("\(activeSectionCount)")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(WanderTheme.surfaceBone.color)
-                    .frame(minWidth: 18, minHeight: 18)
-                    .background(WanderTheme.terracotta.color, in: Circle())
-            }
-            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 9, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(height: 44)
+        .padding(.horizontal, WanderTheme.spacing1)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
@@ -3707,21 +3750,28 @@ private struct MapMoreFilterChip: View {
         .accessibilityLabel("More map filters")
         .accessibilityValue(
             activeSectionCount == 0
-                ? "All categories, people, and statuses"
-                : "\(activeSectionCount) filtered sections"
+                ? "No additional filters"
+                : activeSectionCount == 1
+                    ? "1 filtered section"
+                    : "\(activeSectionCount) filtered sections"
         )
-        .accessibilityIdentifier("map.filter.more")
     }
 }
 
 private struct MapMoreFiltersPopover: View {
     @Binding var selection: MapMoreFilterSelection
+    let source: MapSource
     let peopleOptions: [MapSocialOwnerOption]
     let dismiss: () -> Void
+    @State private var showsAllCategories = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 118), spacing: WanderTheme.spacing2)
     ]
+
+    private var visibleCategories: [String] {
+        MapMoreFilterPolicy.categories(showingAll: showsAllCategories)
+    }
 
     var body: some View {
         ScrollView {
@@ -3729,74 +3779,99 @@ private struct MapMoreFiltersPopover: View {
                 header
 
                 filterSection(
-                    title: "Category",
+                    title: "Categories",
                     detail: "Choose one or more"
                 ) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                        MapMoreOptionChip(
-                            title: "All",
-                            systemImage: "square.grid.2x2",
-                            isSelected: selection.categories.isEmpty
-                        ) {
-                            selection.selectAllCategories()
+                    VStack(spacing: WanderTheme.spacing2) {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                            MapMoreOptionChip(
+                                title: "All",
+                                systemImage: "square.grid.2x2",
+                                isSelected: selection.categories.isEmpty
+                            ) {
+                                selection.selectAllCategories()
+                            }
+
+                            ForEach(visibleCategories, id: \.self) { category in
+                                MapMoreOptionChip(
+                                    title: WanderPlaceCategory.broadCategory(for: category),
+                                    emoji: WanderPlaceCategory.broadEmoji(for: category),
+                                    isSelected: selection.categories.contains(category)
+                                ) {
+                                    selection.toggleCategory(category)
+                                }
+                            }
                         }
 
-                        ForEach(WanderPlaceCategory.editableCategories, id: \.self) { category in
-                            MapMoreOptionChip(
-                                title: WanderPlaceCategory.broadCategory(for: category),
-                                emoji: WanderPlaceCategory.broadEmoji(for: category),
-                                isSelected: selection.categories.contains(category)
-                            ) {
-                                selection.toggleCategory(category)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                showsAllCategories.toggle()
                             }
+                        } label: {
+                            HStack(spacing: WanderTheme.spacing1) {
+                                Text(showsAllCategories ? "Show fewer categories" : "More categories")
+                                Image(systemName: showsAllCategories ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 10, weight: .black))
+                            }
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(WanderTheme.terracottaTint.color, in: Capsule())
+                            .overlay(Capsule().stroke(WanderTheme.terracotta.color, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("map.more.categories.expand")
+                    }
+                }
+
+                if MapMoreFilterPolicy.showsPeople(for: source) {
+                    filterSection(
+                        title: "People",
+                        detail: "Choose one or more"
+                    ) {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                            MapMoreOptionChip(
+                                title: "All",
+                                systemImage: "person.2",
+                                isSelected: selection.people.isEmpty
+                            ) {
+                                selection.selectAllPeople()
+                            }
+
+                            ForEach(peopleOptions) { person in
+                                MapMoreOptionChip(
+                                    title: person.displayName,
+                                    systemImage: "person.fill",
+                                    isSelected: selection.people.contains(person.id)
+                                ) {
+                                    selection.togglePerson(person.id)
+                                }
+                                .accessibilityIdentifier("map.more.person.\(person.id)")
+                            }
+                        }
+
+                        if peopleOptions.isEmpty {
+                            Text("People you follow will appear here.")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(WanderTheme.textMuted.color)
                         }
                     }
                 }
 
-                filterSection(
-                    title: "People",
-                    detail: "Choose one or more"
-                ) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                        MapMoreOptionChip(
-                            title: "All",
-                            systemImage: "person.2",
-                            isSelected: selection.people.isEmpty
-                        ) {
-                            selection.selectAllPeople()
-                        }
-
-                        ForEach(peopleOptions) { person in
-                            MapMoreOptionChip(
-                                title: person.displayName,
-                                systemImage: "person.fill",
-                                isSelected: selection.people.contains(person.id)
-                            ) {
-                                selection.togglePerson(person.id)
-                            }
-                            .accessibilityIdentifier("map.more.person.\(person.id)")
-                        }
-                    }
-
-                    if peopleOptions.isEmpty {
-                        Text("People you follow will appear here.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-                }
-
-                filterSection(
-                    title: "Status",
-                    detail: "Choose one"
-                ) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                        ForEach(MapStatusFilter.allCases) { status in
-                            MapMoreOptionChip(
-                                title: status.title,
-                                systemImage: status.systemImage,
-                                isSelected: selection.status == status
-                            ) {
-                                selection.status = status
+                if MapMoreFilterPolicy.showsStatus(for: source) {
+                    filterSection(
+                        title: "Status",
+                        detail: "Choose one"
+                    ) {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                            ForEach(MapStatusFilter.allCases) { status in
+                                MapMoreOptionChip(
+                                    title: status.title,
+                                    systemImage: status.systemImage,
+                                    isSelected: selection.status == status
+                                ) {
+                                    selection.status = status
+                                }
                             }
                         }
                     }
@@ -3809,7 +3884,7 @@ private struct MapMoreFiltersPopover: View {
             }
             .padding(WanderTheme.spacing4)
         }
-        .frame(width: 330, height: 470)
+        .frame(width: 330, height: source == .featured ? 360 : 470)
         .background(WanderTheme.surfaceBone.color)
         .accessibilityIdentifier("map.moreFilters.popover")
     }
@@ -3820,7 +3895,7 @@ private struct MapMoreFiltersPopover: View {
                 Text("More filters")
                     .font(.system(size: 18, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text("Narrow the active source")
+                Text("Narrow \(source.title.lowercased())")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }

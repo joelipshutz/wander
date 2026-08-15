@@ -280,6 +280,7 @@ final class OnboardingUITests: XCTestCase {
         let filterSteps = [
             ("mapFeatured", "map.filter.featured", "REC-257 Featured filter lesson"),
             ("mapFriends", "map.filter.friends", "REC-257 Friends filter lesson"),
+            ("mapYou", "map.filter.you", "You filter lesson"),
             ("mapMoreFilters", "map.filter.more", "REC-257 More filters lesson")
         ]
 
@@ -454,11 +455,12 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Lists"].isSelected)
     }
 
-    func testMapMorePeopleIncludesYouAndPersistsAcrossSourceSwitch() {
+    func testMapMoreSectionsAndResetFollowTheActiveSource() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
+            "-WanderMapCaptureMode", "friends",
             "-WanderMapMoreFiltersOpen"
         ]
         app.launch()
@@ -467,29 +469,24 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(popover.waitForExistence(timeout: 5))
 
         let expectedPeople = [
-            (id: "user_joe", name: "You"),
             (id: "user_demo", name: "Demo"),
             (id: "user_maya", name: "Maya"),
             (id: "user_ryan", name: "Ryan")
         ]
-        let you = app.buttons["map.more.person.user_joe"]
-        for _ in 0..<5 where !you.exists {
+        let demo = app.buttons["map.more.person.user_demo"]
+        for _ in 0..<5 where !demo.exists {
             popover.swipeUp()
         }
 
+        XCTAssertFalse(app.buttons["map.more.person.user_joe"].exists)
         for person in expectedPeople {
             let button = app.buttons["map.more.person.\(person.id)"]
             XCTAssertTrue(button.exists, "Expected More → People to include \(person.name)")
             XCTAssertTrue(button.label.contains(person.name))
         }
 
-        you.tap()
-        XCTAssertEqual(you.value as? String, "Selected")
-
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-261 More People includes You and follows"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
+        demo.tap()
+        XCTAssertEqual(demo.value as? String, "Selected")
 
         let done = app.buttons["Done"]
         for _ in 0..<5 where !done.isHittable {
@@ -498,14 +495,30 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(done.isHittable)
         done.tap()
 
-        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Friends map source")).firstMatch.tap()
-        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "More map filters")).firstMatch.tap()
-        XCTAssertTrue(popover.waitForExistence(timeout: 3))
-        for _ in 0..<5 where !you.exists {
-            popover.swipeUp()
-        }
+        let more = app.buttons["map.filter.more"]
+        XCTAssertTrue((more.value as? String)?.contains("1 filtered section") == true)
 
-        XCTAssertEqual(you.value as? String, "Selected")
+        app.buttons["map.filter.you"].tap()
+        XCTAssertTrue((more.value as? String)?.contains("No additional filters") == true)
+        more.tap()
+        XCTAssertTrue(popover.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Categories"].exists)
+        XCTAssertFalse(app.staticTexts["People"].exists)
+        XCTAssertTrue(app.staticTexts["Status"].exists)
+        XCTAssertFalse(app.buttons["map.more.person.user_demo"].exists)
+
+        app.buttons["Done"].tap()
+        app.buttons["map.filter.featured"].tap()
+        more.tap()
+        XCTAssertTrue(popover.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Categories"].exists)
+        XCTAssertFalse(app.staticTexts["People"].exists)
+        XCTAssertFalse(app.staticTexts["Status"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Map More follows the active source"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     func testFeedActivityExplanationUsesNext() {
