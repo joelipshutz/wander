@@ -188,9 +188,10 @@ struct MapScreen: View {
             return MapFeaturedSelection.places(
                 from: featuredViewportPlaces ?? store.visiblePlaces(),
                 currentUserID: store.currentUser.id,
-                eligibleOwnerIDs: followedOwnerIDs,
+                followedOwnerIDs: followedOwnerIDs,
                 in: featuredRankingRegion,
-                refinements: mapFilterState.more
+                refinements: mapFilterState.more,
+                tasteSaves: tasteSummaries
             )
         case .friends:
             return MapFilterSelection.friendsPlaces(
@@ -1057,13 +1058,18 @@ struct MapScreen: View {
         isLoadingMapSources = true
 
         let requestedViewport = Self.initialRemoteViewport
-        await store.refreshRemoteSocialSurfaces(
+        async let socialRefresh: Bool = store.refreshRemoteSocialSurfaces(
             in: requestedViewport,
             backend: auth.isSignedIn ? backend : nil
         )
+        let remoteFeaturedPlaces = await store.fetchRemoteFeaturedViewportPlaces(
+            in: requestedViewport,
+            backend: auth.isSignedIn ? backend : nil
+        )
+        _ = await socialRefresh
         guard !Task.isCancelled else { return }
 
-        featuredViewportPlaces = store.visiblePlaces()
+        featuredViewportPlaces = remoteFeaturedPlaces ?? store.visiblePlaces()
         loadedFeaturedViewport = requestedViewport
         featuredRankingRegion = currentSearchRegion
         isLoadingMapSources = false
@@ -1097,7 +1103,7 @@ struct MapScreen: View {
                 return
             }
             guard !Task.isCancelled,
-                  let places = await store.fetchRemoteViewportPlaces(
+                  let places = await store.fetchRemoteFeaturedViewportPlaces(
                       in: requestedViewport,
                       backend: backend
                   ),
@@ -2829,57 +2835,126 @@ enum MapViewportRefreshPolicy {
 
 enum MapFeaturedSelection {
     static let maximumPlaceGroupCount = 24
+    private static let maximumCandidateRowCount = 480
+    private static let reservedRelationshipRowCount = 240
 
     static func places(
         from candidates: [VisiblePlace],
         currentUserID: String,
-        eligibleOwnerIDs: Set<String>,
+        followedOwnerIDs: Set<String>,
         in region: MKCoordinateRegion,
         refinements: MapMoreFilterSelection,
+        tasteSaves: [PlaceSaveSummary] = [],
         limit: Int = maximumPlaceGroupCount
     ) -> [VisiblePlace] {
-        guard limit > 0, !eligibleOwnerIDs.isEmpty else { return [] }
+        guard limit > 0 else { return [] }
 
         let viewport = MapViewportRefreshPolicy.viewport(for: region)
         let communityCheckIns = candidates.filter { visiblePlace in
-            (visiblePlace.owner.id == currentUserID || eligibleOwnerIDs.contains(visiblePlace.owner.id))
-                && visiblePlace.userPlace.status == .been
+            visiblePlace.userPlace.status == .been
                 && MapViewportRefreshPolicy.contains(visiblePlace, in: viewport)
         }
         let refinedPlaces = MapFilterSelection.applying(refinements, to: communityCheckIns)
-        let rankedGroups = VisiblePlaceGrouping.groups(
-            from: refinedPlaces,
+        let boundedPlaces = boundedCandidates(
+            refinedPlaces,
+            currentUserID: currentUserID,
+            followedOwnerIDs: followedOwnerIDs
+        )
+        let tasteProfile = MapFeaturedTasteProfile(
+            tasteSaves: tasteSaves,
             currentUserID: currentUserID
         )
+        let rankedGroups = VisiblePlaceGrouping.groups(
+            from: boundedPlaces,
+            currentUserID: currentUserID
+        )
+        .map { group in
+            RankedGroup(
+                group: group,
+                score: rankingScore(
+                    for: group,
+                    currentUserID: currentUserID,
+                    followedOwnerIDs: followedOwnerIDs,
+                    tasteProfile: tasteProfile
+                )
+            )
+        }
         .sorted(by: ranksBefore)
 
-        return rankedGroups.prefix(limit).flatMap(\.places)
+        return rankedGroups.prefix(limit).flatMap(\.group.places)
     }
 
-    private static func ranksBefore(_ lhs: VisiblePlaceGroup, _ rhs: VisiblePlaceGroup) -> Bool {
-        let lhsSupport = supportCount(for: lhs)
-        let rhsSupport = supportCount(for: rhs)
-        if lhsSupport != rhsSupport {
-            return lhsSupport > rhsSupport
+    private struct RankedGroup {
+        let group: VisiblePlaceGroup
+        let score: Double
+    }
+
+    private static func rankingScore(
+        for group: VisiblePlaceGroup,
+        currentUserID: String,
+        followedOwnerIDs: Set<String>,
+        tasteProfile: MapFeaturedTasteProfile
+    ) -> Double {
+        let ownerIDs = Set(group.places.map(\.owner.id))
+        let relationshipBoost: Double
+        if ownerIDs.contains(currentUserID) {
+            relationshipBoost = 1.8
+        } else if !ownerIDs.isDisjoint(with: followedOwnerIDs) {
+            relationshipBoost = 1.35
+        } else {
+            relationshipBoost = 0
         }
 
-        let lhsScore = lhs.recommendedScore ?? -.infinity
-        let rhsScore = rhs.recommendedScore ?? -.infinity
-        if lhsScore != rhsScore {
-            return lhsScore > rhsScore
+        let support = Double(supportCount(for: group))
+        let supportScore = min(2.4, log2(support + 1) * 0.95)
+        let ratingScore = min(1.25, max(0, (group.recommendedScore ?? 0) / 5) * 1.25)
+
+        return relationshipBoost
+            + tasteProfile.fitScore(for: group)
+            + supportScore
+            + ratingScore
+    }
+
+    private static func ranksBefore(_ lhs: RankedGroup, _ rhs: RankedGroup) -> Bool {
+        if lhs.score != rhs.score {
+            return lhs.score > rhs.score
         }
 
-        let lhsRecency = recency(for: lhs)
-        let rhsRecency = recency(for: rhs)
+        let lhsRecency = recency(for: lhs.group)
+        let rhsRecency = recency(for: rhs.group)
         if lhsRecency != rhsRecency {
             return lhsRecency > rhsRecency
         }
 
-        return lhs.key < rhs.key
+        return lhs.group.key < rhs.group.key
+    }
+
+    private static func boundedCandidates(
+        _ candidates: [VisiblePlace],
+        currentUserID: String,
+        followedOwnerIDs: Set<String>
+    ) -> [VisiblePlace] {
+        guard candidates.count > maximumCandidateRowCount else { return candidates }
+
+        let relationshipRows = Array(candidates.lazy.filter { visiblePlace in
+            visiblePlace.owner.id == currentUserID
+                || followedOwnerIDs.contains(visiblePlace.owner.id)
+        }
+        .prefix(reservedRelationshipRowCount))
+        let communityRows = Array(candidates.lazy.filter { visiblePlace in
+            visiblePlace.owner.id != currentUserID
+                && !followedOwnerIDs.contains(visiblePlace.owner.id)
+        }
+        .prefix(maximumCandidateRowCount - relationshipRows.count))
+
+        return relationshipRows + communityRows
     }
 
     private static func supportCount(for group: VisiblePlaceGroup) -> Int {
-        max(Set(group.places.map(\.owner.id)).count, group.recommendedCount)
+        max(
+            max(Set(group.places.map(\.owner.id)).count, group.recommendedCount),
+            group.places.map(\.communitySaveCount).max() ?? 0
+        )
     }
 
     private static func recency(for group: VisiblePlaceGroup) -> Date {
@@ -2887,6 +2962,80 @@ enum MapFeaturedSelection {
             .map { $0.userPlace.visitedAt ?? $0.userPlace.savedAt }
             .max()
             ?? .distantPast
+    }
+}
+
+private struct MapFeaturedTasteProfile {
+    private let categoryCounts: [String: Int]
+    private let cuisineCounts: [String: Int]
+    private let tagCounts: [String: Int]
+    private let likedSaveCount: Int
+
+    init(tasteSaves: [PlaceSaveSummary], currentUserID: String) {
+        let likedSaves = tasteSaves.filter { summary in
+            guard summary.visiblePlace.owner.id == currentUserID else { return false }
+            return summary.visiblePlace.userPlace.status == .wannaGo
+                || (summary.visiblePlace.userPlace.ratingScore ?? 0) >= 4
+        }
+
+        var categoryCounts: [String: Int] = [:]
+        var cuisineCounts: [String: Int] = [:]
+        var tagCounts: [String: Int] = [:]
+
+        for summary in likedSaves {
+            categoryCounts[Self.normalized(summary.visiblePlace.effectiveCategory), default: 0] += 1
+
+            if let cuisine = summary.visiblePlace.restaurantCuisine {
+                cuisineCounts[Self.normalized(cuisine), default: 0] += 1
+            }
+
+            for tag in Set(summary.attributes.flatMap(PlaceProfileTagParser.tags(from:))) {
+                tagCounts[tag.normalized, default: 0] += 1
+            }
+        }
+
+        self.categoryCounts = categoryCounts
+        self.cuisineCounts = cuisineCounts
+        self.tagCounts = tagCounts
+        self.likedSaveCount = likedSaves.count
+    }
+
+    func fitScore(for group: VisiblePlaceGroup) -> Double {
+        guard likedSaveCount > 0 else { return 0 }
+
+        var score = affinityScore(
+            count: categoryCounts[Self.normalized(group.primary.effectiveCategory), default: 0],
+            maximum: 1.1
+        )
+
+        if let cuisine = group.primary.restaurantCuisine {
+            score += affinityScore(
+                count: cuisineCounts[Self.normalized(cuisine), default: 0],
+                maximum: 0.75
+            )
+        }
+
+        let matchingTagCount = Set(group.places.flatMap { visiblePlace in
+            visiblePlace.attributes.flatMap(PlaceProfileTagParser.tags(from:)).map(\.normalized)
+        })
+        .reduce(into: 0) { count, tag in
+            if tagCounts[tag, default: 0] > 0 {
+                count += 1
+            }
+        }
+        score += min(0.75, Double(matchingTagCount) * 0.25)
+
+        return score
+    }
+
+    private func affinityScore(count: Int, maximum: Double) -> Double {
+        guard count > 0 else { return 0 }
+        let share = Double(count) / Double(likedSaveCount)
+        return maximum * min(1, 0.35 + share)
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }
 
@@ -2908,13 +3057,23 @@ enum MapFilterSelection {
         _ selection: MapMoreFilterSelection,
         to places: [VisiblePlace]
     ) -> [VisiblePlace] {
-        places.filter { visiblePlace in
-            matches(
-                status: visiblePlace.userPlace.status,
-                category: visiblePlace.effectiveCategory,
-                ownerID: visiblePlace.owner.id,
-                selection: selection
-            )
+        guard selection.activeSectionCount > 0 else { return places }
+
+        let normalizedCategories = Set(
+            selection.categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        )
+        let selectedStatuses = statuses(for: selection.status)
+
+        return places.filter { visiblePlace in
+            let matchesCategory = normalizedCategories.isEmpty
+                || normalizedCategories.contains(
+                    WanderPlaceCategory.normalizedPrimaryCategory(visiblePlace.effectiveCategory)
+                )
+            let matchesPerson = selection.people.isEmpty
+                || selection.people.contains(visiblePlace.owner.id)
+            let matchesStatus = selectedStatuses.isEmpty
+                || selectedStatuses.contains(visiblePlace.userPlace.status)
+            return matchesCategory && matchesPerson && matchesStatus
         }
     }
 
@@ -8986,7 +9145,9 @@ struct PlaceSheet: View {
     }
 
     private var savers: [LocalProfile] {
-        saves.map(\.visiblePlace.owner)
+        saves
+            .filter { !$0.visiblePlace.isCommunityAggregate }
+            .map(\.visiblePlace.owner)
     }
 
     private var presentation: PlaceProfilePresentation {
@@ -9463,6 +9624,7 @@ struct PlaceActivitySection: View {
 
     private var entries: [PlaceActivityEntry] {
         saves
+            .filter { !$0.visiblePlace.isCommunityAggregate }
             .flatMap { summary -> [PlaceActivityEntry] in
                 let userPlace = summary.visiblePlace.userPlace
                 let visits = store.visits(for: summary.visiblePlace.userPlace.id)

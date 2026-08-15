@@ -276,7 +276,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
         span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
     )
 
-    func testFeaturedUsesOwnAndFollowedCheckInsOnly() {
+    func testFeaturedIncludesCommunityCheckInsButNeverWannaOrOutsideViewport() {
         let joe = profile(id: "user_joe")
         let ben = profile(id: "user_ben")
         let stranger = profile(id: "user_stranger")
@@ -295,21 +295,148 @@ final class MapFeaturedSelectionTests: XCTestCase {
         let featured = MapFeaturedSelection.places(
             from: [benWanna, ownCheckIn, strangerCheckIn, outsideCheckIn, benCheckIn],
             currentUserID: joe.id,
-            eligibleOwnerIDs: [ben.id],
+            followedOwnerIDs: [ben.id],
             in: losAngelesRegion,
             refinements: MapMoreFilterSelection()
         )
 
-        XCTAssertEqual(Set(featured.map(\.id)), Set([ownCheckIn.id, benCheckIn.id]))
+        XCTAssertEqual(
+            Set(featured.map(\.id)),
+            Set([ownCheckIn.id, benCheckIn.id, strangerCheckIn.id])
+        )
         XCTAssertTrue(
             MapFeaturedSelection.places(
                 from: [benCheckIn, benWanna],
                 currentUserID: joe.id,
-                eligibleOwnerIDs: [ben.id],
+                followedOwnerIDs: [ben.id],
                 in: losAngelesRegion,
                 refinements: MapMoreFilterSelection(status: .wanna)
             ).isEmpty
         )
+    }
+
+    func testFeaturedStillWorksWhenViewerFollowsNobody() {
+        let joe = profile(id: "user_joe")
+        let community = profile(id: "user_community")
+        let ownCheckIn = visiblePlace(owner: joe, name: "Own", status: .been)
+        let communityCheckIn = visiblePlace(
+            owner: community,
+            name: "Community",
+            longitude: -118.24,
+            status: .been
+        )
+
+        let featured = MapFeaturedSelection.places(
+            from: [communityCheckIn, ownCheckIn],
+            currentUserID: joe.id,
+            followedOwnerIDs: [],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection()
+        )
+
+        XCTAssertEqual(Set(featured.map(\.id)), Set([ownCheckIn.id, communityCheckIn.id]))
+    }
+
+    func testFeaturedPrioritizesFollowedContributorWhenEvidenceIsEqual() {
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let community = profile(id: "user_community")
+        let timestamp = Date(timeIntervalSince1970: 1_720_000_000)
+        let followed = visiblePlace(
+            owner: ben,
+            name: "Followed Pick",
+            providerID: "followed_pick",
+            status: .been,
+            ratingScore: 4,
+            visitedAt: timestamp
+        )
+        let broaderCommunity = visiblePlace(
+            owner: community,
+            name: "Community Pick",
+            longitude: -118.24,
+            providerID: "community_pick_equal",
+            status: .been,
+            ratingScore: 4,
+            visitedAt: timestamp
+        )
+
+        let featured = MapFeaturedSelection.places(
+            from: [broaderCommunity, followed],
+            currentUserID: joe.id,
+            followedOwnerIDs: [ben.id],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection(),
+            limit: 1
+        )
+
+        XCTAssertEqual(featured.map(\.place.canonicalName), ["Followed Pick"])
+    }
+
+    func testFeaturedCanRankHighFitCommunityPlaceAboveWeakFollowedPlace() {
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let community = profile(id: "user_community")
+        let tasteSave = visiblePlace(
+            owner: joe,
+            name: "Favorite Coffee",
+            providerID: "favorite_coffee",
+            category: WanderPlaceCategory.coffeeTeaSweets,
+            status: .wannaGo
+        )
+        let weakFollowed = visiblePlace(
+            owner: ben,
+            name: "Weak Followed",
+            longitude: -118.24,
+            providerID: "weak_followed",
+            category: WanderPlaceCategory.shopping,
+            status: .been,
+            ratingScore: 2
+        )
+        let highFitCommunity = visiblePlace(
+            owner: community,
+            name: "High Fit Community",
+            longitude: -118.23,
+            providerID: "high_fit_community",
+            category: WanderPlaceCategory.coffeeTeaSweets,
+            status: .been,
+            ratingScore: 5,
+            communitySaveCount: 5
+        )
+
+        let featured = MapFeaturedSelection.places(
+            from: [weakFollowed, highFitCommunity],
+            currentUserID: joe.id,
+            followedOwnerIDs: [ben.id],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection(),
+            tasteSaves: [PlaceSaveSummary(visiblePlace: tasteSave, attributes: [])],
+            limit: 1
+        )
+
+        XCTAssertEqual(featured.map(\.place.canonicalName), ["High Fit Community"])
+    }
+
+    func testFeaturedPeopleRefinementNarrowsWithoutChangingSource() {
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let community = profile(id: "user_community")
+        let followed = visiblePlace(owner: ben, name: "Ben Pick", status: .been)
+        let broaderCommunity = visiblePlace(
+            owner: community,
+            name: "Community Pick",
+            longitude: -118.24,
+            status: .been
+        )
+
+        let featured = MapFeaturedSelection.places(
+            from: [broaderCommunity, followed],
+            currentUserID: joe.id,
+            followedOwnerIDs: [ben.id],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection(people: [ben.id])
+        )
+
+        XCTAssertEqual(featured.map(\.id), [followed.id])
     }
 
     func testFeaturedRanksCommunitySupportBeforeRatingAndRecency() {
@@ -347,7 +474,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
         let featured = MapFeaturedSelection.places(
             from: [soloFavorite, communityOne, communityTwo],
             currentUserID: joe.id,
-            eligibleOwnerIDs: [ben.id, juana.id],
+            followedOwnerIDs: [ben.id, juana.id],
             in: losAngelesRegion,
             refinements: MapMoreFilterSelection()
         )
@@ -374,7 +501,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
         let featured = MapFeaturedSelection.places(
             from: candidates,
             currentUserID: joe.id,
-            eligibleOwnerIDs: [ben.id],
+            followedOwnerIDs: [ben.id],
             in: losAngelesRegion,
             refinements: MapMoreFilterSelection()
         )
@@ -383,6 +510,42 @@ final class MapFeaturedSelectionTests: XCTestCase {
             VisiblePlaceGrouping.groups(from: featured, currentUserID: joe.id).count,
             MapFeaturedSelection.maximumPlaceGroupCount
         )
+    }
+
+    func testFeaturedLargeCandidateRankingStaysLightweight() {
+        let joe = profile(id: "user_joe")
+        let community = profile(id: "user_community")
+        let candidates = (0..<8_000).map { index in
+            visiblePlace(
+                owner: community,
+                name: "Candidate \(index)",
+                latitude: 34.0 + Double(index % 100) * 0.001,
+                longitude: -118.25,
+                providerID: "candidate_\(index)",
+                category: index.isMultiple(of: 2)
+                    ? WanderPlaceCategory.coffeeTeaSweets
+                    : WanderPlaceCategory.restaurantsFood,
+                status: .been,
+                ratingScore: Double(index % 6),
+                communitySaveCount: (index % 8) + 1
+            )
+        }
+
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let featured = MapFeaturedSelection.places(
+            from: candidates,
+            currentUserID: joe.id,
+            followedOwnerIDs: [],
+            in: losAngelesRegion,
+            refinements: MapMoreFilterSelection()
+        )
+        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+
+        XCTAssertEqual(
+            VisiblePlaceGrouping.groups(from: featured, currentUserID: joe.id).count,
+            MapFeaturedSelection.maximumPlaceGroupCount
+        )
+        XCTAssertLessThan(elapsed, 2, "Featured ranking should remain a local, sub-two-second pass for 8,000 candidates")
     }
 
     func testViewportRefreshWaitsUntilCameraLeavesPrefetchBuffer() {
@@ -434,16 +597,19 @@ final class MapFeaturedSelectionTests: XCTestCase {
         latitude: Double = 34.05,
         longitude: Double = -118.25,
         providerID: String? = nil,
+        category: String = WanderPlaceCategory.restaurantsFood,
         status: PlaceStatus,
         ratingScore: Double? = nil,
-        visitedAt: Date? = nil
+        visitedAt: Date? = nil,
+        communitySaveCount: Int = 0
     ) -> VisiblePlace {
         let providerID = providerID ?? name.lowercased().replacingOccurrences(of: " ", with: "_")
         let place = LocalPlace(
             localID: "local_place_\(owner.id)_\(providerID)",
             serverID: "place_\(providerID)",
             canonicalName: name,
-            category: WanderPlaceCategory.restaurantsFood,
+            category: category,
+            primaryCategory: category,
             latitude: latitude,
             longitude: longitude,
             sourceProvider: "mapkit",
@@ -465,7 +631,13 @@ final class MapFeaturedSelectionTests: XCTestCase {
             sourceType: "test",
             syncState: .synced
         )
-        return VisiblePlace(id: userPlace.id, place: place, userPlace: userPlace, owner: owner)
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner,
+            communitySaveCount: communitySaveCount
+        )
     }
 }
 

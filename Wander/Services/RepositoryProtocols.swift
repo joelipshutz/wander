@@ -1625,6 +1625,7 @@ protocol PlaceCandidateResolving {
 protocol PlaceRepository {
     func places(in viewport: MapViewport) async throws -> [VisiblePlace]
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
+    func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace]
     func resolveCurrentLocation() async throws -> [PlaceCandidate]
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
     func sharedPlace(id: String) async throws -> PlaceCandidate?
@@ -1633,6 +1634,10 @@ protocol PlaceRepository {
 extension PlaceRepository {
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("rec.me place search")
+    }
+
+    func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {
+        try await places(in: viewport)
     }
 
     func sharedPlace(id: String) async throws -> PlaceCandidate? {

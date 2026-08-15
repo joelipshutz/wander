@@ -6667,6 +6667,30 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.remoteVisiblePlaceCache.map(\.id), originalCacheIDs)
     }
 
+    func testRemoteFeaturedViewportFetchUsesCommunityPathWithoutReplacingProfileWideCache() async throws {
+        let store = WanderStore(fixtures: .seed())
+        let remotePlace = try XCTUnwrap(store.visiblePlaces().first)
+        let placeRepository = FakePlaceRepository(
+            places: [],
+            featuredPlaces: [remotePlace]
+        )
+        let backend = WanderBackend(placeRepository: placeRepository)
+        let viewport = MapViewport(
+            minLatitude: 33.9,
+            minLongitude: -118.4,
+            maxLatitude: 34.2,
+            maxLongitude: -118.1
+        )
+        let originalCacheIDs = store.remoteVisiblePlaceCache.map(\.id)
+
+        let places = await store.fetchRemoteFeaturedViewportPlaces(in: viewport, backend: backend)
+
+        XCTAssertEqual(places?.map(\.id), [remotePlace.id])
+        XCTAssertEqual(placeRepository.featuredViewports, [viewport])
+        XCTAssertTrue(placeRepository.viewports.isEmpty)
+        XCTAssertEqual(store.remoteVisiblePlaceCache.map(\.id), originalCacheIDs)
+    }
+
     func testRemoteSocialGraphHydratesFollowEdgesAndRelationships() async {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -9504,10 +9528,13 @@ private final class FakeSocialPlaceSaveRepository: SocialPlaceSaveRepository {
 @MainActor
 private final class FakePlaceRepository: PlaceRepository {
     private var placesResult: [VisiblePlace]
+    private var featuredPlacesResult: [VisiblePlace]
     private(set) var viewports: [MapViewport] = []
+    private(set) var featuredViewports: [MapViewport] = []
 
-    init(places: [VisiblePlace]) {
+    init(places: [VisiblePlace], featuredPlaces: [VisiblePlace]? = nil) {
         self.placesResult = places
+        self.featuredPlacesResult = featuredPlaces ?? places
     }
 
     func setPlaces(_ places: [VisiblePlace]) {
@@ -9517,6 +9544,11 @@ private final class FakePlaceRepository: PlaceRepository {
     func places(in viewport: MapViewport) async throws -> [VisiblePlace] {
         viewports.append(viewport)
         return placesResult
+    }
+
+    func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {
+        featuredViewports.append(viewport)
+        return featuredPlacesResult
     }
 
     func resolveCurrentLocation() async throws -> [PlaceCandidate] {
