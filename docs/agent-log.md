@@ -29977,3 +29977,47 @@ Mock generation checkpoint - 2026-08-15 13:15 PDT:
   `http://127.0.0.1:57867/boards/b-20260815-201111-cfqpdq/`.
 - No production SwiftUI files were changed. Next step is Joe's visual selection
   and any requested hybridization before implementation planning or code edits.
+
+Approved direction and flow audit checkpoint - 2026-08-15 13:35 PDT:
+
+- Joe approved Variant A, `Editorial Fold`, and added the interaction constraint
+  that the place profile actions float above the home indicator and remain
+  visible while the full-screen profile scrolls. The existing choice to hide the
+  tab bar inside a place profile is confirmed.
+- Saved the approval in the design session and recorded Variant A in local taste
+  memory. The product direction is Apple-native editorial typography: serif for
+  place/editorial content, system sans for controls, metadata, body, and CTAs.
+- The floating profile action state matrix should be:
+  - unsaved/social place: `Check in` + `Wanna`;
+  - existing Wanna: `Check in` + selected `Wanna`, with the selected action
+    reopening its editor;
+  - existing checked-in place: `Check in again` + a quiet edit/history action,
+    because the current data contract does not allow a checked-in place to
+    become a current Wanna record.
+- Selecting Check in or Wanna expands a tray attached to the floating action
+  bar. The place profile remains the visual parent; the status-choice step and
+  generic action-titled save screen disappear. Essentials appear first, `more
+  options` expands in the same tray, and the large confirmation CTA stays pinned
+  above the home indicator or keyboard.
+- Entry-point audit:
+  - Map, Feed, Discover, Lists, and general Profile place destinations should
+    converge on the same full-screen place profile and floating action contract.
+  - Own Profile activity destinations can keep opening at activity/history but
+    should expose repeat/edit actions through the same floating tray rather than
+    an unrelated sheet.
+  - Single-place Add/manual/link/photo confirmation keeps the large bottom CTA,
+    then enters the place profile action contract instead of a separate status
+    chooser.
+  - Batch import keeps inline per-row Check In/Wanna controls because status is
+    chosen across several places at once; its final bulk action uses the shared
+    large bottom CTA family. Optional details use the same expanded editor
+    grammar.
+  - Shared visit invitations are Check-in-only and should open the place context
+    with the shared-person cue above the same attached editor.
+- Required state coverage before implementation: new save, existing Wanna,
+  Wanna-to-check-in conversion, repeat check-in, edit visit/Wanna, destructive
+  removal, keyboard and Dynamic Type, draft recovery, signed-out local save/auth
+  gate, saving/retry, offline/local-only result, success, and the once-daily
+  streak celebration handoff.
+- No production code was changed in this checkpoint. Next artifact is a deeper
+  Editorial Fold flow set covering the normalized states above.
