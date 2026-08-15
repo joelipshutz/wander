@@ -324,6 +324,14 @@ struct SupabasePlaceRepository: PlaceRepository {
         return try rows.map { try $0.visiblePlace() }
     }
 
+    func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
+        let rows: [RemoteRecmePlaceSearchDTO] = try await rpc.call(
+            "search_recme_places",
+            params: RecmePlaceSearchParams(request: request)
+        )
+        return rows.compactMap { $0.placeCandidate() }
+    }
+
     func resolveCurrentLocation() async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("remote current location place resolution")
     }
@@ -342,6 +350,103 @@ struct SupabasePlaceRepository: PlaceRepository {
             )
         )
         return preview.placeCandidate()
+    }
+}
+
+private struct RecmePlaceSearchParams: Encodable {
+    let inputQuery: String
+    let inputCategories: [String]?
+    let inputArea: String?
+    let inputFavoriteOnly: Bool
+    let inputScope: String
+    let inputLimit: Int
+
+    init(request: RecmePlaceSearchRequest) {
+        inputQuery = request.query
+        inputCategories = request.categories.isEmpty ? nil : request.categories
+        inputArea = request.area
+        inputFavoriteOnly = request.favoriteOnly
+        inputScope = request.scope.rawValue
+        inputLimit = request.limit
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case inputQuery = "input_query"
+        case inputCategories = "input_categories"
+        case inputArea = "input_area"
+        case inputFavoriteOnly = "input_favorite_only"
+        case inputScope = "input_scope"
+        case inputLimit = "input_limit"
+    }
+}
+
+private struct RemoteRecmePlaceSearchDTO: Decodable {
+    let id: String
+    let canonicalName: String
+    let category: String
+    let primaryCategory: String?
+    let subcategory: String?
+    let categorySource: String?
+    let categoryConfidence: Double?
+    let rawProviderType: String?
+    let address: String?
+    let locality: String?
+    let region: String?
+    let country: String?
+    let latitude: Double
+    let longitude: Double
+    let sourceProvider: String
+    let sourceProviderPlaceID: String
+    let confidence: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case canonicalName = "canonical_name"
+        case category
+        case primaryCategory = "primary_category"
+        case subcategory
+        case categorySource = "category_source"
+        case categoryConfidence = "category_confidence"
+        case rawProviderType = "raw_provider_type"
+        case address
+        case locality
+        case region
+        case country
+        case latitude
+        case longitude
+        case sourceProvider = "source_provider"
+        case sourceProviderPlaceID = "source_provider_place_id"
+        case confidence
+    }
+
+    func placeCandidate() -> PlaceCandidate? {
+        guard !canonicalName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              (-90...90).contains(latitude),
+              (-180...180).contains(longitude),
+              !sourceProviderPlaceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+
+        return PlaceCandidate(
+            id: id,
+            name: canonicalName,
+            category: category,
+            primaryCategory: primaryCategory,
+            subcategory: subcategory,
+            categorySource: categorySource ?? PlaceCategorySource.provider.rawValue,
+            categoryConfidence: categoryConfidence,
+            rawProviderType: rawProviderType,
+            address: address,
+            locality: locality,
+            region: region,
+            country: country,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            confidence: confidence ?? 1
+        )
     }
 }
 

@@ -231,3 +231,153 @@ Implement the Map + Feed/Discover slice, then run five real retrieval attempts o
 
 - You moved directly from “search isn't working quite right” to asking whether it should become “one platform,” which identified the durability question instead of treating each symptom as an isolated bug.
 - You chose the middle path—shared primitives with separate adapters—rather than the smallest patch or the largest abstraction. That is the right pressure for a product whose search contract is still being learned.
+
+## 2026-08-14 Addendum: Every rec.me Save as the Discover Corpus
+
+### Accepted product contract
+
+Discover place search should search the public-place projection contributed by privacy-eligible saves across every active rec.me user. Results should favor the current user's own memories and friends' memories by default. A query that explicitly says `friend`, `friends`, or `mutuals` is a hard mutual-friend filter.
+
+The word `everyone` no longer means “the current local cache of you, following, and friends.” It means the rec.me-wide place corpus described below.
+
+### Privacy boundary
+
+A stranger's save may make a provider-backed canonical place discoverable, but it must not disclose or return the stranger's identity, note, rating, status, visibility, attributes, personal labels, save count, or other memory content. Full memory cards remain limited to rows already visible through existing RLS.
+
+The global projection excludes self-only saves, private profiles, deleted rows, blocked owners, unsafe address/residence categories, manual/coordinate sources, and places without a stable external provider identifier. The first allowlist is limited to public dining, coffee, nightlife, outdoors, things-to-do, and shopping venues from MapKit, Google Maps/Places, or Apple Maps. It returns only canonical place facts already suitable for a place candidate: name, category, address/locality/region/country, coordinates, original provider identifiers, and confidence.
+
+### Retrieval flow
+
+```text
+Submit query
+    |
+    +--> synchronous local trusted-memory match --> visible immediately
+    |
+    +--> deterministic query plan --> authenticated global RPC
+    |                                  |
+    |                                  +--> all active rec.me saves
+    |                                  +--> privacy-safe canonical place projection
+    |                                  +--> own/friend/following ranking bias
+    |
+    +--> existing structured parser/refinement
+                                       |
+                                       v
+                     merge current revision only
+                     local memory groups first
+                     canonical community places second
+                     dedupe by provider identity / physical-place key
+```
+
+The global request starts before the optional structured refinement finishes. Search remains submit-driven rather than network-on-every-keystroke. A remote timeout or failure leaves immediate local results intact and ends the loading state with a quiet retryable message.
+
+### Server contract
+
+Add an authenticated `search_recme_places` RPC with a narrow request: residual lexical query, normalized category filters, optional area, optional opinion intent, optional relationship scope, and a bounded result limit.
+
+The function must:
+
+- use `security definer` only because the canonical projection intentionally aggregates beyond normal row-level memory visibility;
+- derive the viewer from `app.current_user_id()` and never accept a caller-selected user id;
+- pin an empty `search_path` and fully qualify referenced objects/functions;
+- revoke execution from `public` and `anon`, granting only `authenticated` and `service_role`;
+- exclude blocked relationships in either direction and deleted profiles/saves/places;
+- use an explicit public-venue category/provider allowlist and exclude self-only saves and private profiles;
+- apply explicit `friends` as a mutual-only save filter;
+- rank lexical relevance first, then own/mutual/following affinity and aggregate quality as bounded tie-breakers;
+- return no save-level columns, identities, counts, or internal rank components.
+
+Canonical place text uses a stored generated `tsvector` with a GIN index. The result limit is clamped server-side. No embeddings, vector database, or third-party search service are introduced.
+
+### Client contract
+
+- Extend `PlaceRepository` and `WanderBackend` with a rec.me place-candidate search method instead of introducing a universal search platform.
+- Keep `TrustedPlaceSearch` as the shared local lexical engine. Add bounded social-affinity tie-breaking in the Discover adapter, not the cross-surface core.
+- Keep existing local `VisiblePlace` cards and evidence. Render global results as separate canonical `PlaceCandidate` cards labeled `Saved on rec.me`; never synthesize a fake owner or memory.
+- Opening a global candidate launches the normal add/save flow with `social_save` attribution at the source-type level only.
+- Preserve the current submission UUID, cancellation, and normalized-query guards for both refinement paths.
+- Consume the complete opinion phrase `worth crossing town for` so the example query becomes a structured favorite-coffee search rather than requiring the residual words `worth`, `crossing`, and `town` to appear in place content.
+
+### Failure modes and safeguards
+
+| Failure | User behavior | Safeguard / test |
+|---|---|---|
+| Global RPC times out or fails | Local results stay visible; global section shows a quiet retryable state | Repository failure and Discover fallback tests |
+| An older response arrives late | It is discarded and cannot replace the newer query | Submission UUID and normalized-query regression tests |
+| Same place exists locally and globally | One place is shown, with the visible local memory card taking precedence | Provider-id and physical grouping-key dedupe tests |
+| Query contains only semantic language | Structured filters can return candidates without impossible residual tokens | `worth crossing town for` planner/parser regression |
+| Caller is anonymous or tries to choose another viewer | RPC rejects the request | pgTAP grants/auth assertions and hosted smoke test |
+| Private save detail leaks into the response | Build/test fails | Exact RPC return-column and DTO decoding assertions |
+| Home/manual private place enters global corpus | It is excluded | SQL fixture regression tests |
+
+### Validation additions
+
+- SQL: authenticated access, anonymous denial, empty caller identity denial, block exclusion, deleted-row exclusion, provider/home safety filters, mutual-only scope, friend-biased ordering, lexical/category/area/opinion behavior, result clamp, exact public return shape, `prosecdef`, pinned `search_path`, and grants.
+- Swift repository: exact RPC name/parameters, safe DTO decoding, invalid coordinates, empty results, and failure behavior.
+- Store/search: default friend affinity is bounded by textual relevance; explicit friends remains a hard scope; `worth crossing town for` is fully consumed.
+- Discover UI: suggested and typed searches remain on Discover, immediate local cards are not erased by remote failure, global candidates appear after local groups, duplicates are removed, save flow opens, and stale/double submissions cannot publish.
+- Hosted verification: install pinned script dependencies, apply the reviewed migration to the confirmed linked project, run the production smoke transaction including the new RPC, and inspect function metadata/grants after deployment.
+- Full iPhone simulator tests plus large- and small-phone screenshots because the results presentation changes.
+
+### What already exists
+
+- Shared `TrustedPlaceSearch` matching, scoring, evidence, and deterministic ordering.
+- Discover parser normalization, phrase planning, local immediate results, asynchronous refinement, cancellation, stale-response guards, and analytics privacy rules.
+- `PlaceRepository`, `PlaceCandidate`, `WanderBackend`, Supabase RPC client, and the normal candidate save flow.
+- Existing RLS-authoritative full-memory visibility for own/following/mutual saves.
+
+### Not in scope
+
+- Changing Map search to use the global rec.me corpus.
+- Combining People and Places into one result list.
+- Exposing stranger save identities, notes, tags, ratings, statuses, counts, or evidence.
+- Searching private memory prose across strangers.
+- Embeddings, semantic vector search, a separate search service, or a universal search module.
+- A TestFlight upload as part of implementation; release remains an explicit follow-up.
+
+### Implementation sequence
+
+1. Add the RPC migration and SQL regression/smoke coverage.
+2. Add the repository request/response contract and decoding tests.
+3. Add deterministic request planning, complete opinion phrase consumption, and Discover social-affinity ranking tests.
+4. Integrate parallel global retrieval, merge/dedupe, failure state, and candidate save cards.
+5. Run focused then full validation, visual QA, and hosted smoke checks.
+
+The complete version is required. Omitting the backend, privacy assertions, or hosted verification would leave the accepted corpus contract either unimplemented or unsafe.
+
+## GSTACK REVIEW REPORT
+
+### Findings
+
+- **[P0, confidence 10]** The shipped `.everyone` scope is only the local you/following/friends cache, so it cannot satisfy the accepted rec.me-wide corpus contract. Resolution: add a separate authenticated canonical-place RPC and keep local memories as the immediate first stage.
+- **[P0, confidence 10]** Existing RLS correctly prevents reading stranger memory rows. Returning full stranger `user_places` from a definer function would be a privacy regression. Resolution: return canonical venue facts only; exclude self-only saves, private profiles, blocks, and unsafe venue types; assert the exact return shape and grants.
+- **[P1, confidence 10]** `worth crossing town for` is recognized semantically but was not consumed by the lexical planner, which could force impossible residual terms. Resolution: add the full phrase to the opinion lexicon and apply deterministic structured planning during the immediate local pass.
+- **[P1, confidence 9]** Waiting for the remote parser before starting global retrieval would add avoidable latency. Resolution: immediate local results remain synchronous; global search and structured refinement run independently with the same stale-submission guards.
+- **[P1, confidence 9]** Global candidates must preserve their original provider identity or saves can duplicate the canonical place. Resolution: `rec.me` is presentation provenance only; repository results retain the original provider and provider place id.
+- **[P1, confidence 9]** Social relevance should not replace lexical relevance. Resolution: local affinity is a bounded score bonus, global ordering uses lexical rank first and affinity second, and explicit `friends` is a hard mutual-only scope.
+- **[P1, confidence 9]** A definer RPC without metadata, grant, and hosted payload coverage is too risky to ship. Resolution: pgTAP and smoke coverage assert `prosecdef`, empty `search_path`, authenticated-only execution, canonical-only result columns, block/private/self exclusions, provider safety, favorite semantics, scope, and provider identity.
+
+### Outside voice
+
+The read-only reviewer agreed the architecture is safe after the privacy-eligible corpus and provider-identity rules above were tightened. It also confirmed that current `main` already keeps the walkthrough in Discover; the existing navigation regression is preserved rather than rewritten around the older TestFlight behavior.
+
+### Test diagram
+
+```text
+SQL metadata/grants + fixture behavior
+        |
+        v
+repository params/DTO/provider identity
+        |
+        v
+deterministic phrase + social ranking
+        |
+        v
+Discover cancellation/failure/dedupe/save UI
+        |
+        v
+focused iOS tests -> full suite -> hosted rollback smoke -> visual QA
+```
+
+### Unresolved decisions
+
+None. The accepted scope is the complete privacy-safe implementation above; a TestFlight release remains a separate explicit action.

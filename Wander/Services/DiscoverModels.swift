@@ -972,6 +972,10 @@ struct DeterministicFilterParser: LLMFilterParser {
     var parseSource: DiscoverParseSource { .deterministic }
 
     func parse(query: String, schema: DiscoverFilterSchema) async throws -> DiscoverFilters {
+        Self.filters(query: query, schema: schema)
+    }
+
+    static func filters(query: String, schema: DiscoverFilterSchema) -> DiscoverFilters {
         let normalized = query.lowercased()
         var filters = DiscoverFilters(query: query, schemaVersion: 2)
 

@@ -314,6 +314,14 @@ final class WanderBackend: ObservableObject {
         return try await placeRepository.places(in: viewport)
     }
 
+    func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
+        guard let placeRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        return try await placeRepository.searchRecmePlaces(request)
+    }
+
     func sharedPlace(id: String) async throws -> PlaceCandidate? {
         guard let placeRepository else {
             throw WanderRemoteError.notConfigured

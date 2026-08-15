@@ -4594,10 +4594,42 @@ final class WanderStore: ObservableObject {
         query: String,
         scope: DiscoverPlaceScope = .everyone
     ) -> DiscoverResults {
-        let filters = DiscoverFilters(query: query)
-        let matches = TrustedPlaceSearch.matches(
+        let filters = DeterministicFilterParser.filters(
             query: query,
-            in: visiblePlaces(filters: PlaceFilters(ownerScopes: scope.ownerScopes))
+            schema: DiscoverFilterSchema()
+        )
+        var placeFilters = PlaceFilters()
+        placeFilters.statuses = filters.statuses
+        placeFilters.categories = Set(filters.categories.map(WanderPlaceCategory.normalizedPrimaryCategory))
+        placeFilters.ownerScopes = scope.ownerScopes
+        if scope == .everyone, let relationship = filters.relationship {
+            switch relationship {
+            case .mutual:
+                placeFilters.ownerScopes = ["friends"]
+            case .follower:
+                placeFilters.ownerScopes = ["following"]
+            case .owner:
+                placeFilters.ownerScopes = ["you"]
+            case .nonFollower:
+                placeFilters.ownerScopes = []
+            }
+        }
+        let candidates = visiblePlaces(filters: placeFilters)
+            .filter { visiblePlace in
+                matchesArea(filters.area, visiblePlace: visiblePlace)
+                    && matchesOwner(filters.ownerQuery, visiblePlace: visiblePlace)
+                    && matchesTags(filters.tags, visiblePlace: visiblePlace)
+                    && matchesOpinion(filters.opinion, visiblePlace: visiblePlace)
+            }
+        let queryPlan = TrustedPlaceSearchQuery(
+            query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+        let matches = rankedDiscoverMatches(
+            TrustedPlaceSearch.matches(
+                query: queryPlan,
+                in: candidates
+            )
         )
         let places = matches.map(\.place)
         let evidenceByUserPlaceID = Dictionary(
@@ -4619,6 +4651,20 @@ final class WanderStore: ObservableObject {
             parseSource: .deterministic,
             evidenceByUserPlaceID: evidenceByUserPlaceID
         )
+    }
+
+    func recmePlaceSearchRequest(query: String, limit: Int = 20) async -> RecmePlaceSearchRequest? {
+        let parsed = (try? await DeterministicFilterParser().parse(
+            query: query,
+            schema: DiscoverFilterSchema()
+        )) ?? DiscoverFilters(query: query)
+        let filters = DiscoverSemanticNormalizer.normalized(parsed, query: query)
+        guard filters.ownerQuery == nil,
+              filters.relationship != .nonFollower
+        else {
+            return nil
+        }
+        return DiscoverRecmePlaceSearchPlanner.request(query: query, filters: filters, limit: limit)
     }
 
     func discover(query: String, scope: DiscoverPlaceScope = .everyone, backend: WanderBackend? = nil) async -> DiscoverResults {
@@ -4681,6 +4727,8 @@ final class WanderStore: ObservableObject {
                 }
                 return lhs.place.userPlace.id < rhs.place.userPlace.id
             }
+        } else {
+            searchMatches = rankedDiscoverMatches(searchMatches)
         }
         let places = searchMatches.map(\.place)
 
@@ -4726,6 +4774,34 @@ final class WanderStore: ObservableObject {
             parseSource: lastDiscoverParseSource,
             evidenceByUserPlaceID: evidenceByUserPlaceID
         )
+    }
+
+    private func rankedDiscoverMatches(
+        _ matches: [TrustedPlaceSearchMatch]
+    ) -> [TrustedPlaceSearchMatch] {
+        matches.sorted { lhs, rhs in
+            let lhsScore = lhs.score + discoverSocialAffinityBonus(for: lhs.place)
+            let rhsScore = rhs.score + discoverSocialAffinityBonus(for: rhs.place)
+            if lhsScore != rhsScore { return lhsScore > rhsScore }
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            if lhs.place.userPlace.savedAt != rhs.place.userPlace.savedAt {
+                return lhs.place.userPlace.savedAt > rhs.place.userPlace.savedAt
+            }
+            return lhs.place.userPlace.id < rhs.place.userPlace.id
+        }
+    }
+
+    private func discoverSocialAffinityBonus(for visiblePlace: VisiblePlace) -> Int {
+        switch relationship(to: visiblePlace.owner.id) {
+        case .owner:
+            6
+        case .mutual:
+            4
+        case .follower:
+            2
+        case .nonFollower:
+            0
+        }
     }
 
     func currentLocationCandidates() async throws -> [PlaceCandidate] {

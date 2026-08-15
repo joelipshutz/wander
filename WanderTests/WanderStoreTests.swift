@@ -6306,6 +6306,24 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(immediate.places.map(\.userPlace.id), refined.places.map(\.userPlace.id))
     }
 
+    func testTrustedPlaceImmediateSearchAppliesOpinionPhraseBeforeRemoteRefinement() {
+        let store = makeStore()
+
+        let immediate = store.searchTrustedPlaces(query: "coffee worth crossing town for")
+
+        XCTAssertFalse(immediate.places.isEmpty)
+        XCTAssertEqual(immediate.filters.opinion, .favorite)
+        XCTAssertTrue(immediate.places.allSatisfy { $0.userPlace.status == .been })
+    }
+
+    func testTrustedPlaceDefaultRankingUsesBoundedSocialAffinity() {
+        let store = makeStore()
+
+        let results = store.searchTrustedPlaces(query: "Circuit Coffee")
+
+        XCTAssertEqual(results.places.map(\.owner.id), ["user_joe", "user_ryan", "user_maya"])
+    }
+
     func testDiscoverGenuineFreeTextMissDoesNotSilentlyReturnEveryPlace() async {
         let store = makeStore()
 

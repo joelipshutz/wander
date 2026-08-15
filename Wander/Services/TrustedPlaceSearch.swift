@@ -295,7 +295,9 @@ enum DiscoverTrustedPlaceSearchPlanner {
         }
 
         if filters.opinion == .favorite {
-            phrases.append(contentsOf: ["favorite", "favourite", "best", "loved", "highly rated"])
+            phrases.append(contentsOf: [
+                "favorite", "favourite", "best", "loved", "highly rated", "worth crossing town for"
+            ])
         }
 
         for tag in filters.tags {
@@ -331,6 +333,43 @@ enum DiscoverTrustedPlaceSearchPlanner {
             ["view", "views"]
         default:
             []
+        }
+    }
+}
+
+enum DiscoverRecmePlaceSearchPlanner {
+    static func request(
+        query: String,
+        filters: DiscoverFilters,
+        limit: Int = 20
+    ) -> RecmePlaceSearchRequest {
+        let queryPlan = TrustedPlaceSearchQuery(
+            query,
+            consumedPhrases: DiscoverTrustedPlaceSearchPlanner.consumedPhrases(for: filters)
+        )
+
+        return RecmePlaceSearchRequest(
+            query: queryPlan.requiredTokens.joined(separator: " "),
+            categories: filters.categories
+                .map(WanderPlaceCategory.normalizedPrimaryCategory)
+                .sorted(),
+            area: filters.area,
+            favoriteOnly: filters.opinion == .favorite,
+            scope: scope(for: filters.relationship),
+            limit: limit
+        )
+    }
+
+    private static func scope(for relationship: ViewerRelationship?) -> RecmePlaceSearchScope {
+        switch relationship {
+        case .owner:
+            .mine
+        case .mutual:
+            .friends
+        case .follower:
+            .following
+        case .nonFollower, nil:
+            .everyone
         }
     }
 }

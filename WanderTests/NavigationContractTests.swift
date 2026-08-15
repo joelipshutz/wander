@@ -2638,6 +2638,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("private func exitPlaceSearch()"))
         XCTAssertTrue(source.contains("private func clearPlaceSearch(focusField: Bool = true)"))
         XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
+        XCTAssertTrue(source.contains("communityPlaceSearchTask?.cancel()"))
+        XCTAssertTrue(source.contains("startCommunityPlaceSearch(query: query, submissionID: submissionID)"))
+        XCTAssertTrue(source.contains("backend.searchRecmePlaces(request)"))
+        XCTAssertTrue(source.contains("Saved on rec.me"))
         XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
         XCTAssertTrue(source.contains("Try a search"))
         XCTAssertTrue(source.contains("coffee worth crossing town for"))
@@ -2667,6 +2671,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(authRefresh.contains("previousAuthState != requestedAuthState"))
         XCTAssertTrue(authRefresh.contains("await refreshPlaces(query: placesQuery)"))
+        XCTAssertTrue(authRefresh.contains("startCommunityPlaceSearch("))
         XCTAssertTrue(authRefresh.contains("await refreshMembers(query: memberQuery)"))
         XCTAssertTrue(authRefresh.contains("guard !Task.isCancelled"))
         XCTAssertTrue(visibleDataRefresh.contains("await refreshPlaces(query: placesQuery)"))
