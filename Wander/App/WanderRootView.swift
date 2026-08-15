@@ -337,6 +337,7 @@ struct WanderRootView: View {
     private let deepLinkLaunchRequest: WanderDeepLinkLaunchRequest?
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
+    private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
     private let isFirstVisitWalkthroughEligible: Bool
     private let onFirstVisitWalkthroughCompleted: () -> Void
 
@@ -360,6 +361,8 @@ struct WanderRootView: View {
         self.deepLinkLaunchRequest = deepLinkLaunchRequest
         self.onDeepLinkLaunchRequestHandled = onDeepLinkLaunchRequestHandled
         self.analytics = analytics
+        let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
+        self.walkthroughDebugPreferences = walkthroughDebugPreferences
         self.isFirstVisitWalkthroughEligible = isFirstVisitWalkthroughEligible
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
@@ -392,7 +395,12 @@ struct WanderRootView: View {
                     launchArguments: launchArguments,
                     resolvedValue: nil
                 ),
-                onCompleted: onFirstVisitWalkthroughCompleted
+                onCompleted: {
+                    if let userID = initialSession?.userID {
+                        walkthroughDebugPreferences.clearReplayRequest(for: userID)
+                    }
+                    onFirstVisitWalkthroughCompleted()
+                }
             )
         )
         _addSheetDetent = State(
@@ -607,7 +615,9 @@ struct WanderRootView: View {
             ) {
                 switch presentation {
                 case .settings:
-                    SettingsScreen()
+                    SettingsScreen(
+                        onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser
+                    )
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
@@ -1394,12 +1404,20 @@ struct WanderRootView: View {
     private func configureWalkthroughsForCurrentUser() {
         let launchArguments = ProcessInfo.processInfo.arguments
         let userID = auth.state.session?.userID ?? store.currentUser.id
-        let resolvedValue = backend.featureFlag(.firstVisitNUX, for: userID)
+        let isDebugSettingsEntitled = backend.featureFlag(.debugSettings, for: userID) == true
+        let debugNUXOverride = isDebugSettingsEntitled
+            ? walkthroughDebugPreferences.nuxOverride(for: userID)
+            : nil
+        let isReplayRequested = isDebugSettingsEntitled
+            && walkthroughDebugPreferences.isReplayRequested(for: userID)
+        let resolvedValue = debugNUXOverride
+            ?? backend.featureFlag(.firstVisitNUX, for: userID)
         let isEnabled = FirstVisitWalkthroughFeatureFlag.isEnabled(
             isEligible: isFirstVisitWalkthroughEligible,
             isUsingLiveData: fixtureMode == .empty,
             launchArguments: launchArguments,
-            resolvedValue: resolvedValue
+            resolvedValue: resolvedValue,
+            isEntitledDebugReplayRequested: isReplayRequested
         )
         walkthroughs.setEnabled(isEnabled)
 

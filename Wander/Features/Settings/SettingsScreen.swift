@@ -2,6 +2,8 @@ import SwiftUI
 import UIKit
 
 struct SettingsScreen: View {
+    let onNUXDebugSettingsChanged: () -> Void
+
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -12,8 +14,14 @@ struct SettingsScreen: View {
     @State private var isUpdatingPrivateProfile = false
     @State private var privacyErrorMessage: String?
 
+    init(onNUXDebugSettingsChanged: @escaping () -> Void = {}) {
+        self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
+    }
+
     var body: some View {
-        ProfileSettingsHome()
+        ProfileSettingsHome(
+            onNUXDebugSettingsChanged: onNUXDebugSettingsChanged
+        )
     }
 
     private var header: some View {

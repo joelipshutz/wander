@@ -1076,6 +1076,43 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
     }
 
+    func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let saveFlow = try sourceSection(
+            mapScreen,
+            after: "struct MapPlaceSaveFlowSheet: View",
+            before: "private struct MapSaveVisitPhotoSection: View"
+        )
+        let typography = try XCTUnwrap(
+            theme.components(separatedBy: "enum WanderTypography").last?
+                .components(separatedBy: "private extension Color").first
+        )
+
+        XCTAssertTrue(
+            typography.contains(
+                "actionScreenTitle = Font.system(.title, design: .default, weight: .bold)"
+            )
+        )
+        XCTAssertTrue(saveFlow.contains("Text(flowTitle)\n                    .font(WanderTypography.actionScreenTitle)"))
+        XCTAssertTrue(
+            saveFlow.contains(
+                "Text(context.candidate.name)\n                        .font(WanderTypography.editorialNamedContent)"
+            )
+        )
+        XCTAssertEqual(saveFlow.components(separatedBy: "WanderTypography.editorial").count - 1, 1)
+        XCTAssertTrue(saveFlow.contains(".font(WanderTypography.label)"))
+        XCTAssertTrue(saveFlow.contains(".font(WanderTypography.metadata)"))
+        XCTAssertFalse(saveFlow.contains(".font(.system(size: 28, weight: .black))"))
+        XCTAssertFalse(saveFlow.contains(".font(.system(size: 17, weight: .bold))"))
+        XCTAssertFalse(saveFlow.contains("WanderTypography.editorialRatingDisplay"))
+        XCTAssertFalse(saveFlow.contains("WanderTypography.editorialRatingSuffix"))
+    }
+
     func testDirectionCTypographyTargetsNamedContentHeadingsAndCustomMastheads() throws {
         let theme = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
@@ -1248,6 +1285,31 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("send test streak reminder"))
         XCTAssertFalse(settings.contains("settings.notifications.testSaveStreakReminder"))
         XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
+    }
+
+    func testDebugSettingsAreServerEntitledAndDoNotShipAnIdentityAllowlist() throws {
+        let profileSettings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/ProfileSettingsViews.swift"
+            )
+        )
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+
+        XCTAssertTrue(profileSettings.contains("Section(\"debug settings\")"))
+        XCTAssertTrue(profileSettings.contains("backend.featureFlag(.debugSettings, for: userID) == true"))
+        XCTAssertTrue(profileSettings.contains("server-entitled tester surface"))
+        XCTAssertTrue(profileSettings.contains("Label(\"first-visit NUX\""))
+        XCTAssertTrue(profileSettings.contains("settings.debug.firstVisitNUX"))
+        XCTAssertFalse(profileSettings.contains("settings.debug.replayNUX"))
+        XCTAssertFalse(profileSettings.contains("settings.debug.disableNUX"))
+        XCTAssertFalse(profileSettings.contains("jolipshutz"))
+        XCTAssertFalse(profileSettings.contains("ryan_lieblein"))
+        XCTAssertFalse(profileSettings.contains("@gmail.com"))
+        XCTAssertTrue(root.contains("isEntitledDebugReplayRequested: isReplayRequested"))
+        XCTAssertTrue(root.contains("walkthroughDebugPreferences.clearReplayRequest"))
+        XCTAssertTrue(root.contains("onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser"))
     }
 
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {

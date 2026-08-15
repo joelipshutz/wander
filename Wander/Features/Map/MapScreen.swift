@@ -5857,7 +5857,7 @@ struct MapPlaceSaveFlowSheet: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             ZStack {
                 Text(flowTitle)
-                    .font(.system(size: 28, weight: .black))
+                    .font(WanderTypography.actionScreenTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.center)
@@ -5874,7 +5874,7 @@ struct MapPlaceSaveFlowSheet: View {
                             step = .confirm
                         } label: {
                             Label("back", systemImage: "chevron.left")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(WanderTypography.label)
                                 .foregroundStyle(WanderTheme.terracotta.color)
                                 .frame(minHeight: WanderTheme.tapMinimum)
                         }
@@ -5905,7 +5905,7 @@ struct MapPlaceSaveFlowSheet: View {
 
             if step == .confirm {
                 Text(context.subtitle)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
         }
@@ -6002,7 +6002,7 @@ struct MapPlaceSaveFlowSheet: View {
 
             if let errorMessage {
                 Text(errorMessage)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.terracottaDark.color)
                     .padding(WanderTheme.spacing3)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -6047,7 +6047,7 @@ struct MapPlaceSaveFlowSheet: View {
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("a note for future you")
-                .font(.system(size: 13, weight: .bold))
+                .font(WanderTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
             TextField("what you'll want to remember, who told you...", text: $note, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -6063,7 +6063,7 @@ struct MapPlaceSaveFlowSheet: View {
     private var plannedDateSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("when do you wanna go?")
-                .font(.system(size: 13, weight: .bold))
+                .font(WanderTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
 
             VStack(spacing: 0) {
@@ -6081,17 +6081,17 @@ struct MapPlaceSaveFlowSheet: View {
                         if let plannedDate {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("planned for")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(WanderTypography.metadata)
                                     .foregroundStyle(WanderTheme.textMuted.color)
                                 Text(WannaGoDate.displayString(for: plannedDate))
-                                    .font(.system(size: 14, weight: .black))
+                                    .font(WanderTypography.label)
                                     .foregroundStyle(WanderTheme.textInk.color)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.82)
                             }
                         } else {
                             Text("add a date")
-                                .font(.system(size: 14, weight: .black))
+                                .font(WanderTypography.label)
                                 .foregroundStyle(WanderTheme.textInk.color)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.82)
@@ -6136,7 +6136,7 @@ struct MapPlaceSaveFlowSheet: View {
 
                     HStack {
                         Label("Past dates are unavailable", systemImage: "calendar.badge.exclamationmark")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(WanderTypography.metadata)
                             .foregroundStyle(WanderTheme.textMuted.color)
 
                         Spacer()
@@ -6146,7 +6146,7 @@ struct MapPlaceSaveFlowSheet: View {
                                 plannedDate = nil
                                 isShowingPlannedDatePicker = false
                             }
-                            .font(.system(size: 12, weight: .black))
+                            .font(WanderTypography.metadata)
                             .foregroundStyle(WanderTheme.terracottaDark.color)
                         }
                     }
@@ -6162,7 +6162,7 @@ struct MapPlaceSaveFlowSheet: View {
             )
 
             Text("If notifications are on, rec.me will remind you three days before.")
-                .font(.system(size: 11, weight: .medium))
+                .font(WanderTypography.metadata)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -6240,11 +6240,11 @@ struct MapPlaceSaveFlowSheet: View {
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
                     Text("more options")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(WanderTypography.label)
                         .foregroundStyle(WanderTheme.textInk.color)
 
                     Text(optionalDetailsSummary)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(WanderTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
@@ -6378,7 +6378,7 @@ struct MapPlaceSaveFlowSheet: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             Text("place type")
-                .font(.system(size: 14, weight: .bold))
+                .font(WanderTypography.label)
                 .foregroundStyle(WanderTheme.textMuted.color)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .frame(minHeight: 36)
@@ -6441,7 +6441,7 @@ struct MapPlaceSaveFlowSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: WanderTheme.spacing2) {
                     Text(context.candidate.name)
-                        .font(.system(size: 17, weight: .bold))
+                        .font(WanderTypography.editorialNamedContent)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(1)
                         .minimumScaleFactor(0.84)
@@ -6449,7 +6449,7 @@ struct MapPlaceSaveFlowSheet: View {
                     Spacer(minLength: WanderTheme.spacing1)
 
                     Text(selectedStatus.displayTitle)
-                        .font(.system(size: 11, weight: .black))
+                        .font(WanderTypography.metadata)
                         .foregroundStyle(WanderTheme.terracotta.color)
                         .padding(.horizontal, WanderTheme.spacing2)
                         .padding(.vertical, WanderTheme.spacing1)
@@ -6458,7 +6458,7 @@ struct MapPlaceSaveFlowSheet: View {
                 }
 
                 Text(candidateSubtitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
             }

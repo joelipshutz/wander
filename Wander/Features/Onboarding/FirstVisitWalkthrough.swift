@@ -502,10 +502,52 @@ enum FirstVisitWalkthroughFeatureFlag {
         isUsingLiveData: Bool,
         launchArguments: [String],
         resolvedValue: Bool?,
+        isEntitledDebugReplayRequested: Bool = false,
         allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
     ) -> Bool {
-        (allowsLaunchOverride && launchArguments.contains("-WanderEnableWalkthroughs"))
+        isEntitledDebugReplayRequested
+            || (allowsLaunchOverride && launchArguments.contains("-WanderEnableWalkthroughs"))
             || (resolvedValue == true && isEligible && isUsingLiveData)
+    }
+}
+
+struct FirstVisitWalkthroughDebugPreferences {
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func nuxOverride(for userID: String) -> Bool? {
+        let key = enabledKey(userID: userID)
+        guard defaults.object(forKey: key) != nil else { return nil }
+        return defaults.bool(forKey: key)
+    }
+
+    func isReplayRequested(for userID: String) -> Bool {
+        defaults.bool(forKey: replayKey(userID: userID))
+    }
+
+    func setNUXEnabled(_ isEnabled: Bool, for userID: String) {
+        defaults.set(isEnabled, forKey: enabledKey(userID: userID))
+        if isEnabled {
+            FirstVisitWalkthroughStore(defaults: defaults).reset(for: userID)
+            defaults.set(true, forKey: replayKey(userID: userID))
+        } else {
+            clearReplayRequest(for: userID)
+        }
+    }
+
+    func clearReplayRequest(for userID: String) {
+        defaults.removeObject(forKey: replayKey(userID: userID))
+    }
+
+    private func enabledKey(userID: String) -> String {
+        "wander.debugSettings.\(userID).firstVisitNUX.enabled"
+    }
+
+    private func replayKey(userID: String) -> String {
+        "wander.debugSettings.\(userID).firstVisitNUX.replayRequested"
     }
 }
 
