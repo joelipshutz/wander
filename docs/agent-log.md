@@ -29374,3 +29374,27 @@ Implementation and validation checkpoint - 2026-08-14 18:58 PDT:
   production flag change was performed. During validation `origin/main`
   advanced to App Store build 148 (`e7f34342`); the branch must be rebased onto
   that exact main before PR handoff.
+
+Handoff - 2026-08-14 19:03 PDT:
+
+- Rebased the complete Ryan + dismissal stack onto exact latest `origin/main`
+  build 148 (`e7f34342`) without conflict. Regenerated the Xcode project with no
+  tracked change. The rebased implementation commit is `cdf653d9`.
+- Post-rebase validation on iPhone 16 Plus / iOS 18.6 passed 34/34 focused unit
+  tests (the complete walkthrough suite plus the updated navigation contract)
+  and 4/4 focused dismissal UI tests. This supplements the earlier exact-stack
+  full pass of 1,196 tests and compact iPhone 16e screenshot pass.
+- Pushed `codex/rec-236-disable-nux` and opened ready PR #416:
+  `https://github.com/joelipshutz/wander/pull/416`. It is intentionally stacked
+  on Ryan's open PR #415 and should land after #415 so its diff contracts to the
+  off-by-default flag, account retirement, and dismissal follow-up.
+- Linked PR #416 from REC-236, posted the diagnosis and validation evidence,
+  and moved the issue to In Review. Marked Mission Control task
+  `0f47c59e-851d-4d80-b8bb-5e559b4fc911` done with the same outcome.
+- Captured the versioned-completion/unversioned-eligibility gotcha in the shared
+  KB at `kb/inbox/2026-08-14-recme-versioned-nux-eligibility.md`; GBrain sync
+  confirmed the source was current.
+- Removed the task-owned pre-rebase stash only after the implementation was
+  committed and pushed. Other pre-existing stashes and Joe's original checkout
+  remain untouched. No known NUX-specific blocker remains. No merge or release
+  action was taken.
