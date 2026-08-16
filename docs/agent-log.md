@@ -29993,3 +29993,65 @@ Completion — 2026-08-16 00:53 PDT:
   versus Featured entry points, provider/ranker boundary, evaluation gap, and
   no-release status. Documentation validation was `git diff --check`; no app
   test was required because runtime code did not change.
+
+## 2026-08-16 01:12 PDT - Codex - REC-225 Featured offline benchmark
+
+Agent: Codex
+Branch: `codex/rec-225-relevance-evaluator`
+Worktree: `/private/tmp/recme-rec225-relevance-evaluator`
+Linear: `REC-225` (`In Progress`)
+Mission Control: unavailable after restart; the local task API connection hung
+until cancelled
+
+Goal: implement the separate real viewer-plus-viewport Featured evaluation
+specified by the REC-225 architecture, generate the first blind grading pool,
+and keep production code, hosted data, and release state unchanged.
+
+Restart recovery and scope:
+
+- The computer restart removed the temporary worktree but no work was lost;
+  commits through `dfccf3a1` were already pushed. Pruned only stale worktree
+  metadata and recreated this isolated checkout from the existing branch.
+- Confirmed PR #427 is still open and REC-225 was moved back to In Progress for
+  the continuation. The main checkout remains 249 commits behind `origin/main`
+  with Joe-owned untracked `tmp/`, so it will not be edited.
+- The existing evaluator tests query relevance only. Featured requires real
+  viewport coordinates, relationship-visible saves, anonymous eligible
+  community aggregates, explicit viewer taste, density slices, and repeat-pan
+  pairs. The available gstack `benchmark` skill is browser-performance-only and
+  was not used for this offline relevance benchmark.
+- Read-only aggregate inspection selected the active grader profile because it
+  has 97 saves, 37 ratings, and five followed profiles. The
+  generator will require an explicit viewer handle rather than hard-code it,
+  and tracked/local blind artifacts will not expose contributor identities.
+
+Expected files: Featured relevance loader/core/scorer and tests under
+`scripts/relevance-lab/`, package commands and README, a sanitized evaluation
+contract under `docs/evals/`, this log, and ignored local grading artifacts.
+
+Checkpoint — 2026-08-16 01:29 PDT:
+
+- Added the full offline Featured harness: a privacy-minimized real-data loader,
+  deterministic current/network-only/fixed/density-aware/density+semantic
+  policies, contributor/category diversity, dense/sparse/empty/cold-start/pan
+  scenario construction, blind HTML/Markdown pool rendering, local latency
+  sampling, scoring, source/diversity/geographic/pan metrics, and predeclared
+  promotion gates.
+- Hardened the embedding boundary beyond the original query evaluator: the
+  semantic payload is canonical place name/category/subcategory, coarse
+  locality/region, and approved structured tags from the viewer's own saves
+  only. Followed/stranger attributes, contributor identity, notes, prose,
+  labels, addresses, photos, emails, and coordinates are excluded. Raw
+  contributor ids are converted to one-way opaque labels before ranking.
+- All 21 relevance tests pass, including new privacy, density, diversity,
+  scenario, parser, metric, and promotion-gate coverage. Every new runtime
+  module passes `node --check`; `git diff --check` passes.
+- Read-only real-loader validation succeeded without any embedding call: 90
+  eligible canonical candidates from 113 Been saves, 79 positive/Wanna taste
+  places, and nine scenarios (two dense, two sparse, two simulated empty, two
+  overlapping pan, one cold-start), with 5–60 candidates per viewport.
+- The first real pool generation was rejected at the external-data approval
+  boundary before any payload was sent. Completing the semantic arm requires
+  Joe's explicit approval to send the minimized canonical-place payload above
+  to OpenAI's embedding API. No workaround was attempted; local/Supabase-only
+  validation continued safely.

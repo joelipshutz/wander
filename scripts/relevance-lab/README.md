@@ -51,3 +51,36 @@ On the real blind pool, vectors earn a pgvector follow-up only when the hybrid p
 This lab tests place/query embeddings, not learned people embeddings. Personalization uses explicit, inspectable taste and relationship features. A people-vector experiment is deferred until real interaction data can support honest offline judgments.
 
 The seams are deliberate: query plan, candidate providers, ranker, and evaluation are separate. Replacing exact vector retrieval with pgvector or adding an LLM query planner should not require rewriting the ranker or scorecard.
+
+## Prepare a real Featured judgment pool
+
+Featured is evaluated separately because it has no text query. Its unit is a real viewer plus a real map viewport. The generator reads one explicit viewer's privacy-eligible corpus in a read-only transaction, creates dense, sparse, simulated-empty-network, cold-start, and overlapping-pan scenarios, then compares five hidden policies:
+
+1. The shipped Featured scoring baseline.
+2. Trusted-network-only retrieval.
+3. A fixed network/community blend.
+4. A viewport-density-aware blend.
+5. The density-aware blend plus place-semantic similarity to the viewer's explicit positive/Wanna taste profile.
+
+Run it with the handle of the person who will grade the pool:
+
+```bash
+npm --prefix scripts run relevance:prepare-featured-real -- \
+  --viewer-handle <your-recme-handle>
+```
+
+The ignored output folder receives `featured-judgments.html`, a Markdown fallback, and `featured-pool-key.json`. Candidate order is randomized and policy/source order is hidden. Grade each place according to the viewer's taste and whether it is a useful Featured pin in the named map area; there is deliberately no query.
+
+The loader never writes hosted data. Non-followed contributions become anonymous canonical-place aggregates before leaving the loader: contributor identifiers are one-way opaque labels used only for diversity counts, and stranger notes, prose, tags, answers, photos, and identities are not selected into the benchmark model. The embedding provider receives only canonical place facts, coarse locality/region, and approved structured tags from the viewer's own saves. Followed and stranger save attributes are not selected for embedding. Coordinates remain local and are used only for viewport membership and geographic metrics.
+
+After copying the completed scores into `featured-scores.txt`, score without Supabase or embedding calls:
+
+```bash
+npm --prefix scripts run relevance:score-featured-real -- \
+  --key scripts/relevance-lab/output/featured-pool-key.json \
+  --scores scripts/relevance-lab/output/featured-scores.txt \
+  --write-report scripts/relevance-lab/output/featured-scorecard.md \
+  --write-json scripts/relevance-lab/output/featured-scorecard.json
+```
+
+The predeclared promotion gate is intentionally harder than “wins overall”: zero privacy/duplicate failures, local ranking p95 below 50 ms, at least +0.05 nDCG@5 on sparse/empty/cold-start slices, no more than 0.02 nDCG@5 regression on dense-network slices, and no more than 0.10 top-10 overlap regression across the small-pan pair. Place semantics must independently clear the same incremental gate over density-aware ranking. A pass earns only a feature-flagged implementation trial, not production rollout.
