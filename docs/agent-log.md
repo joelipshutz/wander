@@ -29960,3 +29960,25 @@ Option B checkpoint — compact filters:
 - Captured `docs/reviews/rec-278-map-ui/option-b-compact-filters.png` with the
   same iPhone 16 Plus, friends fixture, selected place, camera, and status-bar
   setup as Option A. Incremental simulator build passed.
+
+Option C checkpoint — polished utility row:
+
+- Kept Option B's hierarchy, switched source pills to lighter text-only rounded
+  rectangles, made More a compact icon control, moved recenter to neutral glass,
+  and added a passive source-aware result count (`8 from friends` in the
+  deterministic capture). Search copy is now the more concrete `search places
+  or people...`.
+- The initial C pass used a fixed lower-map clearance. Visual inspection on the
+  smaller iPhone 16e exposed an overlap when the selected place title wrapped.
+  Reworked the selected-place surface so the utility row participates in the
+  card's natural layout; this removes the fixed-height assumption and keeps the
+  row clear on both phone sizes.
+- Captured the final C layout on iPhone 16 Plus and iPhone 16e / iOS 18.6, plus
+  a native-glass check on an isolated iPhone 16 Plus / iOS 26.2 simulator. Also
+  inspected the open More panel; its anchor and existing content remain intact.
+  Artifacts and the recommendation are indexed in
+  `docs/reviews/rec-278-map-ui/README.md`.
+- Incremental build passed. The focused Map filter/layout and focused-search
+  contract set passed 16/16 after correcting one new source-contract assertion
+  that initially targeted the wrong `body` declaration. Existing compiler and
+  headermap warnings remain unchanged.

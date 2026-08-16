@@ -114,7 +114,36 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertLessThan(filters.lowerBound, mapSpace.lowerBound)
         XCTAssertLessThan(mapSpace.lowerBound, search.lowerBound)
         XCTAssertTrue(map.contains("selectedPlaceProfileSurface\n                    .padding(.bottom, MapControlLayout.searchDockClearance)"))
-        XCTAssertTrue(map.contains("? MapControlLayout.selectedPlaceRecenterClearance"))
+        XCTAssertTrue(map.contains("MapResultsSummaryPill("))
+        XCTAssertTrue(map.contains(".overlay(alignment: .bottom)"))
+        XCTAssertTrue(map.contains("if !isPlaceProfilePresented && !hasSelectedProfile"))
+        XCTAssertTrue(map.contains("aboveCard: { mapUtilityRow }"))
+
+        let placeProfileSurface = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let mapSurface = try XCTUnwrap(
+            placeProfileSurface
+                .components(separatedBy: "struct PlaceProfileMapSurface")
+                .last?
+                .components(separatedBy: "struct PlaceProfileFullScreen")
+                .first
+        )
+        let body = try XCTUnwrap(
+            mapSurface
+                .components(separatedBy: "var body: some View {")
+                .last?
+                .components(separatedBy: ".transition(")
+                .first
+        )
+        let utility = try XCTUnwrap(body.range(of: "aboveCard"))
+        let previewCard = try XCTUnwrap(
+            body.range(
+                of: "PlaceProfilePreviewCard(",
+                range: utility.upperBound..<body.endIndex
+            )
+        )
+        XCTAssertLessThan(utility.lowerBound, previewCard.lowerBound)
     }
 
     func testMoreSectionsMatchTheActiveSource() {
@@ -201,7 +230,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: Capsule())"))
         XCTAssertFalse(searchSurfaceSource.contains(".glassEffect("))
         XCTAssertFalse(searchSurfaceSource.contains(".shadow("))
-        XCTAssertTrue(filterChipSource.contains(".wanderGlassCapsule("))
+        XCTAssertTrue(filterChipSource.contains(".wanderGlassPanel("))
     }
 
     func testFeaturedIsTheOnlyDefaultSourceAndMoreDefaultsToAll() {

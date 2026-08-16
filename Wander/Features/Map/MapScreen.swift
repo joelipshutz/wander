@@ -591,21 +591,10 @@ struct MapScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .safeAreaPadding(.top, WanderTheme.spacing2)
                 .ignoresSafeArea(.keyboard, edges: .bottom)
-                .overlay(alignment: .bottomTrailing) {
-                    if !isPlaceProfilePresented {
-                        RecenterButton(isLoading: isRecenteringOnUser) {
-                            dismissMoreFilters()
-                            recenterOnUser()
-                        }
-                        .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
-                        .accessibilityHidden(walkthroughs.currentStep?.target == .mapTabs)
-                        .padding(.trailing, WanderTheme.spacing3)
-                        .padding(
-                            .bottom,
-                            hasSelectedProfile
-                                ? MapControlLayout.selectedPlaceRecenterClearance
-                                : MapControlLayout.searchDockClearance
-                        )
+                .overlay(alignment: .bottom) {
+                    if !isPlaceProfilePresented && !hasSelectedProfile {
+                        mapUtilityRow
+                            .padding(.bottom, MapControlLayout.searchDockClearance)
                     }
                 }
                 .zIndex(40)
@@ -1350,13 +1339,15 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedSearchCandidate),
-                onOpen: openSelectedPlaceProfile
-            ) {
-                performAction(
-                    for: selectedSearchCandidate,
-                    defaultVisibility: store.effectiveDefaultVisibility
-                )
-            }
+                onOpen: openSelectedPlaceProfile,
+                onAction: {
+                    performAction(
+                        for: selectedSearchCandidate,
+                        defaultVisibility: store.effectiveDefaultVisibility
+                    )
+                },
+                aboveCard: { mapUtilityRow }
+            )
             .zIndex(30)
         } else if let selectedPlace {
             PlaceProfileMapSurface(
@@ -1365,10 +1356,10 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
-                onOpen: openSelectedPlaceProfile
-            ) {
-                performAction(for: selectedPlace)
-            }
+                onOpen: openSelectedPlaceProfile,
+                onAction: { performAction(for: selectedPlace) },
+                aboveCard: { mapUtilityRow }
+            )
             .zIndex(30)
         } else if let walkthroughFallbackMemory,
                   walkthroughs.currentStep?.target == .mapMemory {
@@ -1384,10 +1375,35 @@ struct MapScreen: View {
                 currentUserID: store.currentUser.id,
                 action: .none,
                 onOpen: {},
-                onAction: {}
+                onAction: {},
+                aboveCard: { mapUtilityRow }
             )
             .zIndex(30)
         }
+    }
+
+    private var mapUtilityRow: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            RecenterButton(isLoading: isRecenteringOnUser) {
+                dismissMoreFilters()
+                recenterOnUser()
+            }
+
+            Spacer(minLength: 0)
+
+            MapResultsSummaryPill(
+                count: visiblePlaceGroups.count,
+                source: mapFilterState.source
+            )
+
+            Spacer(minLength: 0)
+
+            Color.clear
+                .frame(width: 44, height: 44)
+        }
+        .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
+        .accessibilityHidden(walkthroughs.currentStep?.target == .mapTabs)
+        .padding(.horizontal, WanderTheme.spacing3)
     }
 
     @ViewBuilder
@@ -3512,7 +3528,6 @@ enum MapSocialOwnerSelection {
 
 private enum MapControlLayout {
     static let searchDockClearance: CGFloat = 64
-    static let selectedPlaceRecenterClearance: CGFloat = 218
 }
 
 private struct SearchBar: View {
@@ -3527,7 +3542,7 @@ private struct SearchBar: View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(WanderTheme.textMuted.color)
-            TextField("search your map or people...", text: $query)
+            TextField("search places or people...", text: $query)
                 .focused(isFocused)
                 .accessibilityIdentifier("map.searchField")
                 .font(.system(size: 14, weight: .medium))
@@ -3793,14 +3808,39 @@ private struct RecenterButton: View {
             Image(systemName: isLoading ? "location.circle.fill" : "location.fill")
                 .font(.system(size: 16, weight: .black))
                 .frame(width: 44, height: 44)
-                .background(WanderTheme.skyTint.color)
-                .foregroundStyle(WanderTheme.pinSocial.color)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(WanderTheme.pinSocial.color, lineWidth: 2))
-                .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 5)
+                .foregroundStyle(isLoading ? WanderTheme.pinSocial.color : WanderTheme.textInk.color)
+                .contentShape(Circle())
+                .wanderGlassCapsule(tone: .neutral, showsBorder: true)
         }
         .disabled(isLoading)
         .accessibilityLabel("Center on my location")
+    }
+}
+
+private struct MapResultsSummaryPill: View {
+    let count: Int
+    let source: MapSource
+
+    var body: some View {
+        Text(summary)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(WanderTheme.textInk.color)
+            .monospacedDigit()
+            .padding(.horizontal, WanderTheme.spacing2)
+            .frame(minHeight: 36)
+            .wanderGlassCapsule(interactive: false, showsBorder: true)
+            .accessibilityLabel(summary)
+    }
+
+    private var summary: String {
+        switch source {
+        case .featured:
+            "\(count) featured \(count == 1 ? "place" : "places")"
+        case .friends:
+            "\(count) from friends"
+        case .you:
+            "\(count) on your map"
+        }
     }
 }
 
@@ -3841,27 +3881,24 @@ private struct MapSourceFilterChip: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: source.systemImage)
-                .font(.system(size: 11, weight: .bold))
-                .frame(width: 14)
-            Text(source.title)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-        }
-        .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing2)
-        .frame(minHeight: 40)
-        .foregroundStyle(WanderTheme.textInk.color)
-        .contentShape(Capsule())
-        .wanderGlassCapsule(
-            tone: isSelected ? .selected : .neutral,
-            showsBorder: true
-        )
-        .padding(.vertical, 2)
-        .accessibilityLabel("\(source.title) map source")
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        Text(source.title)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .font(.system(size: 12, weight: .bold))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 40)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .wanderGlassPanel(
+                cornerRadius: 14,
+                tone: isSelected ? .selected : .neutral,
+                interactive: true,
+                showsBorder: true
+            )
+            .padding(.vertical, 2)
+            .accessibilityLabel("\(source.title) map source")
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -3874,44 +3911,36 @@ private struct MapMoreFilterChip: View {
     }
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            Image(systemName: isExpanded ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
-                .font(.system(size: 11, weight: .bold))
-                .overlay(alignment: .topTrailing) {
-                    if selectedOptionCount > 0 {
-                        Text("\(selectedOptionCount)")
-                            .font(.system(size: 7, weight: .black, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
-                            .frame(minWidth: 12, minHeight: 12)
-                            .padding(.horizontal, selectedOptionCount > 9 ? 2 : 0)
-                            .background(Color.black, in: Capsule())
-                            .offset(x: 6, y: -5)
-                    }
+        Image(systemName: isExpanded ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+            .font(.system(size: 14, weight: .bold))
+            .overlay(alignment: .topTrailing) {
+                if selectedOptionCount > 0 {
+                    Text("\(selectedOptionCount)")
+                        .font(.system(size: 7, weight: .black, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 12, minHeight: 12)
+                        .padding(.horizontal, selectedOptionCount > 9 ? 2 : 0)
+                        .background(Color.black, in: Capsule())
+                        .offset(x: 6, y: -5)
                 }
-                .frame(width: 16, height: 18)
-            Text("More")
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-        }
-        .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing2)
-        .frame(minHeight: 40)
-        .foregroundStyle(WanderTheme.textInk.color)
-        .contentShape(Capsule())
-        .wanderGlassCapsule(
-            tone: isActive ? .selected : .neutral,
-            showsBorder: true
-        )
-        .padding(.vertical, 2)
-        .accessibilityLabel("More map filters")
-        .accessibilityValue(
-            selectedOptionCount == 0
-                ? "No additional filters"
-                : selectedOptionCount == 1
-                    ? "1 selected filter"
-                    : "\(selectedOptionCount) selected filters"
-        )
+            }
+            .frame(width: 40, height: 40)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .contentShape(Capsule())
+            .wanderGlassCapsule(
+                tone: isActive ? .selected : .neutral,
+                showsBorder: true
+            )
+            .padding(.vertical, 2)
+            .accessibilityLabel("More map filters")
+            .accessibilityValue(
+                selectedOptionCount == 0
+                    ? "No additional filters"
+                    : selectedOptionCount == 1
+                        ? "1 selected filter"
+                        : "\(selectedOptionCount) selected filters"
+            )
     }
 }
 
