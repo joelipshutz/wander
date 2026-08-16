@@ -29963,3 +29963,18 @@ Validation and handoff:
   mergeable and `validate-pr-payload` passed. REC-225 is `In Review` with the
   scorecard metrics, architecture qualification, validation, and no-release
   status recorded in Linear.
+
+Checkpoint — 2026-08-16 00:45 PDT:
+
+- Expanded the REC-225 design spec so Map Featured is explicitly the queryless,
+  viewport-scoped mode of the same relevance platform, aligned with the locked
+  REC-249/253/261 Map source, privacy, buffering, and result-cap contracts.
+- Specified parallel trusted-network and anonymous wider-community candidate
+  providers, density-aware blending without a sequential fallback cliff,
+  deterministic taste/community ranking, contributor/place diversity, and an
+  optional feature-flagged place-semantic provider. LLM and learned people
+  embeddings remain outside the camera-driven path.
+- Added a separate blind Featured benchmark requirement because the completed
+  text-query judgments do not measure network backfill, geographic usefulness,
+  source mix, or pan stability. This documentation update changes no iOS code,
+  hosted schema/data, build number, TestFlight binary, or release status.
