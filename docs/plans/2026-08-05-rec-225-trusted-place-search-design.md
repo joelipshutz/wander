@@ -7,6 +7,36 @@ Linear: `REC-225`
 Status: APPROVED
 Mode: Startup
 
+## Current Architecture at a Glance (2026-08-16)
+
+This document records the architecture as it evolved. The original August 5 sections define the local lexical first slice. The August 14 addendum expands Discover to the privacy-safe rec.me-wide place corpus. The August 16 addendum makes Map Featured a queryless mode of the same relevance platform. Where an earlier first-slice statement conflicts with a later addendum, the later dated contract is authoritative.
+
+The production direction is **a modular retrieval-and-ranking platform, not a vector database with an LLM in front of it**:
+
+```text
+Conversational or submitted Search        Map Featured
+        |                                      |
+LLM may create typed query plan       viewer + viewport plan
+        +------------------+-------------------+
+                           v
+         hard privacy, geography, and product filters
+                           |
+         bounded candidate providers run in parallel
+       lexical | trusted network | anonymous community
+                    | optional place vectors
+                           |
+             canonical union and deduplication
+                           |
+       deterministic, versioned, intent-aware ranker
+          owns personalization <-> community dial
+                           |
+                surface-owned presentation
+```
+
+The real-corpus REC-225 gate approved place vectors only as an optional feature-flagged candidate provider; it did not approve the tested fixed hybrid weights. Learned people vectors are deferred because the graph has too little rating density. The LLM may translate a conversation into a typed plan but does not receive place records, rank results, or run during map movement. Search and Featured need separate offline benchmarks because query relevance does not measure network density, geographic usefulness, or pan stability.
+
+Implementation status is intentionally separate from architecture status. The checked-in evaluator and scorecard validate the candidate-provider decision; the Featured platform expansion below is a specification, not a claim that its modules, RPCs, or vector path are already shipped.
+
 ## Problem Statement
 
 rec.me promises that trusted people's place memories become a searchable map, but its search surfaces currently implement different retrieval contracts:
@@ -381,3 +411,156 @@ focused iOS tests -> full suite -> hosted rollback smoke -> visual QA
 ### Unresolved decisions
 
 None. The accepted scope is the complete privacy-safe implementation above; a TestFlight release remains a separate explicit action.
+
+## 2026-08-16 Addendum: Featured as a Queryless Retrieval Mode
+
+### Platform decision
+
+Map Featured plugs into the same relevance platform as conversational and submitted search. It is not a second search stack. The shared platform owns typed request planning, hard constraints, bounded candidate providers, canonical-place deduplication, deterministic ranking, and offline evaluation. Each surface still owns its trigger, presentation, cancellation, and result cap.
+
+The two modes differ at the request boundary:
+
+```text
+Search
+  text or conversation -> typed query plan -> filtered candidate union -> rank
+
+Featured
+  viewer + expanded viewport + zoom + refinements -> filtered candidate union -> rank
+```
+
+Featured has no required query text and never invokes an LLM while the user pans or zooms. The existing Map source and refinement contract locked for REC-249, REC-253, and REC-261 remains authoritative: Featured is the default source, contains Been/check-in places only, uses the existing expanded-viewport fetch and rendering caps, and may use wider-community evidence only through the privacy-safe anonymous aggregate described below.
+
+### Shared request contract
+
+The platform accepts a typed plan rather than a free-form collection of weights:
+
+```text
+PlaceRetrievalPlan
+  mode: search | featured
+  viewer: authenticated context, never a caller-selected RPC parameter
+  query: optional normalized lexical and structured intent
+  geography: optional expanded viewport, zoom, and map center
+  hard filters: source, category, people, status, area, and safety constraints
+  ranking policy: versioned personalization, network, community, and semantic weights
+  result budget: provider, union, and surface caps
+```
+
+Search supplies query intent and may use the conversational LLM only to produce this plan. Featured supplies geography and the current Map refinements. Both modes return canonical place candidates with source provenance and only the evidence the caller is allowed to display.
+
+### Featured candidate providers
+
+For every eligible expanded viewport, Featured requests these bounded sources in parallel:
+
+1. **Trusted-network provider:** the viewer's own and followed people's eligible saves, with full memory detail only where existing RLS permits it.
+2. **Wider-community provider:** canonical places supported by eligible rec.me saves outside the visible network. It returns anonymous place-level aggregates only.
+3. **Optional place-semantic provider:** feature-flagged pgvector candidates from the approved, privacy-safe canonical place document. This provider remains off until it wins the separate Featured offline gate.
+
+The canonical place document is global and reusable across viewers: canonical
+name, category, subcategory, and approved coarse place facts. A viewer's notes,
+labels, answers, or structured save tags never change the stored place vector.
+Those personal signals stay in the explicit taste profile/ranker, which avoids
+per-viewer re-embedding and keeps the semantic provider cheap, cacheable, and
+auditable.
+
+The platform unions and deduplicates providers before ranking. It must not wait for the trusted-network provider to return too few rows and then issue a second community request. Parallel bounded retrieval keeps latency stable and lets the ranker use the same policy in dense and sparse regions.
+
+Every candidate retains provider provenance, relationship evidence, and the set of safe ranking features that produced it. A canonical place that appears in multiple providers is one result; named trusted evidence takes presentation precedence over anonymous community evidence.
+
+### Network density and the personalization-to-community dial
+
+Featured measures network confidence from the current retrieval context, not from a global friend count or raw save count. The initial confidence model uses:
+
+- distinct eligible canonical places in the expanded viewport;
+- distinct trusted contributors represented by those places;
+- viewport area and zoom;
+- candidate quality and usable ranking-feature coverage; and
+- concentration, so one prolific person cannot make a sparse network appear dense.
+
+Confidence controls a continuous blend or source quota inside the deterministic ranker. A dense, diverse network receives a stronger trusted-network and taste-match contribution. As confidence falls, wider-community candidates fill more of the result budget. This is not an all-or-nothing fallback, and crossing a threshold must not abruptly replace the map.
+
+The wider pool may outrank weak network candidates when it is substantially stronger under the calibrated policy, but relationship evidence remains an explicit bounded boost. The ranker also enforces contributor and place diversity so one friend, one venue cluster, or one globally popular chain cannot monopolize the rendered set.
+
+### Featured ranking policy
+
+The order of operations is fixed:
+
+1. Enforce authentication, blocks in either direction, profile/save eligibility, public-venue safety, viewport, source, and explicit More refinements.
+2. Group and deduplicate by canonical provider identity or the existing physical-place grouping key.
+3. Build one viewer taste profile for the pass from explicit positive evidence already allowed by the locked Map contract, including positively rated and Wanna saves. Wanna may inform taste but cannot become a Featured result because Featured output remains Been-only.
+4. Score candidates with versioned features: self/follow relationship, explicit category/cuisine/tag fit where available, community support, aggregate rating, recency, geographic usefulness, provider provenance, and optional place-semantic similarity.
+5. Apply density-aware source weights plus contributor/place diversity, then render at most the existing 24 groups from the existing server cap of 120 candidate groups.
+
+Featured has no lexical query score. Search does. The two modes may therefore use different versioned weight policies while sharing candidate, evidence, dedupe, and evaluation contracts. The fixed hybrid weights from the first REC-225 benchmark are not approved for Featured or production search. Learned people embeddings remain deferred; explicit graph relationships and observable taste evidence are sufficient for this slice.
+
+### Privacy and display contract
+
+- Named social proof, notes, tags, answers, photos, save identity, and other memory detail come only from the viewer or people visible through the existing trust/privacy graph.
+- A non-followed contribution is eligible only when its owner is active and non-private and the Been/check-in save uses the persisted `followers` value presented as Everyone.
+- Wider-community output is an anonymous canonical-place aggregate: support, rating, recency, and approved place facts only. It never returns a stranger identity, user-place id, note, personal tag, answer, or photo.
+- Blocks apply before aggregation and ranking. A specific People refinement excludes anonymous community-only candidates, and unsupported filter combinations remain honestly empty.
+- Any backend function derives the viewer from authenticated claims and follows the existing narrow `security definer`, pinned `search_path`, grant, metadata-test, and hosted-smoke requirements.
+
+### Map performance and stability
+
+Featured preserves the locked Map behavior rather than introducing network work on every camera frame:
+
+- source changes and pans inside the prefetched expanded viewport rerank locally;
+- leaving the buffer preserves current pins, waits for the existing 250 ms camera-idle debounce, cancels stale work, fetches one bounded expanded viewport, and swaps only after success;
+- cache keys include viewer/account revision, retrieval-policy version, refinements, and a stable geographic cell or expanded viewport;
+- small changes in density use hysteresis or a stable quota so source composition does not oscillate while panning; and
+- no LLM call occurs in the synchronous or camera-driven path.
+
+The product should expose one coherent result set, not separate Network and Community sections. Provenance remains available for explanations and measurement even when it is not rendered.
+
+### Separate offline Featured evaluation
+
+The 74 blind judgments over 12 text queries validated a bounded semantic provider for query-driven place retrieval. They do not validate Featured, network backfill, geographic usefulness, or map stability.
+
+Before changing the production Featured policy or enabling the semantic provider, create a second blind benchmark whose unit is `viewer + viewport + zoom + refinements`. Include dense-network, sparse-network, empty-network, repeat-pan, and cold-start scenarios. Use real privacy-eligible place projections and hide provider/source order during grading.
+
+The benchmark must report whether its real community corpus is large and
+geographically mixed enough to support a promotion decision. Simulated
+thin/empty relationship masks are useful directional stress tests, but cannot
+substitute for an actual sparse viewport containing both trusted-network and
+community-only candidates.
+
+Compare at least:
+
+1. current Featured baseline;
+2. trusted-network only;
+3. a fixed network/community blend;
+4. the density-aware blend; and
+5. density-aware blend plus optional place-semantic candidates.
+
+Report overall and slice-level ranking quality, ideal/useful top slots, trusted-network coverage, source mix, distinct-contributor diversity, geographic diversity, duplicate rate, small-pan result overlap, zero-result rate, provider latency, end-to-end latency, and privacy/filter violations. A new policy must produce zero privacy or hard-filter failures, avoid a material regression in the dense-network slice, and show a clear gain in sparse/empty-network usefulness. Exact quality, stability, and latency thresholds must be recorded in the benchmark before rollout rather than chosen after results are visible.
+
+### Scope of this addendum
+
+This addendum defines how Featured uses the REC-225 platform and how it must be evaluated. It does not itself change the Map UI, current hosted schema or RPCs, build number, or TestFlight release. It also does not enable pgvector or people embeddings. Those remain separately reviewed implementation slices behind the provider and policy seams.
+
+### Offline Featured outcome — 2026-08-16
+
+The first blind real-corpus run did not justify replacing the explicit Featured
+baseline. Sixty-five numeric judgments scored eight complete scenarios; one
+honest unknown excluded the only actual-sparse scenario instead of becoming a
+false zero. The baseline reached 82.9% nDCG@5 and 100% ideal-at-one, versus
+49.5% for network-only, 77.1% for a fixed blend, 79.5% for density-aware, and
+73.0% for density-aware plus place semantics. Density-aware ranking regressed
+the sparse/empty aggregate by 3.2 points and dense by 2.4 points; semantics
+regressed another 2.5 and 11.8 points respectively.
+
+Therefore the platform seams remain approved, but neither proposed Featured
+policy is. Keep the current explicit relationship, structured-taste, aggregate
+support/rating, and recency score. Community fallback remains necessary—network
+only produced no coverage in empty/cold-start simulations—but it should not be
+retuned from this corpus. Do not use place vectors for queryless Featured taste
+ranking. The separately validated semantic candidate provider remains available
+for text Search only.
+
+Rerun before changing Featured weights after the corpus meets the predeclared
+community-evidence gate and has multiple judges. The evaluator now treats
+unknown as an excluded scenario that blocks promotion and groups same-name,
+nearby-coordinate cross-provider records before ranking, matching the app's
+physical-place coordinate bucket. The first pool exposed
+both weaknesses, so its result is a conservative `DEFER`, not a calibrated
+production-weight recommendation.

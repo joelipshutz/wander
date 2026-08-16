@@ -29901,3 +29901,281 @@ Completion — 2026-08-15 13:23 PDT:
 - This merge did not increment build 151, archive or upload a binary, attach a
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
+
+## 2026-08-15 23:22 PDT - Codex - REC-225 real relevance gate
+
+Agent: Codex
+Branch: `codex/rec-225-relevance-evaluator`
+Worktree: `/private/tmp/recme-rec225-relevance-evaluator`
+Linear: `REC-225` (`In Progress`)
+Mission Control: unavailable; `localhost:4000` refused the task API
+
+Goal: turn Joe's completed blind judgments over the sanitized real rec.me
+corpus into a reproducible scorecard, decide whether place vectors earned the
+next architecture slice, and keep the result attached to ready PR #427.
+
+Coordination and data boundary:
+
+- Restored the existing isolated PR worktree and rebased its three commits onto
+  exact `origin/main` `c071f5ed`, preserving the active local checkout and its
+  untracked `tmp/` artifacts.
+- Extracted all 74 grades from Joe's eight screenshots, including the clipped
+  final selection. Scores, the hidden machine key, and the per-place judgment
+  pool remain ignored local artifacts under
+  `/Users/joelipshutz/Developer/Wander (nametbd)/tmp/recme-relevance-eval/`.
+- The hosted snapshot had 210 active saves and 114 ratings. Embedding input was
+  restricted to canonical place facts, coarse locality/region, and approved
+  aggregated structured tags; notes, free text, personal labels, identities,
+  addresses, photos, emails, and coordinates were excluded.
+
+Implementation and result:
+
+- Added a local scorer that validates pool completeness, reconstructs each
+  hidden top-five ranking, computes nDCG@5/MRR/top-slot/coverage guardrails,
+  slices results by intent, and applies a documented place-vector gate without
+  querying Supabase or regenerating embeddings. Added focused parser, ranking,
+  gate, and incomplete-pool tests plus a package command and usage docs.
+- The real blind scorecard passed the bounded place-vector gate: semantic
+  nDCG@5 rose from 73.3% for lexical + explicit reranking to 81.7% for hybrid,
+  an 8.4-point gain. Non-semantic guardrails improved by 0.4 points. Aggregate
+  nDCG@5 was 56.9% lexical, 77.7% explicit rerank, and 84.1% hybrid.
+- This is not approval to ship the current fixed hybrid weights. The hybrid
+  blend regressed `date-night restaurant in Los Angeles` from 46.6% reranked
+  nDCG@5 to 40.9%, while that query's lexical baseline was 92.3%; special
+  occasion also remained weak at 39.4%. The durable decision is to keep vectors
+  as a feature-flagged candidate source, preserve lexical evidence, and make
+  source weights intent-dependent inside one deterministic ranker.
+- Learned people vectors remain deferred: only two profiles have five or more
+  ratings. The conversational LLM remains a typed query planner, not the
+  synchronous ranker.
+
+Validation and handoff:
+
+- `npm --prefix scripts run test:relevance` passed 11/11.
+- Both scorer modules pass `node --check`; `git diff --check` passes.
+- Generated the sanitized tracked scorecard at
+  `docs/evals/2026-08-15-real-relevance-scorecard.md`; the reusable local report,
+  JSON, hidden key, and raw scores stay untracked.
+- PR #427 remains the merge vehicle. This developer-only evaluator changes no
+  iOS app code, hosted schema/data, build number, TestFlight binary, or release
+  status.
+- Force-pushed the rebased scorecard after all checks; GitHub reports PR #427
+  mergeable and `validate-pr-payload` passed. REC-225 is `In Review` with the
+  scorecard metrics, architecture qualification, validation, and no-release
+  status recorded in Linear.
+
+Checkpoint — 2026-08-16 00:45 PDT:
+
+- Expanded the REC-225 design spec so Map Featured is explicitly the queryless,
+  viewport-scoped mode of the same relevance platform, aligned with the locked
+  REC-249/253/261 Map source, privacy, buffering, and result-cap contracts.
+- Specified parallel trusted-network and anonymous wider-community candidate
+  providers, density-aware blending without a sequential fallback cliff,
+  deterministic taste/community ranking, contributor/place diversity, and an
+  optional feature-flagged place-semantic provider. LLM and learned people
+  embeddings remain outside the camera-driven path.
+- Added a separate blind Featured benchmark requirement because the completed
+  text-query judgments do not measure network backfill, geographic usefulness,
+  source mix, or pan stability. This documentation update changes no iOS code,
+  hosted schema/data, build number, TestFlight binary, or release status.
+
+Completion — 2026-08-16 00:53 PDT:
+
+- Committed and pushed the architecture/spec update as `bea782dd` on the
+  existing ready PR #427. GitHub reports the PR mergeable and the refreshed
+  `validate-pr-payload` check passed.
+- Added the current architecture diagram and implementation-status warning at
+  the top of the REC-225 spec, the detailed Featured contract at the end, and a
+  matching durable decision so later implementation work cannot mistake the
+  original vector-first proposal or the local lexical first slice for the
+  approved platform direction.
+- REC-225 remains In Review and now has a Linear comment recording the Search
+  versus Featured entry points, provider/ranker boundary, evaluation gap, and
+  no-release status. Documentation validation was `git diff --check`; no app
+  test was required because runtime code did not change.
+
+## 2026-08-16 01:12 PDT - Codex - REC-225 Featured offline benchmark
+
+Agent: Codex
+Branch: `codex/rec-225-relevance-evaluator`
+Worktree: `/private/tmp/recme-rec225-relevance-evaluator`
+Linear: `REC-225` (`In Progress`)
+Mission Control: unavailable after restart; the local task API connection hung
+until cancelled
+
+Goal: implement the separate real viewer-plus-viewport Featured evaluation
+specified by the REC-225 architecture, generate the first blind grading pool,
+and keep production code, hosted data, and release state unchanged.
+
+Restart recovery and scope:
+
+- The computer restart removed the temporary worktree but no work was lost;
+  commits through `dfccf3a1` were already pushed. Pruned only stale worktree
+  metadata and recreated this isolated checkout from the existing branch.
+- Confirmed PR #427 is still open and REC-225 was moved back to In Progress for
+  the continuation. The main checkout remains 249 commits behind `origin/main`
+  with Joe-owned untracked `tmp/`, so it will not be edited.
+- The existing evaluator tests query relevance only. Featured requires real
+  viewport coordinates, relationship-visible saves, anonymous eligible
+  community aggregates, explicit viewer taste, density slices, and repeat-pan
+  pairs. The available gstack `benchmark` skill is browser-performance-only and
+  was not used for this offline relevance benchmark.
+- Read-only aggregate inspection selected the active grader profile because it
+  has 97 saves, 37 ratings, and five followed profiles. The
+  generator will require an explicit viewer handle rather than hard-code it,
+  and tracked/local blind artifacts will not expose contributor identities.
+
+Expected files: Featured relevance loader/core/scorer and tests under
+`scripts/relevance-lab/`, package commands and README, a sanitized evaluation
+contract under `docs/evals/`, this log, and ignored local grading artifacts.
+
+Checkpoint — 2026-08-16 01:29 PDT:
+
+- Added the full offline Featured harness: a privacy-minimized real-data loader,
+  deterministic current/network-only/fixed/density-aware/density+semantic
+  policies, contributor/category diversity, dense/sparse/empty/cold-start/pan
+  scenario construction, blind HTML/Markdown pool rendering, local latency
+  sampling, scoring, source/diversity/geographic/pan metrics, and predeclared
+  promotion gates.
+- Hardened the embedding boundary beyond the original query evaluator: the
+  semantic payload is canonical place name/category/subcategory, coarse
+  locality/region, and approved structured tags from the viewer's own saves
+  only. Followed/stranger attributes, contributor identity, notes, prose,
+  labels, addresses, photos, emails, and coordinates are excluded. Raw
+  contributor ids are converted to one-way opaque labels before ranking.
+- All 21 relevance tests pass, including new privacy, density, diversity,
+  scenario, parser, metric, and promotion-gate coverage. Every new runtime
+  module passes `node --check`; `git diff --check` passes.
+- Read-only real-loader validation succeeded without any embedding call: 90
+  eligible canonical candidates from 113 Been saves, 79 positive/Wanna taste
+  places, and nine scenarios (two dense, two sparse, two simulated empty, two
+  overlapping pan, one cold-start), with 5–60 candidates per viewport.
+- The first real pool generation was rejected at the external-data approval
+  boundary before any payload was sent. Completing the semantic arm requires
+  Joe's explicit approval to send the minimized canonical-place payload above
+  to OpenAI's embedding API. No workaround was attempted; local/Supabase-only
+  validation continued safely.
+
+Checkpoint — 2026-08-16 02:06 PDT:
+
+- Joe explicitly approved sending the minimized place documents to OpenAI for
+  embeddings after reviewing the estimated sub-$0.001 cost. The first sandboxed
+  attempt failed at DNS resolution before reading hosted data; the approved
+  network run then completed successfully.
+- Generated the real blind Featured grading pool from 90 canonical candidate
+  places across 113 eligible Been saves plus 79 positive/Wanna taste places.
+  OpenAI `text-embedding-3-small` embedded 169 minimized documents (zero cache
+  hits, 169 misses); the run produced nine scenarios: two dense, two sparse,
+  two simulated-empty, two overlapping-pan, and one cold-start scenario.
+- The provider payload remained limited to canonical place name, category,
+  subcategory, coarse locality/region, and approved structured tags from the
+  viewer's own saves. It did not include contributor/profile identity, notes,
+  prose answers, personal labels, addresses, photos, emails, coordinates, or
+  followed/stranger attributes.
+- Preserved the ignored blind grader, Markdown fallback, and scoring key under
+  `/Users/joelipshutz/Developer/Wander (nametbd)/tmp/recme-relevance-eval/`
+  so the artifacts survive another temporary-worktree cleanup. These local
+  artifacts remain untracked and must not be committed.
+- Validation after generation: all 21 relevance tests pass and
+  `git diff --check` passes. The next gate requires Joe to grade every candidate
+  in `featured-judgments.html` according to personal taste and usefulness as a
+  Featured map pin, then return the copied score lines for offline scoring.
+
+Checkpoint — 2026-08-16 04:06 PDT:
+
+- Continued unattended while Joe deferred human grading. An objective audit of
+  the generated key found that the original second `sparse` scenario was a
+  false label: its locality bucket looked sparse, but its expanded viewport
+  overlapped 57 candidates and had 0.917 network confidence. The audit also
+  found that the real eligible corpus has 90 canonical candidates but only six
+  community-only places (6.7%); 84 are the viewer's own or trusted-network
+  places, and no actual sparse viewport returns a network/community mix.
+- Reworked scenario construction to classify density from all candidates
+  actually inside each viewport. It now requires at least one genuine dense
+  and one genuine sparse viewport, and uses an explicitly recorded `thin`
+  relationship mask only when a second organic sparse viewport is unavailable.
+  Relationship boosts, source labels, contributor diversity, and network-only
+  output all honor that mask.
+- Added a reusable fail-closed Featured preflight plus package command. It
+  validates honest density labels, actual sparse coverage, complete top-five
+  blind pooling, policy-order separation, a sparse mixed-source result, pan
+  pairs, privacy/deduplication, and local ranking latency. It separately records
+  whether real community evidence is promotion-ready.
+- Locked the evidence gate before human grading: at least 20 real community-only
+  places, at least 20% community-only corpus share, and at least one actual
+  sparse mixed-source viewport. Simulated thin/empty slices are directional and
+  cannot earn `KEEP`; the scorecard forces density and semantic decisions to
+  `DEFER` while this gate is false.
+- Regenerated the first corrected pool as `featured-offline-v2` entirely from
+  the embedding cache. A subsequent architecture audit removed viewer-specific
+  structured tags from place embeddings so the semantic provider now produces
+  one global, reusable canonical vector per place; personal tags remain local,
+  explicit ranker/taste features and are masked when a trusted place is used as
+  a simulated community candidate. This required one additional minimized
+  169-document embedding refresh, still below $0.001; the final pool is version
+  `featured-offline-v3`, and its repeat generation has 169 cache hits and zero
+  misses. Preflight
+  passes structurally with one explicit evidence warning: nine scenarios, one
+  actual sparse, one simulated thin, zero privacy/duplicate/blind-coverage
+  failures, policy separation present, full top-10 pan stability, and 0.235 ms
+  local ranking p95. The refreshed persistent grader contains 66 judgments and
+  uses a new v3 local-storage key so no earlier answers can leak into it.
+- Validation: all 25 relevance tests pass, the standalone preflight passes, the
+  scoring path correctly forces `DEFER` on an otherwise valid synthetic score
+  set when community evidence is insufficient, syntax checks pass, and
+  `git diff --check` passes.
+
+Checkpoint — 2026-08-16 04:30 PDT:
+
+- Joe completed the Featured blind pass by voice. Captured 65 numeric personal-
+  taste judgments and one honest unknown across all 66 pooled rows. Reused a
+  judgment only for the same place within the same named map context; duplicate
+  display records received the same grade. Viewer-specific scores and machine
+  artifacts remain ignored under
+  `/Users/joelipshutz/Developer/Wander (nametbd)/tmp/recme-relevance-eval/`.
+- Extended the scorer to accept `X` for unknown. It excludes the whole
+  incomplete scenario from judged ranking metrics, reports the exclusion, and
+  blocks promotion instead of coercing unfamiliarity to grade zero. The only
+  actual-sparse scenario was excluded because one place was unknown, leaving
+  eight scoreable scenarios.
+- Blind result: current explicit baseline 82.9% nDCG@5 and 100% ideal-at-one;
+  network-only 49.5%; fixed blend 77.1%; density-aware 79.5%; density-aware plus
+  place semantics 73.0%. Density-aware regressed the scoreable sparse/empty/
+  cold-start aggregate by 3.2 points and dense by 2.4; semantics regressed a
+  further 2.5 and 11.8 points. Every policy had 100% top-10 small-pan overlap;
+  local ranking p95 was 0.61 ms with no privacy violations.
+- Decision remains `DEFER`: retain the current explicit Featured baseline and
+  anonymous community fallback, do not ship network-only, density-aware
+  retuning, place-semantic Featured ranking, or people embeddings. This does not
+  revoke the separately validated semantic candidate provider for text Search.
+  The real snapshot still has only six community-only places (6.7%) and no
+  actual sparse mixed-source viewport.
+- The grading pass exposed an evaluator-only physical-grouping parity gap: one
+  same-name/same-coordinate place appeared under conflicting provider ids even
+  though the app already groups nearby same-name aliases. Updated the evaluator
+  to use the app's 0.001-degree nearby-coordinate bucket before contributor
+  aggregation. A same-name trail at two materially different coordinates stays
+  distinct pending stronger identity evidence.
+- Added a tracked aggregate scorecard and updated the architecture plan,
+  decisions, evaluator documentation, HTML grader, and tests. The next generated
+  pool is version `featured-offline-v4` with a first-class unknown control and a
+  fresh local-storage key.
+- Validation: 26/26 relevance tests pass, syntax checks pass, local scoring
+  reproduced the aggregate report, and `git diff --check` passes. Mission
+  Control task `89e7babf-6f61-484b-a284-b769a4841d59` tracks the continuation;
+  REC-225 and PR #427 remain the durable issue/PR handoff.
+
+Handoff — 2026-08-16 04:32 PDT:
+
+- Rebased the complete 11-commit branch onto `origin/main` at `910f1575`, then
+  reran all 26 relevance tests and `git diff --check` successfully. Outcome
+  commit after rebase: `27e6c14a`.
+- Force-pushed the rebased branch and updated ready PR #427 with both Search and
+  Featured results, architecture decisions, privacy boundaries, evidence gaps,
+  and validation. The PR is mergeable and `validate-pr-payload` passed; no
+  TestFlight/build action is authorized or needed.
+- Added the aggregate outcome to REC-225 and moved it to `In Review`. Concrete
+  next step is PR review/merge. Production implementation should keep the
+  explicit Featured baseline and open a separately scoped, feature-flagged
+  Search semantic-provider slice; do not implement vector/density/people
+  ranking for Featured from this result.

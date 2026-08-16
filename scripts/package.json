@@ -9,6 +9,13 @@
     "test:clerk-continuity": "node --test clerk-account-continuity-audit.test.mjs",
     "audit:testflight-manifest": "node reconcile-testflight-manifest.mjs",
     "record:testflight-manifest": "node testflight-manifest.mjs record",
+    "relevance:prepare-featured-real": "node relevance-lab/prepare-featured-real.mjs",
+    "relevance:preflight-featured-real": "node relevance-lab/featured-preflight.mjs",
+    "relevance:prepare-real": "node relevance-lab/prepare-real.mjs",
+    "relevance:score-featured-real": "node relevance-lab/score-featured-real.mjs",
+    "relevance:score-real": "node relevance-lab/score-real.mjs",
+    "relevance:run": "node relevance-lab/run.mjs",
+    "test:relevance": "node --test relevance-lab/*.test.mjs",
     "sync:testflight-manifest": "node testflight-manifest.mjs sync",
     "snapshot:testflight-manifest": "node testflight-manifest.mjs snapshot",
     "test:testflight-manifest": "node --test reconcile-testflight-manifest.test.mjs testflight-manifest.test.mjs testflight-release-gate.test.mjs"
