@@ -30403,7 +30403,6 @@ Outcome and validation:
   local machine does not have the Supabase CLI, so hosted migration/pgTAP
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
-
 ## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
 
 Agent: Codex
@@ -30583,7 +30582,6 @@ Landing fixes and validation — 2026-08-16 06:37 PDT:
 - Maintainability and performance reviews were clean. The final UI remains
   Option B; the image-backed/liquid-glass ticket experiment remains deferred.
   No build-number bump, archive, TestFlight upload, or release was performed.
-
 ## 2026-08-16 10:04 PDT - Codex - REC-281 PR #458 landing review
 
 Agent: Codex
@@ -30625,3 +30623,17 @@ Linear: `REC-281` (`In Review`)
 - PR: https://github.com/joelipshutz/wander/pull/458. Ready for squash merge to
   `main`; app behavior should ride the next explicitly requested TestFlight
   batch.
+
+## 2026-08-16 04:45 PDT — Codex — REC-280 semantic Discover candidate provider
+
+- Goal: implement the Search-only, feature-flagged pgvector candidate provider approved by the REC-225 real-corpus relevance gate. Preserve local/FTS fallback, privacy eligibility, deterministic ranking, and the vector-free Featured policy.
+- Linear: `REC-280` (`In Progress`), child of `REC-225`.
+- Branch/worktree: `codex/rec-280-semantic-search` in `/private/tmp/recme-rec280-semantic-search`, created from `origin/main` at `40811705`.
+- Starting status: clean (`## codex/rec-280-semantic-search...origin/main`). Existing checkout `joe/phone-build-latest` is dirty with untracked `tmp/`; the pending evaluator uses `/private/tmp/recme-rec225-relevance-evaluator`, so this implementation is isolated.
+- Expected files: a new Supabase migration and pgTAP coverage, semantic-search/backfill Edge Functions and tests, hosted smoke coverage, place repository/DTO/orchestration/feature-flag code and focused iOS tests, plus REC-225/REC-280 docs as the implementation clarifies the shipped contract.
+- Locked privacy decision: Joe explicitly approved sending minimized canonical place documents to OpenAI for embeddings. The documents exclude user/profile identity, notes, labels, answers, ratings, photos, coordinates, and people embeddings. Map Featured will not use vectors.
+- Rollout correction from Joe: semantic Search no longer needs a Joe/account override for dogfood. Xcode Debug builds enable the provider at compile time; Release builds honor only the globally default-off launch flag. Updated implementation, tests, decision record, implementation plan, PR handoff, and KB memory to match.
+- Removed only this worktree's disposable `DerivedData-rec280` after an interrupted validation run filled the disk, then rebuilt from clean generated state. Focused semantic/Discover validation passed 23/23. The aggregate scheme still reproduces the pre-existing Clerk test-order fatal (`Clerk has not been configured`) while the same cancellation regression passes 1/1 alone; complete remainder validation continues with that known isolation case separated.
+- Final iOS validation: the complete `WanderTests` target excluding the known aggregate-only `AuthSessionTests` group executed 1,200 tests, with 1,199 passes and one signal-killed `testFeaturedLargeCandidateRankingStaysLightweight` runner. That exact Featured performance regression then passed 1/1 in isolation (9.662 seconds). Together with the isolated auth cancellation pass and the 23/23 semantic Search/repository/navigation suite, every affected test received a passing execution. Full-scheme UI automation continued to show unrelated pre-existing timeout/restart noise; no semantic assertion failed.
+- Backend validation remained green: semantic Edge Function 4/4, embedding refresh Edge Function 3/3, rollback-only hosted semantic pgTAP 18/18, feature-flag pgTAP 14/14, and the full hosted Supabase smoke suite. `node --check scripts/supabase-smoke-test.mjs` and `git diff --check` passed.
+- No hosted migration, Edge deployment, embedding backfill, feature-flag mutation, build-number bump, archive, TestFlight upload, or Slack release action was performed. Release remains globally off; Xcode Debug builds use semantic retrieval without any account-specific override.

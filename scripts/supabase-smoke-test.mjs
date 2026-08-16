@@ -117,6 +117,7 @@ async function main() {
 }
 
 async function runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, strangerUserID) {
+  const semanticUnitVector = `[1,${Array(1535).fill(0).join(",")}]`;
   await client.query("reset role");
   await client.query(
     `
@@ -154,6 +155,31 @@ async function runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, stra
           updated_at = now()
     `,
     [strangerUserID],
+  );
+  await client.query(
+    `
+      insert into public.place_search_embeddings (
+        place_id, model, dimensions, document_version, document_hash, embedding
+      )
+      select
+        place.id,
+        'text-embedding-3-small',
+        1536,
+        1,
+        repeat('c', 64),
+        $1::extensions.vector
+      from public.places as place
+      where place.source_provider = 'mapkit'
+        and place.source_provider_place_id = 'codex-global-search-coffee'
+      on conflict (place_id) do update
+      set model = excluded.model,
+          dimensions = excluded.dimensions,
+          document_version = excluded.document_version,
+          document_hash = excluded.document_hash,
+          embedding = excluded.embedding,
+          updated_at = now()
+    `,
+    [semanticUnitVector],
   );
 
   await setAuthenticatedUser(client, smokeUserID);
@@ -193,6 +219,70 @@ async function runGlobalDiscoverPlaceSearchSmokeChecks(client, smokeUserID, stra
       && result.rows[0]?.empty_search_path === true
       && result.rows[0]?.authenticated_allowed === true
       && result.rows[0]?.anon_denied === true,
+  );
+
+  await expectQuery(
+    client,
+    "authenticated semantic Discover search preserves the lexical privacy contract",
+    `select * from public.search_recme_places_semantic($1::extensions.vector, $2, $3, $4, $5, $6, $7)`,
+    [semanticUnitVector, ["coffee_tea_sweets"], "Los Angeles", true, "everyone", 20, 0.35],
+    (result) => result.rows.length === 1
+      && result.rows[0]?.canonical_name === "Codex Global Search Coffee"
+      && result.rows[0]?.source_provider === "mapkit"
+      && result.rows[0]?.source_provider_place_id === "codex-global-search-coffee"
+      && Number(result.rows[0]?.semantic_similarity) > 0.99
+      && !("user_id" in result.rows[0])
+      && !("note" in result.rows[0])
+      && !("rating_score" in result.rows[0])
+      && !("visibility" in result.rows[0])
+      && !("embedding" in result.rows[0]),
+  );
+
+  await expectQuery(
+    client,
+    "semantic search metadata, vector storage, and backfill grants remain privacy locked",
+    `
+      select
+        semantic_proc.prosecdef,
+        exists (
+          select 1
+          from unnest(coalesce(semantic_proc.proconfig, array[]::text[])) as setting
+          where setting ~ '^search_path=(""|)$'
+        ) as empty_search_path,
+        'statement_timeout=3s' = any(coalesce(semantic_proc.proconfig, array[]::text[]))
+          as bounded_timeout,
+        has_function_privilege('authenticated', semantic_proc.oid, 'execute')
+          as authenticated_allowed,
+        not has_function_privilege('anon', semantic_proc.oid, 'execute')
+          as anon_denied,
+        has_function_privilege(
+          'service_role',
+          'public.semantic_place_embedding_backfill_batch(text,integer,integer)',
+          'execute'
+        ) as service_backfill_allowed,
+        not has_function_privilege(
+          'authenticated',
+          'public.semantic_place_embedding_backfill_batch(text,integer,integer)',
+          'execute'
+        ) as authenticated_backfill_denied,
+        not has_table_privilege(
+          'authenticated',
+          'public.place_search_embeddings',
+          'select'
+        ) as authenticated_vectors_denied
+      from pg_proc as semantic_proc
+      where semantic_proc.oid =
+        'public.search_recme_places_semantic(extensions.vector,text[],text,boolean,text,integer,double precision)'::regprocedure
+    `,
+    [],
+    (result) => result.rows[0]?.prosecdef === true
+      && result.rows[0]?.empty_search_path === true
+      && result.rows[0]?.bounded_timeout === true
+      && result.rows[0]?.authenticated_allowed === true
+      && result.rows[0]?.anon_denied === true
+      && result.rows[0]?.service_backfill_allowed === true
+      && result.rows[0]?.authenticated_backfill_denied === true
+      && result.rows[0]?.authenticated_vectors_denied === true,
   );
 }
 

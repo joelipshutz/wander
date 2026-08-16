@@ -4,6 +4,11 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
     case firstVisitNUX = "first_visit_nux"
     case debugSettings = "debug_settings"
     case placeProfileSaveTrayV1 = "place_profile_save_tray_v1"
+    case semanticPlaceSearchV1 = "semantic_place_search_v1"
+
+    var allowsAccountOverride: Bool {
+        self != .semanticPlaceSearchV1
+    }
 }
 
 enum FeatureFlagResolution: Equatable {
@@ -23,6 +28,24 @@ enum DebugSettingsAccessPolicy {
 
     private static var isSimulatorBuild: Bool {
         #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+}
+
+enum SemanticPlaceSearchAccessPolicy {
+    static func isEnabled(serverFlag: Bool?) -> Bool {
+        isEnabled(serverFlag: serverFlag, isDebugBuild: isDebugBuild)
+    }
+
+    static func isEnabled(serverFlag: Bool?, isDebugBuild: Bool) -> Bool {
+        isDebugBuild || serverFlag == true
+    }
+
+    private static var isDebugBuild: Bool {
+        #if DEBUG
         true
         #else
         false
@@ -81,7 +104,7 @@ final class WanderBackend: ObservableObject {
             self.blockRepository = SupabaseBlockRepository(rpc: client)
             self.muteRepository = SupabaseMuteRepository(rpc: client)
             self.communityReportRepository = SupabaseCommunityReportRepository(rpc: client)
-            self.placeRepository = SupabasePlaceRepository(rpc: client)
+            self.placeRepository = SupabasePlaceRepository(rpc: client, functions: client)
             self.feedRepository = SupabaseFeedRepository(rpc: client)
             self.activityEngagementRepository = SupabaseActivityEngagementRepository(rpc: client)
             let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client)
@@ -390,6 +413,80 @@ final class WanderBackend: ObservableObject {
         }
 
         return try await placeRepository.searchRecmePlaces(request)
+    }
+
+    func searchRecmePlaces(
+        _ request: RecmePlaceSearchRequest,
+        includesSemanticProvider: Bool
+    ) async throws -> RecmePlaceSearchOutcome {
+        guard let placeRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+
+        guard includesSemanticProvider else {
+            let lexical = try await placeRepository.searchRecmePlaces(request)
+            return RecmePlaceSearchFusion.outcome(
+                lexical: lexical,
+                semantic: [],
+                semanticStatus: .disabled,
+                limit: request.limit
+            )
+        }
+
+        let lexicalTask = Task { @MainActor in
+            await placeSearchAttempt {
+                try await placeRepository.searchRecmePlaces(request)
+            }
+        }
+        let semanticTask = Task { @MainActor in
+            await placeSearchAttempt {
+                try await placeRepository.searchRecmePlacesSemantic(request)
+            }
+        }
+        let (lexicalResult, semanticResult) = await withTaskCancellationHandler {
+            await (lexicalTask.value, semanticTask.value)
+        } onCancel: {
+            lexicalTask.cancel()
+            semanticTask.cancel()
+        }
+
+        switch (lexicalResult, semanticResult) {
+        case (.success(let lexical), .success(let semantic)):
+            return RecmePlaceSearchFusion.outcome(
+                lexical: lexical,
+                semantic: semantic,
+                semanticStatus: .succeeded,
+                limit: request.limit
+            )
+        case (.success(let lexical), .failure):
+            return RecmePlaceSearchFusion.outcome(
+                lexical: lexical,
+                semantic: [],
+                semanticStatus: .failed,
+                limit: request.limit
+            )
+        case (.failure, .success(let semantic)):
+            return RecmePlaceSearchFusion.outcome(
+                lexical: [],
+                semantic: semantic,
+                semanticStatus: .succeeded,
+                limit: request.limit
+            )
+        case (.failure(let lexicalError), .failure):
+            throw lexicalError
+        }
+    }
+
+    private func placeSearchAttempt(
+        _ operation: @escaping @MainActor () async throws -> [PlaceCandidate]
+    ) async -> Result<[PlaceCandidate], Error> {
+        do {
+            return .success(try await operation())
+        } catch is CancellationError {
+            return .failure(CancellationError())
+        } catch {
+            return .failure(error)
+        }
     }
 
     func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {

@@ -159,6 +159,7 @@ final class TrustedPlaceSearchTests: XCTestCase {
 
         XCTAssertTrue(query.requiredTokens.isEmpty)
         XCTAssertEqual(request.query, "")
+        XCTAssertEqual(request.semanticQuery, "coffee worth crossing town for")
         XCTAssertEqual(request.categories, [WanderPlaceCategory.coffeeTeaSweets])
         XCTAssertTrue(request.favoriteOnly)
         XCTAssertEqual(request.scope, .everyone)
@@ -270,10 +271,87 @@ final class TrustedPlaceSearchTests: XCTestCase {
         )
     }
 
+    func testSemanticFusionBoostsProviderOverlapAndCanRecoverAHighSemanticMiss() {
+        let lexical = ["lexical-a", "lexical-b", "overlap", "lexical-d"]
+            .map(makeCandidate)
+        let semantic = ["semantic-only", "overlap"]
+            .map(makeCandidate)
+
+        let outcome = RecmePlaceSearchFusion.outcome(
+            lexical: lexical,
+            semantic: semantic,
+            semanticStatus: .succeeded,
+            limit: 5
+        )
+
+        XCTAssertEqual(
+            outcome.candidates.map(\.id),
+            ["overlap", "lexical-a", "lexical-b", "semantic-only", "lexical-d"]
+        )
+        XCTAssertEqual(outcome.lexicalCount, 4)
+        XCTAssertEqual(outcome.semanticCount, 2)
+        XCTAssertEqual(outcome.overlapCount, 1)
+        XCTAssertEqual(outcome.matches.first?.providers, [.lexical, .semantic])
+        XCTAssertEqual(outcome.semanticStatus, .succeeded)
+        XCTAssertEqual(RecmePlaceSearchOutcome.rankingPolicyVersion, "search_rrf_v1")
+    }
+
+    func testSemanticFailureLeavesLexicalOrderingUntouched() {
+        let lexical = ["a", "b", "c"].map(makeCandidate)
+
+        let outcome = RecmePlaceSearchFusion.outcome(
+            lexical: lexical,
+            semantic: [],
+            semanticStatus: .failed,
+            limit: 20
+        )
+
+        XCTAssertEqual(outcome.candidates.map(\.id), ["a", "b", "c"])
+        XCTAssertEqual(outcome.matches.map(\.providers), [[.lexical], [.lexical], [.lexical]])
+        XCTAssertEqual(outcome.semanticStatus, .failed)
+    }
+
+    func testBackendCanReturnSemanticResultsWhenLexicalProviderFails() async throws {
+        let semantic = makeCandidate("semantic-only")
+        let repository = SearchProviderPlaceRepository(
+            lexicalResult: .failure(SearchProviderTestError.expected),
+            semanticResult: .success([semantic])
+        )
+        let backend = WanderBackend(placeRepository: repository)
+
+        let outcome = try await backend.searchRecmePlaces(
+            RecmePlaceSearchRequest(query: "rainy coffee"),
+            includesSemanticProvider: true
+        )
+
+        XCTAssertEqual(outcome.candidates.map(\.id), ["semantic-only"])
+        XCTAssertEqual(outcome.semanticStatus, .succeeded)
+        XCTAssertEqual(repository.lexicalRequestCount, 1)
+        XCTAssertEqual(repository.semanticRequestCount, 1)
+    }
+
     private static func milliseconds(_ duration: Duration) -> Double {
         let components = duration.components
         return (Double(components.seconds) * 1_000)
             + (Double(components.attoseconds) / 1_000_000_000_000_000)
+    }
+
+    private func makeCandidate(_ id: String) -> PlaceCandidate {
+        PlaceCandidate(
+            id: id,
+            name: id,
+            category: WanderPlaceCategory.coffeeTeaSweets,
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            subcategory: "coffee_shop",
+            categorySource: PlaceCategorySource.provider.rawValue,
+            categoryConfidence: 1,
+            rawProviderType: "cafe",
+            latitude: 34,
+            longitude: -118,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: id,
+            confidence: 1
+        )
     }
 
     private func makeVisiblePlace(
@@ -330,4 +408,39 @@ final class TrustedPlaceSearchTests: XCTestCase {
             attributes: localAttributes
         )
     }
+}
+
+private enum SearchProviderTestError: Error {
+    case expected
+}
+
+@MainActor
+private final class SearchProviderPlaceRepository: PlaceRepository {
+    let lexicalResult: Result<[PlaceCandidate], Error>
+    let semanticResult: Result<[PlaceCandidate], Error>
+    private(set) var lexicalRequestCount = 0
+    private(set) var semanticRequestCount = 0
+
+    init(
+        lexicalResult: Result<[PlaceCandidate], Error>,
+        semanticResult: Result<[PlaceCandidate], Error>
+    ) {
+        self.lexicalResult = lexicalResult
+        self.semanticResult = semanticResult
+    }
+
+    func places(in viewport: MapViewport) async throws -> [VisiblePlace] { [] }
+
+    func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
+        lexicalRequestCount += 1
+        return try lexicalResult.get()
+    }
+
+    func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
+        semanticRequestCount += 1
+        return try semanticResult.get()
+    }
+
+    func resolveCurrentLocation() async throws -> [PlaceCandidate] { [] }
+    func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate] { [] }
 }
