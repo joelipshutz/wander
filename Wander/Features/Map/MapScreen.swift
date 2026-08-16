@@ -2034,7 +2034,7 @@ struct MapScreen: View {
             attributes: store.attributes(for: visiblePlace.userPlace.id)
         )
         if let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
-            route: saveActionSnapshot(saves: saves).route,
+            route: .floatingActions,
             state: state,
             action: saveAction,
             baseContext: context
@@ -2080,7 +2080,7 @@ struct MapScreen: View {
             defaultVisibility: defaultVisibility
         )
         if let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
-            route: saveActionSnapshot(saves: saves).route,
+            route: .floatingActions,
             state: state,
             action: saveAction,
             baseContext: context

@@ -127,15 +127,25 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
 
     func testFloatingSnapshotRefreshesActionsWithoutChangingTheCapturedRoute() {
-        let snapshot = PlaceProfileSaveActionSnapshot(
-            route: .floatingActions,
-            presentation: PlaceProfileSaveActionPolicy.resolve(state: .unsaved)
+        let snapshot = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: true,
+            launchArguments: []
+        )
+        let flagOffSnapshot = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: false,
+            launchArguments: []
         )
 
         let refreshed = snapshot.refreshingPresentation(for: .checkInHistory)
 
         XCTAssertEqual(refreshed.route, .floatingActions)
         XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in again", "Edit / history"])
+        XCTAssertEqual(flagOffSnapshot.route, .legacy)
+        XCTAssertEqual(snapshot.route, .floatingActions)
         let legacy = PlaceProfileSaveActionSnapshot(
             route: .legacy,
             presentation: .empty

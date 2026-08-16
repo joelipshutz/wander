@@ -3006,7 +3006,7 @@ final class NavigationContractTests: XCTestCase {
         let floatingActions = try sourceSection(
             placeProfile,
             after: "struct PlaceProfileFloatingActions: View {",
-            before: "private struct PlacePhotoGalleryViewerRoute: Identifiable {"
+            before: "struct PlaceSaveAttachedTray: View {"
         )
 
         XCTAssertTrue(fullView.contains("if !usesFloatingActions, action != .none"))
@@ -3084,6 +3084,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(policy.contains("action.destinationStatus == .been"))
         XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext)"))
         XCTAssertTrue(mapScreen.contains("dismissPlaceProfileThen {\n            performFloatingAction"))
+
+        let visiblePlaceHandler = try sourceSection(
+            mapScreen,
+            after: "private func handleFloatingAction(\n        _ saveAction: PlaceProfileSaveAction,\n        for visiblePlace: VisiblePlace",
+            before: "private func performFloatingAction(\n        _ saveAction: PlaceProfileSaveAction,\n        for candidate: PlaceCandidate"
+        )
+        let candidateHandler = try sourceSection(
+            mapScreen,
+            after: "private func handleFloatingAction(\n        _ saveAction: PlaceProfileSaveAction,\n        for candidate: PlaceCandidate",
+            before: "private var attachedSaveDraft: PlaceSaveDraft?"
+        )
+        for handler in [visiblePlaceHandler, candidateHandler] {
+            XCTAssertTrue(handler.contains("route: .floatingActions"))
+            XCTAssertFalse(handler.contains("saveActionSnapshot(saves: saves).route"))
+        }
 
         let attachedCompletion = try sourceSection(
             mapScreen,
