@@ -667,13 +667,16 @@ struct MapScreen: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .fullScreenCover(isPresented: placeProfileDestinationBinding) {
-                NavigationStack {
-                    selectedPlaceProfileDestination
-                }
-                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
-            }
             .toolbar(.hidden, for: .navigationBar)
+        }
+        .allowsHitTesting(!isPlaceProfileOverlayVisible)
+        .accessibilityHidden(isPlaceProfileOverlayVisible)
+        .overlay {
+            selectedPlaceProfileOverlay
+        }
+        .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
+            guard !hasSelectedProfile else { return }
+            isPlaceProfilePresented = false
         }
         .walkthroughPresenterScrim(
             isPresented: mapSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
@@ -1240,19 +1243,6 @@ struct MapScreen: View {
         selectVisiblePlace(visiblePlace)
     }
 
-    private var placeProfileDestinationBinding: Binding<Bool> {
-        Binding(
-            get: {
-                isPlaceProfilePresented && hasSelectedProfile
-            },
-            set: { isPresented in
-                if !isPresented {
-                    isPlaceProfilePresented = false
-                }
-            }
-        )
-    }
-
     @ViewBuilder
     private var selectedPlaceProfileSurface: some View {
         if let selectedSearchCandidate {
@@ -1302,6 +1292,35 @@ struct MapScreen: View {
         }
     }
 
+    @ViewBuilder
+    private var selectedPlaceProfileOverlay: some View {
+        if isPlaceProfileOverlayVisible {
+            PlaceProfileSlideContainer(
+                reduceMotion: reduceMotion,
+                isGestureDismissEnabled: walkthroughs.activeSurface != .placeDetail,
+                onDismissed: closeWalkthroughPlaceDetail
+            ) {
+                NavigationStack {
+                    selectedPlaceProfileDestination
+                }
+                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
+            }
+            .ignoresSafeArea()
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityAction(.escape) {
+                guard walkthroughs.activeSurface != .placeDetail else { return }
+                collapseSelectedPlaceProfile()
+            }
+            .transition(.move(edge: .trailing))
+            .zIndex(100)
+        }
+    }
+
+    private var isPlaceProfileOverlayVisible: Bool {
+        isPlaceProfilePresented && hasSelectedProfile
+    }
+
     private func presentWalkthroughPlaceMemory() {
         guard walkthroughs.currentStep?.target == .mapMemory else { return }
 
@@ -1337,7 +1356,7 @@ struct MapScreen: View {
     }
 
     private func presentWalkthroughPlaceDetail() {
-        isPlaceProfilePresented = hasSelectedProfile
+        openSelectedPlaceProfile()
     }
 
     private func closeWalkthroughPlaceDetail() {
@@ -1360,11 +1379,12 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedSearchCandidate),
+                usesInteractiveHorizontalDismissal: true,
                 onBack: {
-                    closeWalkthroughPlaceDetail()
+                    collapseSelectedPlaceProfile()
                 },
                 onAction: {
-                    dismissPlaceProfileThen {
+                    collapseSelectedPlaceProfile {
                         performAction(
                             for: selectedSearchCandidate,
                             defaultVisibility: store.defaultVisibility
@@ -1379,11 +1399,12 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
+                usesInteractiveHorizontalDismissal: true,
                 onBack: {
-                    closeWalkthroughPlaceDetail()
+                    collapseSelectedPlaceProfile()
                 },
                 onAction: {
-                    dismissPlaceProfileThen {
+                    collapseSelectedPlaceProfile {
                         performAction(for: selectedPlace)
                     }
                 }
@@ -1400,7 +1421,10 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: .none,
-                onBack: closeWalkthroughPlaceDetail,
+                usesInteractiveHorizontalDismissal: true,
+                onBack: {
+                    collapseSelectedPlaceProfile()
+                },
                 onAction: {}
             )
         }
@@ -1408,14 +1432,30 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
-        isPlaceProfilePresented = true
+        if reduceMotion {
+            isPlaceProfilePresented = true
+        } else {
+            withAnimation(.easeOut(duration: 0.28)) {
+                isPlaceProfilePresented = true
+            }
+        }
     }
 
-    private func dismissPlaceProfileThen(_ action: @MainActor @escaping () -> Void) {
-        isPlaceProfilePresented = false
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            action()
+    private func collapseSelectedPlaceProfile(
+        completion: (@MainActor () -> Void)? = nil
+    ) {
+        guard isPlaceProfilePresented else { return }
+
+        guard !reduceMotion else {
+            closeWalkthroughPlaceDetail()
+            completion?()
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.22)) {
+            closeWalkthroughPlaceDetail()
+        } completion: {
+            completion?()
         }
     }
 
