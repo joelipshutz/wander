@@ -30115,3 +30115,32 @@ QA checkpoint — 2026-08-16 01:00 PDT:
   own Simulator window and brought Simulator to the foreground for Joe.
 - No product source, hosted data, schema/RLS/RPC/migration, push, merge,
   build-number bump, archive, TestFlight upload, or release was changed.
+
+Checkpoint — 2026-08-16 02:08 PDT:
+
+- Joe selected the final floating place CTA direction: compact buttons with a
+  deep-black Check in action on the left, a light Wanna action on the right,
+  and no shared rail or background. This corresponds to comparison style 5.
+- Branch/worktree: `codex/place-action-variants` at
+  `/Users/joelipshutz/Developer/Wander-worktrees/place-action-variants`.
+  The worktree is clean before this change. It is 19 commits ahead and 6
+  commits behind current `origin/main`; no overlapping uncommitted work exists.
+- Expected files: `Wander/Features/Map/PlaceProfileMapSurface.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Settings/ProfileSettingsViews.swift`, focused tests, and
+  this log. The 1–5 Simulator debug picker remains available; no push, merge,
+  build-number bump, TestFlight upload, or release is authorized.
+
+Validation — 2026-08-16 02:15 PDT:
+
+- Encoded comparison style 5 as `productionDefault` and routed all clean,
+  invalid, signed-out, account-transition, environment, and non-entitled
+  fallbacks through it. Existing explicit 1–5 Simulator selections remain
+  account-scoped overrides.
+- The selected default remains compact, uses the deep-black glass Check in
+  treatment, keeps Wanna neutral/light, and does not use the option-4 charcoal
+  rail.
+- Five focused tests passed with zero failures: default/argument resolution,
+  glass tones, compact sizing and no-rail behavior, per-account debug
+  overrides, and Simulator/server debug-settings access. Result:
+  `/Users/joelipshutz/Developer/Wander-worktrees/attached-new-wanna/DerivedData-s7-wanna/Logs/Test/Test-Wander-2026.08.16_02-10-29--0700.xcresult`.

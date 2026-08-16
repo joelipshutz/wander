@@ -1487,6 +1487,7 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
     case option4 = 4
     case option5 = 5
 
+    static let productionDefault = PlaceProfileFloatingActionVariant.option5
     static let selectionLaunchArgument = "-WanderPlaceActionVariant"
 
     static func resolved(
@@ -1499,7 +1500,7 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
             guard arguments.indices.contains(valueIndex),
                   let rawValue = Int(arguments[valueIndex]),
                   let variant = PlaceProfileFloatingActionVariant(rawValue: rawValue) else {
-                return .option1
+                return productionDefault
             }
             return variant
         }
@@ -1507,7 +1508,7 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
 
         guard let storedRawValue,
               let variant = PlaceProfileFloatingActionVariant(rawValue: storedRawValue) else {
-            return .option1
+            return productionDefault
         }
         return variant
     }
@@ -1536,7 +1537,7 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
         case .option4:
             "4 — compact dark rail"
         case .option5:
-            "5 — compact deep black"
+            "5 — selected · compact deep black"
         }
     }
 }
@@ -1559,7 +1560,7 @@ struct PlaceProfileFloatingActionDebugPreferences {
         }
         #endif
 
-        guard isDebugSettingsEntitled else { return .option1 }
+        guard isDebugSettingsEntitled else { return .productionDefault }
         return storedVariant(for: userID)
     }
 
@@ -1586,7 +1587,7 @@ struct PlaceProfileFloatingActionDebugPreferences {
 }
 
 private struct PlaceProfileFloatingActionVariantEnvironmentKey: EnvironmentKey {
-    static let defaultValue = PlaceProfileFloatingActionVariant.option1
+    static let defaultValue = PlaceProfileFloatingActionVariant.productionDefault
 }
 
 extension EnvironmentValues {
@@ -1767,7 +1768,7 @@ struct PlaceProfileFloatingActions: View {
 
     static func glassTone(
         for action: PlaceProfileSaveAction,
-        variant: PlaceProfileFloatingActionVariant = .option1
+        variant: PlaceProfileFloatingActionVariant = .productionDefault
     ) -> WanderGlassTone {
         guard action.kind == .checkIn else {
             return variant == .option4 ? .lightAction : .neutral

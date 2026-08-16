@@ -1324,7 +1324,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled("))
         XCTAssertTrue(root.contains(".environment("))
         XCTAssertTrue(root.contains("\\.placeProfileFloatingActionVariant"))
-        XCTAssertTrue(root.contains("placeProfileFloatingActionVariant = .option1"))
+        XCTAssertTrue(root.contains("placeProfileFloatingActionVariant = .productionDefault"))
     }
 
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {

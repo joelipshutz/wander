@@ -17,7 +17,7 @@ struct ProfileSettingsHome: View {
     @State private var errorMessage: String?
     @State private var isNUXEnabled = false
     @State private var isNUXReplayQueued = false
-    @State private var selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.option1.rawValue
+    @State private var selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.productionDefault.rawValue
 
     private let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
     private let placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
@@ -315,7 +315,7 @@ struct ProfileSettingsHome: View {
         guard let userID = debugSettingsUserID else {
             isNUXEnabled = false
             isNUXReplayQueued = false
-            selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.option1.rawValue
+            selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.productionDefault.rawValue
             return
         }
         isNUXEnabled = walkthroughDebugPreferences.nuxOverride(for: userID)

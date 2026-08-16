@@ -240,7 +240,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
     }
 
     @MainActor
-    func testFloatingActionsUseTintedPrimaryAndNeutralSecondaryGlass() {
+    func testFloatingActionsUseSelectedPrimaryAndNeutralSecondaryGlass() {
         let checkIn = PlaceProfileSaveAction(
             kind: .checkIn,
             title: "Check in",
@@ -260,7 +260,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             destinationStatus: nil
         )
 
-        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: checkIn), .accent)
+        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: checkIn), .deepBlackAction)
         XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: selectedWanna), .neutral)
         XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: editHistory), .neutral)
         XCTAssertEqual(
@@ -287,7 +287,8 @@ final class PlaceProfilePresentationTests: XCTestCase {
 
     @MainActor
     func testFloatingActionComparisonResolvesOnlyExplicitValidDebugOptions() {
-        XCTAssertEqual(PlaceProfileFloatingActionVariant.resolved(from: []), .option1)
+        XCTAssertEqual(PlaceProfileFloatingActionVariant.productionDefault, .option5)
+        XCTAssertEqual(PlaceProfileFloatingActionVariant.resolved(from: []), .option5)
         XCTAssertEqual(
             PlaceProfileFloatingActionVariant.resolved(
                 from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "2"]
@@ -320,17 +321,17 @@ final class PlaceProfilePresentationTests: XCTestCase {
             PlaceProfileFloatingActionVariant.resolved(
                 from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument]
             ),
-            .option1
+            .option5
         )
         XCTAssertEqual(
             PlaceProfileFloatingActionVariant.resolved(
                 from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "6"]
             ),
-            .option1
+            .option5
         )
         XCTAssertEqual(
             PlaceProfileFloatingActionVariant.resolved(from: [], storedRawValue: 6),
-            .option1
+            .option5
         )
     }
 
@@ -362,19 +363,19 @@ final class PlaceProfilePresentationTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let preferences = PlaceProfileFloatingActionDebugPreferences(defaults: defaults)
 
-        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option1)
+        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option5)
         preferences.setVariant(.option5, for: "user_a")
         preferences.setVariant(.option2, for: "user_b")
         XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option5)
         XCTAssertEqual(preferences.storedVariant(for: "user_b"), .option2)
-        XCTAssertEqual(preferences.storedVariant(for: "user_c"), .option1)
+        XCTAssertEqual(preferences.storedVariant(for: "user_c"), .option5)
         XCTAssertEqual(
             preferences.activeVariant(
                 for: "user_a",
                 isDebugSettingsEntitled: false,
                 arguments: []
             ),
-            .option1
+            .option5
         )
         XCTAssertEqual(
             preferences.activeVariant(

@@ -326,7 +326,7 @@ struct WanderRootView: View {
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var didApplyWalkthroughLaunchConfiguration = false
-    @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.option1
+    @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.productionDefault
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -667,7 +667,7 @@ struct WanderRootView: View {
                 // revalidates so walkthrough UI cannot disappear and reappear.
                 if auth.state.session == nil {
                     backend.clearFeatureFlags()
-                    placeProfileFloatingActionVariant = .option1
+                    placeProfileFloatingActionVariant = .productionDefault
                     configureWalkthroughsForCurrentUser()
                 }
                 return
@@ -675,7 +675,7 @@ struct WanderRootView: View {
 
             // A different account must fail closed while its own override loads;
             // the tagged resolution prevents the previous account from leaking.
-            placeProfileFloatingActionVariant = .option1
+            placeProfileFloatingActionVariant = .productionDefault
             if backend.featureFlag(.firstVisitNUX, for: userID) == nil {
                 configureWalkthroughsForCurrentUser()
             }
@@ -751,7 +751,7 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { previousState, state in
             let nextUserID = state.session?.userID
             if previousState.session?.userID != nextUserID {
-                placeProfileFloatingActionVariant = .option1
+                placeProfileFloatingActionVariant = .productionDefault
             }
             if let automaticImportOwnerUserID,
                automaticImportOwnerUserID != nextUserID {
