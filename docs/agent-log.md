@@ -30656,4 +30656,6 @@ Pre-merge sweep — 2026-08-16 10:04 PDT:
 - Joe explicitly authorized squashing PR #457 into `main` for Xcode testing before any TestFlight release.
 - Latest `origin/main` remains `39aa45e1`; the PR is clean, mergeable, and its required `validate-pr-payload` check passes.
 - Removed three accidental trailing-space markers from the canonical spec after the exact final `git diff --check` caught them. No product or runtime behavior changed.
-- Final focused validation is being rerun at the corrected branch commit. Hosted activation, build-number bump, archive, TestFlight upload, and Slack release remain outside this merge.
+- Exact-commit focused iOS validation passed 24/24, including semantic fusion, lexical fallback, submitted-search cancellation, privacy/filter contracts, and the 1,000-place performance guard. Result: `/private/tmp/DerivedData-rec280-merge/Logs/Test/Test-Wander-2026.08.16_10-02-50--0700.xcresult`.
+- Exact-commit Edge validation passed 4/4 for semantic search and 3/3 for embedding refresh; `node --check scripts/supabase-smoke-test.mjs` and final `git diff --check` also pass.
+- Hosted activation, build-number bump, archive, TestFlight upload, and Slack release remain outside this merge.
