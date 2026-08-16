@@ -67,12 +67,14 @@ enum PlaceProfileSaveActionPolicy {
         state: PlaceProfileSaveActionState,
         isSignedIn: Bool,
         resolvedFlagValue: Bool?,
-        launchArguments: [String] = ProcessInfo.processInfo.arguments
+        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = false
     ) -> PlaceProfileSaveActionSnapshot {
         let usesFloatingActions = isFloatingActionsEnabled(
             isSignedIn: isSignedIn,
             resolvedFlagValue: resolvedFlagValue,
-            launchArguments: launchArguments
+            launchArguments: launchArguments,
+            isSimulator: isSimulator
         )
 
         guard usesFloatingActions else {
@@ -91,8 +93,13 @@ enum PlaceProfileSaveActionPolicy {
     static func isFloatingActionsEnabled(
         isSignedIn: Bool,
         resolvedFlagValue: Bool?,
-        launchArguments: [String] = ProcessInfo.processInfo.arguments
+        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = false
     ) -> Bool {
+        if isSimulator {
+            return true
+        }
+
         #if DEBUG
         if launchArguments.contains(debugEnableLaunchArgument) {
             return true
@@ -152,14 +159,18 @@ enum PlaceProfileSaveActionPolicy {
     ) -> MapPlaceSaveContext? {
         guard route == .floatingActions,
               state == .wanna,
-              action.kind == .wanna,
-              action.isSelected,
-              action.destinationStatus == .wannaGo,
               baseContext.existingCurrentUserSave?.userPlace.status == .wannaGo,
               case .add = baseContext.mode
         else { return nil }
 
-        return baseContext.preselectingStatus(.wannaGo)
+        switch (action.kind, action.isSelected, action.destinationStatus) {
+        case (.wanna, true, .wannaGo):
+            return baseContext.preselectingStatus(.wannaGo)
+        case (.checkIn, false, .been):
+            return baseContext.preselectingStatus(.been)
+        default:
+            return nil
+        }
     }
 
     static func state(

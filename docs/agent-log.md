@@ -30292,3 +30292,57 @@ Outcome and validation:
 - Existing compiler/headermap warnings remain unchanged. No build-number bump,
   archive, TestFlight upload, hosted schema/data/auth mutation, or Slack release
   action was performed.
+
+## 2026-08-16 08:50 PDT - Codex - REC-275 attached Check-in routing correction
+
+Agent: Codex using the ios-fix evidence and verification loop
+Branch: codex/rec-275-attached-wanna-checkin
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-275 (In Progress)
+
+Starting state and diagnosis:
+
+- Joe reported from the dedicated S7.2 Simulator that tapping Check in leaves
+  the place profile before the editor appears. Captured the live pre-fix state
+  at /private/tmp/s73-pre-leaves-profile.png; the repository intentionally
+  has no StateServer, so the checked-in JSON fixture records the reproduction
+  contract instead of inventing debug infrastructure.
+- This worktree starts from exact S7.2 commit ed92cd3c and leaves PR #455
+  untouched. The fix is isolated as the next stacked gate.
+- Two concrete causes explain the report. First, the attached route is enabled
+  by a one-shot Simulator launch argument or hosted flag, so manually quitting
+  and reopening the app falls back to the legacy full-screen action. Second,
+  S7.2 deliberately rejects existing-Wanna to Check-in conversion, causing that
+  action to collapse the profile before opening the legacy sheet.
+- Scope: make the S7 route the default in every Simulator build while
+  preserving fail-closed physical/TestFlight behavior, and attach the
+  existing-Wanna to Check-in conversion using the existing add-visit mutation
+  path with draft restoration. Repeat Check in, edit/history, shared invites,
+  imports, and non-Map entry points remain later gates.
+- Expected files: save-action policy, shared draft routing, policy/navigation
+  and UI regressions, the reproduction fixture, and this log. No build-number
+  bump, TestFlight upload, hosted mutation, or release action is authorized.
+
+Validation handoff, 2026-08-16 09:06 PDT:
+
+- Simulator builds now select the floating/attached route by default, even
+  without the one-shot launch argument. Physical devices and TestFlight still
+  require the resolved hosted flag, preserving the launch cutoff.
+- Existing Wanna to Check in now resolves through the existing add-visit
+  context and attached editor. The current place profile stays mounted, the
+  Wanna note is preserved, and the draft survives collapse/reopen.
+- Focused place-profile presentation and navigation suites passed 153/153.
+  Result:
+  /private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_08-53-13--0700.xcresult.
+- Both targeted UI regressions passed 2/2: first Check in without the launch
+  argument, and existing-Wanna to attached Check-in conversion. Result:
+  /private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_09-02-41--0700.xcresult.
+- Inspected the exported conversion screenshot. It shows the Check-in editor
+  attached over Elysian Picnic Steps with the profile still visible underneath:
+  /private/tmp/s73-attachments/7398DE49-6EBD-4D2C-87DD-9C8D948C3982.png.
+- Installed the exact passing build on S7.2 Edit Wanna Test
+  (AC52441A-D833-4DC1-A1EE-3632D3F7F9AE) and relaunched authenticated at
+  Elysian Picnic Steps without the feature launch argument. Resting evidence:
+  /private/tmp/s73-ready-no-flag.png.
+- Existing warnings are unchanged. No build number, TestFlight, hosted flag,
+  schema/data, auth, or Slack release operation was performed.

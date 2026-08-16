@@ -1431,8 +1431,7 @@ final class OnboardingUITests: XCTestCase {
             "-WanderResetWalkthroughs",
             "-WanderMapPlace",
             "Griffith Observatory Trail",
-            "-WanderMapSheetExpanded",
-            "-WanderPlaceProfileSaveTrayV1"
+            "-WanderMapSheetExpanded"
         ]
         app.launch()
 
@@ -1643,8 +1642,25 @@ final class OnboardingUITests: XCTestCase {
             editedNote
         )
 
+        app.buttons["Collapse Wanna"].tap()
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 2))
+        checkIn.tap()
+
+        let conversionTray = app.descendants(matching: .any)["place-profile.attached-check-in"]
+        XCTAssertTrue(conversionTray.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Elysian Picnic Steps"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
+        XCTAssertTrue(app.buttons["save.checkInDateDisclosure"].exists)
+        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        let conversionScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
+        XCTAssertTrue(conversionScrollView.waitForExistence(timeout: 2))
+        let conversionNote = conversionScrollView.descendants(matching: .textField).firstMatch
+        XCTAssertTrue(conversionNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(conversionNote.value as? String, editedNote)
+
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "Existing Map Wanna attached editor"
+        screenshot.name = "Existing Wanna converts to attached Check in"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }

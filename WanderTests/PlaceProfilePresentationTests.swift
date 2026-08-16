@@ -147,7 +147,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
     }
 
-    func testAttachedEditorRoutesOnlyTheSelectedExistingWannaAction() throws {
+    func testAttachedEditorRoutesExistingWannaEditAndCheckInConversion() throws {
         let currentUser = profile(id: "user_current_edit_wanna", handle: "current")
         let currentWanna = summary(
             owner: currentUser,
@@ -195,20 +195,48 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(draft.form.selectedStatus, .wannaGo)
         XCTAssertEqual(draft.form.step, .details)
 
-        XCTAssertNil(
+        let conversion = try XCTUnwrap(
             PlaceProfileSaveActionPolicy.attachedSaveContext(
                 route: .floatingActions,
                 state: .wanna,
                 action: checkIn,
                 baseContext: base
-            ),
-            "Wanna-to-Check-in remains on the legacy route until its own gate"
+            )
         )
+        guard case .addVisit(let visiblePlace) = conversion.mode else {
+            return XCTFail("Existing Wanna to Check in must use the add-visit path")
+        }
+        XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
+        XCTAssertEqual(conversion.initialStatus, .been)
+        XCTAssertEqual(conversion.initialNote, "Bring a picnic blanket.")
+        XCTAssertTrue(conversion.startsOnDetails)
+        XCTAssertFalse(conversion.showsRemoveControl)
+        XCTAssertTrue(conversion.allowsPhotoAttachments)
+
+        let conversionDraft = try XCTUnwrap(
+            PlaceSaveDraft.restorableFlow(
+                ownerUserID: currentUser.id,
+                context: conversion
+            )
+        )
+        XCTAssertEqual(conversionDraft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
+        XCTAssertEqual(conversionDraft.form.note, "Bring a picnic blanket.")
+        XCTAssertEqual(conversionDraft.form.selectedStatus, .been)
+        XCTAssertEqual(conversionDraft.form.step, .details)
+
         XCTAssertNil(
             PlaceProfileSaveActionPolicy.attachedSaveContext(
                 route: .legacy,
                 state: .wanna,
                 action: selectedWanna,
+                baseContext: base
+            )
+        )
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .legacy,
+                state: .wanna,
+                action: checkIn,
                 baseContext: base
             )
         )
@@ -750,6 +778,27 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(openedProfile.presentation.actions.map(\.kind), [.checkIn, .wanna])
         XCTAssertEqual(laterFlagRefresh.route, .legacy)
         XCTAssertEqual(openedProfile.route, .floatingActions)
+    }
+
+    func testSimulatorBuildDefaultsToFloatingActionsAcrossManualRelaunches() {
+        let simulator = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: nil,
+            launchArguments: [],
+            isSimulator: true
+        )
+        let physicalDevice = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: nil,
+            launchArguments: [],
+            isSimulator: false
+        )
+
+        XCTAssertEqual(simulator.route, .floatingActions)
+        XCTAssertEqual(simulator.presentation.actions.map(\.kind), [.checkIn, .wanna])
+        XCTAssertEqual(physicalDevice.route, .legacy)
     }
 
     #if DEBUG

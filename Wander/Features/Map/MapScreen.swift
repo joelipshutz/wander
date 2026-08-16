@@ -1628,8 +1628,17 @@ struct MapScreen: View {
             resolvedFlagValue: backend.featureFlag(
                 .placeProfileSaveTrayV1,
                 for: store.currentUser.id
-            )
+            ),
+            isSimulator: Self.isSimulatorBuild
         )
+    }
+
+    private static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
     }
 
     private func dismissPlaceProfileThen(_ action: @MainActor @escaping () -> Void) {
@@ -5676,10 +5685,13 @@ extension PlaceSaveDraft {
         case .add(let addSourceType):
             sourceType = addSourceType
             baselineUserPlaceLocalID = context.existingCurrentUserSave?.userPlace.localID
+        case .addVisit(let visiblePlace):
+            sourceType = AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual
+            baselineUserPlaceLocalID = visiblePlace.userPlace.localID
         case .editWant(let visiblePlace):
             sourceType = AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual
             baselineUserPlaceLocalID = visiblePlace.userPlace.localID
-        case .addVisit, .sharedVisit, .editVisit:
+        case .sharedVisit, .editVisit:
             return nil
         }
 
