@@ -80,6 +80,19 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertEqual(store.state, .loading)
     }
 
+    func testReleasedStoreDoesNotStartCancelledProviderObservation() async {
+        let provider = PreviewAuthSessionProvider(state: .signedOut)
+        var store: AuthSessionStore? = AuthSessionStore(provider: provider)
+        weak var releasedStore = store
+
+        store = nil
+        XCTAssertNil(releasedStore)
+
+        await Task.yield()
+
+        XCTAssertEqual(provider.sessionChangesRequestCount, 0)
+    }
+
     func testNativeAuthAttemptSurvivesTransientProviderStatesAndClosesOnSuccess() async {
         let provider = PreviewAuthSessionProvider(
             state: .signedOut,
