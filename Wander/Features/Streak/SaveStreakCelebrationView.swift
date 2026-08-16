@@ -348,9 +348,9 @@ struct SaveStreakConfettiMotion: Equatable {
     )
 
     static let sameDayPop = SaveStreakConfettiMotion(
-        pieceCount: 30,
-        travelScale: 0.62,
-        speedScale: 1,
+        pieceCount: 42,
+        travelScale: 0.72,
+        speedScale: 0.92,
         arrivalWindow: nil
     )
 

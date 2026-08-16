@@ -30526,3 +30526,29 @@ Starting state and scope:
 - Expected files: streak presentation/motion policy, shared CTA tone mapping,
   focused unit/token regressions, and this log. No build number, TestFlight,
   hosted flag, schema/data, auth, merge, or release action is authorized.
+
+Implementation and validation handoff, 2026-08-16 11:04 PDT:
+
+- Increased the same-day confetti recipe from 30 to 42 pieces, extended its
+  travel, and slowed its motion slightly. The last particle now completes at
+  roughly 2.02 seconds, and the overlay remains mounted for 2.25 seconds so
+  the animation finishes naturally instead of disappearing mid-flight.
+- Remapped the shared Espresso confirmation tone to `.deepBlackAction`, the
+  exact glass tone already used by the production floating Check in button.
+  This keeps the Espresso semantic at call sites while removing the lighter
+  near-black mismatch.
+- Added regression coverage for the 2.25-second presentation policy, particle
+  lifetime margin, fuller motion recipe, and exact confirmation/floating-action
+  tone parity. The focused streak and theme suites passed 19/19:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_10-54-28--0700.xcresult`.
+- The attached Check-in editor UI regression passed 1/1 and visually confirms
+  the dark confirmation CTA in the native compact sheet:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_10-59-49--0700.xcresult`.
+  Inspected screenshot:
+  `/private/tmp/rec284-confetti-ui-attachments-final/78992096-2DFE-4838-8B74-0357783C1C6E.png`.
+- Initial clean-cache and UI attempts stopped before exercising app code due
+  to local disk exhaustion. Removed only disposable REC-284 derived data,
+  reused the existing task cache, and both reruns passed. No product failure
+  remains from those attempts.
+- No build number, TestFlight, hosted flag, schema/data, auth, merge, Slack, or
+  release action was performed.

@@ -749,7 +749,7 @@ enum WanderPrimaryButtonTone: Equatable {
         case .brand:
             nil
         case .espressoConfirmation:
-            .espressoAction
+            .deepBlackAction
         }
     }
 }

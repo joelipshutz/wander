@@ -27,8 +27,13 @@ final class SaveStreakCalculatorTests: XCTestCase {
         XCTAssertNil(
             SaveStreakPresentationPolicy.autoDismissDelay(for: .dailyTakeover)
         )
-        XCTAssertNotNil(
-            SaveStreakPresentationPolicy.autoDismissDelay(for: .sameDayConfetti)
+        XCTAssertEqual(
+            SaveStreakPresentationPolicy.autoDismissDelay(for: .sameDayConfetti),
+            .milliseconds(2_250)
+        )
+        XCTAssertLessThan(
+            SaveStreakConfettiMotion.sameDayPop.latestEndTime,
+            Double(SaveStreakPresentationPolicy.sameDayConfettiAutoDismissMilliseconds) / 1_000
         )
     }
 
@@ -59,15 +64,17 @@ final class SaveStreakCalculatorTests: XCTestCase {
         XCTAssertEqual(motion.latestEndTime, 1.63 / 0.70 + 1, accuracy: 0.001)
     }
 
-    func testSameDayConfettiPopKeepsItsShortShippingRecipe() {
+    func testSameDayConfettiPopUsesFullerFollowThroughRecipe() {
         let motion = SaveStreakConfettiMotion.sameDayPop
 
-        XCTAssertEqual(motion.pieceCount, 30)
-        XCTAssertEqual(motion.travelScale, 0.62, accuracy: 0.001)
-        XCTAssertEqual(motion.speedScale, 1, accuracy: 0.001)
+        XCTAssertEqual(motion.pieceCount, 42)
+        XCTAssertEqual(motion.travelScale, 0.72, accuracy: 0.001)
+        XCTAssertEqual(motion.speedScale, 0.92, accuracy: 0.001)
         XCTAssertNil(motion.arrivalWindow)
         XCTAssertEqual(motion.delay(for: 8), 0.28, accuracy: 0.001)
-        XCTAssertEqual(motion.travelDuration(for: 4), 1.63, accuracy: 0.001)
+        XCTAssertEqual(motion.travelDuration(for: 4), 1.63 / 0.92, accuracy: 0.001)
+        XCTAssertGreaterThan(motion.latestEndTime, 2)
+        XCTAssertLessThan(motion.latestEndTime, 2.1)
     }
 
     func testCelebrationPresentationUsesNumericDayStreakLanguage() {
