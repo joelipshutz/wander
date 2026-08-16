@@ -363,7 +363,7 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private var scopeSwitch: some View").first
         )
 
-        XCTAssertTrue(header.contains("Text(\"lists\")"))
+        XCTAssertTrue(header.contains("WanderTabHeaderLabel(title: \"lists\")"))
         XCTAssertTrue(header.contains("WanderGlassActionButton("))
         XCTAssertTrue(header.contains("accessibilityIdentifier: \"lists.headerAdd\""))
         XCTAssertFalse(header.contains("WanderGlassHeader("))
@@ -3032,10 +3032,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
         XCTAssertTrue(navigationRow.contains("ProfileBackButton(action: backAction)"))
-        XCTAssertTrue(navigationRow.contains("Text(\"@\\(profile.handle)\")"))
+        XCTAssertTrue(navigationRow.contains("WanderTabHeaderLabel(title: \"@\\(profile.handle)\")"))
         XCTAssertLessThan(
             try XCTUnwrap(navigationRow.range(of: "ProfileBackButton(action: backAction)")?.lowerBound),
-            try XCTUnwrap(navigationRow.range(of: "Text(\"@\\(profile.handle)\")")?.lowerBound)
+            try XCTUnwrap(navigationRow.range(of: "WanderTabHeaderLabel(title: \"@\\(profile.handle)\")")?.lowerBound)
         )
         XCTAssertTrue(navigationRow.contains("pendingInvitationCount: sharedVisitInvitationCount"))
         XCTAssertFalse(navigationRow.contains("WanderTheme.surfaceRaised.color"))
