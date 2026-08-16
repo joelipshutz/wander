@@ -1407,10 +1407,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
         let restoredNoteHeading = attachedScrollView.staticTexts["a note for future you"]
         let scrollStart = attachedScrollView.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82)
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62)
         )
         let scrollEnd = attachedScrollView.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.56)
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22)
         )
         for _ in 0..<8 where !restoredNoteHeading.isHittable {
             scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
