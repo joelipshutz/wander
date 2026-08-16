@@ -29959,3 +29959,7 @@ Validation and handoff:
 - PR #427 remains the merge vehicle. This developer-only evaluator changes no
   iOS app code, hosted schema/data, build number, TestFlight binary, or release
   status.
+- Force-pushed the rebased scorecard after all checks; GitHub reports PR #427
+  mergeable and `validate-pr-payload` passed. REC-225 is `In Review` with the
+  scorecard metrics, architecture qualification, validation, and no-release
+  status recorded in Linear.
