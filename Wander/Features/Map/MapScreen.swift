@@ -1269,37 +1269,60 @@ struct MapScreen: View {
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
-        guard let group = VisiblePlaceGrouping.matchingGroup(
+        let groupedPlaces = VisiblePlaceGrouping.matchingGroup(
             for: selectedPlace,
             in: visiblePlaces,
             currentUserID: store.currentUser.id
-        ) else {
-            return [
-                PlaceSaveSummary(
-                    visiblePlace: selectedPlace,
-                    attributes: selectedPlace.attributes,
-                    viewerFollowsOwner: store.viewerFollows(selectedPlace.owner.id),
-                    displayNoteOverride: walkthroughDisplayNoteOverride(for: selectedPlace)
-                )
-            ]
-        }
-        return saveSummaries(for: group)
+        )?.places ?? [selectedPlace]
+
+        return saveSummaries(
+            from: groupedPlaces,
+            currentUserSave: currentUserSave(matching: selectedPlace)
+        )
     }
 
     private func saveSummaries(for group: VisiblePlaceGroup) -> [PlaceSaveSummary] {
-        group.places.map { visiblePlace in
-            PlaceSaveSummary(
-                visiblePlace: visiblePlace,
-                attributes: visiblePlace.attributes,
-                viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id),
-                displayNoteOverride: walkthroughDisplayNoteOverride(for: visiblePlace)
-            )
-        }
+        saveSummaries(
+            from: group.places,
+            currentUserSave: currentUserSave(matching: group.primary)
+        )
     }
 
     private func saveSummaries(for candidate: PlaceCandidate) -> [PlaceSaveSummary] {
-        guard let matchingPlace = visiblePlace(matching: candidate) else { return [] }
-        return saveSummaries(for: matchingPlace)
+        let groupedSummaries = visiblePlace(matching: candidate)
+            .map { saveSummaries(for: $0) }
+            ?? []
+        guard let currentUserSave = currentUserSave(matching: candidate),
+              !groupedSummaries.contains(where: {
+                  $0.visiblePlace.userPlace.id == currentUserSave.userPlace.id
+              })
+        else { return groupedSummaries }
+
+        return [saveSummary(for: currentUserSave)] + groupedSummaries
+    }
+
+    private func saveSummaries(
+        from visiblePlaces: [VisiblePlace],
+        currentUserSave: VisiblePlace?
+    ) -> [PlaceSaveSummary] {
+        var summaries = visiblePlaces.map(saveSummary(for:))
+        guard let currentUserSave,
+              !summaries.contains(where: {
+                  $0.visiblePlace.userPlace.id == currentUserSave.userPlace.id
+              })
+        else { return summaries }
+
+        summaries.insert(saveSummary(for: currentUserSave), at: 0)
+        return summaries
+    }
+
+    private func saveSummary(for visiblePlace: VisiblePlace) -> PlaceSaveSummary {
+        PlaceSaveSummary(
+            visiblePlace: visiblePlace,
+            attributes: visiblePlace.attributes,
+            viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id),
+            displayNoteOverride: walkthroughDisplayNoteOverride(for: visiblePlace)
+        )
     }
 
     private func walkthroughDisplayNoteOverride(for visiblePlace: VisiblePlace) -> String? {

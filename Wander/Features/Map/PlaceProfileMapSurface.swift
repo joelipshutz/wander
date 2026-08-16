@@ -1701,6 +1701,7 @@ struct PlaceProfileFloatingActions: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("place-profile.floating-action.\(action.kind.rawValue)")
             .accessibilityLabel(action.title)
             .accessibilityAddTraits(action.isSelected ? .isSelected : [])
         }

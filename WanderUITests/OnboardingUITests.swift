@@ -1370,7 +1370,8 @@ final class OnboardingUITests: XCTestCase {
         leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
 
         XCTAssertTrue(ratings.waitForNonExistence(timeout: 3))
-        XCTAssertTrue(compactCard.waitForExistence(timeout: 3))
+        let restoredCompactCard = app.buttons["Open Woodcat Coffee"]
+        XCTAssertTrue(restoredCompactCard.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
 
         let collapsedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -1393,8 +1394,8 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let checkInAgain = app.buttons["Check in again"].firstMatch
-        let editHistory = app.buttons["Edit / history"].firstMatch
+        let checkInAgain = app.buttons["place-profile.floating-action.checkIn"]
+        let editHistory = app.buttons["place-profile.floating-action.editHistory"]
         XCTAssertTrue(checkInAgain.waitForExistence(timeout: 5))
         XCTAssertTrue(editHistory.waitForExistence(timeout: 2))
         XCTAssertTrue(checkInAgain.isHittable)
@@ -1435,8 +1436,8 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let checkIn = app.buttons["Check in"].firstMatch
-        let wanna = app.buttons["Wanna"].firstMatch
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
         XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
         XCTAssertTrue(wanna.waitForExistence(timeout: 2))
         checkIn.tap()
@@ -1507,8 +1508,8 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let checkIn = app.buttons["Check in"].firstMatch
-        let wanna = app.buttons["Wanna"].firstMatch
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
         XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
         XCTAssertTrue(wanna.waitForExistence(timeout: 2))
         wanna.tap()

@@ -30178,3 +30178,55 @@ Outcome and validation:
   two-device visual QA plus the complete relevant suite, then push/open a PR
   only after Joe approves S7.1. No main merge, build-number bump, archive,
   TestFlight upload, hosted data change, or release was performed.
+
+## 2026-08-16 04:40 PDT - Codex - REC-275 S7.1 pre-merge validation
+
+Agent: Codex
+Branch: `codex/rec-275-attached-new-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-new-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Outcome and validation:
+
+- Rebasing the approved S4-S7.1 stack onto `origin/main` at build-155 commit
+  `910f1575` completed without changing the build number or release state.
+  The current edge-to-edge interactive profile transition and the attached
+  editor/floating-action implementation were both retained.
+- Fixed a filtered-map routing edge: if Featured/Friends grouping omits the
+  current user's save for the same place, the profile now merges that save into
+  its summaries before deriving the floating action state. This prevents a
+  saved place from presenting an unsaved CTA while preserving the existing
+  mutation guard.
+- Added stable accessibility identifiers for the floating Check in, Wanna, and
+  Edit/history controls. This prevents UI automation from selecting the
+  same-labelled compact-card action underneath the profile.
+- Focused policy, remote repository, onboarding, and profile presentation
+  validation passed 145/145. Four end-to-end UI regressions also passed 4/4:
+  edge-swipe collapse, floating actions through deep scroll, first attached
+  Check-in with draft restoration, and first attached Wanna with draft
+  restoration/status switching. UI result:
+  `DerivedData-s7-ui/Logs/Test/Test-Wander-2026.08.16_04-32-31--0700.xcresult`.
+- The complete 1,237-test `WanderTests` target executed twice. Every test except
+  `testCancelledSessionRefreshDoesNotReplaceValidatedState` passed in each
+  aggregate run; that cancellation test trapped only when run in the complete
+  target and passed 1/1 when rerun alone. This is recorded as an aggregate-runner
+  isolation flake rather than a CTA regression; all unit tests received a
+  passing execution across the aggregate plus isolated run. Aggregate result:
+  `DerivedData-s7-ui/Logs/Test/Test-Wander-2026.08.16_04-36-47--0700.xcresult`;
+  isolated result:
+  `DerivedData-s7-ui/Logs/Test/Test-Wander-2026.08.16_04-38-57--0700.xcresult`.
+- Reviewed the full source diff and visual evidence. No critical correctness,
+  auth, persistence, accessibility, or launch-safety issue remains in the S7.1
+  scope. Existing compiler/headermap warnings remain unchanged.
+- Installed the exact rebased test build on the smaller `REC-166 iPhone 16e`
+  Simulator and visually verified the expanded Griffith profile plus compact
+  floating actions respect the smaller viewport and home indicator. Evidence:
+  `/private/tmp/s7-rebase-iphone16e.png`.
+- Removed only disposable DerivedData and obsolete CTA-comparison Simulator
+  clones created by this work after the machine ran out of disk. Preserved the
+  `S7.1 Attached Wanna Test` and `REC-166 iPhone 16e` devices, source, test
+  results, and screenshots.
+- The included feature-flag migration is fail-closed if not yet hosted. The
+  local machine does not have the Supabase CLI, so hosted migration/pgTAP
+  verification remains a deployment follow-up; no hosted schema, data, RPC,
+  auth, build-number, archive, TestFlight, or Slack release action was taken.
