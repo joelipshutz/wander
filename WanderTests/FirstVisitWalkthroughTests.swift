@@ -4,8 +4,8 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtyEightGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 38)
+    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtySevenGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 37)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -50,7 +50,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.feedSearch]?.map(\.target),
-            [.feedSearchField, .feedSmartSearch, .feedSearchResultsBack, .feedSearchExitBack]
+            [.feedSearchField, .feedSmartSearch, .feedSearchResultsBack]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.lists]?.map(\.target),
@@ -228,7 +228,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             importStep.message,
-            "Import your places and lists from Google Maps, Instagram, TikTok, and more here"
+            "Import your places and lists from Google Maps, Instagram, Tiktok, and more here"
         )
 
         let memoryStep = try XCTUnwrap(
@@ -314,7 +314,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
     func testTransientFlagDisableDoesNotCountTheSamePhysicalLaunchTwice() throws {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)
-        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
 
         coordinator.registerLaunch()
         coordinator.setEnabled(false)
@@ -325,20 +329,90 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(coordinator.isPresentingImportLesson)
         XCTAssertFalse(coordinator.isPresentingDeviceFeaturesLesson)
 
-        let nextPhysicalLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let nextPhysicalLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         nextPhysicalLaunch.registerLaunch()
         nextPhysicalLaunch.presentLaunchLessonIfEligible()
         XCTAssertTrue(nextPhysicalLaunch.isPresentingImportLesson)
+    }
+
+    func testAccountSwitchingDoesNotCountTheSamePhysicalLaunchTwiceForReturningAccount() throws {
+        let defaults = try makeDefaults()
+        let launchRegistry = FirstVisitWalkthroughLaunchRegistry()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "user-a",
+            store: store,
+            launchRegistry: launchRegistry
+        )
+
+        coordinator.registerLaunch()
+        coordinator.setUserID("user-b")
+        coordinator.registerLaunch()
+        coordinator.setUserID("user-a")
+        coordinator.registerLaunch()
+
+        let reconstructedCoordinator = FirstVisitWalkthroughCoordinator(
+            userID: "user-a",
+            store: store,
+            launchRegistry: launchRegistry
+        )
+        reconstructedCoordinator.registerLaunch()
+
+        XCTAssertEqual(
+            defaults.integer(
+                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).user-a.authenticatedLaunchCount"
+            ),
+            1
+        )
+        XCTAssertEqual(
+            defaults.integer(
+                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).user-b.authenticatedLaunchCount"
+            ),
+            1
+        )
+    }
+
+    func testDebugResetAllowsAUserToRegisterAgainInTheCurrentProcess() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
+
+        coordinator.registerLaunch()
+        coordinator.resetCurrentUser()
+        coordinator.registerLaunch()
+
+        XCTAssertEqual(
+            defaults.integer(
+                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).ryan.authenticatedLaunchCount"
+            ),
+            1
+        )
     }
 
     func testTransientFlagDisablePreservesSecondAndThirdLaunchLessons() throws {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)
 
-        let firstLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let firstLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         firstLaunch.registerLaunch()
 
-        let secondLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let secondLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         secondLaunch.registerLaunch()
         secondLaunch.setEnabled(false)
         secondLaunch.setEnabled(true)
@@ -348,7 +422,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(secondLaunch.isPresentingDeviceFeaturesLesson)
         secondLaunch.completeImportLesson()
 
-        let thirdLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let thirdLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         thirdLaunch.registerLaunch()
         thirdLaunch.setEnabled(false)
         thirdLaunch.setEnabled(true)
@@ -492,14 +570,26 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let defaults = try makeDefaults()
         let walkthroughStore = FirstVisitWalkthroughStore(defaults: defaults)
         let preferences = FirstVisitWalkthroughDebugPreferences(defaults: defaults)
+        let launchRegistry = FirstVisitWalkthroughLaunchRegistry()
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "user_a",
+            store: walkthroughStore,
+            launchRegistry: launchRegistry
+        )
 
         walkthroughStore.setProgress(2, for: "user_a", surface: .map)
         walkthroughStore.markComplete(for: "user_a", surface: .map)
         walkthroughStore.markComplete(for: "user_b", surface: .map)
+        coordinator.registerLaunch()
         XCTAssertNil(preferences.nuxOverride(for: "user_a"))
         XCTAssertNil(preferences.nuxOverride(for: "user_b"))
 
-        preferences.setNUXEnabled(true, for: "user_a")
+        preferences.setNUXEnabled(
+            true,
+            for: "user_a",
+            launchRegistry: launchRegistry
+        )
+        coordinator.registerLaunch()
 
         XCTAssertEqual(preferences.nuxOverride(for: "user_a"), true)
         XCTAssertTrue(preferences.isReplayRequested(for: "user_a"))
@@ -508,6 +598,12 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertNil(preferences.nuxOverride(for: "user_b"))
         XCTAssertFalse(preferences.isReplayRequested(for: "user_b"))
         XCTAssertTrue(walkthroughStore.isComplete(for: "user_b", surface: .map))
+        XCTAssertEqual(
+            defaults.integer(
+                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).user_a.authenticatedLaunchCount"
+            ),
+            1
+        )
 
         preferences.clearReplayRequest(for: "user_a")
         XCTAssertEqual(preferences.nuxOverride(for: "user_a"), true)
@@ -525,6 +621,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let coordinator = FirstVisitWalkthroughCoordinator(
             userID: "existing-user",
             store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry(),
             onCompleted: { _ in completionCount += 1 }
         )
 
@@ -549,7 +646,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         let nextLaunch = FirstVisitWalkthroughCoordinator(
             userID: "existing-user",
-            store: store
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
         )
         nextLaunch.registerLaunch()
         nextLaunch.presentLaunchLessonIfEligible()
@@ -607,6 +705,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let coordinator = FirstVisitWalkthroughCoordinator(
             userID: "new-user",
             store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry(),
             onCompleted: { _ in completionCount += 1 }
         )
 
@@ -673,7 +772,6 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.advancePassiveStep()
         coordinator.perform(.feedSmartSearch)
         coordinator.perform(.feedSearchResultsBack)
-        coordinator.perform(.feedSearchExitBack)
         XCTAssertNil(coordinator.activeSurface)
         XCTAssertEqual(coordinator.requestedSurface, .feed)
 
@@ -729,8 +827,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         for target in [
             WalkthroughTargetID.feedSmartSearch,
-            .feedSearchResultsBack,
-            .feedSearchExitBack
+            .feedSearchResultsBack
         ] {
             let step = try XCTUnwrap(
                 FirstVisitWalkthroughContent.allSteps.first { $0.target == target }
@@ -824,13 +921,21 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)
 
-        let firstLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let firstLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         firstLaunch.registerLaunch()
         firstLaunch.presentLaunchLessonIfEligible()
         XCTAssertFalse(firstLaunch.isPresentingImportLesson)
         XCTAssertFalse(firstLaunch.isPresentingDeviceFeaturesLesson)
 
-        let secondLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let secondLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         secondLaunch.registerLaunch()
         secondLaunch.presentLaunchLessonIfEligible()
         XCTAssertTrue(secondLaunch.isPresentingImportLesson)
@@ -839,7 +944,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         secondLaunch.completeImportLesson()
         XCTAssertFalse(secondLaunch.isPresentingImportLesson)
 
-        let thirdLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let thirdLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         thirdLaunch.registerLaunch()
         thirdLaunch.presentLaunchLessonIfEligible()
         XCTAssertTrue(thirdLaunch.isPresentingDeviceFeaturesLesson)
@@ -847,7 +956,11 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         thirdLaunch.completeDeviceFeaturesLesson()
         XCTAssertFalse(thirdLaunch.isPresentingDeviceFeaturesLesson)
 
-        let fourthLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let fourthLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         fourthLaunch.registerLaunch()
         fourthLaunch.presentLaunchLessonIfEligible()
         XCTAssertFalse(fourthLaunch.isPresentingLaunchLesson)
@@ -857,25 +970,38 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)
 
-        let firstLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let firstLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         firstLaunch.registerLaunch()
 
         let interruptedSecondLaunch = FirstVisitWalkthroughCoordinator(
             userID: "ryan",
-            store: store
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
         )
         interruptedSecondLaunch.registerLaunch()
         interruptedSecondLaunch.presentLaunchLessonIfEligible()
         XCTAssertTrue(interruptedSecondLaunch.isPresentingImportLesson)
 
-        let thirdLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let thirdLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         thirdLaunch.registerLaunch()
         thirdLaunch.presentLaunchLessonIfEligible()
         XCTAssertFalse(thirdLaunch.isPresentingImportLesson)
         XCTAssertTrue(thirdLaunch.isPresentingDeviceFeaturesLesson)
         thirdLaunch.completeDeviceFeaturesLesson()
 
-        let fourthLaunch = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        let fourthLaunch = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
         fourthLaunch.registerLaunch()
         fourthLaunch.presentLaunchLessonIfEligible()
         XCTAssertTrue(fourthLaunch.isPresentingImportLesson)
@@ -897,7 +1023,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let defaults = try makeDefaults()
         let importCoordinator = FirstVisitWalkthroughCoordinator(
             userID: "visual-test",
-            store: FirstVisitWalkthroughStore(defaults: defaults)
+            store: FirstVisitWalkthroughStore(defaults: defaults),
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
         )
 
         importCoordinator.registerLaunch(forceImportLesson: true)
@@ -906,7 +1033,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         let deviceCoordinator = FirstVisitWalkthroughCoordinator(
             userID: "visual-test-2",
-            store: FirstVisitWalkthroughStore(defaults: defaults)
+            store: FirstVisitWalkthroughStore(defaults: defaults),
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
         )
         deviceCoordinator.registerLaunch(forceDeviceFeaturesLesson: true)
         XCTAssertTrue(deviceCoordinator.isPresentingDeviceFeaturesLesson)
@@ -951,9 +1079,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.perform(.feedSmartSearch)
         XCTAssertEqual(coordinator.currentStep?.target, .feedSearchResultsBack)
         coordinator.perform(.feedSearchResultsBack)
-        XCTAssertEqual(coordinator.currentStep?.target, .feedSearchExitBack)
-        XCTAssertNil(coordinator.requestedSurface)
-        coordinator.perform(.feedSearchExitBack)
+        XCTAssertNil(coordinator.activeSurface)
         XCTAssertEqual(coordinator.requestedSurface, .feed)
 
         coordinator.consumeRequestedSurface(.feed)

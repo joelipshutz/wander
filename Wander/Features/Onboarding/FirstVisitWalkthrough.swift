@@ -49,7 +49,6 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case feedSearchField
     case feedSmartSearch
     case feedSearchResultsBack
-    case feedSearchExitBack
     case placeRatings
     case placeActions
     case placeHistory
@@ -201,7 +200,7 @@ enum FirstVisitWalkthroughContent {
                 .add,
                 .addImport,
                 "Bring saves with you",
-                "Import your places and lists from Google Maps, Instagram, TikTok, and more here.",
+                "Import your places and lists from Google Maps, Instagram, Tiktok, and more here.",
                 advance: .next,
                 coachTheme: .save
             ),
@@ -319,15 +318,6 @@ enum FirstVisitWalkthroughContent {
                 presentationStyle: .delayedTargetOnly(
                     milliseconds: discoverResultsPreviewMilliseconds
                 )
-            ),
-            step(
-                .feedSearch,
-                .feedSearchExitBack,
-                "",
-                "",
-                allowsBackNavigation: false,
-                coachTheme: .map,
-                presentationStyle: .delayedTargetOnly(milliseconds: 450)
             )
         ],
         .lists: [
@@ -558,10 +548,16 @@ struct FirstVisitWalkthroughDebugPreferences {
         defaults.bool(forKey: replayKey(userID: userID))
     }
 
-    func setNUXEnabled(_ isEnabled: Bool, for userID: String) {
+    @MainActor
+    func setNUXEnabled(
+        _ isEnabled: Bool,
+        for userID: String,
+        launchRegistry: FirstVisitWalkthroughLaunchRegistry = .process
+    ) {
         defaults.set(isEnabled, forKey: enabledKey(userID: userID))
         if isEnabled {
             FirstVisitWalkthroughStore(defaults: defaults).reset(for: userID)
+            launchRegistry.reset(for: userID)
             defaults.set(true, forKey: replayKey(userID: userID))
         } else {
             clearReplayRequest(for: userID)
@@ -675,6 +671,33 @@ struct FirstVisitWalkthroughStore {
     }
 }
 
+/// Registers an authenticated launch once per account for the lifetime of the
+/// app process, even when SwiftUI reconstructs the walkthrough coordinator.
+/// Tests can inject a fresh registry to model a separate physical launch.
+@MainActor
+final class FirstVisitWalkthroughLaunchRegistry {
+    static let process = FirstVisitWalkthroughLaunchRegistry()
+
+    private var launchCountsByUserID: [String: Int] = [:]
+
+    func launchCount(
+        for userID: String,
+        store: FirstVisitWalkthroughStore
+    ) -> Int {
+        if let registeredLaunchCount = launchCountsByUserID[userID] {
+            return registeredLaunchCount
+        }
+
+        let launchCount = store.registerLaunch(for: userID)
+        launchCountsByUserID[userID] = launchCount
+        return launchCount
+    }
+
+    func reset(for userID: String) {
+        launchCountsByUserID.removeValue(forKey: userID)
+    }
+}
+
 @MainActor
 final class FirstVisitWalkthroughCoordinator: ObservableObject {
     @Published private(set) var activeSurface: WalkthroughSurface?
@@ -689,7 +712,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
     private(set) var userID: String
     private let store: FirstVisitWalkthroughStore
-    private var registeredLaunchUserID: String?
+    private let launchRegistry: FirstVisitWalkthroughLaunchRegistry
     private var isImportLessonEligible = false
     private var isDeviceFeaturesLessonEligible = false
     private var didNotifyCompletion = false
@@ -699,11 +722,13 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     init(
         userID: String = "local-user",
         store: FirstVisitWalkthroughStore = FirstVisitWalkthroughStore(),
+        launchRegistry: FirstVisitWalkthroughLaunchRegistry = .process,
         isEnabled: Bool = true,
         onCompleted: @escaping (String) -> Void = { _ in }
     ) {
         self.userID = userID
         self.store = store
+        self.launchRegistry = launchRegistry
         self.isEnabled = isEnabled
         self.onCompleted = onCompleted
     }
@@ -758,7 +783,6 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         self.userID = userID
         activeSurface = nil
         currentStepIndex = 0
-        registeredLaunchUserID = nil
         requestedSurface = nil
         isImportLessonEligible = false
         isDeviceFeaturesLessonEligible = false
@@ -776,14 +800,11 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     ) {
         guard isEnabled else { return }
 
-        if registeredLaunchUserID != userID {
-            registeredLaunchUserID = userID
-            let launchCount = store.registerLaunch(for: userID)
-            isImportLessonEligible = launchCount >= 2
-                && !store.hasCompletedImportLesson(for: userID)
-            isDeviceFeaturesLessonEligible = launchCount >= 3
-                && !store.hasCompletedDeviceFeaturesLesson(for: userID)
-        }
+        let launchCount = launchRegistry.launchCount(for: userID, store: store)
+        isImportLessonEligible = launchCount >= 2
+            && !store.hasCompletedImportLesson(for: userID)
+        isDeviceFeaturesLessonEligible = launchCount >= 3
+            && !store.hasCompletedDeviceFeaturesLesson(for: userID)
 
         if forceImportLesson {
             isImportLessonEligible = true
@@ -897,7 +918,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         store.reset(for: userID)
         activeSurface = nil
         currentStepIndex = 0
-        registeredLaunchUserID = nil
+        launchRegistry.reset(for: userID)
         requestedSurface = nil
         isImportLessonEligible = false
         isDeviceFeaturesLessonEligible = false
@@ -1124,7 +1145,7 @@ enum WalkthroughHelpDestination {
 
 enum ImportWalkthroughContent {
     static let title = "Bring every saved place with you"
-    static let message = "Paste one place, a few links, or a whole list from Maps, Instagram, TikTok, or Notes. Choose what to keep and mark each Check In or Wanna before anything reaches your map."
+    static let message = "Paste one place, a few links, or a whole list from Maps, Instagram, TikTok, or Notes. Choose what to keep and mark each Check In or Wanna before anything reaches your map"
     static let actionTitle = "Open import form"
     static let helpURL = ImportHelpDestination.url
 }
@@ -1250,7 +1271,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                             .font(WanderTypography.editorialCardTitle)
                             .foregroundStyle(WanderTheme.textInk.color)
 
-                        Text("Set these up once for faster saves.")
+                        Text("Set these up once for faster saves")
                             .font(WanderTypography.metadata)
                             .foregroundStyle(WanderTheme.textMuted.color)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1272,7 +1293,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     DeviceFeatureInstruction(
                         systemImage: "button.programmable",
                         title: "Action Button + Controls",
-                        instruction: "Choose rec.me Check In for a one-press save.",
+                        instruction: "Choose rec.me Check In for a one-press save",
                         accessibilityIdentifier: "walkthrough.deviceFeatures.actionButton"
                     )
 
@@ -1283,7 +1304,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     DeviceFeatureInstruction(
                         systemImage: "square.grid.2x2.fill",
                         title: "Home + Lock Screen widgets",
-                        instruction: "Keep Quick Add, Search, Activity, or Nearby in view.",
+                        instruction: "Keep Quick Add, Search, Activity, or Nearby in view",
                         accessibilityIdentifier: "walkthrough.deviceFeatures.widgets"
                     )
 
@@ -1294,7 +1315,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     DeviceFeatureInstruction(
                         systemImage: "square.and.arrow.up.fill",
                         title: "Share extension",
-                        instruction: "Send places from Maps, Instagram, TikTok, or Safari.",
+                        instruction: "Send places from Maps, Instagram, TikTok, or Safari",
                         accessibilityIdentifier: "walkthrough.deviceFeatures.shareExtension"
                     )
                 }

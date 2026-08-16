@@ -49,6 +49,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(authStore.contains("willEnterForegroundNotification"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
         XCTAssertTrue(root.contains("FirstVisitWalkthroughFeatureFlag.isEnabled("))
+        XCTAssertTrue(root.contains("FirstVisitWalkthroughEligibilityContext("))
+        XCTAssertTrue(
+            root.contains("firstVisitWalkthroughEligibilityContext.applies(to: userID)")
+        )
+        XCTAssertTrue(
+            root.contains("firstVisitWalkthroughEligibilityContext.shouldRetire(")
+        )
+        XCTAssertTrue(root.contains(".onChange(of: firstVisitWalkthroughEligibilityContext)"))
         XCTAssertTrue(
             root.contains(
                 "FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement("
@@ -299,7 +307,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discover.contains("activePlaceSearchHeader"))
         XCTAssertTrue(discover.contains("searchFieldFocused = true"))
         XCTAssertTrue(discover.contains("private var walkthroughSearchBackLabel: String"))
-        XCTAssertTrue(discover.contains("\"Back to Discover search\""))
         XCTAssertTrue(discover.contains("\"Back to Feed\""))
         XCTAssertTrue(discover.contains(".accessibilityIdentifier(\"discover.searchBack\")"))
         XCTAssertFalse(discover.contains(".accessibilityIdentifier(\"discover.close\")"))
@@ -3251,21 +3258,14 @@ final class NavigationContractTests: XCTestCase {
         let resultsBack = try sourceSection(
             backHandler,
             after: "case .feedSearchResultsBack:",
-            before: "case .feedSearchExitBack:"
+            before: "default:"
         )
         XCTAssertTrue(resultsBack.contains("walkthroughs.perform(.feedSearchResultsBack)"))
         XCTAssertTrue(feed.contains("onClose: closeDiscoverSearch"))
         XCTAssertTrue(feed.contains("walkthroughs.consumeRequestedSurface(.feed)"))
         XCTAssertTrue(feed.contains("selectedSurface = .people"))
-        XCTAssertFalse(resultsBack.contains("exitPlaceSearch()"))
-        XCTAssertTrue(resultsBack.contains("clearPlaceSearch(focusField: false)"))
-        let exitBack = try sourceSection(
-            backHandler,
-            after: "case .feedSearchExitBack:",
-            before: "default:"
-        )
-        XCTAssertTrue(exitBack.contains("walkthroughs.perform(.feedSearchExitBack)"))
-        XCTAssertTrue(exitBack.contains("exitPlaceSearch()"))
+        XCTAssertTrue(resultsBack.contains("exitPlaceSearch()"))
+        XCTAssertFalse(discover.contains("feedSearchExitBack"))
 
         let listsAnimation = try sourceSection(
             lists,

@@ -396,14 +396,6 @@ final class OnboardingUITests: XCTestCase {
         )
         waitForExpectations(timeout: 3)
         backButton.tap()
-        XCTAssertTrue(app.buttons["Search coffee worth crossing town for"].waitForExistence(timeout: 4))
-        XCTAssertEqual(backButton.label, "Back to Feed")
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchExitBack"]
-                .waitForExistence(timeout: 2)
-        )
-        XCTAssertTrue(backButton.isHittable)
-        backButton.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.feed.feedPeopleSearch"]
                 .waitForExistence(timeout: 6)
@@ -458,22 +450,14 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Understood as"].waitForExistence(timeout: 6))
         let backButton = app.buttons["discover.searchBack"]
+        RunLoop.current.run(until: Date().addingTimeInterval(4.2))
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchResultsBack"]
                 .waitForExistence(timeout: 6)
         )
-        XCTAssertEqual(backButton.label, "Back to Discover search")
-        XCTAssertTrue(backButton.isHittable)
-        XCTAssertFalse(app.buttons["Lists"].isSelected)
-        backButton.tap()
-
-        XCTAssertTrue(app.buttons["Search coffee worth crossing town for"].waitForExistence(timeout: 4))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchExitBack"]
-                .waitForExistence(timeout: 2)
-        )
         XCTAssertEqual(backButton.label, "Back to Feed")
         XCTAssertTrue(backButton.isHittable)
+        XCTAssertFalse(app.buttons["Lists"].isSelected)
         backButton.tap()
 
         XCTAssertTrue(

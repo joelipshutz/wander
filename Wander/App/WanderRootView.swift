@@ -341,7 +341,7 @@ struct WanderRootView: View {
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
-    private let isFirstVisitWalkthroughEligible: Bool
+    private let firstVisitWalkthroughEligibilityContext: FirstVisitWalkthroughEligibilityContext
     private let onFirstVisitWalkthroughCompleted: (String) -> Void
 
     init(
@@ -366,7 +366,11 @@ struct WanderRootView: View {
         self.analytics = analytics
         let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
         self.walkthroughDebugPreferences = walkthroughDebugPreferences
-        self.isFirstVisitWalkthroughEligible = isFirstVisitWalkthroughEligible
+        let firstVisitWalkthroughEligibilityContext = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: initialSession?.userID,
+            isEligible: isFirstVisitWalkthroughEligible
+        )
+        self.firstVisitWalkthroughEligibilityContext = firstVisitWalkthroughEligibilityContext
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
@@ -393,7 +397,9 @@ struct WanderRootView: View {
         _walkthroughs = StateObject(
             wrappedValue: FirstVisitWalkthroughCoordinator(
                 isEnabled: FirstVisitWalkthroughFeatureFlag.isEnabled(
-                    isEligible: isFirstVisitWalkthroughEligible,
+                    isEligible: firstVisitWalkthroughEligibilityContext.applies(
+                        to: initialSession?.userID
+                    ),
                     isUsingLiveData: fixtureMode == .empty,
                     launchArguments: launchArguments,
                     resolvedValue: nil
@@ -875,6 +881,10 @@ struct WanderRootView: View {
             } else {
                 cancelSignedInMaintenance()
             }
+        }
+        .onChange(of: firstVisitWalkthroughEligibilityContext) { _, _ in
+            guard isSessionValidated else { return }
+            configureWalkthroughsForCurrentUser()
         }
         .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
             if !isPresented {
@@ -1425,11 +1435,16 @@ struct WanderRootView: View {
                 isUsingLiveData: fixtureMode == .empty,
                 resolvedAccountOverride: resolvedFlag?.explicitAccountOverride
             )
-        if shouldRetireEligibility,
+        let enrollmentBelongsToCurrentUser =
+            firstVisitWalkthroughEligibilityContext.applies(to: userID)
+        if firstVisitWalkthroughEligibilityContext.shouldRetire(
+            for: userID,
+            whenRetirementIsRequested: shouldRetireEligibility
+        ),
            retiredWalkthroughUserIDs.insert(userID).inserted {
             onFirstVisitWalkthroughCompleted(userID)
         }
-        let effectiveEligibility = isFirstVisitWalkthroughEligible
+        let effectiveEligibility = enrollmentBelongsToCurrentUser
             && !retiredWalkthroughUserIDs.contains(userID)
         walkthroughs.setEligibilityResolutionPending(
             FirstVisitWalkthroughEligibilityPolicy.isAwaitingFeatureFlagResolution(

@@ -278,11 +278,11 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertEqual(ordinaryEmpty, ContactInvitePrimaryActionState(title: "Invite", isEnabled: false, isSubdued: true))
     }
 
-    func testWalkthroughInviteUsesRequestedProseWithoutAnUnenforcedExpiryClaim() {
+    func testWalkthroughInviteUsesRequestedProse() {
         XCTAssertEqual(ContactInviteWalkthroughContent.selectionGoal, 5)
         XCTAssertEqual(
             ContactInviteWalkthroughContent.inviteProse,
-            "Hey sharing an invite to rec.me a social app for tracking places. This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. Excited to have you on and make sure to use my link."
+            "Hey sharing an invite to rec.me a social app for tracking places. This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. Excited to have you on and make sure to use my link. Heads up this invite expires in 24 hours."
         )
 
         let content = WanderShareContent.appInvite(

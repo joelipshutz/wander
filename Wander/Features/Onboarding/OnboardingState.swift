@@ -67,6 +67,26 @@ enum FirstVisitWalkthroughEligibilityPolicy {
     }
 }
 
+/// Keeps a first-visit enrollment bound to the account that produced it.
+/// `WanderRootView` can remain mounted while authentication changes, so a
+/// bare eligibility Boolean is not sufficient to prevent cross-account NUX.
+struct FirstVisitWalkthroughEligibilityContext: Equatable {
+    let sourceUserID: String?
+    let isEligible: Bool
+
+    func applies(to userID: String?) -> Bool {
+        guard let sourceUserID, let userID else { return false }
+        return isEligible && sourceUserID == userID
+    }
+
+    func shouldRetire(
+        for userID: String?,
+        whenRetirementIsRequested isRequested: Bool
+    ) -> Bool {
+        isRequested && applies(to: userID)
+    }
+}
+
 @MainActor
 final class OnboardingCompletionStore {
     private let defaults: UserDefaults
@@ -267,6 +287,13 @@ final class AppEntryCoordinator: ObservableObject {
     }
 
     func completeOnboarding(for session: AuthSession, serverConfirmed: Bool) {
+        guard auth.isSessionValidated,
+              case .signedIn(let authenticatedSession) = auth.state,
+              authenticatedSession.userID == session.userID,
+              case .onboarding(let onboardingSession, _) = state,
+              onboardingSession.userID == session.userID
+        else { return }
+
         completionStore.markComplete(
             for: session.userID,
             needsServerCompletion: !serverConfirmed,

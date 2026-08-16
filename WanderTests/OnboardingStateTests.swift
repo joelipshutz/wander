@@ -109,7 +109,7 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
-    func testNewUserCompletionEnablesFirstVisitWalkthrough() throws {
+    func testNewUserCompletionEnablesFirstVisitWalkthrough() async throws {
         let session = AuthSession(userID: "new-user", displayName: "Maya", handle: "maya")
         let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -117,10 +117,12 @@ final class OnboardingStateTests: XCTestCase {
         let completionStore = OnboardingCompletionStore(defaults: defaults)
         let coordinator = AppEntryCoordinator(
             auth: AuthSessionStore(provider: SuspendedRefreshAuthProvider(state: .signedIn(session))),
-            backend: WanderBackend(),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
             completionStore: completionStore
         )
 
+        await coordinator.start()
+        XCTAssertEqual(coordinator.state, .onboarding(session: session, step: .identity))
         coordinator.completeOnboarding(for: session, serverConfirmed: true)
 
         XCTAssertEqual(
@@ -138,7 +140,7 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertFalse(completionStore.state(for: session.userID).shouldEnableFirstVisitWalkthrough)
     }
 
-    func testStaleWalkthroughCompletionCannotRetireAnotherReadyAccount() throws {
+    func testStaleWalkthroughCompletionCannotRetireAnotherReadyAccount() async throws {
         let sessionA = AuthSession(userID: "user-a", displayName: "A", handle: "a")
         let sessionB = AuthSession(userID: "user-b", displayName: "B", handle: "b")
         let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
@@ -147,10 +149,11 @@ final class OnboardingStateTests: XCTestCase {
         let completionStore = OnboardingCompletionStore(defaults: defaults)
         let coordinator = AppEntryCoordinator(
             auth: AuthSessionStore(provider: SuspendedRefreshAuthProvider(state: .signedIn(sessionA))),
-            backend: WanderBackend(),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
             completionStore: completionStore
         )
 
+        await coordinator.start()
         coordinator.completeOnboarding(for: sessionA, serverConfirmed: true)
         completionStore.markComplete(
             for: sessionB.userID,
@@ -254,6 +257,133 @@ final class OnboardingStateTests: XCTestCase {
                     FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration
             )
         )
+    }
+
+    func testFirstVisitEligibilityContextNeverCrossesAccounts() {
+        let eligibleAccount = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: "user-a",
+            isEligible: true
+        )
+
+        XCTAssertTrue(eligibleAccount.applies(to: "user-a"))
+        XCTAssertFalse(eligibleAccount.applies(to: "user-b"))
+        XCTAssertFalse(eligibleAccount.applies(to: nil))
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityContext(
+                sourceUserID: "user-a",
+                isEligible: false
+            ).applies(to: "user-a")
+        )
+    }
+
+    func testEligibilityRetirementWaitsForMatchingAccountContext() {
+        let staleContext = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: "user-a",
+            isEligible: true
+        )
+        let activeContext = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: "user-b",
+            isEligible: true
+        )
+
+        XCTAssertFalse(
+            staleContext.shouldRetire(
+                for: "user-b",
+                whenRetirementIsRequested: true
+            ),
+            "A live auth change must not consume another account's retirement attempt."
+        )
+        XCTAssertTrue(
+            activeContext.shouldRetire(
+                for: "user-b",
+                whenRetirementIsRequested: true
+            ),
+            "Retirement must retry once AppEntry publishes the matching account context."
+        )
+        XCTAssertFalse(
+            activeContext.shouldRetire(
+                for: "user-b",
+                whenRetirementIsRequested: false
+            )
+        )
+    }
+
+    func testStaleOnboardingCompletionCannotEnrollAnotherValidatedAccount() async throws {
+        let staleSession = AuthSession(userID: "user-a", displayName: "A", handle: "a")
+        let activeSession = AuthSession(userID: "user-b", displayName: "B", handle: "b")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(
+                provider: SuspendedRefreshAuthProvider(state: .signedIn(activeSession))
+            ),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        coordinator.completeOnboarding(for: staleSession, serverConfirmed: true)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .onboarding(session: activeSession, step: .identity)
+        )
+        XCTAssertEqual(completionStore.state(for: staleSession.userID), .fresh)
+        XCTAssertEqual(completionStore.state(for: activeSession.userID), .fresh)
+    }
+
+    func testStaleOnboardingCompletionCannotReenrollAnAlreadyReadyAccount() async throws {
+        let session = AuthSession(userID: "established-user", displayName: "Joe", handle: "joe")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        completionStore.markComplete(
+            for: session.userID,
+            needsServerCompletion: false,
+            firstVisitWalkthroughEligible: false
+        )
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(
+                provider: SuspendedRefreshAuthProvider(state: .signedIn(session))
+            ),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        coordinator.completeOnboarding(for: session, serverConfirmed: true)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session, firstVisitWalkthroughEligible: false)
+        )
+        XCTAssertFalse(completionStore.state(for: session.userID).shouldEnableFirstVisitWalkthrough)
+    }
+
+    func testOnboardingCompletionRequiresValidatedSession() async throws {
+        let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        let auth = AuthSessionStore(
+            provider: SuspendedRefreshAuthProvider(state: .signedIn(session))
+        )
+        let coordinator = AppEntryCoordinator(
+            auth: auth,
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        auth.beginSessionValidation()
+        coordinator.completeOnboarding(for: session, serverConfirmed: true)
+
+        XCTAssertEqual(coordinator.state, .onboarding(session: session, step: .identity))
+        XCTAssertEqual(completionStore.state(for: session.userID), .fresh)
     }
 
     func testOnlyExplicitAccountDisableRequestsPersistedEligibilityRetirement() {
@@ -532,5 +662,20 @@ private final class SuspendedRefreshAuthProvider: AuthSessionProviding {
 
     func supabaseAccessToken() async throws -> String {
         throw AuthSessionError.tokenUnavailable
+    }
+}
+
+@MainActor
+private final class EmptyOnboardingProfileRepository: ProfileRepository {
+    func currentProfile() async throws -> LocalProfile? {
+        nil
+    }
+
+    func profile(id: String) async throws -> ProfileViewState {
+        throw WanderRemoteError.notConfigured
+    }
+
+    func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
+        []
     }
 }

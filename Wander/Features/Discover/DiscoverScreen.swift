@@ -491,9 +491,6 @@ struct DiscoverScreen: View {
         switch walkthroughs.currentStep?.target {
         case .feedSearchResultsBack:
             walkthroughs.perform(.feedSearchResultsBack)
-            clearPlaceSearch(focusField: false)
-        case .feedSearchExitBack:
-            walkthroughs.perform(.feedSearchExitBack)
             exitPlaceSearch()
         default:
             exitPlaceSearch()
@@ -823,8 +820,6 @@ struct DiscoverScreen: View {
         switch walkthroughs.currentStep?.target {
         case .feedSearchResultsBack where isWalkthroughSearchResultReady:
             .feedSearchResultsBack
-        case .feedSearchExitBack:
-            .feedSearchExitBack
         default:
             nil
         }
@@ -833,8 +828,6 @@ struct DiscoverScreen: View {
     private var walkthroughSearchBackLabel: String {
         switch walkthroughs.currentStep?.target {
         case .feedSearchResultsBack:
-            "Back to Discover search"
-        case .feedSearchExitBack:
             "Back to Feed"
         default:
             onClose == nil ? "Back to Discover" : "Back to Feed"
