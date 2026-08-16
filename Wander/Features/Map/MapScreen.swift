@@ -3846,6 +3846,7 @@ private struct MapSolidAddButton: View {
 
 private struct SearchBar: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var query: String
     let isFocused: FocusState<Bool>.Binding
     let focusRequestID: UUID?
@@ -3888,9 +3889,13 @@ private struct SearchBar: View {
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, minHeight: 48)
+        .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
         .contentShape(Capsule())
         .mapSearchCapsuleSurface()
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
+            value: isFocused.wrappedValue
+        )
     }
 
     @MainActor
