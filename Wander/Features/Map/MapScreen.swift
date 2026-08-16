@@ -287,6 +287,12 @@ struct MapScreen: View {
         if mapFilterState.source == .featured, isLoadingMapSources {
             return nil
         }
+        if mapFilterState.source == .featured,
+           walkthroughs.isAwaitingEligibilityResolution
+                || walkthroughs.activeSurface != nil
+                || walkthroughs.requestedSurface != nil {
+            return nil
+        }
         if mapFilterState.more.activeSectionCount > 0 {
             return "No \(mapFilterState.source.title.lowercased()) places match these filters."
         }
@@ -494,7 +500,7 @@ struct MapScreen: View {
                                         .walkthroughTarget(
                                             source == .friends ? .mapFriends : nil
                                         )
-                                        .walkthroughEmphasis(
+                                        .walkthroughTarget(
                                             source == .featured ? .mapFeatured : nil
                                         )
                                     }
@@ -5833,6 +5839,7 @@ struct MapPlaceSaveFlowSheet: View {
                     }
                 }
                 .onChange(of: draftUpdate, initial: true) { _, update in
+                    walkthroughs.recordUserActivity()
                     guard let draftID else { return }
                     onDraftChange(draftID, update.form, update.submittedAt)
                 }
@@ -6251,41 +6258,18 @@ struct MapPlaceSaveFlowSheet: View {
 
                     Spacer()
 
-                    ZStack {
-                        Circle()
-                            .fill(
-                                isWalkthroughTarget
-                                    ? WanderTheme.sunTint.color
-                                    : .clear
-                            )
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
-                            .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
-                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
+                        .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .overlay {
-                        if isWalkthroughTarget {
-                            Circle()
-                                .stroke(WanderTheme.categorySun.color, lineWidth: 3)
-                        }
-                    }
                     .scaleEffect(
                         isWalkthroughTarget && !reduceMotion && isMoreOptionsArrowPulsing
-                            ? 1.08
+                            ? 1.12
                             : 1
                     )
-                    .shadow(
-                        color: isWalkthroughTarget
-                            ? WanderTheme.categorySun.color.opacity(
-                                isMoreOptionsArrowPulsing ? 0.72 : 0.34
-                            )
-                            : .clear,
-                        radius: isWalkthroughTarget && isMoreOptionsArrowPulsing ? 11 : 4
-                    )
-                    .walkthroughEmphasis(.saveMoreOptions)
+                    .offset(y: isWalkthroughTarget && isMoreOptionsArrowPulsing ? 2 : 0)
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)

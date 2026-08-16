@@ -62,7 +62,7 @@ struct FeedScreen: View {
             .fullScreenCover(isPresented: $isShowingSearch) {
                 DiscoverScreen(
                     startsInPlaceSearch: true,
-                    onClose: { isShowingSearch = false }
+                    onClose: closeDiscoverSearch
                 )
                     .environmentObject(store)
                     .environmentObject(auth)
@@ -164,6 +164,16 @@ struct FeedScreen: View {
         isShowingSearch = true
     }
 
+    private func closeDiscoverSearch() {
+        isShowingSearch = false
+        guard walkthroughs.requestedSurface == .feed else { return }
+        walkthroughs.consumeRequestedSurface(.feed)
+        walkthroughs.activate(.feed)
+        if walkthroughs.currentStep?.target == .feedPeopleSearch {
+            selectedSurface = .people
+        }
+    }
+
     @ViewBuilder
     private var content: some View {
         if store.feedLoadState == .loading, page == nil {
@@ -178,7 +188,7 @@ struct FeedScreen: View {
                 )
             }
 
-            FeedSectionHeading(title: "See your friends’ check-ins here", detail: freshnessDetail)
+            FeedSectionHeading(title: "Activity", detail: freshnessDetail)
             FeedActivityList(
                 activity: page.activity,
                 openProfile: openProfile,
@@ -197,7 +207,7 @@ struct FeedScreen: View {
         } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
             FeedRefreshRecoveryState(retry: refresh)
         } else {
-            FeedSectionHeading(title: "See your friends’ check-ins here")
+            FeedSectionHeading(title: "Activity")
             FeedEmptyState(
                 recommendations: peopleRecommendations,
                 followingProfileIDs: followingProfileIDs,
@@ -205,6 +215,7 @@ struct FeedScreen: View {
                 openProfile: openProfile,
                 follow: follow
             )
+            .walkthroughTarget(.feedActivity)
 
         }
     }
@@ -578,6 +589,7 @@ private struct FeedPeopleSurface: View {
             await refreshRecommendations()
         }
         .task(id: memberQuery) {
+            walkthroughs.recordUserActivity()
             await refreshMembers(query: memberQuery, debounce: true)
         }
         .onChange(of: searchFieldFocused) { _, isFocused in
@@ -1715,7 +1727,7 @@ private struct FeedLoadingState: View {
                         .frame(width: 184, height: 218)
                 }
             }
-            FeedSectionHeading(title: "See your friends’ check-ins here")
+            FeedSectionHeading(title: "Activity")
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -1740,7 +1752,7 @@ private struct FeedRefreshRecoveryState: View {
             FeedSectionHeading(title: "Featured for you")
             FeedRecoveryFeaturedRail()
 
-            FeedSectionHeading(title: "See your friends’ check-ins here", detail: "Unavailable")
+            FeedSectionHeading(title: "Activity", detail: "Unavailable")
             FeedRecoveryActivityList()
 
             FeedRetryRow(

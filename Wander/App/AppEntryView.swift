@@ -101,8 +101,8 @@ struct AppEntryView: View {
                     initialSession: session,
                     isSessionValidated: auth.isSessionValidated,
                     isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible,
-                    onFirstVisitWalkthroughCompleted: {
-                        coordinator.completeFirstVisitWalkthrough(for: session)
+                    onFirstVisitWalkthroughCompleted: { completedUserID in
+                        coordinator.completeFirstVisitWalkthrough(forUserID: completedUserID)
                     },
                     deepLinkLaunchRequest: deepLinkInbox.request(
                         ifSessionValidated: auth.isSessionValidated

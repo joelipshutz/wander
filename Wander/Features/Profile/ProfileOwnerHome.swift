@@ -374,22 +374,6 @@ struct ProfileOwnerHome: View {
                 profileScrollPosition = destination
             }
         }
-        .task(id: walkthroughs.currentStep?.id) {
-            guard mode.isOwner,
-                  walkthroughs.activeSurface == .profile,
-                  walkthroughs.currentStep?.automaticallyAdvances == true
-            else { return }
-
-            let delay = reduceMotion
-                ? FirstVisitWalkthroughContent.reducedMotionProfileAutoAdvanceDelayMilliseconds
-                : FirstVisitWalkthroughContent.profileAutoAdvanceDelayMilliseconds
-            try? await Task.sleep(for: .milliseconds(delay))
-            guard !Task.isCancelled,
-                  walkthroughs.activeSurface == .profile,
-                  walkthroughs.currentStep?.automaticallyAdvances == true
-            else { return }
-            walkthroughs.advancePassiveStep()
-        }
         .wanderScreen()
         .toolbar(.hidden, for: .navigationBar)
     }

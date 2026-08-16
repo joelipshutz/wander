@@ -121,6 +121,64 @@ enum InviteSurface: Equatable {
     }
 }
 
+enum ContactInviteWalkthroughContent {
+    static let selectionGoal = 5
+
+    static let inviteProse =
+        "Hey sharing an invite to rec.me a social app for tracking places. "
+        + "This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. "
+        + "Excited to have you on and make sure to use my link."
+}
+
+enum ContactInviteWalkthroughComposerOutcome: Equatable {
+    case sent
+    case cancelled
+    case failed
+}
+
+enum ContactInviteWalkthroughProgressReducer {
+    enum Action: Equatable {
+        case messageComposerFinished(
+            contactID: String,
+            outcome: ContactInviteWalkthroughComposerOutcome
+        )
+    }
+
+    static func reduce(
+        state: InviteSelection,
+        action: Action,
+        goal: Int = ContactInviteWalkthroughContent.selectionGoal
+    ) -> InviteSelection {
+        var nextState = state
+        guard goal > 0 else { return nextState }
+
+        switch action {
+        case .messageComposerFinished(let contactID, let outcome):
+            guard outcome == .sent,
+                  canInvite(contactID: contactID, state: nextState, goal: goal)
+            else { return nextState }
+            _ = nextState.insert(contactID)
+        }
+
+        return nextState
+    }
+
+    static func canInvite(
+        contactID: String,
+        state: InviteSelection,
+        goal: Int = ContactInviteWalkthroughContent.selectionGoal
+    ) -> Bool {
+        goal > 0 && state.count < goal && !state.contains(contactID)
+    }
+
+    static func isComplete(
+        state: InviteSelection,
+        goal: Int = ContactInviteWalkthroughContent.selectionGoal
+    ) -> Bool {
+        goal > 0 && state.count >= goal
+    }
+}
+
 enum InviteContactRelationship: Equatable {
     case contactOnly
     case recmeUser(handle: String, userID: String)
@@ -245,6 +303,12 @@ struct InviteSelection: Equatable {
 
     func contains(_ contactID: String) -> Bool {
         contactIDs.contains(contactID)
+    }
+
+    @discardableResult
+    mutating func insert(_ contactID: String) -> Bool {
+        guard contactIDs.count < Self.maximumCount else { return false }
+        return contactIDs.insert(contactID).inserted
     }
 
     @discardableResult

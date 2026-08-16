@@ -19,16 +19,51 @@ struct OnboardingLocalState: Codable, Equatable {
     var isComplete: Bool
     var needsServerCompletion: Bool
     var isFirstVisitWalkthroughEligible: Bool? = nil
+    var firstVisitWalkthroughEnrollmentGeneration: Int? = nil
 
     static let fresh = OnboardingLocalState(
         nextStep: .identity,
         isComplete: false,
         needsServerCompletion: false,
-        isFirstVisitWalkthroughEligible: nil
+        isFirstVisitWalkthroughEligible: nil,
+        firstVisitWalkthroughEnrollmentGeneration: nil
     )
 
     var shouldEnableFirstVisitWalkthrough: Bool {
-        isFirstVisitWalkthroughEligible == true
+        FirstVisitWalkthroughEligibilityPolicy.isEnrolled(
+            isPersistedEligible: isFirstVisitWalkthroughEligible,
+            enrollmentGeneration: firstVisitWalkthroughEnrollmentGeneration
+        )
+    }
+}
+
+enum FirstVisitWalkthroughEligibilityPolicy {
+    /// A generation is written only by the current account-onboarding completion
+    /// path. Older boolean-only records therefore fail closed instead of
+    /// re-enrolling established accounts after an app update.
+    static let currentEnrollmentGeneration = 1
+
+    static func isEnrolled(
+        isPersistedEligible: Bool?,
+        enrollmentGeneration: Int?
+    ) -> Bool {
+        isPersistedEligible == true
+            && enrollmentGeneration == currentEnrollmentGeneration
+    }
+
+    static func shouldRequestPersistedEligibilityRetirement(
+        isUsingLiveData: Bool,
+        resolvedAccountOverride: Bool?
+    ) -> Bool {
+        isUsingLiveData && resolvedAccountOverride == false
+    }
+
+    static func isAwaitingFeatureFlagResolution(
+        isEnrolled: Bool,
+        isUsingLiveData: Bool,
+        resolutionIsPending: Bool
+    ) -> Bool {
+        isEnrolled && isUsingLiveData && resolutionIsPending
     }
 }
 
@@ -63,6 +98,9 @@ final class OnboardingCompletionStore {
         value.isComplete = true
         value.needsServerCompletion = needsServerCompletion
         value.isFirstVisitWalkthroughEligible = firstVisitWalkthroughEligible
+        value.firstVisitWalkthroughEnrollmentGeneration = firstVisitWalkthroughEligible
+            ? FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration
+            : nil
         save(value, for: userID)
     }
 
@@ -73,10 +111,16 @@ final class OnboardingCompletionStore {
         save(value, for: userID)
     }
 
-    func retireFirstVisitWalkthrough(for userID: String) {
+    @discardableResult
+    func retireFirstVisitWalkthrough(for userID: String) -> Bool {
         var value = state(for: userID)
+        guard value.isFirstVisitWalkthroughEligible == true
+                || value.firstVisitWalkthroughEnrollmentGeneration != nil
+        else { return false }
         value.isFirstVisitWalkthroughEligible = false
+        value.firstVisitWalkthroughEnrollmentGeneration = nil
         save(value, for: userID)
+        return true
     }
 
     func clear(for userID: String) {
@@ -238,12 +282,13 @@ final class AppEntryCoordinator: ObservableObject {
         state = .ready(session: session, firstVisitWalkthroughEligible: true)
     }
 
-    func completeFirstVisitWalkthrough(for session: AuthSession) {
-        completionStore.retireFirstVisitWalkthrough(for: session.userID)
+    func completeFirstVisitWalkthrough(forUserID userID: String) {
         guard case .ready(let readySession, _) = state,
-              readySession.userID == session.userID
+              readySession.userID == userID
         else { return }
-        state = .ready(session: session, firstVisitWalkthroughEligible: false)
+        let didRetire = completionStore.retireFirstVisitWalkthrough(for: userID)
+        guard didRetire else { return }
+        state = .ready(session: readySession, firstVisitWalkthroughEligible: false)
     }
 
     func saveProgress(_ step: OnboardingStep, for session: AuthSession) {

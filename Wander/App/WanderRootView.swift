@@ -326,6 +326,9 @@ struct WanderRootView: View {
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var didApplyWalkthroughLaunchConfiguration = false
+    @State private var retiredWalkthroughUserIDs: Set<String> = []
+    @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
+    @State private var nativeTabItemControlsFrame: CGRect?
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -339,7 +342,7 @@ struct WanderRootView: View {
     private let analytics: AnalyticsClient
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
     private let isFirstVisitWalkthroughEligible: Bool
-    private let onFirstVisitWalkthroughCompleted: () -> Void
+    private let onFirstVisitWalkthroughCompleted: (String) -> Void
 
     init(
         initialTab: WanderTab? = nil,
@@ -348,7 +351,7 @@ struct WanderRootView: View {
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
         isFirstVisitWalkthroughEligible: Bool = false,
-        onFirstVisitWalkthroughCompleted: @escaping () -> Void = {},
+        onFirstVisitWalkthroughCompleted: @escaping (String) -> Void = { _ in },
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
@@ -395,11 +398,9 @@ struct WanderRootView: View {
                     launchArguments: launchArguments,
                     resolvedValue: nil
                 ),
-                onCompleted: {
-                    if let userID = initialSession?.userID {
-                        walkthroughDebugPreferences.clearReplayRequest(for: userID)
-                    }
-                    onFirstVisitWalkthroughCompleted()
+                onCompleted: { completedUserID in
+                    walkthroughDebugPreferences.clearReplayRequest(for: completedUserID)
+                    onFirstVisitWalkthroughCompleted(completedUserID)
                 }
             )
         )
@@ -454,7 +455,13 @@ struct WanderRootView: View {
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
         .background {
-            WanderNativeTabTouchObserver(tabs: WanderTab.primaryTabs)
+            WanderNativeTabTouchObserver(
+                tabs: WanderTab.primaryTabs,
+                onItemControlsFrameChange: { frame in
+                    guard nativeTabItemControlsFrame != frame else { return }
+                    nativeTabItemControlsFrame = frame
+                }
+            )
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
@@ -483,16 +490,11 @@ struct WanderRootView: View {
                 selectedTab = .discover
             }
         }
-        .overlay(alignment: .bottom) {
-            Color.clear
-                .frame(height: walkthroughTabBarTargetHeight)
-                .offset(y: walkthroughTabBarTargetVerticalOffset)
-                .contentShape(Rectangle())
-                .allowsHitTesting(false)
-                .walkthroughTarget(.mapTabs)
-                .padding(.horizontal, walkthroughTabBarTargetHorizontalInset)
-        }
-        .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
+        .firstVisitWalkthroughOverlay(
+            walkthroughs,
+            surface: walkthroughSurface(for: selectedTab),
+            externalTargetFrames: nativeTabItemControlsFrame.map { [.mapTabs: $0] } ?? [:]
+        )
         .walkthroughLaunchLessonOverlay(
             walkthroughs,
             onOpenImport: presentWalkthroughImportHub
@@ -726,8 +728,12 @@ struct WanderRootView: View {
             guard isSessionValidated, let request else { return }
             routeNotification(request)
         }
-        .onChange(of: auth.state) { _, state in
+        .onChange(of: auth.state) { previousState, state in
             let nextUserID = state.session?.userID
+            if previousState.session?.userID != nextUserID {
+                walkthroughFeatureFlagRefreshTask?.cancel()
+                walkthroughFeatureFlagRefreshTask = nil
+            }
             if let automaticImportOwnerUserID,
                automaticImportOwnerUserID != nextUserID {
                 cancelAutomaticPlaceImports(clearVerificationQueue: true)
@@ -828,6 +834,7 @@ struct WanderRootView: View {
                 placeSaveDraftStore.flush()
             }
             guard phase == .active, isSessionValidated else { return }
+            refreshWalkthroughFeatureFlagsAfterForeground()
             drainPendingNotificationResponses()
             drainSharedPlaceImports()
             resumeAutomaticPlaceImports()
@@ -1211,6 +1218,8 @@ struct WanderRootView: View {
 
     private func handleRootDisappear() {
         cancelSignedInMaintenance()
+        walkthroughFeatureFlagRefreshTask?.cancel()
+        walkthroughFeatureFlagRefreshTask = nil
         nearbyWidgetRefreshTask?.cancel()
         nearbyWidgetRefreshTask = nil
         deepLinkHandoffTask?.cancel()
@@ -1410,13 +1419,31 @@ struct WanderRootView: View {
             : nil
         let isReplayRequested = isDebugSettingsEntitled
             && walkthroughDebugPreferences.isReplayRequested(for: userID)
-        let resolvedValue = debugNUXOverride
-            ?? backend.featureFlag(.firstVisitNUX, for: userID)
+        let resolvedFlag = backend.resolvedFeatureFlag(.firstVisitNUX, for: userID)
+        let shouldRetireEligibility =
+            FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement(
+                isUsingLiveData: fixtureMode == .empty,
+                resolvedAccountOverride: resolvedFlag?.explicitAccountOverride
+            )
+        if shouldRetireEligibility,
+           retiredWalkthroughUserIDs.insert(userID).inserted {
+            onFirstVisitWalkthroughCompleted(userID)
+        }
+        let effectiveEligibility = isFirstVisitWalkthroughEligible
+            && !retiredWalkthroughUserIDs.contains(userID)
+        walkthroughs.setEligibilityResolutionPending(
+            FirstVisitWalkthroughEligibilityPolicy.isAwaitingFeatureFlagResolution(
+                isEnrolled: effectiveEligibility,
+                isUsingLiveData: fixtureMode == .empty,
+                resolutionIsPending: backend.featureFlagResolution.isPending(for: userID)
+            )
+        )
         let isEnabled = FirstVisitWalkthroughFeatureFlag.isEnabled(
-            isEligible: isFirstVisitWalkthroughEligible,
+            isEligible: effectiveEligibility,
             isUsingLiveData: fixtureMode == .empty,
             launchArguments: launchArguments,
-            resolvedValue: resolvedValue,
+            resolvedValue: resolvedFlag?.isEnabled,
+            entitledDebugOverride: debugNUXOverride,
             isEntitledDebugReplayRequested: isReplayRequested
         )
         walkthroughs.setEnabled(isEnabled)
@@ -1449,6 +1476,18 @@ struct WanderRootView: View {
         presentLaunchLessonIfAppropriate()
         if !walkthroughs.isPresentingLaunchLesson {
             walkthroughs.activate(walkthroughSurface(for: selectedTab))
+        }
+    }
+
+    private func refreshWalkthroughFeatureFlagsAfterForeground() {
+        walkthroughFeatureFlagRefreshTask?.cancel()
+        guard let userID = featureFlagLoadUserID else { return }
+
+        walkthroughFeatureFlagRefreshTask = Task { @MainActor in
+            await backend.refreshFeatureFlags(for: userID)
+            guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
+            configureWalkthroughsForCurrentUser()
+            walkthroughFeatureFlagRefreshTask = nil
         }
     }
 
@@ -1515,18 +1554,6 @@ struct WanderRootView: View {
         case .profile:
             .profile
         }
-    }
-
-    private var walkthroughTabBarTargetHeight: CGFloat {
-        46
-    }
-
-    private var walkthroughTabBarTargetVerticalOffset: CGFloat {
-        if #available(iOS 26.0, *) { 17 } else { 13 }
-    }
-
-    private var walkthroughTabBarTargetHorizontalInset: CGFloat {
-        if #available(iOS 26.0, *) { 32 } else { 0 }
     }
 
     private var featureFlagLoadUserID: String? {
@@ -2132,16 +2159,46 @@ struct WanderTabPressInteraction: Equatable {
 }
 
 private final class WanderTabTouchAnchorView: UIView {
-    var onWindowChange: ((UIWindow?) -> Void)?
+    var onGeometryChange: ((WanderTabTouchAnchorView) -> Void)?
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        onWindowChange?(window)
+        onGeometryChange?(self)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onGeometryChange?(self)
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        onGeometryChange?(self)
+    }
+}
+
+enum WanderTabBarWalkthroughTargetGeometry {
+    static func targetFrame(
+        controlFrames: [CGRect],
+        visibleBounds: CGRect
+    ) -> CGRect? {
+        let visibleControlFrames = controlFrames.filter {
+            !$0.isNull && !$0.isInfinite && !$0.isEmpty
+        }
+        guard let first = visibleControlFrames.first else { return nil }
+
+        let union = visibleControlFrames.dropFirst().reduce(first) { $0.union($1) }
+        let visibleUnion = union.intersection(visibleBounds)
+        guard !visibleUnion.isNull, !visibleUnion.isInfinite, !visibleUnion.isEmpty else {
+            return nil
+        }
+        return visibleUnion
     }
 }
 
 private struct WanderNativeTabTouchObserver: UIViewRepresentable {
     let tabs: [WanderTab]
+    let onItemControlsFrameChange: (CGRect?) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(observer: self)
@@ -2150,21 +2207,21 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
     func makeUIView(context: Context) -> WanderTabTouchAnchorView {
         let view = WanderTabTouchAnchorView(frame: .zero)
         view.isUserInteractionEnabled = false
-        view.onWindowChange = { [weak coordinator = context.coordinator] window in
-            coordinator?.attachIfNeeded(in: window)
+        view.onGeometryChange = { [weak coordinator = context.coordinator] anchorView in
+            coordinator?.attachIfNeeded(to: anchorView)
         }
         return view
     }
 
     func updateUIView(_ uiView: WanderTabTouchAnchorView, context: Context) {
-        context.coordinator.update(observer: self, window: uiView.window)
+        context.coordinator.update(observer: self, anchorView: uiView)
     }
 
     static func dismantleUIView(
         _ uiView: WanderTabTouchAnchorView,
         coordinator: Coordinator
     ) {
-        uiView.onWindowChange = nil
+        uiView.onGeometryChange = nil
         coordinator.detach()
     }
 
@@ -2175,33 +2232,51 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
         private weak var observedTabBar: UITabBar?
         private var observedControls: [UIControl] = []
         private var originalImages: [(image: UIImage?, selectedImage: UIImage?)] = []
+        private var lastPublishedItemControlsFrame: CGRect?
+        private var attachmentRetryTask: Task<Void, Never>?
+        private var attachmentRetryCount = 0
 
         init(observer: WanderNativeTabTouchObserver) {
             self.observer = observer
         }
 
-        func update(observer: WanderNativeTabTouchObserver, window: UIWindow?) {
+        func update(observer: WanderNativeTabTouchObserver, anchorView: WanderTabTouchAnchorView) {
             self.observer = observer
-            attachIfNeeded(in: window)
+            attachIfNeeded(to: anchorView)
         }
 
-        func attachIfNeeded(in window: UIWindow?) {
-            guard let window,
+        func attachIfNeeded(to anchorView: WanderTabTouchAnchorView) {
+            guard let window = anchorView.window,
                   let tabBar = Self.findTabBar(in: window),
                   tabBar.items?.count == observer.tabs.count,
                   let itemControls = Self.itemControls(
                     in: tabBar,
-                    expectedCount: observer.tabs.count
+                    tabs: observer.tabs
                   )
             else {
+                publishItemControlsFrame(nil)
+                scheduleAttachmentRetry(for: anchorView)
                 return
             }
+
+            attachmentRetryTask?.cancel()
+            attachmentRetryTask = nil
+            attachmentRetryCount = 0
+
+            let convertedFrames = itemControls.map {
+                window.convert($0.bounds, from: $0)
+            }
+            let targetFrame = WanderTabBarWalkthroughTargetGeometry.targetFrame(
+                controlFrames: convertedFrames,
+                visibleBounds: window.bounds
+            )
+            publishItemControlsFrame(targetFrame)
 
             let controlsMatch = observedControls.count == itemControls.count
                 && zip(observedControls, itemControls).allSatisfy { $0 === $1 }
             guard observedTabBar !== tabBar || !controlsMatch else { return }
 
-            detach()
+            detach(clearPublishedFrame: false)
             observedTabBar = tabBar
             observedControls = itemControls
             originalImages = tabBar.items?.map { ($0.image, $0.selectedImage) } ?? []
@@ -2215,7 +2290,10 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
             }
         }
 
-        func detach() {
+        func detach(clearPublishedFrame: Bool = true) {
+            attachmentRetryTask?.cancel()
+            attachmentRetryTask = nil
+            attachmentRetryCount = 0
             restoreOriginalImages()
             for control in observedControls {
                 control.removeTarget(self, action: #selector(handleTouchDown(_:)), for: .touchDown)
@@ -2229,6 +2307,29 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
             originalImages = []
             observedTabBar = nil
             interaction.cancel()
+            if clearPublishedFrame {
+                publishItemControlsFrame(nil)
+            }
+        }
+
+        private func scheduleAttachmentRetry(for anchorView: WanderTabTouchAnchorView) {
+            guard attachmentRetryTask == nil, attachmentRetryCount < 20 else { return }
+            attachmentRetryCount += 1
+            attachmentRetryTask = Task { @MainActor [weak self, weak anchorView] in
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled, let self, let anchorView else { return }
+                self.attachmentRetryTask = nil
+                self.attachIfNeeded(to: anchorView)
+            }
+        }
+
+        private func publishItemControlsFrame(_ frame: CGRect?) {
+            guard frame != lastPublishedItemControlsFrame else { return }
+            lastPublishedItemControlsFrame = frame
+            let onChange = observer.onItemControlsFrameChange
+            DispatchQueue.main.async {
+                onChange(frame)
+            }
         }
 
         @objc
@@ -2302,15 +2403,37 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
 
         private static func itemControls(
             in tabBar: UITabBar,
-            expectedCount: Int
+            tabs: [WanderTab]
         ) -> [UIControl]? {
-            var controls = tabBar.subviews.compactMap { $0 as? UIControl }
+            let visibleControls = descendantControls(in: tabBar)
                 .filter { !$0.isHidden && $0.alpha > 0 && $0.isUserInteractionEnabled }
-                .sorted { $0.frame.minX < $1.frame.minX }
+            let labeledControls = tabs.compactMap { tab in
+                visibleControls.first { control in
+                    control.accessibilityLabel?.caseInsensitiveCompare(tab.title) == .orderedSame
+                }
+            }
+            let tabBarButtons = visibleControls.filter {
+                String(describing: type(of: $0)).contains("UITabBarButton")
+            }
+            var controls: [UIControl]
+            if Set(labeledControls.map(ObjectIdentifier.init)).count == tabs.count {
+                controls = labeledControls
+            } else if tabBarButtons.count == tabs.count {
+                controls = tabBarButtons.sorted { $0.frame.minX < $1.frame.minX }
+            } else {
+                return nil
+            }
             if tabBar.effectiveUserInterfaceLayoutDirection == .rightToLeft {
                 controls.reverse()
             }
-            return controls.count == expectedCount ? controls : nil
+            return controls
+        }
+
+        private static func descendantControls(in root: UIView) -> [UIControl] {
+            root.subviews.flatMap { subview in
+                let control = (subview as? UIControl).map { [$0] } ?? []
+                return control + descendantControls(in: subview)
+            }
         }
 
         private static func findTabBar(in root: UIView) -> UITabBar? {

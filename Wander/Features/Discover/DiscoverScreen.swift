@@ -793,7 +793,7 @@ struct DiscoverScreen: View {
                         .foregroundStyle(WanderTheme.terracottaDark.color)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
-                .accessibilityLabel(onClose == nil ? "Back to Discover" : "Back to Feed")
+                .accessibilityLabel(walkthroughSearchBackLabel)
                 .accessibilityIdentifier("discover.searchBack")
                 .walkthroughTargetAndEmphasis(walkthroughSearchBackTarget)
             }
@@ -821,13 +821,34 @@ struct DiscoverScreen: View {
 
     private var walkthroughSearchBackTarget: WalkthroughTargetID? {
         switch walkthroughs.currentStep?.target {
-        case .feedSearchResultsBack:
+        case .feedSearchResultsBack where isWalkthroughSearchResultReady:
             .feedSearchResultsBack
         case .feedSearchExitBack:
             .feedSearchExitBack
         default:
             nil
         }
+    }
+
+    private var walkthroughSearchBackLabel: String {
+        switch walkthroughs.currentStep?.target {
+        case .feedSearchResultsBack:
+            "Back to Discover search"
+        case .feedSearchExitBack:
+            "Back to Feed"
+        default:
+            onClose == nil ? "Back to Discover" : "Back to Feed"
+        }
+    }
+
+    private var isWalkthroughSearchResultReady: Bool {
+        guard submittedPlacesQuery != nil else { return false }
+        let hasRenderedResults = !placeGroups.isEmpty
+            || !filteredCommunityPlaceCandidates.isEmpty
+        let reachedTerminalEmptyState = !isPlaceSearchLoading
+            && !isPlaceSearchRefining
+            && !isCommunityPlaceSearchLoading
+        return hasRenderedResults || reachedTerminalEmptyState
     }
 
     @ViewBuilder

@@ -553,18 +553,18 @@ struct ListsScreen: View {
         switch walkthroughs.currentStep?.target {
         case .listsScope:
             if reduceMotion {
-                try? await Task.sleep(for: .milliseconds(2_600))
+                try? await Task.sleep(for: .milliseconds(3_600))
             } else {
                 for scope in [ListsScope.friends, .collabs, .mine] {
-                    try? await Task.sleep(for: .milliseconds(650))
+                    try? await Task.sleep(for: .milliseconds(900))
                     guard !Task.isCancelled,
                           walkthroughs.currentStep?.target == .listsScope
                     else { return }
-                    withAnimation(.snappy(duration: 0.38, extraBounce: 0.08)) {
+                    withAnimation(.snappy(duration: 0.48, extraBounce: 0.06)) {
                         selectedScopeID = scope.rawValue
                     }
                 }
-                try? await Task.sleep(for: .milliseconds(1_100))
+                try? await Task.sleep(for: .milliseconds(1_400))
             }
             guard !Task.isCancelled,
                   walkthroughs.currentStep?.target == .listsScope
@@ -572,7 +572,7 @@ struct ListsScreen: View {
             walkthroughs.advancePassiveStep()
 
         case .listsOpenPlan:
-            try? await Task.sleep(for: .milliseconds(3_200))
+            try? await Task.sleep(for: .milliseconds(4_000))
             guard !Task.isCancelled,
                   walkthroughs.currentStep?.target == .listsOpenPlan
             else { return }

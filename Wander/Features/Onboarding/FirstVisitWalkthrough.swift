@@ -92,6 +92,12 @@ enum WalkthroughSpotlightStyle: Equatable, Sendable {
     case clearPage
 }
 
+enum WalkthroughPresentationStyle: Equatable, Sendable {
+    case coach
+    case delayedTargetOnly(milliseconds: Int)
+    case finale
+}
+
 struct WalkthroughStep: Identifiable, Equatable, Sendable {
     let surface: WalkthroughSurface
     let target: WalkthroughTargetID
@@ -104,15 +110,21 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
     let coachTheme: WalkthroughCoachTheme
     let spotlightStyle: WalkthroughSpotlightStyle
     let automaticallyAdvances: Bool
+    let presentationStyle: WalkthroughPresentationStyle
 
     var id: String { "\(surface.rawValue).\(target.rawValue)" }
-    var automaticallyRecoversWhenTargetIsMissing: Bool { advance == .action }
+    var automaticallyRecoversWhenTargetIsMissing: Bool {
+        advance == .action && presentationStyle == .coach
+    }
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 10
-    static let profileAutoAdvanceDelayMilliseconds = 2_600
-    static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 2_200
+    static let version = 11
+    static let profileIntroAutoAdvanceDelayMilliseconds = 4_000
+    static let profileAutoAdvanceDelayMilliseconds = 2_200
+    static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 1_900
+    static let nextArrowNudgeDelayMilliseconds = 3_000
+    static let discoverResultsPreviewMilliseconds = 4_000
     static let suppressedSurfaces: Set<WalkthroughSurface> = [.listDetail, .listEditor]
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
@@ -139,7 +151,7 @@ enum FirstVisitWalkthroughContent {
                 .map,
                 .mapMoreFilters,
                 "Narrow in with More",
-                "Category chooses the kind of place. People picks whose saves you see. Status switches between All, Check Ins, and Wanna.",
+                "Filter by category, specific friends in your network, and distinguish between a check-in, wanna go, or both.",
                 advance: .next,
                 coachTheme: .map
             ),
@@ -155,7 +167,7 @@ enum FirstVisitWalkthroughContent {
                 .map,
                 .mapMemory,
                 "Open a place memory",
-                "A place card keeps the useful context together. Next, we’ll open it and show you what each part means.",
+                "A place card keeps the useful context together.",
                 advance: .next,
                 nextButtonTitle: "Open place",
                 coachTheme: .memory
@@ -174,10 +186,12 @@ enum FirstVisitWalkthroughContent {
                 .sendoff,
                 .mapSendoff,
                 "Your map is yours now",
-                "Save the places worth remembering. When you need the right spot, your people and your memories will be here.",
+                "As you move through this life and this world you change things slightly. You leave marks behind, however small.",
                 advance: .next,
-                nextButtonTitle: "Start exploring",
-                coachTheme: .celebration
+                nextButtonTitle: "Finish",
+                coachTheme: .celebration,
+                spotlightStyle: .clearPage,
+                presentationStyle: .finale
             )
         ],
         .add: [
@@ -187,7 +201,7 @@ enum FirstVisitWalkthroughContent {
                 .add,
                 .addImport,
                 "Bring saves with you",
-                "Import places from Google Maps, Instagram, TikTok, and more.",
+                "Import your places and lists from Google Maps, Instagram, TikTok, and more here.",
                 advance: .next,
                 coachTheme: .save
             ),
@@ -248,7 +262,7 @@ enum FirstVisitWalkthroughContent {
             step(
                 .feed,
                 .feedActivity,
-                "See your friends’ check-ins here",
+                "See your friend's check-ins in real time",
                 "Interact with your trusted feed with a like, comment, or share.",
                 advance: .next
             ),
@@ -273,7 +287,7 @@ enum FirstVisitWalkthroughContent {
                 .feed,
                 .feedInvite,
                 "rec.me gets better with your circle",
-                "Invite people whose taste you trust. The more of your circle that joins, the more useful every recommendation becomes.",
+                "Invite people whose taste you trust. The more people that join from your circle, the more useful your rec.me space becomes.",
                 advance: .next,
                 coachTheme: .social
             )
@@ -298,18 +312,22 @@ enum FirstVisitWalkthroughContent {
             step(
                 .feedSearch,
                 .feedSearchResultsBack,
-                "See how we understood your search",
-                "Review the trusted results and filters, then tap Back to return to the search ideas.",
+                "",
+                "",
                 allowsBackNavigation: false,
-                coachTheme: .map
+                coachTheme: .map,
+                presentationStyle: .delayedTargetOnly(
+                    milliseconds: discoverResultsPreviewMilliseconds
+                )
             ),
             step(
                 .feedSearch,
                 .feedSearchExitBack,
-                "Back to your people",
-                "Tap Back once more. We’ll take you to the People side of Feed next.",
+                "",
+                "",
                 allowsBackNavigation: false,
-                coachTheme: .social
+                coachTheme: .map,
+                presentationStyle: .delayedTargetOnly(milliseconds: 450)
             )
         ],
         .lists: [
@@ -343,7 +361,7 @@ enum FirstVisitWalkthroughContent {
                 .profile,
                 .profileShare,
                 "Your profile connects your circle",
-                "Share your rec.me and keep up with the people whose taste you trust.",
+                "Share your rec.me and keep up with the people whose taste you trust",
                 advance: .next,
                 allowsBackNavigation: false,
                 coachTheme: .social,
@@ -354,7 +372,18 @@ enum FirstVisitWalkthroughContent {
                 .profile,
                 .profileActivity,
                 "Your activity tells the story",
-                "Recent check-ins and Wanna saves stay easy to revisit.",
+                "Recent check-ins and Wanna saves stay easy to revisit",
+                advance: .next,
+                allowsBackNavigation: false,
+                coachTheme: .memory,
+                spotlightStyle: .clearPage,
+                automaticallyAdvances: true
+            ),
+            step(
+                .profile,
+                .profileCalendar,
+                "Your calendar, at a glance",
+                "See when you checked in and how your months fill up over time",
                 advance: .next,
                 allowsBackNavigation: false,
                 coachTheme: .memory,
@@ -365,21 +394,10 @@ enum FirstVisitWalkthroughContent {
                 .profile,
                 .profileMap,
                 "Your map grows with you",
-                "Watch your places, cities, and memories come together on one map.",
+                "Watch your places, cities, and memories come together on one map",
                 advance: .next,
                 allowsBackNavigation: false,
                 coachTheme: .map,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            ),
-            step(
-                .profile,
-                .profileCalendar,
-                "Your calendar, at a glance",
-                "See when you checked in and how your months fill up over time.",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .memory,
                 spotlightStyle: .clearPage,
                 automaticallyAdvances: true
             )
@@ -389,7 +407,7 @@ enum FirstVisitWalkthroughContent {
                 .placeDetail,
                 .placeRatings,
                 "Three ratings, three jobs",
-                "Your rating is yours. Friends rating averages people you follow. Fit score predicts how well this place matches your taste.",
+                "Your rating is the average of your check-ins. rec.me rating averages your network's ratings. And fit score predicts how well this place matches your taste.",
                 advance: .next,
                 coachTheme: .rating
             ),
@@ -405,7 +423,7 @@ enum FirstVisitWalkthroughContent {
                 .placeDetail,
                 .placeHistory,
                 "Every visit stays useful",
-                "Check-in history keeps each date, rating, note, tag, photo, and companion together.",
+                "Ever forget if that surf break you saved is left or right breaking? Check-in history captures that experience in memory with dates, ratings, notes, photos, friends, and tags.",
                 advance: .next,
                 nextButtonTitle: "Keep going",
                 coachTheme: .memory
@@ -472,21 +490,31 @@ enum FirstVisitWalkthroughContent {
         nextButtonTitle: String = "Next",
         coachTheme: WalkthroughCoachTheme = .standard,
         spotlightStyle: WalkthroughSpotlightStyle = .focused,
-        automaticallyAdvances: Bool = false
+        automaticallyAdvances: Bool = false,
+        presentationStyle: WalkthroughPresentationStyle = .coach
     ) -> WalkthroughStep {
         WalkthroughStep(
             surface: surface,
             target: target,
             title: title,
-            message: message,
+            message: removingTerminalPeriods(from: message),
             advance: advance,
             allowsTargetInteraction: allowsTargetInteraction ?? (advance == .action),
             allowsBackNavigation: allowsBackNavigation,
             nextButtonTitle: nextButtonTitle,
             coachTheme: coachTheme,
             spotlightStyle: spotlightStyle,
-            automaticallyAdvances: automaticallyAdvances
+            automaticallyAdvances: automaticallyAdvances,
+            presentationStyle: presentationStyle
         )
+    }
+
+    private static func removingTerminalPeriods(from message: String) -> String {
+        var result = message
+        while result.last == "." {
+            result.removeLast()
+        }
+        return result
     }
 }
 
@@ -502,12 +530,14 @@ enum FirstVisitWalkthroughFeatureFlag {
         isUsingLiveData: Bool,
         launchArguments: [String],
         resolvedValue: Bool?,
+        entitledDebugOverride: Bool? = nil,
         isEntitledDebugReplayRequested: Bool = false,
         allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
     ) -> Bool {
-        isEntitledDebugReplayRequested
+        let effectiveResolvedValue = entitledDebugOverride ?? resolvedValue
+        return isEntitledDebugReplayRequested
             || (allowsLaunchOverride && launchArguments.contains("-WanderEnableWalkthroughs"))
-            || (resolvedValue == true && isEligible && isUsingLiveData)
+            || (effectiveResolvedValue == true && isEligible && isUsingLiveData)
     }
 }
 
@@ -654,6 +684,8 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     @Published private(set) var isPresentingDeviceFeaturesLesson = false
     @Published private(set) var tutorialUserPlaceID: String?
     @Published private(set) var isRequestingContactInvite = false
+    @Published private(set) var userActivityGeneration = 0
+    @Published private(set) var isAwaitingEligibilityResolution = false
 
     private(set) var userID: String
     private let store: FirstVisitWalkthroughStore
@@ -661,14 +693,14 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     private var isImportLessonEligible = false
     private var isDeviceFeaturesLessonEligible = false
     private var didNotifyCompletion = false
-    private let onCompleted: () -> Void
+    private let onCompleted: (String) -> Void
     @Published private(set) var isEnabled: Bool
 
     init(
         userID: String = "local-user",
         store: FirstVisitWalkthroughStore = FirstVisitWalkthroughStore(),
         isEnabled: Bool = true,
-        onCompleted: @escaping () -> Void = {}
+        onCompleted: @escaping (String) -> Void = { _ in }
     ) {
         self.userID = userID
         self.store = store
@@ -683,14 +715,16 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
         activeSurface = nil
         currentStepIndex = 0
-        registeredLaunchUserID = nil
         requestedSurface = nil
-        isImportLessonEligible = false
-        isDeviceFeaturesLessonEligible = false
         isPresentingImportLesson = false
         isPresentingDeviceFeaturesLesson = false
         tutorialUserPlaceID = nil
         isRequestingContactInvite = false
+    }
+
+    func setEligibilityResolutionPending(_ isPending: Bool) {
+        guard isAwaitingEligibilityResolution != isPending else { return }
+        isAwaitingEligibilityResolution = isPending
     }
 
     var currentStep: WalkthroughStep? {
@@ -732,6 +766,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isPresentingDeviceFeaturesLesson = false
         tutorialUserPlaceID = nil
         isRequestingContactInvite = false
+        isAwaitingEligibilityResolution = false
         didNotifyCompletion = false
     }
 
@@ -744,11 +779,9 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         if registeredLaunchUserID != userID {
             registeredLaunchUserID = userID
             let launchCount = store.registerLaunch(for: userID)
-            let hasCompletedImportLesson = store.hasCompletedImportLesson(for: userID)
             isImportLessonEligible = launchCount >= 2
-                && !hasCompletedImportLesson
+                && !store.hasCompletedImportLesson(for: userID)
             isDeviceFeaturesLessonEligible = launchCount >= 3
-                && hasCompletedImportLesson
                 && !store.hasCompletedDeviceFeaturesLesson(for: userID)
         }
 
@@ -831,6 +864,11 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         advance()
     }
 
+    func recordUserActivity() {
+        guard isEnabled, currentStep?.advance == .next else { return }
+        userActivityGeneration &+= 1
+    }
+
     func goBack() {
         guard canGoBack, let surface = activeSurface else { return }
         let previousIndex = currentStepIndex - 1
@@ -867,6 +905,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isPresentingDeviceFeaturesLesson = false
         tutorialUserPlaceID = nil
         isRequestingContactInvite = false
+        isAwaitingEligibilityResolution = false
         didNotifyCompletion = false
     }
 
@@ -878,10 +917,10 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             !isPresentingDeviceFeaturesLesson
         else { return }
 
-        if isImportLessonEligible {
-            isPresentingImportLesson = true
-        } else if isDeviceFeaturesLessonEligible {
+        if isDeviceFeaturesLessonEligible {
             isPresentingDeviceFeaturesLesson = true
+        } else if isImportLessonEligible {
+            isPresentingImportLesson = true
         }
     }
 
@@ -967,7 +1006,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
               store.hasCompletedEntireWalkthrough(for: userID)
         else { return }
         didNotifyCompletion = true
-        onCompleted()
+        onCompleted(userID)
     }
 }
 
@@ -1026,9 +1065,16 @@ extension View {
 
     func firstVisitWalkthroughOverlay(
         _ coordinator: FirstVisitWalkthroughCoordinator,
-        surface: WalkthroughSurface
+        surface: WalkthroughSurface,
+        externalTargetFrames: [WalkthroughTargetID: CGRect] = [:]
     ) -> some View {
-        modifier(FirstVisitWalkthroughModifier(coordinator: coordinator, surface: surface))
+        modifier(
+            FirstVisitWalkthroughModifier(
+                coordinator: coordinator,
+                surface: surface,
+                externalTargetFrames: externalTargetFrames
+            )
+        )
     }
 
     func walkthroughPresenterScrim(isPresented: Bool) -> some View {
@@ -1362,6 +1408,7 @@ private struct WalkthroughDismissButton: View {
 private struct FirstVisitWalkthroughModifier: ViewModifier {
     @ObservedObject var coordinator: FirstVisitWalkthroughCoordinator
     let surface: WalkthroughSurface
+    let externalTargetFrames: [WalkthroughTargetID: CGRect]
 
     func body(content: Content) -> some View {
         content
@@ -1373,13 +1420,19 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
             )
             .overlayPreferenceValue(WalkthroughTargetPreferenceKey.self) { anchors in
                 GeometryReader { proxy in
+                    let anchoredTargetFrames = coordinator.currentStep.map { step in
+                        resolvedWalkthroughFrames(anchors.spotlights[step.target], in: proxy)
+                    } ?? []
+                    let externalTargetFrame = coordinator.currentStep.flatMap { step in
+                        resolvedExternalTargetFrame(for: step.target, in: proxy)
+                    }
+                    let targetFrames = externalTargetFrame.map { [$0] }
+                        ?? anchoredTargetFrames
+                    let targetFrame = resolvedWalkthroughFrame(targetFrames)
                     if
                         coordinator.activeSurface == surface,
                         let step = coordinator.currentStep,
-                        let targetFrame = resolvedWalkthroughFrame(
-                            anchors.spotlights[step.target],
-                            in: proxy
-                        )
+                        let targetFrame
                     {
                         if targetFrame.intersects(CGRect(origin: .zero, size: proxy.size)),
                            targetFrame.width > 0,
@@ -1387,21 +1440,20 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
                             FirstVisitWalkthroughOverlay(
                                 step: step,
                                 targetFrame: targetFrame,
-                                targetFrames: resolvedWalkthroughFrames(
-                                    anchors.spotlights[step.target],
-                                    in: proxy
-                                ),
+                                targetFrames: targetFrames,
                                 emphasisFrames: resolvedWalkthroughFrames(
                                     anchors.emphases[step.target],
                                     in: proxy
                                 ),
                                 containerSize: proxy.size,
+                                userActivityGeneration: coordinator.userActivityGeneration,
                                 onDismiss: coordinator.dismissEntireWalkthrough,
                                 onBack: step.allowsBackNavigation && coordinator.canGoBack
                                     ? { coordinator.goBack() }
                                     : nil,
                                 onNext: coordinator.advancePassiveStep
                             )
+                            .id(step.id)
                             .transition(.opacity)
                         } else {
                             MissingWalkthroughTargetResolver(coordinator: coordinator, step: step)
@@ -1416,13 +1468,24 @@ private struct FirstVisitWalkthroughModifier: ViewModifier {
             }
     }
 
-    private func resolvedWalkthroughFrame(
-        _ anchors: [Anchor<CGRect>]?,
-        in proxy: GeometryProxy
-    ) -> CGRect? {
-        let frames = resolvedWalkthroughFrames(anchors, in: proxy)
+    private func resolvedWalkthroughFrame(_ frames: [CGRect]) -> CGRect? {
         guard let first = frames.first else { return nil }
         return frames.dropFirst().reduce(first) { $0.union($1) }
+    }
+
+    private func resolvedExternalTargetFrame(
+        for target: WalkthroughTargetID,
+        in proxy: GeometryProxy
+    ) -> CGRect? {
+        guard let windowFrame = externalTargetFrames[target] else { return nil }
+        let proxyFrame = proxy.frame(in: .global)
+        let localFrame = windowFrame.offsetBy(dx: -proxyFrame.minX, dy: -proxyFrame.minY)
+        let bounds = CGRect(origin: .zero, size: proxy.size)
+        guard localFrame.width > 0,
+              localFrame.height > 0,
+              localFrame.intersects(bounds)
+        else { return nil }
+        return localFrame.intersection(bounds)
     }
 
     private func resolvedWalkthroughFrames(
@@ -1522,19 +1585,25 @@ private struct FirstVisitWalkthroughOverlay: View {
     @State private var measuredCardSize = CGSize(width: 280, height: 104)
     @State private var hasNarrowedFeaturedSpotlight = false
     @State private var isFeaturedCoachVisible = false
+    @State private var hasRevealedDelayedTarget = false
+    @State private var isNextArrowNudging = false
 
     let step: WalkthroughStep
     let targetFrame: CGRect
     let targetFrames: [CGRect]
     let emphasisFrames: [CGRect]
     let containerSize: CGSize
+    let userActivityGeneration: Int
     let onDismiss: () -> Void
     let onBack: (() -> Void)?
     let onNext: () -> Void
 
     private var cardWidth: CGFloat {
-        if step.target == .mapFeatured || step.target == .mapFriends {
-            return min(326, max(240, containerSize.width - 32))
+        if step.target == .mapFeatured {
+            return min(330, max(260, containerSize.width - 32))
+        }
+        if step.target == .mapFriends {
+            return min(306, max(260, containerSize.width - 32))
         }
         let characterCount = step.title.count + step.message.count
         let preferred: CGFloat
@@ -1573,13 +1642,16 @@ private struct FirstVisitWalkthroughOverlay: View {
     private var activeTargetFrame: CGRect {
         guard step.target == .mapFeatured,
               reduceMotion || hasNarrowedFeaturedSpotlight,
-              let emphasisFrame = emphasisFrames.first
+              let featuredFrame = targetFrames.min(by: { lhs, rhs in
+                  lhs.width * lhs.height < rhs.width * rhs.height
+              })
         else { return targetFrame }
-        return emphasisFrame
+        return featuredFrame
     }
 
     private var isCoachVisible: Bool {
-        step.target != .mapFeatured || reduceMotion || isFeaturedCoachVisible
+        step.presentationStyle == .coach
+            && (step.target != .mapFeatured || reduceMotion || isFeaturedCoachVisible)
     }
 
     private var isCompactFilterCoach: Bool {
@@ -1587,194 +1659,293 @@ private struct FirstVisitWalkthroughOverlay: View {
     }
 
     private var visibleEmphasisFrames: [CGRect] {
+        if step.target == .mapFeatured {
+            return []
+        }
+        if delayedTargetMilliseconds != nil, !hasRevealedDelayedTarget {
+            return []
+        }
         if step.spotlightStyle == .clearPage {
             return emphasisFrames.isEmpty ? targetFrames : emphasisFrames
-        }
-        if step.target == .mapFeatured, !reduceMotion, !hasNarrowedFeaturedSpotlight {
-            return []
         }
         return emphasisFrames
     }
 
+    private var delayedTargetMilliseconds: Int? {
+        guard case .delayedTargetOnly(let milliseconds) = step.presentationStyle else {
+            return nil
+        }
+        return milliseconds
+    }
+
+    private var shouldShowScrim: Bool {
+        guard step.spotlightStyle == .focused else { return false }
+        return delayedTargetMilliseconds == nil || hasRevealedDelayedTarget
+    }
+
+    private var allowsSpotlightInteraction: Bool {
+        step.allowsTargetInteraction
+            && (delayedTargetMilliseconds == nil || hasRevealedDelayedTarget)
+    }
+
     var body: some View {
         ZStack {
-            if step.spotlightStyle == .focused {
-                WalkthroughScrim(
-                    spotlightFrame: layout.spotlightFrame,
+            if step.presentationStyle == .finale {
+                WalkthroughFinaleView(
+                    step: step,
                     containerSize: containerSize,
-                    cornerRadius: step.target == .mapTabs ? 34 : WanderTheme.radiusLarge
+                    onDismiss: onDismiss,
+                    onFinish: onNext
                 )
-                .allowsHitTesting(false)
-            }
-
-            WalkthroughTouchShield(
-                containerSize: containerSize,
-                spotlightFrame: layout.spotlightFrame,
-                allowsSpotlightInteraction: step.allowsTargetInteraction
-            )
-
-            ForEach(Array(visibleEmphasisFrames.enumerated()), id: \.offset) { _, frame in
-                WalkthroughEmphasisRing(
-                    frame: frame,
-                    cornerRadius: emphasisCornerRadius(for: frame)
-                )
-                .allowsHitTesting(false)
-                .transition(.opacity.combined(with: .scale(scale: 0.94)))
-            }
-
-            ZStack(alignment: .topLeading) {
-                VStack(
-                    alignment: .leading,
-                    spacing: isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing2
-                ) {
-                    HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                        if step.coachTheme != .standard {
-                            WalkthroughCoachThemeBadge(theme: step.coachTheme)
-                        }
-
-                        Text(step.title)
-                            .font(.system(.headline, design: .rounded, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer(minLength: 0)
-
-                        WalkthroughDismissButton(
-                            accessibilityIdentifier: "walkthrough.dismiss.\(step.id)",
-                            action: onDismiss
-                        )
-                    }
-                    if !step.message.isEmpty {
-                        Text(step.message)
-                            .font(.system(.subheadline, design: .rounded))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if onBack != nil || (step.advance == .next && !step.automaticallyAdvances) {
-                        HStack(spacing: WanderTheme.spacing2) {
-                            Spacer(minLength: 0)
-
-                            if let onBack {
-                                Button(action: onBack) {
-                                    Image(systemName: "arrow.left")
-                                        .font(.system(size: 13, weight: .black))
-                                        .foregroundStyle(WanderTheme.textInk.color)
-                                        .frame(width: 44, height: 44)
-                                        .contentShape(Circle())
-                                        .wanderGlassCapsule(tone: .neutral)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Previous walkthrough step")
-                                .accessibilityIdentifier("walkthrough.back.\(step.id)")
-                            }
-
-                            if step.advance == .next && !step.automaticallyAdvances {
-                                Button(action: onNext) {
-                                    Image(systemName: "arrow.right")
-                                        .font(.system(size: 14, weight: .black))
-                                        .foregroundStyle(WanderTheme.terracottaDark.color)
-                                        .frame(width: 44, height: 44)
-                                        .contentShape(Circle())
-                                        .wanderGlassCapsule(tone: .accent)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(step.nextButtonTitle)
-                                .accessibilityIdentifier("walkthrough.next.\(step.id)")
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.vertical, isCompactFilterCoach ? WanderTheme.spacing2 : WanderTheme.spacing3)
-                .frame(width: cardWidth, alignment: .leading)
-                .background {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                            .fill(WanderTheme.surfaceBone.color)
-
-                        if step.coachTheme != .standard {
-                            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            step.coachTheme.accentColor.opacity(0.13),
-                                            .clear
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        }
-                    }
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                        .stroke(
-                            step.coachTheme == .standard
-                                ? WanderTheme.textInk.color.opacity(0.08)
-                                : step.coachTheme.accentColor.opacity(0.3),
-                            lineWidth: 1
-                        )
-                }
-                .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: WalkthroughCardSizePreferenceKey.self,
-                            value: proxy.size
-                        )
-                    }
-                }
-
-                WalkthroughPointer()
-                    .fill(WanderTheme.surfaceBone.color)
-                    .frame(width: 24, height: 12)
-                    .rotationEffect(.degrees(layout.cardAboveTarget ? 180 : 0))
-                    .position(
-                        x: layout.pointerX,
-                        y: layout.cardAboveTarget ? layout.cardSize.height + 6 : -6
+            } else {
+                if shouldShowScrim {
+                    WalkthroughScrim(
+                        spotlightFrame: layout.spotlightFrame,
+                        containerSize: containerSize,
+                        cornerRadius: step.target == .mapTabs ? 34 : WanderTheme.radiusLarge
                     )
+                    .allowsHitTesting(false)
+                }
+
+                WalkthroughTouchShield(
+                    containerSize: containerSize,
+                    spotlightFrame: layout.spotlightFrame,
+                    allowsSpotlightInteraction: allowsSpotlightInteraction
+                )
+
+                ForEach(Array(visibleEmphasisFrames.enumerated()), id: \.offset) { _, frame in
+                    WalkthroughEmphasisRing(
+                        frame: frame,
+                        cornerRadius: emphasisCornerRadius(for: frame)
+                    )
+                    .allowsHitTesting(false)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                }
+
+                if step.presentationStyle == .coach {
+                    coachMark
+                }
+
+                if delayedTargetMilliseconds != nil, hasRevealedDelayedTarget {
+                    Text("Highlighted walkthrough action is ready")
+                        .font(.system(size: 1))
+                        .frame(width: 1, height: 1)
+                        .opacity(0.01)
+                        .position(x: 1, y: 1)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("walkthrough.\(step.id)")
+                }
             }
-            .frame(
-                width: layout.cardSize.width,
-                height: layout.cardSize.height,
-                alignment: .topLeading
-            )
-            .position(x: layout.cardFrame.midX, y: layout.cardFrame.midY)
-            .opacity(isCoachVisible ? 1 : 0)
-            .offset(y: isCoachVisible ? 0 : -10)
-            .allowsHitTesting(isCoachVisible)
-            .accessibilityHidden(!isCoachVisible)
-            .onPreferenceChange(WalkthroughCardSizePreferenceKey.self) { size in
-                guard size.width > 0, size.height > 0 else { return }
-                measuredCardSize = size
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("\(step.title). \(step.message)")
-            .accessibilityIdentifier("walkthrough.\(step.id)")
         }
         .frame(width: containerSize.width, height: containerSize.height)
         .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: step.id)
         .animation(
-            reduceMotion ? nil : .spring(response: 0.52, dampingFraction: 0.88),
+            reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.68),
             value: activeTargetFrame
         )
         .animation(
-            reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.84),
+            reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.78),
             value: isFeaturedCoachVisible
         )
-        .task(id: step.id) {
+        .task(id: "featured-\(step.id)") {
             hasNarrowedFeaturedSpotlight = false
             isFeaturedCoachVisible = false
-            guard step.target == .mapFeatured, !reduceMotion else { return }
-            try? await Task.sleep(for: .milliseconds(950))
+            guard step.target == .mapFeatured else { return }
+            guard !reduceMotion else {
+                hasNarrowedFeaturedSpotlight = true
+                isFeaturedCoachVisible = true
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(820))
             guard !Task.isCancelled else { return }
             hasNarrowedFeaturedSpotlight = true
-            try? await Task.sleep(for: .milliseconds(520))
+            try? await Task.sleep(for: .milliseconds(430))
             guard !Task.isCancelled else { return }
             isFeaturedCoachVisible = true
         }
+        .task(id: "delayed-target-\(step.id)") {
+            hasRevealedDelayedTarget = delayedTargetMilliseconds == nil
+            guard let delayedTargetMilliseconds else { return }
+            try? await Task.sleep(for: .milliseconds(delayedTargetMilliseconds))
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.78)) {
+                hasRevealedDelayedTarget = true
+            }
+        }
+        .task(id: "next-nudge-\(step.id)-\(userActivityGeneration)") {
+            isNextArrowNudging = false
+            guard step.presentationStyle == .coach,
+                  step.advance == .next,
+                  !step.automaticallyAdvances,
+                  !reduceMotion
+            else { return }
+            try? await Task.sleep(
+                for: .milliseconds(FirstVisitWalkthroughContent.nextArrowNudgeDelayMilliseconds)
+            )
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.48)) {
+                isNextArrowNudging = true
+            }
+            try? await Task.sleep(for: .milliseconds(210))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
+                isNextArrowNudging = false
+            }
+        }
+        .task(id: "automatic-advance-\(step.id)") {
+            guard step.surface == .profile,
+                  step.automaticallyAdvances
+            else { return }
+            let delay: Int
+            if reduceMotion {
+                delay = FirstVisitWalkthroughContent.reducedMotionProfileAutoAdvanceDelayMilliseconds
+            } else if step.target == .profileShare {
+                // The first chapter can render during the app's launch transition.
+                // Give it a full beat so the demo never starts halfway through.
+                delay = FirstVisitWalkthroughContent.profileIntroAutoAdvanceDelayMilliseconds
+            } else {
+                delay = FirstVisitWalkthroughContent.profileAutoAdvanceDelayMilliseconds
+            }
+            try? await Task.sleep(for: .milliseconds(delay))
+            guard !Task.isCancelled else { return }
+            onNext()
+        }
+    }
+
+    private var coachMark: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(
+                alignment: .leading,
+                spacing: isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing2
+            ) {
+                HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                    if step.coachTheme != .standard {
+                        WalkthroughCoachThemeBadge(theme: step.coachTheme)
+                    }
+
+                    Text(step.title)
+                        .font(.system(.headline, design: .rounded, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+
+                    WalkthroughDismissButton(
+                        accessibilityIdentifier: "walkthrough.dismiss.\(step.id)",
+                        action: onDismiss
+                    )
+                }
+
+                if !step.message.isEmpty {
+                    Text(step.message)
+                        .font(.system(.subheadline, design: .rounded))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if onBack != nil || (step.advance == .next && !step.automaticallyAdvances) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        Spacer(minLength: 0)
+
+                        if let onBack {
+                            Button(action: onBack) {
+                                Image(systemName: "arrow.left")
+                                    .font(.system(size: 13, weight: .black))
+                                    .foregroundStyle(WanderTheme.textInk.color)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Circle())
+                                    .wanderGlassCapsule(tone: .neutral)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Previous walkthrough step")
+                            .accessibilityIdentifier("walkthrough.back.\(step.id)")
+                        }
+
+                        if step.advance == .next && !step.automaticallyAdvances {
+                            Button(action: onNext) {
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 14, weight: .black))
+                                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Circle())
+                                    .wanderGlassCapsule(tone: .accent)
+                            }
+                            .buttonStyle(.plain)
+                            .offset(y: isNextArrowNudging ? -5 : 0)
+                            .accessibilityLabel(step.nextButtonTitle)
+                            .accessibilityIdentifier("walkthrough.next.\(step.id)")
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, isCompactFilterCoach ? WanderTheme.spacing3 : WanderTheme.spacing4)
+            .padding(.vertical, isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing3)
+            .frame(width: cardWidth, alignment: .leading)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .fill(WanderTheme.surfaceBone.color)
+
+                    if step.coachTheme != .standard {
+                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        step.coachTheme.accentColor.opacity(0.13),
+                                        .clear
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .stroke(
+                        step.coachTheme == .standard
+                            ? WanderTheme.textInk.color.opacity(0.08)
+                            : step.coachTheme.accentColor.opacity(0.3),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: WalkthroughCardSizePreferenceKey.self,
+                        value: proxy.size
+                    )
+                }
+            }
+
+            WalkthroughPointer()
+                .fill(WanderTheme.surfaceBone.color)
+                .frame(width: 24, height: 12)
+                .rotationEffect(.degrees(layout.cardAboveTarget ? 180 : 0))
+                .position(
+                    x: layout.pointerX,
+                    y: layout.cardAboveTarget ? layout.cardSize.height + 6 : -6
+                )
+        }
+        .frame(
+            width: layout.cardSize.width,
+            height: layout.cardSize.height,
+            alignment: .topLeading
+        )
+        .position(x: layout.cardFrame.midX, y: layout.cardFrame.midY)
+        .opacity(isCoachVisible ? 1 : 0)
+        .offset(y: isCoachVisible ? 0 : -10)
+        .allowsHitTesting(isCoachVisible)
+        .accessibilityHidden(!isCoachVisible)
+        .onPreferenceChange(WalkthroughCardSizePreferenceKey.self) { size in
+            guard size.width > 0, size.height > 0 else { return }
+            measuredCardSize = size
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(step.title). \(step.message)")
+        .accessibilityIdentifier("walkthrough.\(step.id)")
     }
 
     private func emphasisCornerRadius(for frame: CGRect) -> CGFloat {
@@ -1784,6 +1955,126 @@ private struct FirstVisitWalkthroughOverlay: View {
         default:
             WanderTheme.radiusLarge
         }
+    }
+}
+
+private struct WalkthroughFinaleView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isCelebrating = false
+
+    let step: WalkthroughStep
+    let containerSize: CGSize
+    let onDismiss: () -> Void
+    let onFinish: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {}
+
+            ZStack {
+                Circle()
+                    .fill(WanderTheme.stateSuccess.color.opacity(0.13))
+                    .frame(width: 180, height: 180)
+                    .scaleEffect(reduceMotion ? 1 : (isCelebrating ? 1.08 : 0.9))
+
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 58, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .offset(y: reduceMotion ? 0 : (isCelebrating ? -7 : 4))
+
+                Image(systemName: "sparkles")
+                    .font(.system(size: 22, weight: .black))
+                    .foregroundStyle(WanderTheme.categorySun.color)
+                    .offset(x: -76, y: -54)
+                    .scaleEffect(reduceMotion ? 1 : (isCelebrating ? 1.14 : 0.82))
+
+                Image(systemName: "sparkle")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(WanderTheme.pinSocial.color)
+                    .offset(x: 72, y: -36)
+                    .scaleEffect(reduceMotion ? 1 : (isCelebrating ? 0.84 : 1.12))
+            }
+            .offset(y: -190)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+                HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                        Text(step.title)
+                            .font(WanderTypography.editorialMasthead)
+                            .foregroundStyle(WanderTheme.textInk.color)
+                        Text("A thought for the road")
+                            .font(WanderTypography.metadata)
+                            .foregroundStyle(WanderTheme.textMuted.color)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    WalkthroughDismissButton(
+                        accessibilityIdentifier: "walkthrough.dismiss.\(step.id)",
+                        action: onDismiss
+                    )
+                }
+
+                Text("“\(step.message)”")
+                    .font(.system(.title3, design: .serif, weight: .semibold))
+                    .italic()
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("— Anthony Bourdain")
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+
+                Text("Keep the places that move you. Your map will remember the rest")
+                    .font(WanderTypography.body)
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    Spacer(minLength: 0)
+                    Button(action: onFinish) {
+                        HStack(spacing: WanderTheme.spacing1) {
+                            Text(step.nextButtonTitle)
+                            Image(systemName: "arrow.right")
+                        }
+                        .font(WanderTypography.control)
+                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(minHeight: 48)
+                        .wanderGlassCapsule(tone: .accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(step.nextButtonTitle)
+                    .accessibilityIdentifier("walkthrough.next.\(step.id)")
+                }
+            }
+            .padding(WanderTheme.spacing4)
+            .frame(maxWidth: min(356, containerSize.width - 32), alignment: .leading)
+            .background(
+                WanderTheme.surfaceBone.color.opacity(0.97),
+                in: RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
+                    .stroke(WanderTheme.stateSuccess.color.opacity(0.42), lineWidth: 1)
+            }
+            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 22, y: 10)
+            .offset(y: 92)
+        }
+        .frame(width: containerSize.width, height: containerSize.height)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("walkthrough.\(step.id)")
+        .onAppear {
+            guard !reduceMotion else { return }
+            isCelebrating = true
+        }
+        .animation(
+            reduceMotion ? nil : .easeInOut(duration: 1.8).repeatForever(autoreverses: true),
+            value: isCelebrating
+        )
     }
 }
 
@@ -1936,8 +2227,28 @@ private struct WalkthroughFullScreenScrim: View {
 }
 
 struct WalkthroughScrimShape: Shape {
-    let spotlightFrame: CGRect
+    var spotlightFrame: CGRect
     var cornerRadius = WanderTheme.radiusLarge
+
+    var animatableData: AnimatablePair<
+        AnimatablePair<CGFloat, CGFloat>,
+        AnimatablePair<CGFloat, CGFloat>
+    > {
+        get {
+            AnimatablePair(
+                AnimatablePair(spotlightFrame.origin.x, spotlightFrame.origin.y),
+                AnimatablePair(spotlightFrame.size.width, spotlightFrame.size.height)
+            )
+        }
+        set {
+            spotlightFrame = CGRect(
+                x: newValue.first.first,
+                y: newValue.first.second,
+                width: newValue.second.first,
+                height: newValue.second.second
+            )
+        }
+    }
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
