@@ -30566,3 +30566,29 @@ PR and tracker handoff, 2026-08-16 11:06 PDT:
 - Reinstalled the exact passing build and left `S3B Espresso + Note Test`
   (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) logged in on the map. Resting
   evidence: `/private/tmp/rec-284-confetti-final-ready.png`.
+
+## 2026-08-16 11:20 PDT - Codex - REC-275/REC-284 main landing
+
+Agent: Codex using `recme-pr-review-merge-release` and `review`
+Branch: `codex/rec-284-espresso-confirmation-ctas`
+Worktree: `/private/tmp/recme-rec275-attached-wanna-checkin`
+Linear: REC-275 and REC-284
+
+Starting state and scope:
+
+- Joe explicitly requested pushing the approved/tested work to `main`. This is
+  merge authorization only; no TestFlight build, build-number bump, archive,
+  upload, Slack note, hosted mutation, schema/data, or auth operation is
+  authorized.
+- The delivery is a three-PR stack: #455 attaches existing-Wanna editing, #460
+  keeps Check in attached over the place profile, and #461 adds Espresso CTAs,
+  the visible optional note, native compact/large detents, and confetti/black
+  polish. The top branch is clean and pushed.
+- Latest `origin/main` has advanced since the stack began. A dry merge reports
+  only the append-only `docs/agent-log.md` as a textual conflict; Map source and
+  UI/navigation tests merge automatically. The final landing gate will review
+  the complete combined diff against latest `main`, rerun relevant validation,
+  then consolidate the stack into a single main-targeting PR if clean.
+- The latest completed explicit TestFlight release is build 94. There is no
+  pending release to resume, and this merge will ride the next explicitly
+  requested TestFlight batch.
