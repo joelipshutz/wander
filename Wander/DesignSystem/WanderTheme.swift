@@ -333,7 +333,7 @@ enum WanderGlassTone: Equatable {
         case .lightAction:
             Color.white.opacity(0.28)
         case .darkOverlay:
-            Color.black.opacity(0.46)
+            Color(white: 0.08).opacity(0.78)
         }
     }
 
@@ -361,7 +361,7 @@ enum WanderGlassTone: Equatable {
         case .lightAction:
             Color.white.opacity(0.82)
         case .darkOverlay:
-            Color.black.opacity(0.64)
+            Color.black.opacity(0.82)
         }
     }
 
@@ -376,7 +376,7 @@ enum WanderGlassTone: Equatable {
         case .lightAction:
             Color.white.opacity(0.78)
         case .darkOverlay:
-            Color.white.opacity(0.42)
+            Color.white.opacity(0.18)
         }
     }
 
