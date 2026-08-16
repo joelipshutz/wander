@@ -211,6 +211,7 @@ struct MapScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
@@ -219,6 +220,7 @@ struct MapScreen: View {
     @State private var lastMapPressPoint: CGPoint?
     @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
+    @State private var attachedMapSaveFlow: MapPlaceSaveContext?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var mapQuery: String
@@ -234,6 +236,7 @@ struct MapScreen: View {
     @State private var mapSearchTask: Task<Void, Never>?
     @State private var mapFilterState: MapFilterState
     @State private var isMoreFiltersPresented: Bool
+    @State private var mapTabBecameInactiveAt: Date?
     @State private var routedVisiblePlace: VisiblePlace?
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var featuredRankingRegion = Self.defaultRegion
@@ -264,6 +267,9 @@ struct MapScreen: View {
 
     private let initialPlaceQuery: String?
     private let defaultMapSource: MapSource
+    private let isMapTabActive: Bool
+    private let isAddPresented: Bool
+    private let moreFiltersAwayResetInterval: TimeInterval
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let searchLaunchRequest: WanderMapSearchLaunchRequest?
     private let onSearchLaunchRequestHandled: (UUID) -> Void
@@ -289,6 +295,12 @@ struct MapScreen: View {
                 followedOwnerIDs: followedOwnerIDs,
                 refinements: mapFilterState.more
             )
+        case .you:
+            return MapFilterSelection.ownPlaces(
+                from: store.visiblePlaces(),
+                currentUserID: store.currentUser.id,
+                refinements: mapFilterState.more
+            )
         }
     }
 
@@ -296,6 +308,9 @@ struct MapScreen: View {
         initialPlaceQuery: String? = Self.resolvedInitialMapPlaceQuery(),
         startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation(),
         defaultSource: MapSource = .featured,
+        isMapTabActive: Bool = true,
+        isAddPresented: Bool = false,
+        moreFiltersAwayResetInterval: TimeInterval = Self.resolvedMoreFiltersAwayResetInterval(),
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         searchLaunchRequest: WanderMapSearchLaunchRequest? = nil,
         onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
@@ -304,6 +319,9 @@ struct MapScreen: View {
         self.initialPlaceQuery = initialPlaceQuery
         let initialMapFilterState = Self.resolvedInitialMapFilterState(defaultSource: defaultSource)
         self.defaultMapSource = initialMapFilterState.source
+        self.isMapTabActive = isMapTabActive
+        self.isAddPresented = isAddPresented
+        self.moreFiltersAwayResetInterval = moreFiltersAwayResetInterval
         self.presentationResetRequest = presentationResetRequest
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
@@ -312,6 +330,7 @@ struct MapScreen: View {
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
         _mapFilterState = State(initialValue: initialMapFilterState)
         _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
+        _mapTabBecameInactiveAt = State(initialValue: nil)
         _routedVisiblePlace = State(initialValue: nil)
     }
 
@@ -393,6 +412,8 @@ struct MapScreen: View {
             return "No featured check-ins here yet."
         case .friends:
             return "No friends’ places yet."
+        case .you:
+            return "No places on your map yet."
         }
     }
 
@@ -426,8 +447,9 @@ struct MapScreen: View {
                             UserAnnotation()
                         }
 
-                        ForEach(annotationGroups) { group in
+                        ForEach(Array(annotationGroups.enumerated()), id: \.element.key) { index, group in
                             let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
+                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -447,20 +469,20 @@ struct MapScreen: View {
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
-                                .opacity(isTransitionVisible ? 1 : 0)
-                                .scaleEffect(
-                                    isTransitionVisible
-                                        ? 1
-                                        : MapPinFilterTransitionStyle.hiddenScale
+                                .modifier(
+                                    MapPinEntranceModifier(
+                                        isVisible: isTransitionVisible,
+                                        delay: entranceDelay
+                                    )
                                 )
-                                .allowsHitTesting(isTransitionVisible)
                                 .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
                             }
                         }
 
-                        ForEach(mappableSearchCandidates) { candidate in
+                        ForEach(Array(mappableSearchCandidates.enumerated()), id: \.element.id) { index, candidate in
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
+                                let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                                 Annotation(
                                     candidate.name,
                                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -472,6 +494,12 @@ struct MapScreen: View {
                                     }
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 44)
+                                    .modifier(
+                                        MapPinEntranceModifier(
+                                            isVisible: true,
+                                            delay: entranceDelay
+                                        )
+                                    )
                                 }
                             }
                         }
@@ -538,7 +566,10 @@ struct MapScreen: View {
                                     systemImage: "plus",
                                     accessibilityLabel: "Add a place",
                                     accessibilityIdentifier: "map.headerAdd",
-                                    action: onAdd
+                                    action: {
+                                        dismissMoreFilters()
+                                        onAdd()
+                                    }
                                 )
                                 .walkthroughTarget(
                                     walkthroughs.currentStep?.target == .mapAddAgain
@@ -578,57 +609,62 @@ struct MapScreen: View {
                             .padding(.horizontal, WanderTheme.spacing3)
                         }
                         if !isMapSearchFocused {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: WanderTheme.spacing1) {
-                                    ForEach(MapSource.allCases) { source in
-                                        Button {
-                                            selectMapSource(
-                                                source,
-                                                from: annotationGroups
-                                            )
-                                        } label: {
-                                            MapSourceFilterChip(
-                                                source: source,
-                                                isSelected: mapFilterState.source == source
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .walkthroughTarget(
-                                            source == .friends ? .mapFriends : nil
-                                        )
-                                        .walkthroughTarget(
-                                            source == .featured ? .mapFeatured : nil
-                                        )
-                                    }
-
+                            HStack(spacing: WanderTheme.spacing1) {
+                                ForEach(MapSource.allCases) { source in
                                     Button {
-                                        isMoreFiltersPresented.toggle()
+                                        selectMapSource(
+                                            source,
+                                            from: annotationGroups
+                                        )
                                     } label: {
-                                        MapMoreFilterChip(
-                                            activeSectionCount: mapFilterState.more.activeSectionCount,
-                                            isExpanded: isMoreFiltersPresented
+                                        MapSourceFilterChip(
+                                            source: source,
+                                            isSelected: mapFilterState.source == source
                                         )
                                     }
                                     .buttonStyle(.plain)
-                                    .walkthroughTarget(.mapMoreFilters)
-                                    .popover(
-                                        isPresented: $isMoreFiltersPresented,
-                                        attachmentAnchor: .rect(.bounds),
-                                        arrowEdge: .top
-                                    ) {
-                                        MapMoreFiltersPopover(
-                                            selection: moreFilterSelection,
-                                            peopleOptions: socialOwnerOptions,
-                                            dismiss: { isMoreFiltersPresented = false }
-                                        )
-                                        .presentationCompactAdaptation(.popover)
-                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityIdentifier("map.filter.\(source.rawValue)")
+                                    .walkthroughTarget(source.walkthroughTarget)
                                 }
-                                .walkthroughTarget(.mapFeatured)
-                                .padding(.horizontal, WanderTheme.spacing3)
-                                .padding(.vertical, WanderTheme.spacing1)
+
+                                Button {
+                                    toggleMoreFilters()
+                                } label: {
+                                    MapMoreFilterChip(
+                                        selectedOptionCount: mapFilterState.more.activeOptionCount,
+                                        isExpanded: isMoreFiltersPresented
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity)
+                                .accessibilityIdentifier("map.filter.more")
+                                .walkthroughTarget(.mapMoreFilters)
                             }
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.vertical, WanderTheme.spacing1)
                             .frame(height: 48)
+                            .overlay(alignment: .topTrailing) {
+                                if isMoreFiltersPresented {
+                                    MapMoreFiltersPopover(
+                                        selection: moreFilterSelection,
+                                        source: mapFilterState.source,
+                                        peopleOptions: socialOwnerOptions,
+                                        dismiss: dismissMoreFilters
+                                    )
+                                    .id(mapFilterState.source)
+                                    .padding(.trailing, WanderTheme.spacing3)
+                                    .offset(y: 52)
+                                    .transition(
+                                        reduceMotion
+                                            ? .opacity
+                                            : MapMoreFilterMotionStyle.panelTransition
+                                    )
+                                    .zIndex(20)
+                                }
+                            }
+                            .zIndex(isMoreFiltersPresented ? 20 : 0)
+                            .walkthroughTarget(.mapFeatured)
 
                             if let mapFilterEmptyMessage {
                                 MapFilterEmptyNotice(
@@ -654,6 +690,7 @@ struct MapScreen: View {
                         HStack {
                             Spacer()
                             RecenterButton(isLoading: isRecenteringOnUser) {
+                                dismissMoreFilters()
                                 recenterOnUser()
                             }
                             .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
@@ -673,6 +710,19 @@ struct MapScreen: View {
             .onAppear {
                 resolveInitialSelection()
                 resolveInitialSearchIfNeeded()
+            }
+            .onChange(of: isMapTabActive) { _, isActive in
+                handleMapTabActivityChange(isActive, from: annotationGroups)
+            }
+            .onChange(of: isAddPresented) { _, isPresented in
+                if isPresented {
+                    dismissMoreFilters()
+                }
+            }
+            .onChange(of: isMapSearchFocused) { _, isFocused in
+                if isFocused {
+                    dismissMoreFilters()
+                }
             }
             .task {
                 await centerMapOnCurrentCityIfNeeded()
@@ -708,6 +758,11 @@ struct MapScreen: View {
             }
             .onChange(of: mapFilterState.more) { _, _ in
                 routedVisiblePlace = nil
+            }
+            .onChange(of: isPlaceProfilePresented) { _, isPresented in
+                if !isPresented {
+                    closeAttachedSaveFlow()
+                }
             }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
@@ -764,13 +819,16 @@ struct MapScreen: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .fullScreenCover(isPresented: placeProfileDestinationBinding) {
-                NavigationStack {
-                    selectedPlaceProfileDestination
-                }
-                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
-            }
             .toolbar(.hidden, for: .navigationBar)
+        }
+        .allowsHitTesting(!isPlaceProfileOverlayVisible)
+        .accessibilityHidden(isPlaceProfileOverlayVisible)
+        .overlay {
+            selectedPlaceProfileOverlay
+        }
+        .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
+            guard !hasSelectedProfile else { return }
+            isPlaceProfilePresented = false
         }
         .walkthroughPresenterScrim(
             isPresented: mapSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
@@ -953,10 +1011,57 @@ struct MapScreen: View {
         _ source: MapSource,
         from outgoingGroups: [VisiblePlaceGroup]
     ) {
-        guard mapFilterState.source != source else { return }
+        dismissMoreFilters()
+        let previousState = mapFilterState
+        mapFilterState.selectSource(source)
+        guard mapFilterState != previousState else { return }
         routedVisiblePlace = nil
-        mapFilterState.source = source
         transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
+    }
+
+    private func dismissMoreFilters() {
+        guard isMoreFiltersPresented else { return }
+        withAnimation(
+            reduceMotion
+                ? MapMoreFilterMotionStyle.reducedMotionAnimation
+                : MapMoreFilterMotionStyle.dismissAnimation
+        ) {
+            isMoreFiltersPresented = false
+        }
+    }
+
+    private func toggleMoreFilters() {
+        let willPresent = !isMoreFiltersPresented
+        withAnimation(
+            reduceMotion
+                ? MapMoreFilterMotionStyle.reducedMotionAnimation
+                : willPresent
+                    ? MapMoreFilterMotionStyle.presentAnimation
+                    : MapMoreFilterMotionStyle.dismissAnimation
+        ) {
+            isMoreFiltersPresented = willPresent
+        }
+    }
+
+    private func handleMapTabActivityChange(
+        _ isActive: Bool,
+        from outgoingGroups: [VisiblePlaceGroup],
+        now: Date = .now
+    ) {
+        dismissMoreFilters()
+        guard isActive else {
+            mapTabBecameInactiveAt = now
+            return
+        }
+
+        defer { mapTabBecameInactiveAt = nil }
+        guard MapMoreFilterResetPolicy.shouldResetAfterReturning(
+            leftMapAt: mapTabBecameInactiveAt,
+            returnedAt: now,
+            interval: moreFiltersAwayResetInterval
+        ) else { return }
+
+        setMoreFilterSelection(MapMoreFilterSelection(), from: outgoingGroups)
     }
 
     private func setMoreFilterSelection(
@@ -997,23 +1102,15 @@ struct MapScreen: View {
             await Task.yield()
             guard !Task.isCancelled else { return }
 
-            withAnimation(MapPinFilterTransitionStyle.fadeOutAnimation) {
-                visibleTransitionGroupKeys = []
-            }
+            visibleTransitionGroupKeys = []
 
-            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeOutDuration))
+            try? await Task.sleep(for: .seconds(MapPinEntranceStyle.fadeOutDuration))
             guard !Task.isCancelled else { return }
 
             transitioningAnnotationGroups = incomingGroups
-            visibleTransitionGroupKeys = []
-            await Task.yield()
-            guard !Task.isCancelled else { return }
+            visibleTransitionGroupKeys = incomingKeys
 
-            withAnimation(MapPinFilterTransitionStyle.fadeInAnimation) {
-                visibleTransitionGroupKeys = incomingKeys
-            }
-
-            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeInDuration))
+            try? await Task.sleep(for: .seconds(MapPinEntranceStyle.entranceWindowDuration))
             guard !Task.isCancelled else { return }
             transitioningAnnotationGroups = nil
             visibleTransitionGroupKeys = nil
@@ -1068,6 +1165,7 @@ struct MapScreen: View {
     }
 
     private func selectVisiblePlaceFromMapTap(_ visiblePlace: VisiblePlace) {
+        dismissMoreFilters()
         mapSelectionRevision += 1
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
@@ -1078,6 +1176,7 @@ struct MapScreen: View {
     }
 
     private func selectSearchCandidateFromMapTap(_ candidate: PlaceCandidate) {
+        dismissMoreFilters()
         mapSelectionRevision += 1
         routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
@@ -1089,6 +1188,7 @@ struct MapScreen: View {
     }
 
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
+        dismissMoreFilters()
         if ignoreNextMapTap {
             ignoreNextMapTap = false
             return
@@ -1270,37 +1370,60 @@ struct MapScreen: View {
     }
 
     private func saveSummaries(for selectedPlace: VisiblePlace) -> [PlaceSaveSummary] {
-        guard let group = VisiblePlaceGrouping.matchingGroup(
+        let groupedPlaces = VisiblePlaceGrouping.matchingGroup(
             for: selectedPlace,
             in: visiblePlaces,
             currentUserID: store.currentUser.id
-        ) else {
-            return [
-                PlaceSaveSummary(
-                    visiblePlace: selectedPlace,
-                    attributes: selectedPlace.attributes,
-                    viewerFollowsOwner: store.viewerFollows(selectedPlace.owner.id),
-                    displayNoteOverride: walkthroughDisplayNoteOverride(for: selectedPlace)
-                )
-            ]
-        }
-        return saveSummaries(for: group)
+        )?.places ?? [selectedPlace]
+
+        return saveSummaries(
+            from: groupedPlaces,
+            currentUserSave: currentUserSave(matching: selectedPlace)
+        )
     }
 
     private func saveSummaries(for group: VisiblePlaceGroup) -> [PlaceSaveSummary] {
-        group.places.map { visiblePlace in
-            PlaceSaveSummary(
-                visiblePlace: visiblePlace,
-                attributes: visiblePlace.attributes,
-                viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id),
-                displayNoteOverride: walkthroughDisplayNoteOverride(for: visiblePlace)
-            )
-        }
+        saveSummaries(
+            from: group.places,
+            currentUserSave: currentUserSave(matching: group.primary)
+        )
     }
 
     private func saveSummaries(for candidate: PlaceCandidate) -> [PlaceSaveSummary] {
-        guard let matchingPlace = visiblePlace(matching: candidate) else { return [] }
-        return saveSummaries(for: matchingPlace)
+        let groupedSummaries = visiblePlace(matching: candidate)
+            .map { saveSummaries(for: $0) }
+            ?? []
+        guard let currentUserSave = currentUserSave(matching: candidate),
+              !groupedSummaries.contains(where: {
+                  $0.visiblePlace.userPlace.id == currentUserSave.userPlace.id
+              })
+        else { return groupedSummaries }
+
+        return [saveSummary(for: currentUserSave)] + groupedSummaries
+    }
+
+    private func saveSummaries(
+        from visiblePlaces: [VisiblePlace],
+        currentUserSave: VisiblePlace?
+    ) -> [PlaceSaveSummary] {
+        var summaries = visiblePlaces.map(saveSummary(for:))
+        guard let currentUserSave,
+              !summaries.contains(where: {
+                  $0.visiblePlace.userPlace.id == currentUserSave.userPlace.id
+              })
+        else { return summaries }
+
+        summaries.insert(saveSummary(for: currentUserSave), at: 0)
+        return summaries
+    }
+
+    private func saveSummary(for visiblePlace: VisiblePlace) -> PlaceSaveSummary {
+        PlaceSaveSummary(
+            visiblePlace: visiblePlace,
+            attributes: visiblePlace.attributes,
+            viewerFollowsOwner: store.viewerFollows(visiblePlace.owner.id),
+            displayNoteOverride: walkthroughDisplayNoteOverride(for: visiblePlace)
+        )
     }
 
     private func walkthroughDisplayNoteOverride(for visiblePlace: VisiblePlace) -> String? {
@@ -1343,19 +1466,6 @@ struct MapScreen: View {
         }
 
         selectVisiblePlace(visiblePlace)
-    }
-
-    private var placeProfileDestinationBinding: Binding<Bool> {
-        Binding(
-            get: {
-                isPlaceProfilePresented && hasSelectedProfile
-            },
-            set: { isPresented in
-                if !isPresented {
-                    isPlaceProfilePresented = false
-                }
-            }
-        )
     }
 
     @ViewBuilder
@@ -1407,6 +1517,35 @@ struct MapScreen: View {
         }
     }
 
+    @ViewBuilder
+    private var selectedPlaceProfileOverlay: some View {
+        if isPlaceProfileOverlayVisible {
+            PlaceProfileSlideContainer(
+                reduceMotion: reduceMotion,
+                isGestureDismissEnabled: walkthroughs.activeSurface != .placeDetail,
+                onDismissed: closeWalkthroughPlaceDetail
+            ) {
+                NavigationStack {
+                    selectedPlaceProfileDestination
+                }
+                .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
+            }
+            .ignoresSafeArea()
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityAction(.escape) {
+                guard walkthroughs.activeSurface != .placeDetail else { return }
+                collapseSelectedPlaceProfile()
+            }
+            .transition(.move(edge: .trailing))
+            .zIndex(100)
+        }
+    }
+
+    private var isPlaceProfileOverlayVisible: Bool {
+        isPlaceProfilePresented && hasSelectedProfile
+    }
+
     private func presentWalkthroughPlaceMemory() {
         guard walkthroughs.currentStep?.target == .mapMemory
                 || walkthroughs.activeSurface == .placeDetail
@@ -1456,10 +1595,11 @@ struct MapScreen: View {
     }
 
     private func presentWalkthroughPlaceDetail() {
-        isPlaceProfilePresented = hasSelectedProfile
+        openSelectedPlaceProfile()
     }
 
     private func closeWalkthroughPlaceDetail() {
+        closeAttachedSaveFlow()
         isPlaceProfilePresented = false
         guard walkthroughs.activeSurface == .placeDetail
                 || walkthroughs.requestedSurface == .map
@@ -1480,17 +1620,35 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedSearchCandidate),
+                saveActionSnapshot: saveActionSnapshot(
+                    saves: saveSummaries(for: selectedSearchCandidate)
+                ),
+                attachedSaveContext: $attachedMapSaveFlow,
+                attachedSaveDraft: attachedSaveDraft,
+                usesInteractiveHorizontalDismissal: true,
                 onBack: {
-                    closeWalkthroughPlaceDetail()
+                    collapseSelectedPlaceProfile()
                 },
                 onAction: {
-                    dismissPlaceProfileThen {
+                    collapseSelectedPlaceProfile {
                         performAction(
                             for: selectedSearchCandidate,
                             defaultVisibility: store.defaultVisibility
                         )
                     }
-                }
+                },
+                onFloatingAction: { saveAction in
+                    handleFloatingAction(
+                        saveAction,
+                        for: selectedSearchCandidate,
+                        defaultVisibility: store.defaultVisibility
+                    )
+                },
+                onAttachedDraftChange: updateAttachedDraft,
+                onAttachedSave: saveMapFlowSubmission,
+                onAttachedRemove: removeMapSave,
+                onAttachedClose: closeAttachedSaveFlow,
+                onAttachedSaveCompleted: completeAttachedSaveFlow
             )
         } else if let selectedPlace {
             PlaceProfileFullScreen(
@@ -1499,14 +1657,28 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
+                saveActionSnapshot: saveActionSnapshot(
+                    saves: saveSummaries(for: selectedPlace)
+                ),
+                attachedSaveContext: $attachedMapSaveFlow,
+                attachedSaveDraft: attachedSaveDraft,
+                usesInteractiveHorizontalDismissal: true,
                 onBack: {
-                    closeWalkthroughPlaceDetail()
+                    collapseSelectedPlaceProfile()
                 },
                 onAction: {
-                    dismissPlaceProfileThen {
+                    collapseSelectedPlaceProfile {
                         performAction(for: selectedPlace)
                     }
-                }
+                },
+                onFloatingAction: { saveAction in
+                    handleFloatingAction(saveAction, for: selectedPlace)
+                },
+                onAttachedDraftChange: updateAttachedDraft,
+                onAttachedSave: saveMapFlowSubmission,
+                onAttachedRemove: removeMapSave,
+                onAttachedClose: closeAttachedSaveFlow,
+                onAttachedSaveCompleted: completeAttachedSaveFlow
             )
         } else if let walkthroughFallbackMemory {
             PlaceProfileFullScreen(
@@ -1520,7 +1692,10 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: .none,
-                onBack: closeWalkthroughPlaceDetail,
+                usesInteractiveHorizontalDismissal: true,
+                onBack: {
+                    collapseSelectedPlaceProfile()
+                },
                 onAction: {}
             )
         }
@@ -1529,15 +1704,53 @@ struct MapScreen: View {
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
         walkthroughs.perform(.mapMemory)
-        isPlaceProfilePresented = true
+        if reduceMotion {
+            isPlaceProfilePresented = true
+        } else {
+            withAnimation(.easeOut(duration: 0.28)) {
+                isPlaceProfilePresented = true
+            }
+        }
+    }
+
+    private func collapseSelectedPlaceProfile(
+        completion: (@MainActor () -> Void)? = nil
+    ) {
+        guard isPlaceProfilePresented else { return }
+
+        guard !reduceMotion else {
+            closeWalkthroughPlaceDetail()
+            completion?()
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.22)) {
+            closeWalkthroughPlaceDetail()
+        } completion: {
+            completion?()
+        }
+    }
+
+    private func saveActionSnapshot(
+        saves: [PlaceSaveSummary]
+    ) -> PlaceProfileSaveActionSnapshot {
+        PlaceProfileSaveActionPolicy.snapshot(
+            state: PlaceProfileSaveActionPolicy.state(
+                saves: saves,
+                currentUserID: store.currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: walkthroughs.activeSurface == .placeDetail
+            ),
+            isSignedIn: auth.isSignedIn,
+            resolvedFlagValue: backend.featureFlag(
+                .placeProfileSaveTrayV1,
+                for: store.currentUser.id
+            )
+        )
     }
 
     private func dismissPlaceProfileThen(_ action: @MainActor @escaping () -> Void) {
-        isPlaceProfilePresented = false
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            action()
-        }
+        collapseSelectedPlaceProfile(completion: action)
     }
 
     private func submitMapSearch() {
@@ -1595,6 +1808,7 @@ struct MapScreen: View {
         routedVisiblePlace = nil
         mapSelectionRevision += 1
         mapSaveFlow = nil
+        closeAttachedSaveFlow()
         isPlaceProfilePresented = false
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
@@ -1748,6 +1962,9 @@ struct MapScreen: View {
     }
 
     private func handleMapFeatureSelection(_ feature: MapFeature?) {
+        if feature != nil {
+            dismissMoreFilters()
+        }
         guard let feature else {
             if ignoreNextMapFeatureClear {
                 ignoreNextMapFeatureClear = false
@@ -1916,6 +2133,180 @@ struct MapScreen: View {
         }
     }
 
+    private func performFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for visiblePlace: VisiblePlace
+    ) {
+        guard let status = saveAction.destinationStatus else { return }
+
+        let context: MapPlaceSaveContext
+        if let currentUserSave = currentUserSave(matching: visiblePlace) {
+            context = MapPlaceSaveContext.reselectCurrentUserSave(
+                currentUserSave,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: store.attributes(for: currentUserSave.userPlace.id),
+                latestVisit: store.visits(for: currentUserSave.userPlace.id).first
+            )
+        } else {
+            context = MapPlaceSaveContext.addVisiblePlace(
+                visiblePlace,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: store.attributes(for: visiblePlace.userPlace.id)
+            )
+        }
+        mapSaveFlow = context.preselectingStatus(status)
+    }
+
+    private func handleFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for visiblePlace: VisiblePlace
+    ) {
+        let saves = saveSummaries(for: visiblePlace)
+        let state = PlaceProfileSaveActionPolicy.state(
+            saves: saves,
+            currentUserID: store.currentUser.id,
+            hasSharedVisitInvitation: false,
+            isReadOnly: walkthroughs.activeSurface == .placeDetail
+        )
+        let context = MapPlaceSaveContext.addVisiblePlace(
+            visiblePlace,
+            defaultVisibility: store.effectiveDefaultVisibility,
+            attributes: store.attributes(for: visiblePlace.userPlace.id)
+        )
+        if currentUserSave(matching: visiblePlace) == nil,
+           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+            route: .floatingActions,
+            state: state,
+            action: saveAction,
+            baseContext: context
+        ) {
+            presentAttachedSaveFlow(attachedContext)
+            return
+        }
+
+        dismissPlaceProfileThen {
+            performFloatingAction(saveAction, for: visiblePlace)
+        }
+    }
+
+    private func performFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for candidate: PlaceCandidate,
+        defaultVisibility: PlaceVisibility
+    ) {
+        guard let status = saveAction.destinationStatus else { return }
+        mapSaveFlow = addCandidateContext(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: defaultVisibility
+        )
+        .preselectingStatus(status)
+    }
+
+    private func handleFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for candidate: PlaceCandidate,
+        defaultVisibility: PlaceVisibility
+    ) {
+        let saves = saveSummaries(for: candidate)
+        let state = PlaceProfileSaveActionPolicy.state(
+            saves: saves,
+            currentUserID: store.currentUser.id,
+            hasSharedVisitInvitation: false,
+            isReadOnly: walkthroughs.activeSurface == .placeDetail
+        )
+        let context = addCandidateContext(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: defaultVisibility
+        )
+        if currentUserSave(matching: candidate) == nil,
+           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+            route: .floatingActions,
+            state: state,
+            action: saveAction,
+            baseContext: context
+        ) {
+            presentAttachedSaveFlow(attachedContext)
+            return
+        }
+
+        dismissPlaceProfileThen {
+            performFloatingAction(
+                saveAction,
+                for: candidate,
+                defaultVisibility: defaultVisibility
+            )
+        }
+    }
+
+    private var attachedSaveDraft: PlaceSaveDraft? {
+        guard let context = attachedMapSaveFlow,
+              let draft = placeSaveDraftStore.draft,
+              draft.ownerUserID == store.currentUser.id,
+              draft.candidate.id == context.candidate.id
+        else { return nil }
+        return draft
+    }
+
+    private func presentAttachedSaveFlow(_ context: MapPlaceSaveContext) {
+        guard attachedMapSaveFlow == nil else { return }
+        if let existingDraft = placeSaveDraftStore.draft,
+           existingDraft.ownerUserID == store.currentUser.id,
+           existingDraft.candidate.id == context.candidate.id {
+            if existingDraft.form.selectedStatus != context.initialStatus {
+                var switchedForm = existingDraft.form
+                switchedForm.step = .details
+                switchedForm.selectedStatus = context.initialStatus
+                placeSaveDraftStore.update(
+                    draftID: existingDraft.id,
+                    form: switchedForm,
+                    submittedAt: nil
+                )
+            }
+        } else if let draft = PlaceSaveDraft.addFlow(
+            ownerUserID: store.currentUser.id,
+            context: context
+        ) {
+            placeSaveDraftStore.begin(draft)
+        }
+        attachedMapSaveFlow = context
+    }
+
+    @MainActor
+    private func updateAttachedDraft(
+        draftID: UUID,
+        form: PlaceSaveDraftForm,
+        submittedAt: Date?
+    ) {
+        placeSaveDraftStore.update(
+            draftID: draftID,
+            form: form,
+            submittedAt: submittedAt
+        )
+    }
+
+    @MainActor
+    private func closeAttachedSaveFlow() {
+        guard attachedMapSaveFlow != nil else { return }
+        attachedMapSaveFlow = nil
+        store.saveFlowDidDismiss(.saveSheet)
+    }
+
+    @MainActor
+    private func completeAttachedSaveFlow(_ result: SaveResult) {
+        let candidateID = attachedMapSaveFlow?.candidate.id
+        let selectedResult = mapSaveFlowSelection.saveFlowDidDismiss() ?? result
+        selectSavedResult(selectedResult)
+        selectedSearchCandidateID = nil
+        if let candidateID {
+            mapSearchCandidates.removeAll { $0.id == candidateID }
+        }
+        placeSaveDraftStore.clear()
+        attachedMapSaveFlow = nil
+        store.saveFlowDidDismiss(.saveSheet)
+    }
+
     private func performAction(
         for candidate: PlaceCandidate,
         defaultVisibility: PlaceVisibility
@@ -1973,6 +2364,7 @@ struct MapScreen: View {
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
+            let isAttachedSubmission = attachedMapSaveFlow?.id == submission.context.id
             if sourceType == .socialSave, !auth.isSignedIn {
                 mapSaveFlow = nil
                 auth.presentGate(for: .socialSave)
@@ -1986,9 +2378,13 @@ struct MapScreen: View {
             ) else { return nil }
             let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
             clearNativeMapFeatureSelection()
-            selectedSearchCandidateID = nil
+            if !isAttachedSubmission {
+                selectedSearchCandidateID = nil
+            }
             mapSaveFlowSelection.saveDidSucceed(result)
-            mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
+            if !isAttachedSubmission {
+                mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
+            }
             showMapSaveFeedback(
                 SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
                 successMessage: "Added to your map."
@@ -2746,15 +3142,30 @@ struct MapScreen: View {
             return MapFilterState(source: defaultSource)
         }
 
-        return MapFilterState(
-            source: arguments[valueIndex] == "friends" ? .friends : .featured
-        )
+        let source = MapSource(rawValue: arguments[valueIndex]) ?? .featured
+        return MapFilterState(source: source)
     }
 
     static func resolvedInitialMoreFiltersPresentation(
         from arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> Bool {
         arguments.contains("-WanderMapMoreFiltersOpen")
+    }
+
+    static func resolvedMoreFiltersAwayResetInterval(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> TimeInterval {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapMoreFiltersAwayResetSeconds") else {
+            return MapMoreFilterResetPolicy.otherTabInterval
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex),
+              let interval = TimeInterval(arguments[valueIndex]),
+              interval >= 0
+        else {
+            return MapMoreFilterResetPolicy.otherTabInterval
+        }
+        return interval
     }
 
     static func coordinateCandidate(at coordinate: CLLocationCoordinate2D) -> PlaceCandidate {
@@ -2814,13 +3225,139 @@ enum MapHitTesting {
     }
 }
 
-enum MapPinFilterTransitionStyle {
+enum MapMoreFilterPolicy {
+    static let collapsedCategoryCount = 6
+
+    static func showsPeople(for source: MapSource) -> Bool {
+        switch source {
+        case .friends: true
+        case .featured, .you: false
+        }
+    }
+
+    static func showsStatus(for source: MapSource) -> Bool {
+        switch source {
+        case .featured: false
+        case .friends, .you: true
+        }
+    }
+
+    static func categories(showingAll: Bool) -> [String] {
+        guard !showingAll else { return WanderPlaceCategory.editableCategories }
+        return Array(WanderPlaceCategory.editableCategories.prefix(collapsedCategoryCount))
+    }
+}
+
+enum MapMoreFilterResetPolicy {
+    static let otherTabInterval: TimeInterval = 3 * 60
+
+    static func shouldResetAfterReturning(
+        leftMapAt: Date?,
+        returnedAt: Date,
+        interval: TimeInterval = otherTabInterval
+    ) -> Bool {
+        guard let leftMapAt else { return false }
+        return returnedAt.timeIntervalSince(leftMapAt) >= interval
+    }
+}
+
+@MainActor
+enum MapMoreFilterMotionStyle {
+    static let presentDuration: TimeInterval = 0.46
+    static let dismissDuration: TimeInterval = 0.36
+
+    static let presentAnimation = Animation.spring(
+        duration: presentDuration,
+        bounce: 0.18
+    )
+    static let dismissAnimation = Animation.easeInOut(duration: dismissDuration)
+    static let reducedMotionAnimation = Animation.easeOut(duration: 0.12)
+
+    static let panelTransition = AnyTransition.asymmetric(
+        insertion: .offset(x: 8, y: -22)
+            .combined(with: .scale(scale: 0.82, anchor: .topTrailing))
+            .combined(with: .opacity),
+        removal: .offset(x: 24, y: -38)
+            .combined(with: .scale(scale: 0.24, anchor: .topTrailing))
+            .combined(with: .opacity)
+    )
+}
+
+enum MapPinEntranceStyle {
     static let fadeOutDuration: TimeInterval = 0.06
-    static let fadeInDuration: TimeInterval = 0.10
-    static let duration = fadeOutDuration + fadeInDuration
-    static let hiddenScale: CGFloat = 0.92
+    static let springDuration: TimeInterval = 0.28
+    static let staggerInterval: TimeInterval = 0.015
+    static let maximumStagger: TimeInterval = 0.06
+    static let entranceWindowDuration = springDuration + maximumStagger
+    static let duration = fadeOutDuration + entranceWindowDuration
+    static let hiddenScale: CGFloat = 0.72
+    static let hiddenVerticalOffset: CGFloat = 10
+    static let springBounce = 0.60
     static let fadeOutAnimation = Animation.easeOut(duration: fadeOutDuration)
-    static let fadeInAnimation = Animation.spring(duration: fadeInDuration, bounce: 0.14)
+    static let entranceAnimation = Animation.spring(duration: springDuration, bounce: springBounce)
+
+    static func staggerDelay(for index: Int) -> TimeInterval {
+        min(TimeInterval(max(0, index)) * staggerInterval, maximumStagger)
+    }
+}
+
+private struct MapPinEntranceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let isVisible: Bool
+    let delay: TimeInterval
+
+    @State private var hasEntered = false
+
+    private var isPresented: Bool {
+        reduceMotion ? isVisible : hasEntered
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isPresented ? 1 : 0)
+            .scaleEffect(
+                isPresented ? 1 : MapPinEntranceStyle.hiddenScale,
+                anchor: .bottom
+            )
+            .offset(y: isPresented ? 0 : MapPinEntranceStyle.hiddenVerticalOffset)
+            .allowsHitTesting(isPresented)
+            .onAppear {
+                updatePresentation(for: isVisible)
+            }
+            .onChange(of: isVisible) { _, visible in
+                updatePresentation(for: visible)
+            }
+            .onChange(of: reduceMotion) { _, _ in
+                updatePresentation(for: isVisible)
+            }
+    }
+
+    private func updatePresentation(for visible: Bool) {
+        if reduceMotion {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                hasEntered = visible
+            }
+            return
+        }
+
+        if visible {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                hasEntered = false
+            }
+            withAnimation(MapPinEntranceStyle.entranceAnimation.delay(delay)) {
+                hasEntered = true
+            }
+        } else {
+            withAnimation(MapPinEntranceStyle.fadeOutAnimation) {
+                hasEntered = false
+            }
+        }
+    }
 }
 
 enum MapStatusFilter: String, CaseIterable, Identifiable {
@@ -2858,6 +3395,12 @@ struct MapMoreFilterSelection: Equatable {
             + (status == .all ? 0 : 1)
     }
 
+    var activeOptionCount: Int {
+        categories.count
+            + people.count
+            + (status == .all ? 0 : 1)
+    }
+
     mutating func selectAllCategories() {
         categories.removeAll()
     }
@@ -2889,6 +3432,11 @@ struct MapFilterState: Equatable {
 
     mutating func reset(to defaultSource: MapSource) {
         self = MapFilterState(source: defaultSource)
+    }
+
+    mutating func selectSource(_ source: MapSource) {
+        self.source = source
+        more = MapMoreFilterSelection()
     }
 }
 
@@ -3160,10 +3708,21 @@ enum MapFilterSelection {
         followedOwnerIDs: Set<String>,
         refinements: MapMoreFilterSelection
     ) -> [VisiblePlace] {
-        let eligibleOwnerIDs = followedOwnerIDs.union([currentUserID])
+        let eligibleOwnerIDs = followedOwnerIDs.subtracting([currentUserID])
         return applying(
             refinements,
             to: candidates.filter { eligibleOwnerIDs.contains($0.owner.id) }
+        )
+    }
+
+    static func ownPlaces(
+        from candidates: [VisiblePlace],
+        currentUserID: String,
+        refinements: MapMoreFilterSelection
+    ) -> [VisiblePlace] {
+        applying(
+            refinements,
+            to: candidates.filter { $0.owner.id == currentUserID }
         )
     }
 
@@ -3313,7 +3872,7 @@ enum MapSocialOwnerSelection {
         following: [LocalProfile]
     ) -> [MapSocialOwnerOption] {
         var seen = Set<String>()
-        let followedOptions = following.compactMap { profile -> MapSocialOwnerOption? in
+        return following.compactMap { profile -> MapSocialOwnerOption? in
             guard profile.id != currentUser.id, seen.insert(profile.id).inserted else { return nil }
             return MapSocialOwnerOption(
                 id: profile.id,
@@ -3324,14 +3883,6 @@ enum MapSocialOwnerSelection {
         .sorted {
             $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
-
-        return [
-            MapSocialOwnerOption(
-                id: currentUser.id,
-                displayName: "You",
-                handle: currentUser.handle
-            )
-        ] + followedOptions
     }
 }
 
@@ -3661,15 +4212,17 @@ private struct MapSourceFilterChip: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing1) {
+        HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: source.systemImage)
                 .font(.system(size: 11, weight: .bold))
+                .frame(width: 14)
             Text(source.title)
                 .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(height: 44)
+        .padding(.horizontal, WanderTheme.spacing1)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
@@ -3679,38 +4232,41 @@ private struct MapSourceFilterChip: View {
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityIdentifier("map.filter.\(source.rawValue)")
     }
 }
 
 private struct MapMoreFilterChip: View {
-    let activeSectionCount: Int
+    let selectedOptionCount: Int
     let isExpanded: Bool
 
     private var isActive: Bool {
-        activeSectionCount > 0
+        selectedOptionCount > 0
     }
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: "line.3.horizontal.decrease")
+        HStack(spacing: WanderTheme.spacing2) {
+            Image(systemName: isExpanded ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                 .font(.system(size: 11, weight: .bold))
+                .overlay(alignment: .topTrailing) {
+                    if selectedOptionCount > 0 {
+                        Text("\(selectedOptionCount)")
+                            .font(.system(size: 7, weight: .black, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 12, minHeight: 12)
+                            .padding(.horizontal, selectedOptionCount > 9 ? 2 : 0)
+                            .background(Color.black, in: Capsule())
+                            .offset(x: 6, y: -5)
+                    }
+                }
+                .frame(width: 16, height: 18)
             Text("More")
                 .lineLimit(1)
-            if activeSectionCount > 0 {
-                Text("\(activeSectionCount)")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(WanderTheme.surfaceBone.color)
-                    .frame(minWidth: 18, minHeight: 18)
-                    .background(WanderTheme.terracotta.color, in: Circle())
-            }
-            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 9, weight: .black))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing3)
-        .frame(height: 44)
+        .padding(.horizontal, WanderTheme.spacing1)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
@@ -3719,22 +4275,29 @@ private struct MapMoreFilterChip: View {
         )
         .accessibilityLabel("More map filters")
         .accessibilityValue(
-            activeSectionCount == 0
-                ? "All categories, people, and statuses"
-                : "\(activeSectionCount) filtered sections"
+            selectedOptionCount == 0
+                ? "No additional filters"
+                : selectedOptionCount == 1
+                    ? "1 selected filter"
+                    : "\(selectedOptionCount) selected filters"
         )
-        .accessibilityIdentifier("map.filter.more")
     }
 }
 
 private struct MapMoreFiltersPopover: View {
     @Binding var selection: MapMoreFilterSelection
+    let source: MapSource
     let peopleOptions: [MapSocialOwnerOption]
     let dismiss: () -> Void
+    @State private var showsAllCategories = false
 
     private let columns = [
         GridItem(.adaptive(minimum: 118), spacing: WanderTheme.spacing2)
     ]
+
+    private var visibleCategories: [String] {
+        MapMoreFilterPolicy.categories(showingAll: showsAllCategories)
+    }
 
     var body: some View {
         ScrollView {
@@ -3742,74 +4305,97 @@ private struct MapMoreFiltersPopover: View {
                 header
 
                 filterSection(
-                    title: "Category",
+                    title: "Categories",
                     detail: "Choose one or more"
                 ) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                        MapMoreOptionChip(
-                            title: "All",
-                            systemImage: "square.grid.2x2",
-                            isSelected: selection.categories.isEmpty
-                        ) {
-                            selection.selectAllCategories()
+                    VStack(spacing: WanderTheme.spacing2) {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                            MapMoreOptionChip(
+                                title: "All",
+                                systemImage: "square.grid.2x2",
+                                isSelected: selection.categories.isEmpty
+                            ) {
+                                selection.selectAllCategories()
+                            }
+
+                            ForEach(visibleCategories, id: \.self) { category in
+                                MapMoreOptionChip(
+                                    title: WanderPlaceCategory.broadCategory(for: category),
+                                    emoji: WanderPlaceCategory.broadEmoji(for: category),
+                                    isSelected: selection.categories.contains(category)
+                                ) {
+                                    selection.toggleCategory(category)
+                                }
+                            }
                         }
 
-                        ForEach(WanderPlaceCategory.editableCategories, id: \.self) { category in
-                            MapMoreOptionChip(
-                                title: WanderPlaceCategory.broadCategory(for: category),
-                                emoji: WanderPlaceCategory.broadEmoji(for: category),
-                                isSelected: selection.categories.contains(category)
-                            ) {
-                                selection.toggleCategory(category)
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                showsAllCategories.toggle()
                             }
+                        } label: {
+                            HStack(spacing: WanderTheme.spacing1) {
+                                Text(showsAllCategories ? "Show fewer categories" : "More categories")
+                                Image(systemName: showsAllCategories ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 10, weight: .black))
+                            }
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("map.more.categories.expand")
+                    }
+                }
+
+                if MapMoreFilterPolicy.showsPeople(for: source) {
+                    filterSection(
+                        title: "People",
+                        detail: "Choose one or more"
+                    ) {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                            MapMoreOptionChip(
+                                title: "All",
+                                systemImage: "person.2",
+                                isSelected: selection.people.isEmpty
+                            ) {
+                                selection.selectAllPeople()
+                            }
+
+                            ForEach(peopleOptions) { person in
+                                MapMoreOptionChip(
+                                    title: person.displayName,
+                                    systemImage: "person.fill",
+                                    isSelected: selection.people.contains(person.id)
+                                ) {
+                                    selection.togglePerson(person.id)
+                                }
+                                .accessibilityIdentifier("map.more.person.\(person.id)")
+                            }
+                        }
+
+                        if peopleOptions.isEmpty {
+                            Text("People you follow will appear here.")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(WanderTheme.textMuted.color)
                         }
                     }
                 }
 
-                filterSection(
-                    title: "People",
-                    detail: "Choose one or more"
-                ) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                        MapMoreOptionChip(
-                            title: "All",
-                            systemImage: "person.2",
-                            isSelected: selection.people.isEmpty
-                        ) {
-                            selection.selectAllPeople()
-                        }
-
-                        ForEach(peopleOptions) { person in
-                            MapMoreOptionChip(
-                                title: person.displayName,
-                                systemImage: "person.fill",
-                                isSelected: selection.people.contains(person.id)
-                            ) {
-                                selection.togglePerson(person.id)
-                            }
-                            .accessibilityIdentifier("map.more.person.\(person.id)")
-                        }
-                    }
-
-                    if peopleOptions.isEmpty {
-                        Text("People you follow will appear here.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-                }
-
-                filterSection(
-                    title: "Status",
-                    detail: "Choose one"
-                ) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                        ForEach(MapStatusFilter.allCases) { status in
-                            MapMoreOptionChip(
-                                title: status.title,
-                                systemImage: status.systemImage,
-                                isSelected: selection.status == status
-                            ) {
-                                selection.status = status
+                if MapMoreFilterPolicy.showsStatus(for: source) {
+                    filterSection(
+                        title: "Status",
+                        detail: "Choose one"
+                    ) {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                            ForEach(MapStatusFilter.allCases) { status in
+                                MapMoreOptionChip(
+                                    title: status.title,
+                                    systemImage: status.systemImage,
+                                    isSelected: selection.status == status
+                                ) {
+                                    selection.status = status
+                                }
                             }
                         }
                     }
@@ -3822,8 +4408,8 @@ private struct MapMoreFiltersPopover: View {
             }
             .padding(WanderTheme.spacing4)
         }
-        .frame(width: 330, height: 470)
-        .background(WanderTheme.surfaceBone.color)
+        .frame(width: 330, height: source == .featured ? 360 : 470)
+        .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
         .accessibilityIdentifier("map.moreFilters.popover")
     }
 
@@ -3833,7 +4419,7 @@ private struct MapMoreFiltersPopover: View {
                 Text("More filters")
                     .font(.system(size: 18, weight: .black))
                     .foregroundStyle(WanderTheme.textInk.color)
-                Text("Narrow the active source")
+                Text("Narrow \(source.title.lowercased())")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -3902,17 +4488,12 @@ private struct MapMoreOptionChip: View {
             .foregroundStyle(isSelected ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .background(
-                isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceRaised.color,
-                in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+            .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+            .wanderGlassPanel(
+                cornerRadius: WanderTheme.radiusMedium,
+                tone: isSelected ? .selected : .neutral,
+                interactive: true
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-                    .stroke(
-                        isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            }
         }
         .buttonStyle(.plain)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -4813,6 +5394,31 @@ struct MapPlaceSaveContext: Identifiable {
         )
     }
 
+    func preselectingStatus(_ selection: PlaceStatus) -> MapPlaceSaveContext {
+        if existingCurrentUserSave != nil {
+            return resolvingExistingSave(selection: selection)
+        }
+
+        guard case .add = mode else { return self }
+        return MapPlaceSaveContext(
+            candidate: candidate,
+            mode: mode,
+            requiresStatusConfirmation: false,
+            hasPriorCheckIn: hasPriorCheckIn,
+            initialStatus: selection,
+            initialVisibility: initialVisibility,
+            initialRatingScore: selection == .been ? initialRatingScore : nil,
+            initialNote: initialNote,
+            initialPlannedDate: selection == .wannaGo ? initialPlannedDate : nil,
+            initialAnswers: initialAnswers,
+            initialPersonalLabels: initialPersonalLabels,
+            initialCuisine: initialCuisine,
+            initialPhotoAttachments: initialPhotoAttachments,
+            existingCurrentUserSave: nil,
+            existingLatestVisit: existingLatestVisit
+        )
+    }
+
     static func existingCurrentUserSave(
         _ visiblePlace: VisiblePlace,
         selectedStatus: PlaceStatus? = nil,
@@ -5695,14 +6301,57 @@ private struct MapCheckInDateSection: View {
     }
 }
 
+enum MapPlaceSaveEditorPresentation: Equatable {
+    case sheet
+    case attached
+}
+
 struct MapPlaceSaveFlowSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let context: MapPlaceSaveContext
+    let draft: PlaceSaveDraft?
+    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+
+    init(
+        context: MapPlaceSaveContext,
+        draft: PlaceSaveDraft? = nil,
+        onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
+        onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
+        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
+    ) {
+        self.context = context
+        self.draft = draft
+        self.onDraftChange = onDraftChange
+        self.onSave = onSave
+        self.onRemove = onRemove
+    }
+
+    var body: some View {
+        MapPlaceSaveEditor(
+            context: context,
+            draft: draft,
+            presentation: .sheet,
+            onDraftChange: onDraftChange,
+            onSave: onSave,
+            onRemove: onRemove,
+            onClose: { dismiss() },
+            onSaveCompleted: { _ in dismiss() }
+        )
+    }
+}
+
+struct MapPlaceSaveEditor: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let draftID: UUID?
+    let presentation: MapPlaceSaveEditorPresentation
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
-    @Environment(\.dismiss) private var dismiss
+    let onClose: @MainActor () -> Void
+    let onSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -5743,15 +6392,21 @@ struct MapPlaceSaveFlowSheet: View {
     init(
         context: MapPlaceSaveContext,
         draft: PlaceSaveDraft? = nil,
+        presentation: MapPlaceSaveEditorPresentation,
         onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
-        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
+        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
+        onClose: @escaping @MainActor () -> Void,
+        onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
         _context = State(initialValue: context)
         draftID = draft?.id
+        self.presentation = presentation
         self.onDraftChange = onDraftChange
         self.onSave = onSave
         self.onRemove = onRemove
+        self.onClose = onClose
+        self.onSaveCompleted = onSaveCompleted
         let restoredForm = draft?.form
         let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
             ? .details
@@ -5890,7 +6545,9 @@ struct MapPlaceSaveFlowSheet: View {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
-                        header
+                        if presentation == .sheet {
+                            header
+                        }
 
                         switch step {
                         case .confirm:
@@ -5901,11 +6558,11 @@ struct MapPlaceSaveFlowSheet: View {
                     }
                     .walkthroughTarget(step == .confirm ? .saveStatus : nil)
                     .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing6)
+                    .padding(.top, presentation == .attached ? WanderTheme.spacing1 : WanderTheme.spacing3)
+                    .padding(.bottom, presentation == .attached ? WanderTheme.spacing3 : WanderTheme.spacing6)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .background(WanderTheme.canvasWarm.color)
+                .background(editorBackground)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if step == .details {
                         saveFooter
@@ -5975,6 +6632,12 @@ struct MapPlaceSaveFlowSheet: View {
         .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
     }
 
+    private var editorBackground: Color {
+        presentation == .attached
+            ? WanderTheme.surfaceBone.color
+            : WanderTheme.canvasWarm.color
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             ZStack {
@@ -6007,7 +6670,7 @@ struct MapPlaceSaveFlowSheet: View {
 
                     if walkthroughs.activeSurface != .saveFlow {
                         Button {
-                            dismiss()
+                            onClose()
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 13, weight: .black))
@@ -6079,7 +6742,9 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var detailsContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            candidateCard
+            if presentation == .sheet {
+                candidateCard
+            }
 
             if selectedStatus == .been {
                 MapCheckInDateSection(
@@ -6094,9 +6759,11 @@ struct MapPlaceSaveFlowSheet: View {
                     .walkthroughTarget(.saveDate)
             }
 
-            placeTypeSection
-                .id(WalkthroughTargetID.saveDetails)
-                .walkthroughTarget(.saveDetails)
+            if presentation == .sheet {
+                placeTypeSection
+                    .id(WalkthroughTargetID.saveDetails)
+                    .walkthroughTarget(.saveDetails)
+            }
 
             if selectedStatus == .been || walkthroughs.activeSurface == .saveFlow {
                 ratingSection
@@ -6105,21 +6772,11 @@ struct MapPlaceSaveFlowSheet: View {
             }
 
             if selectedStatus == .been {
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
-                        sharedVisitInviteSection
-                            .disabled(!canInviteFriends)
-                    }
-
-                    if context.allowsPhotoAttachments {
-                        MapSaveVisitPhotoSection(
-                            canAddPhotos: true,
-                            photos: $visitPhotoAttachments
-                        )
-                    }
+                if presentation == .sheet {
+                    visitParticipationSections
+                        .id(WalkthroughTargetID.saveFriends)
+                        .walkthroughTarget(.saveFriends)
                 }
-                .id(WalkthroughTargetID.saveFriends)
-                .walkthroughTarget(.saveFriends)
             }
 
             optionalDetailsDisclosure
@@ -6140,6 +6797,22 @@ struct MapPlaceSaveFlowSheet: View {
         }
     }
 
+    private var visitParticipationSections: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
+                sharedVisitInviteSection
+                    .disabled(!canInviteFriends)
+            }
+
+            if context.allowsPhotoAttachments {
+                MapSaveVisitPhotoSection(
+                    canAddPhotos: true,
+                    photos: $visitPhotoAttachments
+                )
+            }
+        }
+    }
+
     private var saveFooter: some View {
         WanderPrimaryButton(
             title: isSaving ? progressActionTitle : primaryActionTitle,
@@ -6153,7 +6826,7 @@ struct MapPlaceSaveFlowSheet: View {
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing2)
-        .background(WanderTheme.canvasWarm.color)
+        .background(editorBackground)
         .walkthroughTarget(.saveSubmit)
     }
 
@@ -6425,6 +7098,17 @@ struct MapPlaceSaveFlowSheet: View {
             )
 
             if isShowingOptionalDetails {
+                if presentation == .attached {
+                    placeTypeSection
+                        .id(WalkthroughTargetID.saveDetails)
+                        .walkthroughTarget(.saveDetails)
+
+                    if selectedStatus == .been {
+                        visitParticipationSections
+                            .id(WalkthroughTargetID.saveFriends)
+                            .walkthroughTarget(.saveFriends)
+                    }
+                }
                 noteSection
                     .id(WalkthroughTargetID.saveNote)
                     .walkthroughTarget(.saveNote)
@@ -7216,7 +7900,7 @@ struct MapPlaceSaveFlowSheet: View {
                     }
                     walkthroughs.recordTutorialSave(userPlaceID: result.userPlaceID)
                     walkthroughs.perform(.saveSubmit)
-                    dismiss()
+                    onSaveCompleted(result)
                 } else if auth.isSignedIn {
                     saveAttemptedAt = nil
                     resetWalkthroughAutoSaveForRetry()
@@ -7351,7 +8035,7 @@ struct MapPlaceSaveFlowSheet: View {
             await MainActor.run {
                 isRemoving = false
                 if removed {
-                    dismiss()
+                    onClose()
                 } else {
                     errorMessage = "Could not remove this place from your map. Try again."
                 }

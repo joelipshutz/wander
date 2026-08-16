@@ -3,6 +3,7 @@ import Foundation
 enum FeatureFlagKey: String, CaseIterable, Hashable {
     case firstVisitNUX = "first_visit_nux"
     case debugSettings = "debug_settings"
+    case placeProfileSaveTrayV1 = "place_profile_save_tray_v1"
 }
 
 enum FeatureFlagValueSource: Equatable {
@@ -31,6 +32,24 @@ enum FeatureFlagResolution: Equatable {
         case .resolved(let resolvedUserID, _), .failed(let resolvedUserID):
             resolvedUserID != userID
         }
+    }
+}
+
+enum DebugSettingsAccessPolicy {
+    static func isEntitled(serverFlag: Bool?) -> Bool {
+        isEntitled(serverFlag: serverFlag, isSimulator: isSimulatorBuild)
+    }
+
+    static func isEntitled(serverFlag: Bool?, isSimulator: Bool) -> Bool {
+        isSimulator || serverFlag == true
+    }
+
+    private static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
     }
 }
 

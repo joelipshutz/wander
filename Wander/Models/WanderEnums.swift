@@ -14,6 +14,7 @@ enum PlaceStatus: String, Codable, CaseIterable, Equatable {
 enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
     case featured
     case friends
+    case you
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
         switch self {
         case .featured: "Featured"
         case .friends: "Friends"
+        case .you: "You"
         }
     }
 
@@ -28,6 +30,7 @@ enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
         switch self {
         case .featured: "sparkles"
         case .friends: "person.2.fill"
+        case .you: "person.fill"
         }
     }
 
@@ -35,6 +38,15 @@ enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
         switch self {
         case .featured: "Featured shows you recommendations based on your taste"
         case .friends: "All places from everyone you follow"
+        case .you: "Only your check-ins and Wanna Go places"
+        }
+    }
+
+    var walkthroughTarget: WalkthroughTargetID? {
+        switch self {
+        case .featured: .mapFeatured
+        case .friends: .mapFriends
+        case .you: .mapYou
         }
     }
 }

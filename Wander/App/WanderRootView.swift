@@ -330,6 +330,7 @@ struct WanderRootView: View {
     @State private var retiredWalkthroughUserIDs: Set<String> = []
     @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
     @State private var nativeTabItemControlsFrame: CGRect?
+    @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.productionDefault
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -344,6 +345,7 @@ struct WanderRootView: View {
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
     private let firstVisitWalkthroughEligibilityContext: FirstVisitWalkthroughEligibilityContext
     private let onFirstVisitWalkthroughCompleted: (String) -> Void
+    private let placeActionDebugPreferences: PlaceProfileFloatingActionDebugPreferences
 
     init(
         initialTab: WanderTab? = nil,
@@ -372,12 +374,16 @@ struct WanderRootView: View {
             isEligible: isFirstVisitWalkthroughEligible
         )
         self.firstVisitWalkthroughEligibilityContext = firstVisitWalkthroughEligibilityContext
+        placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         _sharedProfile = State(initialValue: initialSharedProfileRoute ?? Self.resolvedInitialSharedProfile())
+        _placeProfileFloatingActionVariant = State(
+            initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
+        )
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
             wrappedValue: Self.makeStore(
@@ -422,12 +428,18 @@ struct WanderRootView: View {
 
     var body: some View {
         stateObservedRoot
+            .environment(
+                \.placeProfileFloatingActionVariant,
+                placeProfileFloatingActionVariant
+            )
     }
 
     private var tabRoot: some View {
         TabView(selection: tabSelection) {
             MapScreen(
                 defaultSource: store.defaultMapFilter,
+                isMapTabActive: selectedTab == .map,
+                isAddPresented: isPresentingAdd,
                 presentationResetRequest: presentationResetRequest,
                 searchLaunchRequest: mapSearchLaunchRequest,
                 onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
@@ -474,6 +486,7 @@ struct WanderRootView: View {
             .accessibilityHidden(true)
         }
         .environmentObject(store)
+        .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
         .task(id: selectedTab) {
@@ -665,6 +678,7 @@ struct WanderRootView: View {
                 // revalidates so walkthrough UI cannot disappear and reappear.
                 if auth.state.session == nil {
                     backend.clearFeatureFlags()
+                    placeProfileFloatingActionVariant = .productionDefault
                     configureWalkthroughsForCurrentUser()
                 }
                 return
@@ -672,11 +686,18 @@ struct WanderRootView: View {
 
             // A different account must fail closed while its own override loads;
             // the tagged resolution prevents the previous account from leaking.
+            placeProfileFloatingActionVariant = .productionDefault
             if backend.featureFlag(.firstVisitNUX, for: userID) == nil {
                 configureWalkthroughsForCurrentUser()
             }
             await backend.refreshFeatureFlags(for: userID)
             guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
+            placeProfileFloatingActionVariant = placeActionDebugPreferences.activeVariant(
+                for: userID,
+                isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled(
+                    serverFlag: backend.featureFlag(.debugSettings, for: userID)
+                )
+            )
             configureWalkthroughsForCurrentUser()
         }
         .task(id: isSessionValidated) {
@@ -743,6 +764,7 @@ struct WanderRootView: View {
             if previousState.session?.userID != nextUserID {
                 walkthroughFeatureFlagRefreshTask?.cancel()
                 walkthroughFeatureFlagRefreshTask = nil
+                placeProfileFloatingActionVariant = .productionDefault
             }
             if let automaticImportOwnerUserID,
                automaticImportOwnerUserID != nextUserID {
@@ -1560,7 +1582,9 @@ struct WanderRootView: View {
         // still need their own stale checkpoints cleared, never the previous
         // account's or the coordinator's placeholder account.
         walkthroughs.setUserID(userID)
-        let isDebugSettingsEntitled = backend.featureFlag(.debugSettings, for: userID) == true
+        let isDebugSettingsEntitled = DebugSettingsAccessPolicy.isEntitled(
+            serverFlag: backend.featureFlag(.debugSettings, for: userID)
+        )
         let debugNUXOverride = isDebugSettingsEntitled
             ? walkthroughDebugPreferences.nuxOverride(for: userID)
             : nil
@@ -2302,7 +2326,10 @@ struct WanderRootView: View {
         return profileID.isEmpty ? nil : SharedProfileRoute(profileID: profileID)
     }
 
-    static func resolvedFixtureMode(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtureMode {
+    static func resolvedFixtureMode(
+        from arguments: [String] = ProcessInfo.processInfo.arguments,
+        usesSimulatorTestSession: Bool? = nil
+    ) -> WanderFixtureMode {
         #if DEBUG
         if arguments.contains("-WanderUseStorefrontFixtures") {
             return .storefront
@@ -2311,7 +2338,12 @@ struct WanderRootView: View {
         if arguments.contains("-WanderUsePerformanceFixtures") {
             return .performance
         }
-        return arguments.contains("-WanderUseDemoFixtures") ? .demo : .empty
+        let restoresSimulatorTestSession = usesSimulatorTestSession
+            ?? SimulatorTestSessionPolicy.isActive(arguments: arguments)
+        if arguments.contains("-WanderUseDemoFixtures") || restoresSimulatorTestSession {
+            return .demo
+        }
+        return .empty
     }
 
     static func resolvedFixtures(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtures {

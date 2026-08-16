@@ -19,6 +19,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case mapAddAgain
     case mapFeatured
     case mapFriends
+    case mapYou
     case mapMoreFilters
     case mapSearch
     case mapMemory
@@ -151,6 +152,14 @@ enum FirstVisitWalkthroughContent {
                 "",
                 advance: .next,
                 coachTheme: .social
+            ),
+            step(
+                .map,
+                .mapYou,
+                "Only your Check Ins and Wanna places",
+                "",
+                advance: .next,
+                coachTheme: .map
             ),
             step(
                 .map,
@@ -2258,7 +2267,7 @@ private struct FirstVisitWalkthroughOverlay: View {
         if step.target == .mapFeatured {
             return min(300, max(260, containerSize.width - 32))
         }
-        if step.target == .mapFriends {
+        if step.target == .mapFriends || step.target == .mapYou {
             return min(286, max(260, containerSize.width - 32))
         }
         let characterCount = step.title.count + step.message.count
@@ -2311,7 +2320,7 @@ private struct FirstVisitWalkthroughOverlay: View {
     }
 
     private var isCompactFilterCoach: Bool {
-        step.target == .mapFeatured || step.target == .mapFriends
+        step.target == .mapFeatured || step.target == .mapFriends || step.target == .mapYou
     }
 
     private var visibleEmphasisFrames: [CGRect] {

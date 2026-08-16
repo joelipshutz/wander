@@ -4,8 +4,20 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtyGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 30)
+    func testEveryMapSourceRegistersItsOwnWalkthroughTarget() {
+        XCTAssertEqual(MapSource.featured.walkthroughTarget, .mapFeatured)
+        XCTAssertEqual(MapSource.friends.walkthroughTarget, .mapFriends)
+        XCTAssertEqual(MapSource.you.walkthroughTarget, .mapYou)
+    }
+
+    func testWalkthroughAddSheetOnlyExpandsWhenCandidateResultsOverflow() {
+        XCTAssertFalse(AddSuggestedPlaces.walkthroughRequiresExpansion(candidateCount: 0))
+        XCTAssertFalse(AddSuggestedPlaces.walkthroughRequiresExpansion(candidateCount: 3))
+        XCTAssertTrue(AddSuggestedPlaces.walkthroughRequiresExpansion(candidateCount: 4))
+    }
+
+    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtyOneGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 31)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -17,6 +29,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 .mapAddAgain,
                 .mapFeatured,
                 .mapFriends,
+                .mapYou,
                 .mapMoreFilters,
                 .mapSearch,
                 .mapTabs,
@@ -76,6 +89,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let passiveTargets: [WalkthroughTargetID] = [
             .mapFeatured,
             .mapFriends,
+            .mapYou,
             .mapMoreFilters,
             .mapSearch,
             .mapTabs,
@@ -130,6 +144,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             WalkthroughTargetID.mapSearch,
             .mapFeatured,
             .mapFriends,
+            .mapYou,
             .mapMoreFilters,
             .addImport,
             .addSearch,
@@ -193,6 +208,9 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let friends = try XCTUnwrap(
             FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapFriends }
         )
+        let you = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapYou }
+        )
         let more = try XCTUnwrap(
             FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapMoreFilters }
         )
@@ -207,6 +225,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertTrue(featured.message.isEmpty)
         XCTAssertEqual(friends.title, MapSource.friends.subtitle)
         XCTAssertTrue(friends.message.isEmpty)
+        XCTAssertEqual(you.title, "Only your Check Ins and Wanna places")
+        XCTAssertTrue(you.message.isEmpty)
         XCTAssertTrue(more.message.contains("category"))
         XCTAssertTrue(more.message.contains("specific friends"))
         XCTAssertTrue(more.message.contains("check-in"))
@@ -288,6 +308,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.currentStep?.target, .mapYou)
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.currentStep?.target, .mapMoreFilters)
         coordinator.advancePassiveStep()
@@ -1404,6 +1426,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.activate(.map)
         coordinator.perform(.mapAdd)
         coordinator.perform(.mapAddAgain)
+        coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()

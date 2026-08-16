@@ -19,6 +19,7 @@ enum AddSheetLayout {
 
 enum AddSuggestedPlaces {
     static let maximumCount = 7
+    static let walkthroughPartialResultCapacity = 3
     static let rowHeight: CGFloat = 58
     static let rowSpacing: CGFloat = 8
     static let showMoreHeight: CGFloat = 44
@@ -35,6 +36,10 @@ enum AddSuggestedPlaces {
 
     static func visible(_ candidates: [PlaceCandidate], count: Int) -> [PlaceCandidate] {
         Array(candidates.prefix(max(0, count)))
+    }
+
+    static func walkthroughRequiresExpansion(candidateCount: Int) -> Bool {
+        candidateCount > walkthroughPartialResultCapacity
     }
 }
 
@@ -841,10 +846,8 @@ struct AddScreen: View {
 
     @MainActor
     private func settleWalkthroughSheet(candidateCount: Int = 0) {
-        let previewCapacity = AddSuggestedPlaces.previewCount(
-            screenHeight: UIScreen.main.bounds.height
-        )
-        let targetDetent: PresentationDetent = candidateCount > previewCapacity
+        let targetDetent: PresentationDetent = AddSuggestedPlaces
+            .walkthroughRequiresExpansion(candidateCount: candidateCount)
             ? .large
             : restingDetent
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0)) {

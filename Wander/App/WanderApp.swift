@@ -1,8 +1,53 @@
+import Foundation
 import SwiftUI
 import SwiftData
 #if DEBUG
 import UIKit
 #endif
+
+enum SimulatorTestSessionPolicy {
+    static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
+    static let liveAuthArgument = "-WanderUseLiveAuth"
+
+    private static let persistenceKey = "recme.simulator.authenticatedFixture.v1"
+    private static let signedOutArguments: Set<String> = [
+        "-WanderAuthUITest",
+        "-WanderOnboardingUITestSignedOut",
+        "-WanderForceSignedOut",
+    ]
+
+    static func isActive(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        defaults: UserDefaults = .standard,
+        isSimulator: Bool = isSimulatorBuild
+    ) -> Bool {
+        guard isSimulator else { return false }
+
+        if arguments.contains(liveAuthArgument) {
+            defaults.removeObject(forKey: persistenceKey)
+            return false
+        }
+
+        if arguments.contains(authenticatedFixtureArgument) {
+            defaults.set(true, forKey: persistenceKey)
+            return true
+        }
+
+        if !signedOutArguments.isDisjoint(with: arguments) {
+            return false
+        }
+
+        return defaults.bool(forKey: persistenceKey)
+    }
+
+    private static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+}
 
 @main
 struct WanderApp: App {
@@ -20,6 +65,7 @@ struct WanderApp: App {
 
     init() {
         let configuration = WanderBackendConfiguration.current()
+        let usesSimulatorTestSession = SimulatorTestSessionPolicy.isActive()
         let analyticsClient: AnalyticsClient
         if let postHog = PostHogAnalyticsClient(configuration: .current()) {
             analyticsClient = postHog
@@ -33,8 +79,8 @@ struct WanderApp: App {
             wrappedValue: PushNotificationManager(analytics: contextualAnalytics)
         )
         let authStore: AuthSessionStore
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest") {
+        #if targetEnvironment(simulator)
+        if usesSimulatorTestSession {
             authStore = AuthSessionStore(
                 provider: PreviewAuthSessionProvider(
                     state: .signedIn(
@@ -52,15 +98,20 @@ struct WanderApp: App {
         #else
         authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
         #endif
-        let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
-        discoverParser = Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
+        let backendStore = usesSimulatorTestSession
+            ? WanderBackend()
+            : WanderBackend(configuration: configuration, authSession: authStore)
+        discoverParser = usesSimulatorTestSession
+            ? DeterministicFilterParser()
+            : Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
         _auth = StateObject(wrappedValue: authStore)
         _backend = StateObject(wrappedValue: backendStore)
         _entryCoordinator = StateObject(
             wrappedValue: AppEntryCoordinator(
                 auth: authStore,
                 backend: backendStore,
-                analytics: contextualAnalytics
+                analytics: contextualAnalytics,
+                usesLocalSimulatorTestSession: usesSimulatorTestSession
             )
         )
         #if DEBUG

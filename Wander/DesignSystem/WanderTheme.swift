@@ -316,6 +316,9 @@ enum WanderGlassTone: Equatable {
     case neutral
     case selected
     case accent
+    case blackAction
+    case deepBlackAction
+    case lightAction
     case darkOverlay
 
     var tint: Color? {
@@ -326,18 +329,24 @@ enum WanderGlassTone: Equatable {
             WanderTheme.terracotta.color.opacity(0.18)
         case .accent:
             WanderTheme.terracotta.color.opacity(0.28)
+        case .blackAction:
+            Color.black.opacity(0.82)
+        case .deepBlackAction:
+            Color.black.opacity(0.94)
+        case .lightAction:
+            Color.white.opacity(0.56)
         case .darkOverlay:
-            Color.black.opacity(0.46)
+            Color(white: 0.08).opacity(0.78)
         }
     }
 
     var foregroundStyle: Color {
         switch self {
-        case .neutral:
+        case .neutral, .lightAction:
             WanderTheme.textInk.color
         case .selected, .accent:
             WanderTheme.terracottaDark.color
-        case .darkOverlay:
+        case .blackAction, .deepBlackAction, .darkOverlay:
             .white
         }
     }
@@ -350,8 +359,14 @@ enum WanderGlassTone: Equatable {
             WanderTheme.terracottaTint.color.opacity(0.72)
         case .accent:
             WanderTheme.terracottaTint.color.opacity(0.78)
+        case .blackAction:
+            Color.black.opacity(0.88)
+        case .deepBlackAction:
+            Color.black.opacity(0.94)
+        case .lightAction:
+            Color.white.opacity(0.92)
         case .darkOverlay:
-            Color.black.opacity(0.64)
+            Color.black.opacity(0.82)
         }
     }
 
@@ -361,19 +376,30 @@ enum WanderGlassTone: Equatable {
             WanderTheme.surfaceRaised.color.opacity(0.72)
         case .selected, .accent:
             WanderTheme.terracotta.color
+        case .blackAction:
+            Color.white.opacity(0.24)
+        case .deepBlackAction:
+            Color.white.opacity(0.22)
+        case .lightAction:
+            Color.white.opacity(0.90)
         case .darkOverlay:
-            Color.white.opacity(0.42)
+            Color.white.opacity(0.18)
         }
     }
 
     var borderWidth: CGFloat {
         switch self {
-        case .neutral, .darkOverlay:
+        case .neutral, .blackAction, .deepBlackAction, .lightAction, .darkOverlay:
             1
         case .selected, .accent:
             2
         }
     }
+}
+
+enum WanderGlassMaterial: Equatable {
+    case regular
+    case clear
 }
 
 private struct WanderGlassCapsuleModifier: ViewModifier {
@@ -410,7 +436,54 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                         )
                 }
                 .shadow(
-                    color: tone == .darkOverlay
+                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
+                        ? Color.black.opacity(0.34)
+                        : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
+                    radius: 10,
+                    x: 0,
+                    y: 5
+                )
+        }
+    }
+}
+
+private struct WanderGlassRoundedRectangleModifier: ViewModifier {
+    let tone: WanderGlassTone
+    let cornerRadius: CGFloat
+    let material: WanderGlassMaterial
+    let isInteractive: Bool
+    let showsBorder: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if #available(iOS 26.0, *) {
+            let glass: Glass = material == .clear ? .clear : .regular
+            content
+                .glassEffect(
+                    glass
+                        .tint(tone.tint)
+                        .interactive(isInteractive),
+                    in: shape
+                )
+                .overlay {
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
+                }
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(tone.fallbackFill, in: shape)
+                .overlay {
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
+                }
+                .shadow(
+                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
                         ? Color.black.opacity(0.34)
                         : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
                     radius: 10,
@@ -423,28 +496,44 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
 
 private struct WanderGlassPanelModifier: ViewModifier {
     let cornerRadius: CGFloat
+    let tone: WanderGlassTone
+    let isInteractive: Bool
+    let showsBorder: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular, in: shape)
+                .glassEffect(
+                    .regular
+                        .tint(tone.tint)
+                        .interactive(isInteractive),
+                    in: shape
+                )
                 .overlay {
-                    shape.stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
                 }
         } else {
             content
                 .background(.ultraThinMaterial, in: shape)
-                .background(WanderTheme.surfaceRaised.color.opacity(0.62), in: shape)
+                .background(tone.fallbackFill, in: shape)
                 .overlay {
-                    shape.stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
                 }
                 .shadow(
-                    color: WanderTheme.textInk.color.opacity(0.08),
-                    radius: 14,
+                    color: tone == .darkOverlay
+                        ? Color.black.opacity(0.34)
+                        : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
+                    radius: isInteractive ? 6 : 14,
                     x: 0,
-                    y: 7
+                    y: isInteractive ? 3 : 7
                 )
         }
     }
@@ -478,8 +567,38 @@ extension View {
         )
     }
 
-    func wanderGlassPanel(cornerRadius: CGFloat = WanderTheme.radiusLarge) -> some View {
-        modifier(WanderGlassPanelModifier(cornerRadius: cornerRadius))
+    func wanderGlassPanel(
+        cornerRadius: CGFloat = WanderTheme.radiusLarge,
+        tone: WanderGlassTone = .neutral,
+        interactive: Bool = false,
+        showsBorder: Bool = true
+    ) -> some View {
+        modifier(
+            WanderGlassPanelModifier(
+                cornerRadius: cornerRadius,
+                tone: tone,
+                isInteractive: interactive,
+                showsBorder: showsBorder
+            )
+        )
+    }
+
+    func wanderGlassRoundedRectangle(
+        tone: WanderGlassTone = .neutral,
+        cornerRadius: CGFloat = WanderTheme.radiusLarge,
+        material: WanderGlassMaterial = .regular,
+        interactive: Bool = true,
+        showsBorder: Bool = true
+    ) -> some View {
+        modifier(
+            WanderGlassRoundedRectangleModifier(
+                tone: tone,
+                cornerRadius: cornerRadius,
+                material: material,
+                isInteractive: interactive,
+                showsBorder: showsBorder
+            )
+        )
     }
 }
 

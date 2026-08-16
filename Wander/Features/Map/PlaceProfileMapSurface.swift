@@ -55,6 +55,7 @@ struct PlaceProfileFullScreen: View {
     private static let edgeSwipeActivationWidth: CGFloat = 28
     private static let edgeSwipeMinimumTranslation: CGFloat = 80
     private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
+    private static let edgeSwipeProjectedTranslation: CGFloat = 160
     private static let minimumFullViewBottomContentInset: CGFloat = 64
 
     let place: PlaceSheetPlace
@@ -63,9 +64,19 @@ struct PlaceProfileFullScreen: View {
     let currentUserID: String
     let action: PlaceSheetAction
     let initialSection: PlaceProfileInitialSection
+    let usesInteractiveHorizontalDismissal: Bool
     let onBack: () -> Void
     let onAction: () -> Void
+    let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    @Binding private var attachedSaveContext: MapPlaceSaveContext?
+    let attachedSaveDraft: PlaceSaveDraft?
+    let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let onAttachedClose: @MainActor () -> Void
+    let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
 
     init(
         place: PlaceSheetPlace,
@@ -73,9 +84,19 @@ struct PlaceProfileFullScreen: View {
         tasteSaves: [PlaceSaveSummary],
         currentUserID: String,
         action: PlaceSheetAction,
+        saveActionSnapshot: PlaceProfileSaveActionSnapshot? = nil,
+        attachedSaveContext: Binding<MapPlaceSaveContext?> = .constant(nil),
+        attachedSaveDraft: PlaceSaveDraft? = nil,
         initialSection: PlaceProfileInitialSection = .top,
+        usesInteractiveHorizontalDismissal: Bool = false,
         onBack: @escaping () -> Void,
-        onAction: @escaping () -> Void
+        onAction: @escaping () -> Void,
+        onFloatingAction: ((PlaceProfileSaveAction) -> Void)? = nil,
+        onAttachedDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
+        onAttachedSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult? = { _ in nil },
+        onAttachedRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool = { _ in false },
+        onAttachedClose: @escaping @MainActor () -> Void = {},
+        onAttachedSaveCompleted: @escaping @MainActor (SaveResult) -> Void = { _ in }
     ) {
         self.place = place
         self.saves = saves
@@ -83,8 +104,18 @@ struct PlaceProfileFullScreen: View {
         self.currentUserID = currentUserID
         self.action = action
         self.initialSection = initialSection
+        self.usesInteractiveHorizontalDismissal = usesInteractiveHorizontalDismissal
         self.onBack = onBack
         self.onAction = onAction
+        self.onFloatingAction = onFloatingAction ?? { _ in onAction() }
+        _attachedSaveContext = attachedSaveContext
+        self.attachedSaveDraft = attachedSaveDraft
+        self.onAttachedDraftChange = onAttachedDraftChange
+        self.onAttachedSave = onAttachedSave
+        self.onAttachedRemove = onAttachedRemove
+        self.onAttachedClose = onAttachedClose
+        self.onAttachedSaveCompleted = onAttachedSaveCompleted
+        _saveActionSnapshot = State(initialValue: saveActionSnapshot)
     }
 
     private var presentation: PlaceProfilePresentation {
@@ -98,26 +129,91 @@ struct PlaceProfileFullScreen: View {
     }
 
     var body: some View {
+        Group {
+            if usesInteractiveHorizontalDismissal {
+                profileContent
+            } else {
+                profileContent
+                    .simultaneousGesture(edgeSwipeBackGesture)
+            }
+        }
+    }
+
+    private var profileContent: some View {
         PlaceProfileFullView(
             place: place,
             presentation: presentation,
             saves: saves,
             currentUserID: currentUserID,
             action: action,
+            saveActionSnapshot: saveActionSnapshot,
+            attachedSaveContext: $attachedSaveContext,
+            attachedSaveDraft: attachedSaveDraft,
             initialSection: initialSection,
             onBack: onBack,
-            onAction: onAction
+            onAction: onAction,
+            onFloatingAction: onFloatingAction,
+            onAttachedDraftChange: onAttachedDraftChange,
+            onAttachedSave: onAttachedSave,
+            onAttachedRemove: onAttachedRemove,
+            onAttachedClose: onAttachedClose,
+            onAttachedSaveCompleted: onAttachedSaveCompleted
         )
         .preferredColorScheme(.light)
         .navigationBarBackButtonHidden(true)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .simultaneousGesture(edgeSwipeBackGesture)
+        .onChange(of: currentUserActionState) { _, state in
+            guard let snapshot = saveActionSnapshot,
+                  snapshot.usesFloatingActions,
+                  snapshot.presentation != .empty
+            else { return }
+            saveActionSnapshot = snapshot.refreshingPresentation(for: state)
+        }
+    }
+
+    private var currentUserActionState: PlaceProfileSaveActionState {
+        PlaceProfileSaveActionPolicy.state(
+            saves: saves,
+            currentUserID: currentUserID,
+            hasSharedVisitInvitation: false,
+            isReadOnly: false
+        )
     }
 
     static func shouldTriggerEdgeSwipeBack(startX: CGFloat, translation: CGSize) -> Bool {
         startX <= edgeSwipeActivationWidth
             && translation.width >= edgeSwipeMinimumTranslation
             && abs(translation.height) <= edgeSwipeMaximumVerticalDrift
+    }
+
+    static func interactiveEdgeSwipeOffset(
+        startX: CGFloat,
+        translation: CGSize,
+        containerWidth: CGFloat
+    ) -> CGFloat? {
+        guard startX <= edgeSwipeActivationWidth, containerWidth > 0 else { return nil }
+        guard translation.width > 0 else { return 0 }
+        guard translation.width >= abs(translation.height) else { return nil }
+
+        return min(translation.width, containerWidth)
+    }
+
+    static func shouldCompleteInteractiveEdgeSwipe(
+        startX: CGFloat,
+        translation: CGSize,
+        predictedEndTranslation: CGSize
+    ) -> Bool {
+        guard startX <= edgeSwipeActivationWidth,
+              translation.width > 0,
+              abs(translation.height) <= edgeSwipeMaximumVerticalDrift
+        else { return false }
+
+        return translation.width >= edgeSwipeMinimumTranslation
+            || (
+                predictedEndTranslation.width >= edgeSwipeProjectedTranslation
+                    && predictedEndTranslation.width >= abs(predictedEndTranslation.height)
+            )
     }
 
     static func resolvedFullBleedHeaderTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
@@ -131,6 +227,7 @@ struct PlaceProfileFullScreen: View {
     private var edgeSwipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
             .onEnded { value in
+                guard !usesInteractiveHorizontalDismissal else { return }
                 guard walkthroughs.activeSurface != .placeDetail else { return }
                 if Self.shouldTriggerEdgeSwipeBack(
                     startX: value.startLocation.x,
@@ -139,6 +236,137 @@ struct PlaceProfileFullScreen: View {
                     onBack()
                 }
             }
+    }
+}
+
+struct PlaceProfileSlideContainer<Content: View>: View {
+    let reduceMotion: Bool
+    let isGestureDismissEnabled: Bool
+    let onDismissed: () -> Void
+    let content: Content
+
+    @State private var horizontalOffset: CGFloat = 0
+    @State private var isTrackingEdgeSwipe = false
+    @State private var isCompletingDismissal = false
+    @GestureState private var isEdgeSwipeGestureActive = false
+
+    init(
+        reduceMotion: Bool,
+        isGestureDismissEnabled: Bool,
+        onDismissed: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.reduceMotion = reduceMotion
+        self.isGestureDismissEnabled = isGestureDismissEnabled
+        self.onDismissed = onDismissed
+        self.content = content()
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            content
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .background(WanderTheme.surfaceBone.color)
+                .scrollDisabled(isTrackingEdgeSwipe)
+                .offset(x: horizontalOffset)
+                .contentShape(Rectangle())
+                .simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))
+                .onChange(of: isEdgeSwipeGestureActive) { wasActive, isActive in
+                    guard wasActive, !isActive else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        guard !isEdgeSwipeGestureActive,
+                              isTrackingEdgeSwipe,
+                              !isCompletingDismissal
+                        else { return }
+                        isTrackingEdgeSwipe = false
+                        restoreAfterCancelledSwipe()
+                    }
+                }
+        }
+    }
+
+    private func edgeSwipeGesture(containerWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .updating($isEdgeSwipeGestureActive) { _, isActive, _ in
+                isActive = true
+            }
+            .onChanged { value in
+                guard isGestureDismissEnabled,
+                      !isCompletingDismissal
+                else { return }
+
+                if isTrackingEdgeSwipe {
+                    horizontalOffset = min(max(value.translation.width, 0), containerWidth)
+                    return
+                }
+
+                guard value.translation.width > 0,
+                      let offset = PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
+                          startX: value.startLocation.x,
+                          translation: value.translation,
+                          containerWidth: containerWidth
+                      )
+                else { return }
+
+                isTrackingEdgeSwipe = true
+                horizontalOffset = offset
+            }
+            .onEnded { value in
+                guard !isCompletingDismissal else { return }
+                let wasTrackingEdgeSwipe = isTrackingEdgeSwipe
+                isTrackingEdgeSwipe = false
+                guard isGestureDismissEnabled, wasTrackingEdgeSwipe else {
+                    restoreAfterCancelledSwipe()
+                    return
+                }
+
+                if PlaceProfileFullScreen.shouldCompleteInteractiveEdgeSwipe(
+                    startX: value.startLocation.x,
+                    translation: value.translation,
+                    predictedEndTranslation: value.predictedEndTranslation
+                ) {
+                    collapse(containerWidth: containerWidth)
+                } else {
+                    restoreAfterCancelledSwipe()
+                }
+            }
+    }
+
+    private func restoreAfterCancelledSwipe() {
+        guard horizontalOffset > 0 else { return }
+        if reduceMotion {
+            horizontalOffset = 0
+        } else {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                horizontalOffset = 0
+            }
+        }
+    }
+
+    private func collapse(containerWidth: CGFloat) {
+        guard !isCompletingDismissal else { return }
+        isCompletingDismissal = true
+
+        guard !reduceMotion else {
+            finishCollapse()
+            return
+        }
+
+        let dismissalWidth = max(containerWidth, 1)
+        withAnimation(.easeOut(duration: 0.22)) {
+            horizontalOffset = dismissalWidth
+        } completion: {
+            guard isCompletingDismissal else { return }
+            finishCollapse()
+        }
+    }
+
+    private func finishCollapse() {
+        onDismissed()
+        horizontalOffset = 0
+        isTrackingEdgeSwipe = false
+        isCompletingDismissal = false
     }
 }
 
@@ -425,11 +653,21 @@ private struct PlaceProfileFullView: View {
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
+    let saveActionSnapshot: PlaceProfileSaveActionSnapshot?
+    @Binding var attachedSaveContext: MapPlaceSaveContext?
+    let attachedSaveDraft: PlaceSaveDraft?
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
+    let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let onAttachedClose: @MainActor () -> Void
+    let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.placeProfileFloatingActionVariant) private var floatingActionVariant
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
@@ -442,6 +680,7 @@ private struct PlaceProfileFullView: View {
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
     @State private var discoveredReservationAction: PlaceExternalAction?
     @State private var recoveredBusinessMetadata: PlaceBusinessMetadata?
+    @State private var floatingActivityScrollRequest = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -479,7 +718,7 @@ private struct PlaceProfileFullView: View {
                                 .id(WalkthroughTargetID.placeRatings)
                                 .walkthroughTarget(.placeRatings)
 
-                            if action != .none {
+                            if !usesFloatingActions, action != .none {
                                 primaryPlaceAction
                             }
 
@@ -512,6 +751,11 @@ private struct PlaceProfileFullView: View {
                     .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                         scrollToWalkthroughTarget(target, using: scrollProxy)
                     }
+                    .onChange(of: floatingActivityScrollRequest) { _, _ in
+                        withAnimation(.easeInOut(duration: 0.24)) {
+                            scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
+                        }
+                    }
                 }
                 .background(WanderTheme.surfaceBone.color)
             }
@@ -522,6 +766,26 @@ private struct PlaceProfileFullView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let attachedSaveContext {
+                PlaceSaveAttachedTray(
+                    context: attachedSaveContext,
+                    draft: attachedSaveDraft,
+                    onDraftChange: onAttachedDraftChange,
+                    onSave: onAttachedSave,
+                    onRemove: onAttachedRemove,
+                    onClose: onAttachedClose,
+                    onSaveCompleted: onAttachedSaveCompleted
+                )
+                .id(attachedSaveContext.id)
+            } else if usesFloatingActions, !floatingActions.isEmpty {
+                PlaceProfileFloatingActions(
+                    actions: floatingActions,
+                    variant: floatingActionVariant,
+                    onAction: handleFloatingAction
+                )
+            }
+        }
         .navigationTitle(place.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
@@ -537,7 +801,7 @@ private struct PlaceProfileFullView: View {
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if action != .none {
+                if !usesFloatingActions, action != .none {
                     Button(action: onAction) {
                         Label(action.accessibilityLabel, systemImage: action.systemImage)
                             .labelStyle(.iconOnly)
@@ -581,6 +845,22 @@ private struct PlaceProfileFullView: View {
                 onPhotoLoadFailure: handlePhotoLoadFailure
             )
         }
+    }
+
+    private var usesFloatingActions: Bool {
+        saveActionSnapshot?.usesFloatingActions == true
+    }
+
+    private var floatingActions: [PlaceProfileSaveAction] {
+        saveActionSnapshot?.presentation.actions ?? []
+    }
+
+    private func handleFloatingAction(_ action: PlaceProfileSaveAction) {
+        if action.kind == .editHistory {
+            floatingActivityScrollRequest += 1
+            return
+        }
+        onFloatingAction(action)
     }
 
     private func scrollToWalkthroughTarget(
@@ -1199,6 +1479,438 @@ private struct PlaceProfileFullView: View {
             .font(.system(size: 11, weight: .black))
             .textCase(.uppercase)
             .foregroundStyle(WanderTheme.textMuted.color)
+    }
+}
+
+enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
+    case option1 = 1
+    case option2 = 2
+    case option3 = 3
+    case option4 = 4
+    case option5 = 5
+
+    static let productionDefault = PlaceProfileFloatingActionVariant.option5
+    static let selectionLaunchArgument = "-WanderPlaceActionVariant"
+
+    static func resolved(
+        from arguments: [String] = ProcessInfo.processInfo.arguments,
+        storedRawValue: Int? = nil
+    ) -> PlaceProfileFloatingActionVariant {
+        #if DEBUG
+        if let argumentIndex = arguments.firstIndex(of: selectionLaunchArgument) {
+            let valueIndex = arguments.index(after: argumentIndex)
+            guard arguments.indices.contains(valueIndex),
+                  let rawValue = Int(arguments[valueIndex]),
+                  let variant = PlaceProfileFloatingActionVariant(rawValue: rawValue) else {
+                return productionDefault
+            }
+            return variant
+        }
+        #endif
+
+        guard let storedRawValue,
+              let variant = PlaceProfileFloatingActionVariant(rawValue: storedRawValue) else {
+            return productionDefault
+        }
+        return variant
+    }
+
+    var usesCompactButtons: Bool {
+        switch self {
+        case .option3, .option4, .option5:
+            true
+        case .option1, .option2:
+            false
+        }
+    }
+
+    var usesCharcoalRail: Bool {
+        self == .option4
+    }
+
+    var testerLabel: String {
+        switch self {
+        case .option1:
+            "1 — current"
+        case .option2:
+            "2 — full-width black"
+        case .option3:
+            "3 — compact black"
+        case .option4:
+            "4 — compact dark rail"
+        case .option5:
+            "5 — selected · compact deep black"
+        }
+    }
+}
+
+struct PlaceProfileFloatingActionDebugPreferences {
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func activeVariant(
+        for userID: String,
+        isDebugSettingsEntitled: Bool,
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> PlaceProfileFloatingActionVariant {
+        #if DEBUG
+        if arguments.contains(PlaceProfileFloatingActionVariant.selectionLaunchArgument) {
+            return PlaceProfileFloatingActionVariant.resolved(from: arguments)
+        }
+        #endif
+
+        guard isDebugSettingsEntitled else { return .productionDefault }
+        return storedVariant(for: userID)
+    }
+
+    func storedVariant(for userID: String) -> PlaceProfileFloatingActionVariant {
+        PlaceProfileFloatingActionVariant.resolved(
+            from: [],
+            storedRawValue: storedRawValue(for: userID)
+        )
+    }
+
+    func setVariant(_ variant: PlaceProfileFloatingActionVariant, for userID: String) {
+        defaults.set(variant.rawValue, forKey: selectionKey(userID: userID))
+    }
+
+    private func storedRawValue(for userID: String) -> Int? {
+        let key = selectionKey(userID: userID)
+        guard defaults.object(forKey: key) != nil else { return nil }
+        return defaults.integer(forKey: key)
+    }
+
+    private func selectionKey(userID: String) -> String {
+        "wander.debugSettings.\(userID).placeActionVariant"
+    }
+}
+
+private struct PlaceProfileFloatingActionVariantEnvironmentKey: EnvironmentKey {
+    static let defaultValue = PlaceProfileFloatingActionVariant.productionDefault
+}
+
+extension EnvironmentValues {
+    var placeProfileFloatingActionVariant: PlaceProfileFloatingActionVariant {
+        get { self[PlaceProfileFloatingActionVariantEnvironmentKey.self] }
+        set { self[PlaceProfileFloatingActionVariantEnvironmentKey.self] = newValue }
+    }
+}
+
+struct PlaceProfileFloatingActions: View {
+    static let minimumActionHeight: CGFloat = 48
+    static let compactActionHeight: CGFloat = 60
+    static let compactActionFrameWidth: CGFloat = 124
+    static let accessibilityCompactActionFrameWidth: CGFloat = 280
+    static let compactCornerRadius: CGFloat = 16
+    static let charcoalRailCornerRadius: CGFloat = 30
+
+    let actions: [PlaceProfileSaveAction]
+    let variant: PlaceProfileFloatingActionVariant
+    let onAction: (PlaceProfileSaveAction) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    init(
+        actions: [PlaceProfileSaveAction],
+        variant: PlaceProfileFloatingActionVariant = .resolved(),
+        onAction: @escaping (PlaceProfileSaveAction) -> Void
+    ) {
+        self.actions = actions
+        self.variant = variant
+        self.onAction = onAction
+    }
+
+    var body: some View {
+        actionCluster
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, variant.usesCompactButtons ? WanderTheme.spacing6 : WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var actionCluster: some View {
+        if variant.usesCharcoalRail {
+            option4InnerActions
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.vertical, WanderTheme.spacing3)
+                .wanderGlassRoundedRectangle(
+                    tone: .darkOverlay,
+                    cornerRadius: Self.charcoalRailCornerRadius,
+                    interactive: false,
+                    showsBorder: true
+                )
+        } else {
+            actionLayout
+        }
+    }
+
+    @ViewBuilder
+    private var option4InnerActions: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: WanderTheme.spacing2) {
+                actionLayout
+            }
+        } else {
+            actionLayout
+        }
+    }
+
+    @ViewBuilder
+    private var actionLayout: some View {
+        if usesVerticalLayout {
+            VStack(spacing: WanderTheme.spacing2) {
+                actionButtons
+            }
+        } else {
+            HStack(spacing: WanderTheme.spacing2) {
+                actionButtons
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        ForEach(actions) { action in
+            Button {
+                onAction(action)
+            } label: {
+                if variant.usesCompactButtons {
+                    actionLabel(for: action)
+                        .contentShape(
+                            RoundedRectangle(
+                                cornerRadius: Self.compactCornerRadius,
+                                style: .continuous
+                            )
+                        )
+                        .wanderGlassRoundedRectangle(
+                            tone: Self.glassTone(for: action, variant: variant),
+                            cornerRadius: Self.compactCornerRadius,
+                            material: variant == .option4 ? .clear : .regular,
+                            interactive: true,
+                            showsBorder: true
+                        )
+                } else {
+                    actionLabel(for: action)
+                        .contentShape(Capsule())
+                        .wanderGlassCapsule(
+                            tone: Self.glassTone(for: action, variant: variant),
+                            interactive: true,
+                            showsBorder: true
+                        )
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("place-profile.floating-action.\(action.kind.rawValue)")
+            .accessibilityLabel(action.title)
+            .accessibilityAddTraits(action.isSelected ? .isSelected : [])
+        }
+    }
+
+    @ViewBuilder
+    private func actionLabel(for action: PlaceProfileSaveAction) -> some View {
+        if variant.usesCompactButtons {
+            VStack(spacing: 3) {
+                Image(systemName: systemImage(for: action))
+                    .accessibilityHidden(true)
+                HStack(spacing: WanderTheme.spacing1) {
+                    Text(action.title)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                    if action.isSelected {
+                        Image(systemName: "checkmark")
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+            .font(.system(size: 15, weight: .bold))
+            .padding(.horizontal, WanderTheme.spacing1)
+            .frame(
+                minWidth: compactActionWidth,
+                maxWidth: compactActionWidth,
+                minHeight: Self.compactActionHeight
+            )
+            .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
+        } else {
+            HStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: systemImage(for: action))
+                    .accessibilityHidden(true)
+                Text(action.title)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                if action.isSelected {
+                    Image(systemName: "checkmark")
+                        .accessibilityHidden(true)
+                }
+            }
+            .font(.system(size: 15, weight: .bold))
+            .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
+        }
+    }
+
+    private var compactActionWidth: CGFloat {
+        return dynamicTypeSize.isAccessibilitySize
+            ? Self.accessibilityCompactActionFrameWidth
+            : Self.compactActionFrameWidth
+    }
+
+    private var usesVerticalLayout: Bool {
+        Self.shouldStackActions(
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+            actionCount: actions.count
+        )
+    }
+
+    static func shouldStackActions(isAccessibilitySize: Bool, actionCount: Int) -> Bool {
+        isAccessibilitySize && actionCount > 1
+    }
+
+    static func glassTone(
+        for action: PlaceProfileSaveAction,
+        variant: PlaceProfileFloatingActionVariant = .productionDefault
+    ) -> WanderGlassTone {
+        guard action.kind == .checkIn else {
+            return variant == .option4 ? .lightAction : .neutral
+        }
+        switch variant {
+        case .option1:
+            return .accent
+        case .option5:
+            return .deepBlackAction
+        case .option2, .option3, .option4:
+            return .blackAction
+        }
+    }
+
+    private func systemImage(for action: PlaceProfileSaveAction) -> String {
+        switch action.kind {
+        case .checkIn:
+            "checkmark.circle"
+        case .wanna:
+            action.isSelected ? "bookmark.fill" : "bookmark"
+        case .editHistory:
+            "clock.arrow.circlepath"
+        }
+    }
+
+}
+
+struct PlaceSaveAttachedTray: View {
+    static let maximumHeight: CGFloat = 520
+
+    let context: MapPlaceSaveContext
+    let draft: PlaceSaveDraft?
+    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let onClose: @MainActor () -> Void
+    let onSaveCompleted: @MainActor (SaveResult) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
+
+    private var resolvedDraft: PlaceSaveDraft? {
+        guard let liveDraft = placeSaveDraftStore.draft,
+              liveDraft.candidate.id == context.candidate.id
+        else { return draft }
+        return liveDraft
+    }
+
+    private var selectedStatus: PlaceStatus {
+        resolvedDraft?.form.selectedStatus ?? context.initialStatus
+    }
+
+    private var trayTitle: String {
+        selectedStatus == .wannaGo ? "Wanna" : CheckInCopy.verb
+    }
+
+    private var traySystemImage: String {
+        selectedStatus == .wannaGo ? "bookmark.fill" : "star.fill"
+    }
+
+    private var collapseAccessibilityLabel: String {
+        selectedStatus == .wannaGo ? "Collapse Wanna" : "Collapse check-in"
+    }
+
+    private var trayAccessibilityIdentifier: String {
+        selectedStatus == .wannaGo
+            ? "place-profile.attached-wanna"
+            : "place-profile.attached-check-in"
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(WanderTheme.borderStrong.color)
+                .frame(width: 36, height: 4)
+                .padding(.top, WanderTheme.spacing1)
+                .accessibilityHidden(true)
+
+            HStack(spacing: WanderTheme.spacing2) {
+                Label(trayTitle, systemImage: traySystemImage)
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .accessibilityAddTraits(.isSelected)
+
+                Spacer()
+
+                Button(action: onClose) {
+                    Label(collapseAccessibilityLabel, systemImage: "chevron.down")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(
+                            minWidth: WanderTheme.tapMinimum,
+                            minHeight: WanderTheme.tapMinimum
+                        )
+                        .foregroundStyle(WanderTheme.textInk.color)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(collapseAccessibilityLabel)
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+
+            Divider()
+                .background(WanderTheme.borderHairline.color)
+
+            MapPlaceSaveEditor(
+                context: context,
+                draft: resolvedDraft,
+                presentation: .attached,
+                onDraftChange: onDraftChange,
+                onSave: onSave,
+                onRemove: onRemove,
+                onClose: onClose,
+                onSaveCompleted: onSaveCompleted
+            )
+            .id(context.id)
+        }
+        .frame(maxHeight: Self.maximumHeight)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: WanderTheme.radiusSheet,
+                topTrailingRadius: WanderTheme.radiusSheet
+            )
+        )
+        .overlay(alignment: .top) {
+            UnevenRoundedRectangle(
+                topLeadingRadius: WanderTheme.radiusSheet,
+                topTrailingRadius: WanderTheme.radiusSheet
+            )
+            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+        .shadow(color: WanderTheme.textInk.color.opacity(0.11), radius: 18, y: -6)
+        .background(WanderTheme.surfaceBone.color.ignoresSafeArea(edges: .bottom))
+        .transition(
+            reduceMotion
+                ? .opacity
+                : .move(edge: .bottom).combined(with: .opacity)
+        )
+        .accessibilityIdentifier(trayAccessibilityIdentifier)
     }
 }
 

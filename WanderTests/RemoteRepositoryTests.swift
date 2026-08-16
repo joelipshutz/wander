@@ -3199,7 +3199,7 @@ final class RemoteRepositoryTests: XCTestCase {
     func testFeatureFlagRepositoryAppliesOwnOverrideOverGlobalDefault() async throws {
         let table = RecordingTable()
         table.responses["GET:feature_flags"] = Data(
-            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
         )
         let repository = SupabaseFeatureFlagRepository(table: table)
 
@@ -3215,6 +3215,10 @@ final class RemoteRepositoryTests: XCTestCase {
                 .debugSettings: ResolvedFeatureFlagValue(
                     isEnabled: true,
                     source: .accountOverride
+                ),
+                .placeProfileSaveTrayV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
                 )
             ]
         )
@@ -3225,7 +3229,10 @@ final class RemoteRepositoryTests: XCTestCase {
             table.calls.first?.queryItems,
             [
                 URLQueryItem(name: "select", value: "key,user_id,enabled"),
-                URLQueryItem(name: "key", value: "in.(first_visit_nux,debug_settings)")
+                URLQueryItem(
+                    name: "key",
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1)"
+                )
             ]
         )
     }
@@ -3252,10 +3259,32 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testDebugSettingsAccessPolicyAllowsEverySimulatorAndRequiresServerFlagOnDevice() {
+        XCTAssertTrue(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: nil, isSimulator: true)
+        )
+        XCTAssertTrue(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: false, isSimulator: true)
+        )
+        XCTAssertTrue(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: true, isSimulator: false)
+        )
+        XCTAssertFalse(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: nil, isSimulator: false)
+        )
+        XCTAssertFalse(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: false, isSimulator: false)
+        )
+    }
+
     func testBackendFeatureFlagsFailClosedAndNeverLeakAcrossAccounts() async {
         let repository = StubFeatureFlagRepository(
             values: [
                 .firstVisitNUX: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .globalDefault
+                ),
+                .placeProfileSaveTrayV1: ResolvedFeatureFlagValue(
                     isEnabled: true,
                     source: .globalDefault
                 )
@@ -3265,21 +3294,26 @@ final class RemoteRepositoryTests: XCTestCase {
         let backend = WanderBackend(featureFlagRepository: repository)
 
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_a"))
+        XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_a"))
         XCTAssertTrue(backend.featureFlagResolution.isPending(for: "user_a"))
         await backend.refreshFeatureFlags(for: "user_a")
         XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user_a"), true)
+        XCTAssertEqual(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_a"), true)
         XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_a"))
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_b"))
+        XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_b"))
         XCTAssertTrue(backend.featureFlagResolution.isPending(for: "user_b"))
 
         repository.error = WanderRemoteError.invalidResponse("expected")
         await backend.refreshFeatureFlags(for: "user_b")
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_b"))
+        XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_b"))
         XCTAssertFalse(
             backend.featureFlagResolution.isPending(for: "user_b"),
             "A failed fetch must stop suppressing normal non-NUX UI."
         )
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_a"))
+        XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_a"))
     }
 
     func testBackendMissingFlagRowIsResolvedAndNotPending() async {
