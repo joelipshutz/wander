@@ -30439,3 +30439,41 @@ Validation — 2026-08-16 06:04 PDT:
 - Existing compiler/headermap warnings remain unchanged. No database, auth,
   schema/RLS/RPC, build number, archive, TestFlight upload, or release change
   is included.
+
+Pre-merge review — 2026-08-16 06:08 PDT:
+
+- The required independent review found no maintainability issue, but identified
+  that the selected Option B had not been validated on the smaller iPhone 16e;
+  the existing small-phone evidence was for Option C.
+- Added a focused UI geometry regression that requires Featured, Friends, You,
+  and More to exist, remain hittable, stay inside the viewport, preserve a
+  44-point hit height, and avoid overlapping adjacent controls. The exact B
+  layout will be captured on an isolated iPhone 16e before merge.
+
+Landing fixes and validation — 2026-08-16 06:37 PDT:
+
+- The iPhone 16e check exposed accessibility frames below the 44-point minimum.
+  Increased the filter-chip content and row height while preserving the selected
+  wide Option B proportions. All four controls now remain inside the viewport,
+  non-overlapping, hittable, and at least 44 points high. Small-phone result:
+  `/private/tmp/DerivedData-rec278-map-ui-small/Logs/Test/Test-Wander-2026.08.16_06-27-12--0700.xcresult`.
+- Adversarial review found that a search/status banner could increase the bottom
+  dock height without increasing the selected-ticket clearance. The dock now
+  reports its rendered height through a preference, and the ticket and recenter
+  button use that measured clearance. The deterministic iPhone 16e regression
+  passed 1/1:
+  `/private/tmp/DerivedData-rec278-map-ui-small/Logs/Test/Test-Wander-2026.08.16_06-26-25--0700.xcresult`.
+- The exact final production diff passed all nine focused UI regressions on the
+  isolated iPhone 16 Plus, including the five Map filter-interaction tests,
+  source-specific More-filter lessons, focused-search containment, and the
+  storefront Map capture. Result:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-34-54--0700.xcresult`.
+- The complete 1,238-test `WanderTests` target passed 1,237 tests; the known
+  aggregate-only `testCancelledSessionRefreshDoesNotReplaceValidatedState`
+  isolation flake trapped again and then passed 1/1 when rerun alone. Aggregate:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-32-57--0700.xcresult`;
+  isolated:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-34-27--0700.xcresult`.
+- Maintainability and performance reviews were clean. The final UI remains
+  Option B; the image-backed/liquid-glass ticket experiment remains deferred.
+  No build-number bump, archive, TestFlight upload, or release was performed.

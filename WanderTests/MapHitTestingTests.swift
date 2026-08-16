@@ -92,7 +92,7 @@ final class MapFilterSelectionTests: XCTestCase {
 
         XCTAssertFalse(filterRow.contains("ScrollView(.horizontal"))
         XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity, alignment: .center)"))
-        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 44)"))
+        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 48)"))
     }
 
     func testMapControlHierarchyKeepsFiltersAboveTheMapAndSearchAboveTabs() throws {
@@ -113,14 +113,16 @@ final class MapFilterSelectionTests: XCTestCase {
 
         XCTAssertLessThan(filters.lowerBound, mapSpace.lowerBound)
         XCTAssertLessThan(mapSpace.lowerBound, search.lowerBound)
-        XCTAssertTrue(map.contains("selectedPlaceProfileSurface\n                    .padding(.bottom, MapControlLayout.searchDockClearance)"))
+        XCTAssertTrue(map.contains("selectedPlaceProfileSurface\n                    .padding(.bottom, mapSearchDockClearance)"))
+        XCTAssertTrue(map.contains("MapSearchDockHeightPreferenceKey"))
+        XCTAssertTrue(map.contains("measuredMapSearchDockHeight = height"))
         XCTAssertTrue(map.contains(".overlay(alignment: .bottomTrailing)"))
         XCTAssertTrue(
             map.contains(
                 "if !isPlaceProfilePresented && !isMapSearchFocused"
             )
         )
-        XCTAssertTrue(map.contains("? MapControlLayout.selectedPlaceRecenterClearance"))
+        XCTAssertTrue(map.contains("? selectedPlaceRecenterClearance"))
     }
 
     func testMoreSectionsMatchTheActiveSource() {

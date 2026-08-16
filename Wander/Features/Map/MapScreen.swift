@@ -168,6 +168,7 @@ struct MapScreen: View {
     @State private var handledPresentationResetRequestID: UUID?
     @State private var mapSearchFocusRequestID: UUID?
     @State private var walkthroughFallbackMemory: VisiblePlace?
+    @State private var measuredMapSearchDockHeight = MapControlLayout.searchDockClearance
     @FocusState private var isMapSearchFocused: Bool
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -240,6 +241,7 @@ struct MapScreen: View {
         self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
+        _mapSearchMessage = State(initialValue: Self.resolvedInitialMapSearchMessage())
         _mapFilterState = State(initialValue: initialMapFilterState)
         _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
         _mapTabBecameInactiveAt = State(initialValue: nil)
@@ -255,6 +257,15 @@ struct MapScreen: View {
         let query = TrustedPlaceSearchQuery(mapQuery)
         guard query.hasMeaningfulTokens else { return places }
         return TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
+    }
+
+    private var mapSearchDockClearance: CGFloat {
+        max(MapControlLayout.searchDockClearance, measuredMapSearchDockHeight)
+    }
+
+    private var selectedPlaceRecenterClearance: CGFloat {
+        MapControlLayout.selectedPlaceRecenterClearance
+            + max(0, mapSearchDockClearance - MapControlLayout.searchDockClearance)
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
@@ -462,7 +473,7 @@ struct MapScreen: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
-                                .frame(minWidth: 44, minHeight: 44)
+                                .frame(minWidth: 44, minHeight: 48)
                                 .accessibilityIdentifier("map.filter.\(source.rawValue)")
                                 .walkthroughTarget(source.walkthroughTarget)
                                 .walkthroughEmphasis(
@@ -479,14 +490,13 @@ struct MapScreen: View {
                                 )
                             }
                             .buttonStyle(.plain)
-                            .frame(minWidth: 44, minHeight: 44)
+                            .frame(minWidth: 44, minHeight: 48)
                             .accessibilityIdentifier("map.filter.more")
                             .walkthroughTarget(.mapMoreFilters)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.horizontal, WanderTheme.spacing3)
-                        .padding(.vertical, WanderTheme.spacing1)
-                        .frame(height: 48)
+                        .frame(height: 52)
                         .overlay(alignment: .topTrailing) {
                             if isMoreFiltersPresented {
                                 MapMoreFiltersPopover(
@@ -589,6 +599,14 @@ struct MapScreen: View {
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .padding(.bottom, WanderTheme.spacing2)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: MapSearchDockHeightPreferenceKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .safeAreaPadding(.top, WanderTheme.spacing2)
@@ -608,15 +626,19 @@ struct MapScreen: View {
                         .padding(
                             .bottom,
                             hasSelectedProfile
-                                ? MapControlLayout.selectedPlaceRecenterClearance
-                                : MapControlLayout.searchDockClearance
+                                ? selectedPlaceRecenterClearance
+                                : mapSearchDockClearance
                         )
                     }
+                }
+                .onPreferenceChange(MapSearchDockHeightPreferenceKey.self) { height in
+                    guard height > 0 else { return }
+                    measuredMapSearchDockHeight = height
                 }
                 .zIndex(40)
 
                 selectedPlaceProfileSurface
-                    .padding(.bottom, MapControlLayout.searchDockClearance)
+                    .padding(.bottom, mapSearchDockClearance)
             }
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
@@ -3016,6 +3038,17 @@ struct MapScreen: View {
         return arguments[valueIndex]
     }
 
+    static func resolvedInitialMapSearchMessage(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String? {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapSearchMessage") else {
+            return nil
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return nil }
+        return arguments[valueIndex]
+    }
+
     static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         arguments.contains("-WanderMapSheetExpanded")
     }
@@ -3781,6 +3814,14 @@ private enum MapControlLayout {
     static let selectedPlaceRecenterClearance: CGFloat = 218
 }
 
+private struct MapSearchDockHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 private struct SearchBar: View {
     @Environment(\.scenePhase) private var scenePhase
     @Binding var query: String
@@ -4047,6 +4088,7 @@ private struct MapSearchMessage: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(Capsule())
         .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .accessibilityIdentifier("map.searchMessage")
     }
 }
 
@@ -4117,7 +4159,7 @@ private struct MapSourceFilterChip: View {
         }
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing2)
-        .frame(minHeight: 40)
+        .frame(minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
@@ -4162,7 +4204,7 @@ private struct MapMoreFilterChip: View {
         }
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing2)
-        .frame(minHeight: 40)
+        .frame(minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
