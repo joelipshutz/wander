@@ -429,6 +429,127 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
     }
 
+    func testDebugReplayClearsStaleDownstreamJourneyCompletion() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
+
+        store.markComplete(for: "ryan", surface: .feed)
+        store.markComplete(for: "ryan", surface: .feedSearch)
+        store.markComplete(for: "ryan", surface: .lists)
+
+        coordinator.prepareDebugReplay(at: .mapAdd)
+
+        XCTAssertEqual(coordinator.currentStep?.target, .mapAdd)
+        XCTAssertFalse(store.isComplete(for: "ryan", surface: .feed))
+        XCTAssertFalse(store.isComplete(for: "ryan", surface: .feedSearch))
+        XCTAssertFalse(store.isComplete(for: "ryan", surface: .lists))
+    }
+
+    func testRequestedRoutingSkipsCompletedFeedToIncompleteListsInsteadOfDeadEnding() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store
+        )
+
+        store.markComplete(for: "ryan", surface: .feed)
+        coordinator.forceActivate(.feedSearchResultsBack)
+        coordinator.perform(.feedSearchResultsBack)
+
+        XCTAssertTrue(store.isComplete(for: "ryan", surface: .feed))
+        XCTAssertEqual(coordinator.requestedSurface, .lists)
+    }
+
+    func testRequestedRoutingSkipsMultipleCompletedDestinations() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store
+        )
+
+        store.markComplete(for: "ryan", surface: .feed)
+        store.markComplete(for: "ryan", surface: .lists)
+        coordinator.forceActivate(.feedSearchResultsBack)
+        coordinator.perform(.feedSearchResultsBack)
+        coordinator.consumeRequestedSurface(.feed)
+
+        XCTAssertEqual(coordinator.requestedSurface, .sendoff)
+    }
+
+    func testRequestedRoutingSkipsTerminalProgressWithoutCompletionBit() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store
+        )
+        let feedStepCount = FirstVisitWalkthroughContent.stepsBySurface[.feed, default: []].count
+
+        store.setProgress(feedStepCount, for: "ryan", surface: .feed)
+        coordinator.forceActivate(.feedSearchResultsBack)
+        coordinator.perform(.feedSearchResultsBack)
+
+        XCTAssertTrue(store.isComplete(for: "ryan", surface: .feed))
+        XCTAssertEqual(coordinator.requestedSurface, .lists)
+    }
+
+    func testRestoreReroutesStaleCompletedDestinationCheckpoint() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let feedStepCount = FirstVisitWalkthroughContent.stepsBySurface[.feed, default: []].count
+        store.setProgress(feedStepCount, for: "ryan", surface: .feed)
+        store.setCheckpoint(
+            FirstVisitWalkthroughCheckpoint(
+                target: .feedActivity,
+                updatedAt: .now,
+                tutorialCandidate: nil,
+                tutorialUserPlaceID: nil,
+                tutorialMemorySnapshot: nil
+            ),
+            for: "ryan"
+        )
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store
+        )
+
+        XCTAssertEqual(coordinator.restoreJourneyIfNeeded(), .resumed(.lists))
+        XCTAssertTrue(store.isComplete(for: "ryan", surface: .feed))
+        XCTAssertEqual(coordinator.requestedSurface, .lists)
+        XCTAssertEqual(store.checkpoint(for: "ryan")?.target, .listsScope)
+    }
+
+    func testExhaustedForwardRouteNormalizesOnlyPrimaryJourney() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: "ryan",
+            store: store
+        )
+        for surface in [WalkthroughSurface.feed, .lists, .sendoff] {
+            store.markComplete(for: "ryan", surface: surface)
+        }
+
+        coordinator.forceActivate(.feedSearchResultsBack)
+        coordinator.perform(.feedSearchResultsBack)
+
+        XCTAssertNil(coordinator.requestedSurface)
+        XCTAssertTrue(
+            FirstVisitWalkthroughContent.primaryJourneySurfaces.allSatisfy {
+                store.isComplete(for: "ryan", surface: $0)
+            }
+        )
+        XCTAssertFalse(store.hasCompletedImportLesson(for: "ryan"))
+        XCTAssertFalse(store.hasCompletedDeviceFeaturesLesson(for: "ryan"))
+    }
+
     func testTransientFlagDisablePreservesSecondAndThirdLaunchLessons() throws {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)

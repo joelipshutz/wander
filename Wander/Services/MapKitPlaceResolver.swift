@@ -448,50 +448,98 @@ extension MapKitPlaceResolver: FirstVisitParkSuggestionRepository {
         }
 
         let radius = FirstVisitParkSuggestionPolicy.searchRadiusMeters
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = "park"
-        request.resultTypes = .pointOfInterest
-        request.region = MKCoordinateRegion(
+        let region = MKCoordinateRegion(
             center: center.coordinate,
             latitudinalMeters: radius * 2,
             longitudinalMeters: radius * 2
         )
-        let response = try await MKLocalSearch(request: request).start()
-        let eligibleItems = response.mapItems.filter { item in
-            let coordinate = item.placemark.coordinate
-            guard CLLocationCoordinate2DIsValid(coordinate) else { return false }
-            let distance = center.distance(
-                from: CLLocation(
-                    latitude: coordinate.latitude,
-                    longitude: coordinate.longitude
+
+        for query in FirstVisitParkSuggestionPolicy.searchQueries {
+            try Task.checkCancellation()
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            request.resultTypes = .pointOfInterest
+            request.region = region
+
+            do {
+                let response = try await MKLocalSearch(request: request).start()
+                try Task.checkCancellation()
+                guard let selectedItem = firstEligibleFirstVisitPark(
+                    in: response.mapItems,
+                    center: center
+                ),
+                    let candidate = mapItems(
+                        [selectedItem],
+                        fallbackCategory: "park",
+                        origin: center,
+                        maxDistance: radius,
+                        limit: 1
+                    ).first
+                else {
+                    continue
+                }
+
+                return candidate.recategorized(
+                    as: PlaceCategoryAssignment(
+                        primaryCategory: WanderPlaceCategory.outdoorsNature,
+                        subcategory: "Park",
+                        source: PlaceCategorySource.provider.rawValue,
+                        confidence: candidate.confidence,
+                        rawProviderType: candidate.rawProviderType ?? "park"
+                    )
                 )
-            )
-            guard distance <= radius else { return false }
-            return item.pointOfInterestCategory == .park
-                || item.pointOfInterestCategory == .nationalPark
-                || item.name?.localizedCaseInsensitiveContains("park") == true
-        }
-        guard let selectedItem = eligibleItems.first,
-              let candidate = mapItems(
-                  [selectedItem],
-                  fallbackCategory: "park",
-                  origin: center,
-                  maxDistance: radius,
-                  limit: 1
-              ).first
-        else {
-            throw PlaceResolutionError.noCandidates
+            } catch let error as CancellationError {
+                throw error
+            } catch {
+                if Task.isCancelled {
+                    throw CancellationError()
+                }
+                // A failed popularity query should not skip the ordinary park
+                // search. The caller supplies Hotchkiss if both attempts fail.
+                continue
+            }
         }
 
-        return candidate.recategorized(
-            as: PlaceCategoryAssignment(
-                primaryCategory: WanderPlaceCategory.outdoorsNature,
-                subcategory: "Park",
-                source: PlaceCategorySource.provider.rawValue,
-                confidence: candidate.confidence,
-                rawProviderType: candidate.rawProviderType ?? "park"
+        throw PlaceResolutionError.noCandidates
+    }
+
+    private func firstEligibleFirstVisitPark(
+        in items: [MKMapItem],
+        center: CLLocation
+    ) -> MKMapItem? {
+        let resultFacts = items.map { item in
+            let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let coordinate = item.placemark.coordinate
+            let hasValidCoordinate = CLLocationCoordinate2DIsValid(coordinate)
+            let distance = hasValidCoordinate
+                ? center.distance(
+                    from: CLLocation(
+                        latitude: coordinate.latitude,
+                        longitude: coordinate.longitude
+                    )
+                )
+                : .infinity
+            let isPark = item.pointOfInterestCategory == .park
+                || item.pointOfInterestCategory == .nationalPark
+                || (
+                    item.pointOfInterestCategory == nil
+                        && name?.localizedCaseInsensitiveContains("park") == true
+                )
+
+            return FirstVisitParkSearchResult(
+                hasName: name?.isEmpty == false,
+                hasValidCoordinate: hasValidCoordinate,
+                isPark: isPark,
+                distanceMeters: distance
             )
-        )
+        }
+
+        guard let index = FirstVisitParkSuggestionPolicy.firstEligibleResultIndex(
+            in: resultFacts
+        ) else {
+            return nil
+        }
+        return items[index]
     }
 }
 

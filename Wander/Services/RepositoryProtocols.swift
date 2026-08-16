@@ -245,8 +245,16 @@ protocol FirstVisitParkSuggestionRepository {
     func suggestion(near context: FirstVisitParkLocationContext) async throws -> PlaceCandidate
 }
 
+struct FirstVisitParkSearchResult: Equatable, Sendable {
+    let hasName: Bool
+    let hasValidCoordinate: Bool
+    let isPark: Bool
+    let distanceMeters: Double
+}
+
 enum FirstVisitParkSuggestionPolicy {
     static let searchRadiusMeters = 16_093.44
+    static let searchQueries = ["popular parks", "park"]
 
     static let hotchkissPark = PlaceCandidate(
         id: "walkthrough-hotchkiss-park-santa-monica",
@@ -269,6 +277,22 @@ enum FirstVisitParkSuggestionPolicy {
             return false
         }
         return postalCode != "90403" && postalCode != "90405"
+    }
+
+    /// Keep MapKit's provider ordering intact. The first eligible result from
+    /// a `popular parks` query is the best popularity proxy the public MapKit
+    /// API offers; it is intentionally preferred over sorting by proximity.
+    static func firstEligibleResultIndex(
+        in results: [FirstVisitParkSearchResult]
+    ) -> Int? {
+        results.firstIndex { result in
+            result.hasName
+                && result.hasValidCoordinate
+                && result.isPark
+                && result.distanceMeters.isFinite
+                && result.distanceMeters >= 0
+                && result.distanceMeters <= searchRadiusMeters
+        }
     }
 
     static func normalizedPostalCode(_ postalCode: String?) -> String? {

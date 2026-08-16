@@ -326,7 +326,7 @@ struct WanderRootView: View {
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
-    @State private var didApplyWalkthroughLaunchConfiguration = false
+    @State private var walkthroughLaunchConfiguredUserIDs: Set<String> = []
     @State private var retiredWalkthroughUserIDs: Set<String> = []
     @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
     @State private var nativeTabItemControlsFrame: CGRect?
@@ -1000,6 +1000,7 @@ struct WanderRootView: View {
         do {
             return try await MapKitPlaceResolver().suggestion(near: context)
         } catch {
+            guard !Task.isCancelled else { return nil }
             return FirstVisitParkSuggestionPolicy.hotchkissPark
         }
     }
@@ -1650,27 +1651,44 @@ struct WanderRootView: View {
             return
         }
 
-        if !didApplyWalkthroughLaunchConfiguration {
-            didApplyWalkthroughLaunchConfiguration = true
-            if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
+        let forcedWalkthroughTarget: WalkthroughTargetID? = {
+            guard let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") else {
+                return nil
+            }
+            let valueIndex = launchArguments.index(after: flagIndex)
+            guard launchArguments.indices.contains(valueIndex) else { return nil }
+            return WalkthroughTargetID(rawValue: launchArguments[valueIndex])
+        }()
+        let shouldApplyLaunchConfiguration = !walkthroughLaunchConfiguredUserIDs.contains(userID)
+        if shouldApplyLaunchConfiguration {
+            walkthroughLaunchConfiguredUserIDs.insert(userID)
+            if let forcedWalkthroughTarget {
+                walkthroughs.prepareDebugReplay(at: forcedWalkthroughTarget)
+            } else if launchArguments.contains("-WanderResetWalkthroughs") {
                 walkthroughs.resetCurrentUser()
             }
         }
         walkthroughs.registerLaunch(
-            forceImportLesson: ProcessInfo.processInfo.arguments.contains(
-                "-WanderShowImportWalkthrough"
-            ),
-            forceDeviceFeaturesLesson: ProcessInfo.processInfo.arguments.contains(
+            forceImportLesson: launchArguments.contains("-WanderShowImportWalkthrough"),
+            forceDeviceFeaturesLesson: launchArguments.contains(
                 "-WanderShowDeviceFeaturesWalkthrough"
             )
         )
-        if let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") {
-            let valueIndex = launchArguments.index(after: flagIndex)
-            if launchArguments.indices.contains(valueIndex),
-               let target = WalkthroughTargetID(rawValue: launchArguments[valueIndex]) {
-                walkthroughs.forceActivate(target)
-                return
+        if let forcedWalkthroughTarget {
+            // A forced replay can be configured before a sheet's target anchors
+            // exist. The authenticated-account refresh arrives once that sheet
+            // is mounted; re-publish the same step without resetting any of the
+            // clean replay state. Once the tester advances, the target no
+            // longer matches and later refreshes cannot rewind the journey.
+            if !shouldApplyLaunchConfiguration,
+               walkthroughs.currentStep?.target == forcedWalkthroughTarget {
+                walkthroughs.forceActivate(forcedWalkthroughTarget)
             }
+            if shouldApplyLaunchConfiguration,
+               let forcedSurface = walkthroughs.activeSurface {
+                routeWalkthrough(to: forcedSurface)
+            }
+            return
         }
 
         switch walkthroughs.restoreJourneyIfNeeded() {

@@ -725,11 +725,13 @@ struct AddScreen: View {
         let candidate: PlaceCandidate
         if let existing = walkthroughs.tutorialCandidate {
             candidate = existing
-        } else if let suggested = await walkthroughParkSuggestion(), !Task.isCancelled {
-            candidate = suggested
-            walkthroughs.recordTutorialCandidate(suggested)
         } else {
-            candidate = Self.hotchkissParkCandidate
+            let suggested = await walkthroughParkSuggestion()
+            // Do not persist the fallback when the lookup was interrupted by
+            // navigation or backgrounding. A later resume must be free to
+            // finish choosing the intended nearby park.
+            guard !Task.isCancelled else { return }
+            candidate = suggested ?? Self.hotchkissParkCandidate
             walkthroughs.recordTutorialCandidate(candidate)
         }
         guard !Task.isCancelled,

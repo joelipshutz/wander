@@ -711,6 +711,76 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertTrue(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "10001"))
     }
 
+    func testFirstVisitParkSelectionPreservesMapKitRelevanceOrderOverProximity() {
+        let results = [
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: 12_000
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: 500
+            )
+        ]
+
+        XCTAssertEqual(
+            FirstVisitParkSuggestionPolicy.firstEligibleResultIndex(in: results),
+            0,
+            "The more relevant MapKit result must win even when another park is closer."
+        )
+    }
+
+    func testFirstVisitParkSelectionEnforcesRadiusAndEligibility() {
+        let results = [
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: false,
+                distanceMeters: 400
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: FirstVisitParkSuggestionPolicy.searchRadiusMeters + 0.01
+            ),
+            FirstVisitParkSearchResult(
+                hasName: false,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: 600
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: false,
+                isPark: true,
+                distanceMeters: 700
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: FirstVisitParkSuggestionPolicy.searchRadiusMeters
+            )
+        ]
+
+        XCTAssertEqual(
+            FirstVisitParkSuggestionPolicy.firstEligibleResultIndex(in: results),
+            4
+        )
+    }
+
+    func testFirstVisitParkSearchPlanUsesPopularityThenOrdinaryParkFallback() {
+        XCTAssertEqual(
+            FirstVisitParkSuggestionPolicy.searchQueries,
+            ["popular parks", "park"]
+        )
+    }
+
     func testFirstVisitParkLocationDoesNotPromptWhenAuthorizationIsUndetermined() async throws {
         let locationProvider = RecordingFirstVisitLocationProvider()
         let provider = CoreFirstVisitParkLocationContextProvider(

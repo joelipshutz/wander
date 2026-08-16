@@ -787,6 +787,15 @@ struct FirstVisitWalkthroughStore {
         legacyVersion10Keys(for: userID).forEach(defaults.removeObject(forKey:))
     }
 
+    /// Normalizes a corrupted or partially migrated primary journey without
+    /// consuming the independent second- and third-launch lessons.
+    func markPrimaryJourneyComplete(for userID: String) {
+        for surface in FirstVisitWalkthroughContent.primaryJourneySurfaces {
+            markComplete(for: userID, surface: surface)
+        }
+        clearCheckpoint(for: userID)
+    }
+
     func hasCheckpointRecord(for userID: String) -> Bool {
         defaults.object(forKey: checkpointKey(userID: userID)) != nil
             || !legacyCheckpointKeys(for: userID).isEmpty
@@ -1138,7 +1147,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         }
         guard let surface = surface(containing: checkpoint.target),
               !FirstVisitWalkthroughContent.suppressedSurfaces.contains(surface),
-              let index = FirstVisitWalkthroughContent.stepsBySurface[surface]?.firstIndex(where: {
+              let checkpointIndex = FirstVisitWalkthroughContent.stepsBySurface[surface]?.firstIndex(where: {
                   $0.target == checkpoint.target
               })
         else {
@@ -1192,9 +1201,28 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             break
         }
 
-        store.setProgress(index, for: userID, surface: surface)
+        let steps = FirstVisitWalkthroughContent.stepsBySurface[surface, default: []]
+        let storedProgress = min(store.progress(for: userID, surface: surface), steps.count)
+        guard !store.isComplete(for: userID, surface: surface),
+              storedProgress < steps.count
+        else {
+            if !steps.isEmpty, storedProgress >= steps.count {
+                store.markComplete(for: userID, surface: surface)
+            }
+            activeSurface = nil
+            currentStepIndex = 0
+            requestNextIncompleteDestination(after: surface)
+            return requestedSurface
+                .map(FirstVisitWalkthroughResumeDisposition.resumed) ?? .none
+        }
+
+        // The checkpoint is the durable record of what was visible when the
+        // app suspended. A separately persisted progress value may be newer,
+        // but it must never rewind behind that exact target.
+        let resumeIndex = max(checkpointIndex, storedProgress)
+        store.setProgress(resumeIndex, for: userID, surface: surface)
         activeSurface = surface
-        currentStepIndex = index
+        currentStepIndex = resumeIndex
         return .resumed(surface)
     }
 
@@ -1276,6 +1304,14 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         activeSurface = surface
         currentStepIndex = index
         persistCheckpoint()
+    }
+
+    /// Starts a deterministic debug replay without carrying completion from a
+    /// previous device run into later parts of the journey.
+    func prepareDebugReplay(at target: WalkthroughTargetID) {
+        guard isEnabled else { return }
+        resetCurrentUser()
+        forceActivate(target)
     }
 
     func perform(_ target: WalkthroughTargetID) {
@@ -1468,6 +1504,12 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     func consumeRequestedSurface(_ surface: WalkthroughSurface) {
         guard requestedSurface == surface else { return }
         requestedSurface = nil
+        // A normal handoff activates `surface` immediately after consuming it.
+        // If old persisted state already completed that destination—or reached
+        // terminal progress without writing its completion bit—reroute now so
+        // the activation no-op cannot strand the journey.
+        guard nextIncompleteTarget(for: surface) == nil else { return }
+        requestNextIncompleteDestination(after: surface)
     }
 
     private func advance() {
@@ -1479,12 +1521,14 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             store.markComplete(for: userID, surface: surface)
             activeSurface = nil
             currentStepIndex = 0
-            requestedSurface = destination(after: surface)
-            if let requestedSurface,
-               let nextTarget = nextIncompleteTarget(for: requestedSurface) {
-                persistCheckpoint(target: nextTarget)
-            } else if surface == .sendoff {
+            requestedSurface = nil
+            if surface == .sendoff {
                 store.clearCheckpoint(for: userID)
+            } else {
+                // Resolve and persist the next usable destination now. This
+                // prevents a force-quit between completion and tab routing from
+                // saving a checkpoint for an already-completed surface.
+                requestNextIncompleteDestination(after: surface)
             }
             notifyCompletionIfNeeded()
         } else {
@@ -1518,6 +1562,29 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         }
     }
 
+    /// A requested handoff can encounter completion saved by an older replay
+    /// or interrupted build. Keep moving through the intended journey instead
+    /// of consuming the request and leaving the user with no active lesson.
+    private func requestNextIncompleteDestination(after surface: WalkthroughSurface) {
+        var visited: Set<WalkthroughSurface> = [surface]
+        var candidate = destination(after: surface)
+
+        while let nextSurface = candidate, visited.insert(nextSurface).inserted {
+            if let nextTarget = nextIncompleteTarget(for: nextSurface) {
+                requestedSurface = nextSurface
+                persistCheckpoint(target: nextTarget)
+                return
+            }
+            candidate = destination(after: nextSurface)
+        }
+
+        // There is nowhere valid to move forward. Normalize only the primary
+        // walkthrough so the user enters the clean app instead of restarting
+        // at Map; launch-two Import and launch-three device tips remain intact.
+        store.markPrimaryJourneyComplete(for: userID)
+        notifyCompletionIfNeeded()
+    }
+
     private func surface(containing target: WalkthroughTargetID) -> WalkthroughSurface? {
         WalkthroughSurface.allCases.first { surface in
             FirstVisitWalkthroughContent.stepsBySurface[surface]?.contains(where: {
@@ -1527,10 +1594,18 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 
     private func nextIncompleteTarget(for surface: WalkthroughSurface) -> WalkthroughTargetID? {
+        guard !FirstVisitWalkthroughContent.suppressedSurfaces.contains(surface),
+              !store.isComplete(for: userID, surface: surface)
+        else { return nil }
+
         let steps = FirstVisitWalkthroughContent.stepsBySurface[surface, default: []]
         guard !steps.isEmpty else { return nil }
-        let index = min(store.progress(for: userID, surface: surface), steps.count - 1)
-        return steps[index].target
+        let progress = min(store.progress(for: userID, surface: surface), steps.count)
+        guard progress < steps.count else {
+            store.markComplete(for: userID, surface: surface)
+            return nil
+        }
+        return steps[progress].target
     }
 
     private func persistCheckpoint(at date: Date = .now) {
