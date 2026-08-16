@@ -30037,6 +30037,44 @@ Handoff — 2026-08-16 05:07 PDT:
   checkout is `codex/rec-278-map-ui-variants`. Deleted only the exact task-only
   `REC-278 iOS26` simulator after preserving its screenshot; shared simulators,
   source, result bundles, and other worktrees remain intact.
+
+Liquid Glass follow-up — 2026-08-16 05:19 PDT:
+
+- Joe prefers the wider Option B filter treatment and asked to see it with
+  native Liquid Glass. He also asked whether the selected-place ticket can read
+  more like the dark image-backed preview in the original reference.
+- Current branch/worktree are clean before the follow-up. The draft PR remains
+  unmerged. Linear `REC-278` and Mission Control moved back to `In Progress`.
+- Plan: build exact Option B checkpoint `8035e745` in a detached task worktree,
+  capture it on a task-owned iPhone 16 Plus / iOS 26.2 simulator, and add only
+  the screenshot/comparison notes to the current branch. Inspect the production
+  ticket surface, but do not change its interaction or styling without a chosen
+  direction.
+- Expected current-branch files: this log,
+  `docs/reviews/rec-278-map-ui/README.md`, and an Option B iOS 26 screenshot.
+
+Liquid Glass follow-up outcome — 2026-08-16 05:27 PDT:
+
+- Created a detached task worktree at exact Option B checkpoint `8035e745` and
+  built it successfully for a task-owned iPhone 16 Plus / iOS 26.2 simulator.
+  Existing compiler/headermap warnings were unchanged.
+- Captured the rendered map after MapKit finished loading at
+  `docs/reviews/rec-278-map-ui/option-b-compact-filters-ios26.png`. This shows
+  Option B's wider icon-plus-label filters and the native system Liquid Glass
+  tab bar in the same state.
+- Confirmed the selected-place ticket is not currently glass-backed:
+  `PlaceProfilePreviewCard` passes `surfaceBone` at 98% opacity into the shared
+  `checkInTicketSurface`, which renders a solid custom ticket fill. A simple
+  opacity reduction would blur the pale map and weaken contrast.
+- Recommended reference-matching direction for a future ticket variant: use the
+  place photo as a full-bleed background, add a strong dark readability gradient,
+  switch metadata to white, and reserve native dark/clear Liquid Glass for
+  actions and chips. No production ticket code or behavior changed in this
+  follow-up.
+- Removed only the detached Option B worktree, task-owned iOS 26 simulator, and
+  exact rebuildable `/private/tmp/DerivedData-rec278-option-b-ios26` cache after
+  preserving the screenshot. Disk pressure was critical; current-branch source,
+  screenshots, result bundles, shared simulators, and other worktrees remain.
 ## 2026-08-15 20:20 PDT - Codex - Place Action Liquid Glass Comparison
 
 Agent: Codex using `design-shotgun` and `ios-design-review`

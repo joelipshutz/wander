@@ -28,6 +28,10 @@ Checkpoint: `1c3bcca0`
 
 Checkpoint: `8035e745`
 
+Native iOS 26 Liquid Glass capture of the exact Option B checkpoint:
+
+![Option B with native iOS 26 Liquid Glass](option-b-compact-filters-ios26.png)
+
 ## Option C — polished utility row
 
 ![Option C — polished utility row](option-c-utility-row.png)
@@ -57,6 +61,13 @@ If C is selected and a deeper redesign is worth doing, the next highest-leverage
 change is the selected-place card: make it more image-led and horizontally
 pageable like the reference. That is intentionally not staged here because it
 changes the place-browsing interaction, not just the Map control hierarchy.
+
+The current ticket is intentionally opaque: its custom ticket surface uses the
+warm `surfaceBone` fill at 98% opacity. Making that fill merely translucent would
+blur the pale map and lower text contrast. To match the supplied preview, the
+recommended treatment is a full-bleed place photo, a bottom-to-top dark gradient,
+white place metadata, and native dark/clear glass only for the save/share/tag
+controls. This preserves legibility while gaining the depth Joe is asking for.
 
 ## Validation
 
