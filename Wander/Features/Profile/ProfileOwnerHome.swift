@@ -407,11 +407,7 @@ struct ProfileOwnerHome: View {
                 ProfileBackButton(action: backAction)
             }
 
-            Text("@\(profile.handle)")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+            WanderTabHeaderLabel(title: "@\(profile.handle)")
 
             Spacer(minLength: 0)
 
