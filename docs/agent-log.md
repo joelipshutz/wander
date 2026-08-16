@@ -29978,3 +29978,18 @@ Checkpoint — 2026-08-16 00:45 PDT:
   text-query judgments do not measure network backfill, geographic usefulness,
   source mix, or pan stability. This documentation update changes no iOS code,
   hosted schema/data, build number, TestFlight binary, or release status.
+
+Completion — 2026-08-16 00:53 PDT:
+
+- Committed and pushed the architecture/spec update as `bea782dd` on the
+  existing ready PR #427. GitHub reports the PR mergeable and the refreshed
+  `validate-pr-payload` check passed.
+- Added the current architecture diagram and implementation-status warning at
+  the top of the REC-225 spec, the detailed Featured contract at the end, and a
+  matching durable decision so later implementation work cannot mistake the
+  original vector-first proposal or the local lexical first slice for the
+  approved platform direction.
+- REC-225 remains In Review and now has a Linear comment recording the Search
+  versus Featured entry points, provider/ranker boundary, evaluation gap, and
+  no-release status. Documentation validation was `git diff --check`; no app
+  test was required because runtime code did not change.
