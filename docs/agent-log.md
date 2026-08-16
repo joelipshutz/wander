@@ -30033,6 +30033,10 @@ Handoff — 2026-08-16 05:07 PDT:
 - No merge, build-number bump, archive, TestFlight upload, hosted-data change,
   or tester/public communication was performed. Next action: Joe selects an
   option, then the branch can be narrowed/finalized and reviewed for merge.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and confirmed the
+  checkout is `codex/rec-278-map-ui-variants`. Deleted only the exact task-only
+  `REC-278 iOS26` simulator after preserving its screenshot; shared simulators,
+  source, result bundles, and other worktrees remain intact.
 ## 2026-08-15 20:20 PDT - Codex - Place Action Liquid Glass Comparison
 
 Agent: Codex using `design-shotgun` and `ios-design-review`
