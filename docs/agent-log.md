@@ -30403,7 +30403,6 @@ Outcome and validation:
   local machine does not have the Supabase CLI, so hosted migration/pgTAP
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
-
 ## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
 
 Agent: Codex
@@ -30583,7 +30582,6 @@ Landing fixes and validation — 2026-08-16 06:37 PDT:
 - Maintainability and performance reviews were clean. The final UI remains
   Option B; the image-backed/liquid-glass ticket experiment remains deferred.
   No build-number bump, archive, TestFlight upload, or release was performed.
-
 ## 2026-08-16 10:04 PDT - Codex - REC-281 PR #458 landing review
 
 Agent: Codex
@@ -30625,3 +30623,40 @@ Linear: `REC-281` (`In Review`)
 - PR: https://github.com/joelipshutz/wander/pull/458. Ready for squash merge to
   `main`; app behavior should ride the next explicitly requested TestFlight
   batch.
+
+## 2026-08-16 04:45 PDT — Codex — REC-280 semantic Discover candidate provider
+
+- Goal: implement the Search-only, feature-flagged pgvector candidate provider approved by the REC-225 real-corpus relevance gate. Preserve local/FTS fallback, privacy eligibility, deterministic ranking, and the vector-free Featured policy.
+- Linear: `REC-280` (`In Progress`), child of `REC-225`.
+- Branch/worktree: `codex/rec-280-semantic-search` in `/private/tmp/recme-rec280-semantic-search`, created from `origin/main` at `40811705`.
+- Starting status: clean (`## codex/rec-280-semantic-search...origin/main`). Existing checkout `joe/phone-build-latest` is dirty with untracked `tmp/`; the pending evaluator uses `/private/tmp/recme-rec225-relevance-evaluator`, so this implementation is isolated.
+- Expected files: a new Supabase migration and pgTAP coverage, semantic-search/backfill Edge Functions and tests, hosted smoke coverage, place repository/DTO/orchestration/feature-flag code and focused iOS tests, plus REC-225/REC-280 docs as the implementation clarifies the shipped contract.
+- Locked privacy decision: Joe explicitly approved sending minimized canonical place documents to OpenAI for embeddings. The documents exclude user/profile identity, notes, labels, answers, ratings, photos, coordinates, and people embeddings. Map Featured will not use vectors.
+- Rollout correction from Joe: semantic Search no longer needs a Joe/account override for dogfood. Xcode Debug builds enable the provider at compile time; Release builds honor only the globally default-off launch flag. Updated implementation, tests, decision record, implementation plan, PR handoff, and KB memory to match.
+- Removed only this worktree's disposable `DerivedData-rec280` after an interrupted validation run filled the disk, then rebuilt from clean generated state. Focused semantic/Discover validation passed 23/23. The aggregate scheme still reproduces the pre-existing Clerk test-order fatal (`Clerk has not been configured`) while the same cancellation regression passes 1/1 alone; complete remainder validation continues with that known isolation case separated.
+- Final iOS validation: the complete `WanderTests` target excluding the known aggregate-only `AuthSessionTests` group executed 1,200 tests, with 1,199 passes and one signal-killed `testFeaturedLargeCandidateRankingStaysLightweight` runner. That exact Featured performance regression then passed 1/1 in isolation (9.662 seconds). Together with the isolated auth cancellation pass and the 23/23 semantic Search/repository/navigation suite, every affected test received a passing execution. Full-scheme UI automation continued to show unrelated pre-existing timeout/restart noise; no semantic assertion failed.
+- Backend validation remained green: semantic Edge Function 4/4, embedding refresh Edge Function 3/3, rollback-only hosted semantic pgTAP 18/18, feature-flag pgTAP 14/14, and the full hosted Supabase smoke suite. `node --check scripts/supabase-smoke-test.mjs` and `git diff --check` passed.
+- No hosted migration, Edge deployment, embedding backfill, feature-flag mutation, build-number bump, archive, TestFlight upload, or Slack release action was performed. Release remains globally off; Xcode Debug builds use semantic retrieval without any account-specific override.
+- Handoff: committed as `c384c2dd`, pushed `codex/rec-280-semantic-search`, and opened ready PR #457 (`https://github.com/joelipshutz/wander/pull/457`). Next step is review/merge; backend activation follows the documented deploy, migration, backfill, authenticated smoke, and Xcode-dogfood sequence rather than happening from this PR.
+- Corrected the PR's required TestFlight-manifest payload; GitHub `validate-pr-payload` passed. Opened `/private/tmp/recme-rec280-semantic-search/Wander.xcodeproj` as its own Xcode workspace document and verified its repository is on `codex/rec-280-semantic-search`, leaving Joe's other active Xcode projects/checkouts untouched.
+
+## 2026-08-16 09:15 PDT — Codex — REC-280 canonical retrieval spec
+
+- Goal: make the approved Search + Featured architecture easy to find from the repository, product docs, and both ranking implementations. No runtime behavior change.
+- Linear/PR: REC-280 (`In Review` before this documentation follow-up), PR #457.
+- Rebased `codex/rec-280-semantic-search` onto current `origin/main` (`39aa45e1`) and preserved both concurrent agent-log entries during the only conflict.
+- Expected files: a canonical `docs/specs/` retrieval document; links from README, product spec, handoff, and the dated implementation plan; source comments at Search fusion, Map Featured ranking, and the semantic migration; this log.
+- Outcome: added `docs/specs/search-featured-retrieval-platform.md` as the stable source of truth for Search, Featured, personalization boundaries, privacy, failure/performance behavior, monitoring, evaluation, future policy controls, implementation locations, and backend activation. Linked it from README, the product spec, the Codex handoff, and the detailed REC-280 implementation plan.
+- Added direct canonical-spec comments beside `RecmePlaceSearchFusion`, `MapFeaturedSelection`, and the semantic-search migration so maintainers can navigate from runtime policy to product contract. Source changes are comments only; no ranking or backend behavior changed.
+- Validation at 09:18 PDT: all referenced canonical implementation files exist, `git diff --check` passes, and the Swift/SQL diff contains only the intended comments. No build/test rerun is required for this documentation-only follow-up; the rebased implementation retains the previously recorded iOS, Edge, pgTAP, and hosted-smoke validation.
+- No hosted schema/data, Edge deployment, embedding backfill, feature flag, build number, archive, TestFlight, or release state changed.
+
+Pre-merge sweep — 2026-08-16 10:04 PDT:
+
+- Joe explicitly authorized squashing PR #457 into `main` for Xcode testing before any TestFlight release.
+- Initial sweep used `origin/main` at `39aa45e1`; the PR was clean, mergeable, and its required `validate-pr-payload` check passed.
+- Removed three accidental trailing-space markers from the canonical spec after the exact final `git diff --check` caught them. No product or runtime behavior changed.
+- Exact-commit focused iOS validation passed 24/24, including semantic fusion, lexical fallback, submitted-search cancellation, privacy/filter contracts, and the 1,000-place performance guard. Result: `/private/tmp/DerivedData-rec280-merge/Logs/Test/Test-Wander-2026.08.16_10-02-50--0700.xcresult`.
+- Exact-commit Edge validation passed 4/4 for semantic search and 3/3 for embedding refresh; `node --check scripts/supabase-smoke-test.mjs` and final `git diff --check` also pass.
+- While that clean build ran, PR #458 advanced `origin/main` to `0464822b`. Rebased again, preserving both REC-281 log blocks; source merged without conflict. The post-rebase focused suite passed 24/24 at `/private/tmp/DerivedData-rec280-merge/Logs/Test/Test-Wander-2026.08.16_10-18-59--0700.xcresult`.
+- Hosted activation, build-number bump, archive, TestFlight upload, and Slack release remain outside this merge.
