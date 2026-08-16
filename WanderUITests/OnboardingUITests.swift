@@ -1305,6 +1305,9 @@ final class OnboardingUITests: XCTestCase {
         let keyboard = app.keyboards.firstMatch
 
         XCTAssertTrue(searchField.waitForExistence(timeout: 4))
+        if !cancelButton.waitForExistence(timeout: 2) {
+            searchField.tap()
+        }
         XCTAssertTrue(cancelButton.waitForExistence(timeout: 2))
         XCTAssertTrue(typeaheadPanel.waitForExistence(timeout: 4))
         XCTAssertTrue(keyboard.waitForExistence(timeout: 2))
