@@ -103,7 +103,7 @@ enum PlaceProfileSaveActionPolicy {
         return resolvedFlagValue == true
     }
 
-    static func attachedFirstCheckInContext(
+    static func attachedFirstSaveContext(
         route: PlaceProfileSaveExperienceRoute,
         state: PlaceProfileSaveActionState,
         action: PlaceProfileSaveAction,
@@ -111,14 +111,14 @@ enum PlaceProfileSaveActionPolicy {
     ) -> MapPlaceSaveContext? {
         guard route == .floatingActions,
               state == .unsaved,
-              action.kind == .checkIn,
-              action.destinationStatus == .been,
+              let destinationStatus = action.destinationStatus,
+              isSupportedFirstSaveAction(action.kind, status: destinationStatus),
               baseContext.existingCurrentUserSave == nil,
               !baseContext.hasPriorCheckIn,
               case .add = baseContext.mode
         else { return nil }
 
-        return baseContext.preselectingStatus(.been)
+        return baseContext.preselectingStatus(destinationStatus)
     }
 
     static func state(
@@ -191,5 +191,17 @@ enum PlaceProfileSaveActionPolicy {
             isSelected: isSelected,
             destinationStatus: destinationStatus
         )
+    }
+
+    private static func isSupportedFirstSaveAction(
+        _ kind: PlaceProfileSaveActionKind,
+        status: PlaceStatus
+    ) -> Bool {
+        switch (kind, status) {
+        case (.checkIn, .been), (.wanna, .wannaGo):
+            true
+        case (.checkIn, .wannaGo), (.wanna, .been), (.editHistory, _):
+            false
+        }
     }
 }

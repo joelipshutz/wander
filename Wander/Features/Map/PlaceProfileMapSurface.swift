@@ -1815,6 +1815,28 @@ struct PlaceSaveAttachedTray: View {
         return liveDraft
     }
 
+    private var selectedStatus: PlaceStatus {
+        resolvedDraft?.form.selectedStatus ?? context.initialStatus
+    }
+
+    private var trayTitle: String {
+        selectedStatus == .wannaGo ? "Wanna" : CheckInCopy.verb
+    }
+
+    private var traySystemImage: String {
+        selectedStatus == .wannaGo ? "bookmark.fill" : "star.fill"
+    }
+
+    private var collapseAccessibilityLabel: String {
+        selectedStatus == .wannaGo ? "Collapse Wanna" : "Collapse check-in"
+    }
+
+    private var trayAccessibilityIdentifier: String {
+        selectedStatus == .wannaGo
+            ? "place-profile.attached-wanna"
+            : "place-profile.attached-check-in"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Capsule()
@@ -1824,7 +1846,7 @@ struct PlaceSaveAttachedTray: View {
                 .accessibilityHidden(true)
 
             HStack(spacing: WanderTheme.spacing2) {
-                Label(CheckInCopy.verb, systemImage: "star.fill")
+                Label(trayTitle, systemImage: traySystemImage)
                     .font(WanderTypography.label)
                     .foregroundStyle(WanderTheme.terracotta.color)
                     .frame(minHeight: WanderTheme.tapMinimum)
@@ -1833,7 +1855,7 @@ struct PlaceSaveAttachedTray: View {
                 Spacer()
 
                 Button(action: onClose) {
-                    Label("Collapse check-in", systemImage: "chevron.down")
+                    Label(collapseAccessibilityLabel, systemImage: "chevron.down")
                         .labelStyle(.iconOnly)
                         .font(.system(size: 13, weight: .bold))
                         .frame(
@@ -1843,7 +1865,7 @@ struct PlaceSaveAttachedTray: View {
                         .foregroundStyle(WanderTheme.textInk.color)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Collapse check-in")
+                .accessibilityLabel(collapseAccessibilityLabel)
             }
             .padding(.horizontal, WanderTheme.spacing4)
 
@@ -1884,7 +1906,7 @@ struct PlaceSaveAttachedTray: View {
                 ? .opacity
                 : .move(edge: .bottom).combined(with: .opacity)
         )
-        .accessibilityIdentifier("place-profile.attached-check-in")
+        .accessibilityIdentifier(trayAccessibilityIdentifier)
     }
 }
 

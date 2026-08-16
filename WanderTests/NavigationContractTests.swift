@@ -3101,7 +3101,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".placeProfileSaveTrayV1"))
     }
 
-    func testFirstMapCheckInUsesOneSharedEditorForSheetAndAttachedTray() throws {
+    func testFirstMapSavesUseOneSharedEditorForSheetAndAttachedTray() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -3129,7 +3129,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("presentation: .attached"))
         XCTAssertTrue(placeProfile.contains("if let attachedSaveContext"))
         XCTAssertTrue(placeProfile.contains(".id(attachedSaveContext.id)"))
-        XCTAssertTrue(placeProfile.contains("accessibilityIdentifier(\"place-profile.attached-check-in\")"))
+        XCTAssertTrue(placeProfile.contains("\"place-profile.attached-check-in\""))
+        XCTAssertTrue(placeProfile.contains("\"place-profile.attached-wanna\""))
+        XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"Wanna\" : CheckInCopy.verb"))
+        XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"bookmark.fill\" : \"star.fill\""))
+        XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(trayAccessibilityIdentifier)"))
 
         XCTAssertTrue(sharedEditor.contains("let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?"))
         XCTAssertTrue(sharedEditor.contains("let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool"))
@@ -3139,11 +3143,16 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
         XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
 
-        XCTAssertTrue(policy.contains("static func attachedFirstCheckInContext("))
+        XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
         XCTAssertTrue(policy.contains("route == .floatingActions"))
         XCTAssertTrue(policy.contains("state == .unsaved"))
-        XCTAssertTrue(policy.contains("action.kind == .checkIn"))
-        XCTAssertTrue(policy.contains("action.destinationStatus == .been"))
+        XCTAssertTrue(policy.contains("isSupportedFirstSaveAction(action.kind, status: destinationStatus)"))
+        XCTAssertTrue(policy.contains("case (.checkIn, .been), (.wanna, .wannaGo):"))
+        XCTAssertTrue(mapScreen.contains("currentUserSave(matching: visiblePlace) == nil"))
+        XCTAssertTrue(mapScreen.contains("currentUserSave(matching: candidate) == nil"))
+        XCTAssertTrue(mapScreen.contains("existingDraft.form.selectedStatus != context.initialStatus"))
+        XCTAssertTrue(mapScreen.contains("switchedForm.selectedStatus = context.initialStatus"))
+        XCTAssertTrue(mapScreen.contains("submittedAt: nil"))
         XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext)"))
         XCTAssertTrue(mapScreen.contains("dismissPlaceProfileThen {\n            performFloatingAction"))
 

@@ -2033,7 +2033,8 @@ struct MapScreen: View {
             defaultVisibility: store.effectiveDefaultVisibility,
             attributes: store.attributes(for: visiblePlace.userPlace.id)
         )
-        if let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
+        if currentUserSave(matching: visiblePlace) == nil,
+           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
             route: .floatingActions,
             state: state,
             action: saveAction,
@@ -2079,7 +2080,8 @@ struct MapScreen: View {
             sourceType: .manual,
             defaultVisibility: defaultVisibility
         )
-        if let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
+        if currentUserSave(matching: candidate) == nil,
+           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
             route: .floatingActions,
             state: state,
             action: saveAction,
@@ -2109,12 +2111,20 @@ struct MapScreen: View {
 
     private func presentAttachedSaveFlow(_ context: MapPlaceSaveContext) {
         guard attachedMapSaveFlow == nil else { return }
-        let hasMatchingDraft = placeSaveDraftStore.draft.map {
-            $0.ownerUserID == store.currentUser.id
-                && $0.candidate.id == context.candidate.id
-                && $0.form.selectedStatus == .been
-        } == true
-        if !hasMatchingDraft, let draft = PlaceSaveDraft.addFlow(
+        if let existingDraft = placeSaveDraftStore.draft,
+           existingDraft.ownerUserID == store.currentUser.id,
+           existingDraft.candidate.id == context.candidate.id {
+            if existingDraft.form.selectedStatus != context.initialStatus {
+                var switchedForm = existingDraft.form
+                switchedForm.step = .details
+                switchedForm.selectedStatus = context.initialStatus
+                placeSaveDraftStore.update(
+                    draftID: existingDraft.id,
+                    form: switchedForm,
+                    submittedAt: nil
+                )
+            }
+        } else if let draft = PlaceSaveDraft.addFlow(
             ownerUserID: store.currentUser.id,
             context: context
         ) {

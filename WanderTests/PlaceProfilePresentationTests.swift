@@ -4,7 +4,7 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
-    func testAttachedEditorRoutingIsLimitedToFlaggedFirstCheckIn() throws {
+    func testAttachedEditorRoutingIsLimitedToFlaggedNewSaveModes() throws {
         let checkIn = try XCTUnwrap(
             PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
                 $0.kind == .checkIn
@@ -33,7 +33,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
 
         let attached = try XCTUnwrap(
-            PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
                 route: .floatingActions,
                 state: .unsaved,
                 action: checkIn,
@@ -48,43 +48,60 @@ final class PlaceProfilePresentationTests: XCTestCase {
             return XCTFail("Attached first check-in must preserve the original add source")
         }
 
-        XCTAssertNil(
-            PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
-                route: .legacy,
-                state: .unsaved,
-                action: checkIn,
-                baseContext: base
-            )
-        )
-        XCTAssertNil(
-            PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
+        let attachedWanna = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
                 route: .floatingActions,
                 state: .unsaved,
                 action: wanna,
                 baseContext: base
             )
         )
+        XCTAssertEqual(attachedWanna.candidate, candidate)
+        XCTAssertEqual(attachedWanna.initialStatus, .wannaGo)
+        XCTAssertFalse(attachedWanna.requiresStatusConfirmation)
+        XCTAssertTrue(attachedWanna.startsOnDetails)
+        guard case .add(.manual) = attachedWanna.mode else {
+            return XCTFail("Attached first Wanna must preserve the original add source")
+        }
+
+        for action in [checkIn, wanna] {
+            XCTAssertNil(
+                PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                    route: .legacy,
+                    state: .unsaved,
+                    action: action,
+                    baseContext: base
+                )
+            )
+        }
         for state in [
             PlaceProfileSaveActionState.wanna,
             .checkInHistory,
             .sharedInvite,
             .readOnly
         ] {
-            XCTAssertNil(
-                PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
-                    route: .floatingActions,
-                    state: state,
-                    action: checkIn,
-                    baseContext: base
+            for action in [checkIn, wanna] {
+                XCTAssertNil(
+                    PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                        route: .floatingActions,
+                        state: state,
+                        action: action,
+                        baseContext: base
+                    )
                 )
-            )
+            }
         }
     }
 
-    func testAttachedEditorRejectsExistingAndRepeatContexts() throws {
+    func testAttachedEditorRejectsExistingAndRepeatContextsForBothActions() throws {
         let checkIn = try XCTUnwrap(
             PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
                 $0.kind == .checkIn
+            }
+        )
+        let wanna = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
+                $0.kind == .wanna
             }
         )
         let currentUser = profile(id: "user_current_attached", handle: "current")
@@ -102,26 +119,72 @@ final class PlaceProfilePresentationTests: XCTestCase {
             latestVisit: nil
         )
 
-        XCTAssertNil(
-            PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
-                route: .floatingActions,
-                state: .unsaved,
-                action: checkIn,
-                baseContext: existing
+        for action in [checkIn, wanna] {
+            XCTAssertNil(
+                PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                    route: .floatingActions,
+                    state: .unsaved,
+                    action: action,
+                    baseContext: existing
+                )
             )
-        )
+        }
 
         let repeatContext = MapPlaceSaveContext.addVisitVisiblePlace(
             currentWanna,
             attributes: [],
             latestVisit: nil
         )
+        for action in [checkIn, wanna] {
+            XCTAssertNil(
+                PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                    route: .floatingActions,
+                    state: .unsaved,
+                    action: action,
+                    baseContext: repeatContext
+                )
+            )
+        }
+    }
+
+    func testAttachedEditorRejectsMismatchedActionAndStatus() throws {
+        let candidate = PlaceCandidate(
+            id: "candidate-attached-mismatch",
+            name: "Griffith Coffee",
+            category: "coffee shop",
+            address: "Los Angeles, CA",
+            latitude: 34.1,
+            longitude: -118.3,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-griffith-coffee-mismatch",
+            confidence: 0.95
+        )
+        let base = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+        let mismatched = PlaceProfileSaveAction(
+            kind: .wanna,
+            title: "Wanna",
+            isSelected: false,
+            destinationStatus: .been
+        )
+
         XCTAssertNil(
-            PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                route: .legacy,
+                state: .unsaved,
+                action: mismatched,
+                baseContext: base
+            )
+        )
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
                 route: .floatingActions,
                 state: .unsaved,
-                action: checkIn,
-                baseContext: repeatContext
+                action: mismatched,
+                baseContext: base
             )
         )
     }
