@@ -4029,12 +4029,7 @@ private struct MapMoreFiltersPopover: View {
             .padding(WanderTheme.spacing4)
         }
         .frame(width: 330, height: source == .featured ? 360 : 470)
-        .background(
-            WanderTheme.surfaceBone.color,
-            in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 18, x: 0, y: 10)
+        .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
         .accessibilityIdentifier("map.moreFilters.popover")
     }
 
@@ -4113,17 +4108,12 @@ private struct MapMoreOptionChip: View {
             .foregroundStyle(isSelected ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .background(
-                isSelected ? WanderTheme.terracottaTint.color : WanderTheme.surfaceRaised.color,
-                in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+            .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+            .wanderGlassPanel(
+                cornerRadius: WanderTheme.radiusMedium,
+                tone: isSelected ? .selected : .neutral,
+                interactive: true
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
-                    .stroke(
-                        isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            }
         }
         .buttonStyle(.plain)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")

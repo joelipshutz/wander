@@ -59,6 +59,29 @@ final class MapMoreFilterResetTests: XCTestCase {
         XCTAssertTrue(map.contains("MapMoreFilterMotionStyle.panelTransition"))
     }
 
+    func testMorePanelAndOptionsUseLiquidGlassWithoutChangingCategoryEmoji() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let popoverStart = try XCTUnwrap(map.range(of: "private struct MapMoreFiltersPopover"))
+        let popoverEnd = try XCTUnwrap(
+            map.range(of: "private struct MapMoreOptionChip", range: popoverStart.upperBound..<map.endIndex)
+        )
+        let optionEnd = try XCTUnwrap(
+            map.range(of: "private struct SearchResultMarker", range: popoverEnd.upperBound..<map.endIndex)
+        )
+        let popover = String(map[popoverStart.lowerBound..<popoverEnd.lowerBound])
+        let optionChip = String(map[popoverEnd.lowerBound..<optionEnd.lowerBound])
+
+        XCTAssertTrue(popover.contains(".wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)"))
+        XCTAssertFalse(popover.contains(".background(\n            WanderTheme.surfaceBone.color"))
+        XCTAssertTrue(optionChip.contains(".wanderGlassPanel("))
+        XCTAssertTrue(popover.contains("emoji: WanderPlaceCategory.broadEmoji(for: category)"))
+    }
+
     func testOtherTabResetIntervalIsThreeMinutes() {
         XCTAssertEqual(MapMoreFilterResetPolicy.otherTabInterval, 180)
     }
@@ -85,6 +108,7 @@ final class MapMoreFilterResetTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testColdLaunchStartsWithNoMoreFilters() {
         let state = MapScreen.resolvedInitialMapFilterState(
             from: ["Wander", "-WanderMapCaptureMode", "friends"]
@@ -110,6 +134,7 @@ final class MapMoreFilterResetTests: XCTestCase {
         XCTAssertEqual(state.more, MapMoreFilterSelection())
     }
 
+    @MainActor
     func testUITestResetIntervalOverrideIsValidated() {
         XCTAssertEqual(
             MapScreen.resolvedMoreFiltersAwayResetInterval(
