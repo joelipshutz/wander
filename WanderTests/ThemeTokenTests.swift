@@ -37,6 +37,14 @@ final class ThemeTokenTests: XCTestCase {
         let actual = Dictionary(uniqueKeysWithValues: WanderTheme.allColorTokens.map { ($0.name, $0.hex) })
         XCTAssertEqual(actual, expected)
     }
+
+    func testEspressoConfirmationUsesDedicatedLiquidGlassTone() {
+        XCTAssertNil(WanderPrimaryButtonTone.brand.glassTone)
+        XCTAssertEqual(
+            WanderPrimaryButtonTone.espressoConfirmation.glassTone,
+            .espressoAction
+        )
+    }
 }
 
 final class PlaceRatingReactionTests: XCTestCase {

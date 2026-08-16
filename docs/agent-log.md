@@ -30346,3 +30346,68 @@ Validation handoff, 2026-08-16 09:06 PDT:
   /private/tmp/s73-ready-no-flag.png.
 - Existing warnings are unchanged. No build number, TestFlight, hosted flag,
   schema/data, auth, or Slack release operation was performed.
+
+## 2026-08-16 09:08 PDT - Codex - REC-284 S3B Espresso confirmation CTAs
+
+Agent: Codex
+Branch: codex/rec-284-espresso-confirmation-ctas
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-284 (In Progress), child of REC-275
+
+Starting state and scope:
+
+- Joe selected S3B Option 2: Espresso for every large place-action
+  confirmation CTA. This branch is stacked on the passing attached Check-in
+  routing correction at 8e194054 so the comparison reflects the latest flow.
+- The approved S3B board is the source of truth: one dark espresso liquid-glass
+  treatment across Check in, Add to Wanna, Update Wanna, repeat/edit
+  confirmations, single-add handoff, batch import, loading, and retry states.
+  The locked floating pair remains deep-black Check in plus light Wanna.
+- Implement a named shared confirmation tone rather than recoloring every
+  WanderPrimaryButton globally. Onboarding, auth recovery, list editing,
+  moderation, Discover relaxation, and Instagram permission guidance are not
+  place-save confirmations and remain on the existing brand treatment.
+- Expected files: the design-system primary button, Map save editor, Add
+  candidate confirmation, import review/completion, source contract tests,
+  focused UI evidence, and this log. No build-number, TestFlight, hosted,
+  schema/data, auth, or release operation is authorized.
+
+Implementation and validation checkpoint, 2026-08-16 09:23 PDT:
+
+- Added the dedicated `espressoConfirmation` liquid-glass tone and applied it
+  only to the large place-action confirmations: save-flow continuation and
+  submit states, single-place Save handoff, and import commit/completion.
+  Floating place-profile actions and unrelated onboarding/auth CTAs retain
+  their separately approved treatments.
+- Based on Joe's attached-sheet review, moved the still-optional note into the
+  main form directly after the visit/Wanna date and before rating/place type.
+  `more options` now contains only secondary fit/tag/privacy fields (plus the
+  existing attached-only place/friend detail), and its helper/walkthrough copy
+  no longer says the note is hidden there.
+- Focused design, navigation, walkthrough, and presentation suites passed
+  191/191. Result:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_09-14-16--0700.xcresult`.
+- Attached-flow UI regressions passed 3/3: new Check in, new Wanna, and
+  existing-Wanna edit/conversion. Each verifies the note is available without
+  opening `more options` and draft content survives collapse/reopen. Result:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_09-19-45--0700.xcresult`.
+- A broader `WanderTests` run exercised the remaining functional suite and
+  surfaced one unrelated existing performance-threshold miss:
+  `TrustedPlaceSearchTests.testSearchOneThousandMemoriesP95UnderFiftyMilliseconds`
+  measured 54.35 ms against its 50 ms threshold. The machine then ran out of
+  temporary disk while Xcode finalized that result bundle, so this is recorded
+  as a non-passing broad run rather than being conflated with the fully passing
+  focused and attached-flow gates above. The failed temporary result bundle was
+  removed; the exact installed test build and passing UI evidence were kept.
+- Inspected exported screenshots for all three states:
+  `/private/tmp/s3b-note-attachments/848F1C17-CC71-48EF-8EAD-21C0592EF6A3.png`,
+  `/private/tmp/s3b-note-attachments/356E354F-7841-4574-A1EF-B102E0125DA0.png`,
+  and
+  `/private/tmp/s3b-note-attachments/A089C979-D73D-481F-9FBF-46460FE1B8C2.png`.
+- Installed the exact passing build on the renamed `S3B Espresso + Note Test`
+  iPhone 16 Plus Simulator (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) and left
+  it authenticated at Elysian Picnic Steps. Resting screenshot:
+  `/private/tmp/s3b-note-ready.png`.
+- Existing compiler/headermap warnings remain unchanged. No build number,
+  TestFlight, hosted flag, schema/data, auth, or Slack release action was
+  performed.

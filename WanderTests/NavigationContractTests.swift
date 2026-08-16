@@ -1435,10 +1435,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("if showsFloatingCurrentLocationAction"))
         XCTAssertTrue(confirmPlace.contains("if !showsFloatingCurrentLocationAction"))
         XCTAssertEqual(
-            addScreen.components(separatedBy: "WanderPrimaryButton(title: \"Save\"").count - 1,
+            confirmPlace.components(separatedBy: "title: \"Save\",").count - 1,
             1,
             "The floating and in-flow layouts should share one Save action implementation."
         )
+        XCTAssertTrue(confirmPlace.contains("tone: .espressoConfirmation"))
         XCTAssertFalse(addScreen.contains("WanderPrimaryButton(title: \"continue\""))
     }
 
@@ -1575,7 +1576,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(cardSource.contains(".font(.system(size:"))
     }
 
-    func testCanonicalSaveDetailsStayCompactAndCollapseNotesWithOptionalQuestions() throws {
+    func testCanonicalSaveDetailsKeepOptionalNoteAboveCollapsedSecondaryQuestions() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -1606,16 +1607,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(detailsContent.contains("ratingSection"))
         XCTAssertTrue(detailsContent.contains("sharedVisitInviteSection"))
         XCTAssertTrue(detailsContent.contains("MapSaveVisitPhotoSection("))
-        XCTAssertFalse(detailsContent.contains("noteSection"))
+        XCTAssertTrue(detailsContent.contains("noteSection"))
         XCTAssertTrue(detailsContent.contains("optionalDetailsDisclosure"))
         XCTAssertFalse(detailsContent.contains("questionAndLabelSections"))
         XCTAssertFalse(detailsContent.contains("visibilitySection"))
 
         XCTAssertFalse(optionalDetails.contains("saveAsSection"))
-        XCTAssertTrue(optionalDetails.contains("noteSection"))
+        XCTAssertFalse(optionalDetails.contains("noteSection"))
         XCTAssertTrue(optionalDetails.contains("questionAndLabelSections"))
         XCTAssertTrue(optionalDetails.contains("visibilitySection"))
-        XCTAssertTrue(optionalDetails.contains("note, fit, tags & privacy"))
+        XCTAssertTrue(optionalDetails.contains("fit, tags & privacy"))
+        XCTAssertFalse(optionalDetails.contains("date, note"))
         XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
         XCTAssertTrue(optionalDetails.contains("WanderTheme.sunTint.color"))
         XCTAssertTrue(optionalDetails.contains("WanderTheme.categorySun.color"))
@@ -1654,6 +1656,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains("add a few details"))
 
         let orderedMarkers = [
+            "noteSection",
             "placeTypeSection",
             "ratingSection",
             "visitParticipationSections",
@@ -1667,6 +1670,7 @@ final class NavigationContractTests: XCTestCase {
 
         let attachedEssentialMarkers = [
             "MapCheckInDateSection(",
+            "noteSection",
             "ratingSection",
             "optionalDetailsDisclosure"
         ]
@@ -1678,14 +1682,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("if presentation == .attached"))
         XCTAssertTrue(optionalDetails.contains("placeTypeSection"))
         XCTAssertTrue(optionalDetails.contains("visitParticipationSections"))
-        let attachedPlaceType = try XCTUnwrap(optionalDetails.range(of: "placeTypeSection"))
-        let attachedParticipation = try XCTUnwrap(optionalDetails.range(of: "visitParticipationSections"))
-        let attachedNote = try XCTUnwrap(optionalDetails.range(of: "noteSection"))
-        XCTAssertLessThan(attachedPlaceType.lowerBound, attachedNote.lowerBound)
-        XCTAssertLessThan(attachedParticipation.lowerBound, attachedNote.lowerBound)
 
         let optionalMarkers = [
-            "noteSection",
             "questionAndLabelSections",
             "visibilitySection"
         ]
@@ -3082,6 +3080,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(theme.contains("case blackAction"))
         XCTAssertTrue(theme.contains("case deepBlackAction"))
+        XCTAssertTrue(theme.contains("case espressoAction"))
         XCTAssertTrue(theme.contains("case lightAction"))
         XCTAssertTrue(theme.contains("Color.white.opacity(0.56)"))
         XCTAssertTrue(theme.contains("func wanderGlassRoundedRectangle("))
@@ -3099,6 +3098,60 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".preselectingStatus(status)"))
         XCTAssertTrue(mapScreen.contains("resolvedFlagValue: backend.featureFlag("))
         XCTAssertTrue(mapScreen.contains(".placeProfileSaveTrayV1"))
+    }
+
+    func testPlaceSaveConfirmationCTAsUseEspressoWithoutRecoloringUnrelatedPrimaryActions() throws {
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+        let importViews = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileImportViews.swift")
+        )
+        let loggedOut = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Onboarding/LoggedOutCarouselView.swift")
+        )
+        let authGate = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Auth/AuthGateSheet.swift")
+        )
+        let mapEditor = try XCTUnwrap(
+            mapScreen
+                .components(separatedBy: "struct MapPlaceSaveEditor: View")
+                .last?
+                .components(separatedBy: "private struct MapSaveChoicePill: View")
+                .first
+        )
+        let adaptiveImport = try XCTUnwrap(
+            importViews
+                .components(separatedBy: "struct PlaceImportAdaptiveReviewScreen: View")
+                .last?
+                .components(separatedBy: "private struct PlaceImportSourceIconStack: View")
+                .first
+        )
+
+        XCTAssertTrue(theme.contains("case espressoAction"))
+        XCTAssertTrue(theme.contains("case espressoConfirmation"))
+        XCTAssertTrue(theme.contains(".wanderGlassRoundedRectangle("))
+        XCTAssertTrue(theme.contains("cornerRadius: WanderTheme.radiusLarge"))
+        XCTAssertEqual(
+            mapEditor.components(separatedBy: "tone: .espressoConfirmation").count - 1,
+            2,
+            "Both the save-flow continuation and final confirmation use Espresso."
+        )
+        XCTAssertTrue(addScreen.contains("private var candidateSaveAction: some View"))
+        XCTAssertTrue(addScreen.contains("tone: .espressoConfirmation"))
+        XCTAssertEqual(
+            adaptiveImport.components(separatedBy: "tone: .espressoConfirmation").count - 1,
+            2,
+            "Import commit and completion confirmations use the same Espresso treatment."
+        )
+        XCTAssertFalse(loggedOut.contains(".espressoConfirmation"))
+        XCTAssertFalse(authGate.contains(".espressoConfirmation"))
     }
 
     func testFirstMapSavesUseOneSharedEditorForSheetAndAttachedTray() throws {

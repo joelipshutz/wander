@@ -1448,9 +1448,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
-        app.buttons["Show more options"].tap()
         let note = app.textFields["what you'll want to remember, who told you..."]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
+        XCTAssertTrue(note.isHittable)
+        XCTAssertTrue(app.buttons["Show more options"].exists)
         note.tap()
         note.typeText("Sunset draft")
 
@@ -1460,12 +1461,6 @@ final class OnboardingUITests: XCTestCase {
         checkIn.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let restoredMoreOptions = app.buttons["Show more options"]
-        if restoredMoreOptions.waitForExistence(timeout: 2) {
-            restoredMoreOptions.tap()
-        } else {
-            XCTAssertTrue(app.buttons["Hide more options"].waitForExistence(timeout: 2))
-        }
         let attachedScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
         XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
         let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
@@ -1521,9 +1516,10 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
-        app.buttons["Show more options"].tap()
         let note = app.textFields["what you'll want to remember, who told you..."]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
+        XCTAssertTrue(note.isHittable)
+        XCTAssertTrue(app.buttons["Show more options"].exists)
         note.tap()
         note.typeText("Wanna sunset draft")
 
@@ -1533,12 +1529,6 @@ final class OnboardingUITests: XCTestCase {
         wanna.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let restoredMoreOptions = app.buttons["Show more options"]
-        if restoredMoreOptions.waitForExistence(timeout: 2) {
-            restoredMoreOptions.tap()
-        } else {
-            XCTAssertTrue(app.buttons["Hide more options"].waitForExistence(timeout: 2))
-        }
         let attachedScrollView = app.scrollViews["place-profile.attached-wanna"].firstMatch
         XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
         let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
@@ -1607,11 +1597,12 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
 
-        app.buttons["Show more options"].tap()
         let attachedScrollView = app.scrollViews["place-profile.attached-wanna"].firstMatch
         XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
         let note = attachedScrollView.descendants(matching: .textField).firstMatch
         XCTAssertTrue(note.waitForExistence(timeout: 3))
+        XCTAssertTrue(note.isHittable)
+        XCTAssertTrue(app.buttons["Show more options"].exists)
         XCTAssertEqual(
             note.value as? String,
             "Saved for a low-effort sunset picnic."
@@ -1628,12 +1619,6 @@ final class OnboardingUITests: XCTestCase {
         wanna.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let restoredMoreOptions = app.buttons["Show more options"]
-        if restoredMoreOptions.waitForExistence(timeout: 2) {
-            restoredMoreOptions.tap()
-        } else {
-            XCTAssertTrue(app.buttons["Hide more options"].waitForExistence(timeout: 2))
-        }
         XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
         let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))

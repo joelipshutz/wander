@@ -6643,7 +6643,11 @@ struct MapPlaceSaveEditor: View {
             }
 
             if hasSelectedStatus {
-                WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
+                WanderPrimaryButton(
+                    title: "continue to details",
+                    systemImage: "arrow.right",
+                    tone: .espressoConfirmation
+                ) {
                     walkthroughs.perform(.saveContinue)
                     prepareDetails()
                 }
@@ -6672,6 +6676,10 @@ struct MapPlaceSaveEditor: View {
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
             }
+
+            noteSection
+                .id(WalkthroughTargetID.saveNote)
+                .walkthroughTarget(.saveNote)
 
             if presentation == .sheet {
                 placeTypeSection
@@ -6729,7 +6737,8 @@ struct MapPlaceSaveEditor: View {
         WanderPrimaryButton(
             title: isSaving ? progressActionTitle : primaryActionTitle,
             systemImage: selectedStatus == .been ? "ticket.fill" : "checkmark",
-            isDisabled: isSaving || isRemoving
+            isDisabled: isSaving || isRemoving,
+            tone: .espressoConfirmation
         ) {
             save()
         }
@@ -7014,7 +7023,7 @@ struct MapPlaceSaveEditor: View {
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
-                    ? "This walkthrough points out where optional note, fit, tag, and privacy fields live. Use Next to continue."
+                    ? "This walkthrough points out where optional fit, tag, and privacy fields live. Use Next to continue."
                     : "Optional. Continue without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)
@@ -7043,9 +7052,6 @@ struct MapPlaceSaveEditor: View {
                             .walkthroughTarget(.saveFriends)
                     }
                 }
-                noteSection
-                    .id(WalkthroughTargetID.saveNote)
-                    .walkthroughTarget(.saveNote)
                 questionAndLabelSections
                 visibilitySection
                     .id(WalkthroughTargetID.savePrivacy)
@@ -7055,12 +7061,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var optionalDetailsSummary: String {
-        if selectedStatus == .wannaGo, let plannedDate {
-            return "planned \(plannedDate.formatted(.dateTime.month(.abbreviated).day())) · note, fit & privacy"
-        }
-        return selectedStatus == .wannaGo
-            ? "date, note, fit, tags & privacy"
-            : "note, fit, tags & privacy"
+        "fit, tags & privacy"
     }
 
     private var removeSaveSection: some View {

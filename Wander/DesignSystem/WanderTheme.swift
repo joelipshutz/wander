@@ -318,6 +318,7 @@ enum WanderGlassTone: Equatable {
     case accent
     case blackAction
     case deepBlackAction
+    case espressoAction
     case lightAction
     case darkOverlay
 
@@ -333,6 +334,8 @@ enum WanderGlassTone: Equatable {
             Color.black.opacity(0.82)
         case .deepBlackAction:
             Color.black.opacity(0.94)
+        case .espressoAction:
+            WanderTheme.textInk.color.opacity(0.92)
         case .lightAction:
             Color.white.opacity(0.56)
         case .darkOverlay:
@@ -346,7 +349,7 @@ enum WanderGlassTone: Equatable {
             WanderTheme.textInk.color
         case .selected, .accent:
             WanderTheme.terracottaDark.color
-        case .blackAction, .deepBlackAction, .darkOverlay:
+        case .blackAction, .deepBlackAction, .espressoAction, .darkOverlay:
             .white
         }
     }
@@ -363,6 +366,8 @@ enum WanderGlassTone: Equatable {
             Color.black.opacity(0.88)
         case .deepBlackAction:
             Color.black.opacity(0.94)
+        case .espressoAction:
+            WanderTheme.textInk.color.opacity(0.98)
         case .lightAction:
             Color.white.opacity(0.92)
         case .darkOverlay:
@@ -380,6 +385,8 @@ enum WanderGlassTone: Equatable {
             Color.white.opacity(0.24)
         case .deepBlackAction:
             Color.white.opacity(0.22)
+        case .espressoAction:
+            Color.white.opacity(0.20)
         case .lightAction:
             Color.white.opacity(0.90)
         case .darkOverlay:
@@ -389,7 +396,7 @@ enum WanderGlassTone: Equatable {
 
     var borderWidth: CGFloat {
         switch self {
-        case .neutral, .blackAction, .deepBlackAction, .lightAction, .darkOverlay:
+        case .neutral, .blackAction, .deepBlackAction, .espressoAction, .lightAction, .darkOverlay:
             1
         case .selected, .accent:
             2
@@ -436,7 +443,7 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                         )
                 }
                 .shadow(
-                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
+                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction || tone == .espressoAction
                         ? Color.black.opacity(0.34)
                         : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
                     radius: 10,
@@ -483,7 +490,7 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
                     )
                 }
                 .shadow(
-                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
+                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction || tone == .espressoAction
                         ? Color.black.opacity(0.34)
                         : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
                     radius: 10,
@@ -733,27 +740,59 @@ struct WanderSegmentedSwitch: View {
     }
 }
 
+enum WanderPrimaryButtonTone: Equatable {
+    case brand
+    case espressoConfirmation
+
+    var glassTone: WanderGlassTone? {
+        switch self {
+        case .brand:
+            nil
+        case .espressoConfirmation:
+            .espressoAction
+        }
+    }
+}
+
 struct WanderPrimaryButton: View {
     let title: String
     var systemImage: String?
     var isDisabled = false
+    var tone: WanderPrimaryButtonTone = .brand
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                }
-                Text(title)
+            if let glassTone = tone.glassTone {
+                label
+                    .foregroundStyle(glassTone.foregroundStyle)
+                    .wanderGlassRoundedRectangle(
+                        tone: glassTone,
+                        cornerRadius: WanderTheme.radiusLarge,
+                        interactive: !isDisabled,
+                        showsBorder: false
+                    )
+                    .opacity(isDisabled ? 0.68 : 1)
+            } else {
+                label
+                    .background(isDisabled ? WanderTheme.borderStrong.color : WanderTheme.terracotta.color)
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .clipShape(Capsule())
             }
-            .font(.system(size: 16, weight: .bold))
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .background(isDisabled ? WanderTheme.borderStrong.color : WanderTheme.terracotta.color)
-            .foregroundStyle(WanderTheme.textOnAction.color)
-            .clipShape(Capsule())
         }
+        .buttonStyle(.plain)
         .disabled(isDisabled)
+    }
+
+    private var label: some View {
+        HStack {
+            if let systemImage {
+                Image(systemName: systemImage)
+            }
+            Text(title)
+        }
+        .font(.system(size: 16, weight: .bold))
+        .frame(maxWidth: .infinity, minHeight: 52)
     }
 }
 
