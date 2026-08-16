@@ -36,25 +36,33 @@ final class MapFilterInteractionUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testSelectedTicketClearsTheCompleteSearchDock() {
+    func testSelectedTicketClearsSearchDockWithoutRedundantResultMessage() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
-            "-WanderMapPlace", "Woodcat Coffee",
-            "-WanderMapSearchMessage", "Map result. Tap + to add it."
+            "-WanderMapPlace", "Woodcat Coffee"
         ]
         app.launch()
 
         let ticket = app.buttons["Open Woodcat Coffee"]
         let message = app.staticTexts["map.searchMessage"]
         let search = app.textFields["map.searchField"]
+        let addButton = app.buttons["map.headerAdd"]
 
         XCTAssertTrue(ticket.waitForExistence(timeout: 5))
-        XCTAssertTrue(message.waitForExistence(timeout: 5))
         XCTAssertTrue(search.waitForExistence(timeout: 5))
-        XCTAssertLessThanOrEqual(ticket.frame.maxY, message.frame.minY)
-        XCTAssertLessThanOrEqual(message.frame.maxY, search.frame.minY)
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        XCTAssertFalse(message.exists)
+        XCTAssertLessThanOrEqual(ticket.frame.maxY, search.frame.minY)
+        XCTAssertGreaterThanOrEqual(addButton.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(addButton.frame.height, 44)
+        XCTAssertTrue(addButton.isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-283 selected ticket without result message"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     private func launchFriendsMore(resetSeconds: String? = nil) -> XCUIApplication {

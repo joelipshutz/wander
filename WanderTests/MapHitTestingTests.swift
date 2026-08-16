@@ -184,7 +184,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertFalse(theme.contains("isElevated"))
     }
 
-    func testMapSearchCapsuleStaysFlatWhileFilterPillsKeepLiquidGlass() throws {
+    func testMapSearchCapsuleUsesLiquidGlassOnIOS26WithFlatFallback() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -206,8 +206,12 @@ final class MapFilterSelectionTests: XCTestCase {
 
         XCTAssertTrue(searchBarSource.contains(".mapSearchCapsuleSurface()"))
         XCTAssertFalse(searchBarSource.contains(".wanderGlassCapsule()"))
+        XCTAssertTrue(searchBarSource.contains("minHeight: isFocused.wrappedValue ? 56 : 48"))
+        XCTAssertTrue(searchBarSource.contains(".snappy(duration: 0.24, extraBounce: 0.08)"))
+        XCTAssertTrue(searchBarSource.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
+        XCTAssertTrue(searchSurfaceSource.contains("if #available(iOS 26.0, *)"))
+        XCTAssertTrue(searchSurfaceSource.contains(".glassEffect(.regular.interactive(true), in: Capsule())"))
         XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: Capsule())"))
-        XCTAssertFalse(searchSurfaceSource.contains(".glassEffect("))
         XCTAssertFalse(searchSurfaceSource.contains(".shadow("))
         XCTAssertTrue(filterChipSource.contains(".wanderGlassCapsule("))
     }

@@ -580,15 +580,10 @@ struct MapScreen: View {
                             if isMapSearchFocused {
                                 MapSearchCancelButton(action: cancelMapSearch)
                             } else {
-                                WanderGlassActionButton(
-                                    systemImage: "plus",
-                                    accessibilityLabel: "Add a place",
-                                    accessibilityIdentifier: "map.headerAdd",
-                                    action: {
-                                        dismissMoreFilters()
-                                        onAdd()
-                                    }
-                                )
+                                MapSolidAddButton {
+                                    dismissMoreFilters()
+                                    onAdd()
+                                }
                                 .walkthroughTarget(
                                     walkthroughs.currentStep?.target == .mapAddAgain
                                         ? .mapAddAgain
@@ -1821,12 +1816,12 @@ struct MapScreen: View {
             if let firstVisiblePlace = visiblePlaces.first {
                 selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
-                mapSearchMessage = mapSearchCandidates.isEmpty ? nil : "Also showing new map results."
+                mapSearchMessage = nil
             } else if let firstCandidate = mapSearchCandidates.first {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
                 center(on: firstCandidate)
-                mapSearchMessage = "Map result. Tap + to add it."
+                mapSearchMessage = nil
             } else {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
@@ -2722,7 +2717,6 @@ struct MapScreen: View {
             selectedSearchCandidateID = candidate.id
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
-            mapSearchMessage = "Map result. Tap + to add it."
         }
     }
 
@@ -3824,8 +3818,37 @@ private struct MapSearchDockHeightPreferenceKey: PreferenceKey {
     }
 }
 
+private struct MapSolidAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .black))
+                .frame(width: 44, height: 44)
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .background(WanderTheme.terracotta.color, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(WanderTheme.terracottaDark.color.opacity(0.32), lineWidth: 1)
+                }
+                .contentShape(Circle())
+                .shadow(
+                    color: WanderTheme.textInk.color.opacity(0.16),
+                    radius: 6,
+                    x: 0,
+                    y: 3
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a place")
+        .accessibilityIdentifier("map.headerAdd")
+    }
+}
+
 private struct SearchBar: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var query: String
     let isFocused: FocusState<Bool>.Binding
     let focusRequestID: UUID?
@@ -3868,9 +3891,13 @@ private struct SearchBar: View {
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, minHeight: 48)
+        .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
         .contentShape(Capsule())
         .mapSearchCapsuleSurface()
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
+            value: isFocused.wrappedValue
+        )
     }
 
     @MainActor
@@ -3892,14 +3919,24 @@ private struct SearchBar: View {
 }
 
 private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: Capsule())
-            .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
-            }
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.interactive(true), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+        }
     }
 }
 
