@@ -1,6 +1,8 @@
 import Foundation
 
 enum RecmePlaceSearchFusion {
+    // Canonical Search + Featured contract:
+    // docs/specs/search-featured-retrieval-platform.md
     // Versioned, explicit policy. The semantic arm can recover semantic misses,
     // while lexical rank retains a small edge for exact/named-place behavior.
     private static let reciprocalRankOffset = 12.0

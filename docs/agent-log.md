@@ -30639,3 +30639,14 @@ Linear: `REC-281` (`In Review`)
 - No hosted migration, Edge deployment, embedding backfill, feature-flag mutation, build-number bump, archive, TestFlight upload, or Slack release action was performed. Release remains globally off; Xcode Debug builds use semantic retrieval without any account-specific override.
 - Handoff: committed as `c384c2dd`, pushed `codex/rec-280-semantic-search`, and opened ready PR #457 (`https://github.com/joelipshutz/wander/pull/457`). Next step is review/merge; backend activation follows the documented deploy, migration, backfill, authenticated smoke, and Xcode-dogfood sequence rather than happening from this PR.
 - Corrected the PR's required TestFlight-manifest payload; GitHub `validate-pr-payload` passed. Opened `/private/tmp/recme-rec280-semantic-search/Wander.xcodeproj` as its own Xcode workspace document and verified its repository is on `codex/rec-280-semantic-search`, leaving Joe's other active Xcode projects/checkouts untouched.
+
+## 2026-08-16 09:15 PDT — Codex — REC-280 canonical retrieval spec
+
+- Goal: make the approved Search + Featured architecture easy to find from the repository, product docs, and both ranking implementations. No runtime behavior change.
+- Linear/PR: REC-280 (`In Review` before this documentation follow-up), PR #457.
+- Rebased `codex/rec-280-semantic-search` onto current `origin/main` (`39aa45e1`) and preserved both concurrent agent-log entries during the only conflict.
+- Expected files: a canonical `docs/specs/` retrieval document; links from README, product spec, handoff, and the dated implementation plan; source comments at Search fusion, Map Featured ranking, and the semantic migration; this log.
+- Outcome: added `docs/specs/search-featured-retrieval-platform.md` as the stable source of truth for Search, Featured, personalization boundaries, privacy, failure/performance behavior, monitoring, evaluation, future policy controls, implementation locations, and backend activation. Linked it from README, the product spec, the Codex handoff, and the detailed REC-280 implementation plan.
+- Added direct canonical-spec comments beside `RecmePlaceSearchFusion`, `MapFeaturedSelection`, and the semantic-search migration so maintainers can navigate from runtime policy to product contract. Source changes are comments only; no ranking or backend behavior changed.
+- Validation at 09:18 PDT: all referenced canonical implementation files exist, `git diff --check` passes, and the Swift/SQL diff contains only the intended comments. No build/test rerun is required for this documentation-only follow-up; the rebased implementation retains the previously recorded iOS, Edge, pgTAP, and hosted-smoke validation.
+- No hosted schema/data, Edge deployment, embedding backfill, feature flag, build number, archive, TestFlight, or release state changed.

@@ -2,6 +2,7 @@ begin;
 
 -- REC-280: Search-only semantic candidates over minimized canonical place
 -- facts. User memories and people never enter this table or its documents.
+-- Canonical contract: docs/specs/search-featured-retrieval-platform.md
 create extension if not exists vector with schema extensions;
 
 create table public.place_search_embeddings (

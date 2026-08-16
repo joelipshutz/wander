@@ -1,5 +1,9 @@
 # REC-280 Semantic Discover Search Implementation
 
+Canonical product and architecture contract:
+`docs/specs/search-featured-retrieval-platform.md`. This dated document retains
+the REC-280 implementation, activation, and validation detail.
+
 Status: implemented for Xcode Debug builds and behind a default-off global
 Release flag; not yet deployed.
 
