@@ -175,6 +175,7 @@ struct MapScreen: View {
     private static let currentLocationTint = Color(uiColor: .systemBlue)
 
     private let initialPlaceQuery: String?
+    private let defaultMapSource: MapSource
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let searchLaunchRequest: WanderMapSearchLaunchRequest?
     private let onSearchLaunchRequestHandled: (UUID) -> Void
@@ -206,19 +207,22 @@ struct MapScreen: View {
     init(
         initialPlaceQuery: String? = Self.resolvedInitialMapPlaceQuery(),
         startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation(),
+        defaultSource: MapSource = .featured,
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         searchLaunchRequest: WanderMapSearchLaunchRequest? = nil,
         onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         onAdd: @escaping () -> Void = {}
     ) {
         self.initialPlaceQuery = initialPlaceQuery
+        let initialMapFilterState = Self.resolvedInitialMapFilterState(defaultSource: defaultSource)
+        self.defaultMapSource = initialMapFilterState.source
         self.presentationResetRequest = presentationResetRequest
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
         self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
-        _mapFilterState = State(initialValue: Self.resolvedInitialMapFilterState())
+        _mapFilterState = State(initialValue: initialMapFilterState)
         _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
         _routedVisiblePlace = State(initialValue: nil)
     }
@@ -1467,8 +1471,14 @@ struct MapScreen: View {
     @MainActor
     private func resetMapPresentations() {
         invalidateMapSearchRequest()
+        mapPinTransitionTask?.cancel()
+        transitioningAnnotationGroups = nil
+        visibleTransitionGroupKeys = nil
         mapSearchFocusRequestID = nil
         isMapSearchFocused = false
+        isMoreFiltersPresented = false
+        mapFilterState.reset(to: defaultMapSource)
+        routedVisiblePlace = nil
         mapSelectionRevision += 1
         mapSaveFlow = nil
         isPlaceProfilePresented = false
@@ -2611,14 +2621,15 @@ struct MapScreen: View {
     }
 
     static func resolvedInitialMapFilterState(
+        defaultSource: MapSource = .featured,
         from arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> MapFilterState {
         guard let flagIndex = arguments.firstIndex(of: "-WanderMapCaptureMode") else {
-            return MapFilterState()
+            return MapFilterState(source: defaultSource)
         }
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else {
-            return MapFilterState()
+            return MapFilterState(source: defaultSource)
         }
 
         return MapFilterState(
@@ -2685,27 +2696,6 @@ enum MapHitTesting {
     static func isScreenPoint(_ point: CGPoint, nearAny markerPoints: [CGPoint], radius: CGFloat = markerTapRadius) -> Bool {
         markerPoints.contains { markerPoint in
             hypot(markerPoint.x - point.x, markerPoint.y - point.y) <= radius
-        }
-    }
-}
-
-enum MapSource: String, CaseIterable, Identifiable {
-    case featured
-    case friends
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .featured: "Featured"
-        case .friends: "Friends"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .featured: "sparkles"
-        case .friends: "person.2.fill"
         }
     }
 }
@@ -2782,6 +2772,10 @@ struct MapMoreFilterSelection: Equatable {
 struct MapFilterState: Equatable {
     var source: MapSource = .featured
     var more = MapMoreFilterSelection()
+
+    mutating func reset(to defaultSource: MapSource) {
+        self = MapFilterState(source: defaultSource)
+    }
 }
 
 enum MapViewportRefreshPolicy {

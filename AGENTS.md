@@ -312,10 +312,14 @@ Observability policy:
 - Before editing the app icon, read `docs/brand/recme-app-icon.md`.
 - The canonical icon master is
   `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
-- The icon mirrors `OnboardingLaunchView`: warm canvas, terracotta
-  `mappin.and.ellipse`, and the black native-serif `rec.me` wordmark. Regenerate
-  the master with `scripts/generate-app-icon-master.swift`; do not substitute a
-  different pin, typeface, palette, or generated illustration.
+- The approved icon is the matte liquid-glass neighborhood map in
+  `Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-original.png`:
+  four terracotta pins, crisp Apple-style symbols, centered black-serif
+  `rec.me`, a subtle cool-blue lower gradient, and the original full-frame
+  composition. Keep it matte rather than glossy and do not apply a directional
+  crop or reframe.
+- Regenerate the fallback master with `scripts/generate-app-icon-master.swift`;
+  it validates and copies the approved Icon Composer source byte-for-byte.
 - Regenerate all platform renditions with
   `scripts/generate-app-icon-renditions.sh`, then retain the
   `BuildConfigurationTests` size, alpha, and discoverability coverage.

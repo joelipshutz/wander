@@ -251,7 +251,7 @@ final class BuildConfigurationTests: XCTestCase {
             isDirectory: true
         )
         let sourceURL = iconDirectory.appendingPathComponent(
-            "Assets/direction-an-santa-monica-coast-emojis.png"
+            "Assets/recme-liquid-glass-map-original.png"
         )
         let documentData = try Data(
             contentsOf: iconDirectory.appendingPathComponent("icon.json")
@@ -274,13 +274,19 @@ final class BuildConfigurationTests: XCTestCase {
         )
 
         XCTAssertEqual(groups.count, 1)
-        XCTAssertEqual(group["blur-material"] as? Double, 0.5)
+        XCTAssertEqual(group["blur-material"] as? Double, 0)
         XCTAssertEqual(
             layer["image-name"] as? String,
-            "direction-an-santa-monica-coast-emojis.png"
+            "recme-liquid-glass-map-original.png"
         )
         XCTAssertEqual(sourceImage.width, 1024)
         XCTAssertEqual(sourceImage.height, 1024)
+        XCTAssertEqual(
+            try Data(contentsOf: sourceURL),
+            try Data(contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png"
+            ))
+        )
         XCTAssertTrue(project.contains("ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon"))
         XCTAssertTrue(generatedProject.contains("AppIcon.icon in Resources"))
     }
@@ -296,16 +302,12 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(agents.contains("docs/brand/recme-app-icon.md"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-master.swift"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
-        XCTAssertTrue(contract.contains("mappin.and.ellipse"))
-        XCTAssertTrue(contract.contains("native system serif"))
-        XCTAssertTrue(contract.contains("#F3DFCA"))
-        XCTAssertTrue(contract.contains("#D46F4D"))
-        XCTAssertTrue(masterGeneratorSource.contains("mappin.and.ellipse"))
-        XCTAssertTrue(masterGeneratorSource.contains("withDesign(.serif)"))
-        XCTAssertTrue(masterGeneratorSource.contains("string: \"rec.me\""))
-        XCTAssertTrue(masterGeneratorSource.contains("RECME_ICON_PREVIEW"))
-        XCTAssertTrue(masterGeneratorSource.contains("requires an explicit non-canonical output path"))
-        XCTAssertTrue(masterGeneratorSource.contains("value.isFinite"))
+        XCTAssertTrue(contract.contains("matte liquid-glass"))
+        XCTAssertTrue(contract.contains("original full-frame"))
+        XCTAssertTrue(contract.contains("rec.me"))
+        XCTAssertTrue(masterGeneratorSource.contains("recme-liquid-glass-map-original.png"))
+        XCTAssertTrue(masterGeneratorSource.contains("1024 x 1024"))
+        XCTAssertTrue(masterGeneratorSource.contains("must be opaque"))
         XCTAssertTrue(releaseHelper.contains(#"groupName: "rec.me Alpha""#))
         XCTAssertTrue(FileManager.default.isExecutableFile(atPath: masterGenerator.path))
         XCTAssertTrue(FileManager.default.isExecutableFile(atPath: renditionGenerator.path))

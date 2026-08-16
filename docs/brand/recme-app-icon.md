@@ -5,6 +5,8 @@ This file is the source of truth for the production rec.me app icon.
 ## Canonical Asset
 
 - Master: `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`
+- Icon Composer source: `Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-original.png`
+- Icon Composer document: `Wander/Resources/AppIcon.icon/icon.json`
 - Manifest: `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json`
 - Master generator: `scripts/generate-app-icon-master.swift`
 - Rendition generator: `scripts/generate-app-icon-renditions.sh`
@@ -16,36 +18,32 @@ master above owns the design.
 
 ## Visual Contract
 
-The app icon is the loading treatment from `OnboardingLaunchView`, scaled for
-small-icon legibility:
+The app icon is the approved matte liquid-glass map artwork:
 
-- full-bleed warm canvas `#F3DFCA`;
-- native SF Symbol `mappin.and.ellipse`, bold, in terracotta `#D46F4D`;
-- lowercase wordmark `rec.me`, verbatim, in the native system serif at black
-  weight and solid black;
-- approved option B uses a slight `-2.5` optical kern at the 1024 px master;
-  this is an app-icon wordmark exception to the UI's no-negative-tracking rule;
-- icon above wordmark in one centered vertical lockup;
-- generous negative space, with no shadows, gradients, borders, textures, or
-  additional objects.
+- full-bleed warm neighborhood map with pale buildings and sage parks;
+- four terracotta map pins containing crisp Apple-style plate-and-cutlery,
+  tree, volleyball, and books symbols;
+- lowercase `rec.me` wordmark, verbatim, centered in a heavy black serif;
+- restrained frosted depth with a matte finish, never glossy or shiny;
+- a very subtle cool-blue gradient toward the bottom;
+- the original full-frame composition, with its bottom-left blue ocean accent
+  left at the canvas edge and no top/right crop or directional reframe.
 
 The PNG must be square and opaque. Do not bake rounded corners into the asset;
-iOS applies the platform mask. Do not substitute another map pin, typeface,
-wordmark spelling, palette, model-generated artwork, or decorative element.
+iOS applies the platform mask. Do not alter the wordmark, pin count, emoji
+meanings, matte finish, or original framing without explicit approval.
 
 ## Editing Workflow
 
-1. Keep `OnboardingLaunchView` and this contract aligned if the loading mark
-   changes.
-2. Run `scripts/generate-app-icon-master.swift` to replace the canonical master
-   deterministically from the native symbol, typeface, and palette.
+1. Treat the Icon Composer PNG as the canonical pixel source. The approved
+   framing is the original full-frame 1024 px composition with no baked
+   platform mask.
+2. Run `scripts/generate-app-icon-master.swift` to validate the source and copy
+   it byte-for-byte to the fallback app-icon master.
 3. Run `scripts/generate-app-icon-renditions.sh`.
 4. Run `BuildConfigurationTests` and inspect at least one 180 px and one 87 px
    rendition before approval.
 
-Sizing overrides are preview-only. Set `RECME_ICON_PREVIEW=1` and pass an
-explicit alternate output path; preview mode rejects the canonical master path.
-
-The tracked Swift generator is the lossless source recipe. Image generation is
-not part of this workflow because the production mark is already defined by
-native SwiftUI/SF Symbol primitives.
+The tracked source PNG is the lossless visual recipe. The Swift generator keeps
+the fallback asset catalog synchronized without regenerating or restyling the
+approved artwork.

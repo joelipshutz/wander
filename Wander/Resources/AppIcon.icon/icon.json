@@ -4,21 +4,21 @@
   },
   "groups" : [
     {
-      "blur-material" : 0.5,
+      "blur-material" : 0,
       "layers" : [
         {
-          "image-name" : "direction-an-santa-monica-coast-emojis.png",
-          "name" : "direction-an-santa-monica-coast-emojis"
+          "image-name" : "recme-liquid-glass-map-original.png",
+          "name" : "recme-liquid-glass-map-original"
         }
       ],
-      "name" : "Santa Monica Liquid Map + App Emojis + Centered rec.me",
+      "name" : "Matte Liquid Glass Map + App Emojis + Centered rec.me",
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 0
       },
       "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
+        "enabled" : false,
+        "value" : 0
       }
     }
   ],

@@ -196,9 +196,9 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             FirstVisitWalkthroughContent.allSteps.first { $0.target == .feedActivity }
         )
 
-        XCTAssertEqual(featured.title, "Featured shows you recommendations based on your taste")
+        XCTAssertEqual(featured.title, MapSource.featured.subtitle)
         XCTAssertTrue(featured.message.isEmpty)
-        XCTAssertEqual(friends.title, "All places from everyone you follow")
+        XCTAssertEqual(friends.title, MapSource.friends.subtitle)
         XCTAssertTrue(friends.message.isEmpty)
         XCTAssertTrue(more.message.contains("category"))
         XCTAssertTrue(more.message.contains("specific friends"))

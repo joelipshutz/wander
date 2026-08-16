@@ -62,6 +62,14 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapSource.friends.title, "Friends")
         XCTAssertEqual(MapSource.featured.systemImage, "sparkles")
         XCTAssertEqual(MapSource.friends.systemImage, "person.2.fill")
+        XCTAssertEqual(
+            MapSource.featured.subtitle,
+            "Featured shows you recommendations based on your taste"
+        )
+        XCTAssertEqual(
+            MapSource.friends.subtitle,
+            "All places from everyone you follow"
+        )
     }
 
     func testPinFilterTransitionStaysInsideTheMicroInteractionBudget() {
@@ -130,6 +138,21 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(state.more.people.isEmpty)
         XCTAssertEqual(state.more.status, .all)
         XCTAssertEqual(state.more.activeSectionCount, 0)
+    }
+
+    func testResetUsesTheConfiguredDefaultAndClearsMoreFilters() {
+        var state = MapFilterState(
+            source: .featured,
+            more: MapMoreFilterSelection(
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                people: ["user_ben"],
+                status: .checkIns
+            )
+        )
+
+        state.reset(to: .friends)
+
+        XCTAssertEqual(state, MapFilterState(source: .friends))
     }
 
     func testAllInEveryMoreSectionAddsNoRefinement() {
