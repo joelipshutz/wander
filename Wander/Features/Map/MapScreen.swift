@@ -6271,6 +6271,7 @@ struct MapPlaceSaveEditor: View {
     let presentation: MapPlaceSaveEditorPresentation
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onClose: @MainActor () -> Void
+    let onContentExpansionRequested: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -6316,6 +6317,7 @@ struct MapPlaceSaveEditor: View {
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
         onClose: @escaping @MainActor () -> Void,
+        onContentExpansionRequested: @escaping @MainActor () -> Void = {},
         onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
         _context = State(initialValue: context)
@@ -6325,6 +6327,7 @@ struct MapPlaceSaveEditor: View {
         self.onSave = onSave
         self.onRemove = onRemove
         self.onClose = onClose
+        self.onContentExpansionRequested = onContentExpansionRequested
         self.onSaveCompleted = onSaveCompleted
         let restoredForm = draft?.form
         let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
@@ -6772,6 +6775,7 @@ struct MapPlaceSaveEditor: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
             TextField("what you'll want to remember, who told you...", text: $note, axis: .vertical)
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("save.note")
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)
                 .lineLimit(3, reservesSpace: true)
@@ -6789,7 +6793,11 @@ struct MapPlaceSaveEditor: View {
 
             VStack(spacing: 0) {
                 Button {
+                    let isOpening = !isShowingPlannedDatePicker
                     isShowingPlannedDatePicker.toggle()
+                    if isOpening {
+                        onContentExpansionRequested()
+                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar.badge.clock")
@@ -6956,7 +6964,11 @@ struct MapPlaceSaveEditor: View {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
                     return
                 } else {
+                    let isOpening = !isShowingOptionalDetails
                     isShowingOptionalDetails.toggle()
+                    if isOpening {
+                        onContentExpansionRequested()
+                    }
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {

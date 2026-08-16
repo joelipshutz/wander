@@ -1448,7 +1448,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
-        let note = app.textFields["what you'll want to remember, who told you..."]
+        let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
         XCTAssertTrue(app.buttons["Show more options"].exists)
@@ -1461,20 +1461,9 @@ final class OnboardingUITests: XCTestCase {
         checkIn.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let attachedScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
-        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
-        let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
+        let restoredNote = app.textFields["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
-        let restoredNoteHeading = attachedScrollView.staticTexts["a note for future you"]
-        let scrollStart = attachedScrollView.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62)
-        )
-        let scrollEnd = attachedScrollView.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22)
-        )
-        for _ in 0..<8 where !restoredNoteHeading.isHittable {
-            scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
-        }
+        let restoredNoteHeading = app.staticTexts["a note for future you"]
         XCTAssertTrue(restoredNoteHeading.isHittable)
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
@@ -1508,7 +1497,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(wanna.waitForExistence(timeout: 2))
         wanna.tap()
 
-        let attachedTray = app.descendants(matching: .any)["place-profile.attached-wanna"]
+        let attachedTray = app.otherElements["place-profile.attached-wanna"].firstMatch
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
         XCTAssertTrue(app.buttons["Add to Wanna"].exists)
         XCTAssertTrue(app.buttons["Add a Wanna go date"].exists)
@@ -1516,7 +1505,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
         XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
 
-        let note = app.textFields["what you'll want to remember, who told you..."]
+        let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
         XCTAssertTrue(app.buttons["Show more options"].exists)
@@ -1529,20 +1518,9 @@ final class OnboardingUITests: XCTestCase {
         wanna.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        let attachedScrollView = app.scrollViews["place-profile.attached-wanna"].firstMatch
-        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
-        let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
+        let restoredNote = app.textFields["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
-        let restoredNoteHeading = attachedScrollView.staticTexts["a note for future you"]
-        let scrollStart = attachedScrollView.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62)
-        )
-        let scrollEnd = attachedScrollView.coordinate(
-            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22)
-        )
-        for _ in 0..<8 where !restoredNoteHeading.isHittable {
-            scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
-        }
+        let restoredNoteHeading = app.staticTexts["a note for future you"]
         XCTAssertTrue(restoredNoteHeading.isHittable)
         XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
@@ -1562,14 +1540,94 @@ final class OnboardingUITests: XCTestCase {
         let switchedTray = app.descendants(matching: .any)["place-profile.attached-check-in"]
         XCTAssertTrue(switchedTray.waitForExistence(timeout: 3))
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
-        let switchedScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
-        XCTAssertTrue(switchedScrollView.waitForExistence(timeout: 2))
-        let preservedNote = switchedScrollView.descendants(matching: .textField).firstMatch
+        let preservedNote = app.textFields["save.note"]
         XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             preservedNote.value as? String,
             "Wanna sunset draft"
         )
+    }
+
+    func testAttachedWannaSheetCanExpandCollapseAndDismissFromItsNativeGrabber() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 5))
+        wanna.tap()
+
+        let attachedTray = app.otherElements["place-profile.attached-wanna"].firstMatch
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+
+        let compactScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        compactScreenshot.name = "Attached Wanna native sheet compact"
+        compactScreenshot.lifetime = .keepAlways
+        add(compactScreenshot)
+
+        func grabberCoordinate(for sheet: XCUIElement) -> XCUICoordinate {
+            let normalizedY = max(
+                0.02,
+                min(0.98, (sheet.frame.minY - 10) / app.frame.height)
+            )
+            return app.coordinate(
+                withNormalizedOffset: CGVector(dx: 0.5, dy: normalizedY)
+            )
+        }
+
+        let compactMinY = attachedTray.frame.minY
+        let expandTarget = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.14))
+        grabberCoordinate(for: attachedTray)
+            .press(forDuration: 0.05, thenDragTo: expandTarget)
+
+        let expanded = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let element = object as? XCUIElement else { return false }
+                return element.frame.minY < compactMinY - 150
+            },
+            object: attachedTray
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 3), .completed)
+
+        let expandedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        expandedScreenshot.name = "Attached Wanna sheet expanded by native grabber"
+        expandedScreenshot.lifetime = .keepAlways
+        add(expandedScreenshot)
+
+        let collapseTarget = app.coordinate(
+            withNormalizedOffset: CGVector(
+                dx: 0.5,
+                dy: min(0.88, (compactMinY + 24) / app.frame.height)
+            )
+        )
+        grabberCoordinate(for: attachedTray)
+            .press(forDuration: 0.05, thenDragTo: collapseTarget)
+
+        let collapsed = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let element = object as? XCUIElement else { return false }
+                return abs(element.frame.minY - compactMinY) <= 20
+            },
+            object: attachedTray
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [collapsed], timeout: 3), .completed)
+
+        let dismissTarget = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98))
+        grabberCoordinate(for: attachedTray)
+            .press(forDuration: 0.05, thenDragTo: dismissTarget)
+
+        XCTAssertTrue(attachedTray.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(wanna.waitForExistence(timeout: 2))
+        XCTAssertTrue(wanna.isHittable)
     }
 
     func testExistingMapWannaExpandsAttachedEditorAndRestoresItsDraft() {
@@ -1597,9 +1655,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
 
-        let attachedScrollView = app.scrollViews["place-profile.attached-wanna"].firstMatch
-        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
-        let note = attachedScrollView.descendants(matching: .textField).firstMatch
+        let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
         XCTAssertTrue(app.buttons["Show more options"].exists)
@@ -1619,8 +1675,7 @@ final class OnboardingUITests: XCTestCase {
         wanna.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
-        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
-        let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
+        let restoredNote = app.textFields["save.note"]
         XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
         XCTAssertEqual(
             restoredNote.value as? String,
@@ -1638,9 +1693,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
         XCTAssertTrue(app.buttons["save.checkInDateDisclosure"].exists)
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
-        let conversionScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
-        XCTAssertTrue(conversionScrollView.waitForExistence(timeout: 2))
-        let conversionNote = conversionScrollView.descendants(matching: .textField).firstMatch
+        let conversionNote = app.textFields["save.note"]
         XCTAssertTrue(conversionNote.waitForExistence(timeout: 3))
         XCTAssertEqual(conversionNote.value as? String, editedNote)
 

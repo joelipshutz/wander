@@ -680,6 +680,19 @@ private struct PlaceProfileFullView: View {
     @State private var recoveredBusinessMetadata: PlaceBusinessMetadata?
     @State private var floatingActivityScrollRequest = 0
 
+    private var attachedSaveSheetContext: Binding<MapPlaceSaveContext?> {
+        Binding(
+            get: { attachedSaveContext },
+            set: { nextContext in
+                if let nextContext {
+                    attachedSaveContext = nextContext
+                } else {
+                    onAttachedClose()
+                }
+            }
+        )
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let headerTopInset = PlaceProfileFullScreen.resolvedFullBleedHeaderTopInset(from: proxy.safeAreaInsets.top)
@@ -765,24 +778,25 @@ private struct PlaceProfileFullView: View {
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let attachedSaveContext {
-                PlaceSaveAttachedTray(
-                    context: attachedSaveContext,
-                    draft: attachedSaveDraft,
-                    onDraftChange: onAttachedDraftChange,
-                    onSave: onAttachedSave,
-                    onRemove: onAttachedRemove,
-                    onClose: onAttachedClose,
-                    onSaveCompleted: onAttachedSaveCompleted
-                )
-                .id(attachedSaveContext.id)
-            } else if usesFloatingActions, !floatingActions.isEmpty {
+            if attachedSaveContext == nil, usesFloatingActions, !floatingActions.isEmpty {
                 PlaceProfileFloatingActions(
                     actions: floatingActions,
                     variant: floatingActionVariant,
                     onAction: handleFloatingAction
                 )
             }
+        }
+        .sheet(item: attachedSaveSheetContext) { context in
+            PlaceSaveAttachedSheet(
+                context: context,
+                draft: attachedSaveDraft,
+                onDraftChange: onAttachedDraftChange,
+                onSave: onAttachedSave,
+                onRemove: onAttachedRemove,
+                onClose: onAttachedClose,
+                onSaveCompleted: onAttachedSaveCompleted
+            )
+            .id(context.id)
         }
         .navigationTitle(place.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -1797,8 +1811,9 @@ struct PlaceProfileFloatingActions: View {
 
 }
 
-struct PlaceSaveAttachedTray: View {
-    static let maximumHeight: CGFloat = 520
+struct PlaceSaveAttachedSheet: View {
+    static let compactHeight: CGFloat = 430
+    static let compactDetent = PresentationDetent.height(compactHeight)
 
     let context: MapPlaceSaveContext
     let draft: PlaceSaveDraft?
@@ -1807,8 +1822,9 @@ struct PlaceSaveAttachedTray: View {
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let onClose: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
+    @State private var selectedDetent: PresentationDetent = .height(430)
 
     private var resolvedDraft: PlaceSaveDraft? {
         guard let liveDraft = placeSaveDraftStore.draft,
@@ -1841,12 +1857,6 @@ struct PlaceSaveAttachedTray: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(WanderTheme.borderStrong.color)
-                .frame(width: 36, height: 4)
-                .padding(.top, WanderTheme.spacing1)
-                .accessibilityHidden(true)
-
             HStack(spacing: WanderTheme.spacing2) {
                 Label(trayTitle, systemImage: traySystemImage)
                     .font(WanderTypography.label)
@@ -1874,41 +1884,41 @@ struct PlaceSaveAttachedTray: View {
             Divider()
                 .background(WanderTheme.borderHairline.color)
 
-            MapPlaceSaveEditor(
-                context: context,
-                draft: resolvedDraft,
-                presentation: .attached,
-                onDraftChange: onDraftChange,
-                onSave: onSave,
-                onRemove: onRemove,
-                onClose: onClose,
-                onSaveCompleted: onSaveCompleted
-            )
-            .id(context.id)
+            GeometryReader { proxy in
+                MapPlaceSaveEditor(
+                    context: context,
+                    draft: resolvedDraft,
+                    presentation: .attached,
+                    onDraftChange: onDraftChange,
+                    onSave: onSave,
+                    onRemove: onRemove,
+                    onClose: onClose,
+                    onContentExpansionRequested: expand,
+                    onSaveCompleted: onSaveCompleted
+                )
+                .id(context.id)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+            }
         }
-        .frame(maxHeight: Self.maximumHeight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
-        .clipShape(
-            UnevenRoundedRectangle(
-                topLeadingRadius: WanderTheme.radiusSheet,
-                topTrailingRadius: WanderTheme.radiusSheet
-            )
+        .presentationDetents(
+            [Self.compactDetent, .large],
+            selection: $selectedDetent
         )
-        .overlay(alignment: .top) {
-            UnevenRoundedRectangle(
-                topLeadingRadius: WanderTheme.radiusSheet,
-                topTrailingRadius: WanderTheme.radiusSheet
-            )
-            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        }
-        .shadow(color: WanderTheme.textInk.color.opacity(0.11), radius: 18, y: -6)
-        .background(WanderTheme.surfaceBone.color.ignoresSafeArea(edges: .bottom))
-        .transition(
-            reduceMotion
-                ? .opacity
-                : .move(edge: .bottom).combined(with: .opacity)
-        )
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(WanderTheme.radiusSheet)
+        .presentationBackground(WanderTheme.surfaceBone.color)
+        .presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))
+        .presentationContentInteraction(.resizes)
+        .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
         .accessibilityIdentifier(trayAccessibilityIdentifier)
+    }
+
+    private func expand() {
+        withAnimation(.snappy(duration: 0.34, extraBounce: 0)) {
+            selectedDetent = .large
+        }
     }
 }
 

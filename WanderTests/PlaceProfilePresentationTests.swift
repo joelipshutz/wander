@@ -4,6 +4,14 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testAttachedSheetUsesCompactAndSystemLargeDetents() {
+        XCTAssertEqual(PlaceSaveAttachedSheet.compactHeight, 430)
+        XCTAssertEqual(
+            PlaceSaveAttachedSheet.compactDetent,
+            PresentationDetent.height(430)
+        )
+    }
+
     func testAttachedEditorRoutingIsLimitedToFlaggedNewSaveModes() throws {
         let checkIn = try XCTUnwrap(
             PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {

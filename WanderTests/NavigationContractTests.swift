@@ -3038,12 +3038,12 @@ final class NavigationContractTests: XCTestCase {
         let floatingActions = try sourceSection(
             placeProfile,
             after: "struct PlaceProfileFloatingActions: View {",
-            before: "struct PlaceSaveAttachedTray: View {"
+            before: "struct PlaceSaveAttachedSheet: View {"
         )
 
         XCTAssertTrue(fullView.contains("if !usesFloatingActions, action != .none"))
         XCTAssertTrue(fullView.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
-        XCTAssertTrue(fullView.contains("else if usesFloatingActions, !floatingActions.isEmpty"))
+        XCTAssertTrue(fullView.contains("if attachedSaveContext == nil, usesFloatingActions, !floatingActions.isEmpty"))
         XCTAssertTrue(fullView.contains("saveActionSnapshot?.usesFloatingActions == true"))
         XCTAssertTrue(fullView.contains("saveActionSnapshot?.presentation.actions ?? []"))
         XCTAssertTrue(fullView.contains("variant: floatingActionVariant"))
@@ -3177,16 +3177,26 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(sheetWrapper.contains("MapPlaceSaveEditor("))
         XCTAssertTrue(sheetWrapper.contains("presentation: .sheet"))
-        XCTAssertTrue(placeProfile.contains("struct PlaceSaveAttachedTray: View"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceSaveAttachedSheet: View"))
         XCTAssertTrue(placeProfile.contains("MapPlaceSaveEditor("))
         XCTAssertTrue(placeProfile.contains("presentation: .attached"))
-        XCTAssertTrue(placeProfile.contains("if let attachedSaveContext"))
-        XCTAssertTrue(placeProfile.contains(".id(attachedSaveContext.id)"))
+        XCTAssertTrue(placeProfile.contains(".sheet(item: attachedSaveSheetContext)"))
+        XCTAssertTrue(placeProfile.contains(".id(context.id)"))
+        XCTAssertTrue(placeProfile.contains("if attachedSaveContext == nil"))
+        XCTAssertTrue(placeProfile.contains("onAttachedClose()"))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-check-in\""))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-wanna\""))
         XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"Wanna\" : CheckInCopy.verb"))
         XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"bookmark.fill\" : \"star.fill\""))
         XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(trayAccessibilityIdentifier)"))
+        XCTAssertTrue(placeProfile.contains("static let compactHeight: CGFloat = 430"))
+        XCTAssertTrue(placeProfile.contains("static let compactDetent = PresentationDetent.height(compactHeight)"))
+        XCTAssertTrue(placeProfile.contains(".presentationDetents("))
+        XCTAssertTrue(placeProfile.contains("[Self.compactDetent, .large]"))
+        XCTAssertTrue(placeProfile.contains(".presentationDragIndicator(.visible)"))
+        XCTAssertTrue(placeProfile.contains(".presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))"))
+        XCTAssertTrue(placeProfile.contains(".presentationContentInteraction(.resizes)"))
+        XCTAssertTrue(placeProfile.contains("onContentExpansionRequested: expand"))
 
         XCTAssertTrue(sharedEditor.contains("let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?"))
         XCTAssertTrue(sharedEditor.contains("let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool"))
@@ -3195,6 +3205,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
         XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
         XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
+        XCTAssertTrue(sharedEditor.contains("let onContentExpansionRequested: @MainActor () -> Void"))
+        XCTAssertEqual(
+            sharedEditor.components(separatedBy: "onContentExpansionRequested()").count - 1,
+            2,
+            "Opening the Wanna date picker or More options should expand the attached tray."
+        )
 
         XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
         XCTAssertTrue(policy.contains("static func attachedExistingWannaContext("))
@@ -3258,6 +3274,18 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(saveCallback.contains("let isAttachedSubmission = attachedMapSaveFlow?.id == submission.context.id"))
         XCTAssertTrue(saveCallback.contains("if !isAttachedSubmission {\n                selectedSearchCandidateID = nil"))
         XCTAssertTrue(saveCallback.contains("if !isAttachedSubmission {\n                mapSearchCandidates.removeAll"))
+
+        let fixtureURL = projectRoot.appendingPathComponent(
+            "WanderTests/Fixtures/ios-fix/rec-284-attached-sheet-detents-pre.json"
+        )
+        let fixtureData = try Data(contentsOf: fixtureURL)
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
+        XCTAssertEqual(fixture["issue"] as? String, "REC-284")
+        XCTAssertTrue(
+            (fixture["root_cause"] as? String)?.contains("fixed maximumHeight") == true
+        )
     }
 
     func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {

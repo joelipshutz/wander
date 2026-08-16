@@ -30450,3 +30450,41 @@ Starting state and scope:
   focused navigation/UI regressions, the pre-state fixture, and this log. No
   build-number, TestFlight, hosted flag, schema/data, auth, or release operation
   is authorized.
+
+Implementation and validation handoff, 2026-08-16 10:28 PDT:
+
+- Replaced the fixed custom attached tray with a native SwiftUI sheet that
+  remains presented from the mounted place profile. It opens at a compact
+  430-point detent, supports the system grabber and spring interaction, expands
+  to the native large detent, collapses back to compact, and dismisses by
+  dragging down. Compact background interaction stays enabled through the
+  compact detent; the existing close lifecycle still preserves drafts.
+- Opening the date control or `more options` requests the large detent so the
+  user sees the added content. The shared editor is explicitly constrained to
+  the active native-sheet height, keeping the Espresso confirmation CTA pinned
+  at the bottom in both compact and expanded states.
+- Added a stable `save.note` accessibility identifier and updated the existing
+  attached-flow UI regressions for the native sheet hierarchy. No save,
+  mutation, authentication, or release contract changed.
+- Focused navigation and native-detent tests passed 2/2. The grabber regression
+  passed 1/1 and proves compact -> large -> compact -> dismissed, including
+  restoration of the floating actions after dismissal. Result bundles:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_10-11-53--0700.xcresult`
+  and `/private/tmp/rec284-native-ui-4.xcresult`.
+- The existing first-Wanna regression passed 1/1, including draft restoration
+  and switching into Check in. The standalone first Check in and existing-Wanna
+  edit/conversion regressions passed 2/2. Results:
+  `/private/tmp/rec284-native-wanna-regression.xcresult` and
+  `/private/tmp/rec284-native-regression-final.xcresult`.
+- Visually inspected the final native compact, large, and Check-in states:
+  `/private/tmp/rec284-native-screens-4/B6FB936C-8313-49CE-8BE9-D5D4066C523D.png`,
+  `/private/tmp/rec284-native-screens-4/5390C87F-00A9-46C1-8B6C-A6169546D656.png`,
+  and
+  `/private/tmp/rec284-native-regression-screens/A89C96C4-47FC-437C-B6CD-CA36E57A0808.png`.
+- Installed the exact passing build on `S3B Espresso + Note Test`
+  (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) and left it authenticated on the
+  Griffith Observatory Trail profile. Tap Check in or Wanna to test the native
+  sheet. Resting evidence: `/private/tmp/rec284-native-simulator-ready.png`.
+- Existing compiler/headermap warnings remain unchanged. No build number,
+  TestFlight, hosted flag, schema/data, auth, Slack, merge, or release action
+  was performed.
