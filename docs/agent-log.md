@@ -30321,3 +30321,11 @@ Final validation before publication:
   UI coverage, and this coordination log.
 - No backend, schema, auth implementation, data, build-number, archive,
   TestFlight, App Store Connect, or Slack release action was taken.
+
+Publication and handoff:
+
+- Committed as `dd5bef9e` (`feat: float Feed glass controls`) and pushed branch
+  `codex/rec-281-feed-glass-controls`.
+- Opened ready PR #458: https://github.com/joelipshutz/wander/pull/458
+- REC-281 is ready for review. Merge-only handoff; no TestFlight release was
+  requested or performed.
