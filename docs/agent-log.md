@@ -30583,3 +30583,45 @@ Landing fixes and validation — 2026-08-16 06:37 PDT:
 - Maintainability and performance reviews were clean. The final UI remains
   Option B; the image-backed/liquid-glass ticket experiment remains deferred.
   No build-number bump, archive, TestFlight upload, or release was performed.
+
+## 2026-08-16 10:04 PDT - Codex - REC-281 PR #458 landing review
+
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Review`)
+
+- Joe explicitly requested that PR #458 be pushed to `main`; this is a
+  merge-only request. No build-number bump, archive, TestFlight upload, App
+  Store Connect action, or Slack release note is authorized.
+- Added the required hidden `recme-testflight-payload` to the PR body and
+  validated it locally against the repository parser. GitHub's
+  `validate-pr-payload` check now passes.
+- Integrated latest `origin/main` at `39aa45e1`. The only merge conflict was
+  the append-only coordination log; preserved both the REC-281 and REC-278
+  entries. GitHub now reports the PR cleanly mergeable.
+- Required gstack pre-landing review found no critical issue. Testing,
+  performance/design, and independent adversarial passes found no additional
+  findings. The maintainability pass identified static header-clearance math
+  and a whitespace-sensitive assertion; the red-team pass identified People
+  query state surviving while conditional result state was recreated.
+- Fixed all review findings: Feed content clearance now follows the measured
+  rendered floating-header height, the contract test uses bounded token checks,
+  and leaving People clears the query so returning cannot show a false empty
+  result while a new search is pending.
+- Final Swift syntax parsing, measured-header/query-lifetime source contracts,
+  and `git diff --check` pass. The earlier exact branch validation remains:
+  generic Simulator build, focused Feed contracts/UI test, full unit-target
+  execution, and iPhone 17 Pro plus iPhone 16e visual QA.
+- A redundant clean post-integration test attempt was blocked before tests ran
+  because the machine volume reached `No space left on device`. Removed only
+  the task-specific, rebuildable `/private/tmp/recme-rec281-landing-dd` and the
+  build/module/package/index caches under `/private/tmp/recme-rec281-dd`;
+  preserved its `Logs` and `TestResults` evidence. No unrelated DerivedData,
+  worktree, source, screenshot, or user file was removed.
+- Inspected the existing `testflight/build-155` state. No durable archive/upload
+  completion receipt was found; Joe's current instruction explicitly
+  prioritizes merging this PR, so that older release state remains untouched.
+- PR: https://github.com/joelipshutz/wander/pull/458. Ready for squash merge to
+  `main`; app behavior should ride the next explicitly requested TestFlight
+  batch.

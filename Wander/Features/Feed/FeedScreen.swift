@@ -16,6 +16,7 @@ struct FeedScreen: View {
     @State private var focusedActivityID: String?
     @State private var selectedSurface: FeedSurface
     @State private var peopleQuery = ""
+    @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
     @FocusState private var peopleSearchFieldFocused: Bool
     private let onAdd: () -> Void
 
@@ -42,15 +43,28 @@ struct FeedScreen: View {
                 case .people:
                     FeedPeopleSurface(
                         memberQuery: $peopleQuery,
+                        contentTopInset: feedContentTopInset,
                         dismissSearchFocus: { peopleSearchFieldFocused = false },
                         openProfile: openProfile
                     )
                 }
 
                 floatingHeader
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: FeedFloatingHeaderHeightPreferenceKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    }
                     .zIndex(1)
             }
             .wanderScreen()
+            .onPreferenceChange(FeedFloatingHeaderHeightPreferenceKey.self) { height in
+                guard height > 0 else { return }
+                floatingHeaderHeight = height
+            }
             .task(id: auth.isSignedIn) {
                 await refresh()
             }
@@ -99,8 +113,11 @@ struct FeedScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
-            .onChange(of: selectedSurface) { _, _ in
+            .onChange(of: selectedSurface) { _, surface in
                 peopleSearchFieldFocused = false
+                if surface != .people {
+                    peopleQuery = ""
+                }
                 walkthroughs.perform(.feedSurfaceSwitch)
             }
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
@@ -179,7 +196,7 @@ struct FeedScreen: View {
                     content
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, FeedFloatingHeaderMetrics.contentTopInset)
+                .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -193,6 +210,10 @@ struct FeedScreen: View {
                 scrollToFocusedActivity(focusedActivityID, proxy: proxy)
             }
         }
+    }
+
+    private var feedContentTopInset: CGFloat {
+        floatingHeaderHeight + WanderTheme.spacing3
     }
 
     private func openDiscoverSearch() {
@@ -568,6 +589,7 @@ private struct FeedPeopleSurface: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Binding var memberQuery: String
+    let contentTopInset: CGFloat
     let dismissSearchFocus: () -> Void
     let openProfile: (ProfileShell) -> Void
 
@@ -604,7 +626,7 @@ private struct FeedPeopleSurface: View {
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, FeedFloatingHeaderMetrics.contentTopInset)
+            .padding(.top, contentTopInset)
             .padding(.bottom, WanderTheme.spacing16)
         }
         .scrollDismissesKeyboard(.interactively)
@@ -1022,11 +1044,18 @@ private struct FeedFollowedPersonRow: View {
 }
 
 private enum FeedFloatingHeaderMetrics {
-    static let contentTopInset = WanderTheme.spacing2
+    static let estimatedHeight = WanderTheme.spacing2
         + WanderTheme.tapMinimum
         + WanderTheme.spacing2
         + WanderTheme.tapMinimum
-        + WanderTheme.spacing3
+}
+
+private struct FeedFloatingHeaderHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
 
 private struct FeedProfileRoute: Identifiable {
