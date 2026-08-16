@@ -1641,8 +1641,7 @@ final class NavigationContractTests: XCTestCase {
         let orderedMarkers = [
             "placeTypeSection",
             "ratingSection",
-            "sharedVisitInviteSection",
-            "MapSaveVisitPhotoSection(",
+            "visitParticipationSections",
             "optionalDetailsDisclosure"
         ]
         let offsets = try orderedMarkers.map { marker in
@@ -1650,6 +1649,25 @@ final class NavigationContractTests: XCTestCase {
             return detailsContent.distance(from: detailsContent.startIndex, to: range.lowerBound)
         }
         XCTAssertEqual(offsets, offsets.sorted())
+
+        let attachedEssentialMarkers = [
+            "MapCheckInDateSection(",
+            "ratingSection",
+            "optionalDetailsDisclosure"
+        ]
+        let attachedEssentialOffsets = try attachedEssentialMarkers.map { marker in
+            let range = try XCTUnwrap(detailsContent.range(of: marker), "Missing \(marker)")
+            return detailsContent.distance(from: detailsContent.startIndex, to: range.lowerBound)
+        }
+        XCTAssertEqual(attachedEssentialOffsets, attachedEssentialOffsets.sorted())
+        XCTAssertTrue(optionalDetails.contains("if presentation == .attached"))
+        XCTAssertTrue(optionalDetails.contains("placeTypeSection"))
+        XCTAssertTrue(optionalDetails.contains("visitParticipationSections"))
+        let attachedPlaceType = try XCTUnwrap(optionalDetails.range(of: "placeTypeSection"))
+        let attachedParticipation = try XCTUnwrap(optionalDetails.range(of: "visitParticipationSections"))
+        let attachedNote = try XCTUnwrap(optionalDetails.range(of: "noteSection"))
+        XCTAssertLessThan(attachedPlaceType.lowerBound, attachedNote.lowerBound)
+        XCTAssertLessThan(attachedParticipation.lowerBound, attachedNote.lowerBound)
 
         let optionalMarkers = [
             "noteSection",
@@ -2993,7 +3011,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(fullView.contains("if !usesFloatingActions, action != .none"))
         XCTAssertTrue(fullView.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
-        XCTAssertTrue(fullView.contains("if usesFloatingActions, !floatingActions.isEmpty"))
+        XCTAssertTrue(fullView.contains("else if usesFloatingActions, !floatingActions.isEmpty"))
         XCTAssertTrue(fullView.contains("saveActionSnapshot?.usesFloatingActions == true"))
         XCTAssertTrue(fullView.contains("saveActionSnapshot?.presentation.actions ?? []"))
         XCTAssertTrue(placeProfile.contains("@State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?"))
@@ -3015,7 +3033,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(mapScreen.contains("saveActionSnapshot: saveActionSnapshot("))
         XCTAssertTrue(mapScreen.contains("onFloatingAction: { saveAction in"))
-        XCTAssertTrue(mapScreen.contains("performFloatingAction(saveAction, for: selectedPlace)"))
+        XCTAssertTrue(mapScreen.contains("handleFloatingAction(saveAction, for: selectedPlace)"))
         XCTAssertTrue(mapScreen.contains(".preselectingStatus(status)"))
         XCTAssertTrue(mapScreen.contains("resolvedFlagValue: backend.featureFlag("))
         XCTAssertTrue(mapScreen.contains(".placeProfileSaveTrayV1"))
