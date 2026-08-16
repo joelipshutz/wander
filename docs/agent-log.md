@@ -29901,3 +29901,31 @@ Completion — 2026-08-15 13:23 PDT:
 - This merge did not increment build 151, archive or upload a binary, attach a
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
+
+## 2026-08-15 20:20 PDT - Codex - Place Action Liquid Glass Comparison
+
+Agent: Codex using `design-shotgun` and `ios-design-review`
+Branch: `codex/place-action-variants`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/place-action-variants`
+Linear: issue creation attempted and blocked by the workspace free issue limit
+
+Goal: preserve the validated Option 1 floating place actions and add a
+debug-selectable native comparison for three additional Liquid Glass treatments:
+black/white full-width, narrower squared black/white, and the narrower pair inside
+an oversized charcoal glass rail inspired by Joe's reference screenshot.
+
+Starting state and coordination:
+
+- Created this isolated worktree from the validated S6 attached-check-in stack at
+  `d1ff8f53`; the Option 1 worktrees and simulators remain untouched.
+- The source checkout is clean. Completed S5/S6 agents previously touched the same
+  place-profile files, so this branch intentionally layers on their finished stack
+  instead of editing those worktrees.
+- Production/default behavior must remain Option 1. Options 2-4 will be selectable
+  only through a debug/test launch argument for visual comparison.
+- Mission Control task creation was attempted but `localhost:4000` is not running.
+- No push, merge, build-number bump, TestFlight upload, or release is authorized.
+
+Expected files: `Wander/Features/Map/PlaceProfileMapSurface.swift`, the existing
+Liquid Glass design-system helper if a new tone is required, focused contract/UI
+tests, this log, and external comparison artifacts under `~/.gstack/projects/`.
