@@ -163,6 +163,7 @@
 		A1AAA9299EEBA57A4F855D7E /* rec-228-bulk-status-coupling-post.png in Resources */ = {isa = PBXBuildFile; fileRef = 1BE0E4CCA52C155A2EFB2465 /* rec-228-bulk-status-coupling-post.png */; };
 		A2FD2C362D9DAB53792C8B06 /* rec-274-comments-message-dismissal-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 2FCD985E8B3B2DF9E8EF2BAD /* rec-274-comments-message-dismissal-pre.json */; };
 		A336C5CBD69909715BC3730D /* PlaceProfileMapSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71C4596873A503C9978BFC8 /* PlaceProfileMapSurface.swift */; };
+		A33B5598D36A532C79349A9C /* LilGrotesk-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1257178CCB21E5E391DFC8D9 /* LilGrotesk-Variable.ttf */; };
 		A56DA6AA1F21129F21800DED /* AuthSessionProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F89709D2B0AA70D438C03C /* AuthSessionProviding.swift */; };
 		A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9E2D335495DCCA3943A885 /* RepositoryProtocols.swift */; };
 		A8710E56BE6DB7AA89C9AD66 /* ContactProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5665DF2A481AC9A45CE315E /* ContactProvider.swift */; };
@@ -214,6 +215,7 @@
 		E4B474B631166BEA26F3C833 /* SupabaseDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21979B6601194E839F12552D /* SupabaseDTOs.swift */; };
 		E4FD872A229A8C85B3F63CEF /* rec-196-offline-map-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = A99F89142F6870FD116A4C39 /* rec-196-offline-map-pre.json */; };
 		E675767BE5C249B99B816B74 /* WanderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0078639327C81EA5F98400B4 /* WanderApp.swift */; };
+		E681DF129AA8F682879397A7 /* LilGrotesk-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1302F610595FE59FD668AF17 /* LilGrotesk-OFL.txt */; };
 		E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E1982754D8F9C0128D97CB /* AppEntryView.swift */; };
 		EB8B2939D8177A23894D5A83 /* NativeAuthFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFE0C041379DF5F5E0E2E0C /* NativeAuthFlowView.swift */; };
 		EF1D7162C9D93C6958A30166 /* WanderWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */; };
@@ -305,7 +307,9 @@
 		117EAEC1389AE3A61BBEE3C1 /* WanderWidgetLaunchRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderWidgetLaunchRequest.swift; sourceTree = "<group>"; };
 		11D6E3741B00C6D1C66CD1C7 /* ListMapPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListMapPresentation.swift; sourceTree = "<group>"; };
 		1202D211E41D76B3D0CB2D31 /* OnboardingPermissionManagers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPermissionManagers.swift; sourceTree = "<group>"; };
+		1257178CCB21E5E391DFC8D9 /* LilGrotesk-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "LilGrotesk-Variable.ttf"; sourceTree = "<group>"; };
 		12893CD9516BC58FD7D3BE43 /* WanderRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderRootView.swift; sourceTree = "<group>"; };
+		1302F610595FE59FD668AF17 /* LilGrotesk-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LilGrotesk-OFL.txt"; sourceTree = "<group>"; };
 		14E5D0878CAA5887921E1ED1 /* CategoryTaxonomyMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryTaxonomyMockups.swift; sourceTree = "<group>"; };
 		15482C29796B02CF92D9B5AD /* NavigationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationContractTests.swift; sourceTree = "<group>"; };
 		159326A07925C1A61C5DEB5F /* WannaGoReminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WannaGoReminder.swift; sourceTree = "<group>"; };
@@ -573,6 +577,7 @@
 				D63987ED78C8738917AB869B /* Info.plist */,
 				541F19B34A4A3BAEB65C2836 /* PrivacyInfo.xcprivacy */,
 				70527AF1590BEF9CB781A16D /* Wander.entitlements */,
+				60140E0F02B0FFC408B4DF19 /* Fonts */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -796,6 +801,15 @@
 				942065A6D7C4B33E392B50F5 /* ProfilePhotoCropView.swift */,
 			);
 			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		60140E0F02B0FFC408B4DF19 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				1302F610595FE59FD668AF17 /* LilGrotesk-OFL.txt */,
+				1257178CCB21E5E391DFC8D9 /* LilGrotesk-Variable.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 		6ECD4722075CCADE379309C1 /* WanderControlShared */ = {
@@ -1233,6 +1247,8 @@
 			files = (
 				3AE2D70CA99943536A70DF4F /* AppIcon.icon in Resources */,
 				9BDDE72CA80B33CAFC0EFD17 /* Assets.xcassets in Resources */,
+				E681DF129AA8F682879397A7 /* LilGrotesk-OFL.txt in Resources */,
+				A33B5598D36A532C79349A9C /* LilGrotesk-Variable.ttf in Resources */,
 				E15BC91E5CA5C62F2E9E710A /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
