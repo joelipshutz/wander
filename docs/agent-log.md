@@ -30404,6 +30404,112 @@ Outcome and validation:
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
 
+## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
+
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Progress`)
+
+Goal: move Feed search higher and make the Places/People selector plus Add
+action read as floating Liquid Glass controls over the Feed instead of a fixed
+row that visually cuts off the screen.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` at `40811705`.
+- The primary checkout is 255 commits behind `origin/main` and contains an
+  unrelated untracked `tmp/`; it remains untouched.
+- No active agent-log entry declares overlapping Feed-header work. Existing
+  active worktrees focus on search ranking, Map actions, and onboarding/auth
+  debug flows; this branch remains scoped to Feed presentation.
+- Existing design-system glass primitives already provide native iOS 26
+  `glassEffect` plus the iOS 17-25 material fallback. The implementation will
+  reuse those primitives instead of adding a competing glass style.
+- Expected files: `Wander/Features/Feed/FeedScreen.swift`, focused Feed/
+  navigation tests, simulator screenshot evidence if available, and this log.
+  No backend, schema, RLS, RPC, data, build-number, archive, upload, release,
+  or TestFlight change is in scope.
+
+Implementation and focused validation checkpoint:
+
+- Reworked the Feed root as a content-backed `ZStack` with a floating header
+  overlay. Search now occupies the top row; the Places/People selector and Add
+  action float together beneath it without an opaque full-width header cutting
+  off the canvas.
+- Reused `GlassEffectContainer`, `wanderGlassCapsule`,
+  `WanderGlassSegmentedSwitch`, and `WanderGlassActionButton`, preserving native
+  iOS 26 Liquid Glass and the existing iOS 17-25 material fallback.
+- Hoisted People search state/focus into the Feed root so both Places and People
+  use the same floating search slot. Both scroll surfaces share a top content
+  inset and move underneath the persistent controls; existing walkthrough,
+  search, Add, and route behavior remains wired.
+- Generic iOS Simulator build passed: `BUILD SUCCEEDED` in 36.631 seconds using
+  `/private/tmp/recme-rec281-dd`.
+- Focused source-contract regression passed 1/1. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-39-51--0700.xcresult`.
+- New Feed UI regression passed 1/1 after narrowing an initially ambiguous
+  accessibility query to the People text field. It verifies the controls remain
+  fixed through scrolling and that People search replaces Places search in the
+  same elevated slot. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-42-09--0700.xcresult`.
+- Visually verified the Feed on iPhone 17 Pro / iOS 26.2 and iPhone 16e /
+  iOS 18.6. The canvas stays continuous, controls do not clip, and both native
+  glass and fallback material render correctly. Evidence:
+  `/private/tmp/rec281-feed-after-large.png` and
+  `/private/tmp/rec281-feed-after-small.png`. The People-state UI attachment is
+  `/private/tmp/rec281-ui-attachments/20D7D2C6-66D0-4A45-ADFE-30898D2C0C65.png`.
+- Removed only the two disposable task-specific Simulator devices and their
+  rebuildable index/module caches after preserving screenshots and test result
+  bundles. Source and validation evidence remain intact.
+
+Final validation before publication:
+
+- Ran the required complete scheme test command on iPhone 16 Plus / iOS 18.6.
+  It exercised the full unit and UI targets for 1,032.787 seconds. The new Feed
+  header UI test and existing Feed screenshot, search, walkthrough, and tab
+  navigation coverage passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-44-08--0700.xcresult`.
+- That aggregate run reproduced the existing Clerk cancellation trap and then
+  accumulated cascading signal-kill failures across 14 unrelated onboarding
+  tests after the app/test runner restarted. Four additional unrelated
+  onboarding/place-editor/map-search tests reported explicit failures. No Feed
+  floating-header test failed.
+- The complete run also exposed two stale source-contract expectations for the
+  old inline People search. Updated those tests to assert the new shared
+  floating search slot while preserving the invite-before-results contract.
+- Reran the two updated contracts together with the known Clerk cancellation
+  case: 3/3 passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-02-25--0700.xcresult`.
+- Reran the complete `WanderTests` target. After the known Clerk test trapped in
+  the aggregate process, the runner restarted and completed 1,203/1,203 tests
+  successfully; the same Clerk case passes alone. Aggregate result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-03-12--0700.xcresult`.
+- Regenerated with XcodeGen. It attempted to add two unrelated pre-existing
+  ios-fix fixtures to the project; removed only that generated project drift so
+  this branch remains scoped to REC-281. No source membership change was needed.
+- Final generic iOS Simulator build passed in 8.211 seconds. `git diff --check`
+  passed, and the final diff contains only Feed presentation, its focused unit/
+  UI coverage, and this coordination log.
+- No backend, schema, auth implementation, data, build-number, archive,
+  TestFlight, App Store Connect, or Slack release action was taken.
+
+Publication and handoff:
+
+- Committed as `dd5bef9e` (`feat: float Feed glass controls`) and pushed branch
+  `codex/rec-281-feed-glass-controls`.
+- Opened ready PR #458: https://github.com/joelipshutz/wander/pull/458
+- REC-281 is ready for review. Merge-only handoff; no TestFlight release was
+  requested or performed.
+- GitHub's `validate-pr-payload` check failed because the manually-created PR
+  body omitted the required `recme-testflight-payload` JSON comment. Inspection
+  confirmed this is PR metadata only, not a source/build/test failure. Because
+  the branch changes app runtime files, the valid classification is `ship` with
+  REC-281 tester-facing change, what-to-test actions, `releaseOperations: none`,
+  validation evidence, and the known aggregate-runner limitation. The GitHub
+  CI-fix workflow requires explicit approval before mutating the PR body, so
+  that metadata-only correction is the sole pending handoff action.
 # 2026-08-16 05:44 PDT - Codex - REC-278 Option B landing
 
 Agent: Codex
@@ -30477,3 +30583,45 @@ Landing fixes and validation — 2026-08-16 06:37 PDT:
 - Maintainability and performance reviews were clean. The final UI remains
   Option B; the image-backed/liquid-glass ticket experiment remains deferred.
   No build-number bump, archive, TestFlight upload, or release was performed.
+
+## 2026-08-16 10:04 PDT - Codex - REC-281 PR #458 landing review
+
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Review`)
+
+- Joe explicitly requested that PR #458 be pushed to `main`; this is a
+  merge-only request. No build-number bump, archive, TestFlight upload, App
+  Store Connect action, or Slack release note is authorized.
+- Added the required hidden `recme-testflight-payload` to the PR body and
+  validated it locally against the repository parser. GitHub's
+  `validate-pr-payload` check now passes.
+- Integrated latest `origin/main` at `39aa45e1`. The only merge conflict was
+  the append-only coordination log; preserved both the REC-281 and REC-278
+  entries. GitHub now reports the PR cleanly mergeable.
+- Required gstack pre-landing review found no critical issue. Testing,
+  performance/design, and independent adversarial passes found no additional
+  findings. The maintainability pass identified static header-clearance math
+  and a whitespace-sensitive assertion; the red-team pass identified People
+  query state surviving while conditional result state was recreated.
+- Fixed all review findings: Feed content clearance now follows the measured
+  rendered floating-header height, the contract test uses bounded token checks,
+  and leaving People clears the query so returning cannot show a false empty
+  result while a new search is pending.
+- Final Swift syntax parsing, measured-header/query-lifetime source contracts,
+  and `git diff --check` pass. The earlier exact branch validation remains:
+  generic Simulator build, focused Feed contracts/UI test, full unit-target
+  execution, and iPhone 17 Pro plus iPhone 16e visual QA.
+- A redundant clean post-integration test attempt was blocked before tests ran
+  because the machine volume reached `No space left on device`. Removed only
+  the task-specific, rebuildable `/private/tmp/recme-rec281-landing-dd` and the
+  build/module/package/index caches under `/private/tmp/recme-rec281-dd`;
+  preserved its `Logs` and `TestResults` evidence. No unrelated DerivedData,
+  worktree, source, screenshot, or user file was removed.
+- Inspected the existing `testflight/build-155` state. No durable archive/upload
+  completion receipt was found; Joe's current instruction explicitly
+  prioritizes merging this PR, so that older release state remains untouched.
+- PR: https://github.com/joelipshutz/wander/pull/458. Ready for squash merge to
+  `main`; app behavior should ride the next explicitly requested TestFlight
+  batch.
