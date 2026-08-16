@@ -30477,3 +30477,68 @@ Landing fixes and validation — 2026-08-16 06:37 PDT:
 - Maintainability and performance reviews were clean. The final UI remains
   Option B; the image-backed/liquid-glass ticket experiment remains deferred.
   No build-number bump, archive, TestFlight upload, or release was performed.
+
+## 2026-08-16 08:12 PDT - Codex - REC-283 Remove Map Result Status Strip
+
+Agent: Codex using `ios-fix` with the existing deterministic simulator fixture
+as the reproduction surface because this repo intentionally has no
+DebugBridge/StateServer.
+
+Branch: `codex/rec-283-remove-map-result-strip`
+
+Worktree: `/private/tmp/recme-rec283-remove-map-result-strip`
+
+Starting commit: `39aa45e11ccaa2182f481fb203303d57b5f76112`
+
+Goal: remove the redundant `Map result. Tap + to add it.` strip between the
+selected-place ticket and search/add dock. Preserve the selected ticket, search,
+add button, other intentional Map status/error messaging, and compact/Liquid
+Glass layout clearances.
+
+Coordination:
+
+- Root checkout remains on stale `joe/phone-build-latest`, 256 commits behind
+  `origin/main`, with unrelated untracked `tmp/`; it will remain untouched.
+- No active worktree or recent log entry claims this exact follow-up. The old
+  REC-278 worktree remains separate.
+- Linear: REC-283 (`In Progress`). Mission Control:
+  `5535c3ba-51b8-4050-82d0-fa11de845e2d` (`in_progress`).
+
+Expected files: `Wander/Features/Map/MapScreen.swift`, focused Map UI tests, and
+this log. No TestFlight release is in scope.
+
+Checkpoint — 2026-08-16 08:26 PDT:
+
+- Root cause: successful saved-place, MapKit-result, and typeahead selection
+  paths assigned generic success copy into the shared `mapSearchMessage` banner
+  state. The bottom stack then rendered that banner between the selected ticket
+  and search/add dock.
+- Removed only those successful-search assignments. No-results errors,
+  shared-place errors, loading state, outbox/retry state, and other intentional
+  Map messages remain unchanged.
+- Added a source-contract regression plus a UI regression that asserts the
+  ticket and search dock both remain present, the generic message does not, and
+  their frames do not overlap. The UI regression keeps an after screenshot.
+- iOS 18.6 / iPhone 16e: 7 focused tests passed, covering the new source
+  contract, all five `MapFilterInteractionUITests`, and the App Store Map
+  storefront capture. Result: `/private/tmp/REC283-Small.xcresult`.
+- iOS 26.2 / iPhone 16e: 3 focused Map/UI tests passed, followed by a 1-test
+  screenshot rerun. Results: `/private/tmp/REC283-iOS26.xcresult` and
+  `/private/tmp/REC283-iOS26-Visual.xcresult`.
+- Clean iOS 26.2 visual verification confirms the selected ticket now sits
+  directly above the search dock, with the wider Liquid Glass filters and
+  ticket styling unchanged. Screenshot:
+  `/private/tmp/REC283-iOS26-clean.png`.
+- `git diff --check` passed. No build-number bump, archive, TestFlight upload,
+  or release was performed.
+
+Handoff — 2026-08-16 08:29 PDT:
+
+- Ready PR: https://github.com/joelipshutz/wander/pull/459
+- Files changed: `Wander/Features/Map/MapScreen.swift`,
+  `WanderTests/NavigationContractTests.swift`,
+  `WanderUITests/MapFilterInteractionUITests.swift`, and this log.
+- Known issues: none found in the tested Map search/selection paths. The PR is
+  intentionally unmerged and no TestFlight action was taken.
+- Next step: review and merge PR #459 when approved; treat the fix as a
+  candidate for the next explicitly requested TestFlight batch.

@@ -395,6 +395,17 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testMapSearchSuccessDoesNotRenderARedundantResultMessage() throws {
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertFalse(map.contains("Map result. Tap + to add it."))
+        XCTAssertFalse(map.contains("Also showing new map results."))
+        XCTAssertTrue(map.contains("No places on your map or map results found."))
+        XCTAssertTrue(map.contains("That shared place could not be opened. Try the link again."))
+    }
+
     func testFocusedMapSearchKeepsSafeChromeAndUsesABoundedGlassMenu() throws {
         let fixtureURL = projectRoot.appendingPathComponent(
             "WanderTests/Fixtures/rec-191-map-search-menu-pre.json"

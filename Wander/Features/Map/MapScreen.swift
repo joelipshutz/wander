@@ -1821,12 +1821,12 @@ struct MapScreen: View {
             if let firstVisiblePlace = visiblePlaces.first {
                 selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
-                mapSearchMessage = mapSearchCandidates.isEmpty ? nil : "Also showing new map results."
+                mapSearchMessage = nil
             } else if let firstCandidate = mapSearchCandidates.first {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
                 center(on: firstCandidate)
-                mapSearchMessage = "Map result. Tap + to add it."
+                mapSearchMessage = nil
             } else {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
@@ -2722,7 +2722,6 @@ struct MapScreen: View {
             selectedSearchCandidateID = candidate.id
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
-            mapSearchMessage = "Map result. Tap + to add it."
         }
     }
 

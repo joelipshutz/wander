@@ -36,13 +36,12 @@ final class MapFilterInteractionUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testSelectedTicketClearsTheCompleteSearchDock() {
+    func testSelectedTicketClearsSearchDockWithoutRedundantResultMessage() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
-            "-WanderMapPlace", "Woodcat Coffee",
-            "-WanderMapSearchMessage", "Map result. Tap + to add it."
+            "-WanderMapPlace", "Woodcat Coffee"
         ]
         app.launch()
 
@@ -51,10 +50,14 @@ final class MapFilterInteractionUITests: XCTestCase {
         let search = app.textFields["map.searchField"]
 
         XCTAssertTrue(ticket.waitForExistence(timeout: 5))
-        XCTAssertTrue(message.waitForExistence(timeout: 5))
         XCTAssertTrue(search.waitForExistence(timeout: 5))
-        XCTAssertLessThanOrEqual(ticket.frame.maxY, message.frame.minY)
-        XCTAssertLessThanOrEqual(message.frame.maxY, search.frame.minY)
+        XCTAssertFalse(message.exists)
+        XCTAssertLessThanOrEqual(ticket.frame.maxY, search.frame.minY)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-283 selected ticket without result message"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     private func launchFriendsMore(resetSeconds: String? = nil) -> XCUIApplication {
