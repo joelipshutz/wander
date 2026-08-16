@@ -310,6 +310,7 @@ final class PushNotificationManager: ObservableObject {
     @Published private(set) var saveStreakRemindersEnabled = false
 
     private let userDefaults: UserDefaults
+    private let analytics: AnalyticsClient
     private let saveStreakReminderAnalytics: SaveStreakReminderAnalytics
     private let tokenKey = "wander.apnsDeviceToken"
     private static let wannaGoRemindersKey = "wander.wannaGoRemindersEnabled"
@@ -323,6 +324,7 @@ final class PushNotificationManager: ObservableObject {
         analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
         self.userDefaults = userDefaults
+        self.analytics = analytics
         self.saveStreakReminderAnalytics = SaveStreakReminderAnalytics(
             analytics: analytics,
             userDefaults: userDefaults
@@ -592,6 +594,16 @@ final class PushNotificationManager: ObservableObject {
             }
         }
         navigationRequest = NotificationNavigationRequest(destination: destination)
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.notificationOpened,
+                properties: [
+                    "notification_type": Self.analyticsNotificationType(from: userInfo),
+                    "delivery_channel": Self.deliveryChannel(eventID: eventID),
+                    "route": Self.analyticsRoute(for: destination)
+                ]
+            )
+        )
         if let userID = userID ?? saveStreakReminderUserID {
             saveStreakReminderAnalytics.recordOpened(
                 userInfo: userInfo,
@@ -663,6 +675,61 @@ final class PushNotificationManager: ObservableObject {
 
     private static func eventID(from userInfo: [AnyHashable: Any]) -> String? {
         (userInfo["recme"] as? [String: Any])?["event_id"] as? String
+    }
+
+    private static func analyticsNotificationType(
+        from userInfo: [AnyHashable: Any]
+    ) -> String {
+        let value = (userInfo["recme"] as? [String: Any])?["notification_type"] as? String
+        let allowedTypes: Set<String> = [
+            "activity_commented",
+            "activity_liked",
+            "capture_ready",
+            "followed_activity_digest",
+            "followed_place_visit",
+            "followed_you",
+            "import_finished",
+            "list_collaborator_added",
+            "list_place_added",
+            "mutual_follow",
+            "place_saved_from_your_map",
+            "save_streak_reminder",
+            "shared_visit",
+            "wanna_go_reminder"
+        ]
+        return value.flatMap { allowedTypes.contains($0) ? $0 : nil } ?? "unknown"
+    }
+
+    private static func deliveryChannel(eventID: String?) -> String {
+        guard let eventID else { return "unknown" }
+        return UUID(uuidString: eventID) == nil ? "local" : "remote"
+    }
+
+    private static func analyticsRoute(for destination: NotificationDestination) -> String {
+        switch destination {
+        case .quickCapture:
+            return "quick_capture"
+        case .profile:
+            return "profile"
+        case .people:
+            return "people"
+        case .list:
+            return "list"
+        case .listInvite:
+            return "list_invite"
+        case .place:
+            return "place"
+        case .activityComments:
+            return "activity_comments"
+        case .sharedVisit:
+            return "shared_visit"
+        case .drafts:
+            return "drafts"
+        case .importReview:
+            return "import_review"
+        case .discover:
+            return "discover"
+        }
     }
 
     static func destination(

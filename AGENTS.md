@@ -331,6 +331,9 @@ Before changing a user-facing flow, read `docs/analytics.md` and search the flow
 - update and check `scripts/posthog-product-dashboard.mjs` when a dashboard metric changes;
 - do not hand-edit PostHog resources tagged `recme:managed`; apply the checked-in dashboard script;
 - keep Monetization blank until an explicit product decision defines it.
+- keep notification delivery/frequency analytics aggregate-only on the server:
+  never export recipient/event/actor/APNs IDs, tokens, copy, deep links, or
+  payload data to PostHog; compute per-recipient distributions inside Supabase.
 
 Run `npm --prefix scripts run analytics:check` for every analytics/dashboard change, then run the relevant iOS tests. Before release, validate changed events in PostHog using a non-production/test account and confirm both expected properties and the absence of private payloads.
 

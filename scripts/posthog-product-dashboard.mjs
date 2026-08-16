@@ -14,6 +14,13 @@ const event = (name, properties = []) => ({
   properties,
 });
 
+const eventTotal = (name, properties = []) => ({
+  kind: "EventsNode",
+  event: name,
+  math: "total",
+  properties,
+});
+
 const property = (key, value) => ({
   key,
   value: [value],
@@ -48,6 +55,18 @@ const funnel = (series) => ({
 });
 
 const hogql = (query) => ({ kind: "HogQLQuery", query });
+
+const hogqlBar = (query, xAxis, yAxis) => ({
+  kind: "DataVisualizationNode",
+  source: hogql(query),
+  display: "ActionsBar",
+  chartSettings: {
+    xAxis: { column: xAxis },
+    yAxis: [{ column: yAxis }],
+    showValuesOnSeries: true,
+    showLegend: false,
+  },
+});
 
 const insights = [
   {
@@ -167,6 +186,100 @@ from returns
       event("contact_invite_completed", [property("outcome", "sent")]),
     ], { breakdown: "surface" }),
   },
+  {
+    key: "notifications-accepted-volume",
+    name: "Notifications — APNs-accepted volume",
+    description: "Notifications with at least one APNs-accepted device delivery, split by coarse notification type. This is provider acceptance, not proof that iOS displayed the alert.",
+    query: trends([
+      eventTotal("notification_delivery_processed", [property("delivery_outcome", "sent")]),
+    ], { breakdown: "notification_type", interval: "day" }),
+  },
+  {
+    key: "notifications-delivery-health",
+    name: "Notifications — delivery health",
+    description: "Terminal notification outcomes and final per-device APNs disposition over the last 30 days. Retry-only worker passes are excluded from the terminal notification rate.",
+    query: hogql(`
+select
+  sum(if(properties.delivery_outcome = 'sent', 1, 0)) as accepted_notifications,
+  sum(if(properties.delivery_outcome = 'failed', 1, 0)) as failed_notifications,
+  round(
+    100.0 * sum(if(properties.delivery_outcome = 'sent', 1, 0)) /
+    nullIf(sum(if(properties.delivery_outcome in ('sent', 'failed'), 1, 0)), 0),
+    1
+  ) as notification_acceptance_percent,
+  sum(if(properties.delivery_outcome in ('sent', 'failed'), toInt(properties.accepted_token_count), 0)) as accepted_device_tokens,
+  sum(if(properties.delivery_outcome in ('sent', 'failed'),
+    toInt(properties.permanent_token_failure_count) +
+    toInt(properties.permanent_event_failure_count) +
+    toInt(properties.retryable_failure_count), 0)) as failed_device_tokens,
+  sum(if(properties.delivery_outcome = 'retrying', 1, 0)) as retry_passes
+from events
+where event = 'notification_delivery_processed'
+  and timestamp >= now() - interval 30 day
+`.trim()),
+  },
+  {
+    key: "notifications-open-rate",
+    name: "Notifications — remote open rate",
+    description: "Routable remote notification taps divided by APNs-accepted notifications over the last 30 days. This is an aggregate directional rate; no notification or recipient identifier is exported by the server analytics path.",
+    query: hogql(`
+with delivery as (
+  select count() as accepted_notifications
+  from events
+  where event = 'notification_delivery_processed'
+    and properties.delivery_outcome = 'sent'
+    and timestamp >= now() - interval 30 day
+), opens as (
+  select count() as notification_opens
+  from events
+  where event = 'notification_opened'
+    and properties.delivery_channel = 'remote'
+    and timestamp >= now() - interval 30 day
+)
+select
+  delivery.accepted_notifications as accepted_notifications,
+  opens.notification_opens as notification_opens,
+  round(
+    100.0 * opens.notification_opens / nullIf(delivery.accepted_notifications, 0),
+    1
+  ) as aggregate_open_percent
+from delivery
+cross join opens
+`.trim()),
+  },
+  {
+    key: "notifications-frequency-summary",
+    name: "Notifications — 30-day frequency per eligible recipient",
+    description: "Latest privacy-preserving aggregate snapshot across users who currently have notifications enabled and at least one active device token. Includes recipients with zero accepted notifications.",
+    query: hogql(`
+select
+  toInt(properties.eligible_recipient_count) as eligible_recipients,
+  toInt(properties.accepted_notification_count) as accepted_notifications,
+  toFloat(properties.average_per_recipient) as average_per_recipient,
+  toInt(properties.p50_per_recipient) as p50_per_recipient,
+  toInt(properties.p90_per_recipient) as p90_per_recipient,
+  toInt(properties.max_per_recipient) as max_per_recipient
+from events
+where event = 'notification_frequency_snapshot'
+order by timestamp desc
+limit 1
+`.trim()),
+  },
+  {
+    key: "notifications-frequency-histogram",
+    name: "Notifications — recipient frequency distribution (30 days)",
+    description: "Latest count of notification-eligible recipients in each APNs-accepted notification bucket. Zero is included. The server exports aggregate bucket counts only, never recipient IDs.",
+    query: hogqlBar(`
+select
+  properties.bucket as notification_count_bucket,
+  argMax(toInt(properties.recipient_count), timestamp) as recipients,
+  argMax(toInt(properties.bucket_order), timestamp) as bucket_order
+from events
+where event = 'notification_frequency_bucket_snapshot'
+group by notification_count_bucket
+order by bucket_order asc
+`.trim(), "notification_count_bucket", "recipients"),
+  },
 ];
 
 const sections = [
@@ -200,6 +313,17 @@ const sections = [
     body: "Deliberately blank. There is no monetization model or event contract yet. Add metrics only after a product decision, then update docs/analytics.md and this managed dashboard together.",
     insightKeys: [],
   },
+  {
+    title: "Notification Operations",
+    body: "Remote notification volume, APNs provider acceptance, aggregate tap-through, and 30-day frequency across notification-eligible users. APNs acceptance does not prove that iOS displayed an alert. Frequency snapshots include zero-notification users and export only aggregate counts—never recipient IDs, notification copy, device tokens, routes, or place data.",
+    insightKeys: [
+      "notifications-accepted-volume",
+      "notifications-delivery-health",
+      "notifications-open-rate",
+      "notifications-frequency-summary",
+      "notifications-frequency-histogram",
+    ],
+  },
 ];
 
 function assertDefinition() {
@@ -210,8 +334,12 @@ function assertDefinition() {
       if (!keys.has(key)) throw new Error(`Unknown insight key ${key}`);
     }
   }
-  if (sections.at(-1)?.title !== "Monetization" || sections.at(-1).insightKeys.length !== 0) {
+  const monetization = sections.find((section) => section.title === "Monetization");
+  if (!monetization || monetization.insightKeys.length !== 0) {
     throw new Error("Monetization must remain an explicit empty section");
+  }
+  if (sections.at(-1)?.title !== "Notification Operations") {
+    throw new Error("Notification Operations must remain the bottom dashboard section");
   }
   return { dashboard: "rec.me Product Funnel", sections: sections.length, insights: insights.length };
 }
@@ -311,7 +439,7 @@ async function applyDashboard() {
   ]);
   const dashboardPayload = {
     name: "rec.me Product Funnel",
-    description: "Acquisition → activation → engagement → retention → referrals → monetization. Managed by scripts/posthog-product-dashboard.mjs; do not hand-edit managed tiles.",
+    description: "Acquisition → activation → engagement → retention → referrals → monetization → notification operations. Managed by scripts/posthog-product-dashboard.mjs; do not hand-edit managed tiles.",
     pinned: true,
     tags: [MANAGED_TAG, DASHBOARD_TAG],
   };

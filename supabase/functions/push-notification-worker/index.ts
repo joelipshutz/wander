@@ -53,6 +53,26 @@ type DeliverySettlement = {
   permanent_event_failure_count?: number;
 };
 
+export type NotificationOperationsSnapshot = {
+  window_days: number;
+  eligible_recipient_count: number;
+  accepted_notification_count: number;
+  average_per_recipient: number;
+  p50_per_recipient: number;
+  p90_per_recipient: number;
+  max_per_recipient: number;
+  histogram: Array<{
+    bucket_order: number;
+    bucket: string;
+    recipient_count: number;
+  }>;
+};
+
+export type PostHogCaptureEvent = {
+  event: string;
+  properties: Record<string, string | number | boolean>;
+};
+
 type ProcessedEvent = {
   event_id: string;
   status: "sent" | "failed" | "skipped" | "retrying";
@@ -101,6 +121,9 @@ export async function handleRequest(req: Request): Promise<Response> {
   const processed = await Promise.all(
     events.map((event) => processEvent(event, config, jwt)),
   );
+  if (events.length > 0) {
+    await captureNotificationFrequencySnapshot();
+  }
 
   return Response.json({
     claimed_count: events.length,
@@ -131,6 +154,9 @@ async function processEvent(
       input_results: results,
     },
   );
+  await capturePostHogEvents([
+    notificationDeliveryAnalyticsEvent(event, settlement),
+  ]);
   const acceptedCount =
     results.filter((result) => result.status === "accepted").length;
   const permanentTokenFailureCount = results.filter(
@@ -156,6 +182,168 @@ async function processEvent(
       .filter(Boolean)
       .join("; ") || undefined,
   };
+}
+
+export function notificationDeliveryAnalyticsEvent(
+  event: PushEvent,
+  settlement: DeliverySettlement,
+): PostHogCaptureEvent {
+  const deliveryOutcome = settlement.status === "pending"
+    ? "retrying"
+    : settlement.status === "stale_claim"
+    ? "skipped"
+    : settlement.status;
+  const retryable = settlement.retryable_count ?? 0;
+  const permanentToken = settlement.permanent_token_failure_count ?? 0;
+  const permanentEvent = settlement.permanent_event_failure_count ?? 0;
+  const activeFailureKinds = [retryable, permanentToken, permanentEvent].filter(
+    (count) => count > 0,
+  ).length;
+  const failureCategory = settlement.status === "stale_claim"
+    ? "stale_claim"
+    : activeFailureKinds > 1
+    ? "mixed"
+    : retryable > 0
+    ? "retryable"
+    : permanentToken > 0
+    ? "permanent_token"
+    : permanentEvent > 0
+    ? "permanent_event"
+    : "none";
+
+  return {
+    event: "notification_delivery_processed",
+    properties: {
+      distinct_id: "notification_operations",
+      analytics_schema_version: "2",
+      platform: "server",
+      source: "push_notification_worker",
+      notification_type: normalizedNotificationType(event.notification_type),
+      delivery_outcome: deliveryOutcome,
+      is_terminal: deliveryOutcome === "sent" || deliveryOutcome === "failed",
+      attempt_number: event.attempt_count ?? 1,
+      accepted_token_count: settlement.accepted_count ?? 0,
+      retryable_failure_count: retryable,
+      permanent_token_failure_count: permanentToken,
+      permanent_event_failure_count: permanentEvent,
+      failure_category: failureCategory,
+      $process_person_profile: false,
+      $geoip_disable: true,
+    },
+  };
+}
+
+export function notificationFrequencyAnalyticsEvents(
+  snapshot: NotificationOperationsSnapshot,
+): PostHogCaptureEvent[] {
+  const common = {
+    distinct_id: "notification_operations",
+    analytics_schema_version: "2",
+    platform: "server",
+    source: "push_notification_worker",
+    window_days: snapshot.window_days,
+    $process_person_profile: false,
+    $geoip_disable: true,
+  };
+  return [
+    {
+      event: "notification_frequency_snapshot",
+      properties: {
+        ...common,
+        eligible_recipient_count: snapshot.eligible_recipient_count,
+        accepted_notification_count: snapshot.accepted_notification_count,
+        average_per_recipient: snapshot.average_per_recipient,
+        p50_per_recipient: snapshot.p50_per_recipient,
+        p90_per_recipient: snapshot.p90_per_recipient,
+        max_per_recipient: snapshot.max_per_recipient,
+      },
+    },
+    ...snapshot.histogram.map((bucket) => ({
+      event: "notification_frequency_bucket_snapshot",
+      properties: {
+        ...common,
+        bucket: normalizedFrequencyBucket(bucket.bucket),
+        bucket_order: bucket.bucket_order,
+        recipient_count: bucket.recipient_count,
+      },
+    })),
+  ];
+}
+
+async function captureNotificationFrequencySnapshot(): Promise<void> {
+  if (!postHogProjectToken()) return;
+  try {
+    const snapshot = await serviceRpc<NotificationOperationsSnapshot>(
+      "notification_operations_snapshot",
+      { input_window_days: 30 },
+    );
+    await capturePostHogEvents(notificationFrequencyAnalyticsEvents(snapshot));
+  } catch (error) {
+    console.error(
+      "notification_frequency_analytics_failed",
+      error instanceof Error ? error.message : "unknown_error",
+    );
+  }
+}
+
+async function capturePostHogEvents(
+  events: PostHogCaptureEvent[],
+): Promise<boolean> {
+  const projectToken = postHogProjectToken();
+  if (!projectToken || events.length === 0) return false;
+  const host = (
+    Deno.env.get("WANDER_POSTHOG_HOST")?.trim() ||
+    "https://us.i.posthog.com"
+  ).replace(/\/$/, "");
+  try {
+    const response = await fetch(`${host}/batch/`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ api_key: projectToken, batch: events }),
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!response.ok) {
+      console.error(
+        "notification_operations_analytics_rejected",
+        response.status,
+      );
+    }
+    return response.ok;
+  } catch (error) {
+    console.error(
+      "notification_operations_analytics_failed",
+      error instanceof Error ? error.message : "unknown_error",
+    );
+    return false;
+  }
+}
+
+function postHogProjectToken(): string | null {
+  return Deno.env.get("WANDER_POSTHOG_PROJECT_TOKEN")?.trim() || null;
+}
+
+function normalizedNotificationType(value: string): string {
+  return [
+      "activity_commented",
+      "activity_liked",
+      "capture_ready",
+      "followed_activity_digest",
+      "followed_place_visit",
+      "followed_you",
+      "list_collaborator_added",
+      "list_place_added",
+      "mutual_follow",
+      "place_saved_from_your_map",
+      "shared_visit",
+    ].includes(value)
+    ? value
+    : "unknown";
+}
+
+function normalizedFrequencyBucket(value: string): string {
+  return ["0", "1", "2-3", "4-7", "8-14", "15-29", "30+"].includes(value)
+    ? value
+    : "unknown";
 }
 
 function processingSummary(
