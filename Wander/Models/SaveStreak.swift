@@ -259,6 +259,7 @@ enum SaveStreakCelebrationPresentation {
 
 enum SaveStreakPresentationPolicy {
     static let postSaveSheetDelay = Duration.milliseconds(140)
+    static let sameDayConfettiAutoDismissMilliseconds = 2_250
 
     static func canPresent(
         celebration: SaveStreakCelebration?,
@@ -285,7 +286,7 @@ enum SaveStreakPresentationPolicy {
         case .dailyTakeover:
             nil
         case .sameDayConfetti:
-            .milliseconds(720)
+            .milliseconds(sameDayConfettiAutoDismissMilliseconds)
         }
     }
 }

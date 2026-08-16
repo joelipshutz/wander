@@ -67,12 +67,14 @@ enum PlaceProfileSaveActionPolicy {
         state: PlaceProfileSaveActionState,
         isSignedIn: Bool,
         resolvedFlagValue: Bool?,
-        launchArguments: [String] = ProcessInfo.processInfo.arguments
+        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = false
     ) -> PlaceProfileSaveActionSnapshot {
         let usesFloatingActions = isFloatingActionsEnabled(
             isSignedIn: isSignedIn,
             resolvedFlagValue: resolvedFlagValue,
-            launchArguments: launchArguments
+            launchArguments: launchArguments,
+            isSimulator: isSimulator
         )
 
         guard usesFloatingActions else {
@@ -91,8 +93,13 @@ enum PlaceProfileSaveActionPolicy {
     static func isFloatingActionsEnabled(
         isSignedIn: Bool,
         resolvedFlagValue: Bool?,
-        launchArguments: [String] = ProcessInfo.processInfo.arguments
+        launchArguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = false
     ) -> Bool {
+        if isSimulator {
+            return true
+        }
+
         #if DEBUG
         if launchArguments.contains(debugEnableLaunchArgument) {
             return true
@@ -119,6 +126,51 @@ enum PlaceProfileSaveActionPolicy {
         else { return nil }
 
         return baseContext.preselectingStatus(destinationStatus)
+    }
+
+    static func attachedSaveContext(
+        route: PlaceProfileSaveExperienceRoute,
+        state: PlaceProfileSaveActionState,
+        action: PlaceProfileSaveAction,
+        baseContext: MapPlaceSaveContext
+    ) -> MapPlaceSaveContext? {
+        if let firstSave = attachedFirstSaveContext(
+            route: route,
+            state: state,
+            action: action,
+            baseContext: baseContext
+        ) {
+            return firstSave
+        }
+
+        return attachedExistingWannaContext(
+            route: route,
+            state: state,
+            action: action,
+            baseContext: baseContext
+        )
+    }
+
+    static func attachedExistingWannaContext(
+        route: PlaceProfileSaveExperienceRoute,
+        state: PlaceProfileSaveActionState,
+        action: PlaceProfileSaveAction,
+        baseContext: MapPlaceSaveContext
+    ) -> MapPlaceSaveContext? {
+        guard route == .floatingActions,
+              state == .wanna,
+              baseContext.existingCurrentUserSave?.userPlace.status == .wannaGo,
+              case .add = baseContext.mode
+        else { return nil }
+
+        switch (action.kind, action.isSelected, action.destinationStatus) {
+        case (.wanna, true, .wannaGo):
+            return baseContext.preselectingStatus(.wannaGo)
+        case (.checkIn, false, .been):
+            return baseContext.preselectingStatus(.been)
+        default:
+            return nil
+        }
     }
 
     static func state(

@@ -1,0 +1,16 @@
+{
+  "issue": "REC-275",
+  "captured_at": "2026-08-16T08:48:00-07:00",
+  "reported_behavior": "Tapping Check in can dismiss the place profile before presenting the save editor.",
+  "expected_behavior": "The place profile remains visible underneath while the Check-in editor opens over or attached to it.",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; Joe's live Simulator report and /private/tmp/s73-pre-leaves-profile.png are the pre-fix evidence",
+  "device": {
+    "name": "S7.2 Edit Wanna Test",
+    "udid": "AC52441A-D833-4DC1-A1EE-3632D3F7F9AE",
+    "surface": "Map place profile"
+  },
+  "root_causes": [
+    "Simulator relaunch without the one-shot launch argument falls back to the legacy route because the hosted flag is fail-closed.",
+    "Existing Wanna to Check in is intentionally rejected by the S7.2 attached-route policy and dismisses the profile before opening the legacy sheet."
+  ]
+}

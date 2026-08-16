@@ -247,7 +247,7 @@ enum FirstVisitWalkthroughContent {
                 .saveFlow,
                 .saveMoreOptions,
                 "More options, whenever you need them",
-                "Notes, fit questions, tags, and privacy live here. You can adjust them on any save.",
+                "Fit questions, tags, and privacy live here. You can adjust them on any save.",
                 advance: .next,
                 coachTheme: .save
             ),

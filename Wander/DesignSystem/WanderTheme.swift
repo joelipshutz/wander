@@ -733,27 +733,68 @@ struct WanderSegmentedSwitch: View {
     }
 }
 
+enum WanderPrimaryButtonTone: Equatable {
+    case brand
+    case espressoConfirmation
+
+    var glassTone: WanderGlassTone? {
+        switch self {
+        case .brand:
+            nil
+        case .espressoConfirmation:
+            .deepBlackAction
+        }
+    }
+}
+
+private struct WanderPrimaryButtonPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 struct WanderPrimaryButton: View {
     let title: String
     var systemImage: String?
     var isDisabled = false
+    var tone: WanderPrimaryButtonTone = .brand
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack {
-                if let systemImage {
-                    Image(systemName: systemImage)
-                }
-                Text(title)
+            if let glassTone = tone.glassTone {
+                label
+                    .foregroundStyle(glassTone.foregroundStyle)
+                    .wanderGlassRoundedRectangle(
+                        tone: glassTone,
+                        cornerRadius: WanderTheme.radiusLarge,
+                        interactive: !isDisabled,
+                        showsBorder: false
+                    )
+                    .opacity(isDisabled ? 0.68 : 1)
+            } else {
+                label
+                    .background(isDisabled ? WanderTheme.borderStrong.color : WanderTheme.terracotta.color)
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .clipShape(Capsule())
             }
-            .font(.system(size: 16, weight: .bold))
-            .frame(maxWidth: .infinity, minHeight: 52)
-            .background(isDisabled ? WanderTheme.borderStrong.color : WanderTheme.terracotta.color)
-            .foregroundStyle(WanderTheme.textOnAction.color)
-            .clipShape(Capsule())
         }
+        .buttonStyle(WanderPrimaryButtonPressStyle())
         .disabled(isDisabled)
+    }
+
+    private var label: some View {
+        HStack {
+            if let systemImage {
+                Image(systemName: systemImage)
+            }
+            Text(title)
+        }
+        .font(.system(size: 16, weight: .bold))
+        .frame(maxWidth: .infinity, minHeight: 52)
     }
 }
 
