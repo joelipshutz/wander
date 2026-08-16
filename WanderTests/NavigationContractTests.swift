@@ -363,7 +363,7 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private var scopeSwitch: some View").first
         )
 
-        XCTAssertTrue(header.contains("Text(\"lists\")"))
+        XCTAssertTrue(header.contains("WanderTabHeaderLabel(title: \"lists\")"))
         XCTAssertTrue(header.contains("WanderGlassActionButton("))
         XCTAssertTrue(header.contains("accessibilityIdentifier: \"lists.headerAdd\""))
         XCTAssertFalse(header.contains("WanderGlassHeader("))
@@ -1051,7 +1051,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("Font.system(.largeTitle, design: .serif"))
         XCTAssertTrue(typography.contains("Font.system(.title3, design: .serif"))
         XCTAssertTrue(typography.contains("Font.system(.body, design: .default"))
-        XCTAssertFalse(typography.contains("size:"))
+        XCTAssertTrue(typography.contains("displayTabHeader = WanderDisplayFont.font(size: 28"))
 
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher("))
@@ -1074,6 +1074,38 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(streak.contains("WanderTypography"))
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
+    }
+
+    func testDisplayTypographyIsLimitedToPrimaryTabHeaders() throws {
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let screens = [
+            "map": "Wander/Features/Map/MapScreen.swift",
+            "feed": "Wander/Features/Feed/FeedScreen.swift",
+            "lists": "Wander/Features/Lists/ListsScreen.swift",
+            "@\\(profile.handle)": "Wander/Features/Profile/ProfileOwnerHome.swift"
+        ]
+
+        XCTAssertTrue(theme.contains("enum WanderDisplayFont"))
+        XCTAssertTrue(theme.contains("struct WanderTabHeaderLabel"))
+        XCTAssertTrue(theme.contains("static let displayHero"))
+        XCTAssertTrue(theme.contains("static let displayTabHeader"))
+        XCTAssertTrue(theme.contains("static let displaySectionTitle"))
+        XCTAssertTrue(theme.contains("static let displayCardTitle"))
+
+        for (title, path) in screens {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(path))
+            XCTAssertEqual(
+                source.components(separatedBy: "WanderTabHeaderLabel(").count - 1,
+                1,
+                "\(path) should use the display family exactly once"
+            )
+            XCTAssertTrue(source.contains("WanderTabHeaderLabel(title: \"\(title)\")"))
+            XCTAssertFalse(source.contains("WanderTypography.displayHero"))
+            XCTAssertFalse(source.contains("WanderTypography.displaySectionTitle"))
+            XCTAssertFalse(source.contains("WanderTypography.displayCardTitle"))
+        }
     }
 
     func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
@@ -3000,10 +3032,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
         XCTAssertTrue(navigationRow.contains("ProfileBackButton(action: backAction)"))
-        XCTAssertTrue(navigationRow.contains("Text(\"@\\(profile.handle)\")"))
+        XCTAssertTrue(navigationRow.contains("WanderTabHeaderLabel(title: \"@\\(profile.handle)\")"))
         XCTAssertLessThan(
             try XCTUnwrap(navigationRow.range(of: "ProfileBackButton(action: backAction)")?.lowerBound),
-            try XCTUnwrap(navigationRow.range(of: "Text(\"@\\(profile.handle)\")")?.lowerBound)
+            try XCTUnwrap(navigationRow.range(of: "WanderTabHeaderLabel(title: \"@\\(profile.handle)\")")?.lowerBound)
         )
         XCTAssertTrue(navigationRow.contains("pendingInvitationCount: sharedVisitInvitationCount"))
         XCTAssertFalse(navigationRow.contains("WanderTheme.surfaceRaised.color"))

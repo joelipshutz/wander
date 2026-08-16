@@ -92,11 +92,55 @@ enum WanderTheme {
     ]
 }
 
+enum WanderDisplayFont {
+    static let familyName = "Lil Grotesk"
+    static let bundleFileName = "LilGrotesk-Variable.ttf"
+
+    enum Weight: CaseIterable {
+        case semibold
+        case bold
+        case black
+
+        var postScriptName: String {
+            switch self {
+            case .semibold: "LilGrotesk-SemiBold"
+            case .bold: "LilGrotesk-Bold"
+            case .black: "LilGrotesk-Black"
+            }
+        }
+
+        var systemWeight: Font.Weight {
+            switch self {
+            case .semibold: .semibold
+            case .bold: .bold
+            case .black: .black
+            }
+        }
+    }
+
+    static func font(
+        size: CGFloat,
+        relativeTo textStyle: Font.TextStyle,
+        weight: Weight
+    ) -> Font {
+        guard UIFont(name: weight.postScriptName, size: size) != nil else {
+            return .system(textStyle, design: .rounded, weight: weight.systemWeight)
+        }
+
+        return .custom(weight.postScriptName, size: size, relativeTo: textStyle)
+    }
+}
+
 /// Semantic, Dynamic-Type-aware typography roles for the approved native
-/// editorial system. Navigation chrome and utility copy stay in the default
-/// system design; serif is reserved for named content, editorial headings,
-/// and eligible custom content mastheads.
+/// editorial system and the rec.me display family. Navigation chrome and
+/// utility copy stay in the default system design; serif remains reserved for
+/// named content and first-run editorial moments.
 enum WanderTypography {
+    static let displayHero = WanderDisplayFont.font(size: 36, relativeTo: .largeTitle, weight: .bold)
+    static let displayTabHeader = WanderDisplayFont.font(size: 28, relativeTo: .title, weight: .bold)
+    static let displaySectionTitle = WanderDisplayFont.font(size: 22, relativeTo: .title2, weight: .bold)
+    static let displayCardTitle = WanderDisplayFont.font(size: 18, relativeTo: .title3, weight: .semibold)
+
     static let editorialMasthead = Font.system(.title, design: .serif, weight: .bold)
     static let editorialNamedContent = Font.system(.headline, design: .serif, weight: .bold)
     static let editorialSmallNamedContent = Font.system(.subheadline, design: .serif, weight: .bold)
@@ -115,6 +159,19 @@ enum WanderTypography {
     static let label = Font.system(.subheadline, design: .default, weight: .semibold)
     static let metadata = Font.system(.caption, design: .default, weight: .semibold)
     static let control = Font.system(.body, design: .default, weight: .semibold)
+}
+
+struct WanderTabHeaderLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(WanderTypography.displayTabHeader)
+            .foregroundStyle(WanderTheme.textInk.color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .accessibilityAddTraits(.isHeader)
+    }
 }
 
 private extension Color {

@@ -62,6 +62,10 @@
 	<string>rec.me saves a share ticket to your photo library when you choose Save, Instagram Post, or TikTok.</string>
 	<key>TikTokClientKey</key>
 	<string>$(WANDER_TIKTOK_CLIENT_KEY)</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>LilGrotesk-Variable.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>

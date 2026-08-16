@@ -58,6 +58,35 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(plist["WANDER_SUPABASE_URL"] as? String, "$(WANDER_SUPABASE_URL)")
     }
 
+    func testDisplayTypographyFontIsBundledAndRegistered() throws {
+        let fontURL = projectRoot.appendingPathComponent(
+            "Wander/Resources/Fonts/\(WanderDisplayFont.bundleFileName)"
+        )
+        let licenseURL = projectRoot.appendingPathComponent(
+            "Wander/Resources/Fonts/LilGrotesk-OFL.txt"
+        )
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        let plistData = try Data(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Resources/Info.plist")
+        )
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any]
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fontURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: licenseURL.path))
+        XCTAssertTrue(project.contains("UIAppFonts:"))
+        XCTAssertEqual(plist["UIAppFonts"] as? [String], [WanderDisplayFont.bundleFileName])
+        XCTAssertEqual(WanderDisplayFont.familyName, "Lil Grotesk")
+
+        for weight in WanderDisplayFont.Weight.allCases {
+            XCTAssertNotNil(
+                UIFont(name: weight.postScriptName, size: 28),
+                "Expected bundled font instance \(weight.postScriptName) to register"
+            )
+        }
+    }
+
     func testInstagramSharingUsesRegisteredMetaApp() throws {
         let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
         let generatedProject = try String(

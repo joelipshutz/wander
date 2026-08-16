@@ -371,9 +371,7 @@ struct ListsScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                Text("lists")
-                    .font(.system(.title2, design: .default, weight: .bold))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                WanderTabHeaderLabel(title: "lists")
 
                 Spacer(minLength: WanderTheme.spacing2)
 
