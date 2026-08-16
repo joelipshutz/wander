@@ -30424,3 +30424,29 @@ Handoff, 2026-08-16 09:36 PDT:
 - Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` could not be
   advanced to Review because `localhost:4000` was not accepting connections;
   Linear and the PR contain the durable current status.
+
+## 2026-08-16 09:51 PDT - Codex - REC-284 attached sheet detents
+
+Agent: Codex using the `ios-fix` and Linear workflows
+Branch: codex/rec-284-espresso-confirmation-ctas
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-284 (returned to In Progress)
+
+Starting state and scope:
+
+- Joe approved the S3B note and Espresso direction, then requested a lower
+  compact attached tray, a near-full-height expanded tray, and direct grab
+  interactions for expand, collapse, and dismiss.
+- Reproduced the current fixed-height behavior on `S3B Espresso + Note Test`
+  and captured `/private/tmp/rec-284-sheet-detents-pre.png`. The app has no
+  DebugBridge/StateServer snapshot API by documented design, so the durable
+  pre-state contract is
+  `WanderTests/Fixtures/ios-fix/rec-284-attached-sheet-detents-pre.json`.
+- Root cause: `PlaceSaveAttachedTray` uses one 520-point maximum height and has
+  no detent state or drag gesture. This is an isolated worktree; no uncommitted
+  overlap was present. `PlaceProfileMapSurface.swift` is high-conflict, so the
+  change will stay narrowly inside the attached-tray presentation path.
+- Expected files: attached tray, shared save-editor expansion callback,
+  focused navigation/UI regressions, the pre-state fixture, and this log. No
+  build-number, TestFlight, hosted flag, schema/data, auth, or release operation
+  is authorized.
