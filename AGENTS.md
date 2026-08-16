@@ -205,6 +205,31 @@ Core rules:
 - Link/photo capture in M2 is an honest unresolved-draft shell until backend extraction jobs exist.
 - Native Contacts permission is planned later; M2 uses `FakeContactProvider` plus username search.
 
+## NUX And Onboarding Parity
+
+Treat the new-user experience (NUX) and first-visit walkthroughs as part of the
+production surface, while keeping them out of unrelated test runs.
+
+- Every UI or functionality change must assess whether it affects a walkthrough
+  step in `Wander/Features/Onboarding/FirstVisitWalkthrough.swift` or the signed-out
+  onboarding/auth flow.
+- When a change affects a user-visible control, flow order, copy, navigation,
+  permission, empty state, action, or product behavior taught by the NUX, update
+  the corresponding walkthrough in the same branch and PR, then run the
+  `WanderOnboarding` scheme.
+- Keep spotlight targets and anchors, coach-mark copy, action gates, fixtures,
+  unavailable-target recovery, persistence/versioning, accessibility behavior,
+  and walkthrough tests aligned with the production experience.
+- Record the NUX validation in the PR and Linear issue. If no walkthrough change
+  is needed, state why the changed surface is not represented or affected; do not
+  run the NUX/onboarding UI suite.
+- The default `Wander` test scheme excludes NUX, onboarding, and auth UI tests and
+  launches its hosted app directly into deterministic signed-in fixtures. Use the
+  dedicated `WanderOnboarding` scheme only for an affected onboarding surface or
+  when explicitly requested.
+- Do not call a user-facing change complete while the NUX still teaches stale
+  UI or behavior.
+
 ## Supabase Schema, RLS, And RPC Policy
 
 Supabase migrations are app behavior, not incidental backend plumbing. Treat
@@ -367,7 +392,13 @@ printing it. An analytics build with a blank resolved token must not be uploaded
 ## Testing Rules
 
 - Every milestone should land with matching tests.
-- Run the full `xcodebuild test` command above before committing implementation changes.
+- Run the full default `xcodebuild test` command above before committing
+  implementation changes. This intentionally excludes NUX/onboarding UI tests.
+- Only when a change affects NUX, first-visit walkthroughs, signed-out onboarding,
+  or authentication UI, also run:
+  ```bash
+  xcodebuild test -project Wander.xcodeproj -scheme WanderOnboarding -destination 'platform=iOS Simulator,name=iPhone 16 Plus,OS=18.6' -derivedDataPath DerivedData-onboarding CODE_SIGNING_ALLOWED=NO
+  ```
 - In Codex, sandboxed `xcodebuild test` commonly fails before exercising app code because
   CoreSimulator services, `~/Library/Logs/CoreSimulator`, or SwiftPM dependency fetching are
   blocked. When that happens, rerun the same `xcodebuild test` command with escalated
