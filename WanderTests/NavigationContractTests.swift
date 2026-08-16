@@ -2620,11 +2620,42 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("centerMapOnInitialPlacesIfNeeded"))
     }
 
-    func testMapPlaceProfileUsesFullScreenCoverInsteadOfNavigationPush() throws {
+    func testMapPlaceProfileSlidesTheEntireNavigationSurfaceAboveCollapsedCard() throws {
         let mapScreen = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift"))
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
 
-        XCTAssertTrue(mapScreen.contains(".fullScreenCover(isPresented: placeProfileDestinationBinding)"))
-        XCTAssertFalse(mapScreen.contains(".navigationDestination(isPresented: placeProfileDestinationBinding)"))
+        XCTAssertFalse(mapScreen.contains(".fullScreenCover(isPresented: placeProfileDestinationBinding)"))
+        XCTAssertTrue(mapScreen.contains("PlaceProfileSlideContainer("))
+        XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
+        XCTAssertTrue(mapScreen.contains(".overlay {\n            selectedPlaceProfileOverlay"))
+        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayVisible)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayVisible)"))
+        XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented && hasSelectedProfile"))
+        XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
+        XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(.isModal)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
+        XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
+        XCTAssertTrue(mapScreen.contains(".transition(.move(edge: .trailing))"))
+        XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
+        XCTAssertTrue(mapScreen.contains("usesInteractiveHorizontalDismissal: true"))
+        XCTAssertFalse(mapScreen.contains("@State private var placeProfileHorizontalOffset"))
+        XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
+
+        XCTAssertTrue(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
+        XCTAssertTrue(placeProfile.contains("let content: Content"))
+        XCTAssertFalse(placeProfile.contains("let content: (PlaceProfileSlideDismissAction) -> Content"))
+        XCTAssertTrue(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
+        XCTAssertTrue(placeProfile.contains("@GestureState private var isEdgeSwipeGestureActive = false"))
+        XCTAssertTrue(placeProfile.contains(".offset(x: horizontalOffset)"))
+        XCTAssertTrue(placeProfile.contains(".scrollDisabled(isTrackingEdgeSwipe)"))
+        XCTAssertTrue(placeProfile.contains(".onChange(of: isEdgeSwipeGestureActive)"))
+        XCTAssertTrue(placeProfile.contains("await Task.yield()"))
+        XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
+        XCTAssertTrue(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
+        XCTAssertTrue(placeProfile.contains(".toolbar(.visible, for: .navigationBar)"))
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
@@ -2806,6 +2837,86 @@ final class NavigationContractTests: XCTestCase {
             PlaceProfileFullScreen.shouldTriggerEdgeSwipeBack(
                 startX: 12,
                 translation: CGSize(width: 110, height: 110)
+            )
+        )
+    }
+
+    @MainActor
+    func testPlaceProfileInteractiveEdgeSwipeTracksOnlyRightwardHorizontalMotion() throws {
+        XCTAssertEqual(
+            try XCTUnwrap(
+                PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
+                    startX: 12,
+                    translation: CGSize(width: 42, height: 8),
+                    containerWidth: 390
+                )
+            ),
+            42
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
+                    startX: 12,
+                    translation: CGSize(width: 500, height: 4),
+                    containerWidth: 390
+                )
+            ),
+            390
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
+                    startX: 12,
+                    translation: CGSize(width: -12, height: 0),
+                    containerWidth: 390
+                )
+            ),
+            0
+        )
+        XCTAssertNil(
+            PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
+                startX: 48,
+                translation: CGSize(width: 80, height: 4),
+                containerWidth: 390
+            )
+        )
+        XCTAssertNil(
+            PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
+                startX: 12,
+                translation: CGSize(width: 20, height: 32),
+                containerWidth: 390
+            )
+        )
+    }
+
+    @MainActor
+    func testPlaceProfileInteractiveEdgeSwipeCompletesByDistanceOrProjectedVelocity() {
+        XCTAssertTrue(
+            PlaceProfileFullScreen.shouldCompleteInteractiveEdgeSwipe(
+                startX: 12,
+                translation: CGSize(width: 96, height: 8),
+                predictedEndTranslation: CGSize(width: 110, height: 10)
+            )
+        )
+        XCTAssertTrue(
+            PlaceProfileFullScreen.shouldCompleteInteractiveEdgeSwipe(
+                startX: 12,
+                translation: CGSize(width: 44, height: 5),
+                predictedEndTranslation: CGSize(width: 190, height: 8)
+            )
+        )
+        XCTAssertFalse(
+            PlaceProfileFullScreen.shouldCompleteInteractiveEdgeSwipe(
+                startX: 12,
+                translation: CGSize(width: 44, height: 5),
+                predictedEndTranslation: CGSize(width: 100, height: 8)
+            )
+        )
+        XCTAssertFalse(
+            PlaceProfileFullScreen.shouldCompleteInteractiveEdgeSwipe(
+                startX: 50,
+                translation: CGSize(width: 120, height: 4),
+                predictedEndTranslation: CGSize(width: 200, height: 5)
             )
         )
     }

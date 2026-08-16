@@ -54,6 +54,7 @@ struct PlaceProfileFullScreen: View {
     private static let edgeSwipeActivationWidth: CGFloat = 28
     private static let edgeSwipeMinimumTranslation: CGFloat = 80
     private static let edgeSwipeMaximumVerticalDrift: CGFloat = 80
+    private static let edgeSwipeProjectedTranslation: CGFloat = 160
     private static let minimumFullViewBottomContentInset: CGFloat = 64
 
     let place: PlaceSheetPlace
@@ -62,6 +63,7 @@ struct PlaceProfileFullScreen: View {
     let currentUserID: String
     let action: PlaceSheetAction
     let initialSection: PlaceProfileInitialSection
+    let usesInteractiveHorizontalDismissal: Bool
     let onBack: () -> Void
     let onAction: () -> Void
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
@@ -73,6 +75,7 @@ struct PlaceProfileFullScreen: View {
         currentUserID: String,
         action: PlaceSheetAction,
         initialSection: PlaceProfileInitialSection = .top,
+        usesInteractiveHorizontalDismissal: Bool = false,
         onBack: @escaping () -> Void,
         onAction: @escaping () -> Void
     ) {
@@ -82,6 +85,7 @@ struct PlaceProfileFullScreen: View {
         self.currentUserID = currentUserID
         self.action = action
         self.initialSection = initialSection
+        self.usesInteractiveHorizontalDismissal = usesInteractiveHorizontalDismissal
         self.onBack = onBack
         self.onAction = onAction
     }
@@ -97,6 +101,17 @@ struct PlaceProfileFullScreen: View {
     }
 
     var body: some View {
+        Group {
+            if usesInteractiveHorizontalDismissal {
+                profileContent
+            } else {
+                profileContent
+                    .simultaneousGesture(edgeSwipeBackGesture)
+            }
+        }
+    }
+
+    private var profileContent: some View {
         PlaceProfileFullView(
             place: place,
             presentation: presentation,
@@ -109,14 +124,43 @@ struct PlaceProfileFullScreen: View {
         )
         .preferredColorScheme(.light)
         .navigationBarBackButtonHidden(true)
+        .toolbar(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .simultaneousGesture(edgeSwipeBackGesture)
     }
 
     static func shouldTriggerEdgeSwipeBack(startX: CGFloat, translation: CGSize) -> Bool {
         startX <= edgeSwipeActivationWidth
             && translation.width >= edgeSwipeMinimumTranslation
             && abs(translation.height) <= edgeSwipeMaximumVerticalDrift
+    }
+
+    static func interactiveEdgeSwipeOffset(
+        startX: CGFloat,
+        translation: CGSize,
+        containerWidth: CGFloat
+    ) -> CGFloat? {
+        guard startX <= edgeSwipeActivationWidth, containerWidth > 0 else { return nil }
+        guard translation.width > 0 else { return 0 }
+        guard translation.width >= abs(translation.height) else { return nil }
+
+        return min(translation.width, containerWidth)
+    }
+
+    static func shouldCompleteInteractiveEdgeSwipe(
+        startX: CGFloat,
+        translation: CGSize,
+        predictedEndTranslation: CGSize
+    ) -> Bool {
+        guard startX <= edgeSwipeActivationWidth,
+              translation.width > 0,
+              abs(translation.height) <= edgeSwipeMaximumVerticalDrift
+        else { return false }
+
+        return translation.width >= edgeSwipeMinimumTranslation
+            || (
+                predictedEndTranslation.width >= edgeSwipeProjectedTranslation
+                    && predictedEndTranslation.width >= abs(predictedEndTranslation.height)
+            )
     }
 
     static func resolvedFullBleedHeaderTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
@@ -130,6 +174,7 @@ struct PlaceProfileFullScreen: View {
     private var edgeSwipeBackGesture: some Gesture {
         DragGesture(minimumDistance: 20, coordinateSpace: .local)
             .onEnded { value in
+                guard !usesInteractiveHorizontalDismissal else { return }
                 guard walkthroughs.activeSurface != .placeDetail else { return }
                 if Self.shouldTriggerEdgeSwipeBack(
                     startX: value.startLocation.x,
@@ -138,6 +183,137 @@ struct PlaceProfileFullScreen: View {
                     onBack()
                 }
             }
+    }
+}
+
+struct PlaceProfileSlideContainer<Content: View>: View {
+    let reduceMotion: Bool
+    let isGestureDismissEnabled: Bool
+    let onDismissed: () -> Void
+    let content: Content
+
+    @State private var horizontalOffset: CGFloat = 0
+    @State private var isTrackingEdgeSwipe = false
+    @State private var isCompletingDismissal = false
+    @GestureState private var isEdgeSwipeGestureActive = false
+
+    init(
+        reduceMotion: Bool,
+        isGestureDismissEnabled: Bool,
+        onDismissed: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.reduceMotion = reduceMotion
+        self.isGestureDismissEnabled = isGestureDismissEnabled
+        self.onDismissed = onDismissed
+        self.content = content()
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            content
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .background(WanderTheme.surfaceBone.color)
+                .scrollDisabled(isTrackingEdgeSwipe)
+                .offset(x: horizontalOffset)
+                .contentShape(Rectangle())
+                .simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))
+                .onChange(of: isEdgeSwipeGestureActive) { wasActive, isActive in
+                    guard wasActive, !isActive else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        guard !isEdgeSwipeGestureActive,
+                              isTrackingEdgeSwipe,
+                              !isCompletingDismissal
+                        else { return }
+                        isTrackingEdgeSwipe = false
+                        restoreAfterCancelledSwipe()
+                    }
+                }
+        }
+    }
+
+    private func edgeSwipeGesture(containerWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
+            .updating($isEdgeSwipeGestureActive) { _, isActive, _ in
+                isActive = true
+            }
+            .onChanged { value in
+                guard isGestureDismissEnabled,
+                      !isCompletingDismissal
+                else { return }
+
+                if isTrackingEdgeSwipe {
+                    horizontalOffset = min(max(value.translation.width, 0), containerWidth)
+                    return
+                }
+
+                guard value.translation.width > 0,
+                      let offset = PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
+                          startX: value.startLocation.x,
+                          translation: value.translation,
+                          containerWidth: containerWidth
+                      )
+                else { return }
+
+                isTrackingEdgeSwipe = true
+                horizontalOffset = offset
+            }
+            .onEnded { value in
+                guard !isCompletingDismissal else { return }
+                let wasTrackingEdgeSwipe = isTrackingEdgeSwipe
+                isTrackingEdgeSwipe = false
+                guard isGestureDismissEnabled, wasTrackingEdgeSwipe else {
+                    restoreAfterCancelledSwipe()
+                    return
+                }
+
+                if PlaceProfileFullScreen.shouldCompleteInteractiveEdgeSwipe(
+                    startX: value.startLocation.x,
+                    translation: value.translation,
+                    predictedEndTranslation: value.predictedEndTranslation
+                ) {
+                    collapse(containerWidth: containerWidth)
+                } else {
+                    restoreAfterCancelledSwipe()
+                }
+            }
+    }
+
+    private func restoreAfterCancelledSwipe() {
+        guard horizontalOffset > 0 else { return }
+        if reduceMotion {
+            horizontalOffset = 0
+        } else {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                horizontalOffset = 0
+            }
+        }
+    }
+
+    private func collapse(containerWidth: CGFloat) {
+        guard !isCompletingDismissal else { return }
+        isCompletingDismissal = true
+
+        guard !reduceMotion else {
+            finishCollapse()
+            return
+        }
+
+        let dismissalWidth = max(containerWidth, 1)
+        withAnimation(.easeOut(duration: 0.22)) {
+            horizontalOffset = dismissalWidth
+        } completion: {
+            guard isCompletingDismissal else { return }
+            finishCollapse()
+        }
+    }
+
+    private func finishCollapse() {
+        onDismissed()
+        horizontalOffset = 0
+        isTrackingEdgeSwipe = false
+        isCompletingDismissal = false
     }
 }
 
