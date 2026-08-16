@@ -48,11 +48,16 @@ final class MapFilterInteractionUITests: XCTestCase {
         let ticket = app.buttons["Open Woodcat Coffee"]
         let message = app.staticTexts["map.searchMessage"]
         let search = app.textFields["map.searchField"]
+        let addButton = app.buttons["map.headerAdd"]
 
         XCTAssertTrue(ticket.waitForExistence(timeout: 5))
         XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
         XCTAssertFalse(message.exists)
         XCTAssertLessThanOrEqual(ticket.frame.maxY, search.frame.minY)
+        XCTAssertGreaterThanOrEqual(addButton.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(addButton.frame.height, 44)
+        XCTAssertTrue(addButton.isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-283 selected ticket without result message"

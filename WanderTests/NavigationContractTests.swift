@@ -320,10 +320,27 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
         XCTAssertFalse(root.contains("Label(WanderTab.add.title"))
-        XCTAssertTrue(map.contains("accessibilityIdentifier: \"map.headerAdd\""))
+        XCTAssertTrue(map.contains(".accessibilityIdentifier(\"map.headerAdd\")"))
         XCTAssertTrue(map.contains("struct MapSourceFilterChip"))
         XCTAssertTrue(map.contains("tone: isSelected ? .selected : .neutral"))
         XCTAssertTrue(map.contains("tone: isActive ? .selected : .neutral"))
+        let mapAddButton = try sourceSection(
+            map,
+            after: "private struct MapSolidAddButton: View",
+            before: "private struct SearchBar: View"
+        )
+        XCTAssertTrue(mapAddButton.contains(".background(WanderTheme.terracotta.color, in: Circle())"))
+        XCTAssertTrue(mapAddButton.contains(".foregroundStyle(WanderTheme.textOnAction.color)"))
+        XCTAssertFalse(mapAddButton.contains(".glassEffect("))
+        XCTAssertFalse(mapAddButton.contains(".wanderGlassCapsule("))
+        let mapSearchSurface = try sourceSection(
+            map,
+            after: "private struct MapSearchCapsuleSurfaceModifier: ViewModifier",
+            before: "private extension View"
+        )
+        XCTAssertTrue(mapSearchSurface.contains("if #available(iOS 26.0, *)"))
+        XCTAssertTrue(mapSearchSurface.contains(".glassEffect(.regular.interactive(true), in: Capsule())"))
+        XCTAssertTrue(mapSearchSurface.contains(".background(.ultraThinMaterial, in: Capsule())"))
 
         XCTAssertFalse(feed.contains("WanderGlassHeader("))
         XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))

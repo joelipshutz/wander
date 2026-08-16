@@ -580,15 +580,10 @@ struct MapScreen: View {
                             if isMapSearchFocused {
                                 MapSearchCancelButton(action: cancelMapSearch)
                             } else {
-                                WanderGlassActionButton(
-                                    systemImage: "plus",
-                                    accessibilityLabel: "Add a place",
-                                    accessibilityIdentifier: "map.headerAdd",
-                                    action: {
-                                        dismissMoreFilters()
-                                        onAdd()
-                                    }
-                                )
+                                MapSolidAddButton {
+                                    dismissMoreFilters()
+                                    onAdd()
+                                }
                                 .walkthroughTarget(
                                     walkthroughs.currentStep?.target == .mapAddAgain
                                         ? .mapAddAgain
@@ -3821,6 +3816,34 @@ private struct MapSearchDockHeightPreferenceKey: PreferenceKey {
     }
 }
 
+private struct MapSolidAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .black))
+                .frame(width: 44, height: 44)
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .background(WanderTheme.terracotta.color, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(WanderTheme.terracottaDark.color.opacity(0.32), lineWidth: 1)
+                }
+                .contentShape(Circle())
+                .shadow(
+                    color: WanderTheme.textInk.color.opacity(0.16),
+                    radius: 6,
+                    x: 0,
+                    y: 3
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a place")
+        .accessibilityIdentifier("map.headerAdd")
+    }
+}
+
 private struct SearchBar: View {
     @Environment(\.scenePhase) private var scenePhase
     @Binding var query: String
@@ -3889,14 +3912,24 @@ private struct SearchBar: View {
 }
 
 private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: Capsule())
-            .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
-            }
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.interactive(true), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+        }
     }
 }
 
