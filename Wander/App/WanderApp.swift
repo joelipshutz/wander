@@ -413,7 +413,7 @@ struct WanderAppEntryView: View {
                         .accessibilityHidden(true)
                     VStack(spacing: WanderTheme.spacing2) {
                         Text("Sign in is unavailable")
-                            .font(.title2.weight(.bold))
+                            .font(WanderTypography.displaySectionTitle)
                         Text(message)
                             .font(.body)
                             .foregroundStyle(WanderTheme.textMuted.color)

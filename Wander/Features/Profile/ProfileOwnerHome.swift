@@ -407,11 +407,7 @@ struct ProfileOwnerHome: View {
                 ProfileBackButton(action: backAction)
             }
 
-            Text("@\(profile.handle)")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+            WanderTabHeaderLabel(title: "@\(profile.handle)")
 
             Spacer(minLength: 0)
 
@@ -956,7 +952,7 @@ private struct ProfileRecentActivitySection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
                 Text("Activity")
-                    .font(WanderTypography.editorialMajorSectionTitle)
+                    .font(WanderTypography.displaySectionTitle)
                     .accessibilityAddTraits(.isHeader)
 
                 ProfileActivityFilterControl(
@@ -1294,7 +1290,7 @@ private struct ProfileCalendarSection: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) calendar")
-                        .font(WanderTypography.editorialMajorSectionTitle)
+                        .font(WanderTypography.displaySectionTitle)
                     Text(monthTitle)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)
@@ -1552,7 +1548,7 @@ private struct ProfileMapSection: View {
             HStack(alignment: .top, spacing: WanderTheme.spacing2) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(ownerLabel) map")
-                        .font(WanderTypography.editorialMajorSectionTitle)
+                        .font(WanderTypography.displaySectionTitle)
                     Text(mapCountSummary)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(WanderTheme.textMuted.color)

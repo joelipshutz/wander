@@ -138,6 +138,7 @@ Before implementation, run design review against the handoff package and the mis
 ## Typography
 
 - **Display/Hero:** Native editorial serif for first-run onboarding; Funnel Display direction, or equivalent playful grotesque, for other major empty states and top-level screen headings.
+- **Display family:** Lil Grotesk is the current rec.me exploration: circular, friendly, and geometric without feeling like generic app chrome. The initial rollout is limited to primary tab headers; semantic hero, section, and card roles are defined so broader branches can be compared before adoption.
 - **Body:** Funnel Sans direction, or equivalent legible sans. Use for body, controls, sheets, cards, and settings.
 - **UI/Labels:** Same as body, medium weight.
 - **Data/Tables:** Same as body with tabular numerals where counts or distances align.

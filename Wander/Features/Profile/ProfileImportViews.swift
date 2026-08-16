@@ -85,7 +85,7 @@ struct PlaceImportHubScreen: View {
                     PlaceImportSourceIconStack(iconSize: 48)
 
                     Text("Import from anywhere")
-                        .font(.system(size: 24, weight: .black))
+                        .font(WanderTypography.displaySectionTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                     Text("Paste links from Google Maps, Instagram, or TikTok, or type place names from your notes.")
                         .font(.system(size: 14, weight: .semibold))
@@ -716,7 +716,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(WanderTheme.stateSuccess.color)
                     Text(completionTitle(receipt))
-                        .font(WanderTypography.editorialMajorSectionTitle)
+                        .font(WanderTypography.displaySectionTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                 }
 
@@ -787,7 +787,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
     private func heading(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(WanderTypography.editorialMajorSectionTitle)
+                .font(WanderTypography.displaySectionTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
             Text(subtitle)
                 .font(WanderTypography.body)
@@ -2229,7 +2229,7 @@ private struct PlaceImportReceiptSheet: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(summaryTitle)
-                        .font(.system(size: 22, weight: .black))
+                        .font(WanderTypography.displaySectionTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                     if let sourceName = receipt.sourceName,
                        !sourceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

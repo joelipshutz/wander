@@ -658,7 +658,7 @@ private struct BlockedMutedEmptyState: View {
                 .font(.system(size: 72, weight: .regular))
                 .foregroundStyle(WanderTheme.categoryMoss.color)
             Text(tab == .blocked ? "You haven't blocked anyone" : "You haven't muted anyone")
-                .font(.system(size: 28, weight: .black, design: .rounded))
+                .font(WanderTypography.displayScreenTitle)
                 .multilineTextAlignment(.center)
             Text(message)
                 .font(.system(size: 16, weight: .medium))

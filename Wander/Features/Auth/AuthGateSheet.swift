@@ -21,7 +21,7 @@ struct AuthGateSheet: View {
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 Text(request.copy.title)
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(WanderTypography.displaySectionTitle)
                 Text(request.copy.message)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(WanderTheme.textMuted.color)

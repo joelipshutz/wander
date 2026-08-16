@@ -34,6 +34,11 @@ struct FeedScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                WanderTabHeaderLabel(title: "feed")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing2)
+
                 HStack(spacing: WanderTheme.spacing2) {
                     FeedSurfaceTabs(selectedSurface: $selectedSurface)
                     .walkthroughTarget(.feedSurfaceSwitch)
@@ -46,7 +51,6 @@ struct FeedScreen: View {
                     )
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing2)
 
                 switch selectedSurface {
                 case .places:
@@ -860,7 +864,7 @@ private struct FeedPeopleEmptyPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
             Text(title)
-                .font(.system(size: 16, weight: .black))
+                .font(WanderTypography.displayCardTitle)
             Text(message)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
@@ -893,7 +897,7 @@ private struct FeedPeopleActionPanel: View {
                 .clipShape(Circle())
 
             Text(title)
-                .font(.system(size: 18, weight: .black, design: .rounded))
+                .font(WanderTypography.displayCardTitle)
                 .multilineTextAlignment(.center)
             Text(message)
                 .font(.system(size: 13, weight: .medium))
@@ -1083,7 +1087,7 @@ private struct FeedSectionHeading: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(WanderTypography.editorialSectionTitle)
+                .font(WanderTypography.displaySectionTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
 
             if let detail {
@@ -1378,7 +1382,7 @@ private struct FeedActivityModule: View {
             .accessibilityLabel("View list \(list.name)")
         } else {
             Text("Map activity")
-                .font(WanderTypography.editorialCardTitle)
+                .font(WanderTypography.displayCardTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
         }
     }

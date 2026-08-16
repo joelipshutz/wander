@@ -420,6 +420,11 @@ struct MapScreen: View {
 
                 VStack(spacing: 0) {
                     VStack(spacing: WanderTheme.spacing2) {
+                        WanderTabHeaderLabel(title: "map")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .shadow(color: .white.opacity(0.95), radius: 4, x: 0, y: 1)
+
                         HStack(spacing: WanderTheme.spacing2) {
                             SearchBar(
                                 query: $mapQuery,

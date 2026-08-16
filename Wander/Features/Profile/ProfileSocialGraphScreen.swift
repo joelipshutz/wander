@@ -301,7 +301,7 @@ private struct ProfileGraphEmptyState: View {
                 .background(WanderTheme.terracottaTint.color)
                 .clipShape(Circle())
             Text(tab.emptyTitle)
-                .font(.system(size: 20, weight: .black))
+                .font(WanderTypography.displaySectionTitle)
             Text(tab.emptyMessage)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)

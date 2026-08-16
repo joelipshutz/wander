@@ -2343,7 +2343,7 @@ private struct OwnerDisambiguationSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text("Which person?")
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(WanderTypography.displaySectionTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text("Pick who you want to search.")
                     .font(.system(size: 13, weight: .bold))
