@@ -179,6 +179,7 @@ export function sanitizeFeaturedRows(candidateRows) {
       country: String(row.country),
       latitude: Number(row.latitude),
       longitude: Number(row.longitude),
+      canonicalTags: new Set([humanize(row.category), humanize(row.subcategory)].filter(Boolean)),
       tags: new Set([humanize(row.category), humanize(row.subcategory)].filter(Boolean)),
       includesSelf: false,
       trustedContributorIds: new Set(),
@@ -211,6 +212,7 @@ export function sanitizeFeaturedRows(candidateRows) {
       country: group.country,
       latitude: group.latitude,
       longitude: group.longitude,
+      canonicalTags: [...group.canonicalTags].sort(),
       tags: [...group.tags].sort().slice(0, 40),
       includesSelf: group.includesSelf,
       trustedContributorIds,
@@ -264,6 +266,13 @@ export async function loadFeaturedRealData(viewerHandle) {
       stats: {
         candidatePlaces: candidates.length,
         candidateSaves: candidateResult.rows.length,
+        selfPlaces: candidates.filter((candidate) => candidate.includesSelf).length,
+        trustedPlaces: candidates.filter((candidate) => (
+          candidate.includesSelf || candidate.trustedContributorIds.length > 0
+        )).length,
+        communityOnlyPlaces: candidates.filter((candidate) => (
+          !candidate.includesSelf && candidate.trustedContributorIds.length === 0
+        )).length,
         tastePlaces: tastePlaces.length,
         viewerSaves: Number(viewerResult.rows[0].save_count),
         viewerRatings: Number(viewerResult.rows[0].rating_count),

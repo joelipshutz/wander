@@ -54,7 +54,7 @@ The seams are deliberate: query plan, candidate providers, ranker, and evaluatio
 
 ## Prepare a real Featured judgment pool
 
-Featured is evaluated separately because it has no text query. Its unit is a real viewer plus a real map viewport. The generator reads one explicit viewer's privacy-eligible corpus in a read-only transaction, creates dense, sparse, simulated-empty-network, cold-start, and overlapping-pan scenarios, then compares five hidden policies:
+Featured is evaluated separately because it has no text query. Its unit is a real viewer plus a real map viewport. The generator reads one explicit viewer's privacy-eligible corpus in a read-only transaction, creates dense, sparse, simulated-empty-network, cold-start, and overlapping-pan scenarios, then compares five hidden policies. At least one sparse scenario must be a genuinely sparse real viewport. If the corpus does not contain a second honest sparse viewport, the generator uses an explicitly recorded `thin` relationship mask over a real dense viewport instead of falsely labeling another dense area as sparse.
 
 1. The shipped Featured scoring baseline.
 2. Trusted-network-only retrieval.
@@ -71,7 +71,16 @@ npm --prefix scripts run relevance:prepare-featured-real -- \
 
 The ignored output folder receives `featured-judgments.html`, a Markdown fallback, and `featured-pool-key.json`. Candidate order is randomized and policy/source order is hidden. Grade each place according to the viewer's taste and whether it is a useful Featured pin in the named map area; there is deliberately no query.
 
-The loader never writes hosted data. Non-followed contributions become anonymous canonical-place aggregates before leaving the loader: contributor identifiers are one-way opaque labels used only for diversity counts, and stranger notes, prose, tags, answers, photos, and identities are not selected into the benchmark model. The embedding provider receives only canonical place facts, coarse locality/region, and approved structured tags from the viewer's own saves. Followed and stranger save attributes are not selected for embedding. Coordinates remain local and are used only for viewport membership and geographic metrics.
+Generation fails closed unless the machine-readable preflight confirms honest density labels, at least one actual sparse viewport, a mixed network/community sparse result, complete blind coverage of every policy's top five, policy separation, complete pan pairs, zero privacy/duplicate failures, and local ranking p95 below 50 ms. Re-run that check without Supabase or embedding calls at any time:
+
+```bash
+npm --prefix scripts run relevance:preflight-featured-real -- \
+  scripts/relevance-lab/output/featured-pool-key.json
+```
+
+The preflight also warns when the real community-only corpus is thin. A policy cannot earn `KEEP` unless the snapshot contains at least 20 real community-only canonical places, those places are at least 20% of the eligible corpus, and at least one actual sparse viewport returns a network/community mix. Simulated thin/empty slices remain directional and are reported separately; they are not misrepresented as organic community coverage.
+
+The loader never writes hosted data. Non-followed contributions become anonymous canonical-place aggregates before leaving the loader: contributor identifiers are one-way opaque labels used only for diversity counts, and stranger notes, prose, tags, answers, photos, and identities are not selected into the benchmark model. Featured place embeddings contain only global canonical facts: name, category, subcategory, and coarse locality/region. Personal structured tags stay in the explicit local taste scorer and never alter the reusable place vector; simulated community candidates lose self-only tags as well as relationship evidence. Coordinates remain local and are used only for viewport membership and geographic metrics.
 
 After copying the completed scores into `featured-scores.txt`, score without Supabase or embedding calls:
 

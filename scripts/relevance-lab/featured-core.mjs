@@ -71,14 +71,22 @@ export function attachSemanticTasteScores(candidates, placeEmbeddings, tasteEmbe
 }
 
 function isTrusted(candidate, scenario) {
-  return scenario.networkMode !== "empty"
-    && (candidate.includesSelf || candidate.trustedContributorIds.length > 0);
+  const hasRealRelationship = candidate.includesSelf || candidate.trustedContributorIds.length > 0;
+  if (!hasRealRelationship || scenario.networkMode === "empty") return false;
+  if (scenario.networkMode !== "thin") return true;
+  return (scenario.trustedCandidateIds ?? []).includes(candidate.id);
 }
 
 function relationshipScore(candidate, scenario) {
-  if (scenario.networkMode === "empty") return 0;
+  if (!isTrusted(candidate, scenario)) return 0;
   if (candidate.includesSelf) return 1;
   return candidate.trustedContributorIds.length > 0 ? 0.75 : 0;
+}
+
+function rankingTags(candidate, scenario) {
+  return isTrusted(candidate, scenario)
+    ? candidate.tags
+    : candidate.canonicalTags ?? candidate.tags;
 }
 
 function tasteScore(candidate, tasteProfile, scenario) {
@@ -87,7 +95,7 @@ function tasteScore(candidate, tasteProfile, scenario) {
   const categoryFit = categoryCount === 0
     ? 0
     : clamp(0.35 + categoryCount / tasteProfile.likedPlaceCount);
-  const matchingTags = unique(candidate.tags.map(normalized)).filter(
+  const matchingTags = unique(rankingTags(candidate, scenario).map(normalized)).filter(
     (tag) => (tasteProfile.tagCounts.get(tag) ?? 0) > 0,
   ).length;
   return clamp(0.72 * categoryFit + Math.min(0.28, matchingTags * 0.14));
@@ -99,7 +107,7 @@ function currentTasteScore(candidate, tasteProfile, scenario) {
   const categoryAffinity = categoryCount === 0
     ? 0
     : 1.1 * Math.min(1, 0.35 + categoryCount / tasteProfile.likedPlaceCount);
-  const matchingTags = unique(candidate.tags.map(normalized)).filter(
+  const matchingTags = unique(rankingTags(candidate, scenario).map(normalized)).filter(
     (tag) => (tasteProfile.tagCounts.get(tag) ?? 0) > 0,
   ).length;
   return categoryAffinity + Math.min(0.75, matchingTags * 0.25);
@@ -112,13 +120,11 @@ function communityScore(candidate) {
 }
 
 function currentScore(candidate, tasteProfile, scenario) {
-  const relationshipBoost = scenario.networkMode === "empty"
+  const relationshipBoost = !isTrusted(candidate, scenario)
     ? 0
     : candidate.includesSelf
       ? 1.8
-      : candidate.trustedContributorIds.length > 0
-        ? 1.35
-        : 0;
+      : 1.35;
   const support = Math.min(2.4, Math.log2(candidate.communitySupport + 1) * 0.95);
   const rating = candidate.communityRating == null
     ? 0
@@ -195,9 +201,9 @@ function rankedRows(candidates, score, limit, diversify, scenario) {
     .map((candidate) => ({
       candidate,
       score: score(candidate),
-      primaryContributor: scenario.networkMode === "empty"
-        ? null
-        : candidate.primaryTrustedContributorId,
+      primaryContributor: isTrusted(candidate, scenario)
+        ? candidate.primaryTrustedContributorId
+        : null,
     }))
     .sort(stableRanksBefore);
   const limited = diversify ? applyDiversity(ranked, limit) : ranked.slice(0, limit);
@@ -207,7 +213,7 @@ function rankedRows(candidates, score, limit, diversify, scenario) {
     source: isTrusted(candidate, scenario)
       ? "network"
       : "community",
-    contributorIds: scenario.networkMode === "empty" ? [] : candidate.trustedContributorIds,
+    contributorIds: isTrusted(candidate, scenario) ? candidate.trustedContributorIds : [],
     latitude: candidate.latitude,
     longitude: candidate.longitude,
   }));
@@ -310,17 +316,45 @@ function areaRows(candidates) {
     grouped.get(label).push(candidate);
   }
   return [...grouped.entries()].map(([label, places]) => {
-    const trusted = places.filter((candidate) => (
+    const viewport = viewportForPlaces(places);
+    const viewportCandidates = candidatesInViewport(candidates, viewport);
+    const trusted = viewportCandidates.filter((candidate) => (
       candidate.includesSelf || candidate.trustedContributorIds.length > 0
     ));
     return {
       label,
       places,
-      viewport: viewportForPlaces(places),
+      viewport,
+      viewportCandidates,
       trustedPlaceCount: trusted.length,
       trustedContributorCount: unique(trusted.flatMap((place) => place.trustedContributorIds)).length,
+      networkConfidence: featuredNetworkConfidence(viewportCandidates, {
+        networkMode: "actual",
+        tasteMode: "actual",
+      }),
     };
   });
+}
+
+function thinTrustedCandidateIds(candidates, limit = 4) {
+  const trusted = candidates
+    .filter((candidate) => candidate.includesSelf || candidate.trustedContributorIds.length > 0)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const selected = [];
+  const representedContributors = new Set();
+
+  for (const candidate of trusted) {
+    const contributor = candidate.primaryTrustedContributorId;
+    if (!contributor || representedContributors.has(contributor)) continue;
+    selected.push(candidate.id);
+    representedContributors.add(contributor);
+    if (selected.length === Math.min(3, limit)) break;
+  }
+  for (const candidate of trusted) {
+    if (!selected.includes(candidate.id)) selected.push(candidate.id);
+    if (selected.length === limit) break;
+  }
+  return selected;
 }
 
 function shiftedViewport(viewport, longitudeFraction) {
@@ -337,22 +371,45 @@ export function generateFeaturedScenarios(candidates) {
   if (areas.length < 2) throw new Error("Featured benchmark needs at least two real mapped areas.");
 
   const dense = [...areas]
-    .filter((area) => area.trustedPlaceCount >= 6 && area.trustedContributorCount >= 2)
-    .sort((left, right) => right.trustedPlaceCount - left.trustedPlaceCount)
+    .filter((area) => (
+      area.networkConfidence >= 0.65
+      && area.trustedPlaceCount >= 6
+      && area.trustedContributorCount >= 2
+    ))
+    .sort((left, right) => right.networkConfidence - left.networkConfidence)
     .slice(0, 2);
-  const denseFallback = [...areas]
-    .sort((left, right) => right.trustedPlaceCount - left.trustedPlaceCount)
-    .filter((area) => !dense.includes(area));
-  while (dense.length < 2 && denseFallback.length > 0) dense.push(denseFallback.shift());
+  if (dense.length === 0) {
+    throw new Error("Featured benchmark needs at least one genuinely dense network viewport.");
+  }
 
-  const sparse = [...areas]
-    .filter((area) => area.trustedPlaceCount >= 1 && area.trustedPlaceCount <= 5)
+  const actualSparse = [...areas]
+    .filter((area) => area.networkConfidence > 0 && area.networkConfidence < 0.65)
     .sort((left, right) => right.places.length - left.places.length)
     .slice(0, 2);
-  const sparseFallback = [...areas]
-    .filter((area) => !dense.includes(area) && !sparse.includes(area))
-    .sort((left, right) => left.trustedPlaceCount - right.trustedPlaceCount);
-  while (sparse.length < 2 && sparseFallback.length > 0) sparse.push(sparseFallback.shift());
+  if (actualSparse.length === 0) {
+    throw new Error("Featured benchmark needs at least one genuinely sparse network viewport.");
+  }
+
+  const sparseScenarios = actualSparse.map((area) => ({
+    title: area.label,
+    slice: "sparse",
+    networkMode: "actual",
+    tasteMode: "actual",
+    viewport: area.viewport,
+  }));
+  for (const area of dense) {
+    if (sparseScenarios.length >= 2) break;
+    const trustedCandidateIds = thinTrustedCandidateIds(area.viewportCandidates);
+    if (trustedCandidateIds.length === 0) continue;
+    sparseScenarios.push({
+      title: area.label,
+      slice: "sparse",
+      networkMode: "thin",
+      tasteMode: "actual",
+      viewport: area.viewport,
+      trustedCandidateIds,
+    });
+  }
 
   const scenarios = [
     ...dense.map((area) => ({
@@ -362,13 +419,7 @@ export function generateFeaturedScenarios(candidates) {
       tasteMode: "actual",
       viewport: area.viewport,
     })),
-    ...sparse.map((area) => ({
-      title: area.label,
-      slice: "sparse",
-      networkMode: "actual",
-      tasteMode: "actual",
-      viewport: area.viewport,
-    })),
+    ...sparseScenarios,
     ...dense.slice(0, 2).map((area) => ({
       title: area.label,
       slice: "empty",

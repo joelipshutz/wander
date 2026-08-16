@@ -63,6 +63,37 @@ test("density-aware ranking shifts toward community strength when the network is
   assert.ok(result.pipelines.densityAware.every((row) => row.contributorIds.length === 0));
 });
 
+test("simulated community candidates cannot retain self-only tags or relationship boosts", () => {
+  const own = candidate("own", {
+    includesSelf: true,
+    canonicalTags: ["restaurants food"],
+    tags: ["restaurants food", "private fit"],
+  });
+  const other = candidate("other", {
+    canonicalTags: ["restaurants food"],
+    tags: ["restaurants food"],
+  });
+  const tasteProfile = buildFeaturedTasteProfile([{
+    category: "unrelated",
+    tags: ["private fit"],
+  }]);
+  const actual = rankFeaturedScenario({
+    candidates: [own, other],
+    scenario: { networkMode: "actual", tasteMode: "actual" },
+    tasteProfile,
+    limit: 2,
+  });
+  const thin = rankFeaturedScenario({
+    candidates: [own, other],
+    scenario: { networkMode: "thin", tasteMode: "actual", trustedCandidateIds: [] },
+    tasteProfile,
+    limit: 2,
+  });
+  assert.equal(actual.pipelines.densityAware[0].id, "own");
+  assert.equal(thin.pipelines.densityAware[0].id, "other");
+  assert.ok(thin.pipelines.densityAware.every((row) => row.source === "community"));
+});
+
 test("semantic taste remains a bounded provider signal", () => {
   const weak = candidate("weak", { semanticTasteScore: 0.1, communitySupport: 3 });
   const fit = candidate("fit", { semanticTasteScore: 1, communitySupport: 3 });

@@ -217,10 +217,12 @@ export function scoreFeaturedPool({ key, scores }) {
   const semanticPanRegression = panOverlap.densityAware == null || panOverlap.densitySemantic == null
     ? null
     : panOverlap.densityAware - panOverlap.densitySemantic;
+  const communityEvidenceReady = key.preflight?.communityEvidenceReady ?? true;
   const sharedGate = privacyFailures === 0
     && duplicateFailures === 0
     && rankLatencyP95Ms != null
-    && rankLatencyP95Ms < 50;
+    && rankLatencyP95Ms < 50
+    && communityEvidenceReady;
   const densityDecision = sharedGate
     && densitySparseEmptyGain >= 0.05
     && densityDenseRegression <= 0.02
@@ -247,6 +249,11 @@ export function scoreFeaturedPool({ key, scores }) {
       privacyFailures,
       duplicateFailures,
       rankLatencyP95Ms,
+      communityEvidenceReady,
+      communityOnlyPlaces: Number(key.stats?.communityOnlyPlaces ?? 0),
+      communityOnlyRate: key.preflight?.communityOnlyRate ?? null,
+      actualSparseMixedSourceScenarios:
+        Number(key.preflight?.actualSparseMixedSourceScenarios ?? 0),
     },
     decision: {
       densityDecision,
@@ -258,7 +265,7 @@ export function scoreFeaturedPool({ key, scores }) {
       semanticSparseEmptyGain,
       semanticDenseRegression,
       semanticPanRegression,
-      rule: "Keep a new Featured policy only with zero privacy/duplicate failures, local rank p95 below 50 ms, at least +0.05 sparse/empty nDCG@5, no more than 0.02 dense nDCG@5 regression, and no more than 0.10 pan-overlap regression.",
+      rule: "Keep a new Featured policy only with promotion-ready real community evidence, zero privacy/duplicate failures, local rank p95 below 50 ms, at least +0.05 sparse/empty nDCG@5, no more than 0.02 dense nDCG@5 regression, and no more than 0.10 pan-overlap regression.",
     },
   };
 }
@@ -289,6 +296,8 @@ export function renderFeaturedScorecard({ key, scorecard }) {
     `Semantic sparse/empty gain over density-aware: ${percentage(scorecard.decision.semanticSparseEmptyGain)}; dense regression: ${percentage(scorecard.decision.semanticDenseRegression)}; pan-overlap regression: ${percentage(scorecard.decision.semanticPanRegression)}.`,
     "",
     `Guardrails: ${scorecard.guardrails.privacyFailures} privacy failures, ${scorecard.guardrails.duplicateFailures} duplicate failures, local ranking p95 ${milliseconds(scorecard.guardrails.rankLatencyP95Ms)}.`,
+    "",
+    `Community evidence: **${scorecard.guardrails.communityEvidenceReady ? "READY" : "INSUFFICIENT"}** — ${scorecard.guardrails.communityOnlyPlaces} real community-only places (${percentage(scorecard.guardrails.communityOnlyRate)}) and ${scorecard.guardrails.actualSparseMixedSourceScenarios} actual sparse mixed-source scenarios. Simulated thin/empty slices are directional and cannot independently earn KEEP.`,
     "",
     "People-vector decision remains **DEFER**. This benchmark uses explicit graph and taste evidence, not learned people embeddings.",
     "",

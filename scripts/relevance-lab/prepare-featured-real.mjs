@@ -14,6 +14,7 @@ import {
   rankFeaturedScenario,
 } from "./featured-core.mjs";
 import { loadFeaturedRealData } from "./featured-real-data.mjs";
+import { assertFeaturedPreflight } from "./featured-preflight.mjs";
 import { createEmbeddingMaps } from "./embeddings.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -75,6 +76,7 @@ function embeddingPlace(place) {
     neighborhood: place.neighborhood ?? place.locality ?? "",
     city: place.city ?? place.region ?? "",
     description: "",
+    tags: [],
   };
 }
 
@@ -123,7 +125,7 @@ function renderJudgments({ experiments, candidates, stats, embedding }) {
   ];
   const key = {
     generatedAt: new Date().toISOString(),
-    policyVersion: "featured-offline-v1",
+    policyVersion: "featured-offline-v3",
     judgedRank,
     stats,
     embedding: {
@@ -270,7 +272,7 @@ function renderHtml({ key, candidates }) {
   <script>
     const inputs = [...document.querySelectorAll('[data-judgment]')];
     const groups = [...new Set(inputs.map(input => input.name))];
-    const storageKey = 'recme-featured-relevance-v1';
+    const storageKey = 'recme-featured-relevance-v3';
     const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
     for (const input of inputs) if (saved[input.name] === input.value) input.checked = true;
     const update = () => {
@@ -359,6 +361,7 @@ async function main() {
     stats,
     embedding,
   });
+  key.preflight = assertFeaturedPreflight(key);
 
   const judgmentsAbsolutePath = await writeArtifact(judgmentsPath, markdown);
   const htmlAbsolutePath = await writeArtifact(htmlPath, renderHtml({ key, candidates: scoredCandidates }));
@@ -371,6 +374,7 @@ async function main() {
   process.stdout.write(`Judgment UI: ${htmlAbsolutePath}\n`);
   process.stdout.write(`Scoring key: ${keyAbsolutePath}\n`);
   process.stdout.write(`Embedding cache: ${embedding.cacheHits} hits, ${embedding.cacheMisses} misses\n`);
+  process.stdout.write(`Preflight: ${key.preflight.status} (${key.preflight.warnings.length} warning(s))\n`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

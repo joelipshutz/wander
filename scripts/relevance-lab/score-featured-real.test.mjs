@@ -74,6 +74,7 @@ test("Featured scorecard applies quality, privacy, latency, and pan gates", () =
     key: {
       judgedRank: 5,
       stats: {},
+      preflight: { communityEvidenceReady: true },
       scenarios,
     },
     scores: parseFeaturedScores(lines.join("\n")),
@@ -86,8 +87,32 @@ test("Featured scorecard applies quality, privacy, latency, and pan gates", () =
   const unsafe = structuredClone(scenarios);
   unsafe[0].privacyFailures = 1;
   const unsafeScorecard = scoreFeaturedPool({
-    key: { judgedRank: 5, stats: {}, scenarios: unsafe },
+    key: {
+      judgedRank: 5,
+      stats: {},
+      preflight: { communityEvidenceReady: true },
+      scenarios: unsafe,
+    },
     scores: parseFeaturedScores(lines.join("\n")),
   });
   assert.equal(unsafeScorecard.decision.densityDecision, "defer");
+
+  const thinCorpusScorecard = scoreFeaturedPool({
+    key: {
+      judgedRank: 5,
+      stats: { communityOnlyPlaces: 6 },
+      preflight: {
+        communityEvidenceReady: false,
+        communityOnlyRate: 0.067,
+        actualSparseMixedSourceScenarios: 0,
+      },
+      scenarios,
+    },
+    scores: parseFeaturedScores(lines.join("\n")),
+  });
+  assert.equal(
+    thinCorpusScorecard.decision.densityDecision,
+    "defer",
+    "simulated fallback slices cannot promote a policy without real community coverage",
+  );
 });

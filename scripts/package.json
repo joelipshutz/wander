@@ -10,6 +10,7 @@
     "audit:testflight-manifest": "node reconcile-testflight-manifest.mjs",
     "record:testflight-manifest": "node testflight-manifest.mjs record",
     "relevance:prepare-featured-real": "node relevance-lab/prepare-featured-real.mjs",
+    "relevance:preflight-featured-real": "node relevance-lab/featured-preflight.mjs",
     "relevance:prepare-real": "node relevance-lab/prepare-real.mjs",
     "relevance:score-featured-real": "node relevance-lab/score-featured-real.mjs",
     "relevance:score-real": "node relevance-lab/score-real.mjs",

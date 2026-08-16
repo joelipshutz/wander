@@ -30080,3 +30080,47 @@ Checkpoint — 2026-08-16 02:06 PDT:
   `git diff --check` passes. The next gate requires Joe to grade every candidate
   in `featured-judgments.html` according to personal taste and usefulness as a
   Featured map pin, then return the copied score lines for offline scoring.
+
+Checkpoint — 2026-08-16 04:06 PDT:
+
+- Continued unattended while Joe deferred human grading. An objective audit of
+  the generated key found that the original second `sparse` scenario was a
+  false label: its locality bucket looked sparse, but its expanded viewport
+  overlapped 57 candidates and had 0.917 network confidence. The audit also
+  found that the real eligible corpus has 90 canonical candidates but only six
+  community-only places (6.7%); 84 are the viewer's own or trusted-network
+  places, and no actual sparse viewport returns a network/community mix.
+- Reworked scenario construction to classify density from all candidates
+  actually inside each viewport. It now requires at least one genuine dense
+  and one genuine sparse viewport, and uses an explicitly recorded `thin`
+  relationship mask only when a second organic sparse viewport is unavailable.
+  Relationship boosts, source labels, contributor diversity, and network-only
+  output all honor that mask.
+- Added a reusable fail-closed Featured preflight plus package command. It
+  validates honest density labels, actual sparse coverage, complete top-five
+  blind pooling, policy-order separation, a sparse mixed-source result, pan
+  pairs, privacy/deduplication, and local ranking latency. It separately records
+  whether real community evidence is promotion-ready.
+- Locked the evidence gate before human grading: at least 20 real community-only
+  places, at least 20% community-only corpus share, and at least one actual
+  sparse mixed-source viewport. Simulated thin/empty slices are directional and
+  cannot earn `KEEP`; the scorecard forces density and semantic decisions to
+  `DEFER` while this gate is false.
+- Regenerated the first corrected pool as `featured-offline-v2` entirely from
+  the embedding cache. A subsequent architecture audit removed viewer-specific
+  structured tags from place embeddings so the semantic provider now produces
+  one global, reusable canonical vector per place; personal tags remain local,
+  explicit ranker/taste features and are masked when a trusted place is used as
+  a simulated community candidate. This required one additional minimized
+  169-document embedding refresh, still below $0.001; the final pool is version
+  `featured-offline-v3`, and its repeat generation has 169 cache hits and zero
+  misses. Preflight
+  passes structurally with one explicit evidence warning: nine scenarios, one
+  actual sparse, one simulated thin, zero privacy/duplicate/blind-coverage
+  failures, policy separation present, full top-10 pan stability, and 0.235 ms
+  local ranking p95. The refreshed persistent grader contains 66 judgments and
+  uses a new v3 local-storage key so no earlier answers can leak into it.
+- Validation: all 25 relevance tests pass, the standalone preflight passes, the
+  scoring path correctly forces `DEFER` on an otherwise valid synthetic score
+  set when community evidence is insufficient, syntax checks pass, and
+  `git diff --check` passes.

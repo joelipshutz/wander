@@ -43,6 +43,7 @@ test("trusted rows contribute only opaque relationship while own rows may add st
   assert.equal(place.trustedContributorIds.length, 1);
   assert.ok(place.trustedContributorIds[0].startsWith("contributor-"));
   assert.ok(place.tags.includes("quiet"));
+  assert.equal(place.canonicalTags.includes("quiet"), false);
   assert.equal(JSON.stringify(place).includes("private-user-id"), false);
 });
 

@@ -455,6 +455,13 @@ For every eligible expanded viewport, Featured requests these bounded sources in
 2. **Wider-community provider:** canonical places supported by eligible rec.me saves outside the visible network. It returns anonymous place-level aggregates only.
 3. **Optional place-semantic provider:** feature-flagged pgvector candidates from the approved, privacy-safe canonical place document. This provider remains off until it wins the separate Featured offline gate.
 
+The canonical place document is global and reusable across viewers: canonical
+name, category, subcategory, and approved coarse place facts. A viewer's notes,
+labels, answers, or structured save tags never change the stored place vector.
+Those personal signals stay in the explicit taste profile/ranker, which avoids
+per-viewer re-embedding and keeps the semantic provider cheap, cacheable, and
+auditable.
+
 The platform unions and deduplicates providers before ranking. It must not wait for the trusted-network provider to return too few rows and then issue a second community request. Parallel bounded retrieval keeps latency stable and lets the ranker use the same policy in dense and sparse regions.
 
 Every candidate retains provider provenance, relationship evidence, and the set of safe ranking features that produced it. A canonical place that appears in multiple providers is one result; named trusted evidence takes presentation precedence over anonymous community evidence.
@@ -510,6 +517,12 @@ The product should expose one coherent result set, not separate Network and Comm
 The 74 blind judgments over 12 text queries validated a bounded semantic provider for query-driven place retrieval. They do not validate Featured, network backfill, geographic usefulness, or map stability.
 
 Before changing the production Featured policy or enabling the semantic provider, create a second blind benchmark whose unit is `viewer + viewport + zoom + refinements`. Include dense-network, sparse-network, empty-network, repeat-pan, and cold-start scenarios. Use real privacy-eligible place projections and hide provider/source order during grading.
+
+The benchmark must report whether its real community corpus is large and
+geographically mixed enough to support a promotion decision. Simulated
+thin/empty relationship masks are useful directional stress tests, but cannot
+substitute for an actual sparse viewport containing both trusted-network and
+community-only candidates.
 
 Compare at least:
 
