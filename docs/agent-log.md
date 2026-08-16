@@ -30329,3 +30329,11 @@ Publication and handoff:
 - Opened ready PR #458: https://github.com/joelipshutz/wander/pull/458
 - REC-281 is ready for review. Merge-only handoff; no TestFlight release was
   requested or performed.
+- GitHub's `validate-pr-payload` check failed because the manually-created PR
+  body omitted the required `recme-testflight-payload` JSON comment. Inspection
+  confirmed this is PR metadata only, not a source/build/test failure. Because
+  the branch changes app runtime files, the valid classification is `ship` with
+  REC-281 tester-facing change, what-to-test actions, `releaseOperations: none`,
+  validation evidence, and the known aggregate-runner limitation. The GitHub
+  CI-fix workflow requires explicit approval before mutating the PR body, so
+  that metadata-only correction is the sole pending handoff action.
