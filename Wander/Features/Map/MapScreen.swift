@@ -5642,6 +5642,7 @@ struct MapPlaceSavePhotoAttachment: Identifiable {
 
     static func make(
         image: UIImage,
+        ownerUserID: String,
         data: Data? = nil,
         contentType: String = "image/jpeg",
         fallbackAssetRef: String? = nil,
@@ -5653,7 +5654,12 @@ struct MapPlaceSavePhotoAttachment: Identifiable {
         guard payload.count <= maximumBytesPerPhoto else { return nil }
 
         let id = UUID()
-        guard let fileRef = VisitPhotoLocalFileStore.save(data: payload, id: id, contentType: contentType) else {
+        guard let fileRef = VisitPhotoLocalFileStore.save(
+            data: payload,
+            id: id,
+            contentType: contentType,
+            ownerUserID: ownerUserID
+        ) else {
             return nil
         }
         return MapPlaceSavePhotoAttachment(
@@ -6737,6 +6743,7 @@ struct MapPlaceSaveEditor: View {
 
             if context.allowsPhotoAttachments {
                 MapSaveVisitPhotoSection(
+                    ownerUserID: store.currentUser.id,
                     canAddPhotos: true,
                     photos: $visitPhotoAttachments
                 )
@@ -7679,6 +7686,7 @@ struct MapPlaceSaveEditor: View {
 }
 
 private struct MapSaveVisitPhotoSection: View {
+    let ownerUserID: String
     let canAddPhotos: Bool
     @Binding var photos: [MapPlaceSavePhotoAttachment]
     @State private var isShowingPhotoMenu = false
@@ -7790,7 +7798,10 @@ private struct MapSaveVisitPhotoSection: View {
         )
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
-                if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
+                if let attachment = MapPlaceSavePhotoAttachment.make(
+                    image: image,
+                    ownerUserID: ownerUserID
+                ) {
                     appendIfWithinLimits(attachment)
                 } else {
                     photoError = "That photo is too large or could not be prepared."
@@ -7831,6 +7842,7 @@ private struct MapSaveVisitPhotoSection: View {
                 let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
                 if let attachment = MapPlaceSavePhotoAttachment.make(
                     image: image,
+                    ownerUserID: ownerUserID,
                     data: data,
                     fallbackAssetRef: assetRef
                 ) {
@@ -10638,7 +10650,10 @@ private struct PlaceActivityCard: View {
         )
         .sheet(isPresented: $isShowingCamera) {
             PlaceActivityCameraPicker { image in
-                if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
+                if let attachment = MapPlaceSavePhotoAttachment.make(
+                    image: image,
+                    ownerUserID: store.currentUser.id
+                ) {
                     Task {
                         await addPhoto(attachment)
                     }
@@ -10901,6 +10916,7 @@ private struct PlaceActivityCard: View {
                 let assetRef = item.itemIdentifier.map { "photos_picker:\($0)" }
                 if let attachment = MapPlaceSavePhotoAttachment.make(
                     image: image,
+                    ownerUserID: store.currentUser.id,
                     data: data,
                     fallbackAssetRef: assetRef
                 ) {

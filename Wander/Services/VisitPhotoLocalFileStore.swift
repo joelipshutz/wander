@@ -3,6 +3,7 @@ import UIKit
 
 enum VisitPhotoLocalFileStore {
     private static let prefix = "local_file:"
+    private static let scopedPrefix = "local_file_v2:"
     private static let directoryName = "VisitPhotos"
 
     static func save(data: Data, id: UUID, contentType: String) -> String? {
@@ -18,23 +19,68 @@ enum VisitPhotoLocalFileStore {
         }
     }
 
-    static func image(from localAssetRef: String?) -> UIImage? {
-        guard let filename = filename(from: localAssetRef),
-              let directory = directoryURL()
-        else {
+    static func save(
+        data: Data,
+        id: UUID,
+        contentType: String,
+        ownerUserID: String
+    ) -> String? {
+        let scope = AccountStorageScope(userID: ownerUserID)
+        let directory = scope.visitPhotosDirectoryURL
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+            )
+            let filename = "\(id.uuidString.lowercased()).\(fileExtension(for: contentType))"
+            try data.write(
+                to: directory.appendingPathComponent(filename),
+                options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+            )
+            return "\(scopedPrefix)\(scope.accountKey)/\(filename)"
+        } catch {
             return nil
         }
+    }
 
-        return UIImage(contentsOfFile: directory.appendingPathComponent(filename).path)
+    static func image(from localAssetRef: String?) -> UIImage? {
+        guard let fileURL = fileURL(from: localAssetRef) else { return nil }
+        return UIImage(contentsOfFile: fileURL.path)
     }
 
     static func data(from localAssetRef: String?) -> Data? {
+        guard let fileURL = fileURL(from: localAssetRef) else { return nil }
+        return try? Data(contentsOf: fileURL, options: .mappedIfSafe)
+    }
+
+    private static func fileURL(from localAssetRef: String?) -> URL? {
+        guard let localAssetRef else { return nil }
+        if localAssetRef.hasPrefix(scopedPrefix) {
+            let relativePath = String(localAssetRef.dropFirst(scopedPrefix.count))
+            let components = relativePath.split(separator: "/").map(String.init)
+            guard components.count == 2,
+                  components[0].count == 64,
+                  components[0].allSatisfy({ $0.isHexDigit }),
+                  components[1] == URL(fileURLWithPath: components[1]).lastPathComponent
+            else { return nil }
+            guard let root = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first else { return nil }
+            return root
+                .appendingPathComponent("rec-me", isDirectory: true)
+                .appendingPathComponent("accounts", isDirectory: true)
+                .appendingPathComponent("v\(AccountStorageScope.currentVersion)", isDirectory: true)
+                .appendingPathComponent(components[0], isDirectory: true)
+                .appendingPathComponent("visit-photos", isDirectory: true)
+                .appendingPathComponent(components[1], isDirectory: false)
+        }
+
         guard let filename = filename(from: localAssetRef),
               let directory = directoryURL()
-        else {
-            return nil
-        }
-        return try? Data(contentsOf: directory.appendingPathComponent(filename), options: .mappedIfSafe)
+        else { return nil }
+        return directory.appendingPathComponent(filename)
     }
 
     private static func filename(from localAssetRef: String?) -> String? {

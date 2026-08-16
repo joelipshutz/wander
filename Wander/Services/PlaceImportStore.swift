@@ -733,6 +733,10 @@ final class FilePlaceImportPersistence: PlaceImportPersisting {
         }
     }
 
+    convenience init(userID: String) {
+        self.init(fileURL: AccountStorageScope(userID: userID).placeImportsURL)
+    }
+
     func load() throws -> PlaceImportSnapshot {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return PlaceImportSnapshot()

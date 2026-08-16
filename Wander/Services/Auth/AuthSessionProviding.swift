@@ -47,6 +47,7 @@ extension AuthState {
 
 struct AuthSession: Codable, Equatable, Identifiable {
     let userID: String
+    let providerSessionID: String?
     let displayName: String?
     let handle: String?
     let email: String?
@@ -56,12 +57,14 @@ struct AuthSession: Codable, Equatable, Identifiable {
 
     init(
         userID: String,
+        providerSessionID: String? = nil,
         displayName: String?,
         handle: String?,
         email: String? = nil,
         phoneNumber: String? = nil
     ) {
         self.userID = userID
+        self.providerSessionID = providerSessionID
         self.displayName = displayName
         self.handle = handle
         self.email = email
@@ -250,6 +253,7 @@ enum NativeAuthOutcome: Equatable {
 @MainActor
 protocol AuthSessionProviding: AnyObject {
     var state: AuthState { get }
+    var availableSessions: [AuthSession] { get }
     var canPresentNativeAuth: Bool { get }
     func sessionChanges() -> AsyncStream<AuthState>
     func refreshSession() async
@@ -258,13 +262,20 @@ protocol AuthSessionProviding: AnyObject {
     func verifyEmailCode(_ code: String) async throws -> NativeAuthOutcome
     func authenticateWithPassword(emailAddress: String, password: String) async throws -> NativeAuthOutcome
     func resetPendingEmailVerification()
+    func activateSession(userID: String) async throws
+    func removeSession(userID: String) async throws
     func signOut() async throws
+    func signOutAll() async throws
     func deleteAccount() async throws
     func supabaseAccessToken() async throws -> String
     func refreshSupabaseAccessToken() async throws -> String
 }
 
 extension AuthSessionProviding {
+    var availableSessions: [AuthSession] {
+        state.session.map { [$0] } ?? []
+    }
+
     func authenticate(with provider: NativeSocialAuthProvider, mode: NativeAuthMode) async throws -> NativeAuthOutcome {
         throw AuthSessionError.notConfigured
     }
@@ -283,6 +294,23 @@ extension AuthSessionProviding {
 
     func resetPendingEmailVerification() {}
 
+    func activateSession(userID: String) async throws {
+        guard state.session?.userID == userID else {
+            throw AuthSessionError.sessionUnavailable
+        }
+    }
+
+    func removeSession(userID: String) async throws {
+        guard state.session?.userID == userID else {
+            throw AuthSessionError.sessionUnavailable
+        }
+        try await signOut()
+    }
+
+    func signOutAll() async throws {
+        try await signOut()
+    }
+
     func deleteAccount() async throws {
         throw AuthSessionError.notConfigured
     }
@@ -298,6 +326,7 @@ extension AuthSessionProviding {
 @MainActor
 final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published private(set) var state: AuthState
+    @Published private(set) var availableSessions: [AuthSession]
     @Published var activeGate: AuthGateRequest?
     @Published var isPresentingNativeAuth = false
     @Published private(set) var activeNativeAuthMode: NativeAuthMode = .signInOrUp
@@ -309,16 +338,24 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
     @Published private(set) var nativeAuthError: String?
     @Published private(set) var isSigningOut = false
     @Published private(set) var signOutError: String?
+    @Published private(set) var isSwitchingAccount = false
+    @Published private(set) var accountManagementError: String?
     @Published private(set) var isSessionValidated = false
 
     private let provider: AuthSessionProviding
+    private let analytics: AnalyticsClient
     private var sessionObservationTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var isNativeAuthAttemptActive = false
 
-    init(provider: AuthSessionProviding) {
+    init(
+        provider: AuthSessionProviding,
+        analytics: AnalyticsClient = NoopAnalyticsClient()
+    ) {
         self.provider = provider
+        self.analytics = analytics
         self.state = provider.state
+        self.availableSessions = provider.availableSessions
         sessionObservationTask = Task { @MainActor [weak self] in
             for await state in provider.sessionChanges() {
                 guard !Task.isCancelled else { return }
@@ -368,6 +405,63 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         #if DEBUG
         WanderDebugLog.remote.debug("auth store refresh finished new_state=\(self.state.debugSummary, privacy: .public)")
         #endif
+    }
+
+    @discardableResult
+    func switchAccount(to userID: String, source: String = "profile") async -> Bool {
+        guard state.session?.userID != userID else { return true }
+        guard availableSessions.contains(where: { $0.userID == userID }) else {
+            accountManagementError = "That account is no longer available on this device."
+            return false
+        }
+
+        beginSessionValidation()
+        isSwitchingAccount = true
+        accountManagementError = nil
+        defer { isSwitchingAccount = false }
+
+        do {
+            try await provider.activateSession(userID: userID)
+            await provider.refreshSession()
+            synchronizeStateFromProvider()
+            guard case .signedIn(let session) = state, session.userID == userID else {
+                throw AuthSessionError.sessionUnavailable
+            }
+            analytics.track(
+                AnalyticsEvent(
+                    name: WanderAnalyticsEvents.accountSwitched,
+                    properties: [
+                        "account_count": "\(availableSessions.count)",
+                        "source": source
+                    ]
+                )
+            )
+            return true
+        } catch {
+            await provider.refreshSession()
+            synchronizeStateFromProvider()
+            accountManagementError = "Could not switch accounts. Try again."
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeAccount(userID: String) async -> Bool {
+        isSwitchingAccount = true
+        accountManagementError = nil
+        defer { isSwitchingAccount = false }
+
+        do {
+            try await provider.removeSession(userID: userID)
+            await provider.refreshSession()
+            synchronizeStateFromProvider()
+            return !availableSessions.contains(where: { $0.userID == userID })
+        } catch {
+            await provider.refreshSession()
+            synchronizeStateFromProvider()
+            accountManagementError = "Could not remove that account. Try again."
+            return false
+        }
     }
 
     func requireSignIn(for intent: AuthGateIntent, action: () -> Void) {
@@ -634,6 +728,24 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         }
     }
 
+    func signOutAll() async throws {
+        beginSessionValidation()
+        nativeAuthDidDismiss()
+        isSigningOut = true
+        signOutError = nil
+        defer { isSigningOut = false }
+
+        do {
+            try await provider.signOutAll()
+            synchronizeStateFromProvider()
+        } catch {
+            await provider.refreshSession()
+            synchronizeStateFromProvider()
+            signOutError = "Could not sign out. Try again."
+            throw error
+        }
+    }
+
     func deleteAccount() async throws {
         beginSessionValidation()
         nativeAuthDidDismiss()
@@ -685,6 +797,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 
     private func synchronizeState(_ state: AuthState) {
         self.state = state
+        availableSessions = provider.availableSessions
         if case .signedIn = state {
             isSessionValidated = true
         } else {
@@ -708,6 +821,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
 @MainActor
 final class PreviewAuthSessionProvider: AuthSessionProviding {
     private(set) var state: AuthState
+    private(set) var availableSessions: [AuthSession]
     let canPresentNativeAuth: Bool
     private let token: String?
     private let signOutError: Error?
@@ -731,6 +845,7 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
 
     init(
         state: AuthState = .signedOut,
+        availableSessions: [AuthSession]? = nil,
         canPresentNativeAuth: Bool = false,
         token: String? = nil,
         signOutError: Error? = nil,
@@ -747,6 +862,7 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     ) {
         let (stream, continuation) = AsyncStream<AuthState>.makeStream()
         self.state = state
+        self.availableSessions = availableSessions ?? state.session.map { [$0] } ?? []
         self.canPresentNativeAuth = canPresentNativeAuth
         self.token = token
         self.signOutError = signOutError
@@ -766,6 +882,10 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
 
     func setState(_ state: AuthState) {
         self.state = state
+        if let session = state.session,
+           !availableSessions.contains(where: { $0.userID == session.userID }) {
+            availableSessions.append(session)
+        }
         sessionChangeContinuation.yield(state)
     }
 
@@ -831,11 +951,40 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
         didResetPendingEmailVerification = true
     }
 
+    func activateSession(userID: String) async throws {
+        guard let session = availableSessions.first(where: { $0.userID == userID }) else {
+            throw AuthSessionError.sessionUnavailable
+        }
+        state = .signedIn(session)
+        sessionChangeContinuation.yield(state)
+    }
+
+    func removeSession(userID: String) async throws {
+        availableSessions.removeAll { $0.userID == userID }
+        if state.session?.userID == userID {
+            state = availableSessions.first.map(AuthState.signedIn) ?? .signedOut
+            sessionChangeContinuation.yield(state)
+        }
+    }
+
     func signOut() async throws {
         if let signOutError {
             throw signOutError
         }
+        if let currentUserID = state.session?.userID {
+            try await removeSession(userID: currentUserID)
+        } else {
+            state = .signedOut
+        }
+    }
+
+    func signOutAll() async throws {
+        if let signOutError {
+            throw signOutError
+        }
+        availableSessions = []
         state = .signedOut
+        sessionChangeContinuation.yield(state)
     }
 
     func supabaseAccessToken() async throws -> String {

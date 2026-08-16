@@ -220,6 +220,7 @@ struct AcquisitionAttribution: Equatable {
 }
 
 enum WanderAnalyticsEvents {
+    static let accountSwitched = "account_switched"
     static let appFirstOpened = "app_first_opened"
     static let appSessionStarted = "app_session_started"
     static let acquisitionLinkOpened = "acquisition_link_opened"

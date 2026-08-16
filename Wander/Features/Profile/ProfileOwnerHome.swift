@@ -269,6 +269,7 @@ struct ProfileOwnerHome: View {
     let avatarAction: () -> Void
     let editAction: () -> Void
     let settingsAction: () -> Void
+    let accountAction: (() -> Void)?
     let shareAction: () -> Void
     let relationshipAction: () -> Void
     let backAction: (() -> Void)?
@@ -407,11 +408,29 @@ struct ProfileOwnerHome: View {
                 ProfileBackButton(action: backAction)
             }
 
-            Text("@\(profile.handle)")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+            if mode.isOwner, let accountAction {
+                Button(action: accountAction) {
+                    HStack(spacing: 5) {
+                        Text("@\(profile.handle)")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .black))
+                    }
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Switch accounts, current account @\(profile.handle)")
+            } else {
+                Text("@\(profile.handle)")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
 
             Spacer(minLength: 0)
 

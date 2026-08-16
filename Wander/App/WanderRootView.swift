@@ -376,7 +376,15 @@ struct WanderRootView: View {
         _placeProfileFloatingActionVariant = State(
             initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
         )
-        let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
+        if fixtureMode == .empty, let userID = initialSession?.userID {
+            AccountStorageScope(userID: userID).migrateMatchingLegacyData()
+        }
+        let persistence: WanderStorePersistence? = if fixtureMode == .empty,
+                                                       let userID = initialSession?.userID {
+            .live(for: userID)
+        } else {
+            nil
+        }
         _store = StateObject(
             wrappedValue: Self.makeStore(
                 fixtureMode: fixtureMode,
@@ -386,11 +394,18 @@ struct WanderRootView: View {
                 initialSession: initialSession
             )
         )
-        let importStore = PlaceImportStore()
+        let importStore = PlaceImportStore(
+            persistence: initialSession.map { FilePlaceImportPersistence(userID: $0.userID) }
+                ?? FilePlaceImportPersistence()
+        )
         _importStore = StateObject(wrappedValue: importStore)
         _placeSaveDraftStore = StateObject(
             wrappedValue: PlaceSaveDraftStore(
-                persistence: fixtureMode == .empty ? .live : .ephemeral
+                persistence: if fixtureMode == .empty, let userID = initialSession?.userID {
+                    .live(for: userID)
+                } else {
+                    .ephemeral
+                }
             )
         )
         _walkthroughs = StateObject(
@@ -424,6 +439,10 @@ struct WanderRootView: View {
                 \.placeProfileFloatingActionVariant,
                 placeProfileFloatingActionVariant
             )
+            .onDisappear {
+                store.flushPersistence()
+                placeSaveDraftStore.flush()
+            }
     }
 
     private var tabRoot: some View {

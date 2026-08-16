@@ -272,6 +272,7 @@ final class AppEntryCoordinator: ObservableObject {
         case .unavailable(let message):
             state = .unavailable(message)
         case .offline(let session, let message):
+            resetAnalyticsIdentityIfChanging(to: session.userID)
             let local = completionStore.state(for: session.userID)
             resolvedUserID = session.userID
             state = AppEntryStateResolver.offlineState(
@@ -284,6 +285,7 @@ final class AppEntryCoordinator: ObservableObject {
                 state = .launching
                 return
             }
+            resetAnalyticsIdentityIfChanging(to: session.userID)
             if usesLocalSimulatorTestSession {
                 resolvedUserID = session.userID
                 analytics.identify(userID: session.userID)
@@ -328,6 +330,11 @@ final class AppEntryCoordinator: ObservableObject {
                 )
             }
         }
+    }
+
+    private func resetAnalyticsIdentityIfChanging(to userID: String) {
+        guard let resolvedUserID, resolvedUserID != userID else { return }
+        analytics.resetIdentity()
     }
 
     private func retryServerCompletion(for session: AuthSession) async {

@@ -166,6 +166,10 @@ struct PlaceSaveDraftPersistence {
             .appendingPathComponent("place-save-draft-v1.json")
     )
 
+    static func live(for userID: String) -> PlaceSaveDraftPersistence {
+        coalescingFile(url: AccountStorageScope(userID: userID).placeSaveDraftURL)
+    }
+
     static var ephemeral: PlaceSaveDraftPersistence {
         PlaceSaveDraftPersistence(
             load: { nil },

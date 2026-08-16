@@ -1030,6 +1030,7 @@ struct AddScreen: View {
             if let image = UIImage(data: data),
                let attachment = MapPlaceSavePhotoAttachment.make(
                    image: image,
+                   ownerUserID: store.currentUser.id,
                    data: data,
                    fallbackAssetRef: assetRef
                ) {
