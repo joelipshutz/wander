@@ -350,6 +350,7 @@ enum DiscoverRecmePlaceSearchPlanner {
 
         return RecmePlaceSearchRequest(
             query: queryPlan.requiredTokens.joined(separator: " "),
+            semanticQuery: query,
             categories: filters.categories
                 .map(WanderPlaceCategory.normalizedPrimaryCategory)
                 .sorted(),

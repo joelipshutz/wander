@@ -1197,6 +1197,54 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 4))
     }
 
+    func testFeedHeaderFloatsAbovePlacesAndPeopleContent() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderInitialTab",
+            "discover"
+        ]
+        app.launch()
+
+        let placeSearch = app.buttons["feed.searchLauncher"]
+        let addButton = app.buttons["feed.headerAdd"]
+        let feedSectionButtons = app.buttons.matching(
+            NSPredicate(format: "label == %@", "Feed section")
+        )
+        let placesButton = feedSectionButtons.element(boundBy: 0)
+        let peopleButton = feedSectionButtons.element(boundBy: 1)
+
+        XCTAssertTrue(placeSearch.waitForExistence(timeout: 6))
+        XCTAssertTrue(addButton.isHittable)
+        XCTAssertEqual(feedSectionButtons.count, 2)
+        XCTAssertTrue(placesButton.isSelected)
+        XCTAssertLessThan(placeSearch.frame.maxY, placesButton.frame.minY)
+        XCTAssertEqual(placesButton.frame.midY, addButton.frame.midY, accuracy: 2)
+
+        let initialSearchY = placeSearch.frame.minY
+        let initialControlsY = placesButton.frame.minY
+        app.swipeUp()
+
+        XCTAssertTrue(placeSearch.isHittable)
+        XCTAssertTrue(addButton.isHittable)
+        XCTAssertEqual(placeSearch.frame.minY, initialSearchY, accuracy: 2)
+        XCTAssertEqual(placesButton.frame.minY, initialControlsY, accuracy: 2)
+
+        peopleButton.tap()
+        let peopleSearch = app.textFields["Search people"]
+        XCTAssertTrue(peopleSearch.waitForExistence(timeout: 4))
+        XCTAssertTrue(peopleButton.isSelected)
+        XCTAssertLessThan(peopleSearch.frame.maxY, peopleButton.frame.minY)
+        XCTAssertTrue(addButton.isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-281 floating Feed header on People"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testCommentsEdgeSwipeReturnsToPreviousFeedPage() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -1267,8 +1315,8 @@ final class OnboardingUITests: XCTestCase {
         }
 
         XCTAssertGreaterThan(searchField.frame.minY, 44)
-        XCTAssertGreaterThanOrEqual(typeaheadPanel.frame.minY, searchField.frame.maxY)
-        XCTAssertLessThan(typeaheadPanel.frame.maxY, keyboard.frame.minY)
+        XCTAssertLessThan(typeaheadPanel.frame.maxY, searchField.frame.minY)
+        XCTAssertLessThan(searchField.frame.maxY, keyboard.frame.minY)
         XCTAssertFalse(app.buttons["map.headerAdd"].exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

@@ -158,13 +158,15 @@ final class InviteFrameworkTests: XCTestCase {
 
     func testFeedPeoplePlacesContactInviteDirectlyAfterSearch() throws {
         let source = try projectSource("Wander/Features/Feed/FeedScreen.swift")
+        let search = try XCTUnwrap(source.range(of: "FeedPeopleSearchField(text: $peopleQuery)"))
+        let surfaceDeclaration = try XCTUnwrap(source.range(of: "private struct FeedPeopleSurface: View"))
         let surface = try XCTUnwrap(source.components(separatedBy: "private struct FeedPeopleSurface: View").last)
-        let search = try XCTUnwrap(surface.range(of: "FeedPeopleSearchField(text: $memberQuery)"))
         let invite = try XCTUnwrap(surface.range(of: "InviteEntryPointButton(surface: .feedPeople)"))
         let results = try XCTUnwrap(surface.range(of: "if isMemberSearchActive"))
 
-        XCTAssertLessThan(search.lowerBound, invite.lowerBound)
+        XCTAssertLessThan(search.lowerBound, surfaceDeclaration.lowerBound)
         XCTAssertLessThan(invite.lowerBound, results.lowerBound)
+        XCTAssertFalse(surface.contains("FeedPeopleSearchField("))
         XCTAssertTrue(surface.contains("contactProvider: store.contactProvider"))
         XCTAssertTrue(surface.contains("senderProfileID: store.currentUser.id"))
     }
