@@ -29967,3 +29967,36 @@ Checkpoint — 2026-08-15 21:08 PDT:
 - Opened this isolated worktree's `Wander.xcodeproj` in Xcode and opened Simulator
   with all four comparison devices booted. No push, PR, merge, build-number bump,
   TestFlight upload, or release was performed.
+
+Checkpoint — 2026-08-15 22:38 PDT:
+
+- Joe clarified the comparison now has five styles. Option 4 retains its charcoal
+  rail with a brighter white/silver Wanna treatment. New Option 5 keeps Option 3's
+  compact no-rail geometry but gives Check in a deeper standalone black glass.
+- Added a `place button style` 1–5 picker beside the existing first-visit NUX
+  control in the server-entitled debug settings section. The choice is stored per
+  account on the device and snapshotted during the existing feature-flag load on
+  the next launch. Missing, malformed, unentitled, signed-out, or switched-account
+  states fail closed to Option 1. The existing Debug launch argument still supports
+  deterministic screenshot/UI-test selection.
+- Kept Supabase unchanged: `debug_settings` remains the Boolean entitlement for
+  the tester surface and `place_profile_save_tray_v1` remains the off-by-default
+  rollout gate. A local numeric comparison preference does not require a schema,
+  RLS, RPC, migration, or hosted data-contract change.
+- Focused iPhone 16 Plus / iOS 26.2 validation passed 6/6 with zero failures:
+  resolver bounds and fallback, Option 5 tone/geometry, account isolation,
+  entitlement fallback, launch-time environment injection, debug-settings gating,
+  and the legacy place-action fallback contract. Result:
+  `/private/tmp/recme-cta-1-5-dd/Logs/Test/Test-Wander-2026.08.15_22-34-28--0700.xcresult`.
+- Installed the tested build on the consolidated `CTA Styles 1-5` simulator
+  (`1B0C1935-9585-4F31-8C01-599AB878FD67`) and left Option 5 open at the same
+  Griffith Observatory Trail test state. Final screenshots:
+  `/private/tmp/recme-cta-final-option-4-lighter.png` and
+  `/private/tmp/recme-cta-final-option-5.png`; durable side-by-side board:
+  `/Users/joelipshutz/.codex/visualizations/2026/08/15/01a00667-f2e5-7720-8849-b0ca9238ee46/cta-options-4-and-5.png`.
+- Deleted only the four superseded task-only CTA simulator devices after preserving
+  their 1–4 screenshots and comparison board. Replaced them with the single 1–5
+  simulator above; no source, archive, screenshot, production, or user data was
+  removed.
+- Local implementation checkpoint: `0b0f4d1b` (`WIP: add five-style place action
+  picker`). No push, PR, merge, build-number bump, TestFlight upload, or release.
