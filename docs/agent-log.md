@@ -30092,3 +30092,26 @@ Validation — 2026-08-16 00:30 PDT:
   `WanderTests/Fixtures/ios-fix/simulator-test-session-relaunch-post.png`.
 - No hosted data, schema/RLS/RPC/migration, physical-device auth, push, merge,
   build-number bump, archive, TestFlight upload, or release was changed.
+
+QA checkpoint — 2026-08-16 01:00 PDT:
+
+- Joe asked to compare all five floating CTA styles in separate Simulator
+  windows after the argument-free relaunch correctly opened the Map root but
+  did not expose a place-profile CTA.
+- Renamed the configured iPhone 16 Plus / iOS 26.2 source device to `CTA Style
+  1` and cloned it into `CTA Style 2` through `CTA Style 5`. The fifth clone
+  initially stalled when the machine had only 165 MB free. Removed only this
+  task's exact 1.6 GB rebuildable DerivedData cache at
+  `/private/tmp/recme-cta-1-5-dd`; source, commits, test result bundles,
+  screenshots, installed apps, and simulator data were preserved. The fifth
+  clone then completed normally.
+- Booted the five named devices, shut down only the two older Launch Cutoff
+  simulator sessions, and launched the already-installed exact tested app on
+  the same expanded Griffith Observatory Trail profile. Every launch uses the
+  same fixture and flags; only `-WanderPlaceActionVariant 1...5` changes.
+- Verified all five screenshots show the place-profile CTAs rather than Map,
+  Home, or a boot spinner:
+  `/private/tmp/cta-style-{1,2,3,4,5}-verified.png`. Opened each device in its
+  own Simulator window and brought Simulator to the foreground for Joe.
+- No product source, hosted data, schema/RLS/RPC/migration, push, merge,
+  build-number bump, archive, TestFlight upload, or release was changed.
