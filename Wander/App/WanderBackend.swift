@@ -3,6 +3,7 @@ import Foundation
 enum FeatureFlagKey: String, CaseIterable, Hashable {
     case firstVisitNUX = "first_visit_nux"
     case debugSettings = "debug_settings"
+    case placeProfileSaveTrayV1 = "place_profile_save_tray_v1"
 }
 
 enum FeatureFlagResolution: Equatable {

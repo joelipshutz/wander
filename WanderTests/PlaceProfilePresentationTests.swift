@@ -43,6 +43,219 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertTrue(PlaceSheetAction.editWant.isPrimaryAction)
     }
 
+    func testPlaceProfileSaveActionPolicyMapsEverySupportedState() {
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in",
+                    isSelected: false,
+                    destinationStatus: .been
+                ),
+                PlaceProfileSaveAction(
+                    kind: .wanna,
+                    title: "Wanna",
+                    isSelected: false,
+                    destinationStatus: .wannaGo
+                )
+            ]
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .wanna).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in",
+                    isSelected: false,
+                    destinationStatus: .been
+                ),
+                PlaceProfileSaveAction(
+                    kind: .wanna,
+                    title: "Wanna",
+                    isSelected: true,
+                    destinationStatus: .wannaGo
+                )
+            ]
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .checkInHistory).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in again",
+                    isSelected: false,
+                    destinationStatus: .been
+                ),
+                PlaceProfileSaveAction(
+                    kind: .editHistory,
+                    title: "Edit / history",
+                    isSelected: false,
+                    destinationStatus: nil
+                )
+            ]
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .sharedInvite).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in",
+                    isSelected: false,
+                    destinationStatus: .been
+                )
+            ]
+        )
+        XCTAssertEqual(PlaceProfileSaveActionPolicy.resolve(state: .readOnly), .empty)
+    }
+
+    func testPlaceProfileSaveActionPolicyUsesGroupedCurrentUserState() {
+        let currentUser = profile(id: "user_current", handle: "current")
+        let socialUser = profile(id: "user_social", handle: "social")
+        let sharedPlace = place(id: "place_policy", category: "coffee")
+        let socialCheckIn = summary(
+            owner: socialUser,
+            place: sharedPlace,
+            status: .been,
+            ratingScore: 5,
+            tags: []
+        )
+
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                saves: [socialCheckIn],
+                currentUserID: currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: false
+            ),
+            .unsaved
+        )
+
+        let ownWanna = summary(
+            owner: currentUser,
+            place: sharedPlace,
+            status: .wannaGo,
+            ratingScore: nil,
+            tags: []
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                saves: [socialCheckIn, ownWanna],
+                currentUserID: currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: false
+            ),
+            .wanna
+        )
+
+        let ownCheckIn = summary(
+            owner: currentUser,
+            place: sharedPlace,
+            status: .been,
+            ratingScore: 4,
+            tags: []
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                saves: [ownCheckIn, socialCheckIn],
+                currentUserID: currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: false
+            ),
+            .checkInHistory
+        )
+    }
+
+    func testPlaceProfileSaveActionPolicyPrioritizesNonMutatingAndInviteStates() {
+        let currentUser = profile(id: "user_current", handle: "current")
+        let ownCheckIn = summary(
+            owner: currentUser,
+            place: place(id: "place_policy", category: "coffee"),
+            status: .been,
+            ratingScore: 4,
+            tags: []
+        )
+
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                currentUserSave: ownCheckIn.visiblePlace,
+                hasSharedVisitInvitation: true,
+                isReadOnly: false
+            ),
+            .sharedInvite
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                currentUserSave: ownCheckIn.visiblePlace,
+                hasSharedVisitInvitation: true,
+                isReadOnly: true
+            ),
+            .readOnly
+        )
+    }
+
+    func testPlaceProfileSaveActionSnapshotFailsClosedWithoutResolvedSignedInFlag() {
+        let unresolved = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: nil,
+            launchArguments: []
+        )
+        let disabled = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: false,
+            launchArguments: []
+        )
+        let signedOut = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: false,
+            resolvedFlagValue: true,
+            launchArguments: []
+        )
+
+        for snapshot in [unresolved, disabled, signedOut] {
+            XCTAssertEqual(snapshot.route, .legacy)
+            XCTAssertFalse(snapshot.usesFloatingActions)
+            XCTAssertEqual(snapshot.presentation, .empty)
+        }
+    }
+
+    func testPlaceProfileSaveActionSnapshotCapturesEnabledRoute() {
+        let openedProfile = PlaceProfileSaveActionPolicy.snapshot(
+            state: .wanna,
+            isSignedIn: true,
+            resolvedFlagValue: true,
+            launchArguments: []
+        )
+        let laterFlagRefresh = PlaceProfileSaveActionPolicy.snapshot(
+            state: .wanna,
+            isSignedIn: true,
+            resolvedFlagValue: false,
+            launchArguments: []
+        )
+
+        XCTAssertEqual(openedProfile.route, .floatingActions)
+        XCTAssertTrue(openedProfile.usesFloatingActions)
+        XCTAssertEqual(openedProfile.presentation.actions.map(\.kind), [.checkIn, .wanna])
+        XCTAssertEqual(laterFlagRefresh.route, .legacy)
+        XCTAssertEqual(openedProfile.route, .floatingActions)
+    }
+
+    #if DEBUG
+    func testPlaceProfileSaveActionDebugLaunchOverrideSupportsSignedOutSimulator() {
+        let snapshot = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: false,
+            resolvedFlagValue: nil,
+            launchArguments: [PlaceProfileSaveActionPolicy.debugEnableLaunchArgument]
+        )
+
+        XCTAssertTrue(snapshot.usesFloatingActions)
+        XCTAssertEqual(snapshot.presentation.actions.map(\.kind), [.checkIn, .wanna])
+    }
+    #endif
+
     #if DEBUG
     @MainActor
     func testMapCaptureRepositoryProvidesDeterministicGoogleAndVisibleUserPhotos() async throws {
