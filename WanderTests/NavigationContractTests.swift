@@ -2976,6 +2976,47 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(actionRow.contains("minimumScaleFactor(0.68)"))
     }
 
+    func testFlaggedPlaceProfileUsesSafeAreaFloatingActionsWithoutRemovingLegacyFallback() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+        let floatingActions = try sourceSection(
+            placeProfile,
+            after: "struct PlaceProfileFloatingActions: View {",
+            before: "private struct PlacePhotoGalleryViewerRoute: Identifiable {"
+        )
+
+        XCTAssertTrue(fullView.contains("if !usesFloatingActions, action != .none"))
+        XCTAssertTrue(fullView.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
+        XCTAssertTrue(fullView.contains("if usesFloatingActions, !floatingActions.isEmpty"))
+        XCTAssertTrue(fullView.contains("saveActionSnapshot?.usesFloatingActions == true"))
+        XCTAssertTrue(fullView.contains("saveActionSnapshot?.presentation.actions ?? []"))
+        XCTAssertTrue(placeProfile.contains("@State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?"))
+        XCTAssertTrue(placeProfile.contains("_saveActionSnapshot = State(initialValue: saveActionSnapshot)"))
+        XCTAssertTrue(floatingActions.contains("dynamicTypeSize.isAccessibilitySize"))
+        XCTAssertTrue(floatingActions.contains(".frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)"))
+        XCTAssertTrue(floatingActions.contains("WanderTheme.surfaceBone.color.ignoresSafeArea(edges: .bottom)"))
+        XCTAssertTrue(floatingActions.contains("RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)"))
+        XCTAssertTrue(floatingActions.contains(".stroke(WanderTheme.borderHairline.color, lineWidth: 1)"))
+        XCTAssertTrue(floatingActions.contains(".accessibilityLabel(action.title)"))
+        XCTAssertTrue(floatingActions.contains(".accessibilityAddTraits(action.isSelected ? .isSelected : [])"))
+
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertTrue(mapScreen.contains("saveActionSnapshot: saveActionSnapshot("))
+        XCTAssertTrue(mapScreen.contains("onFloatingAction: { saveAction in"))
+        XCTAssertTrue(mapScreen.contains("performFloatingAction(saveAction, for: selectedPlace)"))
+        XCTAssertTrue(mapScreen.contains(".preselectingStatus(status)"))
+        XCTAssertTrue(mapScreen.contains("resolvedFlagValue: backend.featureFlag("))
+        XCTAssertTrue(mapScreen.contains(".placeProfileSaveTrayV1"))
+    }
+
     func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")

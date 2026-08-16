@@ -4,6 +4,89 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    @MainActor
+    func testFloatingActionsStackOnlyForMultipleAccessibilitySizeActions() {
+        XCTAssertFalse(
+            PlaceProfileFloatingActions.shouldStackActions(
+                isAccessibilitySize: false,
+                actionCount: 2
+            )
+        )
+        XCTAssertFalse(
+            PlaceProfileFloatingActions.shouldStackActions(
+                isAccessibilitySize: true,
+                actionCount: 1
+            )
+        )
+        XCTAssertTrue(
+            PlaceProfileFloatingActions.shouldStackActions(
+                isAccessibilitySize: true,
+                actionCount: 2
+            )
+        )
+        XCTAssertEqual(PlaceProfileFloatingActions.minimumActionHeight, 48)
+    }
+
+    func testFloatingStatusSelectionStartsTheExistingSaveSheetOnDetails() {
+        let candidate = PlaceCandidate(
+            id: "candidate-floating-actions",
+            name: "Maru Coffee",
+            category: "coffee shop",
+            address: "1936 Hillhurst Ave, Los Angeles, CA",
+            latitude: 34.10662,
+            longitude: -118.28762,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-maru",
+            confidence: 0.95
+        )
+        let base = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+
+        let checkIn = base.preselectingStatus(.been)
+        XCTAssertEqual(checkIn.initialStatus, .been)
+        XCTAssertFalse(checkIn.requiresStatusConfirmation)
+        XCTAssertTrue(checkIn.startsOnDetails)
+
+        let wanna = base.preselectingStatus(.wannaGo)
+        XCTAssertEqual(wanna.initialStatus, .wannaGo)
+        XCTAssertFalse(wanna.requiresStatusConfirmation)
+        XCTAssertTrue(wanna.startsOnDetails)
+    }
+
+    func testFloatingStatusSelectionPreservesExistingWannaConversionSemantics() {
+        let currentUser = profile(id: "user_current", handle: "current")
+        let currentWanna = summary(
+            owner: currentUser,
+            place: place(id: "place_existing_wanna", category: "coffee"),
+            status: .wannaGo,
+            ratingScore: nil,
+            tags: []
+        ).visiblePlace
+        let base = MapPlaceSaveContext.reselectCurrentUserSave(
+            currentWanna,
+            defaultVisibility: .followers,
+            attributes: [],
+            latestVisit: nil
+        )
+
+        let checkIn = base.preselectingStatus(.been)
+        guard case .addVisit = checkIn.mode else {
+            return XCTFail("A current Wanna should use the existing conversion-to-check-in path")
+        }
+        XCTAssertEqual(checkIn.initialStatus, .been)
+        XCTAssertTrue(checkIn.startsOnDetails)
+
+        let wanna = base.preselectingStatus(.wannaGo)
+        guard case .editWant = wanna.mode else {
+            return XCTFail("Selecting the active Wanna should reopen its existing editor")
+        }
+        XCTAssertEqual(wanna.initialStatus, .wannaGo)
+        XCTAssertTrue(wanna.startsOnDetails)
+    }
+
     func testCandidateProfilePreservesProviderPhotoIdentityAndChooseAction() {
         let candidate = PlaceCandidate(
             id: "candidate-maru",

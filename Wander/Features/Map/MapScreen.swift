@@ -1473,6 +1473,9 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedSearchCandidate),
+                saveActionSnapshot: saveActionSnapshot(
+                    saves: saveSummaries(for: selectedSearchCandidate)
+                ),
                 usesInteractiveHorizontalDismissal: true,
                 onBack: {
                     collapseSelectedPlaceProfile()
@@ -1480,6 +1483,15 @@ struct MapScreen: View {
                 onAction: {
                     collapseSelectedPlaceProfile {
                         performAction(
+                            for: selectedSearchCandidate,
+                            defaultVisibility: store.defaultVisibility
+                        )
+                    }
+                },
+                onFloatingAction: { saveAction in
+                    dismissPlaceProfileThen {
+                        performFloatingAction(
+                            saveAction,
                             for: selectedSearchCandidate,
                             defaultVisibility: store.defaultVisibility
                         )
@@ -1493,6 +1505,9 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: action(for: selectedPlace),
+                saveActionSnapshot: saveActionSnapshot(
+                    saves: saveSummaries(for: selectedPlace)
+                ),
                 usesInteractiveHorizontalDismissal: true,
                 onBack: {
                     collapseSelectedPlaceProfile()
@@ -1500,6 +1515,11 @@ struct MapScreen: View {
                 onAction: {
                     collapseSelectedPlaceProfile {
                         performAction(for: selectedPlace)
+                    }
+                },
+                onFloatingAction: { saveAction in
+                    dismissPlaceProfileThen {
+                        performFloatingAction(saveAction, for: selectedPlace)
                     }
                 }
             )
@@ -1551,6 +1571,28 @@ struct MapScreen: View {
         } completion: {
             completion?()
         }
+    }
+
+    private func saveActionSnapshot(
+        saves: [PlaceSaveSummary]
+    ) -> PlaceProfileSaveActionSnapshot {
+        PlaceProfileSaveActionPolicy.snapshot(
+            state: PlaceProfileSaveActionPolicy.state(
+                saves: saves,
+                currentUserID: store.currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: walkthroughs.activeSurface == .placeDetail
+            ),
+            isSignedIn: auth.isSignedIn,
+            resolvedFlagValue: backend.featureFlag(
+                .placeProfileSaveTrayV1,
+                for: store.currentUser.id
+            )
+        )
+    }
+
+    private func dismissPlaceProfileThen(_ action: @MainActor @escaping () -> Void) {
+        collapseSelectedPlaceProfile(completion: action)
     }
 
     private func submitMapSearch() {
@@ -1930,6 +1972,44 @@ struct MapScreen: View {
         case .choose, .none:
             break
         }
+    }
+
+    private func performFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for visiblePlace: VisiblePlace
+    ) {
+        guard let status = saveAction.destinationStatus else { return }
+
+        let context: MapPlaceSaveContext
+        if let currentUserSave = currentUserSave(matching: visiblePlace) {
+            context = MapPlaceSaveContext.reselectCurrentUserSave(
+                currentUserSave,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: store.attributes(for: currentUserSave.userPlace.id),
+                latestVisit: store.visits(for: currentUserSave.userPlace.id).first
+            )
+        } else {
+            context = MapPlaceSaveContext.addVisiblePlace(
+                visiblePlace,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: store.attributes(for: visiblePlace.userPlace.id)
+            )
+        }
+        mapSaveFlow = context.preselectingStatus(status)
+    }
+
+    private func performFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for candidate: PlaceCandidate,
+        defaultVisibility: PlaceVisibility
+    ) {
+        guard let status = saveAction.destinationStatus else { return }
+        mapSaveFlow = addCandidateContext(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: defaultVisibility
+        )
+        .preselectingStatus(status)
     }
 
     private func performAction(
@@ -5011,6 +5091,31 @@ struct MapPlaceSaveContext: Identifiable {
             attributes: existingCurrentUserSave.attributes,
             latestVisit: existingLatestVisit,
             initialPhotoAttachments: initialPhotoAttachments
+        )
+    }
+
+    func preselectingStatus(_ selection: PlaceStatus) -> MapPlaceSaveContext {
+        if existingCurrentUserSave != nil {
+            return resolvingExistingSave(selection: selection)
+        }
+
+        guard case .add = mode else { return self }
+        return MapPlaceSaveContext(
+            candidate: candidate,
+            mode: mode,
+            requiresStatusConfirmation: false,
+            hasPriorCheckIn: hasPriorCheckIn,
+            initialStatus: selection,
+            initialVisibility: initialVisibility,
+            initialRatingScore: selection == .been ? initialRatingScore : nil,
+            initialNote: initialNote,
+            initialPlannedDate: selection == .wannaGo ? initialPlannedDate : nil,
+            initialAnswers: initialAnswers,
+            initialPersonalLabels: initialPersonalLabels,
+            initialCuisine: initialCuisine,
+            initialPhotoAttachments: initialPhotoAttachments,
+            existingCurrentUserSave: nil,
+            existingLatestVisit: existingLatestVisit
         )
     }
 

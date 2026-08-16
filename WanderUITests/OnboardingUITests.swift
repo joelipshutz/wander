@@ -1314,6 +1314,48 @@ final class OnboardingUITests: XCTestCase {
         add(collapsedScreenshot)
     }
 
+    func testFloatingPlaceActionsStayVisibleAndOpenThePreselectedLegacyEditor() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Woodcat Coffee",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let checkInAgain = app.buttons["Check in again"].firstMatch
+        let editHistory = app.buttons["Edit / history"].firstMatch
+        XCTAssertTrue(checkInAgain.waitForExistence(timeout: 5))
+        XCTAssertTrue(editHistory.waitForExistence(timeout: 2))
+        XCTAssertTrue(checkInAgain.isHittable)
+        XCTAssertTrue(editHistory.isHittable)
+
+        let topScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        topScreenshot.name = "Floating place actions at profile top"
+        topScreenshot.lifetime = .keepAlways
+        add(topScreenshot)
+
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertTrue(checkInAgain.isHittable)
+        XCTAssertTrue(editHistory.isHittable)
+
+        let deepScrollScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        deepScrollScreenshot.name = "Floating place actions after deep scroll"
+        deepScrollScreenshot.lifetime = .keepAlways
+        add(deepScrollScreenshot)
+
+        checkInAgain.tap()
+        let slider = app.descendants(matching: .any)["place-rating-slider"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 4))
+        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+    }
+
     func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [

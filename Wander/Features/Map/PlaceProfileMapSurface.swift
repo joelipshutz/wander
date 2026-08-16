@@ -66,7 +66,9 @@ struct PlaceProfileFullScreen: View {
     let usesInteractiveHorizontalDismissal: Bool
     let onBack: () -> Void
     let onAction: () -> Void
+    let onFloatingAction: (PlaceProfileSaveAction) -> Void
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
 
     init(
         place: PlaceSheetPlace,
@@ -74,10 +76,12 @@ struct PlaceProfileFullScreen: View {
         tasteSaves: [PlaceSaveSummary],
         currentUserID: String,
         action: PlaceSheetAction,
+        saveActionSnapshot: PlaceProfileSaveActionSnapshot? = nil,
         initialSection: PlaceProfileInitialSection = .top,
         usesInteractiveHorizontalDismissal: Bool = false,
         onBack: @escaping () -> Void,
-        onAction: @escaping () -> Void
+        onAction: @escaping () -> Void,
+        onFloatingAction: ((PlaceProfileSaveAction) -> Void)? = nil
     ) {
         self.place = place
         self.saves = saves
@@ -88,6 +92,8 @@ struct PlaceProfileFullScreen: View {
         self.usesInteractiveHorizontalDismissal = usesInteractiveHorizontalDismissal
         self.onBack = onBack
         self.onAction = onAction
+        self.onFloatingAction = onFloatingAction ?? { _ in onAction() }
+        _saveActionSnapshot = State(initialValue: saveActionSnapshot)
     }
 
     private var presentation: PlaceProfilePresentation {
@@ -118,9 +124,11 @@ struct PlaceProfileFullScreen: View {
             saves: saves,
             currentUserID: currentUserID,
             action: action,
+            saveActionSnapshot: saveActionSnapshot,
             initialSection: initialSection,
             onBack: onBack,
-            onAction: onAction
+            onAction: onAction,
+            onFloatingAction: onFloatingAction
         )
         .preferredColorScheme(.light)
         .navigationBarBackButtonHidden(true)
@@ -599,9 +607,11 @@ private struct PlaceProfileFullView: View {
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     let action: PlaceSheetAction
+    let saveActionSnapshot: PlaceProfileSaveActionSnapshot?
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
+    let onFloatingAction: (PlaceProfileSaveAction) -> Void
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
@@ -616,6 +626,7 @@ private struct PlaceProfileFullView: View {
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
     @State private var discoveredReservationAction: PlaceExternalAction?
     @State private var recoveredBusinessMetadata: PlaceBusinessMetadata?
+    @State private var floatingActivityScrollRequest = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -653,7 +664,7 @@ private struct PlaceProfileFullView: View {
                                 .id(WalkthroughTargetID.placeRatings)
                                 .walkthroughTarget(.placeRatings)
 
-                            if action != .none {
+                            if !usesFloatingActions, action != .none {
                                 primaryPlaceAction
                             }
 
@@ -686,6 +697,11 @@ private struct PlaceProfileFullView: View {
                     .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                         scrollToWalkthroughTarget(target, using: scrollProxy)
                     }
+                    .onChange(of: floatingActivityScrollRequest) { _, _ in
+                        withAnimation(.easeInOut(duration: 0.24)) {
+                            scrollProxy.scrollTo(PlaceProfileScrollAnchor.activity, anchor: .top)
+                        }
+                    }
                 }
                 .background(WanderTheme.surfaceBone.color)
             }
@@ -696,6 +712,14 @@ private struct PlaceProfileFullView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if usesFloatingActions, !floatingActions.isEmpty {
+                PlaceProfileFloatingActions(
+                    actions: floatingActions,
+                    onAction: handleFloatingAction
+                )
+            }
+        }
         .navigationTitle(place.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
@@ -711,7 +735,7 @@ private struct PlaceProfileFullView: View {
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if action != .none {
+                if !usesFloatingActions, action != .none {
                     Button(action: onAction) {
                         Label(action.accessibilityLabel, systemImage: action.systemImage)
                             .labelStyle(.iconOnly)
@@ -755,6 +779,22 @@ private struct PlaceProfileFullView: View {
                 onPhotoLoadFailure: handlePhotoLoadFailure
             )
         }
+    }
+
+    private var usesFloatingActions: Bool {
+        saveActionSnapshot?.usesFloatingActions == true
+    }
+
+    private var floatingActions: [PlaceProfileSaveAction] {
+        saveActionSnapshot?.presentation.actions ?? []
+    }
+
+    private func handleFloatingAction(_ action: PlaceProfileSaveAction) {
+        if action.kind == .editHistory {
+            floatingActivityScrollRequest += 1
+            return
+        }
+        onFloatingAction(action)
     }
 
     private func scrollToWalkthroughTarget(
@@ -1373,6 +1413,119 @@ private struct PlaceProfileFullView: View {
             .font(.system(size: 11, weight: .black))
             .textCase(.uppercase)
             .foregroundStyle(WanderTheme.textMuted.color)
+    }
+}
+
+struct PlaceProfileFloatingActions: View {
+    static let minimumActionHeight: CGFloat = 48
+
+    let actions: [PlaceProfileSaveAction]
+    let onAction: (PlaceProfileSaveAction) -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        Group {
+            if usesVerticalLayout {
+                VStack(spacing: WanderTheme.spacing2) {
+                    actionButtons
+                }
+            } else {
+                HStack(spacing: WanderTheme.spacing2) {
+                    actionButtons
+                }
+            }
+        }
+        .padding(WanderTheme.spacing2)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSheet))
+        .overlay {
+            RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
+                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+        .shadow(color: WanderTheme.textInk.color.opacity(0.09), radius: 14, y: -5)
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.vertical, WanderTheme.spacing2)
+        .background(WanderTheme.surfaceBone.color.ignoresSafeArea(edges: .bottom))
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        ForEach(actions) { action in
+            Button {
+                onAction(action)
+            } label: {
+                HStack(spacing: WanderTheme.spacing1) {
+                    Image(systemName: systemImage(for: action))
+                        .accessibilityHidden(true)
+                    Text(action.title)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                    if action.isSelected {
+                        Image(systemName: "checkmark")
+                            .accessibilityHidden(true)
+                    }
+                }
+                .font(.system(size: 15, weight: .bold))
+                .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
+                .padding(.horizontal, WanderTheme.spacing2)
+                .contentShape(Capsule())
+                .background(actionBackground(for: action))
+                .foregroundStyle(actionForeground(for: action))
+                .clipShape(Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(actionBorder(for: action), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(action.title)
+            .accessibilityAddTraits(action.isSelected ? .isSelected : [])
+        }
+    }
+
+    private var usesVerticalLayout: Bool {
+        Self.shouldStackActions(
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+            actionCount: actions.count
+        )
+    }
+
+    static func shouldStackActions(isAccessibilitySize: Bool, actionCount: Int) -> Bool {
+        isAccessibilitySize && actionCount > 1
+    }
+
+    private func systemImage(for action: PlaceProfileSaveAction) -> String {
+        switch action.kind {
+        case .checkIn:
+            "checkmark.circle"
+        case .wanna:
+            action.isSelected ? "bookmark.fill" : "bookmark"
+        case .editHistory:
+            "clock.arrow.circlepath"
+        }
+    }
+
+    private func actionBackground(for action: PlaceProfileSaveAction) -> Color {
+        if action.kind == .checkIn {
+            return WanderTheme.terracotta.color
+        }
+        if action.isSelected {
+            return WanderTheme.terracottaTint.color
+        }
+        return WanderTheme.surfaceRaised.color
+    }
+
+    private func actionForeground(for action: PlaceProfileSaveAction) -> Color {
+        action.kind == .checkIn
+            ? WanderTheme.textOnAction.color
+            : WanderTheme.textInk.color
+    }
+
+    private func actionBorder(for action: PlaceProfileSaveAction) -> Color {
+        action.kind == .checkIn
+            ? WanderTheme.terracotta.color
+            : WanderTheme.borderHairline.color
     }
 }
 
