@@ -32,9 +32,21 @@ This reads the hosted corpus in a read-only transaction and writes ignored local
 
 The pool unions candidates from all three pipelines, randomizes their presentation, and hides which system returned each place. Replace every `?` in `real-judgments.md` with `0`, `1`, `2`, or `3`; the completed file becomes the real qrels input for the next scorecard.
 
+Score the completed blind pool without querying Supabase or regenerating embeddings:
+
+```bash
+npm --prefix scripts run relevance:score-real -- \
+  --key scripts/relevance-lab/output/real-pool-key.json \
+  --scores scripts/relevance-lab/output/real-scores.txt \
+  --write-report scripts/relevance-lab/output/real-scorecard.md \
+  --write-json scripts/relevance-lab/output/real-scorecard.json
+```
+
+The scorer requires one grade for every pooled candidate and reconstructs each hidden top-five ranking from the machine key. It reports nDCG@5 plus simple top-result and wrong-result guardrails. Scoring is entirely local; the judgments and machine key remain ignored.
+
 ## Decision rule
 
-Vectors earn a pgvector follow-up only when the hybrid pipeline improves semantic-query nDCG@5 by at least 0.05 over explicit reranking and does not regress named-person nDCG@5 by more than 0.02. That follow-up still needs anonymized real judgments before app integration.
+On the real blind pool, vectors earn a pgvector follow-up only when the hybrid pipeline improves semantic-query nDCG@5 by at least 0.05 over explicit reranking and does not regress non-semantic nDCG@5 by more than 0.02. Passing this gate keeps vectors as an optional candidate source; it does not approve fixed hybrid weights for production.
 
 This lab tests place/query embeddings, not learned people embeddings. Personalization uses explicit, inspectable taste and relationship features. A people-vector experiment is deferred until real interaction data can support honest offline judgments.
 
