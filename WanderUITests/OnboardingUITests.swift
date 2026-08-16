@@ -496,7 +496,7 @@ final class OnboardingUITests: XCTestCase {
         done.tap()
 
         let more = app.buttons["map.filter.more"]
-        XCTAssertTrue((more.value as? String)?.contains("1 filtered section") == true)
+        XCTAssertTrue((more.value as? String)?.contains("1 selected filter") == true)
 
         app.buttons["map.filter.you"].tap()
         XCTAssertTrue((more.value as? String)?.contains("No additional filters") == true)

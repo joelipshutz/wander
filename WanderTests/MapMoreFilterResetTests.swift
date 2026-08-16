@@ -2,6 +2,63 @@ import XCTest
 @testable import Wander
 
 final class MapMoreFilterResetTests: XCTestCase {
+    func testBadgeCountsEverySelectedCategoryPersonAndStatus() {
+        let eightSelections = MapMoreFilterSelection(
+            categories: [
+                WanderPlaceCategory.coffeeTeaSweets,
+                WanderPlaceCategory.barsNightlife,
+                WanderPlaceCategory.outdoorsNature,
+            ],
+            people: ["user_1", "user_2", "user_3", "user_4"],
+            status: .checkIns
+        )
+        let fiveSelections = MapMoreFilterSelection(
+            categories: [WanderPlaceCategory.restaurantsFood],
+            people: ["user_1", "user_2", "user_3"],
+            status: .wanna
+        )
+
+        XCTAssertEqual(eightSelections.activeOptionCount, 8)
+        XCTAssertEqual(fiveSelections.activeOptionCount, 5)
+    }
+
+    func testBadgeCountDecreasesAsOptionsAreDeselected() {
+        var selection = MapMoreFilterSelection(
+            categories: [
+                WanderPlaceCategory.coffeeTeaSweets,
+                WanderPlaceCategory.barsNightlife,
+            ],
+            people: ["user_1"],
+            status: .checkIns
+        )
+
+        XCTAssertEqual(selection.activeOptionCount, 4)
+
+        selection.toggleCategory(WanderPlaceCategory.barsNightlife)
+        XCTAssertEqual(selection.activeOptionCount, 3)
+
+        selection.togglePerson("user_1")
+        XCTAssertEqual(selection.activeOptionCount, 2)
+
+        selection.status = .all
+        XCTAssertEqual(selection.activeOptionCount, 1)
+    }
+
+    @MainActor
+    func testMorePanelUsesDeliberateMotionTiming() throws {
+        XCTAssertEqual(MapMoreFilterMotionStyle.presentDuration, 0.46, accuracy: 0.001)
+        XCTAssertEqual(MapMoreFilterMotionStyle.dismissDuration, 0.36, accuracy: 0.001)
+        XCTAssertGreaterThan(MapMoreFilterMotionStyle.dismissDuration, 0.16)
+
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertTrue(map.contains("MapMoreFilterMotionStyle.panelTransition"))
+    }
+
     func testOtherTabResetIntervalIsThreeMinutes() {
         XCTAssertEqual(MapMoreFilterResetPolicy.otherTabInterval, 180)
     }

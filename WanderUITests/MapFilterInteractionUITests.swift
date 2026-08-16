@@ -45,7 +45,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         search.tap()
         XCTAssertTrue(panel.waitForNonExistence(timeout: 2))
         app.buttons["map.searchCancel"].tap()
-        assertOneMoreSection(in: app)
+        assertOneSelectedFilter(in: app)
 
         app.buttons["map.filter.more"].tap()
         XCTAssertTrue(panel.waitForExistence(timeout: 2))
@@ -53,7 +53,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(nearby.isHittable)
         nearby.tap()
         XCTAssertTrue(panel.waitForNonExistence(timeout: 2))
-        assertOneMoreSection(in: app)
+        assertOneSelectedFilter(in: app)
 
         app.buttons["map.filter.more"].tap()
         XCTAssertTrue(panel.waitForExistence(timeout: 2))
@@ -64,7 +64,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let closeAdd = app.buttons["Close add place"]
         XCTAssertTrue(closeAdd.waitForExistence(timeout: 3))
         closeAdd.tap()
-        assertOneMoreSection(in: app)
+        assertOneSelectedFilter(in: app)
 
         app.buttons["map.filter.more"].tap()
         XCTAssertTrue(panel.waitForExistence(timeout: 2))
@@ -75,7 +75,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(feed.isSelected)
 
         app.buttons["Map"].tap()
-        assertOneMoreSection(in: app)
+        assertOneSelectedFilter(in: app)
     }
 
     func testThreeMinutesOnAnotherTabResetsMoreFilters() {
@@ -103,9 +103,9 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertEqual(demo.value as? String, "Selected")
     }
 
-    private func assertOneMoreSection(in app: XCUIApplication) {
+    private func assertOneSelectedFilter(in app: XCUIApplication) {
         XCTAssertTrue(
-            (app.buttons["map.filter.more"].value as? String)?.contains("1 filtered section") == true
+            (app.buttons["map.filter.more"].value as? String)?.contains("1 selected filter") == true
         )
     }
 }

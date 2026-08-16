@@ -532,12 +532,10 @@ struct MapScreen: View {
                                 }
 
                                 Button {
-                                    withAnimation(.easeInOut(duration: 0.16)) {
-                                        isMoreFiltersPresented.toggle()
-                                    }
+                                    toggleMoreFilters()
                                 } label: {
                                     MapMoreFilterChip(
-                                        activeSectionCount: mapFilterState.more.activeSectionCount,
+                                        selectedOptionCount: mapFilterState.more.activeOptionCount,
                                         isExpanded: isMoreFiltersPresented
                                     )
                                 }
@@ -560,7 +558,11 @@ struct MapScreen: View {
                                     .id(mapFilterState.source)
                                     .padding(.trailing, WanderTheme.spacing3)
                                     .offset(y: 52)
-                                    .transition(.move(edge: .top).combined(with: .opacity))
+                                    .transition(
+                                        reduceMotion
+                                            ? .opacity
+                                            : MapMoreFilterMotionStyle.panelTransition
+                                    )
                                     .zIndex(20)
                                 }
                             }
@@ -911,8 +913,25 @@ struct MapScreen: View {
 
     private func dismissMoreFilters() {
         guard isMoreFiltersPresented else { return }
-        withAnimation(.easeInOut(duration: 0.16)) {
+        withAnimation(
+            reduceMotion
+                ? MapMoreFilterMotionStyle.reducedMotionAnimation
+                : MapMoreFilterMotionStyle.dismissAnimation
+        ) {
             isMoreFiltersPresented = false
+        }
+    }
+
+    private func toggleMoreFilters() {
+        let willPresent = !isMoreFiltersPresented
+        withAnimation(
+            reduceMotion
+                ? MapMoreFilterMotionStyle.reducedMotionAnimation
+                : willPresent
+                    ? MapMoreFilterMotionStyle.presentAnimation
+                    : MapMoreFilterMotionStyle.dismissAnimation
+        ) {
+            isMoreFiltersPresented = willPresent
         }
     }
 
@@ -2862,6 +2881,28 @@ enum MapMoreFilterResetPolicy {
     }
 }
 
+@MainActor
+enum MapMoreFilterMotionStyle {
+    static let presentDuration: TimeInterval = 0.46
+    static let dismissDuration: TimeInterval = 0.36
+
+    static let presentAnimation = Animation.spring(
+        duration: presentDuration,
+        bounce: 0.18
+    )
+    static let dismissAnimation = Animation.easeInOut(duration: dismissDuration)
+    static let reducedMotionAnimation = Animation.easeOut(duration: 0.12)
+
+    static let panelTransition = AnyTransition.asymmetric(
+        insertion: .offset(x: 8, y: -22)
+            .combined(with: .scale(scale: 0.82, anchor: .topTrailing))
+            .combined(with: .opacity),
+        removal: .offset(x: 24, y: -38)
+            .combined(with: .scale(scale: 0.24, anchor: .topTrailing))
+            .combined(with: .opacity)
+    )
+}
+
 enum MapPinEntranceStyle {
     static let fadeOutDuration: TimeInterval = 0.06
     static let springDuration: TimeInterval = 0.28
@@ -2971,6 +3012,12 @@ struct MapMoreFilterSelection: Equatable {
     var activeSectionCount: Int {
         (categories.isEmpty ? 0 : 1)
             + (people.isEmpty ? 0 : 1)
+            + (status == .all ? 0 : 1)
+    }
+
+    var activeOptionCount: Int {
+        categories.count
+            + people.count
             + (status == .all ? 0 : 1)
     }
 
@@ -3809,11 +3856,11 @@ private struct MapSourceFilterChip: View {
 }
 
 private struct MapMoreFilterChip: View {
-    let activeSectionCount: Int
+    let selectedOptionCount: Int
     let isExpanded: Bool
 
     private var isActive: Bool {
-        activeSectionCount > 0
+        selectedOptionCount > 0
     }
 
     var body: some View {
@@ -3821,12 +3868,14 @@ private struct MapMoreFilterChip: View {
             Image(systemName: isExpanded ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                 .font(.system(size: 11, weight: .bold))
                 .overlay(alignment: .topTrailing) {
-                    if activeSectionCount > 0 {
-                        Text("\(activeSectionCount)")
-                            .font(.system(size: 7, weight: .black))
+                    if selectedOptionCount > 0 {
+                        Text("\(selectedOptionCount)")
+                            .font(.system(size: 7, weight: .black, design: .rounded))
+                            .monospacedDigit()
                             .foregroundStyle(.white)
-                            .frame(width: 12, height: 12)
-                            .background(Color(uiColor: .systemRed), in: Circle())
+                            .frame(minWidth: 12, minHeight: 12)
+                            .padding(.horizontal, selectedOptionCount > 9 ? 2 : 0)
+                            .background(Color.black, in: Capsule())
                             .offset(x: 6, y: -5)
                     }
                 }
@@ -3846,11 +3895,11 @@ private struct MapMoreFilterChip: View {
         )
         .accessibilityLabel("More map filters")
         .accessibilityValue(
-            activeSectionCount == 0
+            selectedOptionCount == 0
                 ? "No additional filters"
-                : activeSectionCount == 1
-                    ? "1 filtered section"
-                    : "\(activeSectionCount) filtered sections"
+                : selectedOptionCount == 1
+                    ? "1 selected filter"
+                    : "\(selectedOptionCount) selected filters"
         )
     }
 }
