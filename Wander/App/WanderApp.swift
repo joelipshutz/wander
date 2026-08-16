@@ -90,13 +90,20 @@ struct WanderApp: App {
                             handle: "joe"
                         )
                     )
-                )
+                ),
+                analytics: contextualAnalytics
             )
         } else {
-            authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+            authStore = AuthSessionStore(
+                provider: ClerkAuthService(configuration: configuration),
+                analytics: contextualAnalytics
+            )
         }
         #else
-        authStore = AuthSessionStore(provider: ClerkAuthService(configuration: configuration))
+        authStore = AuthSessionStore(
+            provider: ClerkAuthService(configuration: configuration),
+            analytics: contextualAnalytics
+        )
         #endif
         let backendStore = usesSimulatorTestSession
             ? WanderBackend()

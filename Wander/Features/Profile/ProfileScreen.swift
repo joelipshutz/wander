@@ -9,8 +9,10 @@ struct ProfileScreen: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var showsSettings = false
+    @State private var showsAccountSwitcher = false
     @State private var showsProfilePhotoMenu = false
     @State private var showsProfilePhotoLibrary = false
     @State private var showsProfileCamera = false
@@ -84,6 +86,7 @@ struct ProfileScreen: View {
                     walkthroughs.perform(.profileSettings)
                     showsSettings = true
                 },
+                accountAction: { showsAccountSwitcher = true },
                 shareAction: {
                     walkthroughs.perform(.profileShare)
                 },
@@ -129,6 +132,21 @@ struct ProfileScreen: View {
                             .environmentObject(backend)
                             .environmentObject(pushNotifications)
                     }
+                }
+                .sheet(isPresented: $showsAccountSwitcher) {
+                    AccountSwitcherSheet(
+                        flushCurrentAccount: {
+                            store.flushPersistence()
+                            placeSaveDraftStore.flush()
+                        },
+                        addAccount: {
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(250))
+                                auth.beginSignIn(mode: .signInOrUp)
+                            }
+                        }
+                    )
+                    .environmentObject(auth)
                 }
                 .sheet(isPresented: $showsProfileCamera) {
                     ProfileCameraPicker { image in
@@ -760,7 +778,7 @@ struct ProfileScreen: View {
         defer { isProfilePhotoSaving = false }
 
         do {
-            let url = try ProfileAvatarStorage.live.writeAvatarData(jpegData)
+            let url = try ProfileAvatarStorage.live(for: store.currentUser.id).writeAvatarData(jpegData)
             store.updateCurrentUserAvatarURL(url.absoluteString)
             profilePhotoError = nil
         } catch {
@@ -797,7 +815,7 @@ struct ProfileScreen: View {
         }
 
         do {
-            try ProfileAvatarStorage.live.deleteAvatar()
+            try ProfileAvatarStorage.live(for: store.currentUser.id).deleteAvatar()
             store.updateCurrentUserAvatarURL(nil)
             profilePhotoError = nil
         } catch {
@@ -1073,6 +1091,7 @@ struct ProfileDetailView: View {
                             avatarAction: {},
                             editAction: {},
                             settingsAction: {},
+                            accountAction: nil,
                             shareAction: {},
                             relationshipAction: handleRelationshipAction,
                             backAction: { dismiss() },

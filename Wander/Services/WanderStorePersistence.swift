@@ -24,6 +24,10 @@ struct WanderStorePersistence {
             .appendingPathComponent("wander-store-v1.json")
     )
 
+    static func live(for userID: String) -> WanderStorePersistence {
+        coalescingFile(url: AccountStorageScope(userID: userID).storeURL)
+    }
+
     static func file(url: URL) -> WanderStorePersistence {
         WanderStorePersistence(
             load: {

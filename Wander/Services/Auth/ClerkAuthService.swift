@@ -61,6 +61,26 @@ final class ClerkAuthService: AuthSessionProviding {
         return true
     }
 
+    var availableSessions: [AuthSession] {
+        #if canImport(ClerkKit)
+        let activeSessionID = Clerk.shared.session?.id
+        return Clerk.shared.auth.sessions
+            .filter { Self.isActiveSessionStatus($0.status) && $0.user != nil }
+            .sorted { lhs, rhs in
+                if lhs.id == activeSessionID { return true }
+                if rhs.id == activeSessionID { return false }
+                return lhs.lastActiveAt > rhs.lastActiveAt
+            }
+            .compactMap { session in
+                session.user.map {
+                    Self.authSession(from: $0, providerSessionID: session.id)
+                }
+            }
+        #else
+        return state.session.map { [$0] } ?? []
+        #endif
+    }
+
     func sessionChanges() -> AsyncStream<AuthState> {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
@@ -85,8 +105,9 @@ final class ClerkAuthService: AuthSessionProviding {
                         break
                     case .signedOut, .accountDeleted:
                         guard let self else { return }
-                        self.applyTerminalSignedOutState()
-                        continuation.yield(.signedOut)
+                        let state = Self.currentClientState()
+                        self.applyTerminalObservedState(state)
+                        continuation.yield(state)
                     case .sessionChanged:
                         guard let self else { return }
                         let state = Self.currentClientState()
@@ -349,7 +370,74 @@ final class ClerkAuthService: AuthSessionProviding {
         #endif
     }
 
+    func activateSession(userID: String) async throws {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+        guard let session = Clerk.shared.auth.sessions.first(where: {
+            guard Self.isActiveSessionStatus($0.status), let user = $0.user else { return false }
+            return Self.resolvedUserID(
+                clerkUserID: user.id,
+                canonicalUserID: user.publicMetadata?[Self.canonicalUserIDMetadataKey]?.stringValue
+            ) == userID
+        }) else {
+            throw AuthSessionError.sessionUnavailable
+        }
+        try await Clerk.shared.auth.setActive(
+            sessionId: session.id,
+            organizationId: session.lastActiveOrganizationId
+        )
+        await refreshSession()
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
+    func removeSession(userID: String) async throws {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+        guard let session = Clerk.shared.auth.sessions.first(where: {
+            guard let user = $0.user else { return false }
+            return Self.resolvedUserID(
+                clerkUserID: user.id,
+                canonicalUserID: user.publicMetadata?[Self.canonicalUserIDMetadataKey]?.stringValue
+            ) == userID
+        }) else {
+            throw AuthSessionError.sessionUnavailable
+        }
+        let removedActiveSession = Clerk.shared.session?.id == session.id
+        try await Clerk.shared.auth.signOut(sessionId: session.id)
+        if removedActiveSession {
+            try await activateFirstRemainingSessionIfNeeded()
+        }
+        await refreshSession()
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
     func signOut() async throws {
+        #if canImport(ClerkKit)
+        guard configuration.isClerkConfigured else {
+            throw AuthSessionError.notConfigured
+        }
+        guard let activeSessionID = Clerk.shared.session?.id else {
+            sessionCache.save(nil)
+            state = .signedOut
+            return
+        }
+        try await Clerk.shared.auth.signOut(sessionId: activeSessionID)
+        try await activateFirstRemainingSessionIfNeeded()
+        await refreshSession()
+        #else
+        throw AuthSessionError.notConfigured
+        #endif
+    }
+
+    func signOutAll() async throws {
         #if canImport(ClerkKit)
         guard configuration.isClerkConfigured else {
             throw AuthSessionError.notConfigured
@@ -367,8 +455,8 @@ final class ClerkAuthService: AuthSessionProviding {
         guard configuration.isClerkConfigured else { throw AuthSessionError.notConfigured }
         guard let user = Clerk.shared.user else { throw AuthSessionError.notSignedIn }
         _ = try await user.delete()
-        sessionCache.save(nil)
-        state = .signedOut
+        try await activateFirstRemainingSessionIfNeeded()
+        await refreshSession()
         #else
         throw AuthSessionError.notConfigured
         #endif
@@ -453,6 +541,23 @@ final class ClerkAuthService: AuthSessionProviding {
         refreshGeneration &+= 1
         applyObservedClientState(.signedOut)
     }
+
+    func applyTerminalObservedState(_ state: AuthState) {
+        refreshGeneration &+= 1
+        applyObservedClientState(state)
+    }
+
+    private func activateFirstRemainingSessionIfNeeded() async throws {
+        guard Clerk.shared.session == nil,
+              let replacement = Clerk.shared.auth.sessions.first(where: {
+                  Self.isActiveSessionStatus($0.status) && $0.user != nil
+              })
+        else { return }
+        try await Clerk.shared.auth.setActive(
+            sessionId: replacement.id,
+            organizationId: replacement.lastActiveOrganizationId
+        )
+    }
     #endif
 
     #if canImport(ClerkKit)
@@ -500,7 +605,7 @@ final class ClerkAuthService: AuthSessionProviding {
               isActiveSessionStatus(session.status),
               let user = session.user
         else { return nil }
-        return authSession(from: user)
+        return authSession(from: user, providerSessionID: session.id)
     }
 
     private static func currentClientState() -> AuthState {
@@ -508,14 +613,14 @@ final class ClerkAuthService: AuthSessionProviding {
               isActiveSessionStatus(session.status),
               let user = session.user
         else { return .signedOut }
-        return .signedIn(authSession(from: user))
+        return .signedIn(authSession(from: user, providerSessionID: session.id))
     }
 
     static func isActiveSessionStatus(_ status: ClerkKit.Session.SessionStatus) -> Bool {
         status == .active
     }
 
-    private static func authSession(from user: User) -> AuthSession {
+    private static func authSession(from user: User, providerSessionID: String) -> AuthSession {
         let name = [user.firstName, user.lastName]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -525,6 +630,7 @@ final class ClerkAuthService: AuthSessionProviding {
                 clerkUserID: user.id,
                 canonicalUserID: user.publicMetadata?[canonicalUserIDMetadataKey]?.stringValue
             ),
+            providerSessionID: providerSessionID,
             displayName: name.isEmpty ? user.username : name,
             handle: user.username,
             email: user.primaryEmailAddress?.emailAddress,

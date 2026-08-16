@@ -157,7 +157,7 @@ struct ProfileEditScreen: View {
             let jpegData = try await Task.detached(priority: .userInitiated) {
                 try WanderImageProcessor.squareJPEGData(from: data)
             }.value
-            let localURL = try ProfileAvatarStorage.live.writeAvatarData(jpegData)
+            let localURL = try ProfileAvatarStorage.live(for: store.currentUser.id).writeAvatarData(jpegData)
             store.updateCurrentUserAvatarURL(localURL.absoluteString)
 
             if auth.isSignedIn, backend.canSyncProfileAvatars {

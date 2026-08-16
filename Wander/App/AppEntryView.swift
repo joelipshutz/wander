@@ -113,6 +113,7 @@ struct AppEntryView: View {
                     analytics: analytics,
                     parser: parser
                 )
+                .id(session.userID)
             case .recoverableFailure(_, let message, let canContinueOffline):
                 AppEntryRecoveryView(
                     title: "Your map is still here",

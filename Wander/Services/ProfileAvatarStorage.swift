@@ -148,6 +148,12 @@ struct ProfileAvatarStorage {
         )
     }
 
+    static func live(for userID: String) -> ProfileAvatarStorage {
+        ProfileAvatarStorage(
+            directoryURL: AccountStorageScope(userID: userID).profileAvatarDirectoryURL
+        )
+    }
+
     var avatarFileURL: URL {
         directoryURL.appendingPathComponent(Self.fileName, isDirectory: false)
     }
