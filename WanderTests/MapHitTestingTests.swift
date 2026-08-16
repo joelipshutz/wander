@@ -56,12 +56,14 @@ final class MapCoordinateCandidateTests: XCTestCase {
 }
 
 final class MapFilterSelectionTests: XCTestCase {
-    func testSourcePillsUseFeaturedAndFriendsContract() {
-        XCTAssertEqual(MapSource.allCases, [.featured, .friends])
+    func testSourcePillsUseFeaturedFriendsAndYouContract() {
+        XCTAssertEqual(MapSource.allCases, [.featured, .friends, .you])
         XCTAssertEqual(MapSource.featured.title, "Featured")
         XCTAssertEqual(MapSource.friends.title, "Friends")
+        XCTAssertEqual(MapSource.you.title, "You")
         XCTAssertEqual(MapSource.featured.systemImage, "sparkles")
         XCTAssertEqual(MapSource.friends.systemImage, "person.2.fill")
+        XCTAssertEqual(MapSource.you.systemImage, "person.fill")
         XCTAssertEqual(
             MapSource.featured.subtitle,
             "Featured shows you recommendations based on your taste"
@@ -69,6 +71,47 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(
             MapSource.friends.subtitle,
             "All places from everyone you follow"
+        )
+        XCTAssertEqual(
+            MapSource.you.subtitle,
+            "Only your check-ins and Wanna Go places"
+        )
+    }
+
+    func testSourceFilterRowFitsWithoutHorizontalScrolling() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let filterRow = try XCTUnwrap(
+            map.components(separatedBy: "if !isMapSearchFocused {").last?
+                .components(separatedBy: "if let mapFilterEmptyMessage").first
+        )
+
+        XCTAssertFalse(filterRow.contains("ScrollView(.horizontal"))
+        XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity)"))
+    }
+
+    func testMoreSectionsMatchTheActiveSource() {
+        XCTAssertFalse(MapMoreFilterPolicy.showsPeople(for: .featured))
+        XCTAssertFalse(MapMoreFilterPolicy.showsStatus(for: .featured))
+
+        XCTAssertTrue(MapMoreFilterPolicy.showsPeople(for: .friends))
+        XCTAssertTrue(MapMoreFilterPolicy.showsStatus(for: .friends))
+
+        XCTAssertFalse(MapMoreFilterPolicy.showsPeople(for: .you))
+        XCTAssertTrue(MapMoreFilterPolicy.showsStatus(for: .you))
+        XCTAssertEqual(MapMoreFilterPolicy.collapsedCategoryCount, 6)
+        XCTAssertEqual(MapMoreFilterPolicy.categories(showingAll: false).count, 6)
+        XCTAssertEqual(
+            MapMoreFilterPolicy.categories(showingAll: false),
+            Array(WanderPlaceCategory.editableCategories.prefix(6))
+        )
+        XCTAssertEqual(
+            MapMoreFilterPolicy.categories(showingAll: true),
+            WanderPlaceCategory.editableCategories
         )
     }
 
@@ -178,7 +221,7 @@ final class MapFilterSelectionTests: XCTestCase {
             refinements: MapMoreFilterSelection()
         )
 
-        XCTAssertEqual(Set(visible.map(\.id)), Set([ownCheckIn.id, followedWanna.id]))
+        XCTAssertEqual(Set(visible.map(\.id)), Set([followedWanna.id]))
     }
 
     func testFriendsSourceAndMoreSelectionsCombineAsIntersections() {
@@ -239,7 +282,7 @@ final class MapFilterSelectionTests: XCTestCase {
         )
     }
 
-    func testAllClearsOnlyItsOwnSectionAndSourceSwitchPreservesMore() {
+    func testAllClearsOnlyItsOwnSectionAndSourceSwitchClearsMore() {
         var state = MapFilterState()
         state.more.toggleCategory(WanderPlaceCategory.coffeeTeaSweets)
         state.more.togglePerson("user_ben")
@@ -253,10 +296,45 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(state.more.status, .checkIns)
         XCTAssertEqual(state.more.activeSectionCount, 2)
 
-        state.source = .friends
+        state.selectSource(.friends)
         XCTAssertEqual(state.source, .friends)
-        XCTAssertEqual(state.more.people, Set(["user_ben"]))
-        XCTAssertEqual(state.more.status, .checkIns)
+        XCTAssertTrue(state.more.categories.isEmpty)
+        XCTAssertTrue(state.more.people.isEmpty)
+        XCTAssertEqual(state.more.status, .all)
+        XCTAssertEqual(state.more.activeSectionCount, 0)
+    }
+
+    func testYouSourceIncludesOnlyOwnCheckInsAndWannaPlaces() {
+        let joe = profile(id: "user_joe")
+        let ben = profile(id: "user_ben")
+        let ownCheckIn = visiblePlace(owner: joe, name: "Joe Been", status: .been)
+        let ownWanna = visiblePlace(owner: joe, name: "Joe Wanna", longitude: -118.24, status: .wannaGo)
+        let friendCheckIn = visiblePlace(owner: ben, name: "Ben Been", longitude: -118.23, status: .been)
+
+        let visible = MapFilterSelection.ownPlaces(
+            from: [friendCheckIn, ownWanna, ownCheckIn],
+            currentUserID: joe.id,
+            refinements: MapMoreFilterSelection()
+        )
+
+        XCTAssertEqual(Set(visible.map(\.id)), Set([ownCheckIn.id, ownWanna.id]))
+    }
+
+    func testYouSourceCombinesCategoriesAndStatus() {
+        let joe = profile(id: "user_joe")
+        let ownCheckIn = visiblePlace(owner: joe, name: "Joe Been", status: .been)
+        let ownWanna = visiblePlace(owner: joe, name: "Joe Wanna", longitude: -118.24, status: .wannaGo)
+
+        let visible = MapFilterSelection.ownPlaces(
+            from: [ownWanna, ownCheckIn],
+            currentUserID: joe.id,
+            refinements: MapMoreFilterSelection(
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                status: .wanna
+            )
+        )
+
+        XCTAssertEqual(visible.map(\.id), [ownWanna.id])
     }
 
     private func profile(id: String) -> LocalProfile {
@@ -673,7 +751,7 @@ final class MapFeaturedSelectionTests: XCTestCase {
 }
 
 final class MapSocialOwnerSelectionTests: XCTestCase {
-    func testPeopleOptionsPutYouFirstThenEveryFollowedProfileAlphabetically() {
+    func testPeopleOptionsExcludeYouAndSortEveryFollowedProfileAlphabetically() {
         let joe = profile(id: "user_joe", displayName: "Joe")
         let juana = profile(id: "user_juana", displayName: "Juana")
         let ben = profile(id: "user_ben", displayName: "Ben")
@@ -683,8 +761,8 @@ final class MapSocialOwnerSelectionTests: XCTestCase {
             following: [juana, joe, ben, ben]
         )
 
-        XCTAssertEqual(options.map(\.id), [joe.id, ben.id, juana.id])
-        XCTAssertEqual(options.map(\.displayName), ["You", "Ben", "Juana"])
+        XCTAssertEqual(options.map(\.id), [ben.id, juana.id])
+        XCTAssertEqual(options.map(\.displayName), ["Ben", "Juana"])
     }
 
     private func profile(id: String, displayName: String) -> LocalProfile {

@@ -423,28 +423,44 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
 
 private struct WanderGlassPanelModifier: ViewModifier {
     let cornerRadius: CGFloat
+    let tone: WanderGlassTone
+    let isInteractive: Bool
+    let showsBorder: Bool
 
     @ViewBuilder
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular, in: shape)
+                .glassEffect(
+                    .regular
+                        .tint(tone.tint)
+                        .interactive(isInteractive),
+                    in: shape
+                )
                 .overlay {
-                    shape.stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
                 }
         } else {
             content
                 .background(.ultraThinMaterial, in: shape)
-                .background(WanderTheme.surfaceRaised.color.opacity(0.62), in: shape)
+                .background(tone.fallbackFill, in: shape)
                 .overlay {
-                    shape.stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
                 }
                 .shadow(
-                    color: WanderTheme.textInk.color.opacity(0.08),
-                    radius: 14,
+                    color: tone == .darkOverlay
+                        ? Color.black.opacity(0.34)
+                        : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
+                    radius: isInteractive ? 6 : 14,
                     x: 0,
-                    y: 7
+                    y: isInteractive ? 3 : 7
                 )
         }
     }
@@ -478,8 +494,20 @@ extension View {
         )
     }
 
-    func wanderGlassPanel(cornerRadius: CGFloat = WanderTheme.radiusLarge) -> some View {
-        modifier(WanderGlassPanelModifier(cornerRadius: cornerRadius))
+    func wanderGlassPanel(
+        cornerRadius: CGFloat = WanderTheme.radiusLarge,
+        tone: WanderGlassTone = .neutral,
+        interactive: Bool = false,
+        showsBorder: Bool = true
+    ) -> some View {
+        modifier(
+            WanderGlassPanelModifier(
+                cornerRadius: cornerRadius,
+                tone: tone,
+                isInteractive: interactive,
+                showsBorder: showsBorder
+            )
+        )
     }
 }
 

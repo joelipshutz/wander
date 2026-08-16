@@ -19,8 +19,10 @@ final class DefaultMapFilterSettingsUITests: XCTestCase {
 
         let featured = app.buttons["settings.map.defaultFilter.featured"]
         let friends = app.buttons["settings.map.defaultFilter.friends"]
+        let you = app.buttons["settings.map.defaultFilter.you"]
         XCTAssertTrue(featured.waitForExistence(timeout: 4))
         XCTAssertTrue(friends.exists)
+        XCTAssertTrue(you.exists)
         XCTAssertEqual(
             featured.label,
             "Featured. Featured shows you recommendations based on your taste"
@@ -29,12 +31,17 @@ final class DefaultMapFilterSettingsUITests: XCTestCase {
             friends.label,
             "Friends. All places from everyone you follow"
         )
+        XCTAssertEqual(
+            you.label,
+            "You. Only your check-ins and Wanna Go places"
+        )
         XCTAssertEqual(featured.value as? String, "Selected")
 
-        friends.tap()
+        you.tap()
 
-        XCTAssertEqual(friends.value as? String, "Selected")
+        XCTAssertEqual(you.value as? String, "Selected")
         XCTAssertEqual(featured.value as? String, "")
+        XCTAssertEqual(friends.value as? String, "")
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "Default map filter NUX descriptions"

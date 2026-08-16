@@ -402,7 +402,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(map.contains("if isMapSearchFocused {\n                                MapSearchCancelButton(action: cancelMapSearch)"))
         XCTAssertTrue(map.contains(".accessibilityIdentifier(\"map.searchCancel\")"))
-        XCTAssertTrue(map.contains("if !isMapSearchFocused {\n                            ScrollView(.horizontal"))
+        XCTAssertTrue(map.contains("if !isMapSearchFocused {\n                            HStack(spacing: WanderTheme.spacing1)"))
         XCTAssertTrue(map.contains(".ignoresSafeArea(.keyboard, edges: .bottom)"))
         let typeahead = try XCTUnwrap(
             map.components(separatedBy: "private struct MapTypeaheadList: View").last?
@@ -2565,6 +2565,13 @@ final class NavigationContractTests: XCTestCase {
                 from: ["Wander", "-WanderMapCaptureMode", "featured"]
             ).source,
             .featured
+        )
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapFilterState(
+                defaultSource: .featured,
+                from: ["Wander", "-WanderMapCaptureMode", "you"]
+            ).source,
+            .you
         )
         XCTAssertEqual(
             MapScreen.resolvedInitialMapFilterState(from: ["Wander", "-WanderMapCaptureMode", "trusted"]).source,
