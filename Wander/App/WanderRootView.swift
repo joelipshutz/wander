@@ -419,6 +419,7 @@ struct WanderRootView: View {
     private var tabRoot: some View {
         TabView(selection: tabSelection) {
             MapScreen(
+                defaultSource: store.defaultMapFilter,
                 presentationResetRequest: presentationResetRequest,
                 searchLaunchRequest: mapSearchLaunchRequest,
                 onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,

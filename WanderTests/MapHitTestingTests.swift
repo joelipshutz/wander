@@ -132,6 +132,21 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(state.more.activeSectionCount, 0)
     }
 
+    func testResetUsesTheConfiguredDefaultAndClearsMoreFilters() {
+        var state = MapFilterState(
+            source: .featured,
+            more: MapMoreFilterSelection(
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                people: ["user_ben"],
+                status: .checkIns
+            )
+        )
+
+        state.reset(to: .friends)
+
+        XCTAssertEqual(state, MapFilterState(source: .friends))
+    }
+
     func testAllInEveryMoreSectionAddsNoRefinement() {
         let joe = profile(id: "user_joe")
         let ben = profile(id: "user_ben")

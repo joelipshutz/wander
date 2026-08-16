@@ -2546,8 +2546,25 @@ final class NavigationContractTests: XCTestCase {
             .featured
         )
         XCTAssertEqual(
-            MapScreen.resolvedInitialMapFilterState(from: ["Wander", "-WanderMapCaptureMode", "friends"]).source,
+            MapScreen.resolvedInitialMapFilterState(
+                defaultSource: .friends,
+                from: ["Wander"]
+            ).source,
             .friends
+        )
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapFilterState(
+                defaultSource: .featured,
+                from: ["Wander", "-WanderMapCaptureMode", "friends"]
+            ).source,
+            .friends
+        )
+        XCTAssertEqual(
+            MapScreen.resolvedInitialMapFilterState(
+                defaultSource: .friends,
+                from: ["Wander", "-WanderMapCaptureMode", "featured"]
+            ).source,
+            .featured
         )
         XCTAssertEqual(
             MapScreen.resolvedInitialMapFilterState(from: ["Wander", "-WanderMapCaptureMode", "trusted"]).source,
@@ -2557,6 +2574,21 @@ final class NavigationContractTests: XCTestCase {
             MapScreen.resolvedInitialMoreFiltersPresentation(from: ["Wander", "-WanderMapMoreFiltersOpen"])
         )
         XCTAssertFalse(MapScreen.resolvedInitialMoreFiltersPresentation(from: ["Wander"]))
+    }
+
+    func testProfileSettingsExposePersistedDefaultMapFilterSelector() throws {
+        let settings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/ProfileSettingsViews.swift"
+            )
+        )
+
+        XCTAssertTrue(settings.contains("Label(\"default map filter\", systemImage: \"map\")"))
+        XCTAssertTrue(settings.contains("ForEach(MapSource.allCases)"))
+        XCTAssertTrue(settings.contains("get: { store.defaultMapFilter }"))
+        XCTAssertTrue(settings.contains("set: { store.defaultMapFilter = $0 }"))
+        XCTAssertTrue(settings.contains("settings.map.defaultFilter"))
+        XCTAssertTrue(settings.contains("Used whenever the map opens or resets on this device."))
     }
 
     @MainActor

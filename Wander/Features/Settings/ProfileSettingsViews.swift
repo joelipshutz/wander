@@ -28,6 +28,7 @@ struct ProfileSettingsHome: View {
         NavigationStack {
             List {
                 accountSection
+                mapSection
                 privacySection
                 supportSection
                 if isDebugSettingsEntitled {
@@ -153,6 +154,31 @@ struct ProfileSettingsHome: View {
             } label: {
                 Label("blocked and muted accounts", systemImage: "person.crop.circle.badge.xmark")
             }
+        }
+    }
+
+    private var mapSection: some View {
+        Section {
+            Picker(
+                selection: Binding(
+                    get: { store.defaultMapFilter },
+                    set: { store.defaultMapFilter = $0 }
+                )
+            ) {
+                ForEach(MapSource.allCases) { source in
+                    Label(source.title, systemImage: source.systemImage)
+                        .tag(source)
+                }
+            } label: {
+                Label("default map filter", systemImage: "map")
+            }
+            .pickerStyle(.navigationLink)
+            .tint(WanderTheme.terracotta.color)
+            .accessibilityIdentifier("settings.map.defaultFilter")
+        } header: {
+            Text("map")
+        } footer: {
+            Text("Used whenever the map opens or resets on this device.")
         }
     }
 
