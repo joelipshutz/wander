@@ -12,6 +12,24 @@ enum FeatureFlagResolution: Equatable {
     case failed(userID: String)
 }
 
+enum DebugSettingsAccessPolicy {
+    static func isEntitled(serverFlag: Bool?) -> Bool {
+        isEntitled(serverFlag: serverFlag, isSimulator: isSimulatorBuild)
+    }
+
+    static func isEntitled(serverFlag: Bool?, isSimulator: Bool) -> Bool {
+        isSimulator || serverFlag == true
+    }
+
+    private static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+}
+
 @MainActor
 protocol FeatureFlagRepository {
     func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: Bool]

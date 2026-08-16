@@ -30000,3 +30000,41 @@ Checkpoint — 2026-08-15 22:38 PDT:
   removed.
 - Local implementation checkpoint: `0b0f4d1b` (`WIP: add five-style place action
   picker`). No push, PR, merge, build-number bump, TestFlight upload, or release.
+
+Checkpoint — 2026-08-15 23:28 PDT:
+
+- Joe reported that `@joe` could not see Debug Settings in the simulator and
+  clarified the intended access rule: every simulator build must expose the
+  tester surface somehow.
+- Updating the shared entitlement policy so Simulator builds are locally
+  entitled regardless of hosted flag resolution, while physical devices and
+  TestFlight continue to require the account-scoped `debug_settings` server
+  flag. The account-scoped preferences and next-launch behavior remain intact.
+- Expected files: `Wander/App/WanderBackend.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Settings/ProfileSettingsViews.swift`, focused tests, and
+  this log. No hosted row, schema, RLS, RPC, migration, push, merge, build bump,
+  upload, or release is authorized.
+- Added a simulator UI regression using the authenticated `@joe` fixture. It
+  accepts the normal offline-profile fallback when needed, opens Settings, and
+  asserts both the first-visit NUX control and 1–5 place button style picker.
+
+Validation — 2026-08-15 23:37 PDT:
+
+- Added `DebugSettingsAccessPolicy`: Simulator builds are entitled even when
+  the hosted value is missing or false; physical-device builds require the
+  hosted value to resolve true. Both Settings and the root next-launch CTA
+  snapshot use the same policy.
+- Focused policy/source tests passed 2/2 on `CTA Styles 1-5`, iPhone 16 Plus,
+  iOS 26.2. Result:
+  `/private/tmp/recme-debug-settings-simulator.xcresult`.
+- The first UI run reached Joe `@joe` Settings but its assertions looked below
+  the visible List viewport. Updated the test to scroll the real Settings List;
+  the corrected run passed 1/1 and captured both Debug controls. Result:
+  `/private/tmp/recme-debug-settings-ui-r2.xcresult`; screenshot attachment:
+  `/private/tmp/recme-debug-settings-ui-r2-attachments/4139F565-3715-4BF9-9B66-CE5097C3ECAB.png`.
+- Removed only the inactive, rebuildable 1.6 GB S4 DerivedData cache at
+  `/private/tmp/recme-launch-cutoff-s4-policy-dd` to avoid another disk-full
+  failure. The installed S4 app and passing S4 result bundle remain.
+- No hosted flag row, schema/RLS/RPC/migration, production account access,
+  push, merge, build bump, archive, upload, or release was changed.

@@ -3224,6 +3224,24 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testDebugSettingsAccessPolicyAllowsEverySimulatorAndRequiresServerFlagOnDevice() {
+        XCTAssertTrue(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: nil, isSimulator: true)
+        )
+        XCTAssertTrue(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: false, isSimulator: true)
+        )
+        XCTAssertTrue(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: true, isSimulator: false)
+        )
+        XCTAssertFalse(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: nil, isSimulator: false)
+        )
+        XCTAssertFalse(
+            DebugSettingsAccessPolicy.isEntitled(serverFlag: false, isSimulator: false)
+        )
+    }
+
     func testBackendFeatureFlagsFailClosedAndNeverLeakAcrossAccounts() async {
         let repository = StubFeatureFlagRepository(
             values: [.firstVisitNUX: true, .placeProfileSaveTrayV1: true],

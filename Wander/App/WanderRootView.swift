@@ -683,7 +683,9 @@ struct WanderRootView: View {
             guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
             placeProfileFloatingActionVariant = placeActionDebugPreferences.activeVariant(
                 for: userID,
-                isDebugSettingsEntitled: backend.featureFlag(.debugSettings, for: userID) == true
+                isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled(
+                    serverFlag: backend.featureFlag(.debugSettings, for: userID)
+                )
             )
             configureWalkthroughsForCurrentUser()
         }
@@ -1427,7 +1429,9 @@ struct WanderRootView: View {
     private func configureWalkthroughsForCurrentUser() {
         let launchArguments = ProcessInfo.processInfo.arguments
         let userID = auth.state.session?.userID ?? store.currentUser.id
-        let isDebugSettingsEntitled = backend.featureFlag(.debugSettings, for: userID) == true
+        let isDebugSettingsEntitled = DebugSettingsAccessPolicy.isEntitled(
+            serverFlag: backend.featureFlag(.debugSettings, for: userID)
+        )
         let debugNUXOverride = isDebugSettingsEntitled
             ? walkthroughDebugPreferences.nuxOverride(for: userID)
             : nil

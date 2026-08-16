@@ -2,6 +2,37 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testSimulatorBuildExposesDebugSettingsWithoutServerEntitlement() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderInitialTab",
+            "profile",
+            "-WanderOpenSettings",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let continueOffline = app.buttons["Continue offline"]
+        if continueOffline.waitForExistence(timeout: 8) {
+            continueOffline.tap()
+        }
+
+        let nuxToggle = app.descendants(matching: .any)["settings.debug.firstVisitNUX"]
+        let placeStylePicker = app.descendants(matching: .any)["settings.debug.placeActionVariant"]
+        for _ in 0..<5 where !placeStylePicker.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(nuxToggle.waitForExistence(timeout: 8))
+        XCTAssertTrue(placeStylePicker.waitForExistence(timeout: 3))
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Simulator @joe Debug Settings"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testInstagramPostExplainsFullPhotoAccessBeforeDirectShare() {
         let app = XCUIApplication()
         app.launchArguments = [

@@ -1287,7 +1287,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
     }
 
-    func testDebugSettingsAreServerEntitledAndDoNotShipAnIdentityAllowlist() throws {
+    func testDebugSettingsAreSimulatorOrServerEntitledAndDoNotShipAnIdentityAllowlist() throws {
         let profileSettings = try String(
             contentsOf: projectRoot.appendingPathComponent(
                 "Wander/Features/Settings/ProfileSettingsViews.swift"
@@ -1296,10 +1296,15 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
+        let backend = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderBackend.swift")
+        )
 
         XCTAssertTrue(profileSettings.contains("Section(\"debug settings\")"))
-        XCTAssertTrue(profileSettings.contains("backend.featureFlag(.debugSettings, for: userID) == true"))
-        XCTAssertTrue(profileSettings.contains("server-entitled tester surface"))
+        XCTAssertTrue(profileSettings.contains("DebugSettingsAccessPolicy.isEntitled("))
+        XCTAssertTrue(profileSettings.contains("Every Simulator build exposes this local tester surface"))
+        XCTAssertTrue(backend.contains("#if targetEnvironment(simulator)"))
+        XCTAssertTrue(backend.contains("isSimulator || serverFlag == true"))
         XCTAssertTrue(profileSettings.contains("Label(\"first-visit NUX\""))
         XCTAssertTrue(profileSettings.contains("settings.debug.firstVisitNUX"))
         XCTAssertTrue(profileSettings.contains("Label(\"place button style\""))
@@ -1316,7 +1321,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser"))
         XCTAssertTrue(root.contains("@State private var placeProfileFloatingActionVariant"))
         XCTAssertTrue(root.contains("placeActionDebugPreferences.activeVariant("))
-        XCTAssertTrue(root.contains("isDebugSettingsEntitled: backend.featureFlag(.debugSettings"))
+        XCTAssertTrue(root.contains("isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled("))
         XCTAssertTrue(root.contains(".environment("))
         XCTAssertTrue(root.contains("\\.placeProfileFloatingActionVariant"))
         XCTAssertTrue(root.contains("placeProfileFloatingActionVariant = .option1"))

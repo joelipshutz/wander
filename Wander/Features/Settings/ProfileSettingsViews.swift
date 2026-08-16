@@ -237,12 +237,13 @@ struct ProfileSettingsHome: View {
         }
     }
 
-    // Debug settings is intentionally a server-entitled tester surface rather
-    // than an iOS identity allowlist or a #if DEBUG block. That keeps it hidden
-    // from normal accounts while letting Joe and Ryan test release/TestFlight builds.
+    // Every Simulator build exposes this local tester surface. Physical devices
+    // and TestFlight remain server-entitled so normal accounts never see it.
     private var isDebugSettingsEntitled: Bool {
         guard let userID = debugSettingsUserID else { return false }
-        return backend.featureFlag(.debugSettings, for: userID) == true
+        return DebugSettingsAccessPolicy.isEntitled(
+            serverFlag: backend.featureFlag(.debugSettings, for: userID)
+        )
     }
 
     private var debugSettingsUserID: String? {
