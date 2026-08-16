@@ -30002,3 +30002,331 @@ Validation checkpoint — 2026-08-16 04:57 PDT:
   `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_04-48-08--0700.xcresult`.
 - `git diff --check` passes. No build-number bump, archive, TestFlight upload,
   production-data change, or public post was performed.
+## 2026-08-15 20:20 PDT - Codex - Place Action Liquid Glass Comparison
+
+Agent: Codex using `design-shotgun` and `ios-design-review`
+Branch: `codex/place-action-variants`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/place-action-variants`
+Linear: issue creation attempted and blocked by the workspace free issue limit
+
+Goal: preserve the validated Option 1 floating place actions and add a
+debug-selectable native comparison for three additional Liquid Glass treatments:
+black/white full-width, narrower squared black/white, and the narrower pair inside
+an oversized charcoal glass rail inspired by Joe's reference screenshot.
+
+Starting state and coordination:
+
+- Created this isolated worktree from the validated S6 attached-check-in stack at
+  `d1ff8f53`; the Option 1 worktrees and simulators remain untouched.
+- The source checkout is clean. Completed S5/S6 agents previously touched the same
+  place-profile files, so this branch intentionally layers on their finished stack
+  instead of editing those worktrees.
+- Production/default behavior must remain Option 1. Options 2-4 will be selectable
+  only through a debug/test launch argument for visual comparison.
+- Mission Control task creation was attempted but `localhost:4000` is not running.
+- No push, merge, build-number bump, TestFlight upload, or release is authorized.
+
+Expected files: `Wander/Features/Map/PlaceProfileMapSurface.swift`, the existing
+Liquid Glass design-system helper if a new tone is required, focused contract/UI
+tests, this log, and external comparison artifacts under `~/.gstack/projects/`.
+
+Checkpoint — 2026-08-15 21:08 PDT:
+
+- Implemented four debug-selectable floating place-action treatments while
+  keeping Option 1 as the missing/invalid-argument default and the only release
+  behavior: Option 1 current terracotta/neutral; Option 2 full-width black/white
+  Check in plus unchanged Wanna; Option 3 compact centered black/light pair;
+  Option 4 the compact pair inside an oversized near-black Liquid Glass rail.
+- Added reusable native iOS 26 glass tones/material selection with the existing
+  material fallback retained for earlier iOS versions. Option 4 uses one regular
+  outer glass rail and clear inner glass controls inside `GlassEffectContainer`
+  to avoid stacked regular-blur artifacts. Compact controls remain 60 points high
+  and switch to a 280-point vertical accessibility layout at accessibility text
+  sizes.
+- Added focused resolver, tone, geometry, release-default, and source-contract
+  assertions in `PlaceProfilePresentationTests` and `NavigationContractTests`.
+- Final native iOS 26.2 simulator build passed at commit `810a3035`:
+  `** BUILD SUCCEEDED ** [135.462 sec]`. All changed Swift files parse, the branch
+  is clean, and `git diff --check f7db464b..HEAD` passes.
+- Installed and visually verified the exact final build on four dedicated iPhone
+  16 Plus / iOS 26.2 devices: `CTA Option 1`, `CTA Option 2`, `CTA Option 3`, and
+  `CTA Option 4`. All four launch into the same authenticated Griffith Observatory
+  Trail place profile; only `-WanderPlaceActionVariant 1...4` differs. Final
+  screenshots are `/private/tmp/recme-cta-final-option-{1,2,3,4}.png`; the durable
+  side-by-side board is
+  `/Users/joelipshutz/.codex/visualizations/2026/08/15/01a00667-f2e5-7720-8849-b0ca9238ee46/cta-options-1-through-4.png`.
+- A focused four-test run did not reach assertions because the machine volume
+  filled while Xcode regenerated Clerk localization output. This is an environment
+  failure (`ENOSPC`, build database full), not a product assertion failure. The
+  successful final app build plus simulator verification remain valid; rerun the
+  four focused tests after additional disk is reclaimed before promoting a choice.
+- Removed only exact disposable Xcode build caches after their installed binaries
+  and screenshots were preserved: `/private/tmp/recme-build154-archive-dd` and
+  `/private/tmp/recme-cta-final-dd`. Both are regenerable; no source, archive,
+  screenshot, simulator, production, or user data was removed.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and opened Simulator
+  with all four comparison devices booted. No push, PR, merge, build-number bump,
+  TestFlight upload, or release was performed.
+
+Checkpoint — 2026-08-15 22:38 PDT:
+
+- Joe clarified the comparison now has five styles. Option 4 retains its charcoal
+  rail with a brighter white/silver Wanna treatment. New Option 5 keeps Option 3's
+  compact no-rail geometry but gives Check in a deeper standalone black glass.
+- Added a `place button style` 1–5 picker beside the existing first-visit NUX
+  control in the server-entitled debug settings section. The choice is stored per
+  account on the device and snapshotted during the existing feature-flag load on
+  the next launch. Missing, malformed, unentitled, signed-out, or switched-account
+  states fail closed to Option 1. The existing Debug launch argument still supports
+  deterministic screenshot/UI-test selection.
+- Kept Supabase unchanged: `debug_settings` remains the Boolean entitlement for
+  the tester surface and `place_profile_save_tray_v1` remains the off-by-default
+  rollout gate. A local numeric comparison preference does not require a schema,
+  RLS, RPC, migration, or hosted data-contract change.
+- Focused iPhone 16 Plus / iOS 26.2 validation passed 6/6 with zero failures:
+  resolver bounds and fallback, Option 5 tone/geometry, account isolation,
+  entitlement fallback, launch-time environment injection, debug-settings gating,
+  and the legacy place-action fallback contract. Result:
+  `/private/tmp/recme-cta-1-5-dd/Logs/Test/Test-Wander-2026.08.15_22-34-28--0700.xcresult`.
+- Installed the tested build on the consolidated `CTA Styles 1-5` simulator
+  (`1B0C1935-9585-4F31-8C01-599AB878FD67`) and left Option 5 open at the same
+  Griffith Observatory Trail test state. Final screenshots:
+  `/private/tmp/recme-cta-final-option-4-lighter.png` and
+  `/private/tmp/recme-cta-final-option-5.png`; durable side-by-side board:
+  `/Users/joelipshutz/.codex/visualizations/2026/08/15/01a00667-f2e5-7720-8849-b0ca9238ee46/cta-options-4-and-5.png`.
+- Deleted only the four superseded task-only CTA simulator devices after preserving
+  their 1–4 screenshots and comparison board. Replaced them with the single 1–5
+  simulator above; no source, archive, screenshot, production, or user data was
+  removed.
+- Local implementation checkpoint: `0b0f4d1b` (`WIP: add five-style place action
+  picker`). No push, PR, merge, build-number bump, TestFlight upload, or release.
+
+Checkpoint — 2026-08-15 23:28 PDT:
+
+- Joe reported that `@joe` could not see Debug Settings in the simulator and
+  clarified the intended access rule: every simulator build must expose the
+  tester surface somehow.
+- Updating the shared entitlement policy so Simulator builds are locally
+  entitled regardless of hosted flag resolution, while physical devices and
+  TestFlight continue to require the account-scoped `debug_settings` server
+  flag. The account-scoped preferences and next-launch behavior remain intact.
+- Expected files: `Wander/App/WanderBackend.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Settings/ProfileSettingsViews.swift`, focused tests, and
+  this log. No hosted row, schema, RLS, RPC, migration, push, merge, build bump,
+  upload, or release is authorized.
+- Added a simulator UI regression using the authenticated `@joe` fixture. It
+  accepts the normal offline-profile fallback when needed, opens Settings, and
+  asserts both the first-visit NUX control and 1–5 place button style picker.
+
+Validation — 2026-08-15 23:37 PDT:
+
+- Added `DebugSettingsAccessPolicy`: Simulator builds are entitled even when
+  the hosted value is missing or false; physical-device builds require the
+  hosted value to resolve true. Both Settings and the root next-launch CTA
+  snapshot use the same policy.
+- Focused policy/source tests passed 2/2 on `CTA Styles 1-5`, iPhone 16 Plus,
+  iOS 26.2. Result:
+  `/private/tmp/recme-debug-settings-simulator.xcresult`.
+- The first UI run reached Joe `@joe` Settings but its assertions looked below
+  the visible List viewport. Updated the test to scroll the real Settings List;
+  the corrected run passed 1/1 and captured both Debug controls. Result:
+  `/private/tmp/recme-debug-settings-ui-r2.xcresult`; screenshot attachment:
+  `/private/tmp/recme-debug-settings-ui-r2-attachments/4139F565-3715-4BF9-9B66-CE5097C3ECAB.png`.
+- Removed only the inactive, rebuildable 1.6 GB S4 DerivedData cache at
+  `/private/tmp/recme-launch-cutoff-s4-policy-dd` to avoid another disk-full
+  failure. The installed S4 app and passing S4 result bundle remain.
+- No hosted flag row, schema/RLS/RPC/migration, production account access,
+  push, merge, build bump, archive, upload, or release was changed.
+
+Checkpoint — 2026-08-16 00:18 PDT:
+
+- Joe found that quitting and reopening the `CTA Styles 1-5` Simulator app
+  discarded the authenticated `@joe` fixture and returned to real login. Root
+  cause: `-WanderAuthenticatedUITest` and `-WanderUseDemoFixtures` were
+  process-only launch arguments, so an icon relaunch rebuilt Clerk auth and the
+  empty/live fixture path.
+- Captured the deterministic pre-fix state in
+  `WanderTests/Fixtures/ios-fix/simulator-test-session-relaunch-pre.json`. The
+  iOS-fix DebugBridge snapshot mechanism does not exist in this repository and
+  is not applicable to a Simulator process-launch bug; the fixture records the
+  exact initial arguments, argument-free relaunch, observed state, expected
+  state, and existing simulator screenshot.
+- Implementing a Simulator-only durable local `@joe` session selected by the
+  existing authenticated-test argument, with demo fixtures and direct entry to
+  the app shell on relaunch. `-WanderUseLiveAuth` will explicitly clear it and
+  restore Clerk for authentication testing. Physical devices and TestFlight are
+  unchanged.
+- Expected files: `Wander/App/WanderApp.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Onboarding/OnboardingState.swift`, focused unit/UI tests,
+  the pre-fix fixture above, and this log. No push, merge, build-number bump,
+  TestFlight upload, or release is authorized.
+
+Validation — 2026-08-16 00:30 PDT:
+
+- Added `SimulatorTestSessionPolicy`. Launching once with
+  `-WanderAuthenticatedUITest` persists the local `@joe` fixture choice in the
+  Simulator app container; a later icon/argument-free relaunch restores it.
+  `-WanderUseLiveAuth` removes that preference and restores Clerk. Explicit
+  signed-out test surfaces temporarily stay signed out without destroying the
+  saved tester choice.
+- The local simulator session now uses a local backend, deterministic parser,
+  demo fixtures, and an explicit `AppEntryCoordinator` fast path. It therefore
+  enters the app shell without asking Supabase to validate fake `user_joe` or
+  showing the offline-profile recovery screen. The preview identity is compiled
+  into the auth selection path only for `targetEnvironment(simulator)`; device
+  and TestFlight auth remain unchanged.
+- Five unique focused tests passed with zero failures: persistence/escape hatch,
+  physical-device exclusion, coordinator entry without hosted profile lookup,
+  fixture resolution including ambient-state isolation, and a UI test that
+  terminated the app then relaunched it with an empty argument list. Results:
+  `/private/tmp/recme-simulator-session-unit.xcresult`,
+  `/private/tmp/recme-simulator-session-ui.xcresult`, and
+  `/private/tmp/recme-simulator-session-contract-r2.xcresult`.
+- Installed the exact tested build on `CTA Styles 1-5`
+  (`1B0C1935-9585-4F31-8C01-599AB878FD67`), armed `@joe`, terminated it, and
+  relaunched `com.grayline.wander` with no custom arguments. The final screen is
+  the populated Map tab with all four tabs and no login/offline gate. The app is
+  open for Joe; durable post-fix evidence is
+  `WanderTests/Fixtures/ios-fix/simulator-test-session-relaunch-post.png`.
+- No hosted data, schema/RLS/RPC/migration, physical-device auth, push, merge,
+  build-number bump, archive, TestFlight upload, or release was changed.
+
+QA checkpoint — 2026-08-16 01:00 PDT:
+
+- Joe asked to compare all five floating CTA styles in separate Simulator
+  windows after the argument-free relaunch correctly opened the Map root but
+  did not expose a place-profile CTA.
+- Renamed the configured iPhone 16 Plus / iOS 26.2 source device to `CTA Style
+  1` and cloned it into `CTA Style 2` through `CTA Style 5`. The fifth clone
+  initially stalled when the machine had only 165 MB free. Removed only this
+  task's exact 1.6 GB rebuildable DerivedData cache at
+  `/private/tmp/recme-cta-1-5-dd`; source, commits, test result bundles,
+  screenshots, installed apps, and simulator data were preserved. The fifth
+  clone then completed normally.
+- Booted the five named devices, shut down only the two older Launch Cutoff
+  simulator sessions, and launched the already-installed exact tested app on
+  the same expanded Griffith Observatory Trail profile. Every launch uses the
+  same fixture and flags; only `-WanderPlaceActionVariant 1...5` changes.
+- Verified all five screenshots show the place-profile CTAs rather than Map,
+  Home, or a boot spinner:
+  `/private/tmp/cta-style-{1,2,3,4,5}-verified.png`. Opened each device in its
+  own Simulator window and brought Simulator to the foreground for Joe.
+- No product source, hosted data, schema/RLS/RPC/migration, push, merge,
+  build-number bump, archive, TestFlight upload, or release was changed.
+
+Checkpoint — 2026-08-16 02:08 PDT:
+
+- Joe selected the final floating place CTA direction: compact buttons with a
+  deep-black Check in action on the left, a light Wanna action on the right,
+  and no shared rail or background. This corresponds to comparison style 5.
+- Branch/worktree: `codex/place-action-variants` at
+  `/Users/joelipshutz/Developer/Wander-worktrees/place-action-variants`.
+  The worktree is clean before this change. It is 19 commits ahead and 6
+  commits behind current `origin/main`; no overlapping uncommitted work exists.
+- Expected files: `Wander/Features/Map/PlaceProfileMapSurface.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Settings/ProfileSettingsViews.swift`, focused tests, and
+  this log. The 1–5 Simulator debug picker remains available; no push, merge,
+  build-number bump, TestFlight upload, or release is authorized.
+
+Validation — 2026-08-16 02:15 PDT:
+
+- Encoded comparison style 5 as `productionDefault` and routed all clean,
+  invalid, signed-out, account-transition, environment, and non-entitled
+  fallbacks through it. Existing explicit 1–5 Simulator selections remain
+  account-scoped overrides.
+- The selected default remains compact, uses the deep-black glass Check in
+  treatment, keeps Wanna neutral/light, and does not use the option-4 charcoal
+  rail.
+- Five focused tests passed with zero failures: default/argument resolution,
+  glass tones, compact sizing and no-rail behavior, per-account debug
+  overrides, and Simulator/server debug-settings access. Result:
+  `/Users/joelipshutz/Developer/Wander-worktrees/attached-new-wanna/DerivedData-s7-wanna/Logs/Test/Test-Wander-2026.08.16_02-10-29--0700.xcresult`.
+
+## 2026-08-16 03:45 PDT - Codex - REC-275 S7.1 attached Wanna handoff
+
+Agent: Codex with parallel routing and confirmation-CTA audits
+Branch: `codex/rec-275-attached-new-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-new-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Outcome and validation:
+
+- Added only the first S7 mode: a new unsaved Wanna now expands inside the Map
+  place profile and reuses the shared editor, draft, submission, and large
+  confirmation CTA. Existing Wanna, conversions, repeat visits, edit/history,
+  shared invitations, and non-Map entry points remain on their existing routes.
+- Integrated Joe's selected floating CTA default: compact deep-black Check in
+  on the left, light neutral Wanna on the right, and no shared rail/background.
+  The 1-5 Simulator comparison picker remains available.
+- Combined focused policy and navigation validation passed 42/42 with zero
+  failures. The real UI regression
+  `testFirstMapWannaExpandsAttachedEditorAndRestoresItsDraft` passed 1/1 and
+  verified expansion, optional fields, collapse/reopen draft restoration, and
+  the Check in transition. Result:
+  `/private/tmp/s7-wanna-visual.xcresult`.
+- Visual evidence: collapsed CTA
+  `/private/tmp/s7-selected-cta-resting-final.png`; attached Wanna editor
+  `/private/tmp/s7-wanna-visual-attachments/D1338977-C8D6-4EF2-9F9B-C236234A7370.png`.
+- Reset and relaunched the dedicated `S7.1 Attached Wanna Test` Simulator
+  (`8C40B670-2D32-411C-A50A-9CD3878B8A8B`) on the collapsed Griffith
+  Observatory Trail profile for Joe's review.
+- Pre-merge follow-up remains: rebase the 19-commit stack onto current
+  `origin/main`, add/confirm filtered-map existing-save routing coverage, run
+  two-device visual QA plus the complete relevant suite, then push/open a PR
+  only after Joe approves S7.1. No main merge, build-number bump, archive,
+  TestFlight upload, hosted data change, or release was performed.
+
+## 2026-08-16 04:40 PDT - Codex - REC-275 S7.1 pre-merge validation
+
+Agent: Codex
+Branch: `codex/rec-275-attached-new-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-new-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Outcome and validation:
+
+- Rebasing the approved S4-S7.1 stack onto `origin/main` at build-155 commit
+  `910f1575` completed without changing the build number or release state.
+  The current edge-to-edge interactive profile transition and the attached
+  editor/floating-action implementation were both retained.
+- Fixed a filtered-map routing edge: if Featured/Friends grouping omits the
+  current user's save for the same place, the profile now merges that save into
+  its summaries before deriving the floating action state. This prevents a
+  saved place from presenting an unsaved CTA while preserving the existing
+  mutation guard.
+- Added stable accessibility identifiers for the floating Check in, Wanna, and
+  Edit/history controls. This prevents UI automation from selecting the
+  same-labelled compact-card action underneath the profile.
+- Focused policy, remote repository, onboarding, and profile presentation
+  validation passed 145/145. Four end-to-end UI regressions also passed 4/4:
+  edge-swipe collapse, floating actions through deep scroll, first attached
+  Check-in with draft restoration, and first attached Wanna with draft
+  restoration/status switching. UI result:
+  `DerivedData-s7-ui/Logs/Test/Test-Wander-2026.08.16_04-32-31--0700.xcresult`.
+- The complete 1,237-test `WanderTests` target executed twice. Every test except
+  `testCancelledSessionRefreshDoesNotReplaceValidatedState` passed in each
+  aggregate run; that cancellation test trapped only when run in the complete
+  target and passed 1/1 when rerun alone. This is recorded as an aggregate-runner
+  isolation flake rather than a CTA regression; all unit tests received a
+  passing execution across the aggregate plus isolated run. Aggregate result:
+  `DerivedData-s7-ui/Logs/Test/Test-Wander-2026.08.16_04-36-47--0700.xcresult`;
+  isolated result:
+  `DerivedData-s7-ui/Logs/Test/Test-Wander-2026.08.16_04-38-57--0700.xcresult`.
+- Reviewed the full source diff and visual evidence. No critical correctness,
+  auth, persistence, accessibility, or launch-safety issue remains in the S7.1
+  scope. Existing compiler/headermap warnings remain unchanged.
+- Installed the exact rebased test build on the smaller `REC-166 iPhone 16e`
+  Simulator and visually verified the expanded Griffith profile plus compact
+  floating actions respect the smaller viewport and home indicator. Evidence:
+  `/private/tmp/s7-rebase-iphone16e.png`.
+- Removed only disposable DerivedData and obsolete CTA-comparison Simulator
+  clones created by this work after the machine ran out of disk. Preserved the
+  `S7.1 Attached Wanna Test` and `REC-166 iPhone 16e` devices, source, test
+  results, and screenshots.
+- The included feature-flag migration is fail-closed if not yet hosted. The
+  local machine does not have the Supabase CLI, so hosted migration/pgTAP
+  verification remains a deployment follow-up; no hosted schema, data, RPC,
+  auth, build-number, archive, TestFlight, or Slack release action was taken.

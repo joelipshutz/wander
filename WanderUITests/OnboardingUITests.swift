@@ -2,6 +2,71 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testAuthenticatedSimulatorFixtureSurvivesArgumentFreeRelaunch() {
+        let app = XCUIApplication()
+        defer {
+            app.terminate()
+            app.launchArguments = [
+                "-WanderUseLiveAuth",
+                "-WanderOnboardingUITestSignedOut",
+            ]
+            app.launch()
+            app.terminate()
+        }
+
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderInitialTab",
+            "profile",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Profile"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["Continue offline"].exists)
+        XCTAssertFalse(app.buttons["Get started"].exists)
+
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Profile"].exists)
+        XCTAssertFalse(app.buttons["Continue offline"].exists)
+        XCTAssertFalse(app.buttons["Get started"].exists)
+    }
+
+    func testSimulatorBuildExposesDebugSettingsWithoutServerEntitlement() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderInitialTab",
+            "profile",
+            "-WanderOpenSettings",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let continueOffline = app.buttons["Continue offline"]
+        if continueOffline.waitForExistence(timeout: 8) {
+            continueOffline.tap()
+        }
+
+        let nuxToggle = app.descendants(matching: .any)["settings.debug.firstVisitNUX"]
+        let placeStylePicker = app.descendants(matching: .any)["settings.debug.placeActionVariant"]
+        for _ in 0..<5 where !placeStylePicker.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(nuxToggle.waitForExistence(timeout: 8))
+        XCTAssertTrue(placeStylePicker.waitForExistence(timeout: 3))
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Simulator @joe Debug Settings"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testInstagramPostExplainsFullPhotoAccessBeforeDirectShare() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -1305,13 +1370,217 @@ final class OnboardingUITests: XCTestCase {
         leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
 
         XCTAssertTrue(ratings.waitForNonExistence(timeout: 3))
-        XCTAssertTrue(compactCard.waitForExistence(timeout: 3))
+        let restoredCompactCard = app.buttons["Open Woodcat Coffee"]
+        XCTAssertTrue(restoredCompactCard.waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
 
         let collapsedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         collapsedScreenshot.name = "Place profile collapsed after edge swipe"
         collapsedScreenshot.lifetime = .keepAlways
         add(collapsedScreenshot)
+    }
+
+    func testFloatingPlaceActionsStayVisibleAndOpenThePreselectedLegacyEditor() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Woodcat Coffee",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let checkInAgain = app.buttons["place-profile.floating-action.checkIn"]
+        let editHistory = app.buttons["place-profile.floating-action.editHistory"]
+        XCTAssertTrue(checkInAgain.waitForExistence(timeout: 5))
+        XCTAssertTrue(editHistory.waitForExistence(timeout: 2))
+        XCTAssertTrue(checkInAgain.isHittable)
+        XCTAssertTrue(editHistory.isHittable)
+
+        let topScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        topScreenshot.name = "Floating place actions at profile top"
+        topScreenshot.lifetime = .keepAlways
+        add(topScreenshot)
+
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertTrue(checkInAgain.isHittable)
+        XCTAssertTrue(editHistory.isHittable)
+
+        let deepScrollScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        deepScrollScreenshot.name = "Floating place actions after deep scroll"
+        deepScrollScreenshot.lifetime = .keepAlways
+        add(deepScrollScreenshot)
+
+        checkInAgain.tap()
+        let slider = app.descendants(matching: .any)["place-rating-slider"]
+        XCTAssertTrue(slider.waitForExistence(timeout: 4))
+        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+    }
+
+    func testFirstMapCheckInExpandsAttachedEditorAndRestoresItsDraft() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(wanna.waitForExistence(timeout: 2))
+        checkIn.tap()
+
+        let attachedTray = app.descendants(matching: .any)["place-profile.attached-check-in"]
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
+        XCTAssertTrue(app.buttons["save.checkInDateDisclosure"].exists)
+        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
+
+        app.buttons["Show more options"].tap()
+        let note = app.textFields["what you'll want to remember, who told you..."]
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        note.tap()
+        note.typeText("Sunset draft")
+
+        app.buttons["Collapse check-in"].tap()
+        XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
+        XCTAssertTrue(checkIn.isHittable)
+        checkIn.tap()
+
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
+        let restoredMoreOptions = app.buttons["Show more options"]
+        if restoredMoreOptions.waitForExistence(timeout: 2) {
+            restoredMoreOptions.tap()
+        } else {
+            XCTAssertTrue(app.buttons["Hide more options"].waitForExistence(timeout: 2))
+        }
+        let attachedScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
+        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
+        let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
+        XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
+        let restoredNoteHeading = attachedScrollView.staticTexts["a note for future you"]
+        let scrollStart = attachedScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62)
+        )
+        let scrollEnd = attachedScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22)
+        )
+        for _ in 0..<8 where !restoredNoteHeading.isHittable {
+            scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
+        }
+        XCTAssertTrue(restoredNoteHeading.isHittable)
+        XCTAssertTrue(restoredNote.isHittable)
+        XCTAssertEqual(
+            restoredNote.value as? String,
+            "Sunset draft"
+        )
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "First Map check-in attached editor"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testFirstMapWannaExpandsAttachedEditorAndRestoresItsDraft() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(wanna.waitForExistence(timeout: 2))
+        wanna.tap()
+
+        let attachedTray = app.descendants(matching: .any)["place-profile.attached-wanna"]
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["Add to Wanna"].exists)
+        XCTAssertTrue(app.buttons["Add a Wanna go date"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
+        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
+
+        app.buttons["Show more options"].tap()
+        let note = app.textFields["what you'll want to remember, who told you..."]
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        note.tap()
+        note.typeText("Wanna sunset draft")
+
+        app.buttons["Collapse Wanna"].tap()
+        XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
+        XCTAssertTrue(wanna.isHittable)
+        wanna.tap()
+
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
+        let restoredMoreOptions = app.buttons["Show more options"]
+        if restoredMoreOptions.waitForExistence(timeout: 2) {
+            restoredMoreOptions.tap()
+        } else {
+            XCTAssertTrue(app.buttons["Hide more options"].waitForExistence(timeout: 2))
+        }
+        let attachedScrollView = app.scrollViews["place-profile.attached-wanna"].firstMatch
+        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
+        let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
+        XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
+        let restoredNoteHeading = attachedScrollView.staticTexts["a note for future you"]
+        let scrollStart = attachedScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.62)
+        )
+        let scrollEnd = attachedScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.22)
+        )
+        for _ in 0..<8 where !restoredNoteHeading.isHittable {
+            scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
+        }
+        XCTAssertTrue(restoredNoteHeading.isHittable)
+        XCTAssertTrue(restoredNote.isHittable)
+        XCTAssertEqual(
+            restoredNote.value as? String,
+            "Wanna sunset draft"
+        )
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "First Map Wanna attached editor"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        app.buttons["Collapse Wanna"].tap()
+        XCTAssertTrue(checkIn.isHittable)
+        checkIn.tap()
+
+        let switchedTray = app.descendants(matching: .any)["place-profile.attached-check-in"]
+        XCTAssertTrue(switchedTray.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
+        let switchedScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
+        XCTAssertTrue(switchedScrollView.waitForExistence(timeout: 2))
+        let preservedNote = switchedScrollView.descendants(matching: .textField).firstMatch
+        XCTAssertTrue(preservedNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            preservedNote.value as? String,
+            "Wanna sunset draft"
+        )
     }
 
     func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {

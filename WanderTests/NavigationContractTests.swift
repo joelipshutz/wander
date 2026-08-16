@@ -1289,7 +1289,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
     }
 
-    func testDebugSettingsAreServerEntitledAndDoNotShipAnIdentityAllowlist() throws {
+    func testDebugSettingsAreSimulatorOrServerEntitledAndDoNotShipAnIdentityAllowlist() throws {
         let profileSettings = try String(
             contentsOf: projectRoot.appendingPathComponent(
                 "Wander/Features/Settings/ProfileSettingsViews.swift"
@@ -1298,12 +1298,21 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
+        let backend = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderBackend.swift")
+        )
 
         XCTAssertTrue(profileSettings.contains("Section(\"debug settings\")"))
-        XCTAssertTrue(profileSettings.contains("backend.featureFlag(.debugSettings, for: userID) == true"))
-        XCTAssertTrue(profileSettings.contains("server-entitled tester surface"))
+        XCTAssertTrue(profileSettings.contains("DebugSettingsAccessPolicy.isEntitled("))
+        XCTAssertTrue(profileSettings.contains("Every Simulator build exposes this local tester surface"))
+        XCTAssertTrue(backend.contains("#if targetEnvironment(simulator)"))
+        XCTAssertTrue(backend.contains("isSimulator || serverFlag == true"))
         XCTAssertTrue(profileSettings.contains("Label(\"first-visit NUX\""))
         XCTAssertTrue(profileSettings.contains("settings.debug.firstVisitNUX"))
+        XCTAssertTrue(profileSettings.contains("Label(\"place button style\""))
+        XCTAssertTrue(profileSettings.contains("settings.debug.placeActionVariant"))
+        XCTAssertTrue(profileSettings.contains("PlaceProfileFloatingActionVariant.allCases"))
+        XCTAssertTrue(profileSettings.contains("placeActionDebugPreferences.setVariant"))
         XCTAssertFalse(profileSettings.contains("settings.debug.replayNUX"))
         XCTAssertFalse(profileSettings.contains("settings.debug.disableNUX"))
         XCTAssertFalse(profileSettings.contains("jolipshutz"))
@@ -1312,6 +1321,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("isEntitledDebugReplayRequested: isReplayRequested"))
         XCTAssertTrue(root.contains("walkthroughDebugPreferences.clearReplayRequest"))
         XCTAssertTrue(root.contains("onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser"))
+        XCTAssertTrue(root.contains("@State private var placeProfileFloatingActionVariant"))
+        XCTAssertTrue(root.contains("placeActionDebugPreferences.activeVariant("))
+        XCTAssertTrue(root.contains("isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled("))
+        XCTAssertTrue(root.contains(".environment("))
+        XCTAssertTrue(root.contains("\\.placeProfileFloatingActionVariant"))
+        XCTAssertTrue(root.contains("placeProfileFloatingActionVariant = .productionDefault"))
     }
 
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
@@ -1643,8 +1658,7 @@ final class NavigationContractTests: XCTestCase {
         let orderedMarkers = [
             "placeTypeSection",
             "ratingSection",
-            "sharedVisitInviteSection",
-            "MapSaveVisitPhotoSection(",
+            "visitParticipationSections",
             "optionalDetailsDisclosure"
         ]
         let offsets = try orderedMarkers.map { marker in
@@ -1652,6 +1666,25 @@ final class NavigationContractTests: XCTestCase {
             return detailsContent.distance(from: detailsContent.startIndex, to: range.lowerBound)
         }
         XCTAssertEqual(offsets, offsets.sorted())
+
+        let attachedEssentialMarkers = [
+            "MapCheckInDateSection(",
+            "ratingSection",
+            "optionalDetailsDisclosure"
+        ]
+        let attachedEssentialOffsets = try attachedEssentialMarkers.map { marker in
+            let range = try XCTUnwrap(detailsContent.range(of: marker), "Missing \(marker)")
+            return detailsContent.distance(from: detailsContent.startIndex, to: range.lowerBound)
+        }
+        XCTAssertEqual(attachedEssentialOffsets, attachedEssentialOffsets.sorted())
+        XCTAssertTrue(optionalDetails.contains("if presentation == .attached"))
+        XCTAssertTrue(optionalDetails.contains("placeTypeSection"))
+        XCTAssertTrue(optionalDetails.contains("visitParticipationSections"))
+        let attachedPlaceType = try XCTUnwrap(optionalDetails.range(of: "placeTypeSection"))
+        let attachedParticipation = try XCTUnwrap(optionalDetails.range(of: "visitParticipationSections"))
+        let attachedNote = try XCTUnwrap(optionalDetails.range(of: "noteSection"))
+        XCTAssertLessThan(attachedPlaceType.lowerBound, attachedNote.lowerBound)
+        XCTAssertLessThan(attachedParticipation.lowerBound, attachedNote.lowerBound)
 
         let optionalMarkers = [
             "noteSection",
@@ -2052,7 +2085,20 @@ final class NavigationContractTests: XCTestCase {
             WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]),
             .demo
         )
-        XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander"],
+                usesSimulatorTestSession: true
+            ),
+            .demo
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander"],
+                usesSimulatorTestSession: false
+            ),
+            .empty
+        )
 
         let fixtures = WanderFixtures.storefront()
         XCTAssertEqual(fixtures.currentUser.displayName, "Avery")
@@ -2479,7 +2525,13 @@ final class NavigationContractTests: XCTestCase {
 
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndExplicitProfilingFixturesWhenRequested() {
-        XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander"],
+                usesSimulatorTestSession: false
+            ),
+            .empty
+        )
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
         XCTAssertEqual(
             WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUsePerformanceFixtures"]),
@@ -2976,6 +3028,176 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(actionRow.contains(".frame(maxWidth: .infinity, minHeight: 56)"))
         XCTAssertTrue(actionRow.contains("VStack(spacing: 3)"))
         XCTAssertTrue(actionRow.contains("minimumScaleFactor(0.68)"))
+    }
+
+    func testFlaggedPlaceProfileUsesSafeAreaFloatingActionsWithoutRemovingLegacyFallback() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+        let floatingActions = try sourceSection(
+            placeProfile,
+            after: "struct PlaceProfileFloatingActions: View {",
+            before: "struct PlaceSaveAttachedTray: View {"
+        )
+
+        XCTAssertTrue(fullView.contains("if !usesFloatingActions, action != .none"))
+        XCTAssertTrue(fullView.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
+        XCTAssertTrue(fullView.contains("else if usesFloatingActions, !floatingActions.isEmpty"))
+        XCTAssertTrue(fullView.contains("saveActionSnapshot?.usesFloatingActions == true"))
+        XCTAssertTrue(fullView.contains("saveActionSnapshot?.presentation.actions ?? []"))
+        XCTAssertTrue(fullView.contains("variant: floatingActionVariant"))
+        XCTAssertTrue(placeProfile.contains("@State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?"))
+        XCTAssertTrue(placeProfile.contains("_saveActionSnapshot = State(initialValue: saveActionSnapshot)"))
+        XCTAssertTrue(fullView.contains("@Environment(\\.placeProfileFloatingActionVariant)"))
+        XCTAssertFalse(fullView.contains("PlaceProfileFloatingActionDebugPreferences()"))
+        XCTAssertTrue(placeProfile.contains("case option5 = 5"))
+        XCTAssertTrue(floatingActions.contains("dynamicTypeSize.isAccessibilitySize"))
+        XCTAssertTrue(floatingActions.contains(".frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)"))
+        XCTAssertTrue(floatingActions.contains(".wanderGlassCapsule("))
+        XCTAssertTrue(floatingActions.contains(".wanderGlassRoundedRectangle("))
+        XCTAssertTrue(floatingActions.contains("tone: Self.glassTone(for: action, variant: variant)"))
+        XCTAssertTrue(floatingActions.contains("interactive: true"))
+        XCTAssertTrue(floatingActions.contains("showsBorder: true"))
+        XCTAssertTrue(floatingActions.contains("case .option5:"))
+        XCTAssertTrue(floatingActions.contains(".deepBlackAction"))
+        XCTAssertTrue(floatingActions.contains("tone: .darkOverlay"))
+        XCTAssertTrue(floatingActions.contains("GlassEffectContainer(spacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(floatingActions.contains("material: variant == .option4 ? .clear : .regular"))
+        XCTAssertTrue(floatingActions.contains("static let compactActionHeight: CGFloat = 60"))
+        XCTAssertTrue(floatingActions.contains("static let compactActionFrameWidth: CGFloat = 124"))
+        XCTAssertTrue(floatingActions.contains("static let accessibilityCompactActionFrameWidth: CGFloat = 280"))
+        XCTAssertTrue(floatingActions.contains("variant: PlaceProfileFloatingActionVariant = .resolved()"))
+        XCTAssertTrue(placeProfile.contains("#if DEBUG"))
+        XCTAssertTrue(placeProfile.contains("-WanderPlaceActionVariant"))
+        XCTAssertFalse(floatingActions.contains(".background(WanderTheme.surfaceBone.color)"))
+        XCTAssertFalse(floatingActions.contains("RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)"))
+        XCTAssertTrue(floatingActions.contains(".accessibilityLabel(action.title)"))
+        XCTAssertTrue(floatingActions.contains(".accessibilityAddTraits(action.isSelected ? .isSelected : [])"))
+
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        XCTAssertTrue(theme.contains("case blackAction"))
+        XCTAssertTrue(theme.contains("case deepBlackAction"))
+        XCTAssertTrue(theme.contains("case lightAction"))
+        XCTAssertTrue(theme.contains("Color.white.opacity(0.56)"))
+        XCTAssertTrue(theme.contains("func wanderGlassRoundedRectangle("))
+        XCTAssertTrue(theme.contains("let glass: Glass = material == .clear ? .clear : .regular"))
+        XCTAssertTrue(theme.contains("if #available(iOS 26.0, *)"))
+        XCTAssertTrue(theme.contains(".glassEffect("))
+        XCTAssertTrue(theme.contains(".background(.ultraThinMaterial, in: shape)"))
+
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertTrue(mapScreen.contains("saveActionSnapshot: saveActionSnapshot("))
+        XCTAssertTrue(mapScreen.contains("onFloatingAction: { saveAction in"))
+        XCTAssertTrue(mapScreen.contains("handleFloatingAction(saveAction, for: selectedPlace)"))
+        XCTAssertTrue(mapScreen.contains(".preselectingStatus(status)"))
+        XCTAssertTrue(mapScreen.contains("resolvedFlagValue: backend.featureFlag("))
+        XCTAssertTrue(mapScreen.contains(".placeProfileSaveTrayV1"))
+    }
+
+    func testFirstMapSavesUseOneSharedEditorForSheetAndAttachedTray() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let policy = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileSaveActionPolicy.swift")
+        )
+        let sheetWrapper = try sourceSection(
+            mapScreen,
+            after: "struct MapPlaceSaveFlowSheet: View {",
+            before: "struct MapPlaceSaveEditor: View {"
+        )
+        let sharedEditor = try sourceSection(
+            mapScreen,
+            after: "struct MapPlaceSaveEditor: View {",
+            before: "private struct MapSaveVisitPhotoSection: View"
+        )
+
+        XCTAssertTrue(sheetWrapper.contains("MapPlaceSaveEditor("))
+        XCTAssertTrue(sheetWrapper.contains("presentation: .sheet"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceSaveAttachedTray: View"))
+        XCTAssertTrue(placeProfile.contains("MapPlaceSaveEditor("))
+        XCTAssertTrue(placeProfile.contains("presentation: .attached"))
+        XCTAssertTrue(placeProfile.contains("if let attachedSaveContext"))
+        XCTAssertTrue(placeProfile.contains(".id(attachedSaveContext.id)"))
+        XCTAssertTrue(placeProfile.contains("\"place-profile.attached-check-in\""))
+        XCTAssertTrue(placeProfile.contains("\"place-profile.attached-wanna\""))
+        XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"Wanna\" : CheckInCopy.verb"))
+        XCTAssertTrue(placeProfile.contains("selectedStatus == .wannaGo ? \"bookmark.fill\" : \"star.fill\""))
+        XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(trayAccessibilityIdentifier)"))
+
+        XCTAssertTrue(sharedEditor.contains("let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?"))
+        XCTAssertTrue(sharedEditor.contains("let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool"))
+        XCTAssertTrue(sharedEditor.contains("onDraftChange(draftID, update.form, update.submittedAt)"))
+        XCTAssertTrue(sharedEditor.contains("onSaveCompleted(result)"))
+        XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
+        XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
+        XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
+
+        XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
+        XCTAssertTrue(policy.contains("route == .floatingActions"))
+        XCTAssertTrue(policy.contains("state == .unsaved"))
+        XCTAssertTrue(policy.contains("isSupportedFirstSaveAction(action.kind, status: destinationStatus)"))
+        XCTAssertTrue(policy.contains("case (.checkIn, .been), (.wanna, .wannaGo):"))
+        XCTAssertTrue(mapScreen.contains("currentUserSave(matching: visiblePlace) == nil"))
+        XCTAssertTrue(mapScreen.contains("currentUserSave(matching: candidate) == nil"))
+        XCTAssertTrue(mapScreen.contains("currentUserSave: currentUserSave(matching: selectedPlace)"))
+        XCTAssertTrue(mapScreen.contains("currentUserSave: currentUserSave(matching: group.primary)"))
+        XCTAssertTrue(mapScreen.contains("summaries.insert(saveSummary(for: currentUserSave), at: 0)"))
+        XCTAssertTrue(mapScreen.contains("existingDraft.form.selectedStatus != context.initialStatus"))
+        XCTAssertTrue(mapScreen.contains("switchedForm.selectedStatus = context.initialStatus"))
+        XCTAssertTrue(mapScreen.contains("submittedAt: nil"))
+        XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext)"))
+        XCTAssertTrue(mapScreen.contains("dismissPlaceProfileThen {\n            performFloatingAction"))
+
+        let visiblePlaceHandler = try sourceSection(
+            mapScreen,
+            after: "private func handleFloatingAction(\n        _ saveAction: PlaceProfileSaveAction,\n        for visiblePlace: VisiblePlace",
+            before: "private func performFloatingAction(\n        _ saveAction: PlaceProfileSaveAction,\n        for candidate: PlaceCandidate"
+        )
+        let candidateHandler = try sourceSection(
+            mapScreen,
+            after: "private func handleFloatingAction(\n        _ saveAction: PlaceProfileSaveAction,\n        for candidate: PlaceCandidate",
+            before: "private var attachedSaveDraft: PlaceSaveDraft?"
+        )
+        for handler in [visiblePlaceHandler, candidateHandler] {
+            XCTAssertTrue(handler.contains("route: .floatingActions"))
+            XCTAssertFalse(handler.contains("saveActionSnapshot(saves: saves).route"))
+        }
+
+        let attachedCompletion = try sourceSection(
+            mapScreen,
+            after: "private func completeAttachedSaveFlow(_ result: SaveResult) {",
+            before: "private func performAction(\n        for candidate: PlaceCandidate"
+        )
+        let selectResultOffset = try XCTUnwrap(
+            attachedCompletion.range(of: "selectSavedResult(selectedResult)")?.lowerBound
+        )
+        let clearCandidateOffset = try XCTUnwrap(
+            attachedCompletion.range(of: "selectedSearchCandidateID = nil")?.lowerBound
+        )
+        XCTAssertLessThan(selectResultOffset, clearCandidateOffset)
+        XCTAssertTrue(attachedCompletion.contains("mapSearchCandidates.removeAll"))
+
+        let saveCallback = try sourceSection(
+            mapScreen,
+            after: "private func saveMapFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {",
+            before: "private func scopedSaveMessage("
+        )
+        XCTAssertTrue(saveCallback.contains("let isAttachedSubmission = attachedMapSaveFlow?.id == submission.context.id"))
+        XCTAssertTrue(saveCallback.contains("if !isAttachedSubmission {\n                selectedSearchCandidateID = nil"))
+        XCTAssertTrue(saveCallback.contains("if !isAttachedSubmission {\n                mapSearchCandidates.removeAll"))
     }
 
     func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {

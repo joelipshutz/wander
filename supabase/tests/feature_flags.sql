@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(12);
+select plan(13);
 
 select is(
   (select enabled from public.feature_flags where key = 'first_visit_nux' and user_id is null),
@@ -14,6 +14,12 @@ select is(
   (select enabled from public.feature_flags where key = 'debug_settings' and user_id is null),
   false,
   'debug settings is globally disabled'
+);
+
+select is(
+  (select enabled from public.feature_flags where key = 'place_profile_save_tray_v1' and user_id is null),
+  false,
+  'place-profile save tray is globally disabled'
 );
 
 select ok(
