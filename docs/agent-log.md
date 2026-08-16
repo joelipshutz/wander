@@ -30789,10 +30789,12 @@ Final landing validation:
   native sheet moving. No UIKit bridge, delay workaround, or unverified
   auto-expansion behavior is landing. The supported interaction is the native
   grabber: the user can drag compact -> large -> compact and swipe-dismiss.
-- The final focused unit gate passed 46/46, covering all
+- After `origin/main` advanced to Map-search PR #459, merged `266303d7`
+  cleanly with no textual conflicts. The final post-integration focused unit
+  gate passed 46/46, covering all
   `PlaceProfilePresentationTests`, the relevant navigation contracts, and the
   Espresso theme-token contract. Result:
-  `/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_13-08-04--0700.xcresult`.
+  `/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_13-16-03--0700.xcresult`.
 - The native Wanna sheet UI gate passed: compact -> large -> compact -> dismiss,
   with the place-profile floating actions restored afterward. The attached
   Check-in UI gate also passed 1/1, verifying the editor remains over the place
