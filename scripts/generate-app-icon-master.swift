@@ -8,7 +8,7 @@ let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .deletingLastPathComponent()
 let sourceURL = repoRoot.appendingPathComponent(
-    "Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-ocean-reframe.png"
+    "Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-original.png"
 )
 let defaultOutputURL = repoRoot.appendingPathComponent(
     "Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png"

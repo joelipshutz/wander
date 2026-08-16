@@ -7,8 +7,8 @@
       "blur-material" : 0,
       "layers" : [
         {
-          "image-name" : "recme-liquid-glass-map-ocean-reframe.png",
-          "name" : "recme-liquid-glass-map-ocean-reframe"
+          "image-name" : "recme-liquid-glass-map-original.png",
+          "name" : "recme-liquid-glass-map-original"
         }
       ],
       "name" : "Matte Liquid Glass Map + App Emojis + Centered rec.me",
