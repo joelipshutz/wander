@@ -30144,3 +30144,37 @@ Validation — 2026-08-16 02:15 PDT:
   glass tones, compact sizing and no-rail behavior, per-account debug
   overrides, and Simulator/server debug-settings access. Result:
   `/Users/joelipshutz/Developer/Wander-worktrees/attached-new-wanna/DerivedData-s7-wanna/Logs/Test/Test-Wander-2026.08.16_02-10-29--0700.xcresult`.
+
+## 2026-08-16 03:45 PDT - Codex - REC-275 S7.1 attached Wanna handoff
+
+Agent: Codex with parallel routing and confirmation-CTA audits
+Branch: `codex/rec-275-attached-new-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-new-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Outcome and validation:
+
+- Added only the first S7 mode: a new unsaved Wanna now expands inside the Map
+  place profile and reuses the shared editor, draft, submission, and large
+  confirmation CTA. Existing Wanna, conversions, repeat visits, edit/history,
+  shared invitations, and non-Map entry points remain on their existing routes.
+- Integrated Joe's selected floating CTA default: compact deep-black Check in
+  on the left, light neutral Wanna on the right, and no shared rail/background.
+  The 1-5 Simulator comparison picker remains available.
+- Combined focused policy and navigation validation passed 42/42 with zero
+  failures. The real UI regression
+  `testFirstMapWannaExpandsAttachedEditorAndRestoresItsDraft` passed 1/1 and
+  verified expansion, optional fields, collapse/reopen draft restoration, and
+  the Check in transition. Result:
+  `/private/tmp/s7-wanna-visual.xcresult`.
+- Visual evidence: collapsed CTA
+  `/private/tmp/s7-selected-cta-resting-final.png`; attached Wanna editor
+  `/private/tmp/s7-wanna-visual-attachments/D1338977-C8D6-4EF2-9F9B-C236234A7370.png`.
+- Reset and relaunched the dedicated `S7.1 Attached Wanna Test` Simulator
+  (`8C40B670-2D32-411C-A50A-9CD3878B8A8B`) on the collapsed Griffith
+  Observatory Trail profile for Joe's review.
+- Pre-merge follow-up remains: rebase the 19-commit stack onto current
+  `origin/main`, add/confirm filtered-map existing-save routing coverage, run
+  two-device visual QA plus the complete relevant suite, then push/open a PR
+  only after Joe approves S7.1. No main merge, build-number bump, archive,
+  TestFlight upload, hosted data change, or release was performed.
