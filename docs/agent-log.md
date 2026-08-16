@@ -30017,6 +30017,22 @@ Latest-main integration — 2026-08-16 05:06 PDT:
   `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_04-59-40--0700.xcresult`.
 - This supplements the pre-merge full-scheme result of 1,259/1,259. No
   unrelated `main` behavior was rewritten, and no release action was taken.
+
+Handoff — 2026-08-16 05:07 PDT:
+
+- Pushed `codex/rec-278-map-ui-variants` and opened draft PR #456:
+  `https://github.com/joelipshutz/wander/pull/456`. The PR remains intentionally
+  Draft until Joe selects Option A, B, or C; Option C is recommended and Option
+  A is the minimal-risk fallback.
+- Linked the PR to Linear `REC-278`, added the screenshot/test handoff comment,
+  and moved the issue to `In Review`. Mission Control task
+  `cdcc518c-a6fa-4a46-acc5-79ab6a8fbfbc` is in `review` with the same outcome.
+- The comparison source is `docs/reviews/rec-278-map-ui/README.md`. Option
+  checkpoints remain explicit in branch history: A `1c3bcca0`, B `8035e745`,
+  and C `50a6ed8f`.
+- No merge, build-number bump, archive, TestFlight upload, hosted-data change,
+  or tester/public communication was performed. Next action: Joe selects an
+  option, then the branch can be narrowed/finalized and reviewed for merge.
 ## 2026-08-15 20:20 PDT - Codex - Place Action Liquid Glass Comparison
 
 Agent: Codex using `design-shotgun` and `ios-design-review`
