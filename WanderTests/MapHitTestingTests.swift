@@ -91,7 +91,38 @@ final class MapFilterSelectionTests: XCTestCase {
         )
 
         XCTAssertFalse(filterRow.contains("ScrollView(.horizontal"))
-        XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity)"))
+        XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity, alignment: .center)"))
+        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 48)"))
+    }
+
+    func testMapControlHierarchyKeepsFiltersAboveTheMapAndSearchAboveTabs() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        let filters = try XCTUnwrap(map.range(of: "if !isMapSearchFocused {"))
+        let mapSpace = try XCTUnwrap(
+            map.range(of: "Spacer()", range: filters.upperBound..<map.endIndex)
+        )
+        let search = try XCTUnwrap(
+            map.range(of: "SearchBar(", range: mapSpace.upperBound..<map.endIndex)
+        )
+
+        XCTAssertLessThan(filters.lowerBound, mapSpace.lowerBound)
+        XCTAssertLessThan(mapSpace.lowerBound, search.lowerBound)
+        XCTAssertTrue(map.contains("selectedPlaceProfileSurface\n                    .padding(.bottom, mapSearchDockClearance)"))
+        XCTAssertTrue(map.contains("MapSearchDockHeightPreferenceKey"))
+        XCTAssertTrue(map.contains("measuredMapSearchDockHeight = height"))
+        XCTAssertTrue(map.contains(".overlay(alignment: .bottomTrailing)"))
+        XCTAssertTrue(
+            map.contains(
+                "if !isPlaceProfilePresented && !isMapSearchFocused"
+            )
+        )
+        XCTAssertTrue(map.contains("? selectedPlaceRecenterClearance"))
     }
 
     func testMoreSectionsMatchTheActiveSource() {
