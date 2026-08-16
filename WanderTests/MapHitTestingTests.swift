@@ -77,7 +77,7 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(MapPinEntranceStyle.hiddenScale, 0.70)
         XCTAssertLessThan(MapPinEntranceStyle.hiddenScale, 0.80)
         XCTAssertGreaterThan(MapPinEntranceStyle.hiddenVerticalOffset, 0)
-        XCTAssertEqual(MapPinEntranceStyle.springBounce, 0.36, accuracy: 0.001)
+        XCTAssertEqual(MapPinEntranceStyle.springBounce, 0.75, accuracy: 0.001)
         XCTAssertLessThan(MapPinEntranceStyle.fadeOutDuration, MapPinEntranceStyle.springDuration)
         XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: -1), 0, accuracy: 0.001)
         XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: 1), 0.015, accuracy: 0.001)

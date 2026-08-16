@@ -2706,7 +2706,7 @@ enum MapPinEntranceStyle {
     static let duration = fadeOutDuration + entranceWindowDuration
     static let hiddenScale: CGFloat = 0.72
     static let hiddenVerticalOffset: CGFloat = 10
-    static let springBounce = 0.36
+    static let springBounce = 0.75
     static let fadeOutAnimation = Animation.easeOut(duration: fadeOutDuration)
     static let entranceAnimation = Animation.spring(duration: springDuration, bounce: springBounce)
 
