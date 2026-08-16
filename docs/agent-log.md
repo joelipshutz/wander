@@ -30765,6 +30765,22 @@ Starting state and scope:
 - The latest completed explicit TestFlight release is build 94. There is no
   pending release to resume, and this merge will ride the next explicitly
   requested TestFlight batch.
+
+Landing-review checkpoint:
+
+- Integrated latest `origin/main` into the top stack. The only conflict was
+  this append-only coordination log; both histories were preserved.
+- Independent maintainability review found an unused Espresso glass tone and
+  a duplicated native-sheet height literal. Removed the dead tone and made the
+  sheet's initial selection use its named compact detent.
+- Independent design review found two pre-merge regressions: opening the
+  Check-in date from the compact attached sheet did not request the large
+  detent, and the shared primary button had lost explicit pressed feedback.
+  The date disclosure now promotes the sheet before revealing its calendar,
+  and all shared primary buttons use a subtle pressed scale/opacity style while
+  retaining native Liquid Glass interaction on iOS 26.
+- Swift parsing and `git diff --check` pass after these review fixes. Focused
+  post-integration unit and UI validation remains in progress before merge.
 ## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
 
 Agent: Codex

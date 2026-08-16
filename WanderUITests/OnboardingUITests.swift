@@ -1519,6 +1519,17 @@ final class OnboardingUITests: XCTestCase {
             "Sunset draft"
         )
 
+        let compactMinY = attachedTray.frame.minY
+        app.buttons["save.checkInDateDisclosure"].tap()
+        let expanded = XCTNSPredicateExpectation(
+            predicate: NSPredicate { object, _ in
+                guard let element = object as? XCUIElement else { return false }
+                return element.frame.minY < compactMinY - 150
+            },
+            object: attachedTray
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [expanded], timeout: 3), .completed)
+
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "First Map check-in attached editor"
         screenshot.lifetime = .keepAlways

@@ -3141,7 +3141,6 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(theme.contains("case blackAction"))
         XCTAssertTrue(theme.contains("case deepBlackAction"))
-        XCTAssertTrue(theme.contains("case espressoAction"))
         XCTAssertTrue(theme.contains("case lightAction"))
         XCTAssertTrue(theme.contains("Color.white.opacity(0.56)"))
         XCTAssertTrue(theme.contains("func wanderGlassRoundedRectangle("))
@@ -3194,9 +3193,9 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private struct PlaceImportSourceIconStack: View")
                 .first
         )
-
-        XCTAssertTrue(theme.contains("case espressoAction"))
         XCTAssertTrue(theme.contains("case espressoConfirmation"))
+        XCTAssertTrue(theme.contains("private struct WanderPrimaryButtonPressStyle: ButtonStyle"))
+        XCTAssertTrue(theme.contains(".buttonStyle(WanderPrimaryButtonPressStyle())"))
         XCTAssertTrue(theme.contains(".wanderGlassRoundedRectangle("))
         XCTAssertTrue(theme.contains("cornerRadius: WanderTheme.radiusLarge"))
         XCTAssertEqual(
@@ -3258,6 +3257,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains(".presentationBackgroundInteraction(.enabled(upThrough: Self.compactDetent))"))
         XCTAssertTrue(placeProfile.contains(".presentationContentInteraction(.resizes)"))
         XCTAssertTrue(placeProfile.contains("onContentExpansionRequested: expand"))
+        XCTAssertTrue(sharedEditor.contains("onExpansionRequested: onContentExpansionRequested"))
 
         XCTAssertTrue(sharedEditor.contains("let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?"))
         XCTAssertTrue(sharedEditor.contains("let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool"))

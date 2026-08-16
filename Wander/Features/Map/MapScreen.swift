@@ -6197,6 +6197,7 @@ private final class CheckInDateTrayPresentation: ObservableObject {
 private struct MapCheckInDateSection: View {
     @Binding var visitedAt: Date
     @ObservedObject var presentation: CheckInDateTrayPresentation
+    let onExpansionRequested: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -6206,7 +6207,11 @@ private struct MapCheckInDateSection: View {
 
             VStack(spacing: 0) {
                 Button {
+                    let isOpening = !presentation.isExpanded
                     presentation.isExpanded.toggle()
+                    if isOpening {
+                        onExpansionRequested()
+                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar")
@@ -6728,7 +6733,8 @@ struct MapPlaceSaveEditor: View {
             if selectedStatus == .been {
                 MapCheckInDateSection(
                     visitedAt: $visitedAt,
-                    presentation: checkInDateTrayPresentation
+                    presentation: checkInDateTrayPresentation,
+                    onExpansionRequested: onContentExpansionRequested
                 )
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)

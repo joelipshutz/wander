@@ -318,7 +318,6 @@ enum WanderGlassTone: Equatable {
     case accent
     case blackAction
     case deepBlackAction
-    case espressoAction
     case lightAction
     case darkOverlay
 
@@ -334,8 +333,6 @@ enum WanderGlassTone: Equatable {
             Color.black.opacity(0.82)
         case .deepBlackAction:
             Color.black.opacity(0.94)
-        case .espressoAction:
-            WanderTheme.textInk.color.opacity(0.92)
         case .lightAction:
             Color.white.opacity(0.56)
         case .darkOverlay:
@@ -349,7 +346,7 @@ enum WanderGlassTone: Equatable {
             WanderTheme.textInk.color
         case .selected, .accent:
             WanderTheme.terracottaDark.color
-        case .blackAction, .deepBlackAction, .espressoAction, .darkOverlay:
+        case .blackAction, .deepBlackAction, .darkOverlay:
             .white
         }
     }
@@ -366,8 +363,6 @@ enum WanderGlassTone: Equatable {
             Color.black.opacity(0.88)
         case .deepBlackAction:
             Color.black.opacity(0.94)
-        case .espressoAction:
-            WanderTheme.textInk.color.opacity(0.98)
         case .lightAction:
             Color.white.opacity(0.92)
         case .darkOverlay:
@@ -385,8 +380,6 @@ enum WanderGlassTone: Equatable {
             Color.white.opacity(0.24)
         case .deepBlackAction:
             Color.white.opacity(0.22)
-        case .espressoAction:
-            Color.white.opacity(0.20)
         case .lightAction:
             Color.white.opacity(0.90)
         case .darkOverlay:
@@ -396,7 +389,7 @@ enum WanderGlassTone: Equatable {
 
     var borderWidth: CGFloat {
         switch self {
-        case .neutral, .blackAction, .deepBlackAction, .espressoAction, .lightAction, .darkOverlay:
+        case .neutral, .blackAction, .deepBlackAction, .lightAction, .darkOverlay:
             1
         case .selected, .accent:
             2
@@ -443,7 +436,7 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                         )
                 }
                 .shadow(
-                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction || tone == .espressoAction
+                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
                         ? Color.black.opacity(0.34)
                         : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
                     radius: 10,
@@ -490,7 +483,7 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
                     )
                 }
                 .shadow(
-                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction || tone == .espressoAction
+                    color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
                         ? Color.black.opacity(0.34)
                         : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
                     radius: 10,
@@ -754,6 +747,15 @@ enum WanderPrimaryButtonTone: Equatable {
     }
 }
 
+private struct WanderPrimaryButtonPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .opacity(configuration.isPressed ? 0.88 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 struct WanderPrimaryButton: View {
     let title: String
     var systemImage: String?
@@ -780,7 +782,7 @@ struct WanderPrimaryButton: View {
                     .clipShape(Capsule())
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(WanderPrimaryButtonPressStyle())
         .disabled(isDisabled)
     }
 

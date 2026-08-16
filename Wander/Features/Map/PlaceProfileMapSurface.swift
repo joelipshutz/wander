@@ -1824,7 +1824,7 @@ struct PlaceSaveAttachedSheet: View {
     let onSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
-    @State private var selectedDetent: PresentationDetent = .height(430)
+    @State private var selectedDetent = PlaceSaveAttachedSheet.compactDetent
 
     private var resolvedDraft: PlaceSaveDraft? {
         guard let liveDraft = placeSaveDraftStore.draft,
