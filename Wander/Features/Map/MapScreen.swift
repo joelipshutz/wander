@@ -2145,11 +2145,16 @@ struct MapScreen: View {
 
     @MainActor
     private func completeAttachedSaveFlow(_ result: SaveResult) {
+        let candidateID = attachedMapSaveFlow?.candidate.id
+        let selectedResult = mapSaveFlowSelection.saveFlowDidDismiss() ?? result
+        selectSavedResult(selectedResult)
+        selectedSearchCandidateID = nil
+        if let candidateID {
+            mapSearchCandidates.removeAll { $0.id == candidateID }
+        }
         placeSaveDraftStore.clear()
         attachedMapSaveFlow = nil
         store.saveFlowDidDismiss(.saveSheet)
-        let selectedResult = mapSaveFlowSelection.saveFlowDidDismiss() ?? result
-        selectSavedResult(selectedResult)
     }
 
     private func performAction(
@@ -2209,6 +2214,7 @@ struct MapScreen: View {
         let visitBackend = auth.isSignedIn ? backend : nil
         switch submission.context.mode {
         case .add(let sourceType):
+            let isAttachedSubmission = attachedMapSaveFlow?.id == submission.context.id
             if sourceType == .socialSave, !auth.isSignedIn {
                 mapSaveFlow = nil
                 auth.presentGate(for: .socialSave)
@@ -2222,9 +2228,13 @@ struct MapScreen: View {
             ) else { return nil }
             let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
             clearNativeMapFeatureSelection()
-            selectedSearchCandidateID = nil
+            if !isAttachedSubmission {
+                selectedSearchCandidateID = nil
+            }
             mapSaveFlowSelection.saveDidSucceed(result)
-            mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
+            if !isAttachedSubmission {
+                mapSearchCandidates.removeAll { $0.id == submission.candidate.id }
+            }
             showMapSaveFeedback(
                 SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
                 successMessage: "Added to your map."

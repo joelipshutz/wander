@@ -3066,6 +3066,29 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(policy.contains("action.destinationStatus == .been"))
         XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext)"))
         XCTAssertTrue(mapScreen.contains("dismissPlaceProfileThen {\n            performFloatingAction"))
+
+        let attachedCompletion = try sourceSection(
+            mapScreen,
+            after: "private func completeAttachedSaveFlow(_ result: SaveResult) {",
+            before: "private func performAction(\n        for candidate: PlaceCandidate"
+        )
+        let selectResultOffset = try XCTUnwrap(
+            attachedCompletion.range(of: "selectSavedResult(selectedResult)")?.lowerBound
+        )
+        let clearCandidateOffset = try XCTUnwrap(
+            attachedCompletion.range(of: "selectedSearchCandidateID = nil")?.lowerBound
+        )
+        XCTAssertLessThan(selectResultOffset, clearCandidateOffset)
+        XCTAssertTrue(attachedCompletion.contains("mapSearchCandidates.removeAll"))
+
+        let saveCallback = try sourceSection(
+            mapScreen,
+            after: "private func saveMapFlowSubmission(_ submission: MapPlaceSaveSubmission) async -> SaveResult? {",
+            before: "private func scopedSaveMessage("
+        )
+        XCTAssertTrue(saveCallback.contains("let isAttachedSubmission = attachedMapSaveFlow?.id == submission.context.id"))
+        XCTAssertTrue(saveCallback.contains("if !isAttachedSubmission {\n                selectedSearchCandidateID = nil"))
+        XCTAssertTrue(saveCallback.contains("if !isAttachedSubmission {\n                mapSearchCandidates.removeAll"))
     }
 
     func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {
