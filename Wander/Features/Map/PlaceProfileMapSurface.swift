@@ -1575,6 +1575,14 @@ struct PlaceSaveAttachedTray: View {
     let onClose: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
+
+    private var resolvedDraft: PlaceSaveDraft? {
+        guard let liveDraft = placeSaveDraftStore.draft,
+              liveDraft.candidate.id == context.candidate.id
+        else { return draft }
+        return liveDraft
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1613,7 +1621,7 @@ struct PlaceSaveAttachedTray: View {
 
             MapPlaceSaveEditor(
                 context: context,
-                draft: draft,
+                draft: resolvedDraft,
                 presentation: .attached,
                 onDraftChange: onDraftChange,
                 onSave: onSave,
@@ -1621,6 +1629,7 @@ struct PlaceSaveAttachedTray: View {
                 onClose: onClose,
                 onSaveCompleted: onSaveCompleted
             )
+            .id(context.id)
         }
         .frame(maxHeight: Self.maximumHeight)
         .background(WanderTheme.surfaceBone.color)

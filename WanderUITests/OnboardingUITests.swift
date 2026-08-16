@@ -1395,8 +1395,30 @@ final class OnboardingUITests: XCTestCase {
         checkIn.tap()
 
         XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
+        let restoredMoreOptions = app.buttons["Show more options"]
+        if restoredMoreOptions.waitForExistence(timeout: 2) {
+            restoredMoreOptions.tap()
+        } else {
+            XCTAssertTrue(app.buttons["Hide more options"].waitForExistence(timeout: 2))
+        }
+        let attachedScrollView = app.scrollViews["place-profile.attached-check-in"].firstMatch
+        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
+        let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
+        XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
+        let restoredNoteHeading = attachedScrollView.staticTexts["a note for future you"]
+        let scrollStart = attachedScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.82)
+        )
+        let scrollEnd = attachedScrollView.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.56)
+        )
+        for _ in 0..<8 where !restoredNoteHeading.isHittable {
+            scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
+        }
+        XCTAssertTrue(restoredNoteHeading.isHittable)
+        XCTAssertTrue(restoredNote.isHittable)
         XCTAssertEqual(
-            app.textFields["what you'll want to remember, who told you..."].value as? String,
+            restoredNote.value as? String,
             "Sunset draft"
         )
 
