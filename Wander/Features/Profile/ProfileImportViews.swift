@@ -716,7 +716,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                         .font(.system(size: 34, weight: .bold))
                         .foregroundStyle(WanderTheme.stateSuccess.color)
                     Text(completionTitle(receipt))
-                        .font(WanderTypography.editorialMajorSectionTitle)
+                        .font(WanderTypography.displaySectionTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                 }
 
@@ -787,7 +787,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
     private func heading(title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(WanderTypography.editorialMajorSectionTitle)
+                .font(WanderTypography.displaySectionTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
             Text(subtitle)
                 .font(WanderTypography.body)

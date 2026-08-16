@@ -1087,7 +1087,7 @@ private struct FeedSectionHeading: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(WanderTypography.editorialSectionTitle)
+                .font(WanderTypography.displaySectionTitle)
                 .foregroundStyle(WanderTheme.textInk.color)
 
             if let detail {
