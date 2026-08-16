@@ -324,6 +324,16 @@ final class WanderStore: ObservableObject {
             persist()
         }
     }
+    var defaultMapFilter: MapSource {
+        willSet {
+            guard newValue != defaultMapFilter else { return }
+            objectWillChange.send()
+        }
+        didSet {
+            guard oldValue != defaultMapFilter else { return }
+            persist()
+        }
+    }
 
     let contactProvider: any ContactProvider
 
@@ -498,6 +508,7 @@ final class WanderStore: ObservableObject {
             self.defaultVisibility = restored.defaultVisibility
             self.isPrivateProfile = restored.isPrivateProfile
             self.autoSaveListAddsToWant = restored.autoSaveListAddsToWant
+            self.defaultMapFilter = restored.defaultMapFilter
             self.providerCategoryEnrichmentAttemptedAtByKey = restored.providerCategoryEnrichmentAttemptedAtByKey
             self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
             self.saveStreakRecoveryDatesByUserID = restored.saveStreakRecoveryDatesByUserID
@@ -523,6 +534,7 @@ final class WanderStore: ObservableObject {
             self.defaultVisibility = fixtures.currentUser.defaultVisibility
             self.isPrivateProfile = fixtures.currentUser.isPrivateProfile
             self.autoSaveListAddsToWant = true
+            self.defaultMapFilter = .featured
             self.saveStreakDatesByUserID = Dictionary(grouping: fixtures.userPlaces, by: \.userID)
                 .mapValues { $0.map(\.savedAt) }
             self.saveStreakRecoveryDatesByUserID = [:]
@@ -1377,6 +1389,7 @@ final class WanderStore: ObservableObject {
         defaultVisibility = .followers
         isPrivateProfile = false
         autoSaveListAddsToWant = true
+        defaultMapFilter = .featured
         persist()
     }
 
@@ -7283,6 +7296,7 @@ final class WanderStore: ObservableObject {
             profiles.insert(profile, at: 0)
             defaultVisibility = preferredVisibility
             isPrivateProfile = preferredPrivateProfile
+            defaultMapFilter = .featured
             claimGuestRowsIfNeeded(from: previousCurrentUser, to: profile)
             persist()
         }
@@ -7367,6 +7381,7 @@ final class WanderStore: ObservableObject {
             profiles.insert(profile, at: 0)
             defaultVisibility = .followers
             isPrivateProfile = false
+            defaultMapFilter = .featured
             persist()
         }
     }

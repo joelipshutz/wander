@@ -35,6 +35,7 @@ final class WanderStoreTests: XCTestCase {
             placeListItems: [],
             contactProvider: FakeContactProvider(seededMatches: [])
         ))
+        store.defaultMapFilter = .friends
 
         store.apply(authState: .signedIn(AuthSession(
             userID: "user_second",
@@ -52,6 +53,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.currentUser.isPrivateProfile)
         XCTAssertTrue(store.isPrivateProfile)
         XCTAssertEqual(store.defaultVisibility, .selfOnly)
+        XCTAssertEqual(store.defaultMapFilter, .featured)
     }
 
     func testSigningOutClearsPrivateIdentityFields() {
@@ -65,6 +67,7 @@ final class WanderStoreTests: XCTestCase {
         store.updateCurrentUserAvatarURL("https://example.com/private.jpg")
         store.currentUser.onboardingCompletedAt = Date()
         store.setPrivateProfile(true)
+        store.defaultMapFilter = .friends
 
         store.apply(authState: .signedOut)
 
@@ -78,12 +81,14 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(store.currentUser.isPrivateProfile)
         XCTAssertFalse(store.isPrivateProfile)
         XCTAssertEqual(store.defaultVisibility, .followers)
+        XCTAssertEqual(store.defaultMapFilter, .featured)
     }
 
     func testPermanentAccountDeletionPurgesAllLocalAccountDataAndPreferences() {
         let store = WanderStore(fixtures: .seed())
         store.defaultVisibility = .mutuals
         store.setPrivateProfile(true)
+        store.defaultMapFilter = .friends
 
         store.resetAfterAccountDeletion()
 
@@ -99,6 +104,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.placeLists.isEmpty)
         XCTAssertEqual(store.defaultVisibility, .followers)
         XCTAssertFalse(store.isPrivateProfile)
+        XCTAssertEqual(store.defaultMapFilter, .featured)
     }
 
     func testFriendsAreMutualFollowsFromSingleStoreHelper() {
@@ -8576,16 +8582,18 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.lastRemoteError)
     }
 
-    func testListPersistenceRestoresListsAndAutoSaveSetting() {
+    func testListPersistenceRestoresListsAndLocalPreferences() {
         let fixture = makeTemporaryPersistence()
         let firstStore = WanderStore(fixtures: WanderFixtures.seed(), persistence: fixture.persistence)
         firstStore.autoSaveListAddsToWant = false
+        firstStore.defaultMapFilter = .friends
 
         let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
 
         XCTAssertEqual(relaunchedStore.placeLists.map(\.id), firstStore.placeLists.map(\.id))
         XCTAssertEqual(relaunchedStore.placeListItems.map(\.id), firstStore.placeListItems.map(\.id))
         XCTAssertFalse(relaunchedStore.autoSaveListAddsToWant)
+        XCTAssertEqual(relaunchedStore.defaultMapFilter, .friends)
     }
 
     func testBatchedListProjectionMatchesIndividualListProjection() {

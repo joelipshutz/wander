@@ -206,6 +206,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let defaultVisibilityRaw: String
     let isPrivateProfile: Bool?
     let autoSaveListAddsToWant: Bool?
+    let defaultMapFilterRaw: String?
     let savedAt: Date
 
     @MainActor
@@ -243,6 +244,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         defaultVisibilityRaw = store.defaultVisibility.rawValue
         isPrivateProfile = store.isPrivateProfile
         autoSaveListAddsToWant = store.autoSaveListAddsToWant
+        defaultMapFilterRaw = store.defaultMapFilter.rawValue
         savedAt = .now
     }
 
@@ -294,6 +296,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             defaultVisibility: PlaceVisibility(rawValue: defaultVisibilityRaw) ?? restoredCurrentUser.defaultVisibility,
             isPrivateProfile: isPrivateProfile ?? restoredCurrentUser.isPrivateProfile,
             autoSaveListAddsToWant: autoSaveListAddsToWant ?? true,
+            defaultMapFilter: MapSource(rawValue: defaultMapFilterRaw ?? "") ?? .featured,
             didApplySavedPlaceReset: shouldResetSavedPlaces
         )
     }
@@ -326,6 +329,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let defaultVisibility: PlaceVisibility
         let isPrivateProfile: Bool
         let autoSaveListAddsToWant: Bool
+        let defaultMapFilter: MapSource
         let didApplySavedPlaceReset: Bool
     }
 
