@@ -1,5 +1,7 @@
 import {
   classifyAPNsFailure,
+  notificationDeliveryAnalyticsEvent,
+  notificationFrequencyAnalyticsEvents,
   PushEvent,
   PushToken,
   sendToToken,
@@ -112,4 +114,110 @@ Deno.test("transport failures remain retryable without deactivating the token", 
 
   assertEquals(result.status, "retryable_failure");
   assertEquals(result.error_message, "network_down");
+});
+
+Deno.test("delivery analytics exports coarse outcomes without recipient or notification content", () => {
+  const analyticsEvent = notificationDeliveryAnalyticsEvent(
+    {
+      event_id: "10000000-0000-0000-0000-000000000001",
+      claim_token: "20000000-0000-0000-0000-000000000001",
+      recipient_user_id: "private_recipient",
+      actor_user_id: "private_actor",
+      notification_type: "shared_visit",
+      title: "Private title",
+      body: "Private body",
+      deeplink_url: "recme://places/private-place",
+      data: { place_id: "private-place" },
+      attempt_count: 2,
+      tokens: [{
+        id: "30000000-0000-0000-0000-000000000001",
+        device_token: "a".repeat(64),
+        environment: "production",
+        app_bundle_id: "com.grayline.wander",
+      }],
+    },
+    {
+      status: "sent",
+      accepted_count: 1,
+      retryable_count: 0,
+      permanent_token_failure_count: 1,
+      permanent_event_failure_count: 0,
+    },
+  );
+
+  assertEquals(analyticsEvent.event, "notification_delivery_processed");
+  assertEquals(
+    analyticsEvent.properties.distinct_id,
+    "notification_operations",
+  );
+  assertEquals(analyticsEvent.properties.delivery_outcome, "sent");
+  assertEquals(analyticsEvent.properties.failure_category, "permanent_token");
+  assertEquals(analyticsEvent.properties.accepted_token_count, 1);
+  const serialized = JSON.stringify(analyticsEvent);
+  for (
+    const privateValue of [
+      "private_recipient",
+      "private_actor",
+      "Private title",
+      "Private body",
+      "private-place",
+      "recme://",
+      "a".repeat(64),
+    ]
+  ) {
+    if (serialized.includes(privateValue)) {
+      throw new Error(`Analytics leaked private value: ${privateValue}`);
+    }
+  }
+});
+
+Deno.test("delivery analytics replaces unexpected notification types", () => {
+  const analyticsEvent = notificationDeliveryAnalyticsEvent(
+    {
+      event_id: "10000000-0000-0000-0000-000000000001",
+      claim_token: "20000000-0000-0000-0000-000000000001",
+      recipient_user_id: "private_recipient",
+      notification_type: "customer-name-that-must-not-leak",
+      title: "Private title",
+      body: "Private body",
+      data: {},
+      tokens: [],
+    },
+    { status: "failed", permanent_event_failure_count: 1 },
+  );
+
+  assertEquals(analyticsEvent.properties.notification_type, "unknown");
+});
+
+Deno.test("frequency analytics exposes summary and complete aggregate histogram only", () => {
+  const events = notificationFrequencyAnalyticsEvents({
+    window_days: 30,
+    eligible_recipient_count: 2,
+    accepted_notification_count: 4,
+    average_per_recipient: 2,
+    p50_per_recipient: 1,
+    p90_per_recipient: 3,
+    max_per_recipient: 3,
+    histogram: [
+      { bucket_order: 0, bucket: "0", recipient_count: 1 },
+      { bucket_order: 1, bucket: "1", recipient_count: 0 },
+      { bucket_order: 2, bucket: "2-3", recipient_count: 1 },
+      { bucket_order: 3, bucket: "4-7", recipient_count: 0 },
+      { bucket_order: 4, bucket: "8-14", recipient_count: 0 },
+      { bucket_order: 5, bucket: "15-29", recipient_count: 0 },
+      { bucket_order: 6, bucket: "30+", recipient_count: 0 },
+    ],
+  });
+
+  assertEquals(events.length, 8);
+  assertEquals(events[0].event, "notification_frequency_snapshot");
+  assertEquals(
+    events.slice(1).map((event) => event.properties.bucket),
+    ["0", "1", "2-3", "4-7", "8-14", "15-29", "30+"],
+  );
+  if (JSON.stringify(events).includes("user_")) {
+    throw new Error(
+      "Frequency analytics must not contain recipient identifiers",
+    );
+  }
 });

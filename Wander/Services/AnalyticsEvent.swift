@@ -264,6 +264,7 @@ enum WanderAnalyticsEvents {
     static let contactInviteSheetOpened = "contact_invite_sheet_opened"
     static let contactInviteDeliveryStarted = "contact_invite_delivery_started"
     static let contactInviteCompleted = "contact_invite_completed"
+    static let notificationOpened = "notification_opened"
     static let sharedVisitInvitesQueued = "shared_visit_invites_queued"
     static let sharedVisitAccepted = "shared_visit_accepted"
     static let placeListCreated = "place_list_created"

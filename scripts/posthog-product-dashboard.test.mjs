@@ -11,9 +11,17 @@ import {
 test("dashboard contract has every requested lifecycle section", () => {
   assert.deepEqual(
     sections.map(({ title }) => title),
-    ["Acquisition", "Activation", "Engagement", "Retention", "Referrals", "Monetization"],
+    [
+      "Acquisition",
+      "Activation",
+      "Engagement",
+      "Retention",
+      "Referrals",
+      "Monetization",
+      "Notification Operations",
+    ],
   );
-  assert.equal(sections.at(-1).insightKeys.length, 0);
+  assert.equal(sections.find(({ title }) => title === "Monetization").insightKeys.length, 0);
   assert.equal(assertDefinition().insights, insights.length);
 });
 
@@ -31,6 +39,26 @@ test("engagement and retention queries use canonical events", () => {
   const retention = insights.find(({ key }) => key === "retention-activation-cohorts");
   assert.match(retention.query.query, /d1_percent/);
   assert.match(retention.query.query, /d30_percent/);
+});
+
+test("notification operations includes delivery, opens, frequency, and aggregate histogram", () => {
+  const section = sections.find(({ title }) => title === "Notification Operations");
+  assert.equal(section.insightKeys.length, 5);
+
+  const volume = insights.find(({ key }) => key === "notifications-accepted-volume");
+  assert.equal(volume.query.series[0].event, "notification_delivery_processed");
+  assert.equal(volume.query.series[0].math, "total");
+  assert.equal(volume.query.series[0].properties[0].value[0], "sent");
+
+  const openRate = insights.find(({ key }) => key === "notifications-open-rate");
+  assert.match(openRate.query.query, /notification_opened/);
+  assert.match(openRate.query.query, /delivery_channel = 'remote'/);
+
+  const histogram = insights.find(({ key }) => key === "notifications-frequency-histogram");
+  assert.equal(histogram.query.kind, "DataVisualizationNode");
+  assert.equal(histogram.query.display, "ActionsBar");
+  assert.match(histogram.query.source.query, /notification_frequency_bucket_snapshot/);
+  assert.doesNotMatch(histogram.query.source.query, /distinct_id/);
 });
 
 test("apply provisions an ordered dashboard through supported tile endpoints", async () => {

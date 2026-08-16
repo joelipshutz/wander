@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap;
 set local search_path = public, extensions;
 
-select plan(74);
+select plan(80);
 
 select is(
   (
@@ -1130,6 +1130,54 @@ select ok(
     'execute'
   ),
   'only the service worker can call delivery settlement'
+);
+
+select ok(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.notification_operations_snapshot(integer)'::regprocedure
+  ),
+  'notification operations snapshot is security definer'
+);
+
+select ok(
+  (
+    select proconfig @> array['search_path=app, public']
+    from pg_proc
+    where oid = 'public.notification_operations_snapshot(integer)'::regprocedure
+  ),
+  'notification operations snapshot pins its search path'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.notification_operations_snapshot(integer)',
+    'execute'
+  ),
+  'authenticated clients cannot read the notification operations snapshot'
+);
+
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.notification_operations_snapshot(integer)',
+    'execute'
+  ),
+  'only the service worker can read the notification operations snapshot'
+);
+
+select is(
+  jsonb_array_length(public.notification_operations_snapshot(30)->'histogram'),
+  7,
+  'notification operations snapshot returns every frequency bucket including zero'
+);
+
+select ok(
+  public.notification_operations_snapshot(30)::text not like '%"user_id"%'
+    and public.notification_operations_snapshot(30)::text not like '%user_notify_%',
+  'notification operations snapshot never returns recipient identifiers'
 );
 reset role;
 
