@@ -30230,3 +30230,94 @@ Outcome and validation:
   local machine does not have the Supabase CLI, so hosted migration/pgTAP
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
+
+## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
+
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Progress`)
+
+Goal: move Feed search higher and make the Places/People selector plus Add
+action read as floating Liquid Glass controls over the Feed instead of a fixed
+row that visually cuts off the screen.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` at `40811705`.
+- The primary checkout is 255 commits behind `origin/main` and contains an
+  unrelated untracked `tmp/`; it remains untouched.
+- No active agent-log entry declares overlapping Feed-header work. Existing
+  active worktrees focus on search ranking, Map actions, and onboarding/auth
+  debug flows; this branch remains scoped to Feed presentation.
+- Existing design-system glass primitives already provide native iOS 26
+  `glassEffect` plus the iOS 17-25 material fallback. The implementation will
+  reuse those primitives instead of adding a competing glass style.
+- Expected files: `Wander/Features/Feed/FeedScreen.swift`, focused Feed/
+  navigation tests, simulator screenshot evidence if available, and this log.
+  No backend, schema, RLS, RPC, data, build-number, archive, upload, release,
+  or TestFlight change is in scope.
+
+Implementation and focused validation checkpoint:
+
+- Reworked the Feed root as a content-backed `ZStack` with a floating header
+  overlay. Search now occupies the top row; the Places/People selector and Add
+  action float together beneath it without an opaque full-width header cutting
+  off the canvas.
+- Reused `GlassEffectContainer`, `wanderGlassCapsule`,
+  `WanderGlassSegmentedSwitch`, and `WanderGlassActionButton`, preserving native
+  iOS 26 Liquid Glass and the existing iOS 17-25 material fallback.
+- Hoisted People search state/focus into the Feed root so both Places and People
+  use the same floating search slot. Both scroll surfaces share a top content
+  inset and move underneath the persistent controls; existing walkthrough,
+  search, Add, and route behavior remains wired.
+- Generic iOS Simulator build passed: `BUILD SUCCEEDED` in 36.631 seconds using
+  `/private/tmp/recme-rec281-dd`.
+- Focused source-contract regression passed 1/1. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-39-51--0700.xcresult`.
+- New Feed UI regression passed 1/1 after narrowing an initially ambiguous
+  accessibility query to the People text field. It verifies the controls remain
+  fixed through scrolling and that People search replaces Places search in the
+  same elevated slot. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-42-09--0700.xcresult`.
+- Visually verified the Feed on iPhone 17 Pro / iOS 26.2 and iPhone 16e /
+  iOS 18.6. The canvas stays continuous, controls do not clip, and both native
+  glass and fallback material render correctly. Evidence:
+  `/private/tmp/rec281-feed-after-large.png` and
+  `/private/tmp/rec281-feed-after-small.png`. The People-state UI attachment is
+  `/private/tmp/rec281-ui-attachments/20D7D2C6-66D0-4A45-ADFE-30898D2C0C65.png`.
+- Removed only the two disposable task-specific Simulator devices and their
+  rebuildable index/module caches after preserving screenshots and test result
+  bundles. Source and validation evidence remain intact.
+
+Final validation before publication:
+
+- Ran the required complete scheme test command on iPhone 16 Plus / iOS 18.6.
+  It exercised the full unit and UI targets for 1,032.787 seconds. The new Feed
+  header UI test and existing Feed screenshot, search, walkthrough, and tab
+  navigation coverage passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-44-08--0700.xcresult`.
+- That aggregate run reproduced the existing Clerk cancellation trap and then
+  accumulated cascading signal-kill failures across 14 unrelated onboarding
+  tests after the app/test runner restarted. Four additional unrelated
+  onboarding/place-editor/map-search tests reported explicit failures. No Feed
+  floating-header test failed.
+- The complete run also exposed two stale source-contract expectations for the
+  old inline People search. Updated those tests to assert the new shared
+  floating search slot while preserving the invite-before-results contract.
+- Reran the two updated contracts together with the known Clerk cancellation
+  case: 3/3 passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-02-25--0700.xcresult`.
+- Reran the complete `WanderTests` target. After the known Clerk test trapped in
+  the aggregate process, the runner restarted and completed 1,203/1,203 tests
+  successfully; the same Clerk case passes alone. Aggregate result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-03-12--0700.xcresult`.
+- Regenerated with XcodeGen. It attempted to add two unrelated pre-existing
+  ios-fix fixtures to the project; removed only that generated project drift so
+  this branch remains scoped to REC-281. No source membership change was needed.
+- Final generic iOS Simulator build passed in 8.211 seconds. `git diff --check`
+  passed, and the final diff contains only Feed presentation, its focused unit/
+  UI coverage, and this coordination log.
+- No backend, schema, auth implementation, data, build-number, archive,
+  TestFlight, App Store Connect, or Slack release action was taken.
