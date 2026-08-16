@@ -4,6 +4,449 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testAttachedEditorRoutingIsLimitedToFlaggedNewSaveModes() throws {
+        let checkIn = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
+                $0.kind == .checkIn
+            }
+        )
+        let wanna = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
+                $0.kind == .wanna
+            }
+        )
+        let candidate = PlaceCandidate(
+            id: "candidate-attached-check-in",
+            name: "Griffith Coffee",
+            category: "coffee shop",
+            address: "Los Angeles, CA",
+            latitude: 34.1,
+            longitude: -118.3,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-griffith-coffee",
+            confidence: 0.95
+        )
+        let base = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+
+        let attached = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                route: .floatingActions,
+                state: .unsaved,
+                action: checkIn,
+                baseContext: base
+            )
+        )
+        XCTAssertEqual(attached.candidate, candidate)
+        XCTAssertEqual(attached.initialStatus, .been)
+        XCTAssertFalse(attached.requiresStatusConfirmation)
+        XCTAssertTrue(attached.startsOnDetails)
+        guard case .add(.manual) = attached.mode else {
+            return XCTFail("Attached first check-in must preserve the original add source")
+        }
+
+        let attachedWanna = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                route: .floatingActions,
+                state: .unsaved,
+                action: wanna,
+                baseContext: base
+            )
+        )
+        XCTAssertEqual(attachedWanna.candidate, candidate)
+        XCTAssertEqual(attachedWanna.initialStatus, .wannaGo)
+        XCTAssertFalse(attachedWanna.requiresStatusConfirmation)
+        XCTAssertTrue(attachedWanna.startsOnDetails)
+        guard case .add(.manual) = attachedWanna.mode else {
+            return XCTFail("Attached first Wanna must preserve the original add source")
+        }
+
+        for action in [checkIn, wanna] {
+            XCTAssertNil(
+                PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                    route: .legacy,
+                    state: .unsaved,
+                    action: action,
+                    baseContext: base
+                )
+            )
+        }
+        for state in [
+            PlaceProfileSaveActionState.wanna,
+            .checkInHistory,
+            .sharedInvite,
+            .readOnly
+        ] {
+            for action in [checkIn, wanna] {
+                XCTAssertNil(
+                    PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                        route: .floatingActions,
+                        state: state,
+                        action: action,
+                        baseContext: base
+                    )
+                )
+            }
+        }
+    }
+
+    func testAttachedEditorRejectsExistingAndRepeatContextsForBothActions() throws {
+        let checkIn = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
+                $0.kind == .checkIn
+            }
+        )
+        let wanna = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
+                $0.kind == .wanna
+            }
+        )
+        let currentUser = profile(id: "user_current_attached", handle: "current")
+        let currentWanna = summary(
+            owner: currentUser,
+            place: place(id: "place_current_wanna_attached", category: "coffee"),
+            status: .wannaGo,
+            ratingScore: nil,
+            tags: []
+        ).visiblePlace
+        let existing = MapPlaceSaveContext.reselectCurrentUserSave(
+            currentWanna,
+            defaultVisibility: .followers,
+            attributes: [],
+            latestVisit: nil
+        )
+
+        for action in [checkIn, wanna] {
+            XCTAssertNil(
+                PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                    route: .floatingActions,
+                    state: .unsaved,
+                    action: action,
+                    baseContext: existing
+                )
+            )
+        }
+
+        let repeatContext = MapPlaceSaveContext.addVisitVisiblePlace(
+            currentWanna,
+            attributes: [],
+            latestVisit: nil
+        )
+        for action in [checkIn, wanna] {
+            XCTAssertNil(
+                PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                    route: .floatingActions,
+                    state: .unsaved,
+                    action: action,
+                    baseContext: repeatContext
+                )
+            )
+        }
+    }
+
+    func testAttachedEditorRejectsMismatchedActionAndStatus() throws {
+        let candidate = PlaceCandidate(
+            id: "candidate-attached-mismatch",
+            name: "Griffith Coffee",
+            category: "coffee shop",
+            address: "Los Angeles, CA",
+            latitude: 34.1,
+            longitude: -118.3,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-griffith-coffee-mismatch",
+            confidence: 0.95
+        )
+        let base = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+        let mismatched = PlaceProfileSaveAction(
+            kind: .wanna,
+            title: "Wanna",
+            isSelected: false,
+            destinationStatus: .been
+        )
+
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                route: .legacy,
+                state: .unsaved,
+                action: mismatched,
+                baseContext: base
+            )
+        )
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
+                route: .floatingActions,
+                state: .unsaved,
+                action: mismatched,
+                baseContext: base
+            )
+        )
+    }
+
+    func testFloatingSnapshotRefreshesActionsWithoutChangingTheCapturedRoute() {
+        let snapshot = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: true,
+            launchArguments: []
+        )
+        let flagOffSnapshot = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: false,
+            launchArguments: []
+        )
+
+        let refreshed = snapshot.refreshingPresentation(for: .checkInHistory)
+
+        XCTAssertEqual(refreshed.route, .floatingActions)
+        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in again", "Edit / history"])
+        XCTAssertEqual(flagOffSnapshot.route, .legacy)
+        XCTAssertEqual(snapshot.route, .floatingActions)
+        let legacy = PlaceProfileSaveActionSnapshot(
+            route: .legacy,
+            presentation: .empty
+        )
+        XCTAssertEqual(legacy.refreshingPresentation(for: .unsaved), legacy)
+    }
+
+    @MainActor
+    func testFloatingActionsStackOnlyForMultipleAccessibilitySizeActions() {
+        XCTAssertFalse(
+            PlaceProfileFloatingActions.shouldStackActions(
+                isAccessibilitySize: false,
+                actionCount: 2
+            )
+        )
+        XCTAssertFalse(
+            PlaceProfileFloatingActions.shouldStackActions(
+                isAccessibilitySize: true,
+                actionCount: 1
+            )
+        )
+        XCTAssertTrue(
+            PlaceProfileFloatingActions.shouldStackActions(
+                isAccessibilitySize: true,
+                actionCount: 2
+            )
+        )
+        XCTAssertEqual(PlaceProfileFloatingActions.minimumActionHeight, 48)
+    }
+
+    @MainActor
+    func testFloatingActionsUseSelectedPrimaryAndNeutralSecondaryGlass() {
+        let checkIn = PlaceProfileSaveAction(
+            kind: .checkIn,
+            title: "Check in",
+            isSelected: false,
+            destinationStatus: .been
+        )
+        let selectedWanna = PlaceProfileSaveAction(
+            kind: .wanna,
+            title: "Wanna",
+            isSelected: true,
+            destinationStatus: .wannaGo
+        )
+        let editHistory = PlaceProfileSaveAction(
+            kind: .editHistory,
+            title: "Edit / history",
+            isSelected: false,
+            destinationStatus: nil
+        )
+
+        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: checkIn), .deepBlackAction)
+        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: selectedWanna), .neutral)
+        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: editHistory), .neutral)
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option2),
+            .blackAction
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option3),
+            .blackAction
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option4),
+            .blackAction
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option5),
+            .deepBlackAction
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: selectedWanna, variant: .option4),
+            .lightAction
+        )
+    }
+
+    @MainActor
+    func testFloatingActionComparisonResolvesOnlyExplicitValidDebugOptions() {
+        XCTAssertEqual(PlaceProfileFloatingActionVariant.productionDefault, .option5)
+        XCTAssertEqual(PlaceProfileFloatingActionVariant.resolved(from: []), .option5)
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "2"]
+            ),
+            .option2
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "3"]
+            ),
+            .option3
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "4"]
+            ),
+            .option4
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "5"]
+            ),
+            .option5
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(from: [], storedRawValue: 5),
+            .option5
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument]
+            ),
+            .option5
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "6"]
+            ),
+            .option5
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(from: [], storedRawValue: 6),
+            .option5
+        )
+    }
+
+    @MainActor
+    func testFloatingActionComparisonKeepsCompactOptionsAccessible() {
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option1.usesCompactButtons)
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option2.usesCompactButtons)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option3.usesCompactButtons)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option4.usesCompactButtons)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option5.usesCompactButtons)
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option3.usesCharcoalRail)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option4.usesCharcoalRail)
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option5.usesCharcoalRail)
+        XCTAssertGreaterThanOrEqual(PlaceProfileFloatingActions.minimumActionHeight, 44)
+        XCTAssertGreaterThanOrEqual(PlaceProfileFloatingActions.compactActionHeight, 44)
+        XCTAssertEqual(PlaceProfileFloatingActions.compactActionHeight, 60)
+        XCTAssertEqual(PlaceProfileFloatingActions.compactActionFrameWidth, 124)
+        XCTAssertEqual(PlaceProfileFloatingActions.accessibilityCompactActionFrameWidth, 280)
+        XCTAssertGreaterThan(
+            PlaceProfileFloatingActions.accessibilityCompactActionFrameWidth,
+            PlaceProfileFloatingActions.compactActionFrameWidth
+        )
+    }
+
+    func testFloatingActionDebugPreferencesPersistPerAccount() throws {
+        let suiteName = "PlaceProfilePresentationTests.placeActionVariant.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = PlaceProfileFloatingActionDebugPreferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option5)
+        preferences.setVariant(.option5, for: "user_a")
+        preferences.setVariant(.option2, for: "user_b")
+        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option5)
+        XCTAssertEqual(preferences.storedVariant(for: "user_b"), .option2)
+        XCTAssertEqual(preferences.storedVariant(for: "user_c"), .option5)
+        XCTAssertEqual(
+            preferences.activeVariant(
+                for: "user_a",
+                isDebugSettingsEntitled: false,
+                arguments: []
+            ),
+            .option5
+        )
+        XCTAssertEqual(
+            preferences.activeVariant(
+                for: "user_a",
+                isDebugSettingsEntitled: true,
+                arguments: []
+            ),
+            .option5
+        )
+    }
+
+    func testFloatingStatusSelectionStartsTheExistingSaveSheetOnDetails() {
+        let candidate = PlaceCandidate(
+            id: "candidate-floating-actions",
+            name: "Maru Coffee",
+            category: "coffee shop",
+            address: "1936 Hillhurst Ave, Los Angeles, CA",
+            latitude: 34.10662,
+            longitude: -118.28762,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "mapkit-maru",
+            confidence: 0.95
+        )
+        let base = MapPlaceSaveContext.addCandidate(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: .followers
+        )
+
+        let checkIn = base.preselectingStatus(.been)
+        XCTAssertEqual(checkIn.initialStatus, .been)
+        XCTAssertFalse(checkIn.requiresStatusConfirmation)
+        XCTAssertTrue(checkIn.startsOnDetails)
+
+        let wanna = base.preselectingStatus(.wannaGo)
+        XCTAssertEqual(wanna.initialStatus, .wannaGo)
+        XCTAssertFalse(wanna.requiresStatusConfirmation)
+        XCTAssertTrue(wanna.startsOnDetails)
+    }
+
+    func testFloatingStatusSelectionPreservesExistingWannaConversionSemantics() {
+        let currentUser = profile(id: "user_current", handle: "current")
+        let currentWanna = summary(
+            owner: currentUser,
+            place: place(id: "place_existing_wanna", category: "coffee"),
+            status: .wannaGo,
+            ratingScore: nil,
+            tags: []
+        ).visiblePlace
+        let base = MapPlaceSaveContext.reselectCurrentUserSave(
+            currentWanna,
+            defaultVisibility: .followers,
+            attributes: [],
+            latestVisit: nil
+        )
+
+        let checkIn = base.preselectingStatus(.been)
+        guard case .addVisit = checkIn.mode else {
+            return XCTFail("A current Wanna should use the existing conversion-to-check-in path")
+        }
+        XCTAssertEqual(checkIn.initialStatus, .been)
+        XCTAssertTrue(checkIn.startsOnDetails)
+
+        let wanna = base.preselectingStatus(.wannaGo)
+        guard case .editWant = wanna.mode else {
+            return XCTFail("Selecting the active Wanna should reopen its existing editor")
+        }
+        XCTAssertEqual(wanna.initialStatus, .wannaGo)
+        XCTAssertTrue(wanna.startsOnDetails)
+    }
+
     func testCandidateProfilePreservesProviderPhotoIdentityAndChooseAction() {
         let candidate = PlaceCandidate(
             id: "candidate-maru",
@@ -42,6 +485,219 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
         XCTAssertTrue(PlaceSheetAction.editWant.isPrimaryAction)
     }
+
+    func testPlaceProfileSaveActionPolicyMapsEverySupportedState() {
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in",
+                    isSelected: false,
+                    destinationStatus: .been
+                ),
+                PlaceProfileSaveAction(
+                    kind: .wanna,
+                    title: "Wanna",
+                    isSelected: false,
+                    destinationStatus: .wannaGo
+                )
+            ]
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .wanna).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in",
+                    isSelected: false,
+                    destinationStatus: .been
+                ),
+                PlaceProfileSaveAction(
+                    kind: .wanna,
+                    title: "Wanna",
+                    isSelected: true,
+                    destinationStatus: .wannaGo
+                )
+            ]
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .checkInHistory).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in again",
+                    isSelected: false,
+                    destinationStatus: .been
+                ),
+                PlaceProfileSaveAction(
+                    kind: .editHistory,
+                    title: "Edit / history",
+                    isSelected: false,
+                    destinationStatus: nil
+                )
+            ]
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.resolve(state: .sharedInvite).actions,
+            [
+                PlaceProfileSaveAction(
+                    kind: .checkIn,
+                    title: "Check in",
+                    isSelected: false,
+                    destinationStatus: .been
+                )
+            ]
+        )
+        XCTAssertEqual(PlaceProfileSaveActionPolicy.resolve(state: .readOnly), .empty)
+    }
+
+    func testPlaceProfileSaveActionPolicyUsesGroupedCurrentUserState() {
+        let currentUser = profile(id: "user_current", handle: "current")
+        let socialUser = profile(id: "user_social", handle: "social")
+        let sharedPlace = place(id: "place_policy", category: "coffee")
+        let socialCheckIn = summary(
+            owner: socialUser,
+            place: sharedPlace,
+            status: .been,
+            ratingScore: 5,
+            tags: []
+        )
+
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                saves: [socialCheckIn],
+                currentUserID: currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: false
+            ),
+            .unsaved
+        )
+
+        let ownWanna = summary(
+            owner: currentUser,
+            place: sharedPlace,
+            status: .wannaGo,
+            ratingScore: nil,
+            tags: []
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                saves: [socialCheckIn, ownWanna],
+                currentUserID: currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: false
+            ),
+            .wanna
+        )
+
+        let ownCheckIn = summary(
+            owner: currentUser,
+            place: sharedPlace,
+            status: .been,
+            ratingScore: 4,
+            tags: []
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                saves: [ownCheckIn, socialCheckIn],
+                currentUserID: currentUser.id,
+                hasSharedVisitInvitation: false,
+                isReadOnly: false
+            ),
+            .checkInHistory
+        )
+    }
+
+    func testPlaceProfileSaveActionPolicyPrioritizesNonMutatingAndInviteStates() {
+        let currentUser = profile(id: "user_current", handle: "current")
+        let ownCheckIn = summary(
+            owner: currentUser,
+            place: place(id: "place_policy", category: "coffee"),
+            status: .been,
+            ratingScore: 4,
+            tags: []
+        )
+
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                currentUserSave: ownCheckIn.visiblePlace,
+                hasSharedVisitInvitation: true,
+                isReadOnly: false
+            ),
+            .sharedInvite
+        )
+        XCTAssertEqual(
+            PlaceProfileSaveActionPolicy.state(
+                currentUserSave: ownCheckIn.visiblePlace,
+                hasSharedVisitInvitation: true,
+                isReadOnly: true
+            ),
+            .readOnly
+        )
+    }
+
+    func testPlaceProfileSaveActionSnapshotFailsClosedWithoutResolvedSignedInFlag() {
+        let unresolved = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: nil,
+            launchArguments: []
+        )
+        let disabled = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: false,
+            launchArguments: []
+        )
+        let signedOut = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: false,
+            resolvedFlagValue: true,
+            launchArguments: []
+        )
+
+        for snapshot in [unresolved, disabled, signedOut] {
+            XCTAssertEqual(snapshot.route, .legacy)
+            XCTAssertFalse(snapshot.usesFloatingActions)
+            XCTAssertEqual(snapshot.presentation, .empty)
+        }
+    }
+
+    func testPlaceProfileSaveActionSnapshotCapturesEnabledRoute() {
+        let openedProfile = PlaceProfileSaveActionPolicy.snapshot(
+            state: .wanna,
+            isSignedIn: true,
+            resolvedFlagValue: true,
+            launchArguments: []
+        )
+        let laterFlagRefresh = PlaceProfileSaveActionPolicy.snapshot(
+            state: .wanna,
+            isSignedIn: true,
+            resolvedFlagValue: false,
+            launchArguments: []
+        )
+
+        XCTAssertEqual(openedProfile.route, .floatingActions)
+        XCTAssertTrue(openedProfile.usesFloatingActions)
+        XCTAssertEqual(openedProfile.presentation.actions.map(\.kind), [.checkIn, .wanna])
+        XCTAssertEqual(laterFlagRefresh.route, .legacy)
+        XCTAssertEqual(openedProfile.route, .floatingActions)
+    }
+
+    #if DEBUG
+    func testPlaceProfileSaveActionDebugLaunchOverrideSupportsSignedOutSimulator() {
+        let snapshot = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: false,
+            resolvedFlagValue: nil,
+            launchArguments: [PlaceProfileSaveActionPolicy.debugEnableLaunchArgument]
+        )
+
+        XCTAssertTrue(snapshot.usesFloatingActions)
+        XCTAssertEqual(snapshot.presentation.actions.map(\.kind), [.checkIn, .wanna])
+    }
+    #endif
 
     #if DEBUG
     @MainActor

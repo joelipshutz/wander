@@ -4,6 +4,74 @@ import XCTest
 
 @MainActor
 final class OnboardingStateTests: XCTestCase {
+    func testAuthenticatedSimulatorFixturePersistsUntilLiveAuthIsRequested() throws {
+        let suiteName = "OnboardingStateTests.simulatorSession.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertFalse(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander"],
+                defaults: defaults,
+                isSimulator: true
+            )
+        )
+        XCTAssertTrue(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander", "-WanderAuthenticatedUITest"],
+                defaults: defaults,
+                isSimulator: true
+            )
+        )
+        XCTAssertTrue(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander"],
+                defaults: defaults,
+                isSimulator: true
+            ),
+            "An icon relaunch has no custom arguments but must restore the local test session."
+        )
+        XCTAssertFalse(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander", "-WanderUseLiveAuth"],
+                defaults: defaults,
+                isSimulator: true
+            )
+        )
+        XCTAssertFalse(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander"],
+                defaults: defaults,
+                isSimulator: true
+            )
+        )
+        XCTAssertFalse(
+            SimulatorTestSessionPolicy.isActive(
+                arguments: ["Wander", "-WanderAuthenticatedUITest"],
+                defaults: defaults,
+                isSimulator: false
+            ),
+            "Physical devices and TestFlight must never activate a preview identity."
+        )
+    }
+
+    func testLocalSimulatorSessionEntersAppWithoutHostedProfileResolution() async {
+        let session = AuthSession(userID: "user_joe", displayName: "Joe", handle: "joe")
+        let auth = AuthSessionStore(provider: PreviewAuthSessionProvider(state: .signedIn(session)))
+        let coordinator = AppEntryCoordinator(
+            auth: auth,
+            backend: WanderBackend(),
+            usesLocalSimulatorTestSession: true
+        )
+
+        await coordinator.start()
+
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session, firstVisitWalkthroughEligible: false)
+        )
+    }
+
     func testCarouselAutoAdvanceIntervalIsSevenSeconds() {
         XCTAssertEqual(OnboardingCarouselTiming.defaultAutoAdvanceSeconds, 7)
     }
