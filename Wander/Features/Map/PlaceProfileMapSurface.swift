@@ -11,7 +11,7 @@ private enum PlaceProfileScrollAnchor {
     static let activity = "place-profile.activity"
 }
 
-struct PlaceProfileMapSurface<AboveCard: View>: View {
+struct PlaceProfileMapSurface: View {
     let place: PlaceSheetPlace
     let saves: [PlaceSaveSummary]
     let tasteSaves: [PlaceSaveSummary]
@@ -19,27 +19,6 @@ struct PlaceProfileMapSurface<AboveCard: View>: View {
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
-    let aboveCard: AboveCard
-
-    init(
-        place: PlaceSheetPlace,
-        saves: [PlaceSaveSummary],
-        tasteSaves: [PlaceSaveSummary],
-        currentUserID: String,
-        action: PlaceSheetAction,
-        onOpen: @escaping () -> Void,
-        onAction: @escaping () -> Void,
-        @ViewBuilder aboveCard: () -> AboveCard
-    ) {
-        self.place = place
-        self.saves = saves
-        self.tasteSaves = tasteSaves
-        self.currentUserID = currentUserID
-        self.action = action
-        self.onOpen = onOpen
-        self.onAction = onAction
-        self.aboveCard = aboveCard()
-    }
 
     private var presentation: PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
@@ -52,9 +31,8 @@ struct PlaceProfileMapSurface<AboveCard: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: WanderTheme.spacing2) {
+        VStack {
             Spacer(minLength: 0)
-            aboveCard
             PlaceProfilePreviewCard(
                 place: place,
                 presentation: presentation,

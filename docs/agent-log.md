@@ -30403,3 +30403,39 @@ Outcome and validation:
   local machine does not have the Supabase CLI, so hosted migration/pgTAP
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
+
+# 2026-08-16 05:44 PDT - Codex - REC-278 Option B landing
+
+Agent: Codex
+Branch: `codex/rec-278-map-ui-variants`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-278-map-ui-variants`
+Linear: `REC-278` (`In Progress`)
+
+- Joe selected Option B for `main`: the wider icon-and-label source filters,
+  native Liquid Glass on iOS 26, the reordered bottom search dock, and no
+  Option C result-count utility row.
+- Restoring B as the branch's final production state while preserving the
+  later focused-search keyboard safety fix and unrelated changes integrated
+  from current `main`.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `Wander/Features/Map/PlaceProfileMapSurface.swift`, focused tests, comparison
+  notes, and this log. The image-backed ticket remains deferred; no build-number
+  bump, archive, TestFlight upload, or release is authorized.
+
+Validation — 2026-08-16 06:04 PDT:
+
+- Final Option B focused unit coverage passed 166/166 on iPhone 16 Plus / iOS
+  18.6. Result: `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_05-46-07--0700.xcresult`.
+- The complete `WanderTests` target passed 1,238/1,238 on the isolated
+  `REC-278 Option B Landing` iPhone 16 Plus / iOS 18.6 simulator. Result:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-01-05--0700.xcresult`.
+- Seven focused UI tests passed 7/7 on the same isolated simulator, covering
+  Map launch, all source filters, More-filter reset/persistence, walkthrough
+  targets, and focused-search keyboard containment. Result:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-02-16--0700.xcresult`.
+- A prior complete-scheme attempt on the shared iPhone 16 Plus was discarded
+  after another worktree installed its `/tmp/recme-rec280-semantic-search`
+  build mid-run. No result from that contaminated run is counted.
+- Existing compiler/headermap warnings remain unchanged. No database, auth,
+  schema/RLS/RPC, build number, archive, TestFlight upload, or release change
+  is included.
