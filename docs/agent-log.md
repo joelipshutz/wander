@@ -29901,3 +29901,61 @@ Completion — 2026-08-15 13:23 PDT:
 - This merge did not increment build 151, archive or upload a binary, attach a
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
+
+## 2026-08-15 23:22 PDT - Codex - REC-225 real relevance gate
+
+Agent: Codex
+Branch: `codex/rec-225-relevance-evaluator`
+Worktree: `/private/tmp/recme-rec225-relevance-evaluator`
+Linear: `REC-225` (`In Progress`)
+Mission Control: unavailable; `localhost:4000` refused the task API
+
+Goal: turn Joe's completed blind judgments over the sanitized real rec.me
+corpus into a reproducible scorecard, decide whether place vectors earned the
+next architecture slice, and keep the result attached to ready PR #427.
+
+Coordination and data boundary:
+
+- Restored the existing isolated PR worktree and rebased its three commits onto
+  exact `origin/main` `c071f5ed`, preserving the active local checkout and its
+  untracked `tmp/` artifacts.
+- Extracted all 74 grades from Joe's eight screenshots, including the clipped
+  final selection. Scores, the hidden machine key, and the per-place judgment
+  pool remain ignored local artifacts under
+  `/Users/joelipshutz/Developer/Wander (nametbd)/tmp/recme-relevance-eval/`.
+- The hosted snapshot had 210 active saves and 114 ratings. Embedding input was
+  restricted to canonical place facts, coarse locality/region, and approved
+  aggregated structured tags; notes, free text, personal labels, identities,
+  addresses, photos, emails, and coordinates were excluded.
+
+Implementation and result:
+
+- Added a local scorer that validates pool completeness, reconstructs each
+  hidden top-five ranking, computes nDCG@5/MRR/top-slot/coverage guardrails,
+  slices results by intent, and applies a documented place-vector gate without
+  querying Supabase or regenerating embeddings. Added focused parser, ranking,
+  gate, and incomplete-pool tests plus a package command and usage docs.
+- The real blind scorecard passed the bounded place-vector gate: semantic
+  nDCG@5 rose from 73.3% for lexical + explicit reranking to 81.7% for hybrid,
+  an 8.4-point gain. Non-semantic guardrails improved by 0.4 points. Aggregate
+  nDCG@5 was 56.9% lexical, 77.7% explicit rerank, and 84.1% hybrid.
+- This is not approval to ship the current fixed hybrid weights. The hybrid
+  blend regressed `date-night restaurant in Los Angeles` from 46.6% reranked
+  nDCG@5 to 40.9%, while that query's lexical baseline was 92.3%; special
+  occasion also remained weak at 39.4%. The durable decision is to keep vectors
+  as a feature-flagged candidate source, preserve lexical evidence, and make
+  source weights intent-dependent inside one deterministic ranker.
+- Learned people vectors remain deferred: only two profiles have five or more
+  ratings. The conversational LLM remains a typed query planner, not the
+  synchronous ranker.
+
+Validation and handoff:
+
+- `npm --prefix scripts run test:relevance` passed 11/11.
+- Both scorer modules pass `node --check`; `git diff --check` passes.
+- Generated the sanitized tracked scorecard at
+  `docs/evals/2026-08-15-real-relevance-scorecard.md`; the reusable local report,
+  JSON, hidden key, and raw scores stay untracked.
+- PR #427 remains the merge vehicle. This developer-only evaluator changes no
+  iOS app code, hosted schema/data, build number, TestFlight binary, or release
+  status.

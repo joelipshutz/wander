@@ -169,6 +169,9 @@ export function renderRealScorecard({ key, scorecard }) {
     .sort((left, right) => right.delta - left.delta);
   const largestGain = deltas[0];
   const largestRegression = deltas.at(-1);
+  const guardrailResult = scorecard.decision.guardrailRegression <= 0
+    ? `Non-semantic guardrails improved by ${percentage(-scorecard.decision.guardrailRegression)}.`
+    : `Non-semantic guardrails regressed by ${percentage(scorecard.decision.guardrailRegression)}.`;
   const lines = [
     "# Real rec.me relevance scorecard",
     "",
@@ -184,7 +187,7 @@ export function renderRealScorecard({ key, scorecard }) {
     "",
     scorecard.decision.rule,
     "",
-    `Observed semantic nDCG@5 gain over explicit reranking: ${percentage(scorecard.decision.semanticGain)}. Non-semantic guardrail regression: ${percentage(scorecard.decision.guardrailRegression)}.`,
+    `Observed semantic nDCG@5 gain over explicit reranking: ${percentage(scorecard.decision.semanticGain)}. ${guardrailResult}`,
     "",
     "This gate keeps vectors as an optional candidate source; it does not approve the current fixed hybrid weights for production.",
     "",
@@ -224,7 +227,7 @@ export function renderRealScorecard({ key, scorecard }) {
     "## Architecture read",
     "",
     `- The largest hybrid gain was **${largestGain.text}** (${percentage(largestGain.delta)} versus explicit reranking).`,
-    `- The largest hybrid regression was **${largestRegression.text}** (${percentage(largestRegression.delta)}). The production ranker needs intent-dependent source weights and must preserve strong lexical evidence.`,
+    `- The largest hybrid regression was **${largestRegression.text}** (lost ${percentage(Math.abs(largestRegression.delta))}). The production ranker needs intent-dependent source weights and must preserve strong lexical evidence.`,
     "- Keep lexical, semantic, explicit taste/social, and community retrieval as separate bounded candidate providers. Hard filters run before their union; one deterministic ranker owns the final order and the personal ↔ community dial.",
     "- Let the conversational LLM produce a typed query plan. Do not put an LLM in the synchronous ranking loop.",
     "- Add pgvector only behind the semantic provider seam and feature flag, then rerun this same blind scorecard after weight changes.",
