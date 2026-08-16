@@ -29932,3 +29932,21 @@ Starting state and coordination:
   contract tests, visual-review artifacts under `docs/reviews/rec-278-map-ui/`,
   and this log. No build-number bump, TestFlight upload, or public post is in
   scope.
+
+Option A checkpoint — rearrangement only:
+
+- Moved the unchanged Featured/Friends/You/More row to the top map edge and the
+  unchanged search/add row to a bottom dock above the tab bar. Recenter now
+  clears that dock, and the existing compact place card shifts upward so the
+  card, search, and tabs no longer overlap.
+- Preserved the current 44 pt chip/search/action sizing, Liquid Glass surfaces,
+  source/refinement behavior, popover behavior, search focus/typeahead states,
+  and selected-place implementation. This is intentionally the smallest viable
+  hierarchy change.
+- Captured `docs/reviews/rec-278-map-ui/option-a-rearrangement.png` on iPhone 16
+  Plus / iOS 18.6 with deterministic friends fixtures and Hearthline Coffee
+  selected. Incremental simulator build passed. Focused Map filter/layout and
+  focused-search contract tests passed with exit 0.
+- Capture initially hit a full-disk error. Uninstalled only the task-installed
+  simulator app, reinstalled the freshly built app, and captured successfully;
+  no source, archive, other worktree, or unrelated simulator was removed.

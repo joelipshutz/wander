@@ -400,9 +400,11 @@ final class NavigationContractTests: XCTestCase {
         let map = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
-        XCTAssertTrue(map.contains("if isMapSearchFocused {\n                                MapSearchCancelButton(action: cancelMapSearch)"))
+        XCTAssertTrue(map.contains("MapSearchCancelButton(action: cancelMapSearch)"))
         XCTAssertTrue(map.contains(".accessibilityIdentifier(\"map.searchCancel\")"))
-        XCTAssertTrue(map.contains("if !isMapSearchFocused {\n                            HStack(spacing: WanderTheme.spacing1)"))
+        XCTAssertTrue(map.contains("if !isMapSearchFocused {"))
+        XCTAssertTrue(map.contains("HStack(spacing: WanderTheme.spacing1)"))
+        XCTAssertTrue(map.contains("MapControlLayout.searchDockClearance"))
         XCTAssertTrue(map.contains(".ignoresSafeArea(.keyboard, edges: .bottom)"))
         let typeahead = try XCTUnwrap(
             map.components(separatedBy: "private struct MapTypeaheadList: View").last?

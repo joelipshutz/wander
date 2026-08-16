@@ -94,6 +94,28 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity)"))
     }
 
+    func testMapControlHierarchyKeepsFiltersAboveTheMapAndSearchAboveTabs() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        let filters = try XCTUnwrap(map.range(of: "if !isMapSearchFocused {"))
+        let mapSpace = try XCTUnwrap(
+            map.range(of: "Spacer()", range: filters.upperBound..<map.endIndex)
+        )
+        let search = try XCTUnwrap(
+            map.range(of: "SearchBar(", range: mapSpace.upperBound..<map.endIndex)
+        )
+
+        XCTAssertLessThan(filters.lowerBound, mapSpace.lowerBound)
+        XCTAssertLessThan(mapSpace.lowerBound, search.lowerBound)
+        XCTAssertTrue(map.contains("selectedPlaceProfileSurface\n                    .padding(.bottom, MapControlLayout.searchDockClearance)"))
+        XCTAssertTrue(map.contains("? MapControlLayout.selectedPlaceRecenterClearance"))
+    }
+
     func testMoreSectionsMatchTheActiveSource() {
         XCTAssertFalse(MapMoreFilterPolicy.showsPeople(for: .featured))
         XCTAssertFalse(MapMoreFilterPolicy.showsStatus(for: .featured))
