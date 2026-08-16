@@ -30421,3 +30421,6 @@ Handoff, 2026-08-16 09:36 PDT:
 - Moved REC-284 to In Review and added the exact validation, simulator, broad-
   run caveat, and PR handoff. The dedicated Simulator remains ready for Joe's
   test. No TestFlight or production operation was performed.
+- Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` could not be
+  advanced to Review because `localhost:4000` was not accepting connections;
+  Linear and the PR contain the durable current status.
