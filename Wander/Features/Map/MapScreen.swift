@@ -256,6 +256,7 @@ struct MapScreen: View {
     @State private var handledPresentationResetRequestID: UUID?
     @State private var mapSearchFocusRequestID: UUID?
     @State private var walkthroughFallbackMemory: VisiblePlace?
+    @State private var measuredMapSearchDockHeight = MapControlLayout.searchDockClearance
     @FocusState private var isMapSearchFocused: Bool
 
     private static let defaultRegion = MKCoordinateRegion(
@@ -328,6 +329,7 @@ struct MapScreen: View {
         self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
+        _mapSearchMessage = State(initialValue: Self.resolvedInitialMapSearchMessage())
         _mapFilterState = State(initialValue: initialMapFilterState)
         _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
         _mapTabBecameInactiveAt = State(initialValue: nil)
@@ -343,6 +345,15 @@ struct MapScreen: View {
         let query = TrustedPlaceSearchQuery(mapQuery)
         guard query.hasMeaningfulTokens else { return places }
         return TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
+    }
+
+    private var mapSearchDockClearance: CGFloat {
+        max(MapControlLayout.searchDockClearance, measuredMapSearchDockHeight)
+    }
+
+    private var selectedPlaceRecenterClearance: CGFloat {
+        MapControlLayout.selectedPlaceRecenterClearance
+            + max(0, mapSearchDockClearance - MapControlLayout.searchDockClearance)
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
@@ -541,7 +552,105 @@ struct MapScreen: View {
                 }
 
                 VStack(spacing: 0) {
+                    if !isMapSearchFocused {
+                        HStack(spacing: WanderTheme.spacing1) {
+                            ForEach(MapSource.allCases) { source in
+                                Button {
+                                    selectMapSource(
+                                        source,
+                                        from: annotationGroups
+                                    )
+                                } label: {
+                                    MapSourceFilterChip(
+                                        source: source,
+                                        isSelected: mapFilterState.source == source
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .frame(minWidth: 44, minHeight: 48)
+                                .accessibilityIdentifier("map.filter.\(source.rawValue)")
+                                .walkthroughTarget(source.walkthroughTarget)
+                            }
+
+                            Button {
+                                toggleMoreFilters()
+                            } label: {
+                                MapMoreFilterChip(
+                                    selectedOptionCount: mapFilterState.more.activeOptionCount,
+                                    isExpanded: isMoreFiltersPresented
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .frame(minWidth: 44, minHeight: 48)
+                            .accessibilityIdentifier("map.filter.more")
+                            .walkthroughTarget(.mapMoreFilters)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .frame(height: 52)
+                        .overlay(alignment: .topTrailing) {
+                            if isMoreFiltersPresented {
+                                MapMoreFiltersPopover(
+                                    selection: moreFilterSelection,
+                                    source: mapFilterState.source,
+                                    peopleOptions: socialOwnerOptions,
+                                    dismiss: dismissMoreFilters
+                                )
+                                .id(mapFilterState.source)
+                                .padding(.trailing, WanderTheme.spacing3)
+                                .offset(y: 52)
+                                .transition(
+                                    reduceMotion
+                                        ? .opacity
+                                        : MapMoreFilterMotionStyle.panelTransition
+                                )
+                                .zIndex(20)
+                            }
+                        }
+                        .zIndex(isMoreFiltersPresented ? 20 : 0)
+                        .walkthroughTarget(.mapFeatured)
+
+                        if let mapFilterEmptyMessage {
+                            MapFilterEmptyNotice(
+                                message: mapFilterEmptyMessage,
+                                canReset: mapFilterState.more.activeSectionCount > 0,
+                                reset: {
+                                    setMoreFilterSelection(
+                                        MapMoreFilterSelection(),
+                                        from: annotationGroups
+                                    )
+                                }
+                            )
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.top, WanderTheme.spacing1)
+                        }
+                    }
+
+                    Spacer()
+
                     VStack(spacing: WanderTheme.spacing2) {
+                        if shouldShowTypeahead {
+                            MapTypeaheadList(
+                                suggestions: typeaheadSuggestions,
+                                isLoading: isLoadingTypeahead,
+                                onSelect: selectTypeaheadSuggestion,
+                                onAdd: addTypeaheadSuggestion
+                            )
+                        } else if let mapSearchMessage {
+                            MapSearchMessage(text: mapSearchMessage)
+                        }
+                        if let pendingSharedVisitMessage = SharedVisitOutboxNotice.message(
+                            pendingInvites: store.pendingSharedVisitInvites,
+                            ownerUserID: store.currentUser.id
+                        ) {
+                            MapSearchMessage(
+                                text: pendingSharedVisitMessage,
+                                actionTitle: "Retry"
+                            ) {
+                                Task { await retryPendingSharedVisitOperations() }
+                            }
+                        }
+
                         HStack(spacing: WanderTheme.spacing2) {
                             SearchBar(
                                 query: $mapQuery,
@@ -582,129 +691,49 @@ struct MapScreen: View {
                                 )
                             }
                         }
-                        .padding(.horizontal, WanderTheme.spacing3)
-
-                        if shouldShowTypeahead {
-                            MapTypeaheadList(
-                                suggestions: typeaheadSuggestions,
-                                isLoading: isLoadingTypeahead,
-                                onSelect: selectTypeaheadSuggestion,
-                                onAdd: addTypeaheadSuggestion
-                            )
-                            .padding(.horizontal, WanderTheme.spacing3)
-                        } else if let mapSearchMessage {
-                            MapSearchMessage(text: mapSearchMessage)
-                                .padding(.horizontal, WanderTheme.spacing3)
-                        }
-                        if let pendingSharedVisitMessage = SharedVisitOutboxNotice.message(
-                            pendingInvites: store.pendingSharedVisitInvites,
-                            ownerUserID: store.currentUser.id
-                        ) {
-                            MapSearchMessage(
-                                text: pendingSharedVisitMessage,
-                                actionTitle: "Retry"
-                            ) {
-                                Task { await retryPendingSharedVisitOperations() }
-                            }
-                            .padding(.horizontal, WanderTheme.spacing3)
-                        }
-                        if !isMapSearchFocused {
-                            HStack(spacing: WanderTheme.spacing1) {
-                                ForEach(MapSource.allCases) { source in
-                                    Button {
-                                        selectMapSource(
-                                            source,
-                                            from: annotationGroups
-                                        )
-                                    } label: {
-                                        MapSourceFilterChip(
-                                            source: source,
-                                            isSelected: mapFilterState.source == source
-                                        )
-                                    }
-                                    .buttonStyle(.plain)
-                                    .frame(maxWidth: .infinity)
-                                    .accessibilityIdentifier("map.filter.\(source.rawValue)")
-                                    .walkthroughTarget(source.walkthroughTarget)
-                                }
-
-                                Button {
-                                    toggleMoreFilters()
-                                } label: {
-                                    MapMoreFilterChip(
-                                        selectedOptionCount: mapFilterState.more.activeOptionCount,
-                                        isExpanded: isMoreFiltersPresented
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .frame(maxWidth: .infinity)
-                                .accessibilityIdentifier("map.filter.more")
-                                .walkthroughTarget(.mapMoreFilters)
-                            }
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .padding(.vertical, WanderTheme.spacing1)
-                            .frame(height: 48)
-                            .overlay(alignment: .topTrailing) {
-                                if isMoreFiltersPresented {
-                                    MapMoreFiltersPopover(
-                                        selection: moreFilterSelection,
-                                        source: mapFilterState.source,
-                                        peopleOptions: socialOwnerOptions,
-                                        dismiss: dismissMoreFilters
-                                    )
-                                    .id(mapFilterState.source)
-                                    .padding(.trailing, WanderTheme.spacing3)
-                                    .offset(y: 52)
-                                    .transition(
-                                        reduceMotion
-                                            ? .opacity
-                                            : MapMoreFilterMotionStyle.panelTransition
-                                    )
-                                    .zIndex(20)
-                                }
-                            }
-                            .zIndex(isMoreFiltersPresented ? 20 : 0)
-                            .walkthroughTarget(.mapFeatured)
-
-                            if let mapFilterEmptyMessage {
-                                MapFilterEmptyNotice(
-                                    message: mapFilterEmptyMessage,
-                                    canReset: mapFilterState.more.activeSectionCount > 0,
-                                    reset: {
-                                        setMoreFilterSelection(
-                                            MapMoreFilterSelection(),
-                                            from: annotationGroups
-                                        )
-                                    }
-                                )
-                                .padding(.horizontal, WanderTheme.spacing3)
-                                .padding(.top, WanderTheme.spacing1)
-                            }
-                        }
-
                     }
-
-                    Spacer()
-
-                    if !isPlaceProfilePresented {
-                        HStack {
-                            Spacer()
-                            RecenterButton(isLoading: isRecenteringOnUser) {
-                                dismissMoreFilters()
-                                recenterOnUser()
-                            }
-                            .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
-                            .accessibilityHidden(walkthroughs.currentStep?.target == .mapTabs)
-                            .padding(.trailing, WanderTheme.spacing3)
-                            .padding(.bottom, hasSelectedProfile ? 154 : WanderTheme.spacing2)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing2)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: MapSearchDockHeightPreferenceKey.self,
+                                value: proxy.size.height
+                            )
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .safeAreaPadding(.top, WanderTheme.spacing2)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
+                .ignoresSafeArea(
+                    .keyboard,
+                    edges: isMapSearchFocused ? [] : .bottom
+                )
+                .overlay(alignment: .bottomTrailing) {
+                    if !isPlaceProfilePresented && !isMapSearchFocused {
+                        RecenterButton(isLoading: isRecenteringOnUser) {
+                            dismissMoreFilters()
+                            recenterOnUser()
+                        }
+                        .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
+                        .accessibilityHidden(walkthroughs.currentStep?.target == .mapTabs)
+                        .padding(.trailing, WanderTheme.spacing3)
+                        .padding(
+                            .bottom,
+                            hasSelectedProfile
+                                ? selectedPlaceRecenterClearance
+                                : mapSearchDockClearance
+                        )
+                    }
+                }
+                .onPreferenceChange(MapSearchDockHeightPreferenceKey.self) { height in
+                    guard height > 0 else { return }
+                    measuredMapSearchDockHeight = height
+                }
+                .zIndex(40)
 
                 selectedPlaceProfileSurface
+                    .padding(.bottom, mapSearchDockClearance)
             }
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
@@ -3126,6 +3155,17 @@ struct MapScreen: View {
         return arguments[valueIndex]
     }
 
+    static func resolvedInitialMapSearchMessage(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String? {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapSearchMessage") else {
+            return nil
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex) else { return nil }
+        return arguments[valueIndex]
+    }
+
     static func resolvedInitialPlaceProfilePresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool {
         arguments.contains("-WanderMapSheetExpanded")
     }
@@ -3886,6 +3926,19 @@ enum MapSocialOwnerSelection {
     }
 }
 
+private enum MapControlLayout {
+    static let searchDockClearance: CGFloat = 64
+    static let selectedPlaceRecenterClearance: CGFloat = 218
+}
+
+private struct MapSearchDockHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 private struct SearchBar: View {
     @Environment(\.scenePhase) private var scenePhase
     @Binding var query: String
@@ -4152,6 +4205,7 @@ private struct MapSearchMessage: View {
         .background(WanderTheme.surfaceBone.color)
         .clipShape(Capsule())
         .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .accessibilityIdentifier("map.searchMessage")
     }
 }
 
@@ -4221,14 +4275,15 @@ private struct MapSourceFilterChip: View {
                 .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing1)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.horizontal, WanderTheme.spacing2)
+        .frame(minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isSelected ? .selected : .neutral,
             showsBorder: true
         )
+        .padding(.vertical, 2)
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -4265,14 +4320,15 @@ private struct MapMoreFilterChip: View {
                 .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing1)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.horizontal, WanderTheme.spacing2)
+        .frame(minHeight: 44)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isActive ? .selected : .neutral,
             showsBorder: true
         )
+        .padding(.vertical, 2)
         .accessibilityLabel("More map filters")
         .accessibilityValue(
             selectedOptionCount == 0

@@ -1,6 +1,62 @@
 import XCTest
 
+@MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testSourceFiltersFitWithoutOverlapOnSmallPhones() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures"
+        ]
+        app.launch()
+
+        let filters = [
+            app.buttons["map.filter.featured"],
+            app.buttons["map.filter.friends"],
+            app.buttons["map.filter.you"],
+            app.buttons["map.filter.more"]
+        ]
+        let appFrame = app.windows.firstMatch.frame
+
+        for filter in filters {
+            XCTAssertTrue(filter.waitForExistence(timeout: 5))
+            XCTAssertTrue(filter.isHittable)
+            XCTAssertGreaterThanOrEqual(filter.frame.minX, appFrame.minX)
+            XCTAssertLessThanOrEqual(filter.frame.maxX, appFrame.maxX)
+            XCTAssertGreaterThanOrEqual(filter.frame.height, 44)
+        }
+
+        for (leading, trailing) in zip(filters, filters.dropFirst()) {
+            XCTAssertLessThanOrEqual(leading.frame.maxX, trailing.frame.minX)
+        }
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-278 Option B small-phone filter geometry"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testSelectedTicketClearsTheCompleteSearchDock() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderMapPlace", "Woodcat Coffee",
+            "-WanderMapSearchMessage", "Map result. Tap + to add it."
+        ]
+        app.launch()
+
+        let ticket = app.buttons["Open Woodcat Coffee"]
+        let message = app.staticTexts["map.searchMessage"]
+        let search = app.textFields["map.searchField"]
+
+        XCTAssertTrue(ticket.waitForExistence(timeout: 5))
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(ticket.frame.maxY, message.frame.minY)
+        XCTAssertLessThanOrEqual(message.frame.maxY, search.frame.minY)
+    }
+
     private func launchFriendsMore(resetSeconds: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
