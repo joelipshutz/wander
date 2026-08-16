@@ -2,6 +2,40 @@ import XCTest
 
 @MainActor
 final class OnboardingUITests: XCTestCase {
+    func testAuthenticatedSimulatorFixtureSurvivesArgumentFreeRelaunch() {
+        let app = XCUIApplication()
+        defer {
+            app.terminate()
+            app.launchArguments = [
+                "-WanderUseLiveAuth",
+                "-WanderOnboardingUITestSignedOut",
+            ]
+            app.launch()
+            app.terminate()
+        }
+
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderInitialTab",
+            "profile",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Profile"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.buttons["Continue offline"].exists)
+        XCTAssertFalse(app.buttons["Get started"].exists)
+
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Map"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["Profile"].exists)
+        XCTAssertFalse(app.buttons["Continue offline"].exists)
+        XCTAssertFalse(app.buttons["Get started"].exists)
+    }
+
     func testSimulatorBuildExposesDebugSettingsWithoutServerEntitlement() {
         let app = XCUIApplication()
         app.launchArguments = [

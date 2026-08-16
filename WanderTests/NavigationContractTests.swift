@@ -2083,7 +2083,20 @@ final class NavigationContractTests: XCTestCase {
             WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]),
             .demo
         )
-        XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander"],
+                usesSimulatorTestSession: true
+            ),
+            .demo
+        )
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander"],
+                usesSimulatorTestSession: false
+            ),
+            .empty
+        )
 
         let fixtures = WanderFixtures.storefront()
         XCTAssertEqual(fixtures.currentUser.displayName, "Avery")
@@ -2510,7 +2523,13 @@ final class NavigationContractTests: XCTestCase {
 
     @MainActor
     func testRootViewUsesEmptyFixturesByDefaultAndExplicitProfilingFixturesWhenRequested() {
-        XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander"]), .empty)
+        XCTAssertEqual(
+            WanderRootView.resolvedFixtureMode(
+                from: ["Wander"],
+                usesSimulatorTestSession: false
+            ),
+            .empty
+        )
         XCTAssertEqual(WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUseDemoFixtures"]), .demo)
         XCTAssertEqual(
             WanderRootView.resolvedFixtureMode(from: ["Wander", "-WanderUsePerformanceFixtures"]),

@@ -30038,3 +30038,57 @@ Validation — 2026-08-15 23:37 PDT:
   failure. The installed S4 app and passing S4 result bundle remain.
 - No hosted flag row, schema/RLS/RPC/migration, production account access,
   push, merge, build bump, archive, upload, or release was changed.
+
+Checkpoint — 2026-08-16 00:18 PDT:
+
+- Joe found that quitting and reopening the `CTA Styles 1-5` Simulator app
+  discarded the authenticated `@joe` fixture and returned to real login. Root
+  cause: `-WanderAuthenticatedUITest` and `-WanderUseDemoFixtures` were
+  process-only launch arguments, so an icon relaunch rebuilt Clerk auth and the
+  empty/live fixture path.
+- Captured the deterministic pre-fix state in
+  `WanderTests/Fixtures/ios-fix/simulator-test-session-relaunch-pre.json`. The
+  iOS-fix DebugBridge snapshot mechanism does not exist in this repository and
+  is not applicable to a Simulator process-launch bug; the fixture records the
+  exact initial arguments, argument-free relaunch, observed state, expected
+  state, and existing simulator screenshot.
+- Implementing a Simulator-only durable local `@joe` session selected by the
+  existing authenticated-test argument, with demo fixtures and direct entry to
+  the app shell on relaunch. `-WanderUseLiveAuth` will explicitly clear it and
+  restore Clerk for authentication testing. Physical devices and TestFlight are
+  unchanged.
+- Expected files: `Wander/App/WanderApp.swift`,
+  `Wander/App/WanderRootView.swift`,
+  `Wander/Features/Onboarding/OnboardingState.swift`, focused unit/UI tests,
+  the pre-fix fixture above, and this log. No push, merge, build-number bump,
+  TestFlight upload, or release is authorized.
+
+Validation — 2026-08-16 00:30 PDT:
+
+- Added `SimulatorTestSessionPolicy`. Launching once with
+  `-WanderAuthenticatedUITest` persists the local `@joe` fixture choice in the
+  Simulator app container; a later icon/argument-free relaunch restores it.
+  `-WanderUseLiveAuth` removes that preference and restores Clerk. Explicit
+  signed-out test surfaces temporarily stay signed out without destroying the
+  saved tester choice.
+- The local simulator session now uses a local backend, deterministic parser,
+  demo fixtures, and an explicit `AppEntryCoordinator` fast path. It therefore
+  enters the app shell without asking Supabase to validate fake `user_joe` or
+  showing the offline-profile recovery screen. The preview identity is compiled
+  into the auth selection path only for `targetEnvironment(simulator)`; device
+  and TestFlight auth remain unchanged.
+- Five unique focused tests passed with zero failures: persistence/escape hatch,
+  physical-device exclusion, coordinator entry without hosted profile lookup,
+  fixture resolution including ambient-state isolation, and a UI test that
+  terminated the app then relaunched it with an empty argument list. Results:
+  `/private/tmp/recme-simulator-session-unit.xcresult`,
+  `/private/tmp/recme-simulator-session-ui.xcresult`, and
+  `/private/tmp/recme-simulator-session-contract-r2.xcresult`.
+- Installed the exact tested build on `CTA Styles 1-5`
+  (`1B0C1935-9585-4F31-8C01-599AB878FD67`), armed `@joe`, terminated it, and
+  relaunched `com.grayline.wander` with no custom arguments. The final screen is
+  the populated Map tab with all four tabs and no login/offline gate. The app is
+  open for Joe; durable post-fix evidence is
+  `WanderTests/Fixtures/ios-fix/simulator-test-session-relaunch-post.png`.
+- No hosted data, schema/RLS/RPC/migration, physical-device auth, push, merge,
+  build-number bump, archive, TestFlight upload, or release was changed.

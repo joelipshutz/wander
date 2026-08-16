@@ -1,0 +1,23 @@
+{
+  "issue": "simulator-test-session-relaunch",
+  "capture_source": "CTA Styles 1-5 iPhone 16 Plus simulator on 2026-08-16",
+  "state_server_capture": "not applicable: this is a simulator process-launch configuration bug and the repository has no DebugBridge integration",
+  "initial_launch_arguments": [
+    "-WanderAuthenticatedUITest",
+    "-WanderUseDemoFixtures",
+    "-WanderInitialTab",
+    "profile",
+    "-WanderOpenSettings"
+  ],
+  "initial_session": {
+    "user_id": "user_joe",
+    "display_name": "Joe",
+    "handle": "joe"
+  },
+  "pre_fix_relaunch_arguments": [],
+  "pre_fix_result": "The preview session is discarded; the app reconstructs Clerk auth and can return to login. The fake user can also hit the hosted profile recovery gate before entering the app.",
+  "expected_result": "After the authenticated simulator fixture is selected once, quitting and reopening from the app icon returns directly to the local @joe app shell with demo fixtures and no login or offline-profile gate.",
+  "live_auth_escape_hatch": "-WanderUseLiveAuth clears the persisted simulator fixture session and restores normal Clerk auth.",
+  "pre_fix_screenshot": "/private/tmp/recme-debug-settings-joe.png",
+  "post_fix_screenshot": "simulator-test-session-relaunch-post.png"
+}

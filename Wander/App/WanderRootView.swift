@@ -2067,7 +2067,10 @@ struct WanderRootView: View {
         return profileID.isEmpty ? nil : SharedProfileRoute(profileID: profileID)
     }
 
-    static func resolvedFixtureMode(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtureMode {
+    static func resolvedFixtureMode(
+        from arguments: [String] = ProcessInfo.processInfo.arguments,
+        usesSimulatorTestSession: Bool? = nil
+    ) -> WanderFixtureMode {
         #if DEBUG
         if arguments.contains("-WanderUseStorefrontFixtures") {
             return .storefront
@@ -2076,7 +2079,12 @@ struct WanderRootView: View {
         if arguments.contains("-WanderUsePerformanceFixtures") {
             return .performance
         }
-        return arguments.contains("-WanderUseDemoFixtures") ? .demo : .empty
+        let restoresSimulatorTestSession = usesSimulatorTestSession
+            ?? SimulatorTestSessionPolicy.isActive(arguments: arguments)
+        if arguments.contains("-WanderUseDemoFixtures") || restoresSimulatorTestSession {
+            return .demo
+        }
+        return .empty
     }
 
     static func resolvedFixtures(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtures {
