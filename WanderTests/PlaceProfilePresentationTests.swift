@@ -200,6 +200,72 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: checkIn), .accent)
         XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: selectedWanna), .neutral)
         XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: editHistory), .neutral)
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option2),
+            .blackAction
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option3),
+            .blackAction
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option4),
+            .blackAction
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: selectedWanna, variant: .option4),
+            .neutral
+        )
+    }
+
+    @MainActor
+    func testFloatingActionComparisonResolvesOnlyExplicitValidDebugOptions() {
+        XCTAssertEqual(PlaceProfileFloatingActionVariant.resolved(from: []), .option1)
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "2"]
+            ),
+            .option2
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "3"]
+            ),
+            .option3
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "4"]
+            ),
+            .option4
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument]
+            ),
+            .option1
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "5"]
+            ),
+            .option1
+        )
+    }
+
+    @MainActor
+    func testFloatingActionComparisonKeepsCompactOptionsAccessible() {
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option1.usesCompactButtons)
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option2.usesCompactButtons)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option3.usesCompactButtons)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option4.usesCompactButtons)
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option3.usesCharcoalRail)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option4.usesCharcoalRail)
+        XCTAssertGreaterThanOrEqual(PlaceProfileFloatingActions.minimumActionHeight, 44)
+        XCTAssertGreaterThan(
+            PlaceProfileFloatingActions.accessibilityCompactActionFrameWidth,
+            PlaceProfileFloatingActions.compactActionFrameWidth
+        )
     }
 
     func testFloatingStatusSelectionStartsTheExistingSaveSheetOnDetails() {

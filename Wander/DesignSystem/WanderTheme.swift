@@ -316,6 +316,7 @@ enum WanderGlassTone: Equatable {
     case neutral
     case selected
     case accent
+    case blackAction
     case darkOverlay
 
     var tint: Color? {
@@ -326,6 +327,8 @@ enum WanderGlassTone: Equatable {
             WanderTheme.terracotta.color.opacity(0.18)
         case .accent:
             WanderTheme.terracotta.color.opacity(0.28)
+        case .blackAction:
+            Color.black.opacity(0.82)
         case .darkOverlay:
             Color.black.opacity(0.46)
         }
@@ -337,7 +340,7 @@ enum WanderGlassTone: Equatable {
             WanderTheme.textInk.color
         case .selected, .accent:
             WanderTheme.terracottaDark.color
-        case .darkOverlay:
+        case .blackAction, .darkOverlay:
             .white
         }
     }
@@ -350,6 +353,8 @@ enum WanderGlassTone: Equatable {
             WanderTheme.terracottaTint.color.opacity(0.72)
         case .accent:
             WanderTheme.terracottaTint.color.opacity(0.78)
+        case .blackAction:
+            Color.black.opacity(0.88)
         case .darkOverlay:
             Color.black.opacity(0.64)
         }
@@ -361,6 +366,8 @@ enum WanderGlassTone: Equatable {
             WanderTheme.surfaceRaised.color.opacity(0.72)
         case .selected, .accent:
             WanderTheme.terracotta.color
+        case .blackAction:
+            Color.white.opacity(0.24)
         case .darkOverlay:
             Color.white.opacity(0.42)
         }
@@ -368,7 +375,7 @@ enum WanderGlassTone: Equatable {
 
     var borderWidth: CGFloat {
         switch self {
-        case .neutral, .darkOverlay:
+        case .neutral, .blackAction, .darkOverlay:
             1
         case .selected, .accent:
             2
@@ -410,7 +417,52 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                         )
                 }
                 .shadow(
-                    color: tone == .darkOverlay
+                    color: tone == .darkOverlay || tone == .blackAction
+                        ? Color.black.opacity(0.34)
+                        : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
+                    radius: 10,
+                    x: 0,
+                    y: 5
+                )
+        }
+    }
+}
+
+private struct WanderGlassRoundedRectangleModifier: ViewModifier {
+    let tone: WanderGlassTone
+    let cornerRadius: CGFloat
+    let isInteractive: Bool
+    let showsBorder: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(
+                    .regular
+                        .tint(tone.tint)
+                        .interactive(isInteractive),
+                    in: shape
+                )
+                .overlay {
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
+                }
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(tone.fallbackFill, in: shape)
+                .overlay {
+                    shape.stroke(
+                        showsBorder ? tone.border : Color.clear,
+                        lineWidth: showsBorder ? tone.borderWidth : 0
+                    )
+                }
+                .shadow(
+                    color: tone == .darkOverlay || tone == .blackAction
                         ? Color.black.opacity(0.34)
                         : WanderTheme.textInk.color.opacity(tone == .neutral ? 0.08 : 0.12),
                     radius: 10,
@@ -504,6 +556,22 @@ extension View {
             WanderGlassPanelModifier(
                 cornerRadius: cornerRadius,
                 tone: tone,
+                isInteractive: interactive,
+                showsBorder: showsBorder
+            )
+        )
+    }
+
+    func wanderGlassRoundedRectangle(
+        tone: WanderGlassTone = .neutral,
+        cornerRadius: CGFloat = WanderTheme.radiusLarge,
+        interactive: Bool = true,
+        showsBorder: Bool = true
+    ) -> some View {
+        modifier(
+            WanderGlassRoundedRectangleModifier(
+                tone: tone,
+                cornerRadius: cornerRadius,
                 isInteractive: interactive,
                 showsBorder: showsBorder
             )

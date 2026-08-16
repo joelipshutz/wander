@@ -1478,28 +1478,100 @@ private struct PlaceProfileFullView: View {
     }
 }
 
+enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
+    case option1 = 1
+    case option2 = 2
+    case option3 = 3
+    case option4 = 4
+
+    static let selectionLaunchArgument = "-WanderPlaceActionVariant"
+
+    static func resolved(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> PlaceProfileFloatingActionVariant {
+        #if DEBUG
+        guard let argumentIndex = arguments.firstIndex(of: selectionLaunchArgument) else {
+            return .option1
+        }
+        let valueIndex = arguments.index(after: argumentIndex)
+        guard arguments.indices.contains(valueIndex),
+              let rawValue = Int(arguments[valueIndex]),
+              let variant = PlaceProfileFloatingActionVariant(rawValue: rawValue) else {
+            return .option1
+        }
+        return variant
+        #else
+        return .option1
+        #endif
+    }
+
+    var usesCompactButtons: Bool {
+        self == .option3 || self == .option4
+    }
+
+    var usesCharcoalRail: Bool {
+        self == .option4
+    }
+}
+
 struct PlaceProfileFloatingActions: View {
     static let minimumActionHeight: CGFloat = 48
+    static let compactActionFrameWidth: CGFloat = 124
+    static let accessibilityCompactActionFrameWidth: CGFloat = 220
+    static let compactCornerRadius: CGFloat = 16
+    static let charcoalRailCornerRadius: CGFloat = 30
 
     let actions: [PlaceProfileSaveAction]
+    let variant: PlaceProfileFloatingActionVariant
     let onAction: (PlaceProfileSaveAction) -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    init(
+        actions: [PlaceProfileSaveAction],
+        variant: PlaceProfileFloatingActionVariant = .resolved(),
+        onAction: @escaping (PlaceProfileSaveAction) -> Void
+    ) {
+        self.actions = actions
+        self.variant = variant
+        self.onAction = onAction
+    }
+
     var body: some View {
-        Group {
-            if usesVerticalLayout {
-                VStack(spacing: WanderTheme.spacing2) {
-                    actionButtons
-                }
-            } else {
-                HStack(spacing: WanderTheme.spacing2) {
-                    actionButtons
-                }
-            }
-        }
-        .padding(.horizontal, WanderTheme.spacing3)
+        actionCluster
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, variant.usesCompactButtons ? WanderTheme.spacing6 : WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder
+    private var actionCluster: some View {
+        if variant.usesCharcoalRail {
+            actionLayout
+                .padding(.horizontal, WanderTheme.spacing3)
+                .padding(.vertical, WanderTheme.spacing3)
+                .wanderGlassRoundedRectangle(
+                    tone: .darkOverlay,
+                    cornerRadius: Self.charcoalRailCornerRadius,
+                    interactive: false,
+                    showsBorder: true
+                )
+        } else {
+            actionLayout
+        }
+    }
+
+    @ViewBuilder
+    private var actionLayout: some View {
+        if usesVerticalLayout {
+            VStack(spacing: WanderTheme.spacing2) {
+                actionButtons
+            }
+        } else {
+            HStack(spacing: WanderTheme.spacing2) {
+                actionButtons
+            }
+        }
     }
 
     @ViewBuilder
@@ -1508,32 +1580,63 @@ struct PlaceProfileFloatingActions: View {
             Button {
                 onAction(action)
             } label: {
-                HStack(spacing: WanderTheme.spacing1) {
-                    Image(systemName: systemImage(for: action))
-                        .accessibilityHidden(true)
-                    Text(action.title)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                    if action.isSelected {
-                        Image(systemName: "checkmark")
-                            .accessibilityHidden(true)
-                    }
+                if variant.usesCompactButtons {
+                    actionLabel(for: action)
+                        .contentShape(
+                            RoundedRectangle(
+                                cornerRadius: Self.compactCornerRadius,
+                                style: .continuous
+                            )
+                        )
+                        .wanderGlassRoundedRectangle(
+                            tone: Self.glassTone(for: action, variant: variant),
+                            cornerRadius: Self.compactCornerRadius,
+                            interactive: true,
+                            showsBorder: true
+                        )
+                } else {
+                    actionLabel(for: action)
+                        .contentShape(Capsule())
+                        .wanderGlassCapsule(
+                            tone: Self.glassTone(for: action, variant: variant),
+                            interactive: true,
+                            showsBorder: true
+                        )
                 }
-                .font(.system(size: 15, weight: .bold))
-                .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
-                .padding(.horizontal, WanderTheme.spacing2)
-                .contentShape(Capsule())
-                .foregroundStyle(Self.glassTone(for: action).foregroundStyle)
-                .wanderGlassCapsule(
-                    tone: Self.glassTone(for: action),
-                    interactive: true,
-                    showsBorder: true
-                )
             }
             .buttonStyle(.plain)
             .accessibilityLabel(action.title)
             .accessibilityAddTraits(action.isSelected ? .isSelected : [])
         }
+    }
+
+    private func actionLabel(for action: PlaceProfileSaveAction) -> some View {
+        HStack(spacing: WanderTheme.spacing1) {
+            Image(systemName: systemImage(for: action))
+                .accessibilityHidden(true)
+            Text(action.title)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            if action.isSelected {
+                Image(systemName: "checkmark")
+                    .accessibilityHidden(true)
+            }
+        }
+        .font(.system(size: 15, weight: .bold))
+        .frame(
+            minWidth: compactActionFrameWidth,
+            maxWidth: compactActionFrameWidth ?? .infinity,
+            minHeight: Self.minimumActionHeight
+        )
+        .padding(.horizontal, WanderTheme.spacing2)
+        .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
+    }
+
+    private var compactActionFrameWidth: CGFloat? {
+        guard variant.usesCompactButtons else { return nil }
+        return dynamicTypeSize.isAccessibilitySize
+            ? Self.accessibilityCompactActionFrameWidth
+            : Self.compactActionFrameWidth
     }
 
     private var usesVerticalLayout: Bool {
@@ -1547,8 +1650,12 @@ struct PlaceProfileFloatingActions: View {
         isAccessibilitySize && actionCount > 1
     }
 
-    static func glassTone(for action: PlaceProfileSaveAction) -> WanderGlassTone {
-        action.kind == .checkIn ? .accent : .neutral
+    static func glassTone(
+        for action: PlaceProfileSaveAction,
+        variant: PlaceProfileFloatingActionVariant = .option1
+    ) -> WanderGlassTone {
+        guard action.kind == .checkIn else { return .neutral }
+        return variant == .option1 ? .accent : .blackAction
     }
 
     private func systemImage(for action: PlaceProfileSaveAction) -> String {
