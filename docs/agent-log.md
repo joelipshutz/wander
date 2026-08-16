@@ -29901,3 +29901,34 @@ Completion — 2026-08-15 13:23 PDT:
 - This merge did not increment build 151, archive or upload a binary, attach a
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
+
+## 2026-08-16 04:05 PDT - Codex - REC-278 Map UI layout variants
+
+Agent: Codex using `ios-design-review`
+Branch: `codex/rec-278-map-ui-variants`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-278-map-ui-variants`
+Linear: `REC-278` (`In Progress`)
+Mission Control: `cdcc518c-a6fa-4a46-acc5-79ab6a8fbfbc` (`in_progress`)
+
+Goal: reorganize the production Map controls using Joe's attached map reference,
+then preserve three selectable depths of change: (A) rearrangement only, (B)
+refined sizing/grouping, and (C) the crispest coherent hierarchy. Capture a
+simulator screenshot for each before advancing to the next pass.
+
+Starting state and coordination:
+
+- Created this isolated worktree from exact `origin/main` at `910f1575`. The
+  root checkout is 254 commits behind and contains unrelated untracked `tmp/`;
+  it remains untouched.
+- Existing worktrees were inspected. No current uncommitted overlapping Map UI
+  edit was found. `Wander/Features/Map/MapScreen.swift` and this append-only log
+  are documented high-conflict files, so changes will remain narrow.
+- Reference hierarchy: keep the map itself visually dominant, retain top source
+  pills, move search toward the bottom action zone, and make recenter/count
+  controls read as one lower-map utility row. Current source/filter behavior,
+  native Liquid Glass behavior, pin rendering, map data, and four-tab navigation
+  remain unchanged.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused Map layout
+  contract tests, visual-review artifacts under `docs/reviews/rec-278-map-ui/`,
+  and this log. No build-number bump, TestFlight upload, or public post is in
+  scope.
