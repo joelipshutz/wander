@@ -34,6 +34,11 @@ struct FeedScreen: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                WanderTabHeaderLabel(title: "feed")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, WanderTheme.spacing4)
+                    .padding(.top, WanderTheme.spacing2)
+
                 HStack(spacing: WanderTheme.spacing2) {
                     FeedSurfaceTabs(selectedSurface: $selectedSurface)
                     .walkthroughTarget(.feedSurfaceSwitch)
@@ -46,7 +51,6 @@ struct FeedScreen: View {
                     )
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing2)
 
                 switch selectedSurface {
                 case .places:

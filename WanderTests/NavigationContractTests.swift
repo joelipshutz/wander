@@ -1051,7 +1051,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(typography.contains("Font.system(.largeTitle, design: .serif"))
         XCTAssertTrue(typography.contains("Font.system(.title3, design: .serif"))
         XCTAssertTrue(typography.contains("Font.system(.body, design: .default"))
-        XCTAssertFalse(typography.contains("size:"))
+        XCTAssertTrue(typography.contains("displayTabHeader = WanderDisplayFont.font(size: 28"))
 
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher("))
@@ -1074,6 +1074,38 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(streak.contains("WanderTypography"))
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
+    }
+
+    func testDisplayTypographyIsLimitedToPrimaryTabHeaders() throws {
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let screens = [
+            "map": "Wander/Features/Map/MapScreen.swift",
+            "feed": "Wander/Features/Feed/FeedScreen.swift",
+            "lists": "Wander/Features/Lists/ListsScreen.swift",
+            "@\\(profile.handle)": "Wander/Features/Profile/ProfileOwnerHome.swift"
+        ]
+
+        XCTAssertTrue(theme.contains("enum WanderDisplayFont"))
+        XCTAssertTrue(theme.contains("struct WanderTabHeaderLabel"))
+        XCTAssertTrue(theme.contains("static let displayHero"))
+        XCTAssertTrue(theme.contains("static let displayTabHeader"))
+        XCTAssertTrue(theme.contains("static let displaySectionTitle"))
+        XCTAssertTrue(theme.contains("static let displayCardTitle"))
+
+        for (title, path) in screens {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(path))
+            XCTAssertEqual(
+                source.components(separatedBy: "WanderTabHeaderLabel(").count - 1,
+                1,
+                "\(path) should use the display family exactly once"
+            )
+            XCTAssertTrue(source.contains("WanderTabHeaderLabel(title: \"\(title)\")"))
+            XCTAssertFalse(source.contains("WanderTypography.displayHero"))
+            XCTAssertFalse(source.contains("WanderTypography.displaySectionTitle"))
+            XCTAssertFalse(source.contains("WanderTypography.displayCardTitle"))
+        }
     }
 
     func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
