@@ -213,6 +213,10 @@ final class PlaceProfilePresentationTests: XCTestCase {
             .blackAction
         )
         XCTAssertEqual(
+            PlaceProfileFloatingActions.glassTone(for: checkIn, variant: .option5),
+            .deepBlackAction
+        )
+        XCTAssertEqual(
             PlaceProfileFloatingActions.glassTone(for: selectedWanna, variant: .option4),
             .lightAction
         )
@@ -241,14 +245,28 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
         XCTAssertEqual(
             PlaceProfileFloatingActionVariant.resolved(
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "5"]
+            ),
+            .option5
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(from: [], storedRawValue: 5),
+            .option5
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(
                 from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument]
             ),
             .option1
         )
         XCTAssertEqual(
             PlaceProfileFloatingActionVariant.resolved(
-                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "5"]
+                from: ["Wander", PlaceProfileFloatingActionVariant.selectionLaunchArgument, "6"]
             ),
+            .option1
+        )
+        XCTAssertEqual(
+            PlaceProfileFloatingActionVariant.resolved(from: [], storedRawValue: 6),
             .option1
         )
     }
@@ -259,8 +277,10 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertFalse(PlaceProfileFloatingActionVariant.option2.usesCompactButtons)
         XCTAssertTrue(PlaceProfileFloatingActionVariant.option3.usesCompactButtons)
         XCTAssertTrue(PlaceProfileFloatingActionVariant.option4.usesCompactButtons)
+        XCTAssertTrue(PlaceProfileFloatingActionVariant.option5.usesCompactButtons)
         XCTAssertFalse(PlaceProfileFloatingActionVariant.option3.usesCharcoalRail)
         XCTAssertTrue(PlaceProfileFloatingActionVariant.option4.usesCharcoalRail)
+        XCTAssertFalse(PlaceProfileFloatingActionVariant.option5.usesCharcoalRail)
         XCTAssertGreaterThanOrEqual(PlaceProfileFloatingActions.minimumActionHeight, 44)
         XCTAssertGreaterThanOrEqual(PlaceProfileFloatingActions.compactActionHeight, 44)
         XCTAssertEqual(PlaceProfileFloatingActions.compactActionHeight, 60)
@@ -269,6 +289,37 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertGreaterThan(
             PlaceProfileFloatingActions.accessibilityCompactActionFrameWidth,
             PlaceProfileFloatingActions.compactActionFrameWidth
+        )
+    }
+
+    func testFloatingActionDebugPreferencesPersistPerAccount() throws {
+        let suiteName = "PlaceProfilePresentationTests.placeActionVariant.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = PlaceProfileFloatingActionDebugPreferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option1)
+        preferences.setVariant(.option5, for: "user_a")
+        preferences.setVariant(.option2, for: "user_b")
+        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option5)
+        XCTAssertEqual(preferences.storedVariant(for: "user_b"), .option2)
+        XCTAssertEqual(preferences.storedVariant(for: "user_c"), .option1)
+        XCTAssertEqual(
+            preferences.activeVariant(
+                for: "user_a",
+                isDebugSettingsEntitled: false,
+                arguments: []
+            ),
+            .option1
+        )
+        XCTAssertEqual(
+            preferences.activeVariant(
+                for: "user_a",
+                isDebugSettingsEntitled: true,
+                arguments: []
+            ),
+            .option5
         )
     }
 

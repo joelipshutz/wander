@@ -17,8 +17,10 @@ struct ProfileSettingsHome: View {
     @State private var errorMessage: String?
     @State private var isNUXEnabled = false
     @State private var isNUXReplayQueued = false
+    @State private var selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.option1.rawValue
 
     private let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
+    private let placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
 
     init(onNUXDebugSettingsChanged: @escaping () -> Void = {}) {
         self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
@@ -270,6 +272,31 @@ struct ProfileSettingsHome: View {
             Text(debugNUXStatusMessage)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
+
+            Picker(
+                selection: Binding(
+                    get: { selectedPlaceActionVariantRawValue },
+                    set: { newValue in
+                        guard let userID = debugSettingsUserID,
+                              let variant = PlaceProfileFloatingActionVariant(rawValue: newValue)
+                        else { return }
+                        placeActionDebugPreferences.setVariant(variant, for: userID)
+                        selectedPlaceActionVariantRawValue = variant.rawValue
+                    }
+                )
+            ) {
+                ForEach(PlaceProfileFloatingActionVariant.allCases, id: \.rawValue) { variant in
+                    Text(variant.testerLabel).tag(variant.rawValue)
+                }
+            } label: {
+                Label("place button style", systemImage: "rectangle.split.2x1")
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("settings.debug.placeActionVariant")
+
+            Text("Style \(selectedPlaceActionVariantRawValue) is saved for this account on this device. It applies on the next app launch.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
         }
     }
 
@@ -287,12 +314,16 @@ struct ProfileSettingsHome: View {
         guard let userID = debugSettingsUserID else {
             isNUXEnabled = false
             isNUXReplayQueued = false
+            selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.option1.rawValue
             return
         }
         isNUXEnabled = walkthroughDebugPreferences.nuxOverride(for: userID)
             ?? backend.featureFlag(.firstVisitNUX, for: userID)
             ?? false
         isNUXReplayQueued = walkthroughDebugPreferences.isReplayRequested(for: userID)
+        selectedPlaceActionVariantRawValue = placeActionDebugPreferences
+            .storedVariant(for: userID)
+            .rawValue
     }
 
     private func settingsLink(

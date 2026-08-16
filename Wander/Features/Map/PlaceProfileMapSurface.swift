@@ -665,6 +665,7 @@ private struct PlaceProfileFullView: View {
     let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.placeProfileFloatingActionVariant) private var floatingActionVariant
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
@@ -778,6 +779,7 @@ private struct PlaceProfileFullView: View {
             } else if usesFloatingActions, !floatingActions.isEmpty {
                 PlaceProfileFloatingActions(
                     actions: floatingActions,
+                    variant: floatingActionVariant,
                     onAction: handleFloatingAction
                 )
             }
@@ -1483,34 +1485,114 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
     case option2 = 2
     case option3 = 3
     case option4 = 4
+    case option5 = 5
 
     static let selectionLaunchArgument = "-WanderPlaceActionVariant"
 
     static func resolved(
-        from arguments: [String] = ProcessInfo.processInfo.arguments
+        from arguments: [String] = ProcessInfo.processInfo.arguments,
+        storedRawValue: Int? = nil
     ) -> PlaceProfileFloatingActionVariant {
         #if DEBUG
-        guard let argumentIndex = arguments.firstIndex(of: selectionLaunchArgument) else {
-            return .option1
+        if let argumentIndex = arguments.firstIndex(of: selectionLaunchArgument) {
+            let valueIndex = arguments.index(after: argumentIndex)
+            guard arguments.indices.contains(valueIndex),
+                  let rawValue = Int(arguments[valueIndex]),
+                  let variant = PlaceProfileFloatingActionVariant(rawValue: rawValue) else {
+                return .option1
+            }
+            return variant
         }
-        let valueIndex = arguments.index(after: argumentIndex)
-        guard arguments.indices.contains(valueIndex),
-              let rawValue = Int(arguments[valueIndex]),
-              let variant = PlaceProfileFloatingActionVariant(rawValue: rawValue) else {
+        #endif
+
+        guard let storedRawValue,
+              let variant = PlaceProfileFloatingActionVariant(rawValue: storedRawValue) else {
             return .option1
         }
         return variant
-        #else
-        return .option1
-        #endif
     }
 
     var usesCompactButtons: Bool {
-        self == .option3 || self == .option4
+        switch self {
+        case .option3, .option4, .option5:
+            true
+        case .option1, .option2:
+            false
+        }
     }
 
     var usesCharcoalRail: Bool {
         self == .option4
+    }
+
+    var testerLabel: String {
+        switch self {
+        case .option1:
+            "1 — current"
+        case .option2:
+            "2 — full-width black"
+        case .option3:
+            "3 — compact black"
+        case .option4:
+            "4 — compact dark rail"
+        case .option5:
+            "5 — compact deep black"
+        }
+    }
+}
+
+struct PlaceProfileFloatingActionDebugPreferences {
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func activeVariant(
+        for userID: String,
+        isDebugSettingsEntitled: Bool,
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> PlaceProfileFloatingActionVariant {
+        #if DEBUG
+        if arguments.contains(PlaceProfileFloatingActionVariant.selectionLaunchArgument) {
+            return PlaceProfileFloatingActionVariant.resolved(from: arguments)
+        }
+        #endif
+
+        guard isDebugSettingsEntitled else { return .option1 }
+        return storedVariant(for: userID)
+    }
+
+    func storedVariant(for userID: String) -> PlaceProfileFloatingActionVariant {
+        PlaceProfileFloatingActionVariant.resolved(
+            from: [],
+            storedRawValue: storedRawValue(for: userID)
+        )
+    }
+
+    func setVariant(_ variant: PlaceProfileFloatingActionVariant, for userID: String) {
+        defaults.set(variant.rawValue, forKey: selectionKey(userID: userID))
+    }
+
+    private func storedRawValue(for userID: String) -> Int? {
+        let key = selectionKey(userID: userID)
+        guard defaults.object(forKey: key) != nil else { return nil }
+        return defaults.integer(forKey: key)
+    }
+
+    private func selectionKey(userID: String) -> String {
+        "wander.debugSettings.\(userID).placeActionVariant"
+    }
+}
+
+private struct PlaceProfileFloatingActionVariantEnvironmentKey: EnvironmentKey {
+    static let defaultValue = PlaceProfileFloatingActionVariant.option1
+}
+
+extension EnvironmentValues {
+    var placeProfileFloatingActionVariant: PlaceProfileFloatingActionVariant {
+        get { self[PlaceProfileFloatingActionVariantEnvironmentKey.self] }
+        set { self[PlaceProfileFloatingActionVariantEnvironmentKey.self] = newValue }
     }
 }
 
@@ -1690,7 +1772,14 @@ struct PlaceProfileFloatingActions: View {
         guard action.kind == .checkIn else {
             return variant == .option4 ? .lightAction : .neutral
         }
-        return variant == .option1 ? .accent : .blackAction
+        switch variant {
+        case .option1:
+            return .accent
+        case .option5:
+            return .deepBlackAction
+        case .option2, .option3, .option4:
+            return .blackAction
+        }
     }
 
     private func systemImage(for action: PlaceProfileSaveAction) -> String {

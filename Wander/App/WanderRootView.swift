@@ -326,6 +326,7 @@ struct WanderRootView: View {
     @State private var restoredPlaceSaveDraftOwnerID: String?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var didApplyWalkthroughLaunchConfiguration = false
+    @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.option1
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
     @StateObject private var placeSaveDraftStore: PlaceSaveDraftStore
@@ -338,6 +339,7 @@ struct WanderRootView: View {
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
+    private let placeActionDebugPreferences: PlaceProfileFloatingActionDebugPreferences
     private let isFirstVisitWalkthroughEligible: Bool
     private let onFirstVisitWalkthroughCompleted: () -> Void
 
@@ -363,6 +365,7 @@ struct WanderRootView: View {
         self.analytics = analytics
         let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
         self.walkthroughDebugPreferences = walkthroughDebugPreferences
+        placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
         self.isFirstVisitWalkthroughEligible = isFirstVisitWalkthroughEligible
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
@@ -370,6 +373,9 @@ struct WanderRootView: View {
         _isPresentingAdd = State(initialValue: Self.resolvedInitialAddPresentation())
         _initialPresentation = State(initialValue: initialPresentation ?? Self.resolvedInitialPresentation())
         _sharedProfile = State(initialValue: initialSharedProfileRoute ?? Self.resolvedInitialSharedProfile())
+        _placeProfileFloatingActionVariant = State(
+            initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
+        )
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
         _store = StateObject(
             wrappedValue: Self.makeStore(
@@ -414,6 +420,10 @@ struct WanderRootView: View {
 
     var body: some View {
         stateObservedRoot
+            .environment(
+                \.placeProfileFloatingActionVariant,
+                placeProfileFloatingActionVariant
+            )
     }
 
     private var tabRoot: some View {
@@ -657,6 +667,7 @@ struct WanderRootView: View {
                 // revalidates so walkthrough UI cannot disappear and reappear.
                 if auth.state.session == nil {
                     backend.clearFeatureFlags()
+                    placeProfileFloatingActionVariant = .option1
                     configureWalkthroughsForCurrentUser()
                 }
                 return
@@ -664,11 +675,16 @@ struct WanderRootView: View {
 
             // A different account must fail closed while its own override loads;
             // the tagged resolution prevents the previous account from leaking.
+            placeProfileFloatingActionVariant = .option1
             if backend.featureFlag(.firstVisitNUX, for: userID) == nil {
                 configureWalkthroughsForCurrentUser()
             }
             await backend.refreshFeatureFlags(for: userID)
             guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
+            placeProfileFloatingActionVariant = placeActionDebugPreferences.activeVariant(
+                for: userID,
+                isDebugSettingsEntitled: backend.featureFlag(.debugSettings, for: userID) == true
+            )
             configureWalkthroughsForCurrentUser()
         }
         .task(id: isSessionValidated) {
@@ -730,8 +746,11 @@ struct WanderRootView: View {
             guard isSessionValidated, let request else { return }
             routeNotification(request)
         }
-        .onChange(of: auth.state) { _, state in
+        .onChange(of: auth.state) { previousState, state in
             let nextUserID = state.session?.userID
+            if previousState.session?.userID != nextUserID {
+                placeProfileFloatingActionVariant = .option1
+            }
             if let automaticImportOwnerUserID,
                automaticImportOwnerUserID != nextUserID {
                 cancelAutomaticPlaceImports(clearVerificationQueue: true)
