@@ -5,7 +5,7 @@ This file is the source of truth for the production rec.me app icon.
 ## Canonical Asset
 
 - Master: `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`
-- Icon Composer source: `Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-ocean-reframe.png`
+- Icon Composer source: `Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-original.png`
 - Icon Composer document: `Wander/Resources/AppIcon.icon/icon.json`
 - Manifest: `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json`
 - Master generator: `scripts/generate-app-icon-master.swift`
@@ -26,18 +26,18 @@ The app icon is the approved matte liquid-glass map artwork:
 - lowercase `rec.me` wordmark, verbatim, centered in a heavy black serif;
 - restrained frosted depth with a matte finish, never glossy or shiny;
 - a very subtle cool-blue gradient toward the bottom;
-- a visible bottom-left ocean wedge that remains inside the iOS icon mask;
-- framing shifted toward the upper-right, sacrificing a small amount of the
-  top and right map edges to preserve the ocean at small icon sizes.
+- the original full-frame composition, with its bottom-left blue ocean accent
+  left at the canvas edge and no top/right crop or directional reframe.
 
 The PNG must be square and opaque. Do not bake rounded corners into the asset;
 iOS applies the platform mask. Do not alter the wordmark, pin count, emoji
-meanings, matte finish, or ocean-preserving crop without explicit approval.
+meanings, matte finish, or original framing without explicit approval.
 
 ## Editing Workflow
 
 1. Treat the Icon Composer PNG as the canonical pixel source. The approved
-   framing is an exact 1024 px crop with no baked platform mask.
+   framing is the original full-frame 1024 px composition with no baked
+   platform mask.
 2. Run `scripts/generate-app-icon-master.swift` to validate the source and copy
    it byte-for-byte to the fallback app-icon master.
 3. Run `scripts/generate-app-icon-renditions.sh`.

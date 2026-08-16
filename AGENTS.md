@@ -313,10 +313,11 @@ Observability policy:
 - The canonical icon master is
   `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
 - The approved icon is the matte liquid-glass neighborhood map in
-  `Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-ocean-reframe.png`:
+  `Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-original.png`:
   four terracotta pins, crisp Apple-style symbols, centered black-serif
-  `rec.me`, a subtle cool-blue lower gradient, and a visible bottom-left ocean
-  wedge. Keep it matte rather than glossy and preserve the ocean-first framing.
+  `rec.me`, a subtle cool-blue lower gradient, and the original full-frame
+  composition. Keep it matte rather than glossy and do not apply a directional
+  crop or reframe.
 - Regenerate the fallback master with `scripts/generate-app-icon-master.swift`;
   it validates and copies the approved Icon Composer source byte-for-byte.
 - Regenerate all platform renditions with

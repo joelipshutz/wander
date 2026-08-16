@@ -251,7 +251,7 @@ final class BuildConfigurationTests: XCTestCase {
             isDirectory: true
         )
         let sourceURL = iconDirectory.appendingPathComponent(
-            "Assets/recme-liquid-glass-map-ocean-reframe.png"
+            "Assets/recme-liquid-glass-map-original.png"
         )
         let documentData = try Data(
             contentsOf: iconDirectory.appendingPathComponent("icon.json")
@@ -277,7 +277,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(group["blur-material"] as? Double, 0)
         XCTAssertEqual(
             layer["image-name"] as? String,
-            "recme-liquid-glass-map-ocean-reframe.png"
+            "recme-liquid-glass-map-original.png"
         )
         XCTAssertEqual(sourceImage.width, 1024)
         XCTAssertEqual(sourceImage.height, 1024)
@@ -303,9 +303,9 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-master.swift"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
         XCTAssertTrue(contract.contains("matte liquid-glass"))
-        XCTAssertTrue(contract.contains("bottom-left ocean"))
+        XCTAssertTrue(contract.contains("original full-frame"))
         XCTAssertTrue(contract.contains("rec.me"))
-        XCTAssertTrue(masterGeneratorSource.contains("recme-liquid-glass-map-ocean-reframe.png"))
+        XCTAssertTrue(masterGeneratorSource.contains("recme-liquid-glass-map-original.png"))
         XCTAssertTrue(masterGeneratorSource.contains("1024 x 1024"))
         XCTAssertTrue(masterGeneratorSource.contains("must be opaque"))
         XCTAssertTrue(releaseHelper.contains(#"groupName: "rec.me Alpha""#))
