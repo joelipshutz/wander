@@ -416,7 +416,7 @@ struct ProfileScreen: View {
 
     private var pageTitle: some View {
         Text("profile")
-            .font(.system(size: 30, weight: .black, design: .rounded))
+            .font(WanderTypography.displayScreenTitle)
             .lineLimit(1)
     }
 

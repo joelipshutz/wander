@@ -568,7 +568,7 @@ struct ContactInviteSheet: View {
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text("find your people")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .font(WanderTypography.displayScreenTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text(surface.permissionMessage)
                     .font(.system(size: 15, weight: .semibold))
@@ -641,7 +641,7 @@ struct ContactInviteSheet: View {
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text("contacts are off")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .font(WanderTypography.displayScreenTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text("Turn on Contacts in Settings to browse your address book, or share a rec.me link instead.")
                     .font(.system(size: 15, weight: .semibold))
@@ -744,7 +744,7 @@ struct ContactInviteSheet: View {
 
             VStack(spacing: WanderTheme.spacing2) {
                 Text(completionHeadline ?? surface.completionTitle)
-                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .font(WanderTypography.displayScreenTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Text(completionDetail ?? "The TestFlight invitation was shared.")
                     .font(.system(size: 15, weight: .semibold))

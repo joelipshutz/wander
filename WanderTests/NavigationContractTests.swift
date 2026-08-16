@@ -363,7 +363,7 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private var scopeSwitch: some View").first
         )
 
-        XCTAssertTrue(header.contains("Text(\"lists\")"))
+        XCTAssertTrue(header.contains("WanderTabHeaderLabel(title: \"lists\")"))
         XCTAssertTrue(header.contains("WanderGlassActionButton("))
         XCTAssertTrue(header.contains("accessibilityIdentifier: \"lists.headerAdd\""))
         XCTAssertFalse(header.contains("WanderGlassHeader("))
@@ -1076,20 +1076,28 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
     }
 
-    func testDisplayTypographyCoversPrimaryTabsAndMajorSectionHeadings() throws {
+    func testDisplayTypographyCoversPrimaryTabsAndAuthoredAppHeadings() throws {
         let theme = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
         )
-        let screens: [(title: String, path: String, sectionHeadingCount: Int)] = [
-            ("map", "Wander/Features/Map/MapScreen.swift", 0),
-            ("feed", "Wander/Features/Feed/FeedScreen.swift", 1),
-            ("lists", "Wander/Features/Lists/ListsScreen.swift", 0),
-            ("@\\(profile.handle)", "Wander/Features/Profile/ProfileOwnerHome.swift", 3)
+        let screens: [(
+            title: String,
+            path: String,
+            heroCount: Int,
+            screenTitleCount: Int,
+            sectionTitleCount: Int,
+            cardTitleCount: Int
+        )] = [
+            ("map", "Wander/Features/Map/MapScreen.swift", 0, 0, 0, 0),
+            ("feed", "Wander/Features/Feed/FeedScreen.swift", 0, 0, 1, 3),
+            ("lists", "Wander/Features/Lists/ListsScreen.swift", 1, 6, 0, 4),
+            ("@\\(profile.handle)", "Wander/Features/Profile/ProfileOwnerHome.swift", 0, 0, 3, 0)
         ]
 
         XCTAssertTrue(theme.contains("enum WanderDisplayFont"))
         XCTAssertTrue(theme.contains("struct WanderTabHeaderLabel"))
         XCTAssertTrue(theme.contains("static let displayHero"))
+        XCTAssertTrue(theme.contains("static let displayScreenTitle"))
         XCTAssertTrue(theme.contains("static let displayTabHeader"))
         XCTAssertTrue(theme.contains("static let displaySectionTitle"))
         XCTAssertTrue(theme.contains("static let displayCardTitle"))
@@ -1104,12 +1112,22 @@ final class NavigationContractTests: XCTestCase {
                 "\(path) should use the display family exactly once"
             )
             XCTAssertTrue(source.contains("WanderTabHeaderLabel(title: \"\(title)\")"))
-            XCTAssertFalse(source.contains("WanderTypography.displayHero"))
+            XCTAssertEqual(
+                source.components(separatedBy: "WanderTypography.displayHero").count - 1,
+                screen.heroCount
+            )
+            XCTAssertEqual(
+                source.components(separatedBy: "WanderTypography.displayScreenTitle").count - 1,
+                screen.screenTitleCount
+            )
             XCTAssertEqual(
                 source.components(separatedBy: "WanderTypography.displaySectionTitle").count - 1,
-                screen.sectionHeadingCount
+                screen.sectionTitleCount
             )
-            XCTAssertFalse(source.contains("WanderTypography.displayCardTitle"))
+            XCTAssertEqual(
+                source.components(separatedBy: "WanderTypography.displayCardTitle").count - 1,
+                screen.cardTitleCount
+            )
         }
 
         let profileImport = try String(
@@ -1119,16 +1137,37 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertEqual(
             profileImport.components(separatedBy: "WanderTypography.displaySectionTitle").count - 1,
-            2
+            4
         )
 
         let lists = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
         )
         XCTAssertTrue(lists.contains("WanderTypography.editorialNamedContent"))
+
+        let appHeadingContracts: [(path: String, role: String, count: Int)] = [
+            ("Wander/App/WanderApp.swift", "displaySectionTitle", 1),
+            ("Wander/Features/Auth/AuthGateSheet.swift", "displaySectionTitle", 1),
+            ("Wander/Features/Discover/DiscoverScreen.swift", "displaySectionTitle", 1),
+            ("Wander/Features/Invites/ContactInviteSheet.swift", "displayScreenTitle", 3),
+            ("Wander/Features/Moderation/CommunityReportSheet.swift", "displaySectionTitle", 2),
+            ("Wander/Features/Profile/ProfileScreen.swift", "displayScreenTitle", 1),
+            ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", "displaySectionTitle", 1),
+            ("Wander/Features/Settings/ProfileSettingsViews.swift", "displayScreenTitle", 1),
+            ("Wander/Features/Settings/SettingsScreen.swift", "displayScreenTitle", 3),
+            ("Wander/Features/SharedVisits/SharedVisitComponents.swift", "displaySectionTitle", 1)
+        ]
+        for contract in appHeadingContracts {
+            let source = try String(contentsOf: projectRoot.appendingPathComponent(contract.path))
+            XCTAssertEqual(
+                source.components(separatedBy: "WanderTypography.\(contract.role)").count - 1,
+                contract.count,
+                contract.path
+            )
+        }
     }
 
-    func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
+    func testCheckInAndWannaFlowUsesDisplayHeadingEditorialPlaceNameAndSystemControls() throws {
         let theme = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
         )
@@ -1147,7 +1186,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(
             typography.contains(
-                "actionScreenTitle = Font.system(.title, design: .default, weight: .bold)"
+                "actionScreenTitle = displayScreenTitle"
             )
         )
         XCTAssertTrue(saveFlow.contains("Text(flowTitle)\n                    .font(WanderTypography.actionScreenTitle)"))
@@ -3054,10 +3093,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertLessThan(invitationButtonIndex, editButtonIndex)
         XCTAssertFalse(identity.contains("Text(\"profile\")"))
         XCTAssertTrue(navigationRow.contains("ProfileBackButton(action: backAction)"))
-        XCTAssertTrue(navigationRow.contains("Text(\"@\\(profile.handle)\")"))
+        XCTAssertTrue(navigationRow.contains("WanderTabHeaderLabel(title: \"@\\(profile.handle)\")"))
         XCTAssertLessThan(
             try XCTUnwrap(navigationRow.range(of: "ProfileBackButton(action: backAction)")?.lowerBound),
-            try XCTUnwrap(navigationRow.range(of: "Text(\"@\\(profile.handle)\")")?.lowerBound)
+            try XCTUnwrap(navigationRow.range(of: "WanderTabHeaderLabel(title: \"@\\(profile.handle)\")")?.lowerBound)
         )
         XCTAssertTrue(navigationRow.contains("pendingInvitationCount: sharedVisitInvitationCount"))
         XCTAssertFalse(navigationRow.contains("WanderTheme.surfaceRaised.color"))

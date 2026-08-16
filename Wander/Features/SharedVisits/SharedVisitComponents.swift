@@ -406,7 +406,7 @@ struct ProfileSharedVisitInboxRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("check-in invitations")
-                        .font(.system(size: 16, weight: .black))
+                        .font(WanderTypography.displayCardTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                     Text(subtitle)
                         .font(.system(size: 12, weight: .semibold))
@@ -512,7 +512,7 @@ struct SharedVisitInvitationInboxScreen: View {
                 .frame(width: 84, height: 84)
                 .background(WanderTheme.categorySage.color.opacity(0.22), in: Circle())
             Text("no invitations waiting")
-                .font(.system(size: 21, weight: .black, design: .rounded))
+                .font(WanderTypography.displaySectionTitle)
             Text("New shared check-ins will show up here.")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)

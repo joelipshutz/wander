@@ -26,7 +26,7 @@ struct SettingsScreen: View {
 
     private var header: some View {
         Text("settings")
-            .font(.system(size: 30, weight: .black, design: .rounded))
+            .font(WanderTypography.displayScreenTitle)
             .lineLimit(1)
     }
 
@@ -310,7 +310,7 @@ private struct SettingsSectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 15, weight: .black))
+            .font(WanderTypography.displayCardTitle)
     }
 }
 
@@ -323,7 +323,7 @@ private struct TrustAndPrivacySheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(SettingsTrustSurface.sheetTitle)
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(WanderTypography.displayScreenTitle)
                             .accessibilityAddTraits(.isHeader)
                         Text(SettingsTrustSurface.sheetIntro)
                             .font(.system(size: 14, weight: .medium))
@@ -396,7 +396,7 @@ struct NotificationSettingsSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text("notifications")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(WanderTypography.displayScreenTitle)
                             .accessibilityAddTraits(.isHeader)
                         Text("Choose the account activity rec.me can send to this phone.")
                             .font(.system(size: 14, weight: .medium))

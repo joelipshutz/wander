@@ -46,7 +46,7 @@ struct CommunityReportSheet: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("What’s going on?")
-                        .font(WanderTypography.editorialTitle)
+                        .font(WanderTypography.displaySectionTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                     Text(subject.context)
                         .font(WanderTypography.emphasizedBody)
@@ -181,7 +181,7 @@ struct CommunityReportSheet: View {
                     .accessibilityHidden(true)
 
                 Text("Thanks for looking out for the community.")
-                    .font(WanderTypography.editorialTitle)
+                    .font(WanderTypography.displaySectionTitle)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(WanderTheme.textInk.color)
 

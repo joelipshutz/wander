@@ -137,6 +137,7 @@ enum WanderDisplayFont {
 /// named content and first-run editorial moments.
 enum WanderTypography {
     static let displayHero = WanderDisplayFont.font(size: 36, relativeTo: .largeTitle, weight: .bold)
+    static let displayScreenTitle = WanderDisplayFont.font(size: 30, relativeTo: .largeTitle, weight: .bold)
     static let displayTabHeader = WanderDisplayFont.font(size: 28, relativeTo: .title, weight: .bold)
     static let displaySectionTitle = WanderDisplayFont.font(size: 22, relativeTo: .title2, weight: .bold)
     static let displayCardTitle = WanderDisplayFont.font(size: 18, relativeTo: .title3, weight: .semibold)
@@ -153,7 +154,7 @@ enum WanderTypography {
     static let editorialRatingDisplay = Font.system(.title2, design: .serif, weight: .bold).monospacedDigit()
     static let editorialRatingSuffix = Font.system(.caption, design: .serif, weight: .semibold).monospacedDigit()
 
-    static let actionScreenTitle = Font.system(.title, design: .default, weight: .bold)
+    static let actionScreenTitle = displayScreenTitle
     static let body = Font.system(.body, design: .default, weight: .regular)
     static let emphasizedBody = Font.system(.body, design: .default, weight: .semibold)
     static let label = Font.system(.subheadline, design: .default, weight: .semibold)

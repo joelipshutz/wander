@@ -432,7 +432,7 @@ struct ListsScreen: View {
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(emptyStateTitle)
-                            .font(.system(size: 40, weight: .black, design: .rounded))
+                            .font(WanderTypography.displayHero)
                             .lineLimit(3)
                             .minimumScaleFactor(0.72)
                             .foregroundStyle(WanderTheme.textInk.color)
@@ -1182,7 +1182,7 @@ private struct ListDetailScreen: View {
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("places")
-                .font(.system(size: 18, weight: .black))
+                .font(WanderTypography.displayCardTitle)
 
             if visiblePlaces.isEmpty {
                 Text(renderedList.itemCount > 0 ? "Loading places in this list." : "No places in this list yet.")
@@ -1401,7 +1401,7 @@ private struct ListSuggestionsSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
                 Text("suggested places")
-                    .font(.system(size: 18, weight: .black))
+                    .font(WanderTypography.displayCardTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                 Spacer()
             }
@@ -1462,7 +1462,7 @@ private struct ListAddPlacesScreen: View {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("add places")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .font(WanderTypography.displayScreenTitle)
                     Text(list.name)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(WanderTheme.textMuted.color)
@@ -1523,7 +1523,7 @@ private struct ListAddPlacesScreen: View {
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("suggested for this list")
-                .font(.system(size: 18, weight: .black))
+                .font(WanderTypography.displayCardTitle)
 
             if isLoadingSuggestions {
                 ListLoadingRow(title: "Finding places that fit")
@@ -1569,7 +1569,7 @@ private struct ListAddPlacesScreen: View {
     private var searchContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("results")
-                .font(.system(size: 18, weight: .black))
+                .font(WanderTypography.displayCardTitle)
 
             if isSearching {
                 ListLoadingRow(title: "Searching places")
@@ -1723,7 +1723,7 @@ private struct ListAddPlacesUnavailableScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             Text("add places")
-                .font(.system(size: 30, weight: .black, design: .rounded))
+                .font(WanderTypography.displayScreenTitle)
             Text("This list is not connected to local list data yet.")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(WanderTheme.textMuted.color)
@@ -2226,7 +2226,7 @@ private struct PlaceListInviteSheet: View {
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("build this list together")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .font(WanderTypography.displayScreenTitle)
                     Text(prompt.resolution.listName ?? "Shared list")
                         .font(WanderTypography.editorialTitle)
                     if let owner = prompt.resolution.ownerDisplayName {
@@ -2325,7 +2325,7 @@ private struct CollaboratorInviteSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text("collaborators")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(WanderTypography.displayScreenTitle)
                         Text(list.name)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
@@ -2480,7 +2480,7 @@ private struct FriendCollaboratorSearchSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text("invite collaborator")
-                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .font(WanderTypography.displayScreenTitle)
                     Text("Search friends and add the people who can view this list with you.")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
@@ -3746,7 +3746,7 @@ private struct ListEditorSheet: View {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text(isEditing ? "edit list" : "new list")
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(WanderTypography.displayScreenTitle)
                         Text(isEditing ? "Keep the name, collaborators, and privacy current." : "Name the plan, invite collaborators, then choose privacy.")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
