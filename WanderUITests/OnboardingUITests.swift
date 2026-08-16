@@ -1315,8 +1315,8 @@ final class OnboardingUITests: XCTestCase {
         }
 
         XCTAssertGreaterThan(searchField.frame.minY, 44)
-        XCTAssertGreaterThanOrEqual(typeaheadPanel.frame.minY, searchField.frame.maxY)
-        XCTAssertLessThan(typeaheadPanel.frame.maxY, keyboard.frame.minY)
+        XCTAssertLessThan(typeaheadPanel.frame.maxY, searchField.frame.minY)
+        XCTAssertLessThan(searchField.frame.maxY, keyboard.frame.minY)
         XCTAssertFalse(app.buttons["map.headerAdd"].exists)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

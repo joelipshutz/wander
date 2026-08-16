@@ -29902,6 +29902,179 @@ Completion — 2026-08-15 13:23 PDT:
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
 
+## 2026-08-16 04:05 PDT - Codex - REC-278 Map UI layout variants
+
+Agent: Codex using `ios-design-review`
+Branch: `codex/rec-278-map-ui-variants`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-278-map-ui-variants`
+Linear: `REC-278` (`In Progress`)
+Mission Control: `cdcc518c-a6fa-4a46-acc5-79ab6a8fbfbc` (`in_progress`)
+
+Goal: reorganize the production Map controls using Joe's attached map reference,
+then preserve three selectable depths of change: (A) rearrangement only, (B)
+refined sizing/grouping, and (C) the crispest coherent hierarchy. Capture a
+simulator screenshot for each before advancing to the next pass.
+
+Starting state and coordination:
+
+- Created this isolated worktree from exact `origin/main` at `910f1575`. The
+  root checkout is 254 commits behind and contains unrelated untracked `tmp/`;
+  it remains untouched.
+- Existing worktrees were inspected. No current uncommitted overlapping Map UI
+  edit was found. `Wander/Features/Map/MapScreen.swift` and this append-only log
+  are documented high-conflict files, so changes will remain narrow.
+- Reference hierarchy: keep the map itself visually dominant, retain top source
+  pills, move search toward the bottom action zone, and make recenter/count
+  controls read as one lower-map utility row. Current source/filter behavior,
+  native Liquid Glass behavior, pin rendering, map data, and four-tab navigation
+  remain unchanged.
+- Expected files: `Wander/Features/Map/MapScreen.swift`, focused Map layout
+  contract tests, visual-review artifacts under `docs/reviews/rec-278-map-ui/`,
+  and this log. No build-number bump, TestFlight upload, or public post is in
+  scope.
+
+Option A checkpoint — rearrangement only:
+
+- Moved the unchanged Featured/Friends/You/More row to the top map edge and the
+  unchanged search/add row to a bottom dock above the tab bar. Recenter now
+  clears that dock, and the existing compact place card shifts upward so the
+  card, search, and tabs no longer overlap.
+- Preserved the current 44 pt chip/search/action sizing, Liquid Glass surfaces,
+  source/refinement behavior, popover behavior, search focus/typeahead states,
+  and selected-place implementation. This is intentionally the smallest viable
+  hierarchy change.
+- Captured `docs/reviews/rec-278-map-ui/option-a-rearrangement.png` on iPhone 16
+  Plus / iOS 18.6 with deterministic friends fixtures and Hearthline Coffee
+  selected. Incremental simulator build passed. Focused Map filter/layout and
+  focused-search contract tests passed with exit 0.
+- Capture initially hit a full-disk error. Uninstalled only the task-installed
+  simulator app, reinstalled the freshly built app, and captured successfully;
+  no source, archive, other worktree, or unrelated simulator was removed.
+
+Option B checkpoint — compact filters:
+
+- Kept Option A's hierarchy and reduced only the top-control visual weight:
+  source and More pills now size to their content, use a 40 pt visual capsule
+  inside an explicit 44 pt hit target, and remain centered without horizontal
+  scrolling.
+- Captured `docs/reviews/rec-278-map-ui/option-b-compact-filters.png` with the
+  same iPhone 16 Plus, friends fixture, selected place, camera, and status-bar
+  setup as Option A. Incremental simulator build passed.
+
+Option C checkpoint — polished utility row:
+
+- Kept Option B's hierarchy, switched source pills to lighter text-only rounded
+  rectangles, made More a compact icon control, moved recenter to neutral glass,
+  and added a passive source-aware result count (`8 from friends` in the
+  deterministic capture). Search copy is now the more concrete `search places
+  or people...`.
+- The initial C pass used a fixed lower-map clearance. Visual inspection on the
+  smaller iPhone 16e exposed an overlap when the selected place title wrapped.
+  Reworked the selected-place surface so the utility row participates in the
+  card's natural layout; this removes the fixed-height assumption and keeps the
+  row clear on both phone sizes.
+- Captured the final C layout on iPhone 16 Plus and iPhone 16e / iOS 18.6, plus
+  a native-glass check on an isolated iPhone 16 Plus / iOS 26.2 simulator. Also
+  inspected the open More panel; its anchor and existing content remain intact.
+  Artifacts and the recommendation are indexed in
+  `docs/reviews/rec-278-map-ui/README.md`.
+- Incremental build passed. The focused Map filter/layout and focused-search
+  contract set passed 16/16 after correcting one new source-contract assertion
+  that initially targeted the wrong `body` declaration. Existing compiler and
+  headermap warnings remain unchanged.
+
+Validation checkpoint — 2026-08-16 04:57 PDT:
+
+- The focused More-filter interaction suite passed 3/3 on iPhone 16e / iOS
+  18.6. It exercised More presentation, source switching/reset, and away-time
+  reset behavior with the compact top row.
+- The first full-scheme pass completed 1,258/1,259. Its only failure was
+  `OnboardingUITests.testFocusedMapSearchStaysWithinTheUsableViewport`: moving
+  search to the bottom exposed that the Map container still ignored the keyboard
+  safe area while focused, leaving search behind the keyboard. Updated the
+  keyboard policy to respect the safe area only while search is focused, revised
+  the UI contract for typeahead-above-search, and hid recenter/result utilities
+  during focused search. Visual inspection of the retained test attachment
+  confirmed a clear typeahead → search → keyboard stack.
+- The affected unit/UI set then passed 17/17. A final full rerun passed
+  1,259/1,259 with zero failures, skips, or expected failures on iPhone 16 Plus /
+  iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_04-48-08--0700.xcresult`.
+- `git diff --check` passes. No build-number bump, archive, TestFlight upload,
+  production-data change, or public post was performed.
+
+Latest-main integration — 2026-08-16 05:06 PDT:
+
+- Fetched and merged current `origin/main` at `40811705` (`feat: attach
+  first-save check-in and Wanna flows (#454)`). Map, place-profile, navigation,
+  and onboarding changes merged automatically. The only textual conflict was
+  this append-only log; both complete work histories were retained.
+- The combined branch passed 174/174 post-merge tests with zero failures or
+  skips. Coverage included `MapFilterSelectionTests`, all
+  `NavigationContractTests`, `PlaceProfilePresentationTests`, the More-filter
+  UI suite, focused-search keyboard layout, edge-swipe collapse, floating place
+  actions, and the newly attached first Check-in and Wanna editor flows. Result:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_04-59-40--0700.xcresult`.
+- This supplements the pre-merge full-scheme result of 1,259/1,259. No
+  unrelated `main` behavior was rewritten, and no release action was taken.
+
+Handoff — 2026-08-16 05:07 PDT:
+
+- Pushed `codex/rec-278-map-ui-variants` and opened draft PR #456:
+  `https://github.com/joelipshutz/wander/pull/456`. The PR remains intentionally
+  Draft until Joe selects Option A, B, or C; Option C is recommended and Option
+  A is the minimal-risk fallback.
+- Linked the PR to Linear `REC-278`, added the screenshot/test handoff comment,
+  and moved the issue to `In Review`. Mission Control task
+  `cdcc518c-a6fa-4a46-acc5-79ab6a8fbfbc` is in `review` with the same outcome.
+- The comparison source is `docs/reviews/rec-278-map-ui/README.md`. Option
+  checkpoints remain explicit in branch history: A `1c3bcca0`, B `8035e745`,
+  and C `50a6ed8f`.
+- No merge, build-number bump, archive, TestFlight upload, hosted-data change,
+  or tester/public communication was performed. Next action: Joe selects an
+  option, then the branch can be narrowed/finalized and reviewed for merge.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and confirmed the
+  checkout is `codex/rec-278-map-ui-variants`. Deleted only the exact task-only
+  `REC-278 iOS26` simulator after preserving its screenshot; shared simulators,
+  source, result bundles, and other worktrees remain intact.
+
+Liquid Glass follow-up — 2026-08-16 05:19 PDT:
+
+- Joe prefers the wider Option B filter treatment and asked to see it with
+  native Liquid Glass. He also asked whether the selected-place ticket can read
+  more like the dark image-backed preview in the original reference.
+- Current branch/worktree are clean before the follow-up. The draft PR remains
+  unmerged. Linear `REC-278` and Mission Control moved back to `In Progress`.
+- Plan: build exact Option B checkpoint `8035e745` in a detached task worktree,
+  capture it on a task-owned iPhone 16 Plus / iOS 26.2 simulator, and add only
+  the screenshot/comparison notes to the current branch. Inspect the production
+  ticket surface, but do not change its interaction or styling without a chosen
+  direction.
+- Expected current-branch files: this log,
+  `docs/reviews/rec-278-map-ui/README.md`, and an Option B iOS 26 screenshot.
+
+Liquid Glass follow-up outcome — 2026-08-16 05:27 PDT:
+
+- Created a detached task worktree at exact Option B checkpoint `8035e745` and
+  built it successfully for a task-owned iPhone 16 Plus / iOS 26.2 simulator.
+  Existing compiler/headermap warnings were unchanged.
+- Captured the rendered map after MapKit finished loading at
+  `docs/reviews/rec-278-map-ui/option-b-compact-filters-ios26.png`. This shows
+  Option B's wider icon-plus-label filters and the native system Liquid Glass
+  tab bar in the same state.
+- Confirmed the selected-place ticket is not currently glass-backed:
+  `PlaceProfilePreviewCard` passes `surfaceBone` at 98% opacity into the shared
+  `checkInTicketSurface`, which renders a solid custom ticket fill. A simple
+  opacity reduction would blur the pale map and weaken contrast.
+- Recommended reference-matching direction for a future ticket variant: use the
+  place photo as a full-bleed background, add a strong dark readability gradient,
+  switch metadata to white, and reserve native dark/clear Liquid Glass for
+  actions and chips. No production ticket code or behavior changed in this
+  follow-up.
+- Removed only the detached Option B worktree, task-owned iOS 26 simulator, and
+  exact rebuildable `/private/tmp/DerivedData-rec278-option-b-ios26` cache after
+  preserving the screenshot. Disk pressure was critical; current-branch source,
+  screenshots, result bundles, shared simulators, and other worktrees remain.
 ## 2026-08-15 20:20 PDT - Codex - Place Action Liquid Glass Comparison
 
 Agent: Codex using `design-shotgun` and `ios-design-review`
@@ -30337,3 +30510,76 @@ Publication and handoff:
   validation evidence, and the known aggregate-runner limitation. The GitHub
   CI-fix workflow requires explicit approval before mutating the PR body, so
   that metadata-only correction is the sole pending handoff action.
+# 2026-08-16 05:44 PDT - Codex - REC-278 Option B landing
+
+Agent: Codex
+Branch: `codex/rec-278-map-ui-variants`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-278-map-ui-variants`
+Linear: `REC-278` (`In Progress`)
+
+- Joe selected Option B for `main`: the wider icon-and-label source filters,
+  native Liquid Glass on iOS 26, the reordered bottom search dock, and no
+  Option C result-count utility row.
+- Restoring B as the branch's final production state while preserving the
+  later focused-search keyboard safety fix and unrelated changes integrated
+  from current `main`.
+- Expected files: `Wander/Features/Map/MapScreen.swift`,
+  `Wander/Features/Map/PlaceProfileMapSurface.swift`, focused tests, comparison
+  notes, and this log. The image-backed ticket remains deferred; no build-number
+  bump, archive, TestFlight upload, or release is authorized.
+
+Validation — 2026-08-16 06:04 PDT:
+
+- Final Option B focused unit coverage passed 166/166 on iPhone 16 Plus / iOS
+  18.6. Result: `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_05-46-07--0700.xcresult`.
+- The complete `WanderTests` target passed 1,238/1,238 on the isolated
+  `REC-278 Option B Landing` iPhone 16 Plus / iOS 18.6 simulator. Result:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-01-05--0700.xcresult`.
+- Seven focused UI tests passed 7/7 on the same isolated simulator, covering
+  Map launch, all source filters, More-filter reset/persistence, walkthrough
+  targets, and focused-search keyboard containment. Result:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-02-16--0700.xcresult`.
+- A prior complete-scheme attempt on the shared iPhone 16 Plus was discarded
+  after another worktree installed its `/tmp/recme-rec280-semantic-search`
+  build mid-run. No result from that contaminated run is counted.
+- Existing compiler/headermap warnings remain unchanged. No database, auth,
+  schema/RLS/RPC, build number, archive, TestFlight upload, or release change
+  is included.
+
+Pre-merge review — 2026-08-16 06:08 PDT:
+
+- The required independent review found no maintainability issue, but identified
+  that the selected Option B had not been validated on the smaller iPhone 16e;
+  the existing small-phone evidence was for Option C.
+- Added a focused UI geometry regression that requires Featured, Friends, You,
+  and More to exist, remain hittable, stay inside the viewport, preserve a
+  44-point hit height, and avoid overlapping adjacent controls. The exact B
+  layout will be captured on an isolated iPhone 16e before merge.
+
+Landing fixes and validation — 2026-08-16 06:37 PDT:
+
+- The iPhone 16e check exposed accessibility frames below the 44-point minimum.
+  Increased the filter-chip content and row height while preserving the selected
+  wide Option B proportions. All four controls now remain inside the viewport,
+  non-overlapping, hittable, and at least 44 points high. Small-phone result:
+  `/private/tmp/DerivedData-rec278-map-ui-small/Logs/Test/Test-Wander-2026.08.16_06-27-12--0700.xcresult`.
+- Adversarial review found that a search/status banner could increase the bottom
+  dock height without increasing the selected-ticket clearance. The dock now
+  reports its rendered height through a preference, and the ticket and recenter
+  button use that measured clearance. The deterministic iPhone 16e regression
+  passed 1/1:
+  `/private/tmp/DerivedData-rec278-map-ui-small/Logs/Test/Test-Wander-2026.08.16_06-26-25--0700.xcresult`.
+- The exact final production diff passed all nine focused UI regressions on the
+  isolated iPhone 16 Plus, including the five Map filter-interaction tests,
+  source-specific More-filter lessons, focused-search containment, and the
+  storefront Map capture. Result:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-34-54--0700.xcresult`.
+- The complete 1,238-test `WanderTests` target passed 1,237 tests; the known
+  aggregate-only `testCancelledSessionRefreshDoesNotReplaceValidatedState`
+  isolation flake trapped again and then passed 1/1 when rerun alone. Aggregate:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-32-57--0700.xcresult`;
+  isolated:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_06-34-27--0700.xcresult`.
+- Maintainability and performance reviews were clean. The final UI remains
+  Option B; the image-backed/liquid-glass ticket experiment remains deferred.
+  No build-number bump, archive, TestFlight upload, or release was performed.
