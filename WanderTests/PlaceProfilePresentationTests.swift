@@ -214,7 +214,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
         XCTAssertEqual(
             PlaceProfileFloatingActions.glassTone(for: selectedWanna, variant: .option4),
-            .neutral
+            .lightAction
         )
     }
 
@@ -262,6 +262,10 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertFalse(PlaceProfileFloatingActionVariant.option3.usesCharcoalRail)
         XCTAssertTrue(PlaceProfileFloatingActionVariant.option4.usesCharcoalRail)
         XCTAssertGreaterThanOrEqual(PlaceProfileFloatingActions.minimumActionHeight, 44)
+        XCTAssertGreaterThanOrEqual(PlaceProfileFloatingActions.compactActionHeight, 44)
+        XCTAssertEqual(PlaceProfileFloatingActions.compactActionHeight, 60)
+        XCTAssertEqual(PlaceProfileFloatingActions.compactActionFrameWidth, 124)
+        XCTAssertEqual(PlaceProfileFloatingActions.accessibilityCompactActionFrameWidth, 280)
         XCTAssertGreaterThan(
             PlaceProfileFloatingActions.accessibilityCompactActionFrameWidth,
             PlaceProfileFloatingActions.compactActionFrameWidth

@@ -1516,8 +1516,9 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
 
 struct PlaceProfileFloatingActions: View {
     static let minimumActionHeight: CGFloat = 48
+    static let compactActionHeight: CGFloat = 60
     static let compactActionFrameWidth: CGFloat = 124
-    static let accessibilityCompactActionFrameWidth: CGFloat = 220
+    static let accessibilityCompactActionFrameWidth: CGFloat = 280
     static let compactCornerRadius: CGFloat = 16
     static let charcoalRailCornerRadius: CGFloat = 30
 
@@ -1547,7 +1548,7 @@ struct PlaceProfileFloatingActions: View {
     @ViewBuilder
     private var actionCluster: some View {
         if variant.usesCharcoalRail {
-            actionLayout
+            option4InnerActions
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.vertical, WanderTheme.spacing3)
                 .wanderGlassRoundedRectangle(
@@ -1556,6 +1557,17 @@ struct PlaceProfileFloatingActions: View {
                     interactive: false,
                     showsBorder: true
                 )
+        } else {
+            actionLayout
+        }
+    }
+
+    @ViewBuilder
+    private var option4InnerActions: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: WanderTheme.spacing2) {
+                actionLayout
+            }
         } else {
             actionLayout
         }
@@ -1591,6 +1603,7 @@ struct PlaceProfileFloatingActions: View {
                         .wanderGlassRoundedRectangle(
                             tone: Self.glassTone(for: action, variant: variant),
                             cornerRadius: Self.compactCornerRadius,
+                            material: variant == .option4 ? .clear : .regular,
                             interactive: true,
                             showsBorder: true
                         )
@@ -1610,30 +1623,50 @@ struct PlaceProfileFloatingActions: View {
         }
     }
 
+    @ViewBuilder
     private func actionLabel(for action: PlaceProfileSaveAction) -> some View {
-        HStack(spacing: WanderTheme.spacing1) {
-            Image(systemName: systemImage(for: action))
-                .accessibilityHidden(true)
-            Text(action.title)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            if action.isSelected {
-                Image(systemName: "checkmark")
+        if variant.usesCompactButtons {
+            VStack(spacing: 3) {
+                Image(systemName: systemImage(for: action))
                     .accessibilityHidden(true)
+                HStack(spacing: WanderTheme.spacing1) {
+                    Text(action.title)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                    if action.isSelected {
+                        Image(systemName: "checkmark")
+                            .accessibilityHidden(true)
+                    }
+                }
             }
+            .font(.system(size: 15, weight: .bold))
+            .padding(.horizontal, WanderTheme.spacing1)
+            .frame(
+                minWidth: compactActionWidth,
+                maxWidth: compactActionWidth,
+                minHeight: Self.compactActionHeight
+            )
+            .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
+        } else {
+            HStack(spacing: WanderTheme.spacing1) {
+                Image(systemName: systemImage(for: action))
+                    .accessibilityHidden(true)
+                Text(action.title)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                if action.isSelected {
+                    Image(systemName: "checkmark")
+                        .accessibilityHidden(true)
+                }
+            }
+            .font(.system(size: 15, weight: .bold))
+            .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
+            .padding(.horizontal, WanderTheme.spacing2)
+            .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
         }
-        .font(.system(size: 15, weight: .bold))
-        .frame(
-            minWidth: compactActionFrameWidth,
-            maxWidth: compactActionFrameWidth ?? .infinity,
-            minHeight: Self.minimumActionHeight
-        )
-        .padding(.horizontal, WanderTheme.spacing2)
-        .foregroundStyle(Self.glassTone(for: action, variant: variant).foregroundStyle)
     }
 
-    private var compactActionFrameWidth: CGFloat? {
-        guard variant.usesCompactButtons else { return nil }
+    private var compactActionWidth: CGFloat {
         return dynamicTypeSize.isAccessibilitySize
             ? Self.accessibilityCompactActionFrameWidth
             : Self.compactActionFrameWidth
@@ -1654,7 +1687,9 @@ struct PlaceProfileFloatingActions: View {
         for action: PlaceProfileSaveAction,
         variant: PlaceProfileFloatingActionVariant = .option1
     ) -> WanderGlassTone {
-        guard action.kind == .checkIn else { return .neutral }
+        guard action.kind == .checkIn else {
+            return variant == .option4 ? .lightAction : .neutral
+        }
         return variant == .option1 ? .accent : .blackAction
     }
 
