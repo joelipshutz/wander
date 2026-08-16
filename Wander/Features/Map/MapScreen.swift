@@ -332,8 +332,9 @@ struct MapScreen: View {
                             UserAnnotation()
                         }
 
-                        ForEach(annotationGroups) { group in
+                        ForEach(Array(annotationGroups.enumerated()), id: \.element.key) { index, group in
                             let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
+                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -353,20 +354,20 @@ struct MapScreen: View {
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
-                                .opacity(isTransitionVisible ? 1 : 0)
-                                .scaleEffect(
-                                    isTransitionVisible
-                                        ? 1
-                                        : MapPinFilterTransitionStyle.hiddenScale
+                                .modifier(
+                                    MapPinEntranceModifier(
+                                        isVisible: isTransitionVisible,
+                                        delay: entranceDelay
+                                    )
                                 )
-                                .allowsHitTesting(isTransitionVisible)
                                 .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
                             }
                         }
 
-                        ForEach(mappableSearchCandidates) { candidate in
+                        ForEach(Array(mappableSearchCandidates.enumerated()), id: \.element.id) { index, candidate in
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
+                                let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                                 Annotation(
                                     candidate.name,
                                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -378,6 +379,12 @@ struct MapScreen: View {
                                     }
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 44)
+                                    .modifier(
+                                        MapPinEntranceModifier(
+                                            isVisible: true,
+                                            delay: entranceDelay
+                                        )
+                                    )
                                 }
                             }
                         }
@@ -893,23 +900,15 @@ struct MapScreen: View {
             await Task.yield()
             guard !Task.isCancelled else { return }
 
-            withAnimation(MapPinFilterTransitionStyle.fadeOutAnimation) {
-                visibleTransitionGroupKeys = []
-            }
+            visibleTransitionGroupKeys = []
 
-            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeOutDuration))
+            try? await Task.sleep(for: .seconds(MapPinEntranceStyle.fadeOutDuration))
             guard !Task.isCancelled else { return }
 
             transitioningAnnotationGroups = incomingGroups
-            visibleTransitionGroupKeys = []
-            await Task.yield()
-            guard !Task.isCancelled else { return }
+            visibleTransitionGroupKeys = incomingKeys
 
-            withAnimation(MapPinFilterTransitionStyle.fadeInAnimation) {
-                visibleTransitionGroupKeys = incomingKeys
-            }
-
-            try? await Task.sleep(for: .seconds(MapPinFilterTransitionStyle.fadeInDuration))
+            try? await Task.sleep(for: .seconds(MapPinEntranceStyle.entranceWindowDuration))
             guard !Task.isCancelled else { return }
             transitioningAnnotationGroups = nil
             visibleTransitionGroupKeys = nil
@@ -2694,13 +2693,81 @@ enum MapHitTesting {
     }
 }
 
-enum MapPinFilterTransitionStyle {
+enum MapPinEntranceStyle {
     static let fadeOutDuration: TimeInterval = 0.06
-    static let fadeInDuration: TimeInterval = 0.10
-    static let duration = fadeOutDuration + fadeInDuration
-    static let hiddenScale: CGFloat = 0.92
+    static let springDuration: TimeInterval = 0.28
+    static let staggerInterval: TimeInterval = 0.015
+    static let maximumStagger: TimeInterval = 0.06
+    static let entranceWindowDuration = springDuration + maximumStagger
+    static let duration = fadeOutDuration + entranceWindowDuration
+    static let hiddenScale: CGFloat = 0.72
+    static let hiddenVerticalOffset: CGFloat = 10
+    static let springBounce = 0.60
     static let fadeOutAnimation = Animation.easeOut(duration: fadeOutDuration)
-    static let fadeInAnimation = Animation.spring(duration: fadeInDuration, bounce: 0.14)
+    static let entranceAnimation = Animation.spring(duration: springDuration, bounce: springBounce)
+
+    static func staggerDelay(for index: Int) -> TimeInterval {
+        min(TimeInterval(max(0, index)) * staggerInterval, maximumStagger)
+    }
+}
+
+private struct MapPinEntranceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let isVisible: Bool
+    let delay: TimeInterval
+
+    @State private var hasEntered = false
+
+    private var isPresented: Bool {
+        reduceMotion ? isVisible : hasEntered
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isPresented ? 1 : 0)
+            .scaleEffect(
+                isPresented ? 1 : MapPinEntranceStyle.hiddenScale,
+                anchor: .bottom
+            )
+            .offset(y: isPresented ? 0 : MapPinEntranceStyle.hiddenVerticalOffset)
+            .allowsHitTesting(isPresented)
+            .onAppear {
+                updatePresentation(for: isVisible)
+            }
+            .onChange(of: isVisible) { _, visible in
+                updatePresentation(for: visible)
+            }
+            .onChange(of: reduceMotion) { _, _ in
+                updatePresentation(for: isVisible)
+            }
+    }
+
+    private func updatePresentation(for visible: Bool) {
+        if reduceMotion {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                hasEntered = visible
+            }
+            return
+        }
+
+        if visible {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                hasEntered = false
+            }
+            withAnimation(MapPinEntranceStyle.entranceAnimation.delay(delay)) {
+                hasEntered = true
+            }
+        } else {
+            withAnimation(MapPinEntranceStyle.fadeOutAnimation) {
+                hasEntered = false
+            }
+        }
+    }
 }
 
 enum MapStatusFilter: String, CaseIterable, Identifiable {

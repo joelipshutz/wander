@@ -72,11 +72,16 @@ final class MapFilterSelectionTests: XCTestCase {
         )
     }
 
-    func testPinFilterTransitionStaysInsideTheMicroInteractionBudget() {
-        XCTAssertEqual(MapPinFilterTransitionStyle.duration, 0.16, accuracy: 0.001)
-        XCTAssertGreaterThanOrEqual(MapPinFilterTransitionStyle.hiddenScale, 0.90)
-        XCTAssertLessThan(MapPinFilterTransitionStyle.hiddenScale, 1)
-        XCTAssertLessThan(MapPinFilterTransitionStyle.fadeOutDuration, MapPinFilterTransitionStyle.fadeInDuration)
+    func testPinEntranceStaysInsideTheShortMotionBudget() {
+        XCTAssertEqual(MapPinEntranceStyle.duration, 0.40, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(MapPinEntranceStyle.hiddenScale, 0.70)
+        XCTAssertLessThan(MapPinEntranceStyle.hiddenScale, 0.80)
+        XCTAssertGreaterThan(MapPinEntranceStyle.hiddenVerticalOffset, 0)
+        XCTAssertEqual(MapPinEntranceStyle.springBounce, 0.60, accuracy: 0.001)
+        XCTAssertLessThan(MapPinEntranceStyle.fadeOutDuration, MapPinEntranceStyle.springDuration)
+        XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: -1), 0, accuracy: 0.001)
+        XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: 1), 0.015, accuracy: 0.001)
+        XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: 100), 0.06, accuracy: 0.001)
     }
 
     func testFilterTransitionIsScopedToPinsAndKeepsLiquidGlass() throws {
@@ -96,7 +101,10 @@ final class MapFilterSelectionTests: XCTestCase {
 
         XCTAssertFalse(filterChipSource.contains(".scaleEffect("))
         XCTAssertTrue(map.contains("visibleTransitionGroupKeys?.contains(group.key)"))
-        XCTAssertTrue(map.contains("MapPinFilterTransitionStyle.hiddenScale"))
+        XCTAssertTrue(map.contains("MapPinEntranceModifier("))
+        XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
+        XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
+        XCTAssertTrue(map.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
         XCTAssertFalse(map.contains("incomingGroups + departingGroups"))
         XCTAssertTrue(theme.contains("if #available(iOS 26.0, *) {"))
         XCTAssertFalse(theme.contains("isElevated"))
