@@ -60,7 +60,11 @@ changes the place-browsing interaction, not just the Map control hierarchy.
 
 ## Validation
 
-- Final full scheme: 1,259/1,259 tests passed on iPhone 16 Plus / iOS 18.6.
+- Full option-branch scheme: 1,259/1,259 tests passed on iPhone 16 Plus / iOS
+  18.6 before the final `origin/main` update.
+- Post-merge overlap suite: 174/174 passed across Map layout, navigation, place
+  presentation, focused search, More filters, edge collapse, floating actions,
+  and both attached save flows.
 - Focused More-filter UI suite: 3/3 passed on iPhone 16e / iOS 18.6.
 - Visual inspection: iPhone 16 Plus and iPhone 16e / iOS 18.6, plus an isolated
   iPhone 16 Plus / iOS 26.2 native-glass check.
