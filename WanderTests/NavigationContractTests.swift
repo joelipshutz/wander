@@ -236,7 +236,16 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("private enum FeedSurface"))
         XCTAssertTrue(feed.contains("private struct FeedSurfaceTabs"))
         XCTAssertTrue(feed.contains("case .people:"))
-        XCTAssertTrue(feed.contains("FeedPeopleSurface(openProfile: openProfile)"))
+        XCTAssertTrue(feed.contains("FeedPeopleSurface("))
+        XCTAssertTrue(feed.contains("memberQuery: $peopleQuery"))
+        XCTAssertTrue(feed.contains("dismissSearchFocus: { peopleSearchFieldFocused = false }"))
+        let surfaceChange = try sourceSection(
+            feed,
+            after: ".onChange(of: selectedSurface)",
+            before: ".onChange(of: walkthroughs.currentStep?.target"
+        )
+        XCTAssertTrue(surfaceChange.contains("if surface != .people"))
+        XCTAssertTrue(surfaceChange.contains("peopleQuery = \"\""))
         XCTAssertTrue(feed.contains("PeopleRecommendationShelf("))
         XCTAssertTrue(feed.contains("store.discoverMembers(query: query, backend: backend)"))
         XCTAssertTrue(feed.contains("store.refreshDiscoverPeopleRecommendations(backend: backend, force: force)"))
@@ -346,13 +355,48 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("accessibilityIdentifier: \"feed.headerAdd\""))
         XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
         XCTAssertTrue(feed.contains("-WanderFeedSurface"))
-        let feedControlRow = try XCTUnwrap(
-            feed.components(separatedBy: "NavigationStack {").last?
-                .components(separatedBy: "switch selectedSurface").first
+        XCTAssertTrue(feed.contains("ZStack(alignment: .top)"))
+        let rootComposition = try sourceSection(
+            feed,
+            after: "ZStack(alignment: .top) {",
+            before: ".wanderScreen()"
         )
-        XCTAssertTrue(feedControlRow.contains("HStack(spacing: WanderTheme.spacing2) {"))
-        XCTAssertTrue(feedControlRow.contains("FeedSurfaceTabs(selectedSurface: $selectedSurface)"))
-        XCTAssertTrue(feedControlRow.contains("WanderGlassActionButton("))
+        XCTAssertTrue(rootComposition.contains("floatingHeader"))
+        XCTAssertTrue(rootComposition.contains(".zIndex(1)"))
+        XCTAssertTrue(rootComposition.contains("FeedFloatingHeaderHeightPreferenceKey.self"))
+        XCTAssertTrue(feed.contains(".onPreferenceChange(FeedFloatingHeaderHeightPreferenceKey.self)"))
+        XCTAssertTrue(feed.contains("GlassEffectContainer(spacing: WanderTheme.spacing2)"))
+        let floatingHeader = try sourceSection(
+            feed,
+            after: "private var floatingHeaderContent: some View",
+            before: "private var placesSurface: some View"
+        )
+        let searchPosition = try XCTUnwrap(floatingHeader.range(of: "switch selectedSurface"))
+        let controlsPosition = try XCTUnwrap(
+            floatingHeader.range(of: "HStack(spacing: WanderTheme.spacing2) {")
+        )
+        XCTAssertLessThan(searchPosition.lowerBound, controlsPosition.lowerBound)
+        XCTAssertTrue(floatingHeader.contains("FeedSearchLauncher("))
+        XCTAssertTrue(floatingHeader.contains("FeedPeopleSearchField(text: $peopleQuery)"))
+        XCTAssertTrue(floatingHeader.contains("FeedSurfaceTabs(selectedSurface: $selectedSurface)"))
+        XCTAssertTrue(floatingHeader.contains("WanderGlassActionButton("))
+        XCTAssertTrue(floatingHeader.contains(".focused($peopleSearchFieldFocused)"))
+        let placesSurface = try sourceSection(
+            feed,
+            after: "private var placesSurface: some View",
+            before: "private func openDiscoverSearch()"
+        )
+        XCTAssertFalse(placesSurface.contains("FeedSearchLauncher("))
+        XCTAssertTrue(placesSurface.contains(".padding(.top, feedContentTopInset)"))
+        let peopleSurface = try sourceSection(
+            feed,
+            after: "private struct FeedPeopleSurface: View",
+            before: "private struct FeedPeopleValueNote: View"
+        )
+        XCTAssertTrue(peopleSurface.contains("@Binding var memberQuery: String"))
+        XCTAssertTrue(peopleSurface.contains("let contentTopInset: CGFloat"))
+        XCTAssertFalse(peopleSurface.contains("FeedPeopleSearchField("))
+        XCTAssertTrue(peopleSurface.contains(".padding(.top, contentTopInset)"))
         let feedSearch = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedSearchLauncher: View").last?
                 .components(separatedBy: "private struct FeedSectionHeading: View").first
@@ -2871,7 +2915,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
         XCTAssertTrue(source.contains("communityPlaceSearchTask?.cancel()"))
         XCTAssertTrue(source.contains("startCommunityPlaceSearch(query: query, submissionID: submissionID)"))
-        XCTAssertTrue(source.contains("backend.searchRecmePlaces(request)"))
+        XCTAssertTrue(source.contains("backend.searchRecmePlaces("))
+        XCTAssertTrue(source.contains("includesSemanticProvider: semanticEnabled"))
+        XCTAssertTrue(source.contains("backend.featureFlag(.semanticPlaceSearchV1"))
+        XCTAssertTrue(source.contains("SemanticPlaceSearchAccessPolicy.isEnabled("))
         XCTAssertTrue(source.contains("Saved on rec.me"))
         XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
         XCTAssertTrue(source.contains("Try a search"))

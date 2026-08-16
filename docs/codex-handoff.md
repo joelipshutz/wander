@@ -175,6 +175,7 @@ Highest risk items right now:
 - `AGENTS.md` - durable repo instructions for agents.
 - `docs/setup.md` - local setup and verification commands.
 - `docs/specs/wander-ios-product-spec.md` - product source of truth.
+- `docs/specs/search-featured-retrieval-platform.md` - canonical Search and Map Featured retrieval architecture, privacy contract, tuning controls, and monitoring plan.
 - `docs/plans/2026-06-01-wander-ios-eng-plan.md` - milestone plan.
 - `docs/plans/2026-06-01-wander-m1-5-contract-lock.md` - schema/RLS/local contracts.
 - `DESIGN.md` - design system and UI rules.

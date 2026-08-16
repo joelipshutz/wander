@@ -30403,7 +30403,112 @@ Outcome and validation:
   local machine does not have the Supabase CLI, so hosted migration/pgTAP
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
+## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
 
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Progress`)
+
+Goal: move Feed search higher and make the Places/People selector plus Add
+action read as floating Liquid Glass controls over the Feed instead of a fixed
+row that visually cuts off the screen.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` at `40811705`.
+- The primary checkout is 255 commits behind `origin/main` and contains an
+  unrelated untracked `tmp/`; it remains untouched.
+- No active agent-log entry declares overlapping Feed-header work. Existing
+  active worktrees focus on search ranking, Map actions, and onboarding/auth
+  debug flows; this branch remains scoped to Feed presentation.
+- Existing design-system glass primitives already provide native iOS 26
+  `glassEffect` plus the iOS 17-25 material fallback. The implementation will
+  reuse those primitives instead of adding a competing glass style.
+- Expected files: `Wander/Features/Feed/FeedScreen.swift`, focused Feed/
+  navigation tests, simulator screenshot evidence if available, and this log.
+  No backend, schema, RLS, RPC, data, build-number, archive, upload, release,
+  or TestFlight change is in scope.
+
+Implementation and focused validation checkpoint:
+
+- Reworked the Feed root as a content-backed `ZStack` with a floating header
+  overlay. Search now occupies the top row; the Places/People selector and Add
+  action float together beneath it without an opaque full-width header cutting
+  off the canvas.
+- Reused `GlassEffectContainer`, `wanderGlassCapsule`,
+  `WanderGlassSegmentedSwitch`, and `WanderGlassActionButton`, preserving native
+  iOS 26 Liquid Glass and the existing iOS 17-25 material fallback.
+- Hoisted People search state/focus into the Feed root so both Places and People
+  use the same floating search slot. Both scroll surfaces share a top content
+  inset and move underneath the persistent controls; existing walkthrough,
+  search, Add, and route behavior remains wired.
+- Generic iOS Simulator build passed: `BUILD SUCCEEDED` in 36.631 seconds using
+  `/private/tmp/recme-rec281-dd`.
+- Focused source-contract regression passed 1/1. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-39-51--0700.xcresult`.
+- New Feed UI regression passed 1/1 after narrowing an initially ambiguous
+  accessibility query to the People text field. It verifies the controls remain
+  fixed through scrolling and that People search replaces Places search in the
+  same elevated slot. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-42-09--0700.xcresult`.
+- Visually verified the Feed on iPhone 17 Pro / iOS 26.2 and iPhone 16e /
+  iOS 18.6. The canvas stays continuous, controls do not clip, and both native
+  glass and fallback material render correctly. Evidence:
+  `/private/tmp/rec281-feed-after-large.png` and
+  `/private/tmp/rec281-feed-after-small.png`. The People-state UI attachment is
+  `/private/tmp/rec281-ui-attachments/20D7D2C6-66D0-4A45-ADFE-30898D2C0C65.png`.
+- Removed only the two disposable task-specific Simulator devices and their
+  rebuildable index/module caches after preserving screenshots and test result
+  bundles. Source and validation evidence remain intact.
+
+Final validation before publication:
+
+- Ran the required complete scheme test command on iPhone 16 Plus / iOS 18.6.
+  It exercised the full unit and UI targets for 1,032.787 seconds. The new Feed
+  header UI test and existing Feed screenshot, search, walkthrough, and tab
+  navigation coverage passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-44-08--0700.xcresult`.
+- That aggregate run reproduced the existing Clerk cancellation trap and then
+  accumulated cascading signal-kill failures across 14 unrelated onboarding
+  tests after the app/test runner restarted. Four additional unrelated
+  onboarding/place-editor/map-search tests reported explicit failures. No Feed
+  floating-header test failed.
+- The complete run also exposed two stale source-contract expectations for the
+  old inline People search. Updated those tests to assert the new shared
+  floating search slot while preserving the invite-before-results contract.
+- Reran the two updated contracts together with the known Clerk cancellation
+  case: 3/3 passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-02-25--0700.xcresult`.
+- Reran the complete `WanderTests` target. After the known Clerk test trapped in
+  the aggregate process, the runner restarted and completed 1,203/1,203 tests
+  successfully; the same Clerk case passes alone. Aggregate result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-03-12--0700.xcresult`.
+- Regenerated with XcodeGen. It attempted to add two unrelated pre-existing
+  ios-fix fixtures to the project; removed only that generated project drift so
+  this branch remains scoped to REC-281. No source membership change was needed.
+- Final generic iOS Simulator build passed in 8.211 seconds. `git diff --check`
+  passed, and the final diff contains only Feed presentation, its focused unit/
+  UI coverage, and this coordination log.
+- No backend, schema, auth implementation, data, build-number, archive,
+  TestFlight, App Store Connect, or Slack release action was taken.
+
+Publication and handoff:
+
+- Committed as `dd5bef9e` (`feat: float Feed glass controls`) and pushed branch
+  `codex/rec-281-feed-glass-controls`.
+- Opened ready PR #458: https://github.com/joelipshutz/wander/pull/458
+- REC-281 is ready for review. Merge-only handoff; no TestFlight release was
+  requested or performed.
+- GitHub's `validate-pr-payload` check failed because the manually-created PR
+  body omitted the required `recme-testflight-payload` JSON comment. Inspection
+  confirmed this is PR metadata only, not a source/build/test failure. Because
+  the branch changes app runtime files, the valid classification is `ship` with
+  REC-281 tester-facing change, what-to-test actions, `releaseOperations: none`,
+  validation evidence, and the known aggregate-runner limitation. The GitHub
+  CI-fix workflow requires explicit approval before mutating the PR body, so
+  that metadata-only correction is the sole pending handoff action.
 # 2026-08-16 05:44 PDT - Codex - REC-278 Option B landing
 
 Agent: Codex
@@ -30477,68 +30582,81 @@ Landing fixes and validation — 2026-08-16 06:37 PDT:
 - Maintainability and performance reviews were clean. The final UI remains
   Option B; the image-backed/liquid-glass ticket experiment remains deferred.
   No build-number bump, archive, TestFlight upload, or release was performed.
+## 2026-08-16 10:04 PDT - Codex - REC-281 PR #458 landing review
 
-## 2026-08-16 08:12 PDT - Codex - REC-283 Remove Map Result Status Strip
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Review`)
 
-Agent: Codex using `ios-fix` with the existing deterministic simulator fixture
-as the reproduction surface because this repo intentionally has no
-DebugBridge/StateServer.
+- Joe explicitly requested that PR #458 be pushed to `main`; this is a
+  merge-only request. No build-number bump, archive, TestFlight upload, App
+  Store Connect action, or Slack release note is authorized.
+- Added the required hidden `recme-testflight-payload` to the PR body and
+  validated it locally against the repository parser. GitHub's
+  `validate-pr-payload` check now passes.
+- Integrated latest `origin/main` at `39aa45e1`. The only merge conflict was
+  the append-only coordination log; preserved both the REC-281 and REC-278
+  entries. GitHub now reports the PR cleanly mergeable.
+- Required gstack pre-landing review found no critical issue. Testing,
+  performance/design, and independent adversarial passes found no additional
+  findings. The maintainability pass identified static header-clearance math
+  and a whitespace-sensitive assertion; the red-team pass identified People
+  query state surviving while conditional result state was recreated.
+- Fixed all review findings: Feed content clearance now follows the measured
+  rendered floating-header height, the contract test uses bounded token checks,
+  and leaving People clears the query so returning cannot show a false empty
+  result while a new search is pending.
+- Final Swift syntax parsing, measured-header/query-lifetime source contracts,
+  and `git diff --check` pass. The earlier exact branch validation remains:
+  generic Simulator build, focused Feed contracts/UI test, full unit-target
+  execution, and iPhone 17 Pro plus iPhone 16e visual QA.
+- A redundant clean post-integration test attempt was blocked before tests ran
+  because the machine volume reached `No space left on device`. Removed only
+  the task-specific, rebuildable `/private/tmp/recme-rec281-landing-dd` and the
+  build/module/package/index caches under `/private/tmp/recme-rec281-dd`;
+  preserved its `Logs` and `TestResults` evidence. No unrelated DerivedData,
+  worktree, source, screenshot, or user file was removed.
+- Inspected the existing `testflight/build-155` state. No durable archive/upload
+  completion receipt was found; Joe's current instruction explicitly
+  prioritizes merging this PR, so that older release state remains untouched.
+- PR: https://github.com/joelipshutz/wander/pull/458. Ready for squash merge to
+  `main`; app behavior should ride the next explicitly requested TestFlight
+  batch.
 
-Branch: `codex/rec-283-remove-map-result-strip`
+## 2026-08-16 04:45 PDT — Codex — REC-280 semantic Discover candidate provider
 
-Worktree: `/private/tmp/recme-rec283-remove-map-result-strip`
+- Goal: implement the Search-only, feature-flagged pgvector candidate provider approved by the REC-225 real-corpus relevance gate. Preserve local/FTS fallback, privacy eligibility, deterministic ranking, and the vector-free Featured policy.
+- Linear: `REC-280` (`In Progress`), child of `REC-225`.
+- Branch/worktree: `codex/rec-280-semantic-search` in `/private/tmp/recme-rec280-semantic-search`, created from `origin/main` at `40811705`.
+- Starting status: clean (`## codex/rec-280-semantic-search...origin/main`). Existing checkout `joe/phone-build-latest` is dirty with untracked `tmp/`; the pending evaluator uses `/private/tmp/recme-rec225-relevance-evaluator`, so this implementation is isolated.
+- Expected files: a new Supabase migration and pgTAP coverage, semantic-search/backfill Edge Functions and tests, hosted smoke coverage, place repository/DTO/orchestration/feature-flag code and focused iOS tests, plus REC-225/REC-280 docs as the implementation clarifies the shipped contract.
+- Locked privacy decision: Joe explicitly approved sending minimized canonical place documents to OpenAI for embeddings. The documents exclude user/profile identity, notes, labels, answers, ratings, photos, coordinates, and people embeddings. Map Featured will not use vectors.
+- Rollout correction from Joe: semantic Search no longer needs a Joe/account override for dogfood. Xcode Debug builds enable the provider at compile time; Release builds honor only the globally default-off launch flag. Updated implementation, tests, decision record, implementation plan, PR handoff, and KB memory to match.
+- Removed only this worktree's disposable `DerivedData-rec280` after an interrupted validation run filled the disk, then rebuilt from clean generated state. Focused semantic/Discover validation passed 23/23. The aggregate scheme still reproduces the pre-existing Clerk test-order fatal (`Clerk has not been configured`) while the same cancellation regression passes 1/1 alone; complete remainder validation continues with that known isolation case separated.
+- Final iOS validation: the complete `WanderTests` target excluding the known aggregate-only `AuthSessionTests` group executed 1,200 tests, with 1,199 passes and one signal-killed `testFeaturedLargeCandidateRankingStaysLightweight` runner. That exact Featured performance regression then passed 1/1 in isolation (9.662 seconds). Together with the isolated auth cancellation pass and the 23/23 semantic Search/repository/navigation suite, every affected test received a passing execution. Full-scheme UI automation continued to show unrelated pre-existing timeout/restart noise; no semantic assertion failed.
+- Backend validation remained green: semantic Edge Function 4/4, embedding refresh Edge Function 3/3, rollback-only hosted semantic pgTAP 18/18, feature-flag pgTAP 14/14, and the full hosted Supabase smoke suite. `node --check scripts/supabase-smoke-test.mjs` and `git diff --check` passed.
+- No hosted migration, Edge deployment, embedding backfill, feature-flag mutation, build-number bump, archive, TestFlight upload, or Slack release action was performed. Release remains globally off; Xcode Debug builds use semantic retrieval without any account-specific override.
+- Handoff: committed as `c384c2dd`, pushed `codex/rec-280-semantic-search`, and opened ready PR #457 (`https://github.com/joelipshutz/wander/pull/457`). Next step is review/merge; backend activation follows the documented deploy, migration, backfill, authenticated smoke, and Xcode-dogfood sequence rather than happening from this PR.
+- Corrected the PR's required TestFlight-manifest payload; GitHub `validate-pr-payload` passed. Opened `/private/tmp/recme-rec280-semantic-search/Wander.xcodeproj` as its own Xcode workspace document and verified its repository is on `codex/rec-280-semantic-search`, leaving Joe's other active Xcode projects/checkouts untouched.
 
-Starting commit: `39aa45e11ccaa2182f481fb203303d57b5f76112`
+## 2026-08-16 09:15 PDT — Codex — REC-280 canonical retrieval spec
 
-Goal: remove the redundant `Map result. Tap + to add it.` strip between the
-selected-place ticket and search/add dock. Preserve the selected ticket, search,
-add button, other intentional Map status/error messaging, and compact/Liquid
-Glass layout clearances.
+- Goal: make the approved Search + Featured architecture easy to find from the repository, product docs, and both ranking implementations. No runtime behavior change.
+- Linear/PR: REC-280 (`In Review` before this documentation follow-up), PR #457.
+- Rebased `codex/rec-280-semantic-search` onto current `origin/main` (`39aa45e1`) and preserved both concurrent agent-log entries during the only conflict.
+- Expected files: a canonical `docs/specs/` retrieval document; links from README, product spec, handoff, and the dated implementation plan; source comments at Search fusion, Map Featured ranking, and the semantic migration; this log.
+- Outcome: added `docs/specs/search-featured-retrieval-platform.md` as the stable source of truth for Search, Featured, personalization boundaries, privacy, failure/performance behavior, monitoring, evaluation, future policy controls, implementation locations, and backend activation. Linked it from README, the product spec, the Codex handoff, and the detailed REC-280 implementation plan.
+- Added direct canonical-spec comments beside `RecmePlaceSearchFusion`, `MapFeaturedSelection`, and the semantic-search migration so maintainers can navigate from runtime policy to product contract. Source changes are comments only; no ranking or backend behavior changed.
+- Validation at 09:18 PDT: all referenced canonical implementation files exist, `git diff --check` passes, and the Swift/SQL diff contains only the intended comments. No build/test rerun is required for this documentation-only follow-up; the rebased implementation retains the previously recorded iOS, Edge, pgTAP, and hosted-smoke validation.
+- No hosted schema/data, Edge deployment, embedding backfill, feature flag, build number, archive, TestFlight, or release state changed.
 
-Coordination:
+Pre-merge sweep — 2026-08-16 10:04 PDT:
 
-- Root checkout remains on stale `joe/phone-build-latest`, 256 commits behind
-  `origin/main`, with unrelated untracked `tmp/`; it will remain untouched.
-- No active worktree or recent log entry claims this exact follow-up. The old
-  REC-278 worktree remains separate.
-- Linear: REC-283 (`In Progress`). Mission Control:
-  `5535c3ba-51b8-4050-82d0-fa11de845e2d` (`in_progress`).
-
-Expected files: `Wander/Features/Map/MapScreen.swift`, focused Map UI tests, and
-this log. No TestFlight release is in scope.
-
-Checkpoint — 2026-08-16 08:26 PDT:
-
-- Root cause: successful saved-place, MapKit-result, and typeahead selection
-  paths assigned generic success copy into the shared `mapSearchMessage` banner
-  state. The bottom stack then rendered that banner between the selected ticket
-  and search/add dock.
-- Removed only those successful-search assignments. No-results errors,
-  shared-place errors, loading state, outbox/retry state, and other intentional
-  Map messages remain unchanged.
-- Added a source-contract regression plus a UI regression that asserts the
-  ticket and search dock both remain present, the generic message does not, and
-  their frames do not overlap. The UI regression keeps an after screenshot.
-- iOS 18.6 / iPhone 16e: 7 focused tests passed, covering the new source
-  contract, all five `MapFilterInteractionUITests`, and the App Store Map
-  storefront capture. Result: `/private/tmp/REC283-Small.xcresult`.
-- iOS 26.2 / iPhone 16e: 3 focused Map/UI tests passed, followed by a 1-test
-  screenshot rerun. Results: `/private/tmp/REC283-iOS26.xcresult` and
-  `/private/tmp/REC283-iOS26-Visual.xcresult`.
-- Clean iOS 26.2 visual verification confirms the selected ticket now sits
-  directly above the search dock, with the wider Liquid Glass filters and
-  ticket styling unchanged. Screenshot:
-  `/private/tmp/REC283-iOS26-clean.png`.
-- `git diff --check` passed. No build-number bump, archive, TestFlight upload,
-  or release was performed.
-
-Handoff — 2026-08-16 08:29 PDT:
-
-- Ready PR: https://github.com/joelipshutz/wander/pull/459
-- Files changed: `Wander/Features/Map/MapScreen.swift`,
-  `WanderTests/NavigationContractTests.swift`,
-  `WanderUITests/MapFilterInteractionUITests.swift`, and this log.
-- Known issues: none found in the tested Map search/selection paths. The PR is
-  intentionally unmerged and no TestFlight action was taken.
-- Next step: review and merge PR #459 when approved; treat the fix as a
-  candidate for the next explicitly requested TestFlight batch.
+- Joe explicitly authorized squashing PR #457 into `main` for Xcode testing before any TestFlight release.
+- Initial sweep used `origin/main` at `39aa45e1`; the PR was clean, mergeable, and its required `validate-pr-payload` check passed.
+- Removed three accidental trailing-space markers from the canonical spec after the exact final `git diff --check` caught them. No product or runtime behavior changed.
+- Exact-commit focused iOS validation passed 24/24, including semantic fusion, lexical fallback, submitted-search cancellation, privacy/filter contracts, and the 1,000-place performance guard. Result: `/private/tmp/DerivedData-rec280-merge/Logs/Test/Test-Wander-2026.08.16_10-02-50--0700.xcresult`.
+- Exact-commit Edge validation passed 4/4 for semantic search and 3/3 for embedding refresh; `node --check scripts/supabase-smoke-test.mjs` and final `git diff --check` also pass.
+- While that clean build ran, PR #458 advanced `origin/main` to `0464822b`. Rebased again, preserving both REC-281 log blocks; source merged without conflict. The post-rebase focused suite passed 24/24 at `/private/tmp/DerivedData-rec280-merge/Logs/Test/Test-Wander-2026.08.16_10-18-59--0700.xcresult`.
+- Hosted activation, build-number bump, archive, TestFlight upload, and Slack release remain outside this merge.

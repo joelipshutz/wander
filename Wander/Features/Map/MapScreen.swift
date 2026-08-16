@@ -3413,6 +3413,8 @@ enum MapViewportRefreshPolicy {
 }
 
 enum MapFeaturedSelection {
+    // Canonical Search + Featured contract:
+    // docs/specs/search-featured-retrieval-platform.md
     static let maximumPlaceGroupCount = 24
     private static let maximumCandidateRowCount = 480
     private static let reservedRelationshipRowCount = 240
