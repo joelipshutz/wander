@@ -2051,16 +2051,23 @@ struct MapScreen: View {
             hasSharedVisitInvitation: false,
             isReadOnly: walkthroughs.activeSurface == .placeDetail
         )
-        let context = MapPlaceSaveContext.addVisiblePlace(
+        let currentUserSave = currentUserSave(matching: visiblePlace)
+        let context = currentUserSave.map {
+            MapPlaceSaveContext.reselectCurrentUserSave(
+                $0,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: store.attributes(for: $0.userPlace.id),
+                latestVisit: store.visits(for: $0.userPlace.id).first
+            )
+        } ?? MapPlaceSaveContext.addVisiblePlace(
             visiblePlace,
             defaultVisibility: store.effectiveDefaultVisibility,
             attributes: store.attributes(for: visiblePlace.userPlace.id)
         )
-        if currentUserSave(matching: visiblePlace) == nil,
-           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
-            route: .floatingActions,
-            state: state,
-            action: saveAction,
+        if let attachedContext = PlaceProfileSaveActionPolicy.attachedSaveContext(
+               route: .floatingActions,
+               state: state,
+               action: saveAction,
             baseContext: context
         ) {
             presentAttachedSaveFlow(attachedContext)
@@ -2103,11 +2110,10 @@ struct MapScreen: View {
             sourceType: .manual,
             defaultVisibility: defaultVisibility
         )
-        if currentUserSave(matching: candidate) == nil,
-           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
-            route: .floatingActions,
-            state: state,
-            action: saveAction,
+        if let attachedContext = PlaceProfileSaveActionPolicy.attachedSaveContext(
+               route: .floatingActions,
+               state: state,
+               action: saveAction,
             baseContext: context
         ) {
             presentAttachedSaveFlow(attachedContext)
@@ -2147,7 +2153,7 @@ struct MapScreen: View {
                     submittedAt: nil
                 )
             }
-        } else if let draft = PlaceSaveDraft.addFlow(
+        } else if let draft = PlaceSaveDraft.restorableFlow(
             ownerUserID: store.currentUser.id,
             context: context
         ) {
@@ -2505,6 +2511,7 @@ struct MapScreen: View {
                 return false
             }
             await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            placeSaveDraftStore.clear()
 
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
@@ -5654,7 +5661,27 @@ extension PlaceSaveDraft {
         context: MapPlaceSaveContext,
         now: Date = .now
     ) -> PlaceSaveDraft? {
-        guard case .add(let sourceType) = context.mode else { return nil }
+        guard case .add = context.mode else { return nil }
+        return restorableFlow(ownerUserID: ownerUserID, context: context, now: now)
+    }
+
+    static func restorableFlow(
+        ownerUserID: String,
+        context: MapPlaceSaveContext,
+        now: Date = .now
+    ) -> PlaceSaveDraft? {
+        let sourceType: AddSourceType
+        let baselineUserPlaceLocalID: String?
+        switch context.mode {
+        case .add(let addSourceType):
+            sourceType = addSourceType
+            baselineUserPlaceLocalID = context.existingCurrentUserSave?.userPlace.localID
+        case .editWant(let visiblePlace):
+            sourceType = AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual
+            baselineUserPlaceLocalID = visiblePlace.userPlace.localID
+        case .addVisit, .sharedVisit, .editVisit:
+            return nil
+        }
 
         let initialCuisine = context.candidate.primaryCategory == WanderPlaceCategory.restaurantsFood
             ? context.initialCuisine
@@ -5678,7 +5705,7 @@ extension PlaceSaveDraft {
             updatedAt: now,
             sourceType: sourceType,
             candidate: context.candidate,
-            baselineUserPlaceLocalID: context.existingCurrentUserSave?.userPlace.localID,
+            baselineUserPlaceLocalID: baselineUserPlaceLocalID,
             baselineVisitLocalID: context.existingLatestVisit?.localID,
             form: PlaceSaveDraftForm(
                 step: context.startsOnDetails ? .details : .confirm,
@@ -6711,7 +6738,10 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var progressActionTitle: String {
-        selectedStatus == .been ? "Checking in..." : "Adding to Wanna..."
+        if case .editWant = context.mode {
+            return "Updating Wanna..."
+        }
+        return selectedStatus == .been ? "Checking in..." : "Adding to Wanna..."
     }
 
     private var noteSection: some View {

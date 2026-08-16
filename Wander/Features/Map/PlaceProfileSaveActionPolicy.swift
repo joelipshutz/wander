@@ -121,6 +121,47 @@ enum PlaceProfileSaveActionPolicy {
         return baseContext.preselectingStatus(destinationStatus)
     }
 
+    static func attachedSaveContext(
+        route: PlaceProfileSaveExperienceRoute,
+        state: PlaceProfileSaveActionState,
+        action: PlaceProfileSaveAction,
+        baseContext: MapPlaceSaveContext
+    ) -> MapPlaceSaveContext? {
+        if let firstSave = attachedFirstSaveContext(
+            route: route,
+            state: state,
+            action: action,
+            baseContext: baseContext
+        ) {
+            return firstSave
+        }
+
+        return attachedExistingWannaContext(
+            route: route,
+            state: state,
+            action: action,
+            baseContext: baseContext
+        )
+    }
+
+    static func attachedExistingWannaContext(
+        route: PlaceProfileSaveExperienceRoute,
+        state: PlaceProfileSaveActionState,
+        action: PlaceProfileSaveAction,
+        baseContext: MapPlaceSaveContext
+    ) -> MapPlaceSaveContext? {
+        guard route == .floatingActions,
+              state == .wanna,
+              action.kind == .wanna,
+              action.isSelected,
+              action.destinationStatus == .wannaGo,
+              baseContext.existingCurrentUserSave?.userPlace.status == .wannaGo,
+              case .add = baseContext.mode
+        else { return nil }
+
+        return baseContext.preselectingStatus(.wannaGo)
+    }
+
     static func state(
         currentUserSave: VisiblePlace?,
         hasSharedVisitInvitation: Bool,

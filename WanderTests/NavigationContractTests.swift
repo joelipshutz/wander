@@ -3144,12 +3144,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
 
         XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
+        XCTAssertTrue(policy.contains("static func attachedExistingWannaContext("))
+        XCTAssertTrue(policy.contains("static func attachedSaveContext("))
         XCTAssertTrue(policy.contains("route == .floatingActions"))
         XCTAssertTrue(policy.contains("state == .unsaved"))
+        XCTAssertTrue(policy.contains("state == .wanna"))
+        XCTAssertTrue(policy.contains("action.isSelected"))
         XCTAssertTrue(policy.contains("isSupportedFirstSaveAction(action.kind, status: destinationStatus)"))
         XCTAssertTrue(policy.contains("case (.checkIn, .been), (.wanna, .wannaGo):"))
-        XCTAssertTrue(mapScreen.contains("currentUserSave(matching: visiblePlace) == nil"))
-        XCTAssertTrue(mapScreen.contains("currentUserSave(matching: candidate) == nil"))
+        XCTAssertTrue(mapScreen.contains("let currentUserSave = currentUserSave(matching: visiblePlace)"))
+        XCTAssertTrue(mapScreen.contains("MapPlaceSaveContext.reselectCurrentUserSave("))
+        XCTAssertTrue(mapScreen.contains("PlaceSaveDraft.restorableFlow("))
         XCTAssertTrue(mapScreen.contains("currentUserSave: currentUserSave(matching: selectedPlace)"))
         XCTAssertTrue(mapScreen.contains("currentUserSave: currentUserSave(matching: group.primary)"))
         XCTAssertTrue(mapScreen.contains("summaries.insert(saveSummary(for: currentUserSave), at: 0)"))
@@ -3171,6 +3176,7 @@ final class NavigationContractTests: XCTestCase {
         )
         for handler in [visiblePlaceHandler, candidateHandler] {
             XCTAssertTrue(handler.contains("route: .floatingActions"))
+            XCTAssertTrue(handler.contains("attachedSaveContext("))
             XCTAssertFalse(handler.contains("saveActionSnapshot(saves: saves).route"))
         }
 

@@ -1583,6 +1583,72 @@ final class OnboardingUITests: XCTestCase {
         )
     }
 
+    func testExistingMapWannaExpandsAttachedEditorAndRestoresItsDraft() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Elysian Picnic Steps",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 5))
+        wanna.tap()
+
+        let attachedTray = app.descendants(matching: .any)["place-profile.attached-wanna"]
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.buttons["Update Wanna"].exists)
+        XCTAssertTrue(app.buttons["Remove from Wanna"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
+        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+
+        app.buttons["Show more options"].tap()
+        let attachedScrollView = app.scrollViews["place-profile.attached-wanna"].firstMatch
+        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
+        let note = attachedScrollView.descendants(matching: .textField).firstMatch
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            note.value as? String,
+            "Saved for a low-effort sunset picnic."
+        )
+        note.tap()
+        note.typeText(" Updated")
+        let editedNote = note.value as? String
+        XCTAssertTrue(editedNote?.contains("Saved for a low-effort sunset picnic.") == true)
+        XCTAssertTrue(editedNote?.contains("Updated") == true)
+
+        app.buttons["Collapse Wanna"].tap()
+        XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
+        XCTAssertTrue(wanna.isHittable)
+        wanna.tap()
+
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
+        let restoredMoreOptions = app.buttons["Show more options"]
+        if restoredMoreOptions.waitForExistence(timeout: 2) {
+            restoredMoreOptions.tap()
+        } else {
+            XCTAssertTrue(app.buttons["Hide more options"].waitForExistence(timeout: 2))
+        }
+        XCTAssertTrue(attachedScrollView.waitForExistence(timeout: 2))
+        let restoredNote = attachedScrollView.descendants(matching: .textField).firstMatch
+        XCTAssertTrue(restoredNote.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            restoredNote.value as? String,
+            editedNote
+        )
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "Existing Map Wanna attached editor"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [

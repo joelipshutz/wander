@@ -147,6 +147,73 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
     }
 
+    func testAttachedEditorRoutesOnlyTheSelectedExistingWannaAction() throws {
+        let currentUser = profile(id: "user_current_edit_wanna", handle: "current")
+        let currentWanna = summary(
+            owner: currentUser,
+            place: place(id: "place_current_edit_wanna", category: "park"),
+            status: .wannaGo,
+            ratingScore: nil,
+            tags: ["sunset"]
+        ).visiblePlace
+        currentWanna.userPlace.note = "Bring a picnic blanket."
+        let base = MapPlaceSaveContext.reselectCurrentUserSave(
+            currentWanna,
+            defaultVisibility: .followers,
+            attributes: [],
+            latestVisit: nil
+        )
+        let wannaActions = PlaceProfileSaveActionPolicy.resolve(state: .wanna).actions
+        let checkIn = try XCTUnwrap(wannaActions.first { $0.kind == .checkIn })
+        let selectedWanna = try XCTUnwrap(wannaActions.first { $0.kind == .wanna })
+
+        let attached = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .floatingActions,
+                state: .wanna,
+                action: selectedWanna,
+                baseContext: base
+            )
+        )
+        guard case .editWant(let visiblePlace) = attached.mode else {
+            return XCTFail("The selected existing Wanna action must use the edit-Wanna path")
+        }
+        XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
+        XCTAssertEqual(attached.initialStatus, .wannaGo)
+        XCTAssertEqual(attached.initialNote, "Bring a picnic blanket.")
+        XCTAssertTrue(attached.startsOnDetails)
+        XCTAssertTrue(attached.showsRemoveControl)
+
+        let draft = try XCTUnwrap(
+            PlaceSaveDraft.restorableFlow(
+                ownerUserID: currentUser.id,
+                context: attached
+            )
+        )
+        XCTAssertEqual(draft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
+        XCTAssertEqual(draft.form.note, "Bring a picnic blanket.")
+        XCTAssertEqual(draft.form.selectedStatus, .wannaGo)
+        XCTAssertEqual(draft.form.step, .details)
+
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .floatingActions,
+                state: .wanna,
+                action: checkIn,
+                baseContext: base
+            ),
+            "Wanna-to-Check-in remains on the legacy route until its own gate"
+        )
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .legacy,
+                state: .wanna,
+                action: selectedWanna,
+                baseContext: base
+            )
+        )
+    }
+
     func testAttachedEditorRejectsMismatchedActionAndStatus() throws {
         let candidate = PlaceCandidate(
             id: "candidate-attached-mismatch",

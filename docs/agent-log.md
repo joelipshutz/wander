@@ -30230,3 +30230,65 @@ Outcome and validation:
   local machine does not have the Supabase CLI, so hosted migration/pgTAP
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
+
+## 2026-08-16 04:43 PDT - Codex - REC-275 S7.2 attached edit-Wanna start
+
+Agent: Codex
+Branch: `codex/rec-275-attached-edit-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-edit-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Starting state and scope:
+
+- S7.1 was squash-merged to `main` through PR #454 at `40811705`. No build
+  number, archive, TestFlight, hosted-data, or release action accompanied the
+  merge.
+- This clean worktree was created from that exact `origin/main` commit. No
+  overlapping uncommitted changes are present.
+- S7.2 is intentionally narrow: tapping the selected Wanna floating action for
+  the current user's existing Wanna should expand the existing edit-Wanna
+  context inside the Map place profile, prefilled through the same draft,
+  persistence, submit, remove, and reminder paths already used by the legacy
+  editor.
+- Wanna-to-Check-in conversion, repeat Check in, edit/history, shared
+  invitations, imports, and non-Map entry points remain on legacy routes.
+- Expected files: `Wander/Features/Map/PlaceProfileSaveActionPolicy.swift`,
+  `Wander/Features/Map/MapScreen.swift`, policy/navigation/UI tests, and this
+  log. No push, merge, build-number bump, or TestFlight release is implied by
+  this implementation gate.
+
+## 2026-08-16 05:03 PDT - Codex - REC-275 S7.2 validation handoff
+
+Agent: Codex
+Branch: `codex/rec-275-attached-edit-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-edit-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Outcome and validation:
+
+- Added the S7.2 gate on top of merged S7.1: tapping an already-selected Wanna
+  floating action now expands the existing edit-Wanna form inside the place
+  profile. The form preserves the existing note, optional fields, visibility,
+  date/reminder behavior, update action, and remove action.
+- Reused the existing edit-Wanna mutation path rather than introducing a new
+  persistence contract. The attached form also uses the shared local draft
+  store, so an in-progress edit survives collapse/reopen and app restart.
+- Existing-Wanna to Check in, repeat Check in, edit/history, invitations,
+  imports, and non-Map entry points intentionally remain on their current
+  routes for later gates.
+- Focused policy/navigation/presentation validation passed 163/163. The new
+  end-to-end existing-Wanna test passed 1/1, including prefill, optional fields,
+  collapse/reopen draft restoration, update labeling, and remove availability.
+  Result: `DerivedData-s72/Logs/Test/Test-Wander-2026.08.16_04-54-47--0700.xcresult`.
+- The five-flow UI regression gate passed 5/5: edge-swipe collapse, floating
+  actions after deep scrolling, first attached Check in, first attached Wanna,
+  and attached existing-Wanna editing. Result:
+  `DerivedData-s72/Logs/Test/Test-Wander-2026.08.16_04-57-43--0700.xcresult`.
+- Installed the exact S7.2 build on the dedicated `S7.2 Edit Wanna Test`
+  iPhone 16 Plus Simulator (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) and opened
+  it as authenticated `@joe` on the expanded Elysian Picnic Steps profile.
+  Tap the selected Wanna action to test the attached editor. Resting evidence:
+  `/private/tmp/s72-resting.png`.
+- Existing compiler/headermap warnings remain unchanged. No build-number bump,
+  archive, TestFlight upload, hosted schema/data/auth mutation, or Slack release
+  action was performed.
