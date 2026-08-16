@@ -30650,3 +30650,10 @@ Linear: `REC-281` (`In Review`)
 - Added direct canonical-spec comments beside `RecmePlaceSearchFusion`, `MapFeaturedSelection`, and the semantic-search migration so maintainers can navigate from runtime policy to product contract. Source changes are comments only; no ranking or backend behavior changed.
 - Validation at 09:18 PDT: all referenced canonical implementation files exist, `git diff --check` passes, and the Swift/SQL diff contains only the intended comments. No build/test rerun is required for this documentation-only follow-up; the rebased implementation retains the previously recorded iOS, Edge, pgTAP, and hosted-smoke validation.
 - No hosted schema/data, Edge deployment, embedding backfill, feature flag, build number, archive, TestFlight, or release state changed.
+
+Pre-merge sweep — 2026-08-16 10:04 PDT:
+
+- Joe explicitly authorized squashing PR #457 into `main` for Xcode testing before any TestFlight release.
+- Latest `origin/main` remains `39aa45e1`; the PR is clean, mergeable, and its required `validate-pr-payload` check passes.
+- Removed three accidental trailing-space markers from the canonical spec after the exact final `git diff --check` caught them. No product or runtime behavior changed.
+- Final focused validation is being rerun at the corrected branch commit. Hosted activation, build-number bump, archive, TestFlight upload, and Slack release remain outside this merge.

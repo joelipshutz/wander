@@ -1,8 +1,8 @@
 # Search and Featured Retrieval Platform
 
-Status: canonical architecture and product contract  
-Last updated: 2026-08-16  
-Implementation issue: REC-280  
+Status: canonical architecture and product contract
+Last updated: 2026-08-16
+Implementation issue: REC-280
 
 Read this document first before changing Discover Search retrieval, Map
 Featured ranking, semantic embeddings, personalization/community blending, or
