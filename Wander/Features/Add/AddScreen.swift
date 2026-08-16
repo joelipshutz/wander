@@ -39,6 +39,7 @@ enum AddSuggestedPlaces {
 }
 
 struct AddScreen: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -49,6 +50,7 @@ struct AddScreen: View {
     @Binding private var selectedDetent: PresentationDetent
     let launchRequest: WanderAddLaunchRequest?
     let onLaunchRequestHandled: (UUID) -> Void
+    let walkthroughParkSuggestion: @MainActor () async -> PlaceCandidate?
     let onClose: () -> Void
     @State private var step: AddStep = .source
     @State private var candidates: [PlaceCandidate] = []
@@ -76,6 +78,8 @@ struct AddScreen: View {
     )
     @State private var showsImportInbox = false
     @State private var isAutoClosingWalkthrough = false
+    @State private var isRunningWalkthroughSearch = false
+    @State private var isOpeningWalkthroughCandidate = false
     @State private var showsImportReview = false
     @State private var importReviewBatchIDs: [String] = []
     @FocusState private var isQuickAddFocused: Bool
@@ -87,6 +91,7 @@ struct AddScreen: View {
         selectedDetent: Binding<PresentationDetent>,
         launchRequest: WanderAddLaunchRequest? = nil,
         onLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
+        walkthroughParkSuggestion: @escaping @MainActor () async -> PlaceCandidate? = { nil },
         onClose: @escaping () -> Void
     ) {
         self.importStore = importStore
@@ -95,6 +100,7 @@ struct AddScreen: View {
         _selectedDetent = selectedDetent
         self.launchRequest = launchRequest
         self.onLaunchRequestHandled = onLaunchRequestHandled
+        self.walkthroughParkSuggestion = walkthroughParkSuggestion
         self.onClose = onClose
     }
 
@@ -118,6 +124,22 @@ struct AddScreen: View {
 
     private var isShowingHereNowResults: Bool {
         isShowingInlineCandidateResults && selectedSource == .currentLocation
+    }
+
+    private var isAddWalkthroughActive: Bool {
+        walkthroughs.activeSurface == .add
+    }
+
+    private var isWalkthroughAddFlowActive: Bool {
+        isAddWalkthroughActive
+            || walkthroughs.activeSurface == .saveFlow
+            || walkthroughs.requestedSurface == .map
+    }
+
+    private var isWalkthroughAutomatingPlace: Bool {
+        guard isAddWalkthroughActive else { return false }
+        return walkthroughs.currentStep?.target == .addSearch
+            || walkthroughs.currentStep?.target == .addPlace
     }
 
     var body: some View {
@@ -150,11 +172,17 @@ struct AddScreen: View {
                 reset()
             }
             .onChange(of: walkthroughs.activeSurface, initial: true) { _, activeSurface in
-                if activeSurface == .add {
-                    expandSheet()
+                if activeSurface == .saveFlow {
+                    restoreActiveSaveFlowIfNeeded()
+                } else if activeSurface == .add {
+                    settleWalkthroughSheet()
                 }
             }
+            .task(id: walkthroughs.currentStep?.target) {
+                await runWalkthroughAddAutomationIfNeeded()
+            }
             .task(id: resetToken) {
+                guard !isAddWalkthroughActive else { return }
                 await loadNearbySuggestionsIfNeeded()
             }
             .onChange(of: isQuickAddFocused) { _, isFocused in
@@ -284,8 +312,11 @@ struct AddScreen: View {
             isPresented: addSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
         )
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .add)
-        .onChange(of: walkthroughs.currentStep?.target) { _, target in
-            autoCloseAfterImportIfNeeded(target)
+        .onChange(of: walkthroughs.currentStep?.target) { _, _ in
+            autoCloseAfterImportIfNeeded()
+        }
+        .onChange(of: walkthroughs.requestedSurface) { _, _ in
+            autoCloseAfterImportIfNeeded()
         }
     }
 
@@ -310,15 +341,30 @@ struct AddScreen: View {
 
     private var compactSourceContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                header
-                suggestedPlaces
+            if isAddWalkthroughActive {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    header
+                    suggestedPlacesCore
 
-                if let resolutionMessage {
-                    InlineMessage(text: resolutionMessage)
+                    if let resolutionMessage {
+                        InlineMessage(text: resolutionMessage)
+                    }
+                }
+                .walkthroughTarget(.addSearch)
+
+                suggestedPlacesSeeMore
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            } else {
+                VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                    header
+                    suggestedPlaces
+
+                    if let resolutionMessage {
+                        InlineMessage(text: resolutionMessage)
+                    }
                 }
             }
-            .walkthroughTarget(.addSearch)
 
             Spacer(minLength: 0)
         }
@@ -346,10 +392,7 @@ struct AddScreen: View {
     }
 
     private var walkthroughCandidateCoachClearance: CGFloat {
-        walkthroughs.activeSurface == .add
-            && walkthroughs.currentStep?.target == .addPlace
-            ? 260
-            : WanderTheme.spacing8
+        WanderTheme.spacing8
     }
 
     private var header: some View {
@@ -376,30 +419,22 @@ struct AddScreen: View {
 
             Spacer()
 
-            Button {
-                walkthroughs.perform(.addClose)
-                onClose()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .frame(width: 30, height: 30)
-                    .background(WanderTheme.surfaceSand.color)
-                    .clipShape(Circle())
-                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .contentShape(Rectangle())
+            if !isWalkthroughAddFlowActive {
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .frame(width: 30, height: 30)
+                        .background(WanderTheme.surfaceSand.color)
+                        .clipShape(Circle())
+                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close add place")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close add place")
-            .walkthroughTarget(.addClose)
-            .disabled(
-                walkthroughs.activeSurface == .add
-                    && walkthroughs.currentStep?.target != .addClose
-            )
-            .accessibilityHidden(
-                walkthroughs.activeSurface == .add
-                    && walkthroughs.currentStep?.target != .addClose
-            )
         }
     }
 
@@ -425,6 +460,7 @@ struct AddScreen: View {
                 }
             }
         }
+        .walkthroughTarget(.addSearch)
     }
 
     private var searchField: some View {
@@ -448,9 +484,23 @@ struct AddScreen: View {
             }
         )
         .walkthroughEmphasis(.addSearch)
+        .disabled(isWalkthroughAutomatingPlace)
+        .allowsHitTesting(!isWalkthroughAutomatingPlace)
+        .accessibilityHint(
+            isWalkthroughAutomatingPlace
+                ? "rec.me is choosing a nearby park for this demonstration"
+                : ""
+        )
     }
 
     private var suggestedPlaces: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            suggestedPlacesCore
+            suggestedPlacesSeeMore
+        }
+    }
+
+    private var suggestedPlacesCore: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("Suggested")
                 .font(.system(size: 17, weight: .black))
@@ -469,7 +519,7 @@ struct AddScreen: View {
                 }
                 .frame(minHeight: 82)
             } else if !suggestedCandidates.isEmpty {
-                suggestedPlacePreview(
+                suggestedPlaceRows(
                     count: AddSuggestedPlaces.previewCount(
                         screenHeight: UIScreen.main.bounds.height
                     )
@@ -495,34 +545,40 @@ struct AddScreen: View {
         }
     }
 
-    private func suggestedPlacePreview(count: Int) -> some View {
+    @ViewBuilder
+    private var suggestedPlacesSeeMore: some View {
+        let visibleCount = AddSuggestedPlaces.previewCount(
+            screenHeight: UIScreen.main.bounds.height
+        )
+        if AddSuggestedPlaces.visible(suggestedCandidates, count: visibleCount).count
+            < suggestedCandidates.count {
+            Button {
+                walkthroughs.perform(.addSearch)
+                expandSheet()
+                Task {
+                    await resolveCurrentLocationCandidates()
+                }
+            } label: {
+                Label("See more", systemImage: "arrow.up.right")
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .frame(maxWidth: .infinity, minHeight: AddSuggestedPlaces.showMoreHeight)
+                    .background(WanderTheme.surfaceSand.color)
+                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens all nearby suggestions in the full-screen nearby view")
+        }
+    }
+
+    private func suggestedPlaceRows(count: Int) -> some View {
         let visibleCandidates = AddSuggestedPlaces.visible(suggestedCandidates, count: count)
-        let hasMore = visibleCandidates.count < suggestedCandidates.count
 
         return VStack(spacing: AddSuggestedPlaces.rowSpacing) {
             ForEach(visibleCandidates) { candidate in
                 SuggestedPlaceCard(candidate: candidate) {
                     openSuggestedCandidate(candidate)
                 }
-            }
-
-            if hasMore {
-                Button {
-                    walkthroughs.perform(.addSearch)
-                    expandSheet()
-                    Task {
-                        await resolveCurrentLocationCandidates()
-                    }
-                } label: {
-                    Label("See more", systemImage: "arrow.up.right")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(WanderTheme.terracottaDark.color)
-                        .frame(maxWidth: .infinity, minHeight: AddSuggestedPlaces.showMoreHeight)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens all nearby suggestions in the full-screen nearby view")
             }
         }
     }
@@ -531,7 +587,11 @@ struct AddScreen: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             VStack(spacing: WanderTheme.spacing2) {
                 ForEach(candidates) { candidate in
-                    CandidateRow(candidate: candidate, isSelected: selectedCandidate?.id == candidate.id) {
+                    CandidateRow(
+                        candidate: candidate,
+                        isSelected: selectedCandidate?.id == candidate.id,
+                        isInteractive: !isWalkthroughAutomatingPlace
+                    ) {
                         selectedCandidateID = candidate.id
                     }
                 }
@@ -542,6 +602,8 @@ struct AddScreen: View {
             }
         }
         .walkthroughTarget(showsFloatingCurrentLocationAction ? nil : .addPlace)
+        .disabled(isWalkthroughAutomatingPlace)
+        .allowsHitTesting(!isWalkthroughAutomatingPlace)
     }
 
     private var floatingCandidateAction: some View {
@@ -570,20 +632,23 @@ struct AddScreen: View {
         }
     }
 
-    private func autoCloseAfterImportIfNeeded(_ target: WalkthroughTargetID?) {
-        guard target == .addClose,
-              walkthroughs.activeSurface == .add,
+    private func autoCloseAfterImportIfNeeded() {
+        guard walkthroughs.activeSurface == nil,
+              walkthroughs.requestedSurface == .map,
+              addSaveFlow == nil,
               !isAutoClosingWalkthrough
         else { return }
 
         isAutoClosingWalkthrough = true
         Task { @MainActor in
             await Task.yield()
-            guard walkthroughs.currentStep?.target == .addClose else {
+            guard walkthroughs.activeSurface == nil,
+                  walkthroughs.requestedSurface == .map,
+                  addSaveFlow == nil
+            else {
                 isAutoClosingWalkthrough = false
                 return
             }
-            walkthroughs.perform(.addClose)
             onClose()
         }
     }
@@ -621,6 +686,191 @@ struct AddScreen: View {
         step = .source
         expandSheet()
     }
+
+    @MainActor
+    private func runWalkthroughAddAutomationIfNeeded() async {
+        guard isAddWalkthroughActive, let target = walkthroughs.currentStep?.target else { return }
+
+        switch target {
+        case .addSearch:
+            await runWalkthroughParkSearch()
+        case .addPlace:
+            await openWalkthroughParkAfterPreview()
+        case .addImport:
+            settleWalkthroughSheet()
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func runWalkthroughParkSearch() async {
+        guard !isRunningWalkthroughSearch else { return }
+        isRunningWalkthroughSearch = true
+        defer { isRunningWalkthroughSearch = false }
+
+        settleWalkthroughSheet()
+        isQuickAddFocused = false
+        selectedSource = .manual
+        candidates = []
+        selectedCandidateID = nil
+        isShowingInlineCandidateResults = false
+        resolutionMessage = nil
+
+        let candidate: PlaceCandidate
+        if let existing = walkthroughs.tutorialCandidate {
+            candidate = existing
+        } else if let suggested = await walkthroughParkSuggestion(), !Task.isCancelled {
+            candidate = suggested
+            walkthroughs.recordTutorialCandidate(suggested)
+        } else {
+            candidate = Self.hotchkissParkCandidate
+            walkthroughs.recordTutorialCandidate(candidate)
+        }
+        guard !Task.isCancelled,
+              walkthroughs.activeSurface == .add,
+              walkthroughs.currentStep?.target == .addSearch
+        else { return }
+
+        // Let the coach settle before the automated typing begins. This keeps
+        // the first instruction readable instead of racing through it during
+        // the sheet's presentation animation.
+        try? await Task.sleep(
+            for: reduceMotion ? .milliseconds(900) : .milliseconds(1_500)
+        )
+        guard !Task.isCancelled,
+              walkthroughs.currentStep?.target == .addSearch
+        else { return }
+
+        quickAddQuery = ""
+        let shouldAnimateTyping = !reduceMotion && !UIAccessibility.isVoiceOverRunning
+        if shouldAnimateTyping {
+            for character in candidate.name {
+                guard !Task.isCancelled,
+                      walkthroughs.currentStep?.target == .addSearch
+                else { return }
+                withAnimation(.smooth(duration: 0.12)) {
+                    quickAddQuery.append(character)
+                }
+                try? await Task.sleep(for: .milliseconds(74))
+            }
+        } else {
+            quickAddQuery = candidate.name
+        }
+        guard !Task.isCancelled else { return }
+
+        candidates = await walkthroughPreviewCandidates(selected: candidate)
+        guard !Task.isCancelled,
+              walkthroughs.currentStep?.target == .addSearch
+        else { return }
+        selectedCandidateID = candidate.id
+        selectedSource = .manual
+        isShowingInlineCandidateResults = true
+        step = .source
+        settleWalkthroughSheet(candidateCount: candidates.count)
+
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "Selected \(candidate.name) for the saving-a-place demonstration."
+            )
+        }
+
+        // Keep the selected result visible long enough to understand what the
+        // demo chose before moving into the save sheet.
+        try? await Task.sleep(
+            for: reduceMotion ? .milliseconds(900) : .milliseconds(1_700)
+        )
+        guard !Task.isCancelled,
+              walkthroughs.currentStep?.target == .addSearch
+        else { return }
+        walkthroughs.perform(.addSearch)
+    }
+
+    @MainActor
+    private func walkthroughPreviewCandidates(selected candidate: PlaceCandidate) async -> [PlaceCandidate] {
+        do {
+            let resolved = try await store.manualCandidates(
+                name: candidate.name,
+                areaHint: candidate.locality,
+                category: "park"
+            )
+            var seen = Set<String>()
+            let ordered = ([candidate] + resolved).filter { item in
+                seen.insert(Self.walkthroughCandidateIdentity(item)).inserted
+            }
+            return AddSuggestedPlaces.limited(ordered)
+        } catch {
+            return [candidate]
+        }
+    }
+
+    private static func walkthroughCandidateIdentity(_ candidate: PlaceCandidate) -> String {
+        [candidate.name, candidate.address, candidate.locality, candidate.region]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+            .joined(separator: "|")
+    }
+
+    @MainActor
+    private func openWalkthroughParkAfterPreview() async {
+        guard !isOpeningWalkthroughCandidate else { return }
+        isOpeningWalkthroughCandidate = true
+        defer { isOpeningWalkthroughCandidate = false }
+
+        if selectedCandidate == nil, let candidate = walkthroughs.tutorialCandidate {
+            candidates = [candidate]
+            selectedCandidateID = candidate.id
+            selectedSource = .manual
+            quickAddQuery = candidate.name
+            isShowingInlineCandidateResults = true
+            step = .source
+        }
+
+        settleWalkthroughSheet(candidateCount: candidates.count)
+        try? await Task.sleep(
+            for: reduceMotion ? .milliseconds(1_000) : .milliseconds(2_200)
+        )
+        guard !Task.isCancelled,
+              walkthroughs.activeSurface == .add,
+              walkthroughs.currentStep?.target == .addPlace,
+              selectedCandidate != nil
+        else { return }
+        openSharedSaveFlow()
+    }
+
+    @MainActor
+    private func settleWalkthroughSheet(candidateCount: Int = 0) {
+        let previewCapacity = AddSuggestedPlaces.previewCount(
+            screenHeight: UIScreen.main.bounds.height
+        )
+        let targetDetent: PresentationDetent = candidateCount > previewCapacity
+            ? .large
+            : restingDetent
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0)) {
+            selectedDetent = targetDetent
+        }
+    }
+
+    private static let hotchkissParkCandidate = PlaceCandidate(
+        id: "walkthrough-hotchkiss-park",
+        name: "Hotchkiss Park",
+        category: "park",
+        primaryCategory: WanderPlaceCategory.outdoorsNature,
+        subcategory: "Park",
+        categorySource: PlaceCategorySource.provider.rawValue,
+        categoryConfidence: 1,
+        rawProviderType: "park",
+        address: "2302 4th Street",
+        locality: "Santa Monica",
+        region: "CA",
+        country: "US",
+        latitude: 34.0046,
+        longitude: -118.4845,
+        sourceProvider: "mapkit",
+        sourceProviderPlaceID: "hotchkiss-park-ocean-park",
+        confidence: 1
+    )
 
     private var draftView: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -738,20 +988,25 @@ struct AddScreen: View {
     private func openSharedSaveFlow() {
         guard let selectedCandidate else { return }
 
-        walkthroughs.perform(.addPlace)
-        walkthroughs.activate(.saveFlow)
         presentSaveFlow(addCandidateContext(
             selectedCandidate,
             sourceType: selectedSource,
             defaultVisibility: store.effectiveDefaultVisibility,
             initialPhotoAttachments: pendingVisitPhotoAttachments
         ))
+        // Persist the recoverable form before moving the NUX checkpoint to the
+        // nested save sheet. A kill between these statements can now always
+        // reconstruct the exact presentation.
+        walkthroughs.perform(.addPlace, transitioningTo: .saveFlow)
     }
 
     private func presentSaveFlow(_ context: MapPlaceSaveContext) {
         if let draft = PlaceSaveDraft.addFlow(
             ownerUserID: store.currentUser.id,
-            context: context
+            context: context,
+            walkthroughContentVersion: walkthroughs.activeSurface == .add
+                ? FirstVisitWalkthroughContent.version
+                : nil
         ) {
             placeSaveDraftStore.begin(draft)
         }
@@ -759,10 +1014,14 @@ struct AddScreen: View {
     }
 
     private func restoreActiveSaveFlowIfNeeded() {
-        guard addSaveFlow == nil,
-              let draft = placeSaveDraftStore.draft,
+        guard addSaveFlow == nil else { return }
+
+        guard let draft = placeSaveDraftStore.draft,
               draft.ownerUserID == store.currentUser.id
-        else { return }
+        else {
+            restoreLegacyWalkthroughSaveWithoutDraftIfNeeded()
+            return
+        }
 
         selectedSource = draft.sourceType
         candidates = [draft.candidate]
@@ -781,6 +1040,47 @@ struct AddScreen: View {
         }
         selectedDetent = .large
         addSaveFlow = context
+    }
+
+    private func restoreLegacyWalkthroughSaveWithoutDraftIfNeeded() {
+        guard walkthroughs.activeSurface == .saveFlow,
+              let candidate = walkthroughs.tutorialCandidate
+        else { return }
+
+        if walkthroughs.currentStep?.target == .saveSubmit,
+           let currentSave = MapPlaceSaveContext.currentUserSave(
+               matching: candidate,
+               in: store.currentUserVisiblePlaces
+           ) {
+            let latestVisit = store.visits(for: currentSave.userPlace.id).first
+            if walkthroughs.tutorialMemorySnapshot == nil {
+                walkthroughs.recordTutorialMemorySnapshot(
+                    FirstVisitTutorialMemorySnapshot(
+                        candidate: candidate,
+                        status: currentSave.userPlace.status,
+                        date: latestVisit?.visitedAt ?? currentSave.userPlace.localUpdatedAt,
+                        ratingScore: latestVisit?.ratingScore,
+                        note: latestVisit?.note
+                            ?? "A peaceful neighborhood park with room to slow down and breathe.",
+                        tag: "good walk"
+                    )
+                )
+            }
+            walkthroughs.recordTutorialSave(userPlaceID: currentSave.userPlace.id)
+            walkthroughs.perform(.saveSubmit)
+            return
+        }
+
+        selectedSource = .manual
+        candidates = [candidate]
+        selectedCandidateID = candidate.id
+        let context = addCandidateContext(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: store.effectiveDefaultVisibility
+        )
+        presentSaveFlow(context)
+        selectedDetent = .large
     }
 
     private func addCandidateContext(
@@ -847,7 +1147,12 @@ struct AddScreen: View {
             backend: auth.isSignedIn ? backend : nil
         ) else { return nil }
 
-        placeSaveDraftStore.clear()
+        // During the NUX, the nested sheet records its memory snapshot and
+        // advances the checkpoint after this returns. Keep the submitted draft
+        // until that transition succeeds so a process kill remains recoverable.
+        if walkthroughs.activeSurface != .saveFlow {
+            placeSaveDraftStore.clear()
+        }
         let needsSignIn = !auth.isSignedIn
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         resetAfterSave()
@@ -1340,37 +1645,53 @@ private struct SuggestedPlaceCard: View {
 private struct CandidateRow: View {
     let candidate: PlaceCandidate
     let isSelected: Bool
+    let isInteractive: Bool
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: WanderTheme.spacing3) {
-                CategoryIcon(category: candidate.category)
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(candidate.name)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                    Text(candidate.subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(2)
+        Group {
+            if isInteractive {
+                Button(action: action) {
+                    rowContent
                 }
-                Spacer()
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
+                .buttonStyle(.plain)
+            } else {
+                rowContent
+                    .accessibilityElement(children: .ignore)
             }
-            .padding(WanderTheme.spacing3)
-            .background(WanderTheme.surfaceBone.color)
-            .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-            .overlay(
-                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
-                    .stroke(isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color, lineWidth: isSelected ? 2 : 1)
-            )
         }
-        .buttonStyle(.plain)
         .accessibilityIdentifier("add.candidate.\(candidate.id)")
         .accessibilityLabel(candidate.name)
         .accessibilityValue(isSelected ? "selected" : "not selected")
+        .accessibilityRespondsToUserInteraction(isInteractive)
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            CategoryIcon(category: candidate.category)
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                Text(candidate.name)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                Text(candidate.subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isSelected ? WanderTheme.terracotta.color : WanderTheme.borderStrong.color)
+        }
+        .padding(WanderTheme.spacing3)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .overlay(
+            RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
+                .stroke(
+                    isSelected ? WanderTheme.terracotta.color : WanderTheme.borderHairline.color,
+                    lineWidth: isSelected ? 2 : 1
+                )
+        )
     }
 }
 

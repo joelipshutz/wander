@@ -229,6 +229,64 @@ struct PlaceCandidate: Identifiable, Equatable, Codable, Sendable {
     }
 }
 
+struct FirstVisitParkLocationContext: Equatable, Sendable {
+    let postalCode: String
+}
+
+@MainActor
+protocol FirstVisitParkLocationContextProviding {
+    /// Returns a location only when the user has already granted access. This
+    /// onboarding helper must never initiate a permission prompt by itself.
+    func alreadyAuthorizedLocationContext() async throws -> FirstVisitParkLocationContext?
+}
+
+@MainActor
+protocol FirstVisitParkSuggestionRepository {
+    func suggestion(near context: FirstVisitParkLocationContext) async throws -> PlaceCandidate
+}
+
+enum FirstVisitParkSuggestionPolicy {
+    static let searchRadiusMeters = 16_093.44
+
+    static let hotchkissPark = PlaceCandidate(
+        id: "walkthrough-hotchkiss-park-santa-monica",
+        name: "Hotchkiss Park",
+        category: "park",
+        rawProviderType: "park",
+        address: "2302 4th St",
+        locality: "Santa Monica",
+        region: "CA",
+        country: "US",
+        latitude: 34.00585,
+        longitude: -118.4842,
+        sourceProvider: "walkthrough",
+        sourceProviderPlaceID: "hotchkiss-park-santa-monica",
+        confidence: 1
+    )
+
+    static func shouldRequestNearbySuggestion(postalCode: String?) -> Bool {
+        guard let postalCode = normalizedPostalCode(postalCode) else {
+            return false
+        }
+        return postalCode != "90403" && postalCode != "90405"
+    }
+
+    static func normalizedPostalCode(_ postalCode: String?) -> String? {
+        guard let postalCode else { return nil }
+        let prefix = postalCode
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: "-", maxSplits: 1)
+            .first
+            .map(String.init) ?? ""
+        guard prefix.count == 5,
+              prefix.allSatisfy(\.isNumber)
+        else {
+            return nil
+        }
+        return prefix
+    }
+}
+
 struct PlaceActionLink: Equatable, Codable, Identifiable {
     enum Kind: String, Codable {
         case website

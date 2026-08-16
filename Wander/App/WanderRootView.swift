@@ -324,6 +324,7 @@ struct WanderRootView: View {
     @State private var queuedAutomaticImportBatchIDs: Set<String> = []
     @State private var completedAutomaticImportBatchIDs: Set<String> = []
     @State private var restoredPlaceSaveDraftOwnerID: String?
+    @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var didApplyWalkthroughLaunchConfiguration = false
     @State private var retiredWalkthroughUserIDs: Set<String> = []
@@ -570,7 +571,8 @@ struct WanderRootView: View {
                     resetToken: addTabResetToken,
                     selectedDetent: $addSheetDetent,
                     launchRequest: addLaunchRequest,
-                    onLaunchRequestHandled: consumeAddLaunchRequest
+                    onLaunchRequestHandled: consumeAddLaunchRequest,
+                    walkthroughParkSuggestion: resolveFirstVisitParkSuggestion
                 ) {
                     isPresentingAdd = false
                 }
@@ -651,6 +653,7 @@ struct WanderRootView: View {
     private var shouldDimBehindAddWalkthrough: Bool {
         walkthroughs.activeSurface == .add
             || walkthroughs.activeSurface == .saveFlow
+            || walkthroughs.requestedSurface == .map
     }
 
     private var lifecycleRoot: some View {
@@ -839,8 +842,24 @@ struct WanderRootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
                 placeSaveDraftStore.flush()
+                walkthroughs.recordSuspension()
             }
             guard phase == .active, isSessionValidated else { return }
+            switch walkthroughs.restoreJourneyIfNeeded() {
+            case .resumed(let surface):
+                if completeCommittedWalkthroughDraftIfNeeded() {
+                    routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
+                } else {
+                    routeWalkthrough(to: surface)
+                }
+            case .expired:
+                retireWalkthroughPresentationAndDraft(
+                    for: store.currentUser.id,
+                    forceRootCleanup: true
+                )
+            case .none:
+                break
+            }
             refreshWalkthroughFeatureFlagsAfterForeground()
             drainPendingNotificationResponses()
             drainSharedPlaceImports()
@@ -868,6 +887,8 @@ struct WanderRootView: View {
         ) {
             Button("OK", role: .cancel) {
                 interruptedSaveRecoveryMessage = nil
+                pendingCommittedWalkthroughDraft = nil
+                placeSaveDraftStore.clear()
             }
         } message: {
             Text(interruptedSaveRecoveryMessage ?? "")
@@ -888,7 +909,7 @@ struct WanderRootView: View {
             configureWalkthroughsForCurrentUser()
         }
         .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
-            if !isPresented {
+            if !isPresented, !walkthroughs.hasActivePrimaryJourney {
                 walkthroughs.activate(walkthroughSurface(for: selectedTab))
             }
         }
@@ -920,7 +941,7 @@ struct WanderRootView: View {
         } else {
             walkthroughs.perform(.mapAdd)
         }
-        walkthroughs.activate(.add)
+        walkthroughs.transition(to: .add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
@@ -935,6 +956,32 @@ struct WanderRootView: View {
         )
     }
 
+    @MainActor
+    private func resolveFirstVisitParkSuggestion() async -> PlaceCandidate? {
+        // Demo fixtures have no trustworthy device location. Return the
+        // deterministic fallback immediately instead of waiting on a simulator
+        // that may be authorized but have no live location fix.
+        guard fixtureMode == .empty else {
+            return FirstVisitParkSuggestionPolicy.hotchkissPark
+        }
+
+        let context = try? await CoreFirstVisitParkLocationContextProvider()
+            .alreadyAuthorizedLocationContext()
+        guard let context,
+              FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(
+                  postalCode: context.postalCode
+              )
+        else {
+            return FirstVisitParkSuggestionPolicy.hotchkissPark
+        }
+
+        do {
+            return try await MapKitPlaceResolver().suggestion(near: context)
+        } catch {
+            return FirstVisitParkSuggestionPolicy.hotchkissPark
+        }
+    }
+
     private func restorePlaceSaveDraftIfNeeded() {
         let ownerUserID = store.currentUser.id
         guard restoredPlaceSaveDraftOwnerID != ownerUserID else { return }
@@ -943,6 +990,17 @@ struct WanderRootView: View {
         guard case .restored(let draft) = placeSaveDraftStore.restore(
             ownerUserID: ownerUserID
         ) else { return }
+
+        let checkpoint = FirstVisitWalkthroughStore().checkpoint(for: ownerUserID)
+        if PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+            draft,
+            lastWalkthroughActivityAt: checkpoint?.updatedAt,
+            now: .now,
+            resumeWindow: FirstVisitWalkthroughStore.resumeWindow
+        ) {
+            placeSaveDraftStore.clear()
+            return
+        }
 
         let currentSave = MapPlaceSaveContext.currentUserSave(
             matching: draft.candidate,
@@ -963,10 +1021,14 @@ struct WanderRootView: View {
 
         switch PlaceSaveDraftRecoveryPolicy.outcome(for: draft, evidence: evidence) {
         case .committed:
-            placeSaveDraftStore.clear()
-            interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
-                ? "Your check-in finished while rec.me was in the background."
-                : "This place was added to Wanna while rec.me was in the background."
+            pendingCommittedWalkthroughDraft = draft
+            if completeCommittedWalkthroughDraftIfNeeded() {
+                routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
+            } else {
+                interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
+                    ? "Your check-in finished while rec.me was in the background."
+                    : "This place was added to Wanna while rec.me was in the background."
+            }
         case .retry:
             placeSaveDraftStore.prepareRetry(
                 message: "Save was interrupted before rec.me could confirm it. Review your details and try again."
@@ -975,6 +1037,75 @@ struct WanderRootView: View {
         case .editing:
             presentRestoredAddSheet()
         }
+    }
+
+    @discardableResult
+    private func retireWalkthroughPresentationAndDraft(
+        for ownerUserID: String,
+        forceRootCleanup: Bool
+    ) -> Bool {
+        let persistedDraft: PlaceSaveDraft?
+        if let draft = placeSaveDraftStore.draft, draft.ownerUserID == ownerUserID {
+            persistedDraft = draft
+        } else if case .restored(let draft) = placeSaveDraftStore.restore(
+            ownerUserID: ownerUserID
+        ) {
+            persistedDraft = draft
+        } else {
+            persistedDraft = nil
+        }
+
+        let didDiscardWalkthroughDraft = persistedDraft?.walkthroughContentVersion != nil
+        if didDiscardWalkthroughDraft {
+            placeSaveDraftStore.clear()
+            restoredPlaceSaveDraftOwnerID = ownerUserID
+        }
+
+        guard forceRootCleanup || didDiscardWalkthroughDraft else { return false }
+        pendingCommittedWalkthroughDraft = nil
+        interruptedSaveRecoveryMessage = nil
+        presentationResetRequest = WanderPresentationResetRequest()
+        resetRootPresentationsForDeepLink()
+        selectedTab = .map
+        return true
+    }
+
+    @discardableResult
+    private func completeCommittedWalkthroughDraftIfNeeded() -> Bool {
+        guard let draft = pendingCommittedWalkthroughDraft,
+              draft.ownerUserID == store.currentUser.id,
+              walkthroughs.activeSurface == .saveFlow,
+              walkthroughs.currentStep?.target == .saveSubmit,
+              let currentSave = MapPlaceSaveContext.currentUserSave(
+                  matching: draft.candidate,
+                  in: store.currentUserVisiblePlaces
+              )
+        else { return false }
+
+        let form = draft.form
+        let snapshot = FirstVisitTutorialMemorySnapshot(
+            candidate: draft.candidate,
+            status: form.selectedStatus,
+            date: form.selectedStatus == .been
+                ? form.visitedAt
+                : (form.plannedDate ?? draft.updatedAt),
+            ratingScore: form.selectedStatus == .been ? form.selectedRatingScore : nil,
+            note: form.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "A peaceful neighborhood park with room to slow down and breathe."
+                : form.note,
+            tag: form.unifiedTags.sorted().first ?? "good walk"
+        )
+        walkthroughs.recordTutorialCandidate(draft.candidate)
+        walkthroughs.recordTutorialSelectedStatus(form.selectedStatus)
+        walkthroughs.recordTutorialMemorySnapshot(snapshot)
+        walkthroughs.recordTutorialSave(userPlaceID: currentSave.userPlace.id)
+        walkthroughs.perform(.saveSubmit)
+        // The next NUX checkpoint is now durable. Only now is it safe to drop
+        // the committed form that bridges a process kill during submission.
+        placeSaveDraftStore.clear()
+        pendingCommittedWalkthroughDraft = nil
+        interruptedSaveRecoveryMessage = nil
+        return true
     }
 
     private func presentRestoredAddSheet() {
@@ -1424,6 +1555,11 @@ struct WanderRootView: View {
     private func configureWalkthroughsForCurrentUser() {
         let launchArguments = ProcessInfo.processInfo.arguments
         let userID = auth.state.session?.userID ?? store.currentUser.id
+        // Bind persisted progress to the authenticated account before reading,
+        // retiring, or restoring any journey state. Disabled/established users
+        // still need their own stale checkpoints cleared, never the previous
+        // account's or the coordinator's placeholder account.
+        walkthroughs.setUserID(userID)
         let isDebugSettingsEntitled = backend.featureFlag(.debugSettings, for: userID) == true
         let debugNUXOverride = isDebugSettingsEntitled
             ? walkthroughDebugPreferences.nuxOverride(for: userID)
@@ -1460,13 +1596,36 @@ struct WanderRootView: View {
             launchArguments: launchArguments,
             resolvedValue: resolvedFlag?.isEnabled,
             entitledDebugOverride: debugNUXOverride,
-            isEntitledDebugReplayRequested: isReplayRequested
+            isEntitledDebugReplayRequested: isReplayRequested,
+            isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         )
+        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePresentation
         walkthroughs.setEnabled(isEnabled)
 
-        guard isEnabled else { return }
+        guard isEnabled else {
+            let hasDebugLaunchDisable = FirstVisitWalkthroughFeatureFlag
+                .allowsLaunchArgumentOverride
+                && launchArguments.contains("-WanderDisableWalkthroughs")
+            let hasDebugLaunchEnable = FirstVisitWalkthroughFeatureFlag
+                .allowsLaunchArgumentOverride
+                && launchArguments.contains("-WanderEnableWalkthroughs")
+            let isExplicitlyDisabled = hasDebugLaunchDisable
+                || (isDebugSettingsEntitled && debugNUXOverride == false)
+                || resolvedFlag?.explicitAccountOverride == false
+            if FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: effectiveEligibility,
+                isExplicitReplayEnabled: hasDebugLaunchEnable || isReplayRequested,
+                isExplicitlyDisabled: isExplicitlyDisabled
+            ) {
+                walkthroughs.retireJourneyForDisabledExperience()
+                retireWalkthroughPresentationAndDraft(
+                    for: userID,
+                    forceRootCleanup: hadActiveWalkthroughPresentation
+                )
+            }
+            return
+        }
 
-        walkthroughs.setUserID(userID)
         if !didApplyWalkthroughLaunchConfiguration {
             didApplyWalkthroughLaunchConfiguration = true
             if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
@@ -1489,6 +1648,32 @@ struct WanderRootView: View {
                 return
             }
         }
+
+        switch walkthroughs.restoreJourneyIfNeeded() {
+        case .resumed(let surface):
+            if completeCommittedWalkthroughDraftIfNeeded() {
+                routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
+            } else {
+                routeWalkthrough(to: surface)
+            }
+            return
+        case .expired:
+            retireWalkthroughPresentationAndDraft(
+                for: userID,
+                forceRootCleanup: true
+            )
+            return
+        case .none:
+            break
+        }
+
+        if !walkthroughs.hasCompletedPrimaryJourney {
+            selectedTab = .map
+            isPresentingAdd = false
+            walkthroughs.activate(.map)
+            return
+        }
+
         presentLaunchLessonIfAppropriate()
         if !walkthroughs.isPresentingLaunchLesson {
             walkthroughs.activate(walkthroughSurface(for: selectedTab))
@@ -1516,11 +1701,21 @@ struct WanderRootView: View {
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
         addLaunchRequest = WanderAddLaunchRequest(destination: .importHub)
-        addSheetDetent = .large
+        addSheetDetent = addSheetRestingDetent
         isPresentingAdd = true
     }
 
     private func routeWalkthrough(to surface: WalkthroughSurface) {
+        if surface == .add,
+           placeSaveDraftStore.draft?.walkthroughContentVersion != nil {
+            // A process can be killed after the NUX form is durable but before
+            // its Add -> Save checkpoint update. Prefer the recoverable form
+            // over the older Add checkpoint and reopen the exact save sheet.
+            walkthroughs.transition(to: .saveFlow)
+            routeWalkthrough(to: .saveFlow)
+            return
+        }
+
         let waitsForAddDismissal = isPresentingAdd && surface == .map
         switch surface {
         case .map, .sendoff:
@@ -1537,7 +1732,31 @@ struct WanderRootView: View {
         case .profile:
             selectedTab = .profile
             isPresentingAdd = false
-        case .placeDetail, .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+        case .placeDetail:
+            selectedTab = .map
+            isPresentingAdd = false
+        case .add:
+            selectedTab = .map
+            addSheetDetent = addSheetRestingDetent
+            if !isPresentingAdd {
+                store.saveFlowDidPresent(.addSheet)
+                addTabResetToken = UUID()
+                addLaunchRequest = nil
+                isPresentingAdd = true
+            }
+        case .saveFlow:
+            selectedTab = .map
+            if !isPresentingAdd {
+                store.saveFlowDidPresent(.addSheet)
+                addTabResetToken = UUID()
+                addLaunchRequest = nil
+                addSheetDetent = .large
+                isPresentingAdd = true
+            }
+        case .feedSearch:
+            selectedTab = .discover
+            isPresentingAdd = false
+        case .listDetail, .listEditor:
             break
         }
 

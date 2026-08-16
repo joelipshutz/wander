@@ -107,6 +107,7 @@ struct ContactInviteSheet: View {
     let walkthroughSelectionGoal: Int?
     let onWalkthroughDismiss: (() -> Void)?
     let onPermissionDenied: (() -> Void)?
+    let onWalkthroughSelectionChange: ((Set<String>) -> Void)?
     let analytics: AnalyticsClient
 
     @State private var contacts: [InviteContact]
@@ -137,6 +138,7 @@ struct ContactInviteSheet: View {
         walkthroughSelectionGoal: Int? = nil,
         onWalkthroughDismiss: (() -> Void)? = nil,
         onPermissionDenied: (() -> Void)? = nil,
+        onWalkthroughSelectionChange: ((Set<String>) -> Void)? = nil,
         analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
         self.surface = surface
@@ -146,6 +148,7 @@ struct ContactInviteSheet: View {
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
         self.onWalkthroughDismiss = onWalkthroughDismiss
         self.onPermissionDenied = onPermissionDenied
+        self.onWalkthroughSelectionChange = onWalkthroughSelectionChange
         self.analytics = analytics
         _contacts = State(initialValue: contacts)
         _accessState = State(initialValue: accessState)
@@ -162,6 +165,8 @@ struct ContactInviteSheet: View {
         walkthroughSelectionGoal: Int? = nil,
         onWalkthroughDismiss: (() -> Void)? = nil,
         onPermissionDenied: (() -> Void)? = nil,
+        selectedContactIDs: Set<String> = [],
+        onWalkthroughSelectionChange: ((Set<String>) -> Void)? = nil,
         analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
         self.surface = surface
@@ -171,12 +176,13 @@ struct ContactInviteSheet: View {
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
         self.onWalkthroughDismiss = onWalkthroughDismiss
         self.onPermissionDenied = onPermissionDenied
+        self.onWalkthroughSelectionChange = onWalkthroughSelectionChange
         self.analytics = analytics
         _contacts = State(initialValue: [])
         _accessState = State(initialValue: .primer)
         _presentationState = State(initialValue: .choosing)
         _query = State(initialValue: "")
-        _selection = State(initialValue: InviteSelection())
+        _selection = State(initialValue: InviteSelection(contactIDs: selectedContactIDs))
     }
 
     private var sections: [InviteContactSection] {
@@ -236,6 +242,9 @@ struct ContactInviteSheet: View {
             guard phase == .active, contactProvider != nil else { return }
             Task { await refreshProviderState() }
         }
+        .onChange(of: selection) { _, selection in
+            onWalkthroughSelectionChange?(selection.contactIDs)
+        }
         .sheet(isPresented: $isPresentingMessageComposer) {
             if let messageRecipient {
                 ContactInviteMessageComposer(
@@ -285,36 +294,36 @@ struct ContactInviteSheet: View {
             }
 
             HStack {
-                Button {
-                    if canDismiss {
+                if canDismiss {
+                    Button {
                         onWalkthroughDismiss?()
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .background(WanderTheme.surfaceRaised.color)
+                            .clipShape(Circle())
+                            .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 8, y: 3)
                     }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(Circle())
-                        .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 8, y: 3)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        onWalkthroughDismiss == nil ? "Close" : "Dismiss walkthrough"
+                    )
+                    .accessibilityIdentifier(
+                        onWalkthroughDismiss == nil
+                            ? "invite.close"
+                            : "walkthrough.dismiss.contactInvite"
+                    )
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(
-                    onWalkthroughDismiss == nil ? "Close" : "Dismiss walkthrough"
-                )
-                .accessibilityIdentifier(
-                    onWalkthroughDismiss == nil
-                        ? "invite.close"
-                        : "walkthrough.dismiss.contactInvite"
-                )
 
                 Spacer()
 
                 if presentationState == .choosing && accessState == .authorized {
                     Button {
                         if isWalkthroughMode {
-                            if canDismiss { dismiss() }
+                            dismiss()
                         } else {
                             beginInviteDelivery()
                         }

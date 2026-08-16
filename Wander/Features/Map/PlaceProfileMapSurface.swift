@@ -43,6 +43,7 @@ struct PlaceProfileMapSurface: View {
                 onAction: onAction
             )
             .walkthroughTarget(.mapMemory)
+            .walkthroughEmphasis(.mapMemory)
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing3)
         }
@@ -250,6 +251,7 @@ private struct PlaceProfilePreviewCard: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("map.placeMemory.open")
         .accessibilityLabel("Open \(place.name)")
         .task(id: photoResolutionKey) {
             await resolvePhoto()
@@ -565,7 +567,7 @@ private struct PlaceProfileFullView: View {
             }
         }
         .onChange(of: walkthroughs.requestedSurface, initial: true) { _, requestedSurface in
-            guard requestedSurface == .map else { return }
+            guard requestedSurface == .map || requestedSurface == .feed else { return }
             onBack()
         }
         .fullScreenCover(item: $viewerRoute) { route in

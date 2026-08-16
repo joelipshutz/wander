@@ -114,6 +114,11 @@ struct FeedScreen: View {
                     selectedSurface = .people
                 }
             }
+            .onChange(of: walkthroughs.activeSurface, initial: true) { _, surface in
+                if surface == .feedSearch {
+                    isShowingSearch = true
+                }
+            }
             .onChange(of: isShowingSearch) { _, isShowing in
                 if !isShowing {
                     walkthroughs.activate(.feed)
@@ -160,7 +165,7 @@ struct FeedScreen: View {
             walkthroughs.perform(.feedDiscoverSearch)
             walkthroughs.consumeRequestedSurface(.feedSearch)
         }
-        walkthroughs.activate(.feedSearch)
+        walkthroughs.transition(to: .feedSearch)
         isShowingSearch = true
     }
 
@@ -614,11 +619,14 @@ private struct FeedPeopleSurface: View {
                 surface: .feedPeople,
                 contactProvider: store.contactProvider,
                 senderProfileID: store.currentUser.id,
+                canDismiss: !walkthroughs.isRequestingContactInvite,
                 walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
-                onWalkthroughDismiss: walkthroughDismissAction,
                 onPermissionDenied: walkthroughPermissionDeniedAction,
+                selectedContactIDs: walkthroughs.tutorialInvitedContactIDs,
+                onWalkthroughSelectionChange: walkthroughs.recordTutorialInvitedContactIDs,
                 analytics: store.productAnalytics
             )
+            .interactiveDismissDisabled(walkthroughs.isRequestingContactInvite)
         }
     }
 
@@ -626,13 +634,6 @@ private struct FeedPeopleSurface: View {
         guard walkthroughs.isRequestingContactInvite else { return nil }
         return {
             isPresentingContactInvites = false
-        }
-    }
-
-    private var walkthroughDismissAction: (() -> Void)? {
-        guard walkthroughs.isRequestingContactInvite else { return nil }
-        return {
-            walkthroughs.dismissEntireWalkthrough()
         }
     }
 

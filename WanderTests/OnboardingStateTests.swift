@@ -439,6 +439,41 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testLocalJourneyRetirementRequiresDefinitiveIneligibilityOrDisablement() {
+        XCTAssertTrue(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: false,
+                isExplicitReplayEnabled: false,
+                isExplicitlyDisabled: false
+            ),
+            "Established accounts must discard stale NUX checkpoints."
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: true,
+                isExplicitReplayEnabled: false,
+                isExplicitlyDisabled: true
+            ),
+            "An explicit account or tester disable must retire the local journey."
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: true,
+                isExplicitReplayEnabled: false,
+                isExplicitlyDisabled: false
+            ),
+            "A missing or global flag value must preserve an enrolled user's 12-hour checkpoint."
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: false,
+                isExplicitReplayEnabled: true,
+                isExplicitlyDisabled: false
+            ),
+            "An entitled replay must remain available to an established tester."
+        )
+    }
+
     func testWalkthroughEligibilityRetirementIsIdempotent() throws {
         let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -593,6 +628,66 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testFirstVisitParkPolicyUsesHotchkissForUnavailableAndSantaMonicaZIPs() {
+        let fallback = FirstVisitParkSuggestionPolicy.hotchkissPark
+
+        XCTAssertEqual(fallback.name, "Hotchkiss Park")
+        XCTAssertEqual(fallback.address, "2302 4th St")
+        XCTAssertEqual(fallback.locality, "Santa Monica")
+        XCTAssertEqual(fallback.region, "CA")
+        XCTAssertEqual(fallback.subcategory, "Park")
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: nil))
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "90403"))
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "90405-1234"))
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "invalid"))
+        XCTAssertTrue(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "10001"))
+    }
+
+    func testFirstVisitParkLocationDoesNotPromptWhenAuthorizationIsUndetermined() async throws {
+        let locationProvider = RecordingFirstVisitLocationProvider()
+        let provider = CoreFirstVisitParkLocationContextProvider(
+            locationProvider: locationProvider,
+            authorizationStatus: { .notDetermined },
+            postalCodeResolver: { _ in
+                XCTFail("Postal code lookup must not run without existing authorization")
+                return "10001"
+            }
+        )
+
+        let context = try await provider.alreadyAuthorizedLocationContext()
+
+        XCTAssertNil(context)
+        XCTAssertEqual(locationProvider.requestCount, 0)
+    }
+
+    func testFirstVisitParkLocationUsesOnlyNormalizedZIPAfterAuthorization() async throws {
+        let locationProvider = RecordingFirstVisitLocationProvider()
+        let provider = CoreFirstVisitParkLocationContextProvider(
+            locationProvider: locationProvider,
+            authorizationStatus: { .authorizedWhenInUse },
+            postalCodeResolver: { _ in " 10001-4567 " }
+        )
+
+        let context = try await provider.alreadyAuthorizedLocationContext()
+
+        XCTAssertEqual(context, FirstVisitParkLocationContext(postalCode: "10001"))
+        XCTAssertEqual(locationProvider.requestCount, 1)
+    }
+
+    func testFirstVisitParkLocationFallsBackWhenReverseGeocodingHasNoZIP() async throws {
+        let locationProvider = RecordingFirstVisitLocationProvider()
+        let provider = CoreFirstVisitParkLocationContextProvider(
+            locationProvider: locationProvider,
+            authorizationStatus: { .authorizedAlways },
+            postalCodeResolver: { _ in nil }
+        )
+
+        let context = try await provider.alreadyAuthorizedLocationContext()
+
+        XCTAssertNil(context)
+        XCTAssertEqual(locationProvider.requestCount, 1)
+    }
+
     func testApprovedLocationValueCopyIsStable() {
         XCTAssertEqual(OnboardingLocationContent.eyebrow, "AROUND YOU")
         XCTAssertEqual(OnboardingLocationContent.title, "Find the good stuff nearby")
@@ -618,6 +713,16 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertTrue(source.contains("OnboardingLocationMapPin(pin: pin)"))
         XCTAssertTrue(source.contains("OnboardingLocationSelectedPlaceCard()"))
         XCTAssertTrue(source.contains("isSelected: true"))
+    }
+}
+
+@MainActor
+private final class RecordingFirstVisitLocationProvider: CurrentLocationProviding {
+    private(set) var requestCount = 0
+
+    func currentLocation() async throws -> CLLocation {
+        requestCount += 1
+        return CLLocation(latitude: 34.00585, longitude: -118.4842)
     }
 }
 

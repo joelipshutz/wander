@@ -4,8 +4,8 @@ import XCTest
 
 @MainActor
 final class FirstVisitWalkthroughTests: XCTestCase {
-    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtySevenGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 37)
+    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtyGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 30)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -19,8 +19,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 .mapFriends,
                 .mapMoreFilters,
                 .mapSearch,
-                .mapMemory,
-                .mapTabs
+                .mapTabs,
+                .mapMemory
             ]
         )
         XCTAssertEqual(
@@ -29,7 +29,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.add]?.map(\.target),
-            [.addSearch, .addPlace, .addImport, .addClose]
+            [.addSearch, .addPlace, .addImport]
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.saveFlow]?.map(\.target),
@@ -37,9 +37,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 .saveStatus,
                 .saveContinue,
                 .saveDate,
-                .saveDetails,
                 .saveRating,
-                .saveFriends,
                 .saveMoreOptions,
                 .saveSubmit
             ]
@@ -58,7 +56,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]?.map(\.target),
-            [.profileShare, .profileActivity, .profileCalendar, .profileMap]
+            []
         )
         XCTAssertEqual(
             FirstVisitWalkthroughContent.stepsBySurface[.placeDetail]?.map(\.target),
@@ -80,14 +78,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .mapFriends,
             .mapMoreFilters,
             .mapSearch,
-            .mapMemory,
             .mapTabs,
             .addImport,
-            .saveDate,
-            .saveDetails,
-            .saveRating,
-            .saveFriends,
-            .saveMoreOptions,
             .feedActivity,
             .feedPeopleSearch,
             .feedInvite,
@@ -107,20 +99,24 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             XCTAssertEqual(step.advance, .next, "Expected \(target) to show Next")
         }
 
-        let closeStep = try XCTUnwrap(
-            FirstVisitWalkthroughContent.allSteps.first { $0.target == .addClose }
-        )
-        XCTAssertEqual(closeStep.advance, .action)
+        for target in [
+            WalkthroughTargetID.mapMemory,
+            .addSearch,
+            .addPlace,
+            .saveDate,
+            .saveRating,
+            .saveMoreOptions,
+            .saveSubmit
+        ] {
+            let step = try XCTUnwrap(
+                FirstVisitWalkthroughContent.allSteps.first { $0.target == target }
+            )
+            XCTAssertEqual(step.advance, .action)
+        }
     }
 
     func testPassiveEditableLessonsAllowInteractionWithoutRequiringIt() throws {
-        let editableTargets: [WalkthroughTargetID] = [
-            .saveDate,
-            .saveDetails,
-            .saveRating,
-            .saveFriends,
-            .feedPeopleSearch
-        ]
+        let editableTargets: [WalkthroughTargetID] = [.feedPeopleSearch]
 
         for target in editableTargets {
             let step = try XCTUnwrap(
@@ -136,7 +132,12 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .mapFriends,
             .mapMoreFilters,
             .addImport,
+            .addSearch,
+            .addPlace,
+            .saveDate,
+            .saveRating,
             .saveMoreOptions,
+            .saveSubmit,
             .feedActivity,
             .feedInvite,
             .feedSearchField,
@@ -152,6 +153,12 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             )
             XCTAssertFalse(step.allowsTargetInteraction, "Expected \(target) to be explanation-only")
         }
+
+        let memoryStep = try XCTUnwrap(
+            FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapMemory }
+        )
+        XCTAssertTrue(memoryStep.allowsTargetInteraction)
+        XCTAssertFalse(memoryStep.allowsBackNavigation)
     }
 
     func testFinalSendoffReturnsToMapWithMotivatingAction() throws {
@@ -234,7 +241,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let memoryStep = try XCTUnwrap(
             FirstVisitWalkthroughContent.allSteps.first { $0.target == .mapMemory }
         )
-        XCTAssertEqual(memoryStep.message, "A place card keeps the useful context together")
+        XCTAssertEqual(
+            memoryStep.message,
+            "Tap the highlighted place to revisit everything you just saved"
+        )
 
         let ratingStep = try XCTUnwrap(
             FirstVisitWalkthroughContent.allSteps.first { $0.target == .placeRatings }
@@ -305,7 +315,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(coordinator.isPresentingLaunchLesson)
         XCTAssertEqual(
             defaults.integer(
-                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).existing-user.authenticatedLaunchCount"
+                forKey: "wander.walkthrough.existing-user.authenticatedLaunchCount"
             ),
             0
         )
@@ -364,13 +374,13 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertEqual(
             defaults.integer(
-                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).user-a.authenticatedLaunchCount"
+                forKey: "wander.walkthrough.user-a.authenticatedLaunchCount"
             ),
             1
         )
         XCTAssertEqual(
             defaults.integer(
-                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).user-b.authenticatedLaunchCount"
+                forKey: "wander.walkthrough.user-b.authenticatedLaunchCount"
             ),
             1
         )
@@ -391,7 +401,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertEqual(
             defaults.integer(
-                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).ryan.authenticatedLaunchCount"
+                forKey: "wander.walkthrough.ryan.authenticatedLaunchCount"
             ),
             1
         )
@@ -431,7 +441,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         thirdLaunch.setEnabled(false)
         thirdLaunch.setEnabled(true)
         thirdLaunch.registerLaunch()
-        thirdLaunch.presentLaunchLessonIfEligible()
+        XCTAssertEqual(thirdLaunch.restoreJourneyIfNeeded(), .resumed(.map))
         XCTAssertFalse(thirdLaunch.isPresentingImportLesson)
         XCTAssertTrue(thirdLaunch.isPresentingDeviceFeaturesLesson)
     }
@@ -442,12 +452,12 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             store: FirstVisitWalkthroughStore(defaults: try makeDefaults())
         )
 
-        coordinator.forceActivate(.saveDate)
+        coordinator.forceActivate(.mapFeatured)
         let initialGeneration = coordinator.userActivityGeneration
         coordinator.recordUserActivity()
         XCTAssertEqual(coordinator.userActivityGeneration, initialGeneration + 1)
 
-        coordinator.forceActivate(.saveSubmit)
+        coordinator.forceActivate(.saveDate)
         coordinator.recordUserActivity()
         XCTAssertEqual(coordinator.userActivityGeneration, initialGeneration + 1)
     }
@@ -538,6 +548,18 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             FirstVisitWalkthroughFeatureFlag.isEnabled(
                 isEligible: true,
                 isUsingLiveData: true,
+                launchArguments: [
+                    "-WanderEnableWalkthroughs",
+                    "-WanderDisableWalkthroughs"
+                ],
+                resolvedValue: true
+            ),
+            "The DEBUG disable argument must isolate non-NUX UI tests from persisted replay state."
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: true,
+                isUsingLiveData: true,
                 launchArguments: ["-WanderEnableWalkthroughs"],
                 resolvedValue: false,
                 allowsLaunchOverride: false
@@ -552,6 +574,31 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 isEntitledDebugReplayRequested: true,
                 allowsLaunchOverride: false
             )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: false,
+                isUsingLiveData: true,
+                launchArguments: [],
+                resolvedValue: false,
+                entitledDebugOverride: true,
+                isEntitledDebugReplayRequested: true,
+                isExplicitlyDisabledForAccount: true,
+                allowsLaunchOverride: false
+            ),
+            "An explicit account disable must win over persisted debug replay state."
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughFeatureFlag.isEnabled(
+                isEligible: false,
+                isUsingLiveData: true,
+                launchArguments: ["-WanderEnableWalkthroughs"],
+                resolvedValue: false,
+                isEntitledDebugReplayRequested: true,
+                isExplicitlyDisabledForAccount: true,
+                allowsLaunchOverride: true
+            ),
+            "The DEBUG-only launch argument remains available for an intentional device test."
         )
         XCTAssertFalse(
             FirstVisitWalkthroughFeatureFlag.isEnabled(
@@ -600,7 +647,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertTrue(walkthroughStore.isComplete(for: "user_b", surface: .map))
         XCTAssertEqual(
             defaults.integer(
-                forKey: "wander.walkthrough.v\(FirstVisitWalkthroughContent.version).user_a.authenticatedLaunchCount"
+                forKey: "wander.walkthrough.user_a.authenticatedLaunchCount"
             ),
             1
         )
@@ -731,12 +778,6 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(coordinator.currentStep?.target, .addImport)
 
         coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.currentStep?.target, .addClose)
-
-        coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.currentStep?.target, .addClose)
-
-        coordinator.perform(.addClose)
         XCTAssertNil(coordinator.activeSurface)
         XCTAssertEqual(coordinator.requestedSurface, .map)
     }
@@ -749,10 +790,6 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         ryan.activate(.feed)
         ryan.advancePassiveStep()
         XCTAssertEqual(ryan.currentStep?.target, .feedDiscoverSearch)
-
-        ryan.activate(.profile)
-        XCTAssertEqual(ryan.currentStep?.target, .profileShare)
-        XCTAssertEqual(ryan.activeSurface, .profile)
 
         let resumedRyan = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
         resumedRyan.activate(.feed)
@@ -768,41 +805,358 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         let store = FirstVisitWalkthroughStore(defaults: defaults)
         let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
 
-        coordinator.activate(.feedSearch)
+        coordinator.transition(to: .feedSearch)
         coordinator.advancePassiveStep()
         coordinator.perform(.feedSmartSearch)
         coordinator.perform(.feedSearchResultsBack)
         XCTAssertNil(coordinator.activeSurface)
         XCTAssertEqual(coordinator.requestedSurface, .feed)
 
-        coordinator.activate(.feedSearch)
+        coordinator.transition(to: .feedSearch)
         XCTAssertNil(coordinator.activeSurface)
         XCTAssertTrue(store.isComplete(for: "ryan", surface: .feedSearch))
     }
 
-    func testContentVersionMakesUpdatedWalkthroughEligibleAgain() throws {
+    func testContentVersionDoesNotRestartCompletedWalkthroughContent() throws {
         let defaults = try makeDefaults()
         let firstVersion = FirstVisitWalkthroughStore(defaults: defaults, version: 1)
         firstVersion.markComplete(for: "ryan", surface: .lists)
 
         XCTAssertTrue(firstVersion.isComplete(for: "ryan", surface: .lists))
-        XCTAssertFalse(
+        XCTAssertTrue(
             FirstVisitWalkthroughStore(defaults: defaults)
                 .isComplete(for: "ryan", surface: .lists)
         )
     }
 
-    func testProfileUsesFourClearPageAutoAdvancingLessons() throws {
+    func testLegacyVersionedCompletionAndLaunchStateMigratesWithoutReEnrollment() throws {
+        let defaults = try makeDefaults()
+        let userID = "existing-user"
+        defaults.set(
+            true,
+            forKey: "wander.walkthrough.v11.\(userID).map.complete"
+        )
+        defaults.set(
+            3,
+            forKey: "wander.walkthrough.v11.\(userID).authenticatedLaunchCount"
+        )
+        defaults.set(
+            true,
+            forKey: "wander.walkthrough.v11.\(userID).importLesson.complete"
+        )
+
+        let store = FirstVisitWalkthroughStore(defaults: defaults, version: 12)
+
+        XCTAssertTrue(store.isComplete(for: userID, surface: .map))
+        XCTAssertEqual(store.registerLaunch(for: userID), 4)
+        XCTAssertTrue(store.hasCompletedImportLesson(for: userID))
+        XCTAssertNil(
+            defaults.object(
+                forKey: "wander.walkthrough.v11.\(userID).map.complete"
+            )
+        )
+        XCTAssertNil(
+            defaults.object(
+                forKey: "wander.walkthrough.v11.\(userID).authenticatedLaunchCount"
+            )
+        )
+    }
+
+    func testJourneyCheckpointMigratesAcrossContentVersionsWithoutResettingItsAge() throws {
+        let defaults = try makeDefaults()
+        let userID = "ryan"
+        let leftAt = Date(timeIntervalSince1970: 1_000_000)
+        let legacyCheckpoint = FirstVisitWalkthroughCheckpoint(
+            target: .saveRating,
+            updatedAt: leftAt,
+            tutorialCandidate: nil,
+            tutorialUserPlaceID: nil,
+            tutorialMemorySnapshot: nil
+        )
+        let data = try JSONEncoder().encode(legacyCheckpoint)
+        defaults.set(
+            data,
+            forKey: "wander.walkthrough.v11.\(userID).journeyCheckpoint"
+        )
+
+        let currentStore = FirstVisitWalkthroughStore(defaults: defaults, version: 12)
+        XCTAssertEqual(currentStore.checkpoint(for: userID), legacyCheckpoint)
+        XCTAssertNil(
+            defaults.data(forKey: "wander.walkthrough.v11.\(userID).journeyCheckpoint")
+        )
+
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: userID, store: currentStore)
+        XCTAssertEqual(
+            coordinator.restoreJourneyIfNeeded(
+                now: leftAt.addingTimeInterval(FirstVisitWalkthroughStore.resumeWindow)
+            ),
+            .expired
+        )
+        XCTAssertTrue(currentStore.hasCompletedEntireWalkthrough(for: userID))
+    }
+
+    func testJourneyRestoresExactTargetAndTutorialPlaceWithinTwelveHours() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let candidate = PlaceCandidate(
+            id: "hotchkiss",
+            name: "Hotchkiss Park",
+            category: "Park",
+            primaryCategory: WanderPlaceCategory.outdoorsNature,
+            subcategory: "Park",
+            address: "2302 Fourth St",
+            locality: "Santa Monica",
+            region: "CA",
+            latitude: 34.0057,
+            longitude: -118.4843,
+            confidence: 1
+        )
+        let leftAt = Date(timeIntervalSince1970: 1_000_000)
+        store.setCheckpoint(
+            FirstVisitWalkthroughCheckpoint(
+                target: .saveRating,
+                updatedAt: leftAt,
+                tutorialCandidate: candidate,
+                tutorialUserPlaceID: "saved-hotchkiss",
+                tutorialMemorySnapshot: nil,
+                tutorialSelectedStatus: .wannaGo,
+                tutorialDiscoverQuery: "sunset parks with a view"
+            ),
+            for: "ryan"
+        )
+
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        XCTAssertEqual(
+            coordinator.restoreJourneyIfNeeded(
+                now: leftAt.addingTimeInterval(FirstVisitWalkthroughStore.resumeWindow - 1)
+            ),
+            .resumed(.saveFlow)
+        )
+        XCTAssertEqual(coordinator.currentStep?.target, .saveRating)
+        XCTAssertEqual(coordinator.tutorialCandidate, candidate)
+        XCTAssertEqual(coordinator.tutorialUserPlaceID, "saved-hotchkiss")
+        XCTAssertEqual(coordinator.tutorialSelectedStatus, .wannaGo)
+        XCTAssertEqual(coordinator.tutorialDiscoverQuery, "sunset parks with a view")
+
+        coordinator.activate(.map)
+        XCTAssertEqual(
+            coordinator.currentStep?.target,
+            .saveRating,
+            "An underlying Map appearance must not overwrite the restored save-flow checkpoint"
+        )
+    }
+
+    func testJourneyCheckpointPersistsInteractiveSaveAndDiscoverState() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+
+        coordinator.transition(to: .saveFlow)
+        coordinator.recordTutorialSelectedStatus(.been)
+        coordinator.recordTutorialDiscoverQuery("  quiet parks with a view  ")
+        coordinator.recordSuspension(at: Date(timeIntervalSince1970: 2_000_000))
+
+        let checkpoint = try XCTUnwrap(store.checkpoint(for: "ryan"))
+        XCTAssertEqual(checkpoint.target, .saveStatus)
+        XCTAssertEqual(checkpoint.tutorialSelectedStatus, .been)
+        XCTAssertEqual(checkpoint.tutorialDiscoverQuery, "quiet parks with a view")
+    }
+
+    func testJourneyExpiresAtTwelveHoursAndNeverReentersNUX() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let leftAt = Date(timeIntervalSince1970: 1_000_000)
+        store.setCheckpoint(
+            FirstVisitWalkthroughCheckpoint(
+                target: .feedPeopleSearch,
+                updatedAt: leftAt,
+                tutorialCandidate: nil,
+                tutorialUserPlaceID: nil,
+                tutorialMemorySnapshot: nil
+            ),
+            for: "joe"
+        )
+
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "joe", store: store)
+        XCTAssertEqual(
+            coordinator.restoreJourneyIfNeeded(
+                now: leftAt.addingTimeInterval(FirstVisitWalkthroughStore.resumeWindow)
+            ),
+            .expired
+        )
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(store.checkpoint(for: "joe"))
+        XCTAssertTrue(store.hasCompletedEntireWalkthrough(for: "joe"))
+
+        coordinator.activate(.map)
+        XCTAssertNil(coordinator.activeSurface)
+    }
+
+    func testDefinitivelyDisabledExperienceRetiresCheckpointWithoutCompletionCallback() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let userID = "established-user"
+        store.setCheckpoint(
+            FirstVisitWalkthroughCheckpoint(
+                target: .saveRating,
+                updatedAt: .now,
+                tutorialCandidate: nil,
+                tutorialUserPlaceID: nil,
+                tutorialMemorySnapshot: nil
+            ),
+            for: userID
+        )
+        var completedUserIDs: [String] = []
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: userID,
+            store: store,
+            isEnabled: false,
+            onCompleted: { completedUserIDs.append($0) }
+        )
+
+        coordinator.retireJourneyForDisabledExperience()
+
+        XCTAssertNil(store.checkpoint(for: userID))
+        XCTAssertTrue(store.hasCompletedEntireWalkthrough(for: userID))
+        XCTAssertFalse(coordinator.hasActivePresentation)
+        XCTAssertTrue(completedUserIDs.isEmpty)
+    }
+
+    func testInterruptedImportResumesUntilTwelveHoursThenClearsItsOverlay() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let userID = "ryan"
+        let leftAt = Date(timeIntervalSince1970: 1_000_000)
+        store.setCheckpoint(
+            FirstVisitWalkthroughCheckpoint(
+                target: .mapAdd,
+                updatedAt: leftAt,
+                tutorialCandidate: nil,
+                tutorialUserPlaceID: nil,
+                tutorialMemorySnapshot: nil,
+                presentation: .importLesson
+            ),
+            for: userID
+        )
+
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: userID, store: store)
+        XCTAssertEqual(
+            coordinator.restoreJourneyIfNeeded(now: leftAt.addingTimeInterval(1)),
+            .resumed(.map)
+        )
+        XCTAssertTrue(coordinator.isPresentingImportLesson)
+
+        XCTAssertEqual(
+            coordinator.restoreJourneyIfNeeded(
+                now: leftAt.addingTimeInterval(FirstVisitWalkthroughStore.resumeWindow)
+            ),
+            .expired
+        )
+        XCTAssertFalse(coordinator.isPresentingLaunchLesson)
+        XCTAssertTrue(store.hasCompletedEntireWalkthrough(for: userID))
+    }
+
+    func testContactInvitePresentationRestoresInsideTheContactFlow() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        coordinator.forceActivate(.feedInvite)
+        coordinator.advancePassiveStep()
+        coordinator.recordTutorialInvitedContactIDs(["maya", "nico"])
+
+        XCTAssertTrue(coordinator.isRequestingContactInvite)
+        XCTAssertEqual(store.checkpoint(for: "ryan")?.presentation, .contactInvite)
+        XCTAssertEqual(
+            store.checkpoint(for: "ryan")?.tutorialInvitedContactIDs,
+            ["maya", "nico"]
+        )
+
+        let restored = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        XCTAssertEqual(restored.restoreJourneyIfNeeded(), .resumed(.feed))
+        XCTAssertEqual(restored.currentStep?.target, .feedInvite)
+        XCTAssertTrue(restored.isRequestingContactInvite)
+        XCTAssertEqual(restored.tutorialInvitedContactIDs, ["maya", "nico"])
+    }
+
+    func testAddPlaceTransitionsDirectlyToDurableSaveStatusCheckpoint() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        coordinator.forceActivate(.addPlace)
+
+        coordinator.perform(.addPlace, transitioningTo: .saveFlow)
+
+        XCTAssertEqual(coordinator.activeSurface, .saveFlow)
+        XCTAssertEqual(coordinator.currentStep?.target, .saveStatus)
+        XCTAssertEqual(store.checkpoint(for: "ryan")?.target, .saveStatus)
+        let importIndex = try XCTUnwrap(
+            FirstVisitWalkthroughContent.stepsBySurface[.add]?.firstIndex {
+                $0.target == .addImport
+            }
+        )
+        XCTAssertEqual(
+            store.progress(for: "ryan", surface: .add),
+            importIndex
+        )
+    }
+
+    func testCorruptCheckpointRetiresInsteadOfRestartingTheWalkthrough() throws {
+        let defaults = try makeDefaults()
+        let userID = "ryan"
+        defaults.set(
+            Data("not-json".utf8),
+            forKey: "wander.walkthrough.\(userID).journeyCheckpoint"
+        )
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: userID, store: store)
+
+        XCTAssertEqual(coordinator.restoreJourneyIfNeeded(), .expired)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertTrue(store.hasCompletedEntireWalkthrough(for: userID))
+    }
+
+    func testUncheckpointedShippedV10SessionRetiresInsteadOfRestarting() throws {
+        let defaults = try makeDefaults()
+        let userID = "existing-v10-user"
+        defaults.set(
+            1,
+            forKey: "wander.walkthrough.v10.\(userID).map.progress"
+        )
+        let store = FirstVisitWalkthroughStore(defaults: defaults, version: 12)
+        let coordinator = FirstVisitWalkthroughCoordinator(
+            userID: userID,
+            store: store,
+            launchRegistry: FirstVisitWalkthroughLaunchRegistry()
+        )
+        coordinator.registerLaunch()
+
+        XCTAssertEqual(coordinator.restoreJourneyIfNeeded(), .expired)
+        coordinator.activate(.map)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertTrue(store.hasCompletedEntireWalkthrough(for: userID))
+    }
+
+    func testSuspensionRefreshesTheResumeWindowWithoutChangingTheStep() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+        coordinator.activate(.map)
+        coordinator.perform(.mapAdd)
+        let suspendedAt = Date(timeIntervalSince1970: 2_000_000)
+
+        coordinator.recordSuspension(at: suspendedAt)
+
+        let checkpoint = try XCTUnwrap(store.checkpoint(for: "ryan"))
+        XCTAssertEqual(checkpoint.target, .mapAddAgain)
+        XCTAssertEqual(checkpoint.updatedAt, suspendedAt)
+    }
+
+    func testProfileWalkthroughIsFullySuppressed() throws {
         let profileSteps = try XCTUnwrap(
             FirstVisitWalkthroughContent.stepsBySurface[.profile]
         )
-        XCTAssertEqual(
-            profileSteps.map(\.target),
-            [.profileShare, .profileActivity, .profileCalendar, .profileMap]
-        )
-        XCTAssertEqual(profileSteps.map(\.spotlightStyle), Array(repeating: .clearPage, count: 4))
-        XCTAssertEqual(profileSteps.map(\.automaticallyAdvances), Array(repeating: true, count: 4))
-        XCTAssertFalse(FirstVisitWalkthroughContent.suppressedSurfaces.contains(.profile))
+        XCTAssertTrue(profileSteps.isEmpty)
+        XCTAssertTrue(FirstVisitWalkthroughContent.suppressedSurfaces.contains(.profile))
 
         let defaults = try makeDefaults()
         let coordinator = FirstVisitWalkthroughCoordinator(
@@ -811,9 +1165,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
 
         coordinator.activate(.profile)
-        XCTAssertEqual(coordinator.activeSurface, .profile)
-        XCTAssertEqual(coordinator.currentStep?.target, .profileShare)
-        XCTAssertFalse(coordinator.canGoBack)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.currentStep)
     }
 
     func testDiscoverActionsRequireTheirHighlightedTapWithoutOfferingCoachBack() throws {
@@ -876,7 +1229,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertNil(coordinator.activeSurface)
     }
 
-    func testListsUsesTwoClearPageAutoAdvancingLessonsThenRoutesToProfile() throws {
+    func testListsUsesTwoClearPageAutoAdvancingLessonsThenRoutesToSendoff() throws {
         let listSteps = try XCTUnwrap(FirstVisitWalkthroughContent.stepsBySurface[.lists])
         XCTAssertEqual(listSteps.map(\.spotlightStyle), [.clearPage, .clearPage])
         XCTAssertEqual(listSteps.map(\.automaticallyAdvances), [true, true])
@@ -901,7 +1254,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         coordinator.advancePassiveStep()
         XCTAssertNil(coordinator.activeSurface)
-        XCTAssertEqual(coordinator.requestedSurface, .profile)
+        XCTAssertEqual(coordinator.requestedSurface, .sendoff)
     }
 
     func testDisabledCoordinatorNeverPresentsWalkthroughs() throws {
@@ -950,7 +1303,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             launchRegistry: FirstVisitWalkthroughLaunchRegistry()
         )
         thirdLaunch.registerLaunch()
-        thirdLaunch.presentLaunchLessonIfEligible()
+        XCTAssertEqual(thirdLaunch.restoreJourneyIfNeeded(), .resumed(.map))
         XCTAssertTrue(thirdLaunch.isPresentingDeviceFeaturesLesson)
 
         thirdLaunch.completeDeviceFeaturesLesson()
@@ -966,7 +1319,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(fourthLaunch.isPresentingLaunchLesson)
     }
 
-    func testThirdLaunchDeviceLessonTakesPriorityOverInterruptedImport() throws {
+    func testInterruptedImportResumesExactlyBeforeDeviceLesson() throws {
         let defaults = try makeDefaults()
         let store = FirstVisitWalkthroughStore(defaults: defaults)
 
@@ -992,10 +1345,10 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             launchRegistry: FirstVisitWalkthroughLaunchRegistry()
         )
         thirdLaunch.registerLaunch()
-        thirdLaunch.presentLaunchLessonIfEligible()
-        XCTAssertFalse(thirdLaunch.isPresentingImportLesson)
-        XCTAssertTrue(thirdLaunch.isPresentingDeviceFeaturesLesson)
-        thirdLaunch.completeDeviceFeaturesLesson()
+        XCTAssertEqual(thirdLaunch.restoreJourneyIfNeeded(), .resumed(.map))
+        XCTAssertTrue(thirdLaunch.isPresentingImportLesson)
+        XCTAssertFalse(thirdLaunch.isPresentingDeviceFeaturesLesson)
+        thirdLaunch.completeImportLesson()
 
         let fourthLaunch = FirstVisitWalkthroughCoordinator(
             userID: "ryan",
@@ -1003,9 +1356,9 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             launchRegistry: FirstVisitWalkthroughLaunchRegistry()
         )
         fourthLaunch.registerLaunch()
-        fourthLaunch.presentLaunchLessonIfEligible()
-        XCTAssertTrue(fourthLaunch.isPresentingImportLesson)
-        XCTAssertFalse(fourthLaunch.isPresentingDeviceFeaturesLesson)
+        XCTAssertEqual(fourthLaunch.restoreJourneyIfNeeded(), .resumed(.map))
+        XCTAssertFalse(fourthLaunch.isPresentingImportLesson)
+        XCTAssertTrue(fourthLaunch.isPresentingDeviceFeaturesLesson)
     }
 
     func testImportLessonMatchesTheAdaptiveBuild124ReviewFlow() {
@@ -1056,17 +1409,17 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
-        coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.requestedSurface, .feed)
+        coordinator.perform(.mapMemory)
+        XCTAssertEqual(coordinator.requestedSurface, .placeDetail)
 
-        coordinator.consumeRequestedSurface(.feed)
+        coordinator.consumeRequestedSurface(.placeDetail)
         coordinator.activate(.placeDetail)
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
         coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.requestedSurface, .map)
+        XCTAssertEqual(coordinator.requestedSurface, .feed)
 
-        coordinator.consumeRequestedSurface(.map)
+        coordinator.consumeRequestedSurface(.feed)
         coordinator.activate(.feed)
         XCTAssertEqual(coordinator.currentStep?.target, .feedActivity)
         coordinator.advancePassiveStep()
@@ -1074,7 +1427,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.perform(.feedDiscoverSearch)
         XCTAssertEqual(coordinator.currentStep?.target, .feedPeopleSearch)
 
-        coordinator.activate(.feedSearch)
+        coordinator.transition(to: .feedSearch)
         coordinator.advancePassiveStep()
         coordinator.perform(.feedSmartSearch)
         XCTAssertEqual(coordinator.currentStep?.target, .feedSearchResultsBack)
@@ -1097,18 +1450,6 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.activate(.lists)
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.currentStep?.target, .listsOpenPlan)
-        coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.requestedSurface, .profile)
-
-        coordinator.consumeRequestedSurface(.profile)
-        coordinator.activate(.profile)
-        XCTAssertEqual(coordinator.currentStep?.target, .profileShare)
-        coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.currentStep?.target, .profileActivity)
-        coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.currentStep?.target, .profileCalendar)
-        coordinator.advancePassiveStep()
-        XCTAssertEqual(coordinator.currentStep?.target, .profileMap)
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.requestedSurface, .sendoff)
 

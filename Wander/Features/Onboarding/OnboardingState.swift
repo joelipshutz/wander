@@ -65,6 +65,18 @@ enum FirstVisitWalkthroughEligibilityPolicy {
     ) -> Bool {
         isEnrolled && isUsingLiveData && resolutionIsPending
     }
+
+    /// Retire local walkthrough progress only when this account can no longer
+    /// participate or the tester explicitly disabled the experience. A
+    /// missing/global flag value is intentionally excluded so a temporary flag
+    /// outage cannot erase a new user's resumable 12-hour journey.
+    static func shouldRetireLocalJourney(
+        isEnrolled: Bool,
+        isExplicitReplayEnabled: Bool,
+        isExplicitlyDisabled: Bool
+    ) -> Bool {
+        isExplicitlyDisabled || (!isEnrolled && !isExplicitReplayEnabled)
+    }
 }
 
 /// Keeps a first-visit enrollment bound to the account that produced it.

@@ -113,22 +113,28 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 
     var id: String { "\(surface.rawValue).\(target.rawValue)" }
     var automaticallyRecoversWhenTargetIsMissing: Bool {
-        advance == .action && presentationStyle == .coach
+        // A temporarily late SwiftUI anchor must never skip an unskippable NUX
+        // step. Domain views explicitly recover only genuinely inapplicable
+        // targets (for example visited-only controls after Wanna Go).
+        false
     }
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 11
+    static let version = 12
     static let profileIntroAutoAdvanceDelayMilliseconds = 4_000
     static let profileAutoAdvanceDelayMilliseconds = 2_200
     static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 1_900
     static let nextArrowNudgeDelayMilliseconds = 3_000
     static let discoverResultsPreviewMilliseconds = 4_000
-    static let suppressedSurfaces: Set<WalkthroughSurface> = [.listDetail, .listEditor]
+    static let suppressedSurfaces: Set<WalkthroughSurface> = [.listDetail, .listEditor, .profile]
+    static let primaryJourneySurfaces: [WalkthroughSurface] = [
+        .map, .add, .saveFlow, .placeDetail, .feed, .feedSearch, .lists, .sendoff
+    ]
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
-            step(.map, .mapAdd, "Save your first place", "Tap + to add somewhere you've been or want to try."),
+            step(.map, .mapAdd, "Saving a place", "Tap + and we’ll show you how a place becomes part of your map."),
             step(.map, .mapAddAgain, "One more shortcut", "Tap + again and we’ll show you where imports live."),
             step(
                 .map,
@@ -164,20 +170,20 @@ enum FirstVisitWalkthroughContent {
             ),
             step(
                 .map,
-                .mapMemory,
-                "Open a place memory",
-                "A place card keeps the useful context together.",
-                advance: .next,
-                nextButtonTitle: "Open place",
-                coachTheme: .memory
-            ),
-            step(
-                .map,
                 .mapTabs,
                 "Your places, all connected",
                 "Map, Feed, Lists, and Profile work together to help you find, plan, and remember.",
                 advance: .next,
                 coachTheme: .map
+            ),
+            step(
+                .map,
+                .mapMemory,
+                "Open the place memory",
+                "Tap the highlighted place to revisit everything you just saved.",
+                allowsTargetInteraction: true,
+                allowsBackNavigation: false,
+                coachTheme: .memory
             )
         ],
         .sendoff: [
@@ -194,8 +200,24 @@ enum FirstVisitWalkthroughContent {
             )
         ],
         .add: [
-            step(.add, .addSearch, "Find your first place", "Type a place name and submit the search.", coachTheme: .map),
-            step(.add, .addPlace, "Choose the right place", "Review the options, choose the right result, then tap Save to start your memory.", coachTheme: .save),
+            step(
+                .add,
+                .addSearch,
+                "Finding a park near you",
+                "We’ll choose a popular nearby park and show you how saving works.",
+                allowsTargetInteraction: false,
+                coachTheme: .map,
+                automaticallyAdvances: true
+            ),
+            step(
+                .add,
+                .addPlace,
+                "Here’s a place to start",
+                "We found a nearby park and selected it for this quick demo.",
+                allowsTargetInteraction: false,
+                coachTheme: .save,
+                automaticallyAdvances: true
+            ),
             step(
                 .add,
                 .addImport,
@@ -203,59 +225,51 @@ enum FirstVisitWalkthroughContent {
                 "Import your places and lists from Google Maps, Instagram, Tiktok, and more here.",
                 advance: .next,
                 coachTheme: .save
-            ),
-            step(.add, .addClose, "Back to your map", "Tap × to close Add a Place and keep exploring.")
+            )
         ],
         .saveFlow: [
             step(
                 .saveFlow,
                 .saveStatus,
-                "Choose how to save it",
-                "Pick Check In or Wanna Go. Either way, we’ll guide you through the useful details before you save."
+                "Have you been here before?",
+                "If so, select Check In. If not, select Wanna Go."
             ),
-            step(.saveFlow, .saveContinue, "Add what matters", "Continue to the details that will help future you choose."),
+            step(.saveFlow, .saveContinue, "Continue to the details", "We’ll fill in an example you can recognize on your map."),
             step(
                 .saveFlow,
                 .saveDate,
-                "When were you here?",
-                "Today is selected automatically. Change the date for an older memory, or leave it as is.",
-                advance: .next,
-                allowsTargetInteraction: true
-            ),
-            step(
-                .saveFlow,
-                .saveDetails,
-                "Confirm the place type",
-                "Category and subcategory make this memory easier to find later. The suggested choices are fine to keep.",
-                advance: .next,
-                allowsTargetInteraction: true
+                "A date makes it a memory",
+                "We’ll choose one for this demo.",
+                allowsTargetInteraction: false,
+                automaticallyAdvances: true
             ),
             step(
                 .saveFlow,
                 .saveRating,
-                "Rate it for future you",
-                "A quick rating helps you compare places later. Keep the suggested score or adjust it.",
-                advance: .next,
-                allowsTargetInteraction: true,
-                coachTheme: .rating
-            ),
-            step(
-                .saveFlow,
-                .saveFriends,
-                "Friends and photos are optional",
-                "Add who was there and a photo worth remembering—or leave both blank.",
-                advance: .next,
-                allowsTargetInteraction: true
+                "A rating helps future you",
+                "Watch how a quick score captures how this place felt.",
+                allowsTargetInteraction: false,
+                coachTheme: .rating,
+                automaticallyAdvances: true
             ),
             step(
                 .saveFlow,
                 .saveMoreOptions,
-                "More options, whenever you need them",
-                "Notes, fit questions, tags, and privacy live here. You can adjust them on any save.",
-                advance: .next,
-                coachTheme: .save
+                "Add the detail you’ll remember",
+                "A useful tag and short note make this place easier to rediscover.",
+                allowsTargetInteraction: false,
+                coachTheme: .tags,
+                automaticallyAdvances: true
             ),
-            step(.saveFlow, .saveSubmit, "Put it on your map", "Save the place to finish your first memory.")
+            step(
+                .saveFlow,
+                .saveSubmit,
+                "Putting it on your map",
+                "Your first place memory is ready.",
+                allowsTargetInteraction: false,
+                coachTheme: .save,
+                automaticallyAdvances: true
+            )
         ],
         .feed: [
             step(
@@ -346,52 +360,7 @@ enum FirstVisitWalkthroughContent {
         ],
         .listDetail: [],
         .listEditor: [],
-        .profile: [
-            step(
-                .profile,
-                .profileShare,
-                "Your profile connects your circle",
-                "Share your rec.me and keep up with the people whose taste you trust",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .social,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            ),
-            step(
-                .profile,
-                .profileActivity,
-                "Your activity tells the story",
-                "Recent check-ins and Wanna saves stay easy to revisit",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .memory,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            ),
-            step(
-                .profile,
-                .profileCalendar,
-                "Your calendar, at a glance",
-                "See when you checked in and how your months fill up over time",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .memory,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            ),
-            step(
-                .profile,
-                .profileMap,
-                "Your map grows with you",
-                "Watch your places, cities, and memories come together on one map",
-                advance: .next,
-                allowsBackNavigation: false,
-                coachTheme: .map,
-                spotlightStyle: .clearPage,
-                automaticallyAdvances: true
-            )
-        ],
+        .profile: [],
         .placeDetail: [
             step(
                 .placeDetail,
@@ -522,11 +491,22 @@ enum FirstVisitWalkthroughFeatureFlag {
         resolvedValue: Bool?,
         entitledDebugOverride: Bool? = nil,
         isEntitledDebugReplayRequested: Bool = false,
+        isExplicitlyDisabledForAccount: Bool = false,
         allowsLaunchOverride: Bool = allowsLaunchArgumentOverride
     ) -> Bool {
+        let hasDebugLaunchDisable = allowsLaunchOverride
+            && launchArguments.contains("-WanderDisableWalkthroughs")
+        if hasDebugLaunchDisable {
+            return false
+        }
+        let hasDebugLaunchOverride = allowsLaunchOverride
+            && launchArguments.contains("-WanderEnableWalkthroughs")
+        if isExplicitlyDisabledForAccount && !hasDebugLaunchOverride {
+            return false
+        }
         let effectiveResolvedValue = entitledDebugOverride ?? resolvedValue
         return isEntitledDebugReplayRequested
-            || (allowsLaunchOverride && launchArguments.contains("-WanderEnableWalkthroughs"))
+            || hasDebugLaunchOverride
             || (effectiveResolvedValue == true && isEligible && isUsingLiveData)
     }
 }
@@ -577,7 +557,65 @@ struct FirstVisitWalkthroughDebugPreferences {
     }
 }
 
+struct FirstVisitTutorialMemorySnapshot: Codable, Equatable, Sendable {
+    let candidate: PlaceCandidate
+    let status: PlaceStatus
+    let date: Date
+    let ratingScore: Double?
+    let note: String
+    let tag: String
+}
+
+enum FirstVisitWalkthroughCheckpointPresentation: String, Codable, Equatable, Sendable {
+    case importLesson
+    case awaitingDeviceFeaturesLesson
+    case deviceFeaturesLesson
+    case contactInvite
+}
+
+struct FirstVisitWalkthroughCheckpoint: Codable, Equatable, Sendable {
+    let target: WalkthroughTargetID
+    let updatedAt: Date
+    let tutorialCandidate: PlaceCandidate?
+    let tutorialUserPlaceID: String?
+    let tutorialMemorySnapshot: FirstVisitTutorialMemorySnapshot?
+    let tutorialSelectedStatus: PlaceStatus?
+    let tutorialDiscoverQuery: String?
+    let tutorialInvitedContactIDs: Set<String>?
+    let presentation: FirstVisitWalkthroughCheckpointPresentation?
+
+    init(
+        target: WalkthroughTargetID,
+        updatedAt: Date,
+        tutorialCandidate: PlaceCandidate?,
+        tutorialUserPlaceID: String?,
+        tutorialMemorySnapshot: FirstVisitTutorialMemorySnapshot?,
+        tutorialSelectedStatus: PlaceStatus? = nil,
+        tutorialDiscoverQuery: String? = nil,
+        tutorialInvitedContactIDs: Set<String>? = nil,
+        presentation: FirstVisitWalkthroughCheckpointPresentation? = nil
+    ) {
+        self.target = target
+        self.updatedAt = updatedAt
+        self.tutorialCandidate = tutorialCandidate
+        self.tutorialUserPlaceID = tutorialUserPlaceID
+        self.tutorialMemorySnapshot = tutorialMemorySnapshot
+        self.tutorialSelectedStatus = tutorialSelectedStatus
+        self.tutorialDiscoverQuery = tutorialDiscoverQuery
+        self.tutorialInvitedContactIDs = tutorialInvitedContactIDs
+        self.presentation = presentation
+    }
+}
+
+enum FirstVisitWalkthroughResumeDisposition: Equatable, Sendable {
+    case none
+    case resumed(WalkthroughSurface)
+    case expired
+}
+
 struct FirstVisitWalkthroughStore {
+    static let resumeWindow: TimeInterval = 12 * 60 * 60
+
     let defaults: UserDefaults
     let version: Int
 
@@ -587,51 +625,146 @@ struct FirstVisitWalkthroughStore {
     }
 
     func progress(for userID: String, surface: WalkthroughSurface) -> Int {
-        defaults.integer(forKey: progressKey(userID: userID, surface: surface))
+        let key = progressKey(userID: userID, surface: surface)
+        if defaults.object(forKey: key) != nil {
+            return defaults.integer(forKey: key)
+        }
+
+        let legacyKeys = legacyVersionedKeys(
+            for: userID,
+            suffix: "\(surface.rawValue).progress"
+        )
+        let migrated = legacyKeys.map(defaults.integer(forKey:)).max() ?? 0
+        if !legacyKeys.isEmpty {
+            defaults.set(migrated, forKey: key)
+            legacyKeys.forEach(defaults.removeObject(forKey:))
+        }
+        return migrated
     }
 
     func setProgress(_ progress: Int, for userID: String, surface: WalkthroughSurface) {
         defaults.set(progress, forKey: progressKey(userID: userID, surface: surface))
+        legacyVersionedKeys(
+            for: userID,
+            suffix: "\(surface.rawValue).progress"
+        ).forEach(defaults.removeObject(forKey:))
     }
 
     func isComplete(for userID: String, surface: WalkthroughSurface) -> Bool {
-        defaults.bool(forKey: completionKey(userID: userID, surface: surface))
+        let key = completionKey(userID: userID, surface: surface)
+        if defaults.object(forKey: key) != nil {
+            return defaults.bool(forKey: key)
+        }
+
+        let legacyKeys = legacyVersionedKeys(
+            for: userID,
+            suffix: "\(surface.rawValue).complete"
+        )
+        let migrated = legacyKeys.contains { defaults.bool(forKey: $0) }
+        if !legacyKeys.isEmpty {
+            defaults.set(migrated, forKey: key)
+            legacyKeys.forEach(defaults.removeObject(forKey:))
+        }
+        return migrated
     }
 
     func markComplete(for userID: String, surface: WalkthroughSurface) {
         defaults.set(true, forKey: completionKey(userID: userID, surface: surface))
+        legacyVersionedKeys(
+            for: userID,
+            suffix: "\(surface.rawValue).complete"
+        ).forEach(defaults.removeObject(forKey:))
     }
 
     func reset(for userID: String) {
         for surface in WalkthroughSurface.allCases {
             defaults.removeObject(forKey: progressKey(userID: userID, surface: surface))
             defaults.removeObject(forKey: completionKey(userID: userID, surface: surface))
+            legacyVersionedKeys(
+                for: userID,
+                suffix: "\(surface.rawValue).progress"
+            ).forEach(defaults.removeObject(forKey:))
+            legacyVersionedKeys(
+                for: userID,
+                suffix: "\(surface.rawValue).complete"
+            ).forEach(defaults.removeObject(forKey:))
         }
         defaults.removeObject(forKey: launchCountKey(userID: userID))
         defaults.removeObject(forKey: importLessonCompletionKey(userID: userID))
         defaults.removeObject(forKey: deviceFeaturesCompletionKey(userID: userID))
+        legacyVersionedKeys(
+            for: userID,
+            suffix: "authenticatedLaunchCount"
+        ).forEach(defaults.removeObject(forKey:))
+        legacyVersionedKeys(
+            for: userID,
+            suffix: "importLesson.complete"
+        ).forEach(defaults.removeObject(forKey:))
+        legacyVersionedKeys(
+            for: userID,
+            suffix: "deviceFeatures.complete"
+        ).forEach(defaults.removeObject(forKey:))
+        defaults.removeObject(forKey: legacyRetirementKey(userID: userID))
+        clearCheckpoint(for: userID)
     }
 
     func registerLaunch(for userID: String) -> Int {
-        let nextCount = defaults.integer(forKey: launchCountKey(userID: userID)) + 1
-        defaults.set(nextCount, forKey: launchCountKey(userID: userID))
+        let hadLegacyV10State = !legacyVersion10Keys(for: userID).isEmpty
+        let hasResumableCheckpoint = checkpoint(for: userID) != nil
+        if hadLegacyV10State && !hasResumableCheckpoint {
+            defaults.set(true, forKey: legacyRetirementKey(userID: userID))
+        }
+        let key = launchCountKey(userID: userID)
+        let legacyKeys = legacyVersionedKeys(
+            for: userID,
+            suffix: "authenticatedLaunchCount"
+        )
+        let priorCount: Int
+        if defaults.object(forKey: key) != nil {
+            priorCount = defaults.integer(forKey: key)
+        } else {
+            priorCount = legacyKeys.map(defaults.integer(forKey:)).max() ?? 0
+        }
+        let nextCount = priorCount + 1
+        defaults.set(nextCount, forKey: key)
+        legacyKeys.forEach(defaults.removeObject(forKey:))
         return nextCount
     }
 
     func hasCompletedDeviceFeaturesLesson(for userID: String) -> Bool {
-        defaults.bool(forKey: deviceFeaturesCompletionKey(userID: userID))
+        migratedBoolean(
+            stableKey: deviceFeaturesCompletionKey(userID: userID),
+            legacyKeys: legacyVersionedKeys(
+                for: userID,
+                suffix: "deviceFeatures.complete"
+            )
+        )
     }
 
     func hasCompletedImportLesson(for userID: String) -> Bool {
-        defaults.bool(forKey: importLessonCompletionKey(userID: userID))
+        migratedBoolean(
+            stableKey: importLessonCompletionKey(userID: userID),
+            legacyKeys: legacyVersionedKeys(
+                for: userID,
+                suffix: "importLesson.complete"
+            )
+        )
     }
 
     func markImportLessonComplete(for userID: String) {
         defaults.set(true, forKey: importLessonCompletionKey(userID: userID))
+        legacyVersionedKeys(
+            for: userID,
+            suffix: "importLesson.complete"
+        ).forEach(defaults.removeObject(forKey:))
     }
 
     func markDeviceFeaturesLessonComplete(for userID: String) {
         defaults.set(true, forKey: deviceFeaturesCompletionKey(userID: userID))
+        legacyVersionedKeys(
+            for: userID,
+            suffix: "deviceFeatures.complete"
+        ).forEach(defaults.removeObject(forKey:))
     }
 
     func markEntireWalkthroughComplete(for userID: String) {
@@ -640,6 +773,62 @@ struct FirstVisitWalkthroughStore {
         }
         markImportLessonComplete(for: userID)
         markDeviceFeaturesLessonComplete(for: userID)
+        clearCheckpoint(for: userID)
+        defaults.removeObject(forKey: legacyRetirementKey(userID: userID))
+        legacyVersion10Keys(for: userID).forEach(defaults.removeObject(forKey:))
+    }
+
+    func hasCheckpointRecord(for userID: String) -> Bool {
+        defaults.object(forKey: checkpointKey(userID: userID)) != nil
+            || !legacyCheckpointKeys(for: userID).isEmpty
+    }
+
+    func requiresLegacySessionRetirement(for userID: String) -> Bool {
+        defaults.bool(forKey: legacyRetirementKey(userID: userID))
+            || (!legacyVersion10Keys(for: userID).isEmpty && checkpoint(for: userID) == nil)
+    }
+
+    func checkpoint(for userID: String) -> FirstVisitWalkthroughCheckpoint? {
+        if let data = defaults.data(forKey: checkpointKey(userID: userID)),
+           let checkpoint = try? JSONDecoder().decode(
+               FirstVisitWalkthroughCheckpoint.self,
+               from: data
+           ) {
+            return checkpoint
+        }
+
+        // Journey age must survive a content-version bump. Migrate the newest
+        // legacy checkpoint so an abandoned old NUX retires instead of being
+        // treated as a brand-new walkthrough.
+        let legacyCheckpoint = legacyCheckpointKeys(for: userID)
+            .compactMap { key -> (String, FirstVisitWalkthroughCheckpoint)? in
+                guard let data = defaults.data(forKey: key),
+                      let checkpoint = try? JSONDecoder().decode(
+                          FirstVisitWalkthroughCheckpoint.self,
+                          from: data
+                      )
+                else { return nil }
+                return (key, checkpoint)
+            }
+            .max { $0.1.updatedAt < $1.1.updatedAt }
+        guard let legacyCheckpoint else { return nil }
+        setCheckpoint(legacyCheckpoint.1, for: userID)
+        return legacyCheckpoint.1
+    }
+
+    func setCheckpoint(_ checkpoint: FirstVisitWalkthroughCheckpoint, for userID: String) {
+        guard let data = try? JSONEncoder().encode(checkpoint) else { return }
+        defaults.set(data, forKey: checkpointKey(userID: userID))
+        for key in legacyCheckpointKeys(for: userID) {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    func clearCheckpoint(for userID: String) {
+        defaults.removeObject(forKey: checkpointKey(userID: userID))
+        for key in legacyCheckpointKeys(for: userID) {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     func hasCompletedEntireWalkthrough(for userID: String) -> Bool {
@@ -651,23 +840,64 @@ struct FirstVisitWalkthroughStore {
     }
 
     private func progressKey(userID: String, surface: WalkthroughSurface) -> String {
-        "wander.walkthrough.v\(version).\(userID).\(surface.rawValue).progress"
+        "wander.walkthrough.\(userID).\(surface.rawValue).progress"
     }
 
     private func completionKey(userID: String, surface: WalkthroughSurface) -> String {
-        "wander.walkthrough.v\(version).\(userID).\(surface.rawValue).complete"
+        "wander.walkthrough.\(userID).\(surface.rawValue).complete"
     }
 
     private func launchCountKey(userID: String) -> String {
-        "wander.walkthrough.v\(version).\(userID).authenticatedLaunchCount"
+        "wander.walkthrough.\(userID).authenticatedLaunchCount"
     }
 
     private func deviceFeaturesCompletionKey(userID: String) -> String {
-        "wander.walkthrough.v\(version).\(userID).deviceFeatures.complete"
+        "wander.walkthrough.\(userID).deviceFeatures.complete"
     }
 
     private func importLessonCompletionKey(userID: String) -> String {
-        "wander.walkthrough.v\(version).\(userID).importLesson.complete"
+        "wander.walkthrough.\(userID).importLesson.complete"
+    }
+
+    private func checkpointKey(userID: String) -> String {
+        "wander.walkthrough.\(userID).journeyCheckpoint"
+    }
+
+    private func legacyCheckpointKeys(for userID: String) -> [String] {
+        let prefix = "wander.walkthrough.v"
+        let suffix = ".\(userID).journeyCheckpoint"
+        return defaults.dictionaryRepresentation().keys.filter {
+            $0.hasPrefix(prefix) && $0.hasSuffix(suffix)
+        }
+    }
+
+    private func legacyVersion10Keys(for userID: String) -> [String] {
+        let prefix = "wander.walkthrough.v10.\(userID)."
+        return defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix(prefix) }
+    }
+
+    private func legacyRetirementKey(userID: String) -> String {
+        "wander.walkthrough.\(userID).legacySessionRequiresRetirement"
+    }
+
+    private func legacyVersionedKeys(for userID: String, suffix: String) -> [String] {
+        let prefix = "wander.walkthrough.v"
+        let keySuffix = ".\(userID).\(suffix)"
+        return defaults.dictionaryRepresentation().keys.filter {
+            $0.hasPrefix(prefix) && $0.hasSuffix(keySuffix)
+        }
+    }
+
+    private func migratedBoolean(stableKey: String, legacyKeys: [String]) -> Bool {
+        if defaults.object(forKey: stableKey) != nil {
+            return defaults.bool(forKey: stableKey)
+        }
+        let migrated = legacyKeys.contains { defaults.bool(forKey: $0) }
+        if !legacyKeys.isEmpty {
+            defaults.set(migrated, forKey: stableKey)
+            legacyKeys.forEach(defaults.removeObject(forKey:))
+        }
+        return migrated
     }
 }
 
@@ -705,7 +935,12 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     @Published private(set) var requestedSurface: WalkthroughSurface?
     @Published private(set) var isPresentingImportLesson = false
     @Published private(set) var isPresentingDeviceFeaturesLesson = false
+    @Published private(set) var tutorialCandidate: PlaceCandidate?
     @Published private(set) var tutorialUserPlaceID: String?
+    @Published private(set) var tutorialMemorySnapshot: FirstVisitTutorialMemorySnapshot?
+    @Published private(set) var tutorialSelectedStatus: PlaceStatus?
+    @Published private(set) var tutorialDiscoverQuery: String?
+    @Published private(set) var tutorialInvitedContactIDs: Set<String> = []
     @Published private(set) var isRequestingContactInvite = false
     @Published private(set) var userActivityGeneration = 0
     @Published private(set) var isAwaitingEligibilityResolution = false
@@ -716,6 +951,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     private var isImportLessonEligible = false
     private var isDeviceFeaturesLessonEligible = false
     private var didNotifyCompletion = false
+    private var didAttemptCheckpointRestore = false
     private let onCompleted: (String) -> Void
     @Published private(set) var isEnabled: Bool
 
@@ -736,14 +972,22 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     func setEnabled(_ isEnabled: Bool) {
         guard self.isEnabled != isEnabled else { return }
         self.isEnabled = isEnabled
-        guard !isEnabled else { return }
+        guard !isEnabled else {
+            didAttemptCheckpointRestore = false
+            return
+        }
 
         activeSurface = nil
         currentStepIndex = 0
         requestedSurface = nil
         isPresentingImportLesson = false
         isPresentingDeviceFeaturesLesson = false
+        tutorialCandidate = nil
         tutorialUserPlaceID = nil
+        tutorialMemorySnapshot = nil
+        tutorialSelectedStatus = nil
+        tutorialDiscoverQuery = nil
+        tutorialInvitedContactIDs = []
         isRequestingContactInvite = false
     }
 
@@ -767,6 +1011,25 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isPresentingImportLesson || isPresentingDeviceFeaturesLesson
     }
 
+    var hasActivePresentation: Bool {
+        activeSurface != nil
+            || requestedSurface != nil
+            || isPresentingLaunchLesson
+            || isRequestingContactInvite
+    }
+
+    var hasActivePrimaryJourney: Bool {
+        activeSurface.map(FirstVisitWalkthroughContent.primaryJourneySurfaces.contains) == true
+            || requestedSurface.map(FirstVisitWalkthroughContent.primaryJourneySurfaces.contains) == true
+            || store.checkpoint(for: userID) != nil
+    }
+
+    var hasCompletedPrimaryJourney: Bool {
+        FirstVisitWalkthroughContent.primaryJourneySurfaces.allSatisfy {
+            store.isComplete(for: userID, surface: $0)
+        }
+    }
+
     var canGoBack: Bool {
         guard
             let activeSurface,
@@ -788,10 +1051,16 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isDeviceFeaturesLessonEligible = false
         isPresentingImportLesson = false
         isPresentingDeviceFeaturesLesson = false
+        tutorialCandidate = nil
         tutorialUserPlaceID = nil
+        tutorialMemorySnapshot = nil
+        tutorialSelectedStatus = nil
+        tutorialDiscoverQuery = nil
+        tutorialInvitedContactIDs = []
         isRequestingContactInvite = false
         isAwaitingEligibilityResolution = false
         didNotifyCompletion = false
+        didAttemptCheckpointRestore = false
     }
 
     func registerLaunch(
@@ -811,6 +1080,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             activeSurface = nil
             currentStepIndex = 0
             isPresentingImportLesson = true
+            persistLaunchLessonCheckpoint(.importLesson)
         }
 
         if forceDeviceFeaturesLesson {
@@ -819,11 +1089,137 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             currentStepIndex = 0
             isPresentingImportLesson = false
             isPresentingDeviceFeaturesLesson = true
+            persistLaunchLessonCheckpoint(.deviceFeaturesLesson)
         }
         notifyCompletionIfNeeded()
     }
 
+    @discardableResult
+    func restoreJourneyIfNeeded(now: Date = .now) -> FirstVisitWalkthroughResumeDisposition {
+        guard isEnabled else { return .none }
+        if didAttemptCheckpointRestore {
+            if let checkpoint = store.checkpoint(for: userID),
+               now.timeIntervalSince(checkpoint.updatedAt) >= FirstVisitWalkthroughStore.resumeWindow {
+                store.markEntireWalkthroughComplete(for: userID)
+                clearTransientJourneyState()
+                notifyCompletionIfNeeded()
+                return .expired
+            }
+            return (activeSurface ?? requestedSurface)
+                .map(FirstVisitWalkthroughResumeDisposition.resumed) ?? .none
+        }
+        didAttemptCheckpointRestore = true
+
+        let hadCheckpointRecord = store.hasCheckpointRecord(for: userID)
+        let checkpoint = store.checkpoint(for: userID)
+        let requiresLegacyRetirement = store.requiresLegacySessionRetirement(for: userID)
+        guard let checkpoint else {
+            guard hadCheckpointRecord || requiresLegacyRetirement else { return .none }
+            store.markEntireWalkthroughComplete(for: userID)
+            clearTransientJourneyState()
+            notifyCompletionIfNeeded()
+            return .expired
+        }
+        let elapsed = now.timeIntervalSince(checkpoint.updatedAt)
+        guard elapsed >= 0, elapsed < FirstVisitWalkthroughStore.resumeWindow else {
+            store.markEntireWalkthroughComplete(for: userID)
+            clearTransientJourneyState()
+            notifyCompletionIfNeeded()
+            return .expired
+        }
+        guard let surface = surface(containing: checkpoint.target),
+              !FirstVisitWalkthroughContent.suppressedSurfaces.contains(surface),
+              let index = FirstVisitWalkthroughContent.stepsBySurface[surface]?.firstIndex(where: {
+                  $0.target == checkpoint.target
+              })
+        else {
+            store.markEntireWalkthroughComplete(for: userID)
+            clearTransientJourneyState()
+            notifyCompletionIfNeeded()
+            return .expired
+        }
+
+        tutorialCandidate = checkpoint.tutorialCandidate
+        tutorialUserPlaceID = checkpoint.tutorialUserPlaceID
+        tutorialMemorySnapshot = checkpoint.tutorialMemorySnapshot
+        tutorialSelectedStatus = checkpoint.tutorialSelectedStatus
+        tutorialDiscoverQuery = checkpoint.tutorialDiscoverQuery
+        tutorialInvitedContactIDs = checkpoint.tutorialInvitedContactIDs ?? []
+        isPresentingImportLesson = false
+        isPresentingDeviceFeaturesLesson = false
+        requestedSurface = nil
+
+        switch checkpoint.presentation {
+        case .importLesson:
+            activeSurface = nil
+            currentStepIndex = 0
+            isPresentingImportLesson = true
+            return .resumed(.map)
+        case .deviceFeaturesLesson:
+            activeSurface = nil
+            currentStepIndex = 0
+            isPresentingDeviceFeaturesLesson = true
+            return .resumed(.map)
+        case .awaitingDeviceFeaturesLesson:
+            activeSurface = nil
+            currentStepIndex = 0
+            if isDeviceFeaturesLessonEligible {
+                isPresentingDeviceFeaturesLesson = true
+            }
+            return .resumed(.map)
+        case .contactInvite:
+            guard let index = FirstVisitWalkthroughContent.stepsBySurface[.feed]?.firstIndex(
+                where: { $0.target == .feedInvite }
+            ) else {
+                store.clearCheckpoint(for: userID)
+                return .none
+            }
+            store.setProgress(index, for: userID, surface: .feed)
+            activeSurface = .feed
+            currentStepIndex = index
+            isRequestingContactInvite = true
+            return .resumed(.feed)
+        case nil:
+            break
+        }
+
+        store.setProgress(index, for: userID, surface: surface)
+        activeSurface = surface
+        currentStepIndex = index
+        return .resumed(surface)
+    }
+
+    func recordSuspension(at date: Date = .now) {
+        if let presentation = activeCheckpointPresentation {
+            if let target = currentStep?.target {
+                persistCheckpoint(target: target, at: date, presentation: presentation)
+            } else {
+                persistLaunchLessonCheckpoint(presentation, at: date)
+            }
+        } else {
+            persistCheckpoint(at: date)
+        }
+    }
+
     func activate(_ surface: WalkthroughSurface) {
+        if let activeSurface,
+           activeSurface != surface,
+           FirstVisitWalkthroughContent.primaryJourneySurfaces.contains(activeSurface),
+           FirstVisitWalkthroughContent.primaryJourneySurfaces.contains(surface),
+           requestedSurface != surface {
+            return
+        }
+        activate(surface, replacingActiveJourney: false)
+    }
+
+    func transition(to surface: WalkthroughSurface) {
+        activate(surface, replacingActiveJourney: true)
+    }
+
+    private func activate(
+        _ surface: WalkthroughSurface,
+        replacingActiveJourney _: Bool
+    ) {
         guard isEnabled else {
             activeSurface = nil
             return
@@ -846,6 +1242,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         }
         activeSurface = surface
         currentStepIndex = progress
+        persistCheckpoint()
     }
 
     func forceActivate(_ target: WalkthroughTargetID) {
@@ -869,6 +1266,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         store.setProgress(index, for: userID, surface: surface)
         activeSurface = surface
         currentStepIndex = index
+        persistCheckpoint()
     }
 
     func perform(_ target: WalkthroughTargetID) {
@@ -876,10 +1274,40 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         advance()
     }
 
+    func perform(
+        _ target: WalkthroughTargetID,
+        transitioningTo destination: WalkthroughSurface
+    ) {
+        guard currentStep?.target == target,
+              currentStep?.advance == .action,
+              let source = activeSurface
+        else { return }
+
+        let sourceSteps = FirstVisitWalkthroughContent.stepsBySurface[source, default: []]
+        let sourceNextIndex = currentStepIndex + 1
+        store.setProgress(sourceNextIndex, for: userID, surface: source)
+        if sourceNextIndex >= sourceSteps.count {
+            store.markComplete(for: userID, surface: source)
+        }
+
+        let destinationSteps = FirstVisitWalkthroughContent.stepsBySurface[destination, default: []]
+        let destinationIndex = min(
+            store.progress(for: userID, surface: destination),
+            destinationSteps.count
+        )
+        guard destinationSteps.indices.contains(destinationIndex) else { return }
+
+        requestedSurface = nil
+        activeSurface = destination
+        currentStepIndex = destinationIndex
+        persistCheckpoint()
+    }
+
     func advancePassiveStep() {
         guard currentStep?.advance == .next else { return }
         if currentStep?.target == .feedInvite {
             isRequestingContactInvite = true
+            persistCheckpoint()
             return
         }
         advance()
@@ -896,12 +1324,20 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isRequestingContactInvite = false
         store.setProgress(previousIndex, for: userID, surface: surface)
         currentStepIndex = previousIndex
+        persistCheckpoint()
     }
 
     func completeContactInviteRequest() {
         guard isRequestingContactInvite, currentStep?.target == .feedInvite else { return }
         isRequestingContactInvite = false
+        tutorialInvitedContactIDs = []
         advance()
+    }
+
+    func recordTutorialInvitedContactIDs(_ contactIDs: Set<String>) {
+        guard isRequestingContactInvite, currentStep?.target == .feedInvite else { return }
+        tutorialInvitedContactIDs = contactIDs
+        persistCheckpoint()
     }
 
     func recoverUnavailableTarget(_ target: WalkthroughTargetID) {
@@ -909,9 +1345,32 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         advance()
     }
 
+    func recordTutorialCandidate(_ candidate: PlaceCandidate) {
+        tutorialCandidate = candidate
+        persistCheckpoint()
+    }
+
+    func recordTutorialSelectedStatus(_ status: PlaceStatus) {
+        tutorialSelectedStatus = status
+        persistCheckpoint()
+    }
+
+    func recordTutorialDiscoverQuery(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        tutorialDiscoverQuery = trimmed.isEmpty ? nil : trimmed
+        persistCheckpoint()
+    }
+
     func recordTutorialSave(userPlaceID: String) {
         guard activeSurface == .saveFlow else { return }
         tutorialUserPlaceID = userPlaceID
+        persistCheckpoint()
+    }
+
+    func recordTutorialMemorySnapshot(_ snapshot: FirstVisitTutorialMemorySnapshot) {
+        tutorialCandidate = snapshot.candidate
+        tutorialMemorySnapshot = snapshot
+        persistCheckpoint()
     }
 
     func resetCurrentUser() {
@@ -924,15 +1383,22 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         isDeviceFeaturesLessonEligible = false
         isPresentingImportLesson = false
         isPresentingDeviceFeaturesLesson = false
+        tutorialCandidate = nil
         tutorialUserPlaceID = nil
+        tutorialMemorySnapshot = nil
+        tutorialSelectedStatus = nil
+        tutorialDiscoverQuery = nil
+        tutorialInvitedContactIDs = []
         isRequestingContactInvite = false
         isAwaitingEligibilityResolution = false
         didNotifyCompletion = false
+        didAttemptCheckpointRestore = false
     }
 
     func presentLaunchLessonIfEligible() {
         guard
             isEnabled,
+            store.checkpoint(for: userID) == nil,
             activeSurface == nil,
             !isPresentingImportLesson,
             !isPresentingDeviceFeaturesLesson
@@ -940,8 +1406,10 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
         if isDeviceFeaturesLessonEligible {
             isPresentingDeviceFeaturesLesson = true
+            persistLaunchLessonCheckpoint(.deviceFeaturesLesson)
         } else if isImportLessonEligible {
             isPresentingImportLesson = true
+            persistLaunchLessonCheckpoint(.importLesson)
         }
     }
 
@@ -950,6 +1418,9 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         store.markImportLessonComplete(for: userID)
         isImportLessonEligible = false
         isPresentingImportLesson = false
+        // Keep the 12-hour abandonment clock alive while this new user waits
+        // for the third-launch device-features lesson.
+        persistLaunchLessonCheckpoint(.awaitingDeviceFeaturesLesson)
         notifyCompletionIfNeeded()
     }
 
@@ -958,22 +1429,31 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         store.markDeviceFeaturesLessonComplete(for: userID)
         isDeviceFeaturesLessonEligible = false
         isPresentingDeviceFeaturesLesson = false
+        store.clearCheckpoint(for: userID)
         notifyCompletionIfNeeded()
     }
 
     func dismissEntireWalkthrough() {
         guard isEnabled else { return }
         store.markEntireWalkthroughComplete(for: userID)
-        activeSurface = nil
-        currentStepIndex = 0
-        requestedSurface = nil
+        clearTransientJourneyState()
         isImportLessonEligible = false
         isDeviceFeaturesLessonEligible = false
         isPresentingImportLesson = false
         isPresentingDeviceFeaturesLesson = false
-        tutorialUserPlaceID = nil
-        isRequestingContactInvite = false
         notifyCompletionIfNeeded()
+    }
+
+    /// Clears stale local NUX state for an account that is definitively not
+    /// eligible. This deliberately does not call the completion callback:
+    /// enrollment retirement is owned by AppEntry and may already be complete.
+    func retireJourneyForDisabledExperience() {
+        store.markEntireWalkthroughComplete(for: userID)
+        clearTransientJourneyState()
+        isImportLessonEligible = false
+        isDeviceFeaturesLessonEligible = false
+        didAttemptCheckpointRestore = true
+        didNotifyCompletion = true
     }
 
     func consumeRequestedSurface(_ surface: WalkthroughSurface) {
@@ -991,18 +1471,25 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
             activeSurface = nil
             currentStepIndex = 0
             requestedSurface = destination(after: surface)
+            if let requestedSurface,
+               let nextTarget = nextIncompleteTarget(for: requestedSurface) {
+                persistCheckpoint(target: nextTarget)
+            } else if surface == .sendoff {
+                store.clearCheckpoint(for: userID)
+            }
             notifyCompletionIfNeeded()
         } else {
             currentStepIndex = nextIndex
+            persistCheckpoint()
         }
     }
 
     private func destination(after surface: WalkthroughSurface) -> WalkthroughSurface? {
         switch surface {
         case .map:
-            .feed
+            .placeDetail
         case .placeDetail:
-            .map
+            .feed
         case .sendoff:
             nil
         case .add, .saveFlow:
@@ -1012,14 +1499,107 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         case .listEditor:
             .lists
         case .listDetail:
-            .profile
+            .lists
         case .feedSearch:
             .feed
         case .lists:
-            .profile
+            .sendoff
         case .profile:
             .sendoff
         }
+    }
+
+    private func surface(containing target: WalkthroughTargetID) -> WalkthroughSurface? {
+        WalkthroughSurface.allCases.first { surface in
+            FirstVisitWalkthroughContent.stepsBySurface[surface]?.contains(where: {
+                $0.target == target
+            }) == true
+        }
+    }
+
+    private func nextIncompleteTarget(for surface: WalkthroughSurface) -> WalkthroughTargetID? {
+        let steps = FirstVisitWalkthroughContent.stepsBySurface[surface, default: []]
+        guard !steps.isEmpty else { return nil }
+        let index = min(store.progress(for: userID, surface: surface), steps.count - 1)
+        return steps[index].target
+    }
+
+    private func persistCheckpoint(at date: Date = .now) {
+        guard let target = currentStep?.target else { return }
+        persistCheckpoint(target: target, at: date)
+    }
+
+    private func persistCheckpoint(
+        target: WalkthroughTargetID,
+        at date: Date = .now,
+        presentation: FirstVisitWalkthroughCheckpointPresentation? = nil
+    ) {
+        guard FirstVisitWalkthroughContent.primaryJourneySurfaces.contains(where: { surface in
+            FirstVisitWalkthroughContent.stepsBySurface[surface]?.contains(where: {
+                $0.target == target
+            }) == true
+        }) else { return }
+
+        store.setCheckpoint(
+            FirstVisitWalkthroughCheckpoint(
+                target: target,
+                updatedAt: date,
+                tutorialCandidate: tutorialCandidate,
+                tutorialUserPlaceID: tutorialUserPlaceID,
+                tutorialMemorySnapshot: tutorialMemorySnapshot,
+                tutorialSelectedStatus: tutorialSelectedStatus,
+                tutorialDiscoverQuery: tutorialDiscoverQuery,
+                tutorialInvitedContactIDs: tutorialInvitedContactIDs.isEmpty
+                    ? nil
+                    : tutorialInvitedContactIDs,
+                presentation: presentation ?? activeCheckpointPresentation
+            ),
+            for: userID
+        )
+    }
+
+    private var activeCheckpointPresentation: FirstVisitWalkthroughCheckpointPresentation? {
+        if isPresentingImportLesson { return .importLesson }
+        if isPresentingDeviceFeaturesLesson { return .deviceFeaturesLesson }
+        if isRequestingContactInvite { return .contactInvite }
+        return nil
+    }
+
+    private func persistLaunchLessonCheckpoint(
+        _ presentation: FirstVisitWalkthroughCheckpointPresentation,
+        at date: Date = .now
+    ) {
+        store.setCheckpoint(
+            FirstVisitWalkthroughCheckpoint(
+                target: .mapAdd,
+                updatedAt: date,
+                tutorialCandidate: tutorialCandidate,
+                tutorialUserPlaceID: tutorialUserPlaceID,
+                tutorialMemorySnapshot: tutorialMemorySnapshot,
+                tutorialSelectedStatus: tutorialSelectedStatus,
+                tutorialDiscoverQuery: tutorialDiscoverQuery,
+                tutorialInvitedContactIDs: tutorialInvitedContactIDs.isEmpty
+                    ? nil
+                    : tutorialInvitedContactIDs,
+                presentation: presentation
+            ),
+            for: userID
+        )
+    }
+
+    private func clearTransientJourneyState() {
+        activeSurface = nil
+        currentStepIndex = 0
+        requestedSurface = nil
+        isPresentingImportLesson = false
+        isPresentingDeviceFeaturesLesson = false
+        tutorialCandidate = nil
+        tutorialUserPlaceID = nil
+        tutorialMemorySnapshot = nil
+        tutorialSelectedStatus = nil
+        tutorialDiscoverQuery = nil
+        tutorialInvitedContactIDs = []
+        isRequestingContactInvite = false
     }
 
     private func notifyCompletionIfNeeded() {
@@ -1184,10 +1764,6 @@ private struct ImportWalkthroughOverlay: View {
                     .accessibilityLabel("Import help")
                     .accessibilityHint("Opens import help on getrec.me")
 
-                    WalkthroughDismissButton(
-                        accessibilityIdentifier: "walkthrough.dismiss.importLesson",
-                        action: onDismiss
-                    )
                 }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -1220,6 +1796,7 @@ private struct ImportWalkthroughOverlay: View {
             }
             .shadow(color: .black.opacity(0.28), radius: 22, y: 10)
             .padding(.horizontal, WanderTheme.spacing4)
+            .walkthroughEntranceBounce()
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("walkthrough.importLesson")
@@ -1279,10 +1856,6 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 
                     Spacer(minLength: 0)
 
-                    WalkthroughDismissButton(
-                        accessibilityIdentifier: "walkthrough.dismiss.deviceFeatures",
-                        action: onDismiss
-                    )
                 }
                 .padding(.bottom, WanderTheme.spacing3)
 
@@ -1363,6 +1936,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
             }
             .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
             .padding(.horizontal, WanderTheme.spacing4)
+            .walkthroughEntranceBounce()
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("walkthrough.deviceFeatures.card")
         }
@@ -1406,23 +1980,84 @@ private struct DeviceFeatureInstruction: View {
     }
 }
 
-private struct WalkthroughDismissButton: View {
-    let accessibilityIdentifier: String
-    let action: () -> Void
+private struct WalkthroughEntranceBounceModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasAppeared = false
 
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .frame(width: 44, height: 44)
-                .background(WanderTheme.surfaceSand.color, in: Circle())
-                .contentShape(Circle())
+    let isPresented: Bool
+    let trigger: String
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(reduceMotion || hasAppeared ? 1 : 0.92)
+            .task(id: "\(trigger).\(isPresented)") {
+                guard isPresented else {
+                    hasAppeared = false
+                    return
+                }
+                hasAppeared = false
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                reveal()
+            }
+    }
+
+    private func reveal() {
+        guard !reduceMotion else {
+            hasAppeared = true
+            return
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Dismiss walkthrough")
-        .accessibilityHint("Stops walkthrough prompts for this account")
-        .accessibilityIdentifier(accessibilityIdentifier)
+        withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
+            hasAppeared = true
+        }
+    }
+}
+
+private extension View {
+    func walkthroughEntranceBounce(
+        isPresented: Bool = true,
+        trigger: String = "appearance"
+    ) -> some View {
+        modifier(
+            WalkthroughEntranceBounceModifier(
+                isPresented: isPresented,
+                trigger: trigger
+            )
+        )
+    }
+}
+
+private struct WalkthroughSlowPulseModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isExpanded = false
+
+    let isActive: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(
+                reduceMotion || !isActive
+                    ? 1
+                    : (isExpanded ? 1.06 : 1)
+            )
+            .onAppear { updatePulse() }
+            .onChange(of: isActive) { _, _ in updatePulse() }
+            .animation(
+                reduceMotion || !isActive
+                    ? nil
+                    : .easeInOut(duration: 1.8).repeatForever(autoreverses: true),
+                value: isExpanded
+            )
+    }
+
+    private func updatePulse() {
+        isExpanded = isActive && !reduceMotion
+    }
+}
+
+extension View {
+    func walkthroughSlowPulse(isActive: Bool) -> some View {
+        modifier(WalkthroughSlowPulseModifier(isActive: isActive))
     }
 }
 
@@ -1621,10 +2256,10 @@ private struct FirstVisitWalkthroughOverlay: View {
 
     private var cardWidth: CGFloat {
         if step.target == .mapFeatured {
-            return min(330, max(260, containerSize.width - 32))
+            return min(300, max(260, containerSize.width - 32))
         }
         if step.target == .mapFriends {
-            return min(306, max(260, containerSize.width - 32))
+            return min(286, max(260, containerSize.width - 32))
         }
         let characterCount = step.title.count + step.message.count
         let preferred: CGFloat
@@ -1839,9 +2474,10 @@ private struct FirstVisitWalkthroughOverlay: View {
                 alignment: .leading,
                 spacing: isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing2
             ) {
-                HStack(alignment: .center, spacing: WanderTheme.spacing2) {
+                HStack(alignment: .top, spacing: WanderTheme.spacing2) {
                     if step.coachTheme != .standard {
                         WalkthroughCoachThemeBadge(theme: step.coachTheme)
+                            .padding(.top, 1)
                     }
 
                     Text(step.title)
@@ -1850,11 +2486,6 @@ private struct FirstVisitWalkthroughOverlay: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Spacer(minLength: 0)
-
-                    WalkthroughDismissButton(
-                        accessibilityIdentifier: "walkthrough.dismiss.\(step.id)",
-                        action: onDismiss
-                    )
                 }
 
                 if !step.message.isEmpty {
@@ -1903,33 +2534,12 @@ private struct FirstVisitWalkthroughOverlay: View {
             .padding(.vertical, isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing3)
             .frame(width: cardWidth, alignment: .leading)
             .background {
-                ZStack {
-                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                        .fill(WanderTheme.surfaceBone.color)
-
-                    if step.coachTheme != .standard {
-                        RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        step.coachTheme.accentColor.opacity(0.13),
-                                        .clear
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                }
+                RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                    .fill(WanderTheme.surfaceBone.color)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
-                    .stroke(
-                        step.coachTheme == .standard
-                            ? WanderTheme.textInk.color.opacity(0.08)
-                            : step.coachTheme.accentColor.opacity(0.3),
-                        lineWidth: 1
-                    )
+                    .stroke(WanderTheme.textInk.color.opacity(0.08), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.24), radius: 18, y: 8)
             .background {
@@ -1958,6 +2568,7 @@ private struct FirstVisitWalkthroughOverlay: View {
         .position(x: layout.cardFrame.midX, y: layout.cardFrame.midY)
         .opacity(isCoachVisible ? 1 : 0)
         .offset(y: isCoachVisible ? 0 : -10)
+        .walkthroughEntranceBounce(isPresented: isCoachVisible, trigger: step.id)
         .allowsHitTesting(isCoachVisible)
         .accessibilityHidden(!isCoachVisible)
         .onPreferenceChange(WalkthroughCardSizePreferenceKey.self) { size in
@@ -2021,22 +2632,13 @@ private struct WalkthroughFinaleView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                HStack(alignment: .top, spacing: WanderTheme.spacing2) {
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text(step.title)
-                            .font(WanderTypography.editorialMasthead)
-                            .foregroundStyle(WanderTheme.textInk.color)
-                        Text("A thought for the road")
-                            .font(WanderTypography.metadata)
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    WalkthroughDismissButton(
-                        accessibilityIdentifier: "walkthrough.dismiss.\(step.id)",
-                        action: onDismiss
-                    )
+                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                    Text(step.title)
+                        .font(WanderTypography.editorialMasthead)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                    Text("A thought for the road")
+                        .font(WanderTypography.metadata)
+                        .foregroundStyle(WanderTheme.textMuted.color)
                 }
 
                 Text("“\(step.message)”")
@@ -2075,7 +2677,7 @@ private struct WalkthroughFinaleView: View {
             .padding(WanderTheme.spacing4)
             .frame(maxWidth: min(356, containerSize.width - 32), alignment: .leading)
             .background(
-                WanderTheme.surfaceBone.color.opacity(0.97),
+                WanderTheme.surfaceBone.color,
                 in: RoundedRectangle(cornerRadius: WanderTheme.radiusSheet, style: .continuous)
             )
             .overlay {
@@ -2084,6 +2686,7 @@ private struct WalkthroughFinaleView: View {
             }
             .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 22, y: 10)
             .offset(y: 92)
+            .walkthroughEntranceBounce()
         }
         .frame(width: containerSize.width, height: containerSize.height)
         .accessibilityElement(children: .contain)
@@ -2132,7 +2735,7 @@ private extension WalkthroughCoachTheme {
 
     var animates: Bool {
         switch self {
-        case .social, .memory, .celebration:
+        case .social, .celebration:
             true
         default:
             false

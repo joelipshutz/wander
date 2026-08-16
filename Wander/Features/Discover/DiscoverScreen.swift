@@ -330,6 +330,8 @@ struct DiscoverScreen: View {
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                 if target == .feedSearchField || target == .feedSmartSearch {
                     searchFieldFocused = false
+                } else if target == .feedSearchResultsBack {
+                    restoreWalkthroughSearchResultsIfNeeded()
                 }
             }
             .task(id: visiblePlaceSignature) {
@@ -505,6 +507,9 @@ struct DiscoverScreen: View {
         let query = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
 
+        if walkthroughs.activeSurface == .feedSearch {
+            walkthroughs.recordTutorialDiscoverQuery(query)
+        }
         walkthroughs.perform(.feedSmartSearch)
 
         cancelPlaceSearchWork()
@@ -578,6 +583,18 @@ struct DiscoverScreen: View {
                 ]
             )
         }
+    }
+
+    private func restoreWalkthroughSearchResultsIfNeeded() {
+        guard walkthroughs.activeSurface == .feedSearch,
+              walkthroughs.currentStep?.target == .feedSearchResultsBack,
+              submittedPlacesQuery == nil
+        else { return }
+
+        placesQuery = walkthroughs.tutorialDiscoverQuery
+            ?? suggestedSearches.first?.query
+            ?? "popular parks"
+        submitPlaceSearch(source: "walkthrough_resume")
     }
 
     private func startCommunityPlaceSearch(query: String, submissionID: UUID) {
