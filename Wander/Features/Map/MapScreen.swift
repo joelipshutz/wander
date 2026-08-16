@@ -460,7 +460,7 @@ struct MapScreen: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
-                                .frame(maxWidth: .infinity)
+                                .frame(minWidth: 44, minHeight: 44)
                                 .accessibilityIdentifier("map.filter.\(source.rawValue)")
                                 .walkthroughTarget(source.walkthroughTarget)
                                 .walkthroughEmphasis(
@@ -477,10 +477,11 @@ struct MapScreen: View {
                                 )
                             }
                             .buttonStyle(.plain)
-                            .frame(maxWidth: .infinity)
+                            .frame(minWidth: 44, minHeight: 44)
                             .accessibilityIdentifier("map.filter.more")
                             .walkthroughTarget(.mapMoreFilters)
                         }
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.horizontal, WanderTheme.spacing3)
                         .padding(.vertical, WanderTheme.spacing1)
                         .frame(height: 48)
@@ -3849,14 +3850,15 @@ private struct MapSourceFilterChip: View {
                 .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing1)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.horizontal, WanderTheme.spacing2)
+        .frame(minHeight: 40)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isSelected ? .selected : .neutral,
             showsBorder: true
         )
+        .padding(.vertical, 2)
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -3893,14 +3895,15 @@ private struct MapMoreFilterChip: View {
                 .minimumScaleFactor(0.78)
         }
         .font(.system(size: 12, weight: .bold))
-        .padding(.horizontal, WanderTheme.spacing1)
-        .frame(maxWidth: .infinity, minHeight: 44)
+        .padding(.horizontal, WanderTheme.spacing2)
+        .frame(minHeight: 40)
         .foregroundStyle(WanderTheme.textInk.color)
         .contentShape(Capsule())
         .wanderGlassCapsule(
             tone: isActive ? .selected : .neutral,
             showsBorder: true
         )
+        .padding(.vertical, 2)
         .accessibilityLabel("More map filters")
         .accessibilityValue(
             selectedOptionCount == 0

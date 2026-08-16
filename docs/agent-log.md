@@ -29950,3 +29950,13 @@ Option A checkpoint — rearrangement only:
 - Capture initially hit a full-disk error. Uninstalled only the task-installed
   simulator app, reinstalled the freshly built app, and captured successfully;
   no source, archive, other worktree, or unrelated simulator was removed.
+
+Option B checkpoint — compact filters:
+
+- Kept Option A's hierarchy and reduced only the top-control visual weight:
+  source and More pills now size to their content, use a 40 pt visual capsule
+  inside an explicit 44 pt hit target, and remain centered without horizontal
+  scrolling.
+- Captured `docs/reviews/rec-278-map-ui/option-b-compact-filters.png` with the
+  same iPhone 16 Plus, friends fixture, selected place, camera, and status-bar
+  setup as Option A. Incremental simulator build passed.

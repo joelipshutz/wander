@@ -91,7 +91,8 @@ final class MapFilterSelectionTests: XCTestCase {
         )
 
         XCTAssertFalse(filterRow.contains("ScrollView(.horizontal"))
-        XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity)"))
+        XCTAssertTrue(filterRow.contains(".frame(maxWidth: .infinity, alignment: .center)"))
+        XCTAssertTrue(filterRow.contains(".frame(minWidth: 44, minHeight: 44)"))
     }
 
     func testMapControlHierarchyKeepsFiltersAboveTheMapAndSearchAboveTabs() throws {
