@@ -30552,3 +30552,17 @@ Implementation and validation handoff, 2026-08-16 11:04 PDT:
   remains from those attempts.
 - No build number, TestFlight, hosted flag, schema/data, auth, merge, Slack, or
   release action was performed.
+
+PR and tracker handoff, 2026-08-16 11:06 PDT:
+
+- Reproduction checkpoint `020e3e10` and implementation commit `9c17be1c`
+  are pushed on `codex/rec-284-espresso-confirmation-ctas`; draft PR #461 was
+  updated with the validation summary and remains unmerged.
+- Returned REC-284 to In Review and added the exact recipe, passing tests, and
+  dedicated simulator handoff.
+- Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` could not be
+  advanced because `localhost:4000` still is not accepting connections.
+  Linear, the draft PR, and this log contain the durable current status.
+- Reinstalled the exact passing build and left `S3B Espresso + Note Test`
+  (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) logged in on the map. Resting
+  evidence: `/private/tmp/rec-284-confetti-final-ready.png`.
