@@ -462,6 +462,7 @@ struct WanderRootView: View {
             .accessibilityHidden(true)
         }
         .environmentObject(store)
+        .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
         .task(id: selectedTab) {

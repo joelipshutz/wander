@@ -3021,6 +3021,53 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".placeProfileSaveTrayV1"))
     }
 
+    func testFirstMapCheckInUsesOneSharedEditorForSheetAndAttachedTray() throws {
+        let mapScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let policy = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileSaveActionPolicy.swift")
+        )
+        let sheetWrapper = try sourceSection(
+            mapScreen,
+            after: "struct MapPlaceSaveFlowSheet: View {",
+            before: "struct MapPlaceSaveEditor: View {"
+        )
+        let sharedEditor = try sourceSection(
+            mapScreen,
+            after: "struct MapPlaceSaveEditor: View {",
+            before: "private struct MapSaveVisitPhotoSection: View"
+        )
+
+        XCTAssertTrue(sheetWrapper.contains("MapPlaceSaveEditor("))
+        XCTAssertTrue(sheetWrapper.contains("presentation: .sheet"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceSaveAttachedTray: View"))
+        XCTAssertTrue(placeProfile.contains("MapPlaceSaveEditor("))
+        XCTAssertTrue(placeProfile.contains("presentation: .attached"))
+        XCTAssertTrue(placeProfile.contains("if let attachedSaveContext"))
+        XCTAssertTrue(placeProfile.contains(".id(attachedSaveContext.id)"))
+        XCTAssertTrue(placeProfile.contains("accessibilityIdentifier(\"place-profile.attached-check-in\")"))
+
+        XCTAssertTrue(sharedEditor.contains("let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?"))
+        XCTAssertTrue(sharedEditor.contains("let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool"))
+        XCTAssertTrue(sharedEditor.contains("onDraftChange(draftID, update.form, update.submittedAt)"))
+        XCTAssertTrue(sharedEditor.contains("onSaveCompleted(result)"))
+        XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
+        XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
+        XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
+
+        XCTAssertTrue(policy.contains("static func attachedFirstCheckInContext("))
+        XCTAssertTrue(policy.contains("route == .floatingActions"))
+        XCTAssertTrue(policy.contains("state == .unsaved"))
+        XCTAssertTrue(policy.contains("action.kind == .checkIn"))
+        XCTAssertTrue(policy.contains("action.destinationStatus == .been"))
+        XCTAssertTrue(mapScreen.contains("presentAttachedSaveFlow(attachedContext)"))
+        XCTAssertTrue(mapScreen.contains("dismissPlaceProfileThen {\n            performFloatingAction"))
+    }
+
     func testPlaceProfileDiscoversDirectReservationProviderLinks() throws {
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")

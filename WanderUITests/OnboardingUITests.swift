@@ -1356,6 +1356,56 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
     }
 
+    func testFirstMapCheckInExpandsAttachedEditorAndRestoresItsDraft() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let checkIn = app.buttons["Check in"].firstMatch
+        let wanna = app.buttons["Wanna"].firstMatch
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(wanna.waitForExistence(timeout: 2))
+        checkIn.tap()
+
+        let attachedTray = app.descendants(matching: .any)["place-profile.attached-check-in"]
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+        XCTAssertTrue(app.descendants(matching: .any)["place-rating-slider"].exists)
+        XCTAssertTrue(app.buttons["save.checkInDateDisclosure"].exists)
+        XCTAssertFalse(app.staticTexts["what do you want to do?"].exists)
+        XCTAssertTrue(app.staticTexts["Griffith Observatory Trail"].exists)
+
+        app.buttons["Show more options"].tap()
+        let note = app.textFields["what you'll want to remember, who told you..."]
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        note.tap()
+        note.typeText("Sunset draft")
+
+        app.buttons["Collapse check-in"].tap()
+        XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
+        XCTAssertTrue(checkIn.isHittable)
+        checkIn.tap()
+
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 3))
+        XCTAssertEqual(
+            app.textFields["what you'll want to remember, who told you..."].value as? String,
+            "Sunset draft"
+        )
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "First Map check-in attached editor"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testFeedSearchUsesDedicatedStateAndBackReturnsToFeed() {
         let app = XCUIApplication()
         app.launchArguments = [

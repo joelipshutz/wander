@@ -46,6 +46,16 @@ struct PlaceProfileSaveActionSnapshot: Equatable {
     var usesFloatingActions: Bool {
         route == .floatingActions
     }
+
+    func refreshingPresentation(
+        for state: PlaceProfileSaveActionState
+    ) -> PlaceProfileSaveActionSnapshot {
+        guard usesFloatingActions else { return self }
+        return PlaceProfileSaveActionSnapshot(
+            route: route,
+            presentation: PlaceProfileSaveActionPolicy.resolve(state: state)
+        )
+    }
 }
 
 enum PlaceProfileSaveActionPolicy {
@@ -91,6 +101,24 @@ enum PlaceProfileSaveActionPolicy {
 
         guard isSignedIn else { return false }
         return resolvedFlagValue == true
+    }
+
+    static func attachedFirstCheckInContext(
+        route: PlaceProfileSaveExperienceRoute,
+        state: PlaceProfileSaveActionState,
+        action: PlaceProfileSaveAction,
+        baseContext: MapPlaceSaveContext
+    ) -> MapPlaceSaveContext? {
+        guard route == .floatingActions,
+              state == .unsaved,
+              action.kind == .checkIn,
+              action.destinationStatus == .been,
+              baseContext.existingCurrentUserSave == nil,
+              !baseContext.hasPriorCheckIn,
+              case .add = baseContext.mode
+        else { return nil }
+
+        return baseContext.preselectingStatus(.been)
     }
 
     static func state(

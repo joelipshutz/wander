@@ -123,6 +123,7 @@ struct MapScreen: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
@@ -131,6 +132,7 @@ struct MapScreen: View {
     @State private var lastMapPressPoint: CGPoint?
     @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
+    @State private var attachedMapSaveFlow: MapPlaceSaveContext?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var mapQuery: String
@@ -661,6 +663,11 @@ struct MapScreen: View {
             }
             .onChange(of: mapFilterState.more) { _, _ in
                 routedVisiblePlace = nil
+            }
+            .onChange(of: isPlaceProfilePresented) { _, isPresented in
+                if !isPresented {
+                    closeAttachedSaveFlow()
+                }
             }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
@@ -1454,6 +1461,7 @@ struct MapScreen: View {
     }
 
     private func closeWalkthroughPlaceDetail() {
+        closeAttachedSaveFlow()
         isPlaceProfilePresented = false
         guard walkthroughs.activeSurface == .placeDetail
                 || walkthroughs.requestedSurface == .map
@@ -1476,6 +1484,8 @@ struct MapScreen: View {
                 saveActionSnapshot: saveActionSnapshot(
                     saves: saveSummaries(for: selectedSearchCandidate)
                 ),
+                attachedSaveContext: $attachedMapSaveFlow,
+                attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
                 onBack: {
                     collapseSelectedPlaceProfile()
@@ -1489,14 +1499,17 @@ struct MapScreen: View {
                     }
                 },
                 onFloatingAction: { saveAction in
-                    dismissPlaceProfileThen {
-                        performFloatingAction(
-                            saveAction,
-                            for: selectedSearchCandidate,
-                            defaultVisibility: store.defaultVisibility
-                        )
-                    }
-                }
+                    handleFloatingAction(
+                        saveAction,
+                        for: selectedSearchCandidate,
+                        defaultVisibility: store.defaultVisibility
+                    )
+                },
+                onAttachedDraftChange: updateAttachedDraft,
+                onAttachedSave: saveMapFlowSubmission,
+                onAttachedRemove: removeMapSave,
+                onAttachedClose: closeAttachedSaveFlow,
+                onAttachedSaveCompleted: completeAttachedSaveFlow
             )
         } else if let selectedPlace {
             PlaceProfileFullScreen(
@@ -1508,6 +1521,8 @@ struct MapScreen: View {
                 saveActionSnapshot: saveActionSnapshot(
                     saves: saveSummaries(for: selectedPlace)
                 ),
+                attachedSaveContext: $attachedMapSaveFlow,
+                attachedSaveDraft: attachedSaveDraft,
                 usesInteractiveHorizontalDismissal: true,
                 onBack: {
                     collapseSelectedPlaceProfile()
@@ -1518,10 +1533,13 @@ struct MapScreen: View {
                     }
                 },
                 onFloatingAction: { saveAction in
-                    dismissPlaceProfileThen {
-                        performFloatingAction(saveAction, for: selectedPlace)
-                    }
-                }
+                    handleFloatingAction(saveAction, for: selectedPlace)
+                },
+                onAttachedDraftChange: updateAttachedDraft,
+                onAttachedSave: saveMapFlowSubmission,
+                onAttachedRemove: removeMapSave,
+                onAttachedClose: closeAttachedSaveFlow,
+                onAttachedSaveCompleted: completeAttachedSaveFlow
             )
         } else if let walkthroughFallbackMemory {
             PlaceProfileFullScreen(
@@ -1650,6 +1668,7 @@ struct MapScreen: View {
         routedVisiblePlace = nil
         mapSelectionRevision += 1
         mapSaveFlow = nil
+        closeAttachedSaveFlow()
         isPlaceProfilePresented = false
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
@@ -1998,6 +2017,37 @@ struct MapScreen: View {
         mapSaveFlow = context.preselectingStatus(status)
     }
 
+    private func handleFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for visiblePlace: VisiblePlace
+    ) {
+        let saves = saveSummaries(for: visiblePlace)
+        let state = PlaceProfileSaveActionPolicy.state(
+            saves: saves,
+            currentUserID: store.currentUser.id,
+            hasSharedVisitInvitation: false,
+            isReadOnly: walkthroughs.activeSurface == .placeDetail
+        )
+        let context = MapPlaceSaveContext.addVisiblePlace(
+            visiblePlace,
+            defaultVisibility: store.effectiveDefaultVisibility,
+            attributes: store.attributes(for: visiblePlace.userPlace.id)
+        )
+        if let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
+            route: saveActionSnapshot(saves: saves).route,
+            state: state,
+            action: saveAction,
+            baseContext: context
+        ) {
+            presentAttachedSaveFlow(attachedContext)
+            return
+        }
+
+        dismissPlaceProfileThen {
+            performFloatingAction(saveAction, for: visiblePlace)
+        }
+    }
+
     private func performFloatingAction(
         _ saveAction: PlaceProfileSaveAction,
         for candidate: PlaceCandidate,
@@ -2010,6 +2060,96 @@ struct MapScreen: View {
             defaultVisibility: defaultVisibility
         )
         .preselectingStatus(status)
+    }
+
+    private func handleFloatingAction(
+        _ saveAction: PlaceProfileSaveAction,
+        for candidate: PlaceCandidate,
+        defaultVisibility: PlaceVisibility
+    ) {
+        let saves = saveSummaries(for: candidate)
+        let state = PlaceProfileSaveActionPolicy.state(
+            saves: saves,
+            currentUserID: store.currentUser.id,
+            hasSharedVisitInvitation: false,
+            isReadOnly: walkthroughs.activeSurface == .placeDetail
+        )
+        let context = addCandidateContext(
+            candidate,
+            sourceType: .manual,
+            defaultVisibility: defaultVisibility
+        )
+        if let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstCheckInContext(
+            route: saveActionSnapshot(saves: saves).route,
+            state: state,
+            action: saveAction,
+            baseContext: context
+        ) {
+            presentAttachedSaveFlow(attachedContext)
+            return
+        }
+
+        dismissPlaceProfileThen {
+            performFloatingAction(
+                saveAction,
+                for: candidate,
+                defaultVisibility: defaultVisibility
+            )
+        }
+    }
+
+    private var attachedSaveDraft: PlaceSaveDraft? {
+        guard let context = attachedMapSaveFlow,
+              let draft = placeSaveDraftStore.draft,
+              draft.ownerUserID == store.currentUser.id,
+              draft.candidate.id == context.candidate.id
+        else { return nil }
+        return draft
+    }
+
+    private func presentAttachedSaveFlow(_ context: MapPlaceSaveContext) {
+        guard attachedMapSaveFlow == nil else { return }
+        let hasMatchingDraft = placeSaveDraftStore.draft.map {
+            $0.ownerUserID == store.currentUser.id
+                && $0.candidate.id == context.candidate.id
+                && $0.form.selectedStatus == .been
+        } == true
+        if !hasMatchingDraft, let draft = PlaceSaveDraft.addFlow(
+            ownerUserID: store.currentUser.id,
+            context: context
+        ) {
+            placeSaveDraftStore.begin(draft)
+        }
+        attachedMapSaveFlow = context
+    }
+
+    @MainActor
+    private func updateAttachedDraft(
+        draftID: UUID,
+        form: PlaceSaveDraftForm,
+        submittedAt: Date?
+    ) {
+        placeSaveDraftStore.update(
+            draftID: draftID,
+            form: form,
+            submittedAt: submittedAt
+        )
+    }
+
+    @MainActor
+    private func closeAttachedSaveFlow() {
+        guard attachedMapSaveFlow != nil else { return }
+        attachedMapSaveFlow = nil
+        store.saveFlowDidDismiss(.saveSheet)
+    }
+
+    @MainActor
+    private func completeAttachedSaveFlow(_ result: SaveResult) {
+        placeSaveDraftStore.clear()
+        attachedMapSaveFlow = nil
+        store.saveFlowDidDismiss(.saveSheet)
+        let selectedResult = mapSaveFlowSelection.saveFlowDidDismiss() ?? result
+        selectSavedResult(selectedResult)
     }
 
     private func performAction(
@@ -5999,14 +6139,57 @@ private struct MapCheckInDateSection: View {
     }
 }
 
+enum MapPlaceSaveEditorPresentation: Equatable {
+    case sheet
+    case attached
+}
+
 struct MapPlaceSaveFlowSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let context: MapPlaceSaveContext
+    let draft: PlaceSaveDraft?
+    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+
+    init(
+        context: MapPlaceSaveContext,
+        draft: PlaceSaveDraft? = nil,
+        onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
+        onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
+        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
+    ) {
+        self.context = context
+        self.draft = draft
+        self.onDraftChange = onDraftChange
+        self.onSave = onSave
+        self.onRemove = onRemove
+    }
+
+    var body: some View {
+        MapPlaceSaveEditor(
+            context: context,
+            draft: draft,
+            presentation: .sheet,
+            onDraftChange: onDraftChange,
+            onSave: onSave,
+            onRemove: onRemove,
+            onClose: { dismiss() },
+            onSaveCompleted: { _ in dismiss() }
+        )
+    }
+}
+
+struct MapPlaceSaveEditor: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
     let draftID: UUID?
+    let presentation: MapPlaceSaveEditorPresentation
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
-    @Environment(\.dismiss) private var dismiss
+    let onClose: @MainActor () -> Void
+    let onSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -6046,15 +6229,21 @@ struct MapPlaceSaveFlowSheet: View {
     init(
         context: MapPlaceSaveContext,
         draft: PlaceSaveDraft? = nil,
+        presentation: MapPlaceSaveEditorPresentation,
         onDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
-        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool
+        onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
+        onClose: @escaping @MainActor () -> Void,
+        onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
         _context = State(initialValue: context)
         draftID = draft?.id
+        self.presentation = presentation
         self.onDraftChange = onDraftChange
         self.onSave = onSave
         self.onRemove = onRemove
+        self.onClose = onClose
+        self.onSaveCompleted = onSaveCompleted
         let restoredForm = draft?.form
         let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
             ? .details
@@ -6193,7 +6382,9 @@ struct MapPlaceSaveFlowSheet: View {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
-                        header
+                        if presentation == .sheet {
+                            header
+                        }
 
                         switch step {
                         case .confirm:
@@ -6204,11 +6395,11 @@ struct MapPlaceSaveFlowSheet: View {
                     }
                     .walkthroughTarget(step == .confirm ? .saveStatus : nil)
                     .padding(.horizontal, WanderTheme.spacing4)
-                    .padding(.top, WanderTheme.spacing3)
-                    .padding(.bottom, WanderTheme.spacing6)
+                    .padding(.top, presentation == .attached ? WanderTheme.spacing1 : WanderTheme.spacing3)
+                    .padding(.bottom, presentation == .attached ? WanderTheme.spacing3 : WanderTheme.spacing6)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .background(WanderTheme.canvasWarm.color)
+                .background(editorBackground)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if step == .details {
                         saveFooter
@@ -6273,6 +6464,12 @@ struct MapPlaceSaveFlowSheet: View {
         .interactiveDismissDisabled(walkthroughs.activeSurface == .saveFlow)
     }
 
+    private var editorBackground: Color {
+        presentation == .attached
+            ? WanderTheme.surfaceBone.color
+            : WanderTheme.canvasWarm.color
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             ZStack {
@@ -6304,7 +6501,7 @@ struct MapPlaceSaveFlowSheet: View {
                     Spacer(minLength: 0)
 
                     Button {
-                        dismiss()
+                        onClose()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .black))
@@ -6377,7 +6574,9 @@ struct MapPlaceSaveFlowSheet: View {
 
     private var detailsContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            candidateCard
+            if presentation == .sheet {
+                candidateCard
+            }
 
             if selectedStatus == .been {
                 MapCheckInDateSection(
@@ -6392,30 +6591,22 @@ struct MapPlaceSaveFlowSheet: View {
                     .walkthroughTarget(.saveDate)
             }
 
-            placeTypeSection
-                .id(WalkthroughTargetID.saveDetails)
-                .walkthroughTarget(.saveDetails)
+            if presentation == .sheet {
+                placeTypeSection
+                    .id(WalkthroughTargetID.saveDetails)
+                    .walkthroughTarget(.saveDetails)
+            }
 
             if selectedStatus == .been {
                 ratingSection
                     .id(WalkthroughTargetID.saveRating)
                     .walkthroughTarget(.saveRating)
 
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
-                        sharedVisitInviteSection
-                            .disabled(!canInviteFriends)
-                    }
-
-                    if context.allowsPhotoAttachments {
-                        MapSaveVisitPhotoSection(
-                            canAddPhotos: true,
-                            photos: $visitPhotoAttachments
-                        )
-                    }
+                if presentation == .sheet {
+                    visitParticipationSections
+                        .id(WalkthroughTargetID.saveFriends)
+                        .walkthroughTarget(.saveFriends)
                 }
-                .id(WalkthroughTargetID.saveFriends)
-                .walkthroughTarget(.saveFriends)
             }
 
             optionalDetailsDisclosure
@@ -6436,6 +6627,22 @@ struct MapPlaceSaveFlowSheet: View {
         }
     }
 
+    private var visitParticipationSections: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            if canInviteFriends || walkthroughs.activeSurface == .saveFlow {
+                sharedVisitInviteSection
+                    .disabled(!canInviteFriends)
+            }
+
+            if context.allowsPhotoAttachments {
+                MapSaveVisitPhotoSection(
+                    canAddPhotos: true,
+                    photos: $visitPhotoAttachments
+                )
+            }
+        }
+    }
+
     private var saveFooter: some View {
         WanderPrimaryButton(
             title: isSaving ? progressActionTitle : primaryActionTitle,
@@ -6446,7 +6653,7 @@ struct MapPlaceSaveFlowSheet: View {
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.vertical, WanderTheme.spacing2)
-        .background(WanderTheme.canvasWarm.color)
+        .background(editorBackground)
         .walkthroughTarget(.saveSubmit)
     }
 
@@ -6740,6 +6947,17 @@ struct MapPlaceSaveFlowSheet: View {
             )
 
             if isShowingOptionalDetails {
+                if presentation == .attached {
+                    placeTypeSection
+                        .id(WalkthroughTargetID.saveDetails)
+                        .walkthroughTarget(.saveDetails)
+
+                    if selectedStatus == .been {
+                        visitParticipationSections
+                            .id(WalkthroughTargetID.saveFriends)
+                            .walkthroughTarget(.saveFriends)
+                    }
+                }
                 noteSection
                     .id(WalkthroughTargetID.saveNote)
                     .walkthroughTarget(.saveNote)
@@ -7243,7 +7461,7 @@ struct MapPlaceSaveFlowSheet: View {
                 if let result {
                     walkthroughs.recordTutorialSave(userPlaceID: result.userPlaceID)
                     walkthroughs.perform(.saveSubmit)
-                    dismiss()
+                    onSaveCompleted(result)
                 } else if auth.isSignedIn {
                     saveAttemptedAt = nil
                     if context.sharedVisitInvitation != nil {
@@ -7350,7 +7568,7 @@ struct MapPlaceSaveFlowSheet: View {
             await MainActor.run {
                 isRemoving = false
                 if removed {
-                    dismiss()
+                    onClose()
                 } else {
                     errorMessage = "Could not remove this place from your map. Try again."
                 }

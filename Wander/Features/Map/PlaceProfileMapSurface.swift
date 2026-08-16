@@ -67,6 +67,13 @@ struct PlaceProfileFullScreen: View {
     let onBack: () -> Void
     let onAction: () -> Void
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    @Binding private var attachedSaveContext: MapPlaceSaveContext?
+    let attachedSaveDraft: PlaceSaveDraft?
+    let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let onAttachedClose: @MainActor () -> Void
+    let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var saveActionSnapshot: PlaceProfileSaveActionSnapshot?
 
@@ -77,11 +84,18 @@ struct PlaceProfileFullScreen: View {
         currentUserID: String,
         action: PlaceSheetAction,
         saveActionSnapshot: PlaceProfileSaveActionSnapshot? = nil,
+        attachedSaveContext: Binding<MapPlaceSaveContext?> = .constant(nil),
+        attachedSaveDraft: PlaceSaveDraft? = nil,
         initialSection: PlaceProfileInitialSection = .top,
         usesInteractiveHorizontalDismissal: Bool = false,
         onBack: @escaping () -> Void,
         onAction: @escaping () -> Void,
-        onFloatingAction: ((PlaceProfileSaveAction) -> Void)? = nil
+        onFloatingAction: ((PlaceProfileSaveAction) -> Void)? = nil,
+        onAttachedDraftChange: @escaping @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void = { _, _, _ in },
+        onAttachedSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult? = { _ in nil },
+        onAttachedRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool = { _ in false },
+        onAttachedClose: @escaping @MainActor () -> Void = {},
+        onAttachedSaveCompleted: @escaping @MainActor (SaveResult) -> Void = { _ in }
     ) {
         self.place = place
         self.saves = saves
@@ -93,6 +107,13 @@ struct PlaceProfileFullScreen: View {
         self.onBack = onBack
         self.onAction = onAction
         self.onFloatingAction = onFloatingAction ?? { _ in onAction() }
+        _attachedSaveContext = attachedSaveContext
+        self.attachedSaveDraft = attachedSaveDraft
+        self.onAttachedDraftChange = onAttachedDraftChange
+        self.onAttachedSave = onAttachedSave
+        self.onAttachedRemove = onAttachedRemove
+        self.onAttachedClose = onAttachedClose
+        self.onAttachedSaveCompleted = onAttachedSaveCompleted
         _saveActionSnapshot = State(initialValue: saveActionSnapshot)
     }
 
@@ -125,15 +146,38 @@ struct PlaceProfileFullScreen: View {
             currentUserID: currentUserID,
             action: action,
             saveActionSnapshot: saveActionSnapshot,
+            attachedSaveContext: $attachedSaveContext,
+            attachedSaveDraft: attachedSaveDraft,
             initialSection: initialSection,
             onBack: onBack,
             onAction: onAction,
-            onFloatingAction: onFloatingAction
+            onFloatingAction: onFloatingAction,
+            onAttachedDraftChange: onAttachedDraftChange,
+            onAttachedSave: onAttachedSave,
+            onAttachedRemove: onAttachedRemove,
+            onAttachedClose: onAttachedClose,
+            onAttachedSaveCompleted: onAttachedSaveCompleted
         )
         .preferredColorScheme(.light)
         .navigationBarBackButtonHidden(true)
         .toolbar(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+        .onChange(of: currentUserActionState) { _, state in
+            guard let snapshot = saveActionSnapshot,
+                  snapshot.usesFloatingActions,
+                  snapshot.presentation != .empty
+            else { return }
+            saveActionSnapshot = snapshot.refreshingPresentation(for: state)
+        }
+    }
+
+    private var currentUserActionState: PlaceProfileSaveActionState {
+        PlaceProfileSaveActionPolicy.state(
+            saves: saves,
+            currentUserID: currentUserID,
+            hasSharedVisitInvitation: false,
+            isReadOnly: false
+        )
     }
 
     static func shouldTriggerEdgeSwipeBack(startX: CGFloat, translation: CGSize) -> Bool {
@@ -608,10 +652,17 @@ private struct PlaceProfileFullView: View {
     let currentUserID: String
     let action: PlaceSheetAction
     let saveActionSnapshot: PlaceProfileSaveActionSnapshot?
+    @Binding var attachedSaveContext: MapPlaceSaveContext?
+    let attachedSaveDraft: PlaceSaveDraft?
     let initialSection: PlaceProfileInitialSection
     let onBack: () -> Void
     let onAction: () -> Void
     let onFloatingAction: (PlaceProfileSaveAction) -> Void
+    let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let onAttachedClose: @MainActor () -> Void
+    let onAttachedSaveCompleted: @MainActor (SaveResult) -> Void
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var backend: WanderBackend
@@ -713,7 +764,18 @@ private struct PlaceProfileFullView: View {
         .background(WanderTheme.surfaceBone.color)
         .ignoresSafeArea(.container, edges: .top)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if usesFloatingActions, !floatingActions.isEmpty {
+            if let attachedSaveContext {
+                PlaceSaveAttachedTray(
+                    context: attachedSaveContext,
+                    draft: attachedSaveDraft,
+                    onDraftChange: onAttachedDraftChange,
+                    onSave: onAttachedSave,
+                    onRemove: onAttachedRemove,
+                    onClose: onAttachedClose,
+                    onSaveCompleted: onAttachedSaveCompleted
+                )
+                .id(attachedSaveContext.id)
+            } else if usesFloatingActions, !floatingActions.isEmpty {
                 PlaceProfileFloatingActions(
                     actions: floatingActions,
                     onAction: handleFloatingAction
@@ -1500,6 +1562,90 @@ struct PlaceProfileFloatingActions: View {
         }
     }
 
+}
+
+struct PlaceSaveAttachedTray: View {
+    static let maximumHeight: CGFloat = 520
+
+    let context: MapPlaceSaveContext
+    let draft: PlaceSaveDraft?
+    let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
+    let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
+    let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
+    let onClose: @MainActor () -> Void
+    let onSaveCompleted: @MainActor (SaveResult) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(WanderTheme.borderStrong.color)
+                .frame(width: 36, height: 4)
+                .padding(.top, WanderTheme.spacing1)
+                .accessibilityHidden(true)
+
+            HStack(spacing: WanderTheme.spacing2) {
+                Label(CheckInCopy.verb, systemImage: "star.fill")
+                    .font(WanderTypography.label)
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(minHeight: WanderTheme.tapMinimum)
+                    .accessibilityAddTraits(.isSelected)
+
+                Spacer()
+
+                Button(action: onClose) {
+                    Label("Collapse check-in", systemImage: "chevron.down")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(
+                            minWidth: WanderTheme.tapMinimum,
+                            minHeight: WanderTheme.tapMinimum
+                        )
+                        .foregroundStyle(WanderTheme.textInk.color)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Collapse check-in")
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+
+            Divider()
+                .background(WanderTheme.borderHairline.color)
+
+            MapPlaceSaveEditor(
+                context: context,
+                draft: draft,
+                presentation: .attached,
+                onDraftChange: onDraftChange,
+                onSave: onSave,
+                onRemove: onRemove,
+                onClose: onClose,
+                onSaveCompleted: onSaveCompleted
+            )
+        }
+        .frame(maxHeight: Self.maximumHeight)
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: WanderTheme.radiusSheet,
+                topTrailingRadius: WanderTheme.radiusSheet
+            )
+        )
+        .overlay(alignment: .top) {
+            UnevenRoundedRectangle(
+                topLeadingRadius: WanderTheme.radiusSheet,
+                topTrailingRadius: WanderTheme.radiusSheet
+            )
+            .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
+        }
+        .shadow(color: WanderTheme.textInk.color.opacity(0.11), radius: 18, y: -6)
+        .background(WanderTheme.surfaceBone.color.ignoresSafeArea(edges: .bottom))
+        .transition(
+            reduceMotion
+                ? .opacity
+                : .move(edge: .bottom).combined(with: .opacity)
+        )
+        .accessibilityIdentifier("place-profile.attached-check-in")
+    }
 }
 
 private struct PlacePhotoGalleryViewerRoute: Identifiable {
