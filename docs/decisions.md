@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -16,6 +16,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | No live location | Locked | Current location is for nearby place resolution, not broadcasting. |
 | No gamified check-ins | Locked | Avoid mayorships, streaks, leaderboards, and public check-in framing. |
 | Four bottom tabs | Locked | Map, Add, Discover, Profile. |
+| Place-profile Check in / Wanna presentation | Locked for the 2026-08-15 design direction | Use the approved Editorial Fold typography boundary. A full-screen place profile hides the tab bar and owns a persistent floating bottom action tray. Unsaved and current-Wanna places expose labeled Check in / Wanna actions; checked-in places expose Check in again plus quiet Edit/history. Selecting an action expands an editor attached to the tray while the place remains visible; remove the standalone status-choice screen. Large commits across save/add/import use one 52–56 point terracotta capsule family, while compact contextual actions remain labeled 44-point controls. Batch import keeps inline per-row status selection; shared visit invitations are Check-in-only. |
 | Settings from Profile gear | Locked | Do not add Settings as a fifth tab. |
 | Profile merges self memory and social profile | Locked | Owner and other-user profile states share the same conceptual surface. |
 | Follow graph, not friend requests | Locked | One-way follows; mutual follows are friends. |

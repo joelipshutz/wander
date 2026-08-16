@@ -29901,3 +29901,243 @@ Completion — 2026-08-15 13:23 PDT:
 - This merge did not increment build 151, archive or upload a binary, attach a
   TestFlight build, or post tester-facing release notes. The feature-flag client
   will ship only in a later explicitly authorized release.
+## 2026-08-15 10:42 PDT - Codex - Check-in typography and CTA exploration
+
+Agent: Codex using `design-shotgun`
+Branch: `codex/checkin-cta-exploration`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/checkin-cta-exploration`
+Starting commit: `bc3ddf3e` (latest `origin/main` when the worktree was created)
+Linear: dedicated issue creation attempted and blocked by the workspace free-issue limit
+Mission Control: unavailable; `localhost:4000` refused the required create request and the documented LaunchAgent was not loaded
+
+Goal: mock distinct, app-coherent options for the check-in UI before production
+implementation. The exploration covers the typography, the large bottom
+confirmation CTA family, the compact contextual Check in / Wanna action family,
+and inline interaction patterns that remove the current separate status-choice
+screen while fitting the wider rec.me app.
+
+Starting state and constraints:
+
+- Joe's original checkout is on stale `joe/phone-build-latest` with an untracked
+  `tmp/` directory; it remains untouched. This isolated worktree was created from
+  latest `origin/main` because many agents are working in parallel.
+- Prior approved design decisions remain inputs: the streak celebration's ticket
+  language, the constrained Apple-native editorial typography boundary, the airy
+  ratings rail, and the existing Feed/People direction.
+- `DESIGN.md` remains authoritative: warm map-first utility, editorial serif only
+  for named/editorial content, native sans for controls and metadata, terracotta
+  user/action semantics, compact-phone support, Dynamic Type, and 44-point targets.
+- Current implementation uses `MapPlaceSaveFlowSheet`: an initial status-choice
+  step with Check in / Wanna pills, a separate detail step, and a generic
+  terracotta `WanderPrimaryButton` footer. Map and Feed both present this flow as
+  a large sheet; place profiles expose a compact plus/edit action that routes into
+  the same sheet.
+- Joe explicitly added that the result must fit within the wider app. Treat this
+  as a shared design-system and interaction-hierarchy exploration, not a one-off
+  check-in skin.
+- Design artifacts must remain outside the repo under
+  `~/.gstack/projects/joelipshutz-wander/designs/`. No production UI code changes
+  are authorized until Joe approves a direction.
+
+Expected tracked file: this append-only coordination log. Expected untracked
+design artifacts: comparison PNGs and board under the required gstack design
+directory.
+
+Concept checkpoint - 2026-08-15 11:08 PDT:
+
+- Joe chose three full-system directions rather than a check-in-only treatment.
+  Each mock will show the compact place action, its inline expanded state, and
+  a representative large bottom confirmation CTA in the wider app.
+- Approved for generation: A `Editorial Fold` (warm editorial accordion), B
+  `Native Action Dock` (restrained native utility dock), and C `Ticket Transform`
+  (existing collectible-ticket grammar applied to the interaction itself).
+- All directions keep Check in and Wanna together on the originating place
+  surface; none uses the current standalone status-choice screen.
+- Generation directory:
+  `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/checkin-cta-system-20260815`.
+
+Mock generation checkpoint - 2026-08-15 13:15 PDT:
+
+- Joe explicitly approved sending the three scoped UI briefs to OpenAI for
+  image generation. No repository contents, account data, or user data were
+  included. The generated images were inspected locally; no image-review upload
+  was performed.
+- Generated three complete 3-screen composites:
+  - `variant-A.png` - Editorial Fold: strongest editorial/native typography
+    balance, inline accordion, and capsule confirmation CTA.
+  - `variant-B.png` - Native Action Dock: most direct fit with the wider app,
+    persistent compact actions, expanding native drawer, and rounded-rectangle
+    confirmation CTA.
+  - `variant-C.png` - Ticket Transform: most branded/expressive direction,
+    transforming ticket module, and a shared ticket-family CTA treatment.
+- All three preserve the place profile while Check in expands, keep Wanna
+  available as a peer action, and demonstrate the large CTA family on a wider
+  Add/import confirmation surface.
+- Published the local comparison board at
+  `http://127.0.0.1:57867/boards/b-20260815-201111-cfqpdq/`.
+- No production SwiftUI files were changed. Next step is Joe's visual selection
+  and any requested hybridization before implementation planning or code edits.
+
+Approved direction and flow audit checkpoint - 2026-08-15 13:35 PDT:
+
+- Joe approved Variant A, `Editorial Fold`, and added the interaction constraint
+  that the place profile actions float above the home indicator and remain
+  visible while the full-screen profile scrolls. The existing choice to hide the
+  tab bar inside a place profile is confirmed.
+- Saved the approval in the design session and recorded Variant A in local taste
+  memory. The product direction is Apple-native editorial typography: serif for
+  place/editorial content, system sans for controls, metadata, body, and CTAs.
+- The floating profile action state matrix should be:
+  - unsaved/social place: `Check in` + `Wanna`;
+  - existing Wanna: `Check in` + selected `Wanna`, with the selected action
+    reopening its editor;
+  - existing checked-in place: `Check in again` + a quiet edit/history action,
+    because the current data contract does not allow a checked-in place to
+    become a current Wanna record.
+- Selecting Check in or Wanna expands a tray attached to the floating action
+  bar. The place profile remains the visual parent; the status-choice step and
+  generic action-titled save screen disappear. Essentials appear first, `more
+  options` expands in the same tray, and the large confirmation CTA stays pinned
+  above the home indicator or keyboard.
+- Entry-point audit:
+  - Map, Feed, Discover, Lists, and general Profile place destinations should
+    converge on the same full-screen place profile and floating action contract.
+  - Own Profile activity destinations can keep opening at activity/history but
+    should expose repeat/edit actions through the same floating tray rather than
+    an unrelated sheet.
+  - Single-place Add/manual/link/photo confirmation keeps the large bottom CTA,
+    then enters the place profile action contract instead of a separate status
+    chooser.
+  - Batch import keeps inline per-row Check In/Wanna controls because status is
+    chosen across several places at once; its final bulk action uses the shared
+    large bottom CTA family. Optional details use the same expanded editor
+    grammar.
+  - Shared visit invitations are Check-in-only and should open the place context
+    with the shared-person cue above the same attached editor.
+- Required state coverage before implementation: new save, existing Wanna,
+  Wanna-to-check-in conversion, repeat check-in, edit visit/Wanna, destructive
+  removal, keyboard and Dynamic Type, draft recovery, signed-out local save/auth
+  gate, saving/retry, offline/local-only result, success, and the once-daily
+  streak celebration handoff.
+- No production code was changed in this checkpoint. Next artifact is a deeper
+  Editorial Fold flow set covering the normalized states above.
+
+Generation permission checkpoint - 2026-08-15 13:42 PDT:
+
+- The first expanded-flow image request was blocked before transmission because
+  the approved-A flow brief is a new, more detailed external payload than the
+  three original variant briefs. No expanded flow-state details were sent.
+- Paused mock generation pending Joe's explicit approval to send design-only
+  rec.me UI briefs for the deeper Editorial Fold flow boards. No repository
+  contents, credentials, analytics, account data, or private user data will be
+  included.
+
+Deep-flow completion checkpoint - 2026-08-15 14:25 PDT:
+
+- Joe explicitly approved sending the design-only expanded flow briefs. No
+  repository contents, credentials, analytics, account data, or private user
+  data were included.
+- Generated and locally inspected four Editorial Fold flow boards:
+  - `editorial-flow-01-floating-actions.png`: unsaved, deep-scroll, and
+    existing-Wanna place-profile states with the action tray pinned above the
+    home indicator;
+  - `editorial-flow-02-checkin.png`: collapsed, compact expanded, taller
+    More-options/keyboard, loading/error, and post-save states;
+  - `editorial-flow-03-wanna-edit.png`: new Wanna, edit Wanna,
+    Wanna-to-check-in, repeat check-in, history/edit, draft, auth, and offline
+    contracts;
+  - `editorial-flow-04-entry-points.png`: single Add candidate, batch import,
+    shared invite, common system states, and the wider CTA relationship.
+- Corrected two generator mistakes before accepting the set: Check-in actions
+  cannot use sky/blue, and the app shell must remain exactly four tabs (Map,
+  Add, Discover, Profile). The final wider-app board has the correct four-tab
+  shell. The generated Wanna/edit board still renders some primary controls in
+  neutral espresso; the written contract is authoritative that all primary
+  confirmation actions use terracotta.
+- Refreshed the local comparison board at
+  `http://127.0.0.1:57867/boards/b-20260815-201111-cfqpdq/`.
+- Added the durable implementation handoff at
+  `docs/plans/2026-08-15-check-in-wanna-floating-actions-design.md` and locked
+  the product direction in `docs/decisions.md`.
+- No production SwiftUI, persistence, auth, or backend code changed. The branch
+  is intentionally a design/spec handoff; implementation should rebase onto
+  current `origin/main`, coordinate the listed high-conflict files, and create
+  or attach a Linear issue once workspace capacity is available.
+
+PR handoff - 2026-08-15 14:35 PDT:
+
+- Rebased the design branch onto current `origin/main` at `1dcac5f4`. The only
+  conflict was this append-only coordination log; both main's REC-225/REC-236
+  history and this exploration's complete history were preserved. No product
+  source conflict occurred.
+- `git diff --check origin/main...HEAD` passes and no conflict markers remain.
+  No Xcode build/test was run because the tracked delta is documentation only
+  and production SwiftUI is unchanged.
+- Pushed `codex/checkin-cta-exploration` and opened ready PR #431:
+  https://github.com/joelipshutz/wander/pull/431
+- This PR is the approved design/spec handoff only. It does not merge, bump the
+  build number, archive, upload, attach a TestFlight build, or post tester-facing
+  release notes.
+- The configured artifacts-only gstack sync was not pushed: the external
+  `gstack-artifacts-joelipshutz` repository requires separate payload-specific
+  authorization. The PNGs, board, approval record, and taste profile remain
+  available locally under the documented canonical gstack path.
+
+Launch-safe engineering plan follow-up - 2026-08-15 13:55 PDT:
+
+- Agent/tool: Codex using the `plan-eng-review` workflow.
+- Goal: turn the approved Editorial Fold and floating Check in/Wanna direction
+  into independently shippable implementation slices that do not put the 1.0
+  launch at risk. Joe explicitly prioritized typography and the smallest core
+  Add-flow CTA change before the persistent place-profile action system.
+- Branch/worktree: `codex/checkin-cta-exploration` in
+  `/Users/joelipshutz/Developer/Wander-worktrees/checkin-cta-exploration`.
+- Starting status: clean and tracking the pushed branch. The existing design
+  PR is #431. A dedicated Linear issue remains blocked by the recme workspace's
+  free-issue limit, and Mission Control was unavailable during the design pass.
+- Expected files: the approved design plan, a new engineering sequencing plan,
+  `docs/decisions.md` only if a new durable implementation decision is needed,
+  and this append-only log. No SwiftUI, model, persistence, auth, backend,
+  project, or release files will be changed in this planning pass.
+- Coordination note: active worktrees include separate REC-148 and REC-161
+  typography efforts plus multiple launch-gate/TestFlight worktrees. Their
+  scope and current status must be inspected before assigning typography work
+  to a new implementation slice.
+
+Launch-safe engineering plan completion - 2026-08-15:
+
+- Audited current `origin/main` at `6085eb24`, the active worktree set, merged
+  typography PR #256, merged account-scoped feature-flag PR #426, the current
+  Add/import CTAs, `PlaceProfileFullScreen`, `MapPlaceSaveFlowSheet`, its nine
+  production call sites, save/draft/store tests, launch decisions, and known
+  TestFlight test noise.
+- Added
+  `docs/plans/2026-08-15-check-in-wanna-launch-safe-eng-plan.md`. The plan splits
+  delivery into three independent launch-polish PRs followed by a post-candidate
+  behavior train. Typography lands first, Add's non-committing `Save` label
+  becomes `Use this place` second, and the count-aware import confirmation joins
+  the existing terracotta capsule family third.
+- Floating place actions and the attached editor are explicitly not 1.0
+  blockers. They start behind a new off-by-default key on the already-merged
+  feature-flag platform, snapshot their route for each open profile, retain the
+  legacy sheet as a remote rollback path, and add one place state/entry point
+  per later PR. Production guests remain on legacy during the account-scoped
+  rollout rather than weakening feature-flag RLS.
+- The plan reuses the merged native editorial type roles,
+  `WanderPrimaryButton`, `MapPlaceSaveContext`, durable save drafts, current
+  submission/store/sync semantics, and full-screen place profile. It does not
+  propose a new font dependency, a second CTA component, a save data-model/RPC
+  change, anonymous flag access, or a batch-import navigation rewrite.
+- Wrote local QA and implementation-task artifacts under the canonical rec.me
+  gstack project directory. The automatic independent remote Codex review was
+  blocked before transmission because the engineering plan did not have
+  separate export approval; no plan content was sent and no workaround was
+  attempted.
+- Validation: `git diff --check` passed while drafting. No Xcode build/test was
+  run because this pass changes documentation only; every implementation slice
+  has focused, full-suite, two-device, Dynamic Type, rollback, and TestFlight
+  gates in the plan.
+- Next implementation step, only after plan approval: create fresh worktrees
+  from latest `origin/main` for baseline capture and S1 typography. Do not stack
+  implementation on this design/planning branch and do not merge, release, or
+  enable the behavior flag as part of this planning handoff.
