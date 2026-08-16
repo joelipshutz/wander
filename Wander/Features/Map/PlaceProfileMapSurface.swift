@@ -1435,17 +1435,8 @@ struct PlaceProfileFloatingActions: View {
                 }
             }
         }
-        .padding(WanderTheme.spacing2)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSheet))
-        .overlay {
-            RoundedRectangle(cornerRadius: WanderTheme.radiusSheet)
-                .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-        }
-        .shadow(color: WanderTheme.textInk.color.opacity(0.09), radius: 14, y: -5)
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
-        .background(WanderTheme.surfaceBone.color.ignoresSafeArea(edges: .bottom))
         .accessibilityElement(children: .contain)
     }
 
@@ -1470,13 +1461,12 @@ struct PlaceProfileFloatingActions: View {
                 .frame(maxWidth: .infinity, minHeight: Self.minimumActionHeight)
                 .padding(.horizontal, WanderTheme.spacing2)
                 .contentShape(Capsule())
-                .background(actionBackground(for: action))
-                .foregroundStyle(actionForeground(for: action))
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(actionBorder(for: action), lineWidth: 1)
-                }
+                .foregroundStyle(Self.glassTone(for: action).foregroundStyle)
+                .wanderGlassCapsule(
+                    tone: Self.glassTone(for: action),
+                    interactive: true,
+                    showsBorder: true
+                )
             }
             .buttonStyle(.plain)
             .accessibilityLabel(action.title)
@@ -1495,6 +1485,10 @@ struct PlaceProfileFloatingActions: View {
         isAccessibilitySize && actionCount > 1
     }
 
+    static func glassTone(for action: PlaceProfileSaveAction) -> WanderGlassTone {
+        action.kind == .checkIn ? .accent : .neutral
+    }
+
     private func systemImage(for action: PlaceProfileSaveAction) -> String {
         switch action.kind {
         case .checkIn:
@@ -1506,27 +1500,6 @@ struct PlaceProfileFloatingActions: View {
         }
     }
 
-    private func actionBackground(for action: PlaceProfileSaveAction) -> Color {
-        if action.kind == .checkIn {
-            return WanderTheme.terracotta.color
-        }
-        if action.isSelected {
-            return WanderTheme.terracottaTint.color
-        }
-        return WanderTheme.surfaceRaised.color
-    }
-
-    private func actionForeground(for action: PlaceProfileSaveAction) -> Color {
-        action.kind == .checkIn
-            ? WanderTheme.textOnAction.color
-            : WanderTheme.textInk.color
-    }
-
-    private func actionBorder(for action: PlaceProfileSaveAction) -> Color {
-        action.kind == .checkIn
-            ? WanderTheme.terracotta.color
-            : WanderTheme.borderHairline.color
-    }
 }
 
 private struct PlacePhotoGalleryViewerRoute: Identifiable {

@@ -27,6 +27,32 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceProfileFloatingActions.minimumActionHeight, 48)
     }
 
+    @MainActor
+    func testFloatingActionsUseTintedPrimaryAndNeutralSecondaryGlass() {
+        let checkIn = PlaceProfileSaveAction(
+            kind: .checkIn,
+            title: "Check in",
+            isSelected: false,
+            destinationStatus: .been
+        )
+        let selectedWanna = PlaceProfileSaveAction(
+            kind: .wanna,
+            title: "Wanna",
+            isSelected: true,
+            destinationStatus: .wannaGo
+        )
+        let editHistory = PlaceProfileSaveAction(
+            kind: .editHistory,
+            title: "Edit / history",
+            isSelected: false,
+            destinationStatus: nil
+        )
+
+        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: checkIn), .accent)
+        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: selectedWanna), .neutral)
+        XCTAssertEqual(PlaceProfileFloatingActions.glassTone(for: editHistory), .neutral)
+    }
+
     func testFloatingStatusSelectionStartsTheExistingSaveSheetOnDetails() {
         let candidate = PlaceCandidate(
             id: "candidate-floating-actions",
