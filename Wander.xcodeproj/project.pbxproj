@@ -217,6 +217,7 @@
 		E989A6F79A60A420CD128B19 /* AppEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E1982754D8F9C0128D97CB /* AppEntryView.swift */; };
 		EB8B2939D8177A23894D5A83 /* NativeAuthFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFE0C041379DF5F5E0E2E0C /* NativeAuthFlowView.swift */; };
 		EF1D7162C9D93C6958A30166 /* WanderWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46B5FB52E3A97541DA76FEC9 /* WanderWidgets.swift */; };
+		EFD7097207F571D4002C8BEA /* DefaultMapFilterSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */; };
 		F1A980E1C39359FCE8D7495D /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8C1F5EB6AF68AB6C4BAE54 /* ThemeTokenTests.swift */; };
 		F439A7C2190C5DE57693A3FD /* PlaceImportCandidateMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0B6B10FCA35BC2BBC333BC /* PlaceImportCandidateMatcher.swift */; };
 		F4FB6BEEE27D8866E2FA6187 /* SharedPlaceImportInboxDrainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0757A5692D997B5355944002 /* SharedPlaceImportInboxDrainer.swift */; };
@@ -381,6 +382,7 @@
 		6E38429E654223C87319C7AB /* WanderPlaceCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderPlaceCategory.swift; sourceTree = "<group>"; };
 		70527AF1590BEF9CB781A16D /* Wander.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Wander.entitlements; sourceTree = "<group>"; };
 		70EBC454954F0061CD051E15 /* WanderNearbyWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderNearbyWidgetSnapshot.swift; sourceTree = "<group>"; };
+		711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultMapFilterSettingsUITests.swift; sourceTree = "<group>"; };
 		718A86905C5ED6292D127B8D /* WanderShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WanderShareExtension.entitlements; sourceTree = "<group>"; };
 		73D64500CA1377F2C798EB38 /* WannaGoReminderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WannaGoReminderTests.swift; sourceTree = "<group>"; };
 		73F1E08A489F203F67F25F17 /* AppBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBrand.swift; sourceTree = "<group>"; };
@@ -961,6 +963,7 @@
 			isa = PBXGroup;
 			children = (
 				EA454CD7CBC8A79CCEE08BBD /* AppStoreScreenshotsUITests.swift */,
+				711BCBBAAB14E60B59E9728C /* DefaultMapFilterSettingsUITests.swift */,
 				1A19BF719612E6755CBF3892 /* OnboardingUITests.swift */,
 			);
 			path = WanderUITests;
@@ -1491,6 +1494,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				63B4F0219103EE4D48C147C9 /* AppStoreScreenshotsUITests.swift in Sources */,
+				EFD7097207F571D4002C8BEA /* DefaultMapFilterSettingsUITests.swift in Sources */,
 				321792B906B2F777D89C44B7 /* OnboardingUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

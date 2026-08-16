@@ -159,20 +159,16 @@ struct ProfileSettingsHome: View {
 
     private var mapSection: some View {
         Section {
-            Picker(
-                selection: Binding(
-                    get: { store.defaultMapFilter },
-                    set: { store.defaultMapFilter = $0 }
-                )
-            ) {
-                ForEach(MapSource.allCases) { source in
-                    Label(source.title, systemImage: source.systemImage)
-                        .tag(source)
-                }
+            NavigationLink {
+                DefaultMapFilterSettingsScreen()
             } label: {
-                Label("default map filter", systemImage: "map")
+                HStack {
+                    Label("default map filter", systemImage: "map")
+                    Spacer()
+                    Label(store.defaultMapFilter.title, systemImage: store.defaultMapFilter.systemImage)
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
             }
-            .pickerStyle(.navigationLink)
             .tint(WanderTheme.terracotta.color)
             .accessibilityIdentifier("settings.map.defaultFilter")
         } header: {
@@ -356,6 +352,61 @@ struct ProfileSettingsHome: View {
         } catch {
             errorMessage = "Your account could not be deleted. Nothing was removed. Please try again."
         }
+    }
+}
+
+private struct DefaultMapFilterSettingsScreen: View {
+    @EnvironmentObject private var store: WanderStore
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(MapSource.allCases) { source in
+                    Button {
+                        store.defaultMapFilter = source
+                    } label: {
+                        HStack(alignment: .center, spacing: WanderTheme.spacing3) {
+                            Image(systemName: source.systemImage)
+                                .font(.system(.body, design: .default, weight: .bold))
+                                .foregroundStyle(WanderTheme.terracotta.color)
+                                .frame(width: 24)
+
+                            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+                                Text(source.title)
+                                    .font(.system(.body, design: .default, weight: .bold))
+                                    .foregroundStyle(WanderTheme.textInk.color)
+
+                                Text(source.subtitle)
+                                    .font(.system(.subheadline, design: .default, weight: .medium))
+                                    .foregroundStyle(WanderTheme.textMuted.color)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+
+                            Spacer(minLength: WanderTheme.spacing2)
+
+                            if store.defaultMapFilter == source {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 15, weight: .black))
+                                    .foregroundStyle(WanderTheme.terracotta.color)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .frame(minHeight: WanderTheme.tapMinimum)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(source.title). \(source.subtitle)")
+                    .accessibilityValue(store.defaultMapFilter == source ? "Selected" : "")
+                    .accessibilityIdentifier("settings.map.defaultFilter.\(source.rawValue)")
+                }
+            } footer: {
+                Text("Used whenever the map opens or resets on this device.")
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(WanderTheme.canvasWarm.color)
+        .navigationTitle("default map filter")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

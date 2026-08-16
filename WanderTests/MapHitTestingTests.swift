@@ -62,6 +62,14 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapSource.friends.title, "Friends")
         XCTAssertEqual(MapSource.featured.systemImage, "sparkles")
         XCTAssertEqual(MapSource.friends.systemImage, "person.2.fill")
+        XCTAssertEqual(
+            MapSource.featured.subtitle,
+            "Featured shows you recommendations based on your taste"
+        )
+        XCTAssertEqual(
+            MapSource.friends.subtitle,
+            "All places from everyone you follow"
+        )
     }
 
     func testPinFilterTransitionStaysInsideTheMicroInteractionBudget() {

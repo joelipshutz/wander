@@ -2584,9 +2584,10 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(settings.contains("Label(\"default map filter\", systemImage: \"map\")"))
+        XCTAssertTrue(settings.contains("DefaultMapFilterSettingsScreen()"))
         XCTAssertTrue(settings.contains("ForEach(MapSource.allCases)"))
-        XCTAssertTrue(settings.contains("get: { store.defaultMapFilter }"))
-        XCTAssertTrue(settings.contains("set: { store.defaultMapFilter = $0 }"))
+        XCTAssertTrue(settings.contains("Text(source.subtitle)"))
+        XCTAssertTrue(settings.contains("store.defaultMapFilter = source"))
         XCTAssertTrue(settings.contains("settings.map.defaultFilter"))
         XCTAssertTrue(settings.contains("Used whenever the map opens or resets on this device."))
     }

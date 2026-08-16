@@ -122,7 +122,7 @@ enum FirstVisitWalkthroughContent {
             step(
                 .map,
                 .mapFeatured,
-                "Featured shows you recommendations based on your taste",
+                MapSource.featured.subtitle,
                 "",
                 advance: .next,
                 coachTheme: .map
@@ -130,7 +130,7 @@ enum FirstVisitWalkthroughContent {
             step(
                 .map,
                 .mapFriends,
-                "All places from everyone you follow",
+                MapSource.friends.subtitle,
                 "",
                 advance: .next,
                 coachTheme: .social

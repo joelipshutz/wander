@@ -30,6 +30,13 @@ enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
         case .friends: "person.2.fill"
         }
     }
+
+    var subtitle: String {
+        switch self {
+        case .featured: "Featured shows you recommendations based on your taste"
+        case .friends: "All places from everyone you follow"
+        }
+    }
 }
 
 /// Product vocabulary for the repeatable place check-in system.
