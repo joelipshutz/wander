@@ -590,9 +590,12 @@ struct MapScreen: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .safeAreaPadding(.top, WanderTheme.spacing2)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
+                .ignoresSafeArea(
+                    .keyboard,
+                    edges: isMapSearchFocused ? [] : .bottom
+                )
                 .overlay(alignment: .bottom) {
-                    if !isPlaceProfilePresented && !hasSelectedProfile {
+                    if !isPlaceProfilePresented && !hasSelectedProfile && !isMapSearchFocused {
                         mapUtilityRow
                             .padding(.bottom, MapControlLayout.searchDockClearance)
                     }

@@ -51,3 +51,18 @@ simulator.
   tab navigation, and map data are unchanged.
 - Every interactive control retains at least a 44 pt hit target.
 
+## Optional next depth
+
+If C is selected and a deeper redesign is worth doing, the next highest-leverage
+change is the selected-place card: make it more image-led and horizontally
+pageable like the reference. That is intentionally not staged here because it
+changes the place-browsing interaction, not just the Map control hierarchy.
+
+## Validation
+
+- Final full scheme: 1,259/1,259 tests passed on iPhone 16 Plus / iOS 18.6.
+- Focused More-filter UI suite: 3/3 passed on iPhone 16e / iOS 18.6.
+- Visual inspection: iPhone 16 Plus and iPhone 16e / iOS 18.6, plus an isolated
+  iPhone 16 Plus / iOS 26.2 native-glass check.
+- Focused search now places typeahead above search and search above the keyboard;
+  passive map utility controls hide until focus ends.

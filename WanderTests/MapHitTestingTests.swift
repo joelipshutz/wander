@@ -116,7 +116,11 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(map.contains("selectedPlaceProfileSurface\n                    .padding(.bottom, MapControlLayout.searchDockClearance)"))
         XCTAssertTrue(map.contains("MapResultsSummaryPill("))
         XCTAssertTrue(map.contains(".overlay(alignment: .bottom)"))
-        XCTAssertTrue(map.contains("if !isPlaceProfilePresented && !hasSelectedProfile"))
+        XCTAssertTrue(
+            map.contains(
+                "if !isPlaceProfilePresented && !hasSelectedProfile && !isMapSearchFocused"
+            )
+        )
         XCTAssertTrue(map.contains("aboveCard: { mapUtilityRow }"))
 
         let placeProfileSurface = try String(

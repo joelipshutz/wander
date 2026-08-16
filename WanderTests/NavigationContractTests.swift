@@ -405,7 +405,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(map.contains("if !isMapSearchFocused {"))
         XCTAssertTrue(map.contains("HStack(spacing: WanderTheme.spacing1)"))
         XCTAssertTrue(map.contains("MapControlLayout.searchDockClearance"))
-        XCTAssertTrue(map.contains(".ignoresSafeArea(.keyboard, edges: .bottom)"))
+        XCTAssertTrue(map.contains("edges: isMapSearchFocused ? [] : .bottom"))
         let typeahead = try XCTUnwrap(
             map.components(separatedBy: "private struct MapTypeaheadList: View").last?
                 .components(separatedBy: "private struct MapTypeaheadRow: View").first

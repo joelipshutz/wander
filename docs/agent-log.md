@@ -29982,3 +29982,23 @@ Option C checkpoint — polished utility row:
   contract set passed 16/16 after correcting one new source-contract assertion
   that initially targeted the wrong `body` declaration. Existing compiler and
   headermap warnings remain unchanged.
+
+Validation checkpoint — 2026-08-16 04:57 PDT:
+
+- The focused More-filter interaction suite passed 3/3 on iPhone 16e / iOS
+  18.6. It exercised More presentation, source switching/reset, and away-time
+  reset behavior with the compact top row.
+- The first full-scheme pass completed 1,258/1,259. Its only failure was
+  `OnboardingUITests.testFocusedMapSearchStaysWithinTheUsableViewport`: moving
+  search to the bottom exposed that the Map container still ignored the keyboard
+  safe area while focused, leaving search behind the keyboard. Updated the
+  keyboard policy to respect the safe area only while search is focused, revised
+  the UI contract for typeahead-above-search, and hid recenter/result utilities
+  during focused search. Visual inspection of the retained test attachment
+  confirmed a clear typeahead → search → keyboard stack.
+- The affected unit/UI set then passed 17/17. A final full rerun passed
+  1,259/1,259 with zero failures, skips, or expected failures on iPhone 16 Plus /
+  iOS 18.6. Result bundle:
+  `/private/tmp/DerivedData-rec278-map-ui/Logs/Test/Test-Wander-2026.08.16_04-48-08--0700.xcresult`.
+- `git diff --check` passes. No build-number bump, archive, TestFlight upload,
+  production-data change, or public post was performed.
