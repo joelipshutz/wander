@@ -30781,6 +30781,30 @@ Landing-review checkpoint:
   retaining native Liquid Glass interaction on iOS 26.
 - Swift parsing and `git diff --check` pass after these review fixes. Focused
   post-integration unit and UI validation remains in progress before merge.
+
+Final landing validation:
+
+- Rejected the attempted programmatic detent promotion after direct iOS 18.6
+  simulator validation showed SwiftUI's bound selection changing without the
+  native sheet moving. No UIKit bridge, delay workaround, or unverified
+  auto-expansion behavior is landing. The supported interaction is the native
+  grabber: the user can drag compact -> large -> compact and swipe-dismiss.
+- The final focused unit gate passed 46/46, covering all
+  `PlaceProfilePresentationTests`, the relevant navigation contracts, and the
+  Espresso theme-token contract. Result:
+  `/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_13-08-04--0700.xcresult`.
+- The native Wanna sheet UI gate passed: compact -> large -> compact -> dismiss,
+  with the place-profile floating actions restored afterward. The attached
+  Check-in UI gate also passed 1/1, verifying the editor remains over the place
+  profile, exposes rating/date/note/More Options above the fold, and preserves
+  the optional note draft after collapse and reopen. Check-in result:
+  `/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_13-12-52--0700.xcresult`.
+- Final Swift parsing and `git diff --check` pass. No build-number bump,
+  archive, TestFlight upload, Slack release note, hosted flag, schema/data, or
+  auth change was performed. Mission Control task
+  `65ee363b-0823-4f5c-8975-e36d7809fea5` remains unreachable because
+  `localhost:4000` is not accepting connections; Linear, PR #461, and this log
+  carry the durable handoff.
 ## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
 
 Agent: Codex

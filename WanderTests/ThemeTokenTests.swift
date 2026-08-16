@@ -38,6 +38,7 @@ final class ThemeTokenTests: XCTestCase {
         XCTAssertEqual(actual, expected)
     }
 
+    @MainActor
     func testEspressoConfirmationMatchesProductionCheckInBlack() {
         XCTAssertNil(WanderPrimaryButtonTone.brand.glassTone)
         XCTAssertEqual(
