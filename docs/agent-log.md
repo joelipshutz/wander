@@ -29929,3 +29929,41 @@ Starting state and coordination:
 Expected files: `Wander/Features/Map/PlaceProfileMapSurface.swift`, the existing
 Liquid Glass design-system helper if a new tone is required, focused contract/UI
 tests, this log, and external comparison artifacts under `~/.gstack/projects/`.
+
+Checkpoint — 2026-08-15 21:08 PDT:
+
+- Implemented four debug-selectable floating place-action treatments while
+  keeping Option 1 as the missing/invalid-argument default and the only release
+  behavior: Option 1 current terracotta/neutral; Option 2 full-width black/white
+  Check in plus unchanged Wanna; Option 3 compact centered black/light pair;
+  Option 4 the compact pair inside an oversized near-black Liquid Glass rail.
+- Added reusable native iOS 26 glass tones/material selection with the existing
+  material fallback retained for earlier iOS versions. Option 4 uses one regular
+  outer glass rail and clear inner glass controls inside `GlassEffectContainer`
+  to avoid stacked regular-blur artifacts. Compact controls remain 60 points high
+  and switch to a 280-point vertical accessibility layout at accessibility text
+  sizes.
+- Added focused resolver, tone, geometry, release-default, and source-contract
+  assertions in `PlaceProfilePresentationTests` and `NavigationContractTests`.
+- Final native iOS 26.2 simulator build passed at commit `810a3035`:
+  `** BUILD SUCCEEDED ** [135.462 sec]`. All changed Swift files parse, the branch
+  is clean, and `git diff --check f7db464b..HEAD` passes.
+- Installed and visually verified the exact final build on four dedicated iPhone
+  16 Plus / iOS 26.2 devices: `CTA Option 1`, `CTA Option 2`, `CTA Option 3`, and
+  `CTA Option 4`. All four launch into the same authenticated Griffith Observatory
+  Trail place profile; only `-WanderPlaceActionVariant 1...4` differs. Final
+  screenshots are `/private/tmp/recme-cta-final-option-{1,2,3,4}.png`; the durable
+  side-by-side board is
+  `/Users/joelipshutz/.codex/visualizations/2026/08/15/01a00667-f2e5-7720-8849-b0ca9238ee46/cta-options-1-through-4.png`.
+- A focused four-test run did not reach assertions because the machine volume
+  filled while Xcode regenerated Clerk localization output. This is an environment
+  failure (`ENOSPC`, build database full), not a product assertion failure. The
+  successful final app build plus simulator verification remain valid; rerun the
+  four focused tests after additional disk is reclaimed before promoting a choice.
+- Removed only exact disposable Xcode build caches after their installed binaries
+  and screenshots were preserved: `/private/tmp/recme-build154-archive-dd` and
+  `/private/tmp/recme-cta-final-dd`. Both are regenerable; no source, archive,
+  screenshot, simulator, production, or user data was removed.
+- Opened this isolated worktree's `Wander.xcodeproj` in Xcode and opened Simulator
+  with all four comparison devices booted. No push, PR, merge, build-number bump,
+  TestFlight upload, or release was performed.
