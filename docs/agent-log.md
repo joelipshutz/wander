@@ -30488,3 +30488,16 @@ Implementation and validation handoff, 2026-08-16 10:28 PDT:
 - Existing compiler/headermap warnings remain unchanged. No build number,
   TestFlight, hosted flag, schema/data, auth, Slack, merge, or release action
   was performed.
+
+PR and tracker handoff, 2026-08-16 10:30 PDT:
+
+- Implementation commit: `79e95d46` (`feat: use native detents for attached
+  saves`), following reproduction checkpoint `a57f7dc5`. Both commits are
+  pushed on `codex/rec-284-espresso-confirmation-ctas`.
+- Updated stacked draft PR #461 with the native-sheet behavior, exact
+  validation, and tester checklist:
+  https://github.com/joelipshutz/wander/pull/461
+- Returned REC-284 to In Review and added the passing test/simulator handoff.
+- Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` still could not
+  be advanced because `localhost:4000` is not accepting connections. Linear,
+  the PR, and this log contain the durable current status.
