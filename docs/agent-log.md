@@ -30164,3 +30164,18 @@ Checkpoint — 2026-08-16 04:30 PDT:
   reproduced the aggregate report, and `git diff --check` passes. Mission
   Control task `89e7babf-6f61-484b-a284-b769a4841d59` tracks the continuation;
   REC-225 and PR #427 remain the durable issue/PR handoff.
+
+Handoff — 2026-08-16 04:32 PDT:
+
+- Rebased the complete 11-commit branch onto `origin/main` at `910f1575`, then
+  reran all 26 relevance tests and `git diff --check` successfully. Outcome
+  commit after rebase: `27e6c14a`.
+- Force-pushed the rebased branch and updated ready PR #427 with both Search and
+  Featured results, architecture decisions, privacy boundaries, evidence gaps,
+  and validation. The PR is mergeable and `validate-pr-payload` passed; no
+  TestFlight/build action is authorized or needed.
+- Added the aggregate outcome to REC-225 and moved it to `In Review`. Concrete
+  next step is PR review/merge. Production implementation should keep the
+  explicit Featured baseline and open a separately scoped, feature-flagged
+  Search semantic-provider slice; do not implement vector/density/people
+  ranking for Featured from this result.
