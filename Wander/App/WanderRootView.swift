@@ -420,6 +420,8 @@ struct WanderRootView: View {
         TabView(selection: tabSelection) {
             MapScreen(
                 defaultSource: store.defaultMapFilter,
+                isMapTabActive: selectedTab == .map,
+                isAddPresented: isPresentingAdd,
                 presentationResetRequest: presentationResetRequest,
                 searchLaunchRequest: mapSearchLaunchRequest,
                 onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,

@@ -146,6 +146,7 @@ struct MapScreen: View {
     @State private var mapSearchTask: Task<Void, Never>?
     @State private var mapFilterState: MapFilterState
     @State private var isMoreFiltersPresented: Bool
+    @State private var mapTabBecameInactiveAt: Date?
     @State private var routedVisiblePlace: VisiblePlace?
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var featuredRankingRegion = Self.defaultRegion
@@ -176,6 +177,9 @@ struct MapScreen: View {
 
     private let initialPlaceQuery: String?
     private let defaultMapSource: MapSource
+    private let isMapTabActive: Bool
+    private let isAddPresented: Bool
+    private let moreFiltersAwayResetInterval: TimeInterval
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let searchLaunchRequest: WanderMapSearchLaunchRequest?
     private let onSearchLaunchRequestHandled: (UUID) -> Void
@@ -214,6 +218,9 @@ struct MapScreen: View {
         initialPlaceQuery: String? = Self.resolvedInitialMapPlaceQuery(),
         startsExpanded: Bool = Self.resolvedInitialPlaceProfilePresentation(),
         defaultSource: MapSource = .featured,
+        isMapTabActive: Bool = true,
+        isAddPresented: Bool = false,
+        moreFiltersAwayResetInterval: TimeInterval = Self.resolvedMoreFiltersAwayResetInterval(),
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         searchLaunchRequest: WanderMapSearchLaunchRequest? = nil,
         onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
@@ -222,6 +229,9 @@ struct MapScreen: View {
         self.initialPlaceQuery = initialPlaceQuery
         let initialMapFilterState = Self.resolvedInitialMapFilterState(defaultSource: defaultSource)
         self.defaultMapSource = initialMapFilterState.source
+        self.isMapTabActive = isMapTabActive
+        self.isAddPresented = isAddPresented
+        self.moreFiltersAwayResetInterval = moreFiltersAwayResetInterval
         self.presentationResetRequest = presentationResetRequest
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
@@ -230,6 +240,7 @@ struct MapScreen: View {
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
         _mapFilterState = State(initialValue: initialMapFilterState)
         _isMoreFiltersPresented = State(initialValue: Self.resolvedInitialMoreFiltersPresentation())
+        _mapTabBecameInactiveAt = State(initialValue: nil)
         _routedVisiblePlace = State(initialValue: nil)
     }
 
@@ -459,7 +470,10 @@ struct MapScreen: View {
                                     systemImage: "plus",
                                     accessibilityLabel: "Add a place",
                                     accessibilityIdentifier: "map.headerAdd",
-                                    action: onAdd
+                                    action: {
+                                        dismissMoreFilters()
+                                        onAdd()
+                                    }
                                 )
                                 .walkthroughTarget(
                                     walkthroughs.currentStep?.target == .mapAddAgain
@@ -518,7 +532,9 @@ struct MapScreen: View {
                                 }
 
                                 Button {
-                                    isMoreFiltersPresented.toggle()
+                                    withAnimation(.easeInOut(duration: 0.16)) {
+                                        isMoreFiltersPresented.toggle()
+                                    }
                                 } label: {
                                     MapMoreFilterChip(
                                         activeSectionCount: mapFilterState.more.activeSectionCount,
@@ -529,25 +545,27 @@ struct MapScreen: View {
                                 .frame(maxWidth: .infinity)
                                 .accessibilityIdentifier("map.filter.more")
                                 .walkthroughTarget(.mapMoreFilters)
-                                .popover(
-                                    isPresented: $isMoreFiltersPresented,
-                                    attachmentAnchor: .rect(.bounds),
-                                    arrowEdge: .top
-                                ) {
+                            }
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.vertical, WanderTheme.spacing1)
+                            .frame(height: 48)
+                            .overlay(alignment: .topTrailing) {
+                                if isMoreFiltersPresented {
                                     MapMoreFiltersPopover(
                                         selection: moreFilterSelection,
                                         source: mapFilterState.source,
                                         peopleOptions: socialOwnerOptions,
-                                        dismiss: { isMoreFiltersPresented = false }
+                                        dismiss: dismissMoreFilters
                                     )
                                     .id(mapFilterState.source)
-                                    .presentationCompactAdaptation(.popover)
+                                    .padding(.trailing, WanderTheme.spacing3)
+                                    .offset(y: 52)
+                                    .transition(.move(edge: .top).combined(with: .opacity))
+                                    .zIndex(20)
                                 }
                             }
+                            .zIndex(isMoreFiltersPresented ? 20 : 0)
                             .walkthroughTarget(.mapFeatured)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .padding(.vertical, WanderTheme.spacing1)
-                            .frame(height: 48)
 
                             if let mapFilterEmptyMessage {
                                 MapFilterEmptyNotice(
@@ -573,6 +591,7 @@ struct MapScreen: View {
                         HStack {
                             Spacer()
                             RecenterButton(isLoading: isRecenteringOnUser) {
+                                dismissMoreFilters()
                                 recenterOnUser()
                             }
                             .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
@@ -592,6 +611,19 @@ struct MapScreen: View {
             .onAppear {
                 resolveInitialSelection()
                 resolveInitialSearchIfNeeded()
+            }
+            .onChange(of: isMapTabActive) { _, isActive in
+                handleMapTabActivityChange(isActive, from: annotationGroups)
+            }
+            .onChange(of: isAddPresented) { _, isPresented in
+                if isPresented {
+                    dismissMoreFilters()
+                }
+            }
+            .onChange(of: isMapSearchFocused) { _, isFocused in
+                if isFocused {
+                    dismissMoreFilters()
+                }
             }
             .task {
                 await centerMapOnCurrentCityIfNeeded()
@@ -869,11 +901,40 @@ struct MapScreen: View {
         _ source: MapSource,
         from outgoingGroups: [VisiblePlaceGroup]
     ) {
-        guard mapFilterState.source != source else { return }
-        routedVisiblePlace = nil
-        isMoreFiltersPresented = false
+        dismissMoreFilters()
+        let previousState = mapFilterState
         mapFilterState.selectSource(source)
+        guard mapFilterState != previousState else { return }
+        routedVisiblePlace = nil
         transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
+    }
+
+    private func dismissMoreFilters() {
+        guard isMoreFiltersPresented else { return }
+        withAnimation(.easeInOut(duration: 0.16)) {
+            isMoreFiltersPresented = false
+        }
+    }
+
+    private func handleMapTabActivityChange(
+        _ isActive: Bool,
+        from outgoingGroups: [VisiblePlaceGroup],
+        now: Date = .now
+    ) {
+        dismissMoreFilters()
+        guard isActive else {
+            mapTabBecameInactiveAt = now
+            return
+        }
+
+        defer { mapTabBecameInactiveAt = nil }
+        guard MapMoreFilterResetPolicy.shouldResetAfterReturning(
+            leftMapAt: mapTabBecameInactiveAt,
+            returnedAt: now,
+            interval: moreFiltersAwayResetInterval
+        ) else { return }
+
+        setMoreFilterSelection(MapMoreFilterSelection(), from: outgoingGroups)
     }
 
     private func setMoreFilterSelection(
@@ -977,6 +1038,7 @@ struct MapScreen: View {
     }
 
     private func selectVisiblePlaceFromMapTap(_ visiblePlace: VisiblePlace) {
+        dismissMoreFilters()
         mapSelectionRevision += 1
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
@@ -987,6 +1049,7 @@ struct MapScreen: View {
     }
 
     private func selectSearchCandidateFromMapTap(_ candidate: PlaceCandidate) {
+        dismissMoreFilters()
         mapSelectionRevision += 1
         routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
@@ -998,6 +1061,7 @@ struct MapScreen: View {
     }
 
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
+        dismissMoreFilters()
         if ignoreNextMapTap {
             ignoreNextMapTap = false
             return
@@ -1678,6 +1742,9 @@ struct MapScreen: View {
     }
 
     private func handleMapFeatureSelection(_ feature: MapFeature?) {
+        if feature != nil {
+            dismissMoreFilters()
+        }
         guard let feature else {
             if ignoreNextMapFeatureClear {
                 ignoreNextMapFeatureClear = false
@@ -2686,6 +2753,22 @@ struct MapScreen: View {
         arguments.contains("-WanderMapMoreFiltersOpen")
     }
 
+    static func resolvedMoreFiltersAwayResetInterval(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> TimeInterval {
+        guard let flagIndex = arguments.firstIndex(of: "-WanderMapMoreFiltersAwayResetSeconds") else {
+            return MapMoreFilterResetPolicy.otherTabInterval
+        }
+        let valueIndex = arguments.index(after: flagIndex)
+        guard arguments.indices.contains(valueIndex),
+              let interval = TimeInterval(arguments[valueIndex]),
+              interval >= 0
+        else {
+            return MapMoreFilterResetPolicy.otherTabInterval
+        }
+        return interval
+    }
+
     static func coordinateCandidate(at coordinate: CLLocationCoordinate2D) -> PlaceCandidate {
         let display = coordinateDisplay(for: coordinate)
         let latitude = Int((coordinate.latitude * 100_000).rounded())
@@ -2763,6 +2846,19 @@ enum MapMoreFilterPolicy {
     static func categories(showingAll: Bool) -> [String] {
         guard !showingAll else { return WanderPlaceCategory.editableCategories }
         return Array(WanderPlaceCategory.editableCategories.prefix(collapsedCategoryCount))
+    }
+}
+
+enum MapMoreFilterResetPolicy {
+    static let otherTabInterval: TimeInterval = 3 * 60
+
+    static func shouldResetAfterReturning(
+        leftMapAt: Date?,
+        returnedAt: Date,
+        interval: TimeInterval = otherTabInterval
+    ) -> Bool {
+        guard let leftMapAt else { return false }
+        return returnedAt.timeIntervalSince(leftMapAt) >= interval
     }
 }
 
@@ -2912,7 +3008,6 @@ struct MapFilterState: Equatable {
     }
 
     mutating func selectSource(_ source: MapSource) {
-        guard self.source != source else { return }
         self.source = source
         more = MapMoreFilterSelection()
     }
@@ -3690,9 +3785,10 @@ private struct MapSourceFilterChip: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing1) {
+        HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: source.systemImage)
                 .font(.system(size: 11, weight: .bold))
+                .frame(width: 14)
             Text(source.title)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
@@ -3721,19 +3817,20 @@ private struct MapMoreFilterChip: View {
     }
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing1) {
+        HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: isExpanded ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
                 .font(.system(size: 11, weight: .bold))
                 .overlay(alignment: .topTrailing) {
                     if activeSectionCount > 0 {
                         Text("\(activeSectionCount)")
-                            .font(.system(size: 8, weight: .black))
-                            .foregroundStyle(WanderTheme.surfaceBone.color)
-                            .frame(width: 14, height: 14)
-                            .background(WanderTheme.terracotta.color, in: Circle())
-                            .offset(x: 8, y: -7)
+                            .font(.system(size: 7, weight: .black))
+                            .foregroundStyle(.white)
+                            .frame(width: 12, height: 12)
+                            .background(Color(uiColor: .systemRed), in: Circle())
+                            .offset(x: 6, y: -5)
                     }
                 }
+                .frame(width: 16, height: 18)
             Text("More")
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
@@ -3813,11 +3910,9 @@ private struct MapMoreFiltersPopover: View {
                                 Image(systemName: showsAllCategories ? "chevron.up" : "chevron.down")
                                     .font(.system(size: 10, weight: .black))
                             }
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(WanderTheme.terracottaDark.color)
                             .frame(maxWidth: .infinity, minHeight: 44)
-                            .background(WanderTheme.terracottaTint.color, in: Capsule())
-                            .overlay(Capsule().stroke(WanderTheme.terracotta.color, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("map.more.categories.expand")
@@ -3885,7 +3980,12 @@ private struct MapMoreFiltersPopover: View {
             .padding(WanderTheme.spacing4)
         }
         .frame(width: 330, height: source == .featured ? 360 : 470)
-        .background(WanderTheme.surfaceBone.color)
+        .background(
+            WanderTheme.surfaceBone.color,
+            in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+        .shadow(color: WanderTheme.textInk.color.opacity(0.16), radius: 18, x: 0, y: 10)
         .accessibilityIdentifier("map.moreFilters.popover")
     }
 
