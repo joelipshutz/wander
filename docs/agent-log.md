@@ -30124,3 +30124,43 @@ Checkpoint — 2026-08-16 04:06 PDT:
   scoring path correctly forces `DEFER` on an otherwise valid synthetic score
   set when community evidence is insufficient, syntax checks pass, and
   `git diff --check` passes.
+
+Checkpoint — 2026-08-16 04:30 PDT:
+
+- Joe completed the Featured blind pass by voice. Captured 65 numeric personal-
+  taste judgments and one honest unknown across all 66 pooled rows. Reused a
+  judgment only for the same place within the same named map context; duplicate
+  display records received the same grade. Viewer-specific scores and machine
+  artifacts remain ignored under
+  `/Users/joelipshutz/Developer/Wander (nametbd)/tmp/recme-relevance-eval/`.
+- Extended the scorer to accept `X` for unknown. It excludes the whole
+  incomplete scenario from judged ranking metrics, reports the exclusion, and
+  blocks promotion instead of coercing unfamiliarity to grade zero. The only
+  actual-sparse scenario was excluded because one place was unknown, leaving
+  eight scoreable scenarios.
+- Blind result: current explicit baseline 82.9% nDCG@5 and 100% ideal-at-one;
+  network-only 49.5%; fixed blend 77.1%; density-aware 79.5%; density-aware plus
+  place semantics 73.0%. Density-aware regressed the scoreable sparse/empty/
+  cold-start aggregate by 3.2 points and dense by 2.4; semantics regressed a
+  further 2.5 and 11.8 points. Every policy had 100% top-10 small-pan overlap;
+  local ranking p95 was 0.61 ms with no privacy violations.
+- Decision remains `DEFER`: retain the current explicit Featured baseline and
+  anonymous community fallback, do not ship network-only, density-aware
+  retuning, place-semantic Featured ranking, or people embeddings. This does not
+  revoke the separately validated semantic candidate provider for text Search.
+  The real snapshot still has only six community-only places (6.7%) and no
+  actual sparse mixed-source viewport.
+- The grading pass exposed an evaluator-only physical-grouping parity gap: one
+  same-name/same-coordinate place appeared under conflicting provider ids even
+  though the app already groups nearby same-name aliases. Updated the evaluator
+  to use the app's 0.001-degree nearby-coordinate bucket before contributor
+  aggregation. A same-name trail at two materially different coordinates stays
+  distinct pending stronger identity evidence.
+- Added a tracked aggregate scorecard and updated the architecture plan,
+  decisions, evaluator documentation, HTML grader, and tests. The next generated
+  pool is version `featured-offline-v4` with a first-class unknown control and a
+  fresh local-storage key.
+- Validation: 26/26 relevance tests pass, syntax checks pass, local scoring
+  reproduced the aggregate report, and `git diff --check` passes. Mission
+  Control task `89e7babf-6f61-484b-a284-b769a4841d59` tracks the continuation;
+  REC-225 and PR #427 remain the durable issue/PR handoff.

@@ -53,8 +53,9 @@ function allOrders({ current = worse, density = better, semantic = better } = {}
 }
 
 test("Featured score parser requires stable scenario/label lines", () => {
-  const parsed = parseFeaturedScores("featured-q01:A=3\nfeatured-q01:B=0\n");
+  const parsed = parseFeaturedScores("featured-q01:A=3\nfeatured-q01:B=0\nfeatured-q01:C=X\n");
   assert.equal(parsed.get("featured-q01:A"), 3);
+  assert.equal(parsed.get("featured-q01:C"), null);
   assert.throws(() => parseFeaturedScores("featured-qx:A=3"), /Invalid Featured score/);
 });
 
@@ -114,5 +115,29 @@ test("Featured scorecard applies quality, privacy, latency, and pan gates", () =
     thinCorpusScorecard.decision.densityDecision,
     "defer",
     "simulated fallback slices cannot promote a policy without real community coverage",
+  );
+
+  const unknownLines = lines.map((line) => (
+    line.startsWith("featured-q02:A=") ? "featured-q02:A=X" : line
+  ));
+  const incompleteScorecard = scoreFeaturedPool({
+    key: {
+      judgedRank: 5,
+      stats: {},
+      preflight: { communityEvidenceReady: true },
+      scenarios,
+    },
+    scores: parseFeaturedScores(unknownLines.join("\n")),
+  });
+  assert.equal(incompleteScorecard.unknownJudgmentCount, 1);
+  assert.equal(incompleteScorecard.scoredScenarioCount, scenarios.length - 1);
+  assert.deepEqual(incompleteScorecard.excludedScenarios, [{
+    id: "featured-q02",
+    unknownCandidates: ["A"],
+  }]);
+  assert.equal(
+    incompleteScorecard.decision.densityDecision,
+    "defer",
+    "an incomplete blind scenario cannot promote a policy",
   );
 });

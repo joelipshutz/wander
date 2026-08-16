@@ -47,6 +47,29 @@ test("trusted rows contribute only opaque relationship while own rows may add st
   assert.equal(JSON.stringify(place).includes("private-user-id"), false);
 });
 
+test("same physical place merges across conflicting provider identities", () => {
+  const places = sanitizeFeaturedRows([
+    row(),
+    row({
+      place_id: "place-2",
+      source_provider: "google",
+      source_provider_place_id: "google-place-2",
+      contributor_id: "second-private-id",
+      latitude: 34.0102,
+      longitude: -118.4902,
+    }),
+    row({
+      place_id: "place-3",
+      source_provider: "google",
+      source_provider_place_id: "google-place-3",
+      contributor_id: "third-private-id",
+      latitude: 34.02,
+    }),
+  ]);
+  assert.equal(places.length, 2);
+  assert.equal(places.find(({ id }) => id === "place-1").communitySupport, 2);
+});
+
 test("taste rows use only canonical facts and approved non-text attributes", () => {
   const [place] = sanitizeTasteRows([{
     place_id: "taste-1",

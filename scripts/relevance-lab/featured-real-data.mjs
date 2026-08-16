@@ -149,7 +149,20 @@ function opaqueContributorID(value) {
   return `contributor-${createHash("sha256").update(String(value)).digest("hex").slice(0, 12)}`;
 }
 
+function keyPart(value) {
+  return String(value).toLocaleLowerCase().normalize("NFKD").replace(/[^a-z0-9.-]+/g, "");
+}
+
 function canonicalKey(row) {
+  const latitude = Number(row.latitude);
+  const longitude = Number(row.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    const latitudeBucket = (Math.round(latitude * 1_000) / 1_000).toFixed(3);
+    const longitudeBucket = (Math.round(longitude * 1_000) / 1_000).toFixed(3);
+    return ["physical", row.canonical_name, latitudeBucket, longitudeBucket]
+      .map(keyPart)
+      .join("|");
+  }
   if (row.source_provider && row.source_provider_place_id) {
     return `${row.source_provider}:${row.source_provider_place_id}`.toLocaleLowerCase();
   }
@@ -160,7 +173,7 @@ function canonicalKey(row) {
     Number(row.latitude).toFixed(4),
     Number(row.longitude).toFixed(4),
   ]
-    .map((value) => String(value).toLocaleLowerCase().normalize("NFKD").replace(/[^a-z0-9.-]+/g, ""))
+    .map(keyPart)
     .join("|");
 }
 

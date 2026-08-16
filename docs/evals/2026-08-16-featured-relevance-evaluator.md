@@ -40,6 +40,11 @@ The generator requires an explicit real viewer handle. It reads in one hosted re
 
 The blind page exposes place name, category, and coarse area so the judge can assess usefulness. It hides policy order, source membership, network density, contributor identity, and rank provenance.
 
+The score format also accepts `X` for an honestly unknown place. Any scenario
+containing an unknown is excluded from judged ranking metrics, the exclusion is
+reported, and the promotion gate remains closed. Unknown is never coerced to
+grade `0`, because unfamiliarity is not evidence that a recommendation is bad.
+
 Generation fails closed through an automated preflight. Every dense/sparse
 label is checked against the confidence calculated from all candidates actually
 inside that viewport, rather than the locality bucket that proposed the

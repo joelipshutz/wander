@@ -43,11 +43,11 @@ export function parseFeaturedScores(contents) {
   for (const [index, rawLine] of contents.split(/\r?\n/).entries()) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
-    const match = /^(featured-q\d+):([A-L])=([0-3])$/.exec(line);
+    const match = /^(featured-q\d+):([A-L])=([0-3Xx])$/.exec(line);
     if (!match) throw new Error(`Invalid Featured score on line ${index + 1}: ${rawLine}`);
     const key = `${match[1]}:${match[2]}`;
     if (scores.has(key)) throw new Error(`Duplicate Featured score: ${key}`);
-    scores.set(key, Number(match[3]));
+    scores.set(key, match[3].toUpperCase() === "X" ? null : Number(match[3]));
   }
   return scores;
 }
@@ -152,7 +152,18 @@ function panOverlapByPipeline(scenarios) {
 export function scoreFeaturedPool({ key, scores }) {
   validateScores(key, scores);
   const judgedRank = Number(key.judgedRank ?? 5);
-  const perScenario = key.scenarios.map((scenario) => {
+  const excludedScenarios = key.scenarios.flatMap((scenario) => {
+    const unknownCandidates = scenario.candidates
+      .filter((candidate) => scores.get(`${scenario.id}:${candidate.label}`) == null)
+      .map((candidate) => candidate.label);
+    return unknownCandidates.length === 0 ? [] : [{ id: scenario.id, unknownCandidates }];
+  });
+  const excludedScenarioIds = new Set(excludedScenarios.map(({ id }) => id));
+  const scoredScenarios = key.scenarios.filter(({ id }) => !excludedScenarioIds.has(id));
+  if (scoredScenarios.length === 0) {
+    throw new Error("Featured scores do not contain one fully judged scenario.");
+  }
+  const perScenario = scoredScenarios.map((scenario) => {
     const relevance = Object.fromEntries(scenario.candidates.map((candidate) => [
       candidate.placeId,
       scores.get(`${scenario.id}:${candidate.label}`),
@@ -218,11 +229,13 @@ export function scoreFeaturedPool({ key, scores }) {
     ? null
     : panOverlap.densityAware - panOverlap.densitySemantic;
   const communityEvidenceReady = key.preflight?.communityEvidenceReady ?? true;
+  const judgmentCoverageReady = excludedScenarios.length === 0;
   const sharedGate = privacyFailures === 0
     && duplicateFailures === 0
     && rankLatencyP95Ms != null
     && rankLatencyP95Ms < 50
-    && communityEvidenceReady;
+    && communityEvidenceReady
+    && judgmentCoverageReady;
   const densityDecision = sharedGate
     && densitySparseEmptyGain >= 0.05
     && densityDenseRegression <= 0.02
@@ -239,8 +252,11 @@ export function scoreFeaturedPool({ key, scores }) {
     : "defer";
 
   return {
-    judgmentCount: scores.size,
-    scenarioCount: perScenario.length,
+    judgmentCount: [...scores.values()].filter((score) => score != null).length,
+    unknownJudgmentCount: [...scores.values()].filter((score) => score == null).length,
+    scenarioCount: key.scenarios.length,
+    scoredScenarioCount: perScenario.length,
+    excludedScenarios,
     pipelines,
     slices,
     perScenario,
@@ -250,6 +266,7 @@ export function scoreFeaturedPool({ key, scores }) {
       duplicateFailures,
       rankLatencyP95Ms,
       communityEvidenceReady,
+      judgmentCoverageReady,
       communityOnlyPlaces: Number(key.stats?.communityOnlyPlaces ?? 0),
       communityOnlyRate: key.preflight?.communityOnlyRate ?? null,
       actualSparseMixedSourceScenarios:
@@ -272,7 +289,7 @@ export function scoreFeaturedPool({ key, scores }) {
 
 export function renderFeaturedScorecard({ key, scorecard }) {
   const labels = {
-    current: "Shipped Featured baseline",
+    current: "Current explicit baseline",
     networkOnly: "Trusted network only",
     fixedBlend: "Fixed network/community blend",
     densityAware: "Density-aware blend",
@@ -283,7 +300,7 @@ export function renderFeaturedScorecard({ key, scorecard }) {
     "",
     `Generated: ${new Date().toISOString()}`,
     "",
-    `Blind pool: ${scorecard.judgmentCount} judgments across ${scorecard.scenarioCount} real viewer-plus-viewport scenarios. Snapshot: ${key.stats.candidatePlaces} eligible places, ${key.stats.candidateSaves} privacy-eligible Been saves, and ${key.stats.tastePlaces} positive/Wanna taste places.`,
+    `Blind pool: ${scorecard.judgmentCount} numeric judgments and ${scorecard.unknownJudgmentCount} explicit unknown${scorecard.unknownJudgmentCount === 1 ? "" : "s"}. Scored ${scorecard.scoredScenarioCount} of ${scorecard.scenarioCount} real viewer-plus-viewport scenarios. Snapshot: ${key.stats.candidatePlaces} eligible places, ${key.stats.candidateSaves} privacy-eligible Been saves, and ${key.stats.tastePlaces} positive/Wanna taste places.`,
     "",
     "## Outcome",
     "",
@@ -298,6 +315,8 @@ export function renderFeaturedScorecard({ key, scorecard }) {
     `Guardrails: ${scorecard.guardrails.privacyFailures} privacy failures, ${scorecard.guardrails.duplicateFailures} duplicate failures, local ranking p95 ${milliseconds(scorecard.guardrails.rankLatencyP95Ms)}.`,
     "",
     `Community evidence: **${scorecard.guardrails.communityEvidenceReady ? "READY" : "INSUFFICIENT"}** — ${scorecard.guardrails.communityOnlyPlaces} real community-only places (${percentage(scorecard.guardrails.communityOnlyRate)}) and ${scorecard.guardrails.actualSparseMixedSourceScenarios} actual sparse mixed-source scenarios. Simulated thin/empty slices are directional and cannot independently earn KEEP.`,
+    "",
+    `Judgment coverage: **${scorecard.guardrails.judgmentCoverageReady ? "COMPLETE" : "INCOMPLETE"}**${scorecard.excludedScenarios.length === 0 ? "." : ` — excluded ${scorecard.excludedScenarios.map(({ id, unknownCandidates }) => `${id} (${unknownCandidates.join(", ")})`).join("; ")} rather than treating unknown places as irrelevant.`}`,
     "",
     "People-vector decision remains **DEFER**. This benchmark uses explicit graph and taste evidence, not learned people embeddings.",
     "",
@@ -336,7 +355,8 @@ export function renderFeaturedScorecard({ key, scorecard }) {
     "## Limits",
     "",
     "- This is one viewer/judge and a small real corpus. It is an architecture promotion gate, not a population-level recommendation benchmark.",
-    "- Every top-five candidate from every policy was pooled and judged. Source-mix, contributor-diversity, geographic-dispersion, latency, privacy, duplicate, and pan metrics use the full bounded top-24 output.",
+    "- Every top-five candidate from every policy was pooled. A scenario with any explicit unknown judgment is excluded from judged ranking metrics rather than converting missing knowledge into a false relevance grade; incomplete coverage blocks policy promotion.",
+    "- Source-mix, contributor-diversity, geographic-dispersion, latency, privacy, duplicate, and pan metrics use the full bounded top-24 output.",
     "- Empty-network and cold-start slices intentionally mask the real viewer's network, while retaining the same privacy-eligible canonical corpus. They test fallback behavior without inventing places or stranger content.",
     "- Offline ranking latency excludes mobile networking and rendering. Production implementation still needs RPC p50/p95 and no-flicker map instrumentation.",
     "- A KEEP result approves only a bounded implementation trial behind a policy/provider flag. It does not approve people embeddings, LLM ranking, or an unconditional production rollout.",

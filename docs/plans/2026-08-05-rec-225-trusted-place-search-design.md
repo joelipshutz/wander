@@ -537,3 +537,30 @@ Report overall and slice-level ranking quality, ideal/useful top slots, trusted-
 ### Scope of this addendum
 
 This addendum defines how Featured uses the REC-225 platform and how it must be evaluated. It does not itself change the Map UI, current hosted schema or RPCs, build number, or TestFlight release. It also does not enable pgvector or people embeddings. Those remain separately reviewed implementation slices behind the provider and policy seams.
+
+### Offline Featured outcome — 2026-08-16
+
+The first blind real-corpus run did not justify replacing the explicit Featured
+baseline. Sixty-five numeric judgments scored eight complete scenarios; one
+honest unknown excluded the only actual-sparse scenario instead of becoming a
+false zero. The baseline reached 82.9% nDCG@5 and 100% ideal-at-one, versus
+49.5% for network-only, 77.1% for a fixed blend, 79.5% for density-aware, and
+73.0% for density-aware plus place semantics. Density-aware ranking regressed
+the sparse/empty aggregate by 3.2 points and dense by 2.4 points; semantics
+regressed another 2.5 and 11.8 points respectively.
+
+Therefore the platform seams remain approved, but neither proposed Featured
+policy is. Keep the current explicit relationship, structured-taste, aggregate
+support/rating, and recency score. Community fallback remains necessary—network
+only produced no coverage in empty/cold-start simulations—but it should not be
+retuned from this corpus. Do not use place vectors for queryless Featured taste
+ranking. The separately validated semantic candidate provider remains available
+for text Search only.
+
+Rerun before changing Featured weights after the corpus meets the predeclared
+community-evidence gate and has multiple judges. The evaluator now treats
+unknown as an excluded scenario that blocks promotion and groups same-name,
+nearby-coordinate cross-provider records before ranking, matching the app's
+physical-place coordinate bucket. The first pool exposed
+both weaknesses, so its result is a conservative `DEFER`, not a calibrated
+production-weight recommendation.

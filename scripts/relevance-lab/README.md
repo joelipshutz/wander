@@ -42,7 +42,7 @@ npm --prefix scripts run relevance:score-real -- \
   --write-json scripts/relevance-lab/output/real-scorecard.json
 ```
 
-The scorer requires one grade for every pooled candidate and reconstructs each hidden top-five ranking from the machine key. It reports nDCG@5 plus simple top-result and wrong-result guardrails. Scoring is entirely local; the judgments and machine key remain ignored.
+The scorer requires one response for every pooled candidate and reconstructs each hidden top-five ranking from the machine key. Use `0`–`3` for a real judgment or `X` when the judge does not know the place well enough to grade it. A scenario containing `X` is excluded from judged ranking metrics rather than treating unknown as irrelevant, and incomplete coverage blocks policy promotion. The scorer reports nDCG@5 plus simple top-result and wrong-result guardrails. Scoring is entirely local; the judgments and machine key remain ignored.
 
 ## Decision rule
 
@@ -69,7 +69,7 @@ npm --prefix scripts run relevance:prepare-featured-real -- \
   --viewer-handle <your-recme-handle>
 ```
 
-The ignored output folder receives `featured-judgments.html`, a Markdown fallback, and `featured-pool-key.json`. Candidate order is randomized and policy/source order is hidden. Grade each place according to the viewer's taste and whether it is a useful Featured pin in the named map area; there is deliberately no query.
+The ignored output folder receives `featured-judgments.html`, a Markdown fallback, and `featured-pool-key.json`. Candidate order is randomized and policy/source order is hidden. Grade each place according to the viewer's taste and whether it is a useful Featured pin in the named map area; there is deliberately no query. Use `X` when the judge genuinely does not know a place. The scorer excludes that whole scenario from judged ranking metrics and prevents a `KEEP` decision until coverage is complete, instead of silently turning uncertainty into a zero.
 
 Generation fails closed unless the machine-readable preflight confirms honest density labels, at least one actual sparse viewport, a mixed network/community sparse result, complete blind coverage of every policy's top five, policy separation, complete pan pairs, zero privacy/duplicate failures, and local ranking p95 below 50 ms. Re-run that check without Supabase or embedding calls at any time:
 

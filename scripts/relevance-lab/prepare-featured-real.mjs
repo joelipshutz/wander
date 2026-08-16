@@ -117,6 +117,7 @@ function renderJudgments({ experiments, candidates, stats, embedding }) {
     "- `2` — good and useful Featured pin",
     "- `1` — weak filler but defensible",
     "- `0` — wrong, unhelpful, or misleading",
+    "- `X` — you do not know the place well enough to judge",
     "",
     "Judge according to your taste and the map area, not retrieval source or general fame. There is no text query. Candidate order is randomized and every retrieval policy is hidden.",
     "",
@@ -125,7 +126,7 @@ function renderJudgments({ experiments, candidates, stats, embedding }) {
   ];
   const key = {
     generatedAt: new Date().toISOString(),
-    policyVersion: "featured-offline-v3",
+    policyVersion: "featured-offline-v4",
     judgedRank,
     stats,
     embedding: {
@@ -208,7 +209,7 @@ function renderHtml({ key, candidates }) {
     const rows = scenario.candidates.map((candidate) => {
       const place = placesById.get(candidate.placeId);
       const name = `${scenario.id}:${candidate.label}`;
-      const buttons = [0, 1, 2, 3].map((grade) => `
+      const buttons = [0, 1, 2, 3, "X"].map((grade) => `
         <label class="grade grade-${grade}">
           <input type="radio" name="${escapeHtml(name)}" value="${grade}" data-judgment>
           <span>${grade}</span>
@@ -265,14 +266,14 @@ function renderHtml({ key, candidates }) {
     <h1>Real rec.me Featured judgments</h1>
     <p>Grade how useful each place would be as a Featured pin for you in the shown map area. There is no query.</p>
     <p>Use your taste and the place's genuine usefulness. Do not reward fame by itself. Candidate order is randomized and every retrieval policy is hidden.</p>
-    <p class="rubric"><strong>3</strong> ideal · <strong>2</strong> good · <strong>1</strong> weak filler · <strong>0</strong> wrong</p>
+    <p class="rubric"><strong>3</strong> ideal · <strong>2</strong> good · <strong>1</strong> weak filler · <strong>0</strong> wrong · <strong>X</strong> unknown</p>
   </header>
   ${cards}
   <div class="bar"><div class="bar-inner"><span id="status">0 complete</span><button id="copy" type="button">Copy completed scores</button></div></div>
   <script>
     const inputs = [...document.querySelectorAll('[data-judgment]')];
     const groups = [...new Set(inputs.map(input => input.name))];
-    const storageKey = 'recme-featured-relevance-v3';
+    const storageKey = 'recme-featured-relevance-v4';
     const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
     for (const input of inputs) if (saved[input.name] === input.value) input.checked = true;
     const update = () => {
