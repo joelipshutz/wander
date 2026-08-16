@@ -1076,15 +1076,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
     }
 
-    func testDisplayTypographyIsLimitedToPrimaryTabHeaders() throws {
+    func testDisplayTypographyCoversPrimaryTabsAndMajorSectionHeadings() throws {
         let theme = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
         )
-        let screens = [
-            "map": "Wander/Features/Map/MapScreen.swift",
-            "feed": "Wander/Features/Feed/FeedScreen.swift",
-            "lists": "Wander/Features/Lists/ListsScreen.swift",
-            "@\\(profile.handle)": "Wander/Features/Profile/ProfileOwnerHome.swift"
+        let screens: [(title: String, path: String, sectionHeadingCount: Int)] = [
+            ("map", "Wander/Features/Map/MapScreen.swift", 0),
+            ("feed", "Wander/Features/Feed/FeedScreen.swift", 1),
+            ("lists", "Wander/Features/Lists/ListsScreen.swift", 0),
+            ("@\\(profile.handle)", "Wander/Features/Profile/ProfileOwnerHome.swift", 3)
         ]
 
         XCTAssertTrue(theme.contains("enum WanderDisplayFont"))
@@ -1094,7 +1094,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(theme.contains("static let displaySectionTitle"))
         XCTAssertTrue(theme.contains("static let displayCardTitle"))
 
-        for (title, path) in screens {
+        for screen in screens {
+            let title = screen.title
+            let path = screen.path
             let source = try String(contentsOf: projectRoot.appendingPathComponent(path))
             XCTAssertEqual(
                 source.components(separatedBy: "WanderTabHeaderLabel(").count - 1,
@@ -1103,9 +1105,27 @@ final class NavigationContractTests: XCTestCase {
             )
             XCTAssertTrue(source.contains("WanderTabHeaderLabel(title: \"\(title)\")"))
             XCTAssertFalse(source.contains("WanderTypography.displayHero"))
-            XCTAssertFalse(source.contains("WanderTypography.displaySectionTitle"))
+            XCTAssertEqual(
+                source.components(separatedBy: "WanderTypography.displaySectionTitle").count - 1,
+                screen.sectionHeadingCount
+            )
             XCTAssertFalse(source.contains("WanderTypography.displayCardTitle"))
         }
+
+        let profileImport = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/ProfileImportViews.swift"
+            )
+        )
+        XCTAssertEqual(
+            profileImport.components(separatedBy: "WanderTypography.displaySectionTitle").count - 1,
+            2
+        )
+
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        XCTAssertTrue(lists.contains("WanderTypography.editorialNamedContent"))
     }
 
     func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
@@ -1194,7 +1214,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(discoverSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
 
         XCTAssertTrue(profile.contains("Text(profile.displayName)\n                        .font(.system(size: 18, weight: .bold))"))
-        XCTAssertEqual(profile.components(separatedBy: "WanderTypography.editorialMajorSectionTitle").count - 1, 3)
+        XCTAssertEqual(profile.components(separatedBy: "WanderTypography.editorialMajorSectionTitle").count - 1, 0)
+        XCTAssertEqual(profile.components(separatedBy: "WanderTypography.displaySectionTitle").count - 1, 3)
         let profileStreak = try XCTUnwrap(
             profile.components(separatedBy: "private struct ProfileSaveStreakRow: View").last?
                 .components(separatedBy: "#if DEBUG").first
@@ -1202,6 +1223,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(profileStreak.contains("editorialMasthead"))
         XCTAssertFalse(profileStreak.contains("editorialNamedContent"))
         XCTAssertFalse(profileStreak.contains("editorialMajorSectionTitle"))
+        XCTAssertFalse(profileStreak.contains("displaySectionTitle"))
 
         for source in [feed, streak] {
             XCTAssertFalse(source.contains("editorialMasthead"))
