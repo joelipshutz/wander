@@ -494,12 +494,26 @@ final class OnboardingUITests: XCTestCase {
         }
         XCTAssertTrue(done.isHittable)
         done.tap()
+        XCTAssertTrue(popover.waitForNonExistence(timeout: 2))
 
         let more = app.buttons["map.filter.more"]
-        XCTAssertTrue((more.value as? String)?.contains("1 selected filter") == true)
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@", "1 selected filter"),
+            evaluatedWith: more
+        )
+        waitForExpectations(timeout: 2)
 
-        app.buttons["map.filter.you"].tap()
-        XCTAssertTrue((more.value as? String)?.contains("No additional filters") == true)
+        let you = app.buttons["map.filter.you"]
+        you.tap()
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@", "Selected"),
+            evaluatedWith: you
+        )
+        expectation(
+            for: NSPredicate(format: "value CONTAINS %@", "No additional filters"),
+            evaluatedWith: more
+        )
+        waitForExpectations(timeout: 2)
         more.tap()
         XCTAssertTrue(popover.waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Categories"].exists)
