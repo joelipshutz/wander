@@ -332,11 +332,9 @@ struct MapScreen: View {
                             UserAnnotation()
                         }
 
-                        ForEach(annotationGroups) { group in
+                        ForEach(Array(annotationGroups.enumerated()), id: \.element.key) { index, group in
                             let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
-                            let entranceDelay = MapPinEntranceStyle.staggerDelay(
-                                for: annotationGroups.firstIndex(where: { $0.key == group.key }) ?? 0
-                            )
+                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -366,12 +364,10 @@ struct MapScreen: View {
                             }
                         }
 
-                        ForEach(mappableSearchCandidates) { candidate in
+                        ForEach(Array(mappableSearchCandidates.enumerated()), id: \.element.id) { index, candidate in
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
-                                let entranceDelay = MapPinEntranceStyle.staggerDelay(
-                                    for: mappableSearchCandidates.firstIndex(where: { $0.id == candidate.id }) ?? 0
-                                )
+                                let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
                                 Annotation(
                                     candidate.name,
                                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
