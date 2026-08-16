@@ -1,0 +1,21 @@
+{
+  "issue": "REC-284",
+  "capturedAt": "2026-08-16T10:49:00-07:00",
+  "branch": "codex/rec-284-espresso-confirmation-ctas",
+  "simulator": {
+    "name": "S3B Espresso + Note Test",
+    "udid": "AC52441A-D833-4DC1-A1EE-3632D3F7F9AE",
+    "screenshot": "/private/tmp/rec-284-confetti-black-pre.png"
+  },
+  "observed": {
+    "sameDayConfettiPieceCount": 30,
+    "sameDayConfettiTravelScale": 0.62,
+    "sameDayConfettiSpeedScale": 1.0,
+    "sameDayConfettiLatestEndSeconds": 1.84,
+    "sameDayConfettiAutoDismissMilliseconds": 720,
+    "confirmationGlassTone": "espressoAction",
+    "placeProfileCheckInGlassTone": "deepBlackAction"
+  },
+  "rootCause": "The same-day overlay is removed after 720 ms even though its last particle finishes at roughly 1.84 seconds, cutting off the effect. The confirmation CTA also uses a lighter espresso tint than the production floating Check in button.",
+  "expected": "Use a moderately fuller confetti burst, keep the overlay mounted until every particle finishes, and render Espresso confirmation CTAs with the exact deepBlackAction glass tone used by the floating Check in button."
+}

@@ -30501,3 +30501,28 @@ PR and tracker handoff, 2026-08-16 10:30 PDT:
 - Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` still could not
   be advanced because `localhost:4000` is not accepting connections. Linear,
   the PR, and this log contain the durable current status.
+
+## 2026-08-16 10:50 PDT - Codex - REC-284 confetti and CTA black polish
+
+Agent: Codex using the `ios-fix` and Linear workflows
+Branch: codex/rec-284-espresso-confirmation-ctas
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-284 (returned to In Progress)
+
+Starting state and scope:
+
+- Joe reported that the same-day confetti feels cut off and requested a
+  slightly fuller, longer effect plus exact black parity between the large
+  confirmation CTA and the production place-profile Check in button.
+- Deterministic reproduction found the same-day overlay auto-dismisses after
+  720 ms while the existing final particle completes at roughly 1.84 seconds.
+  That truncation is the source of the bug-like finish. The confirmation CTA
+  maps to `.espressoAction`, while the floating Check in maps to the darker
+  `.deepBlackAction`.
+- Captured the current installed build at
+  `/private/tmp/rec-284-confetti-black-pre.png`; the durable pre-state contract
+  is
+  `WanderTests/Fixtures/ios-fix/rec-284-confetti-cta-polish-pre.json`.
+- Expected files: streak presentation/motion policy, shared CTA tone mapping,
+  focused unit/token regressions, and this log. No build number, TestFlight,
+  hosted flag, schema/data, auth, merge, or release action is authorized.
