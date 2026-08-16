@@ -30055,3 +30055,28 @@ Checkpoint — 2026-08-16 01:29 PDT:
   Joe's explicit approval to send the minimized canonical-place payload above
   to OpenAI's embedding API. No workaround was attempted; local/Supabase-only
   validation continued safely.
+
+Checkpoint — 2026-08-16 02:06 PDT:
+
+- Joe explicitly approved sending the minimized place documents to OpenAI for
+  embeddings after reviewing the estimated sub-$0.001 cost. The first sandboxed
+  attempt failed at DNS resolution before reading hosted data; the approved
+  network run then completed successfully.
+- Generated the real blind Featured grading pool from 90 canonical candidate
+  places across 113 eligible Been saves plus 79 positive/Wanna taste places.
+  OpenAI `text-embedding-3-small` embedded 169 minimized documents (zero cache
+  hits, 169 misses); the run produced nine scenarios: two dense, two sparse,
+  two simulated-empty, two overlapping-pan, and one cold-start scenario.
+- The provider payload remained limited to canonical place name, category,
+  subcategory, coarse locality/region, and approved structured tags from the
+  viewer's own saves. It did not include contributor/profile identity, notes,
+  prose answers, personal labels, addresses, photos, emails, coordinates, or
+  followed/stranger attributes.
+- Preserved the ignored blind grader, Markdown fallback, and scoring key under
+  `/Users/joelipshutz/Developer/Wander (nametbd)/tmp/recme-relevance-eval/`
+  so the artifacts survive another temporary-worktree cleanup. These local
+  artifacts remain untracked and must not be committed.
+- Validation after generation: all 21 relevance tests pass and
+  `git diff --check` passes. The next gate requires Joe to grade every candidate
+  in `featured-judgments.html` according to personal taste and usefulness as a
+  Featured map pin, then return the copied score lines for offline scoring.
