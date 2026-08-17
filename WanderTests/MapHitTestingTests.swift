@@ -27,6 +27,84 @@ final class MapHitTestingTests: XCTestCase {
     }
 }
 
+final class MapSelectionMotionTests: XCTestCase {
+    func testSelectedCoordinateCentersInsideTheUnobscuredMapHeight() {
+        let coordinate = CLLocationCoordinate2D(latitude: 34, longitude: -118)
+        let span = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.2)
+        let viewportHeight: CGFloat = 800
+        let obscuredBottomHeight: CGFloat = 240
+
+        let region = MapSelectionViewport.region(
+            centeredOn: coordinate,
+            preserving: span,
+            viewportHeight: viewportHeight,
+            obscuredBottomHeight: obscuredBottomHeight
+        )
+
+        let projectedY = viewportHeight * (
+            0.5 - CGFloat(coordinate.latitude - region.center.latitude) / CGFloat(region.span.latitudeDelta)
+        )
+        XCTAssertEqual(projectedY, (viewportHeight - obscuredBottomHeight) / 2, accuracy: 0.001)
+        XCTAssertEqual(region.span.latitudeDelta, span.latitudeDelta)
+        XCTAssertEqual(region.span.longitudeDelta, span.longitudeDelta)
+        XCTAssertEqual(region.center.longitude, coordinate.longitude)
+    }
+
+    func testNearbyBadgeReflectsLocationAuthorization() {
+        XCTAssertTrue(MapNearbyPermissionPolicy.showsAttentionBadge(for: .notDetermined))
+        XCTAssertTrue(MapNearbyPermissionPolicy.showsAttentionBadge(for: .denied))
+        XCTAssertTrue(MapNearbyPermissionPolicy.showsAttentionBadge(for: .restricted))
+        XCTAssertFalse(MapNearbyPermissionPolicy.showsAttentionBadge(for: .authorizedWhenInUse))
+        XCTAssertFalse(MapNearbyPermissionPolicy.showsAttentionBadge(for: .authorizedAlways))
+    }
+
+    @MainActor
+    func testSelectionMotionUsesAStagedCardAndBouncyPinContract() {
+        XCTAssertEqual(MapCompactCardMotionStyle.entranceDuration, 0.42, accuracy: 0.001)
+        XCTAssertEqual(MapCompactCardMotionStyle.nearbyFadeDuration, 0.46, accuracy: 0.001)
+        XCTAssertGreaterThan(MapCompactCardMotionStyle.hiddenVerticalOffset, 300)
+        XCTAssertGreaterThan(MapPinSelectionMotionStyle.selectedScale, 1.1)
+        XCTAssertGreaterThan(MapPinSelectionMotionStyle.bounce, 0.4)
+    }
+
+    func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let card = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+
+        XCTAssertTrue(map.contains("DragGesture(minimumDistance: MapHitTesting.panDismissalDistance"))
+        XCTAssertTrue(map.contains("handleMapPanStart()"))
+        XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
+        XCTAssertTrue(map.contains("compactCardContentOpacity"))
+        XCTAssertTrue(map.contains("nearbyFadeAnimation"))
+        XCTAssertTrue(map.contains("centerCompactSelection(on: candidate)"))
+        XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
+    }
+
+    func testNearbyPermissionEducationIsGatedBeforeTheSystemRequest() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertTrue(map.contains("MapNearbyPermissionPolicy.showsAttentionBadge"))
+        XCTAssertTrue(map.contains("MapLocationEducationPrompt("))
+        XCTAssertTrue(map.contains("map.locationEducation.allow"))
+        XCTAssertTrue(map.contains("map.locationEducation.cancel"))
+        XCTAssertTrue(map.contains("locationPermission.requestAccess()"))
+        XCTAssertTrue(map.contains("WanderAnalyticsEvents.locationPermissionResult"))
+        XCTAssertTrue(map.contains("guard Self.canShowUserLocation else"))
+    }
+}
+
 final class MapCoordinateCandidateTests: XCTestCase {
     @MainActor
     func testCoordinateCandidateUsesDroppedPinWithFallbackCategory() {
@@ -122,7 +200,7 @@ final class MapFilterSelectionTests: XCTestCase {
                 "if !isPlaceProfilePresented && !isMapSearchFocused"
             )
         )
-        XCTAssertTrue(map.contains("? selectedPlaceRecenterClearance"))
+        XCTAssertTrue(map.contains("mapSearchDockClearance + nearbyLift"))
     }
 
     func testMoreSectionsMatchTheActiveSource() {

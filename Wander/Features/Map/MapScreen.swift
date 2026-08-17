@@ -118,12 +118,14 @@ enum MapWalkthroughMemoryPolicy {
 struct MapScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
+    @StateObject private var locationPermission = OnboardingLocationPermissionManager()
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
@@ -159,8 +161,19 @@ struct MapScreen: View {
     @State private var transitioningAnnotationGroups: [VisiblePlaceGroup]?
     @State private var visibleTransitionGroupKeys: Set<String>?
     @State private var mapPinTransitionTask: Task<Void, Never>?
+    @State private var compactCardPhase = MapCompactCardPhase.hidden
+    @State private var compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
+    @State private var compactCardContentOpacity: Double = 1
+    @State private var nearbyLift: CGFloat = 0
+    @State private var nearbyOpacity: Double = 1
+    @State private var compactCardMotionTask: Task<Void, Never>?
+    @State private var compactCardReplacementTask: Task<Void, Never>?
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
+    @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
+    @State private var isLocationEducationPresented = false
+    @State private var isRequestingLocationPermission = false
+    @State private var shouldRecenterAfterLocationSettings = false
     @State private var suppressNextQueryAutoSelection = false
     @State private var didResolveInitialCamera = false
     @State private var didResolveInitialSearch = false
@@ -304,6 +317,29 @@ struct MapScreen: View {
         selectedPlace != nil || selectedSearchCandidate != nil || walkthroughFallbackMemory != nil
     }
 
+    private var compactSelectionIdentity: String? {
+        if let selectedPlaceGroupKey {
+            return "place:\(selectedPlaceGroupKey)"
+        }
+        if let selectedSearchCandidateID {
+            return "candidate:\(selectedSearchCandidateID)"
+        }
+        if let walkthroughFallbackMemory {
+            return "walkthrough:\(walkthroughFallbackMemory.id)"
+        }
+        return nil
+    }
+
+    private var highlightsCompactSelection: Bool {
+        compactCardPhase != .dismissing
+    }
+
+    private var nearbyNeedsLocationPermission: Bool {
+        MapNearbyPermissionPolicy.showsAttentionBadge(
+            for: locationPermission.authorizationStatus
+        )
+    }
+
     private var mappableSearchCandidates: [PlaceCandidate] {
         mapSearchCandidates.filter { candidate in
             guard candidate.latitude != nil, candidate.longitude != nil else { return false }
@@ -381,7 +417,8 @@ struct MapScreen: View {
                                         visiblePlace: group.primary,
                                         saves: saveSummaries(for: group),
                                         currentUserID: store.currentUser.id,
-                                        isSelected: group.key == selectedPlaceGroupKey
+                                        isSelected: highlightsCompactSelection
+                                            && group.key == selectedPlaceGroupKey
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -392,7 +429,12 @@ struct MapScreen: View {
                                         delay: entranceDelay
                                     )
                                 )
-                                .zIndex(group.key == selectedPlaceGroupKey ? 1 : 0)
+                                .zIndex(
+                                    highlightsCompactSelection
+                                        && group.key == selectedPlaceGroupKey
+                                        ? 1
+                                        : 0
+                                )
                             }
                         }
 
@@ -407,7 +449,11 @@ struct MapScreen: View {
                                     Button {
                                         selectSearchCandidateFromMapTap(candidate)
                                     } label: {
-                                        SearchResultMarker(candidate: candidate, isSelected: selectedSearchCandidateID == candidate.id)
+                                        SearchResultMarker(
+                                            candidate: candidate,
+                                            isSelected: highlightsCompactSelection
+                                                && selectedSearchCandidateID == candidate.id
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 44)
@@ -429,6 +475,14 @@ struct MapScreen: View {
                     .modifier(HideNativeMapFeatureAccessory())
                     .tint(Self.currentLocationTint)
                     .ignoresSafeArea()
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.preference(
+                                key: MapViewportHeightPreferenceKey.self,
+                                value: geometry.size.height
+                            )
+                        }
+                    }
                     .onChange(of: selectedMapFeature) { _, feature in
                         handleMapFeatureSelection(feature)
                     }
@@ -446,6 +500,12 @@ struct MapScreen: View {
                             }
                     )
                     .simultaneousGesture(
+                        DragGesture(minimumDistance: MapHitTesting.panDismissalDistance, coordinateSpace: .local)
+                            .onChanged { _ in
+                                handleMapPanStart()
+                            }
+                    )
+                    .simultaneousGesture(
                         LongPressGesture(minimumDuration: 0.48)
                             .onEnded { didComplete in
                                 guard didComplete, let point = lastMapPressPoint else { return }
@@ -455,6 +515,10 @@ struct MapScreen: View {
                                 lastMapPressPoint = nil
                             }
                     )
+                    .onPreferenceChange(MapViewportHeightPreferenceKey.self) { height in
+                        guard height > 0 else { return }
+                        measuredMapViewportHeight = height
+                    }
                 }
 
                 VStack(spacing: 0) {
@@ -611,19 +675,21 @@ struct MapScreen: View {
                 )
                 .overlay(alignment: .bottomTrailing) {
                     if !isPlaceProfilePresented && !isMapSearchFocused {
-                        RecenterButton(isLoading: isRecenteringOnUser) {
+                        RecenterButton(
+                            isLoading: isRecenteringOnUser,
+                            showsAttentionBadge: nearbyNeedsLocationPermission
+                        ) {
                             dismissMoreFilters()
-                            recenterOnUser()
+                            handleNearbyTap()
                         }
                         .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
-                        .accessibilityHidden(walkthroughs.currentStep?.target == .mapTabs)
-                        .padding(.trailing, WanderTheme.spacing3)
-                        .padding(
-                            .bottom,
-                            hasSelectedProfile
-                                ? selectedPlaceRecenterClearance
-                                : mapSearchDockClearance
+                        .accessibilityHidden(
+                            walkthroughs.currentStep?.target == .mapTabs || nearbyOpacity <= 0.5
                         )
+                        .padding(.trailing, WanderTheme.spacing3)
+                        .padding(.bottom, mapSearchDockClearance + nearbyLift)
+                        .opacity(nearbyOpacity)
+                        .allowsHitTesting(nearbyOpacity > 0.5)
                     }
                 }
                 .onPreferenceChange(MapSearchDockHeightPreferenceKey.self) { height in
@@ -634,11 +700,18 @@ struct MapScreen: View {
 
                 selectedPlaceProfileSurface
                     .padding(.bottom, mapSearchDockClearance)
+                    .offset(y: compactCardVerticalOffset)
+                    .opacity(compactCardContentOpacity)
+                    .allowsHitTesting(compactCardPhase != .dismissing)
             }
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
+                locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
                 resolveInitialSearchIfNeeded()
+            }
+            .onChange(of: compactSelectionIdentity, initial: true) { previous, current in
+                handleCompactSelectionIdentityChange(from: previous, to: current)
             }
             .onChange(of: isMapTabActive) { _, isActive in
                 handleMapTabActivityChange(isActive, from: annotationGroups)
@@ -727,6 +800,8 @@ struct MapScreen: View {
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
                 mapPinTransitionTask?.cancel()
+                compactCardMotionTask?.cancel()
+                compactCardReplacementTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -749,6 +824,15 @@ struct MapScreen: View {
         .overlay {
             selectedPlaceProfileOverlay
         }
+        .fullScreenCover(isPresented: $isLocationEducationPresented) {
+            MapLocationEducationPrompt(
+                isRequesting: isRequestingLocationPermission,
+                onAllow: allowLocationFromEducation,
+                onCancel: cancelLocationEducation
+            )
+            .presentationBackground(.clear)
+            .interactiveDismissDisabled()
+        }
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
             isPlaceProfilePresented = false
@@ -766,6 +850,15 @@ struct MapScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            locationPermission.refreshAuthorizationStatus()
+            if shouldRecenterAfterLocationSettings,
+               !MapNearbyPermissionPolicy.showsAttentionBadge(
+                    for: locationPermission.authorizationStatus
+               ) {
+                shouldRecenterAfterLocationSettings = false
+                isLocationEducationPresented = false
+                performCurrentLocationRecenter()
+            }
             Task {
                 await handleNotificationRoute(pushNotifications.navigationRequest)
             }
@@ -1042,12 +1135,15 @@ struct MapScreen: View {
     }
 
     private func clearMapSelection() {
+        compactCardMotionTask?.cancel()
+        compactCardReplacementTask?.cancel()
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
         selectedMapFeature = nil
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
         isPlaceProfilePresented = false
+        resetCompactCardPresentation()
     }
 
     private func clearMapSelectionAndSearch() {
@@ -1061,6 +1157,7 @@ struct MapScreen: View {
         mapSearchCandidates = []
         mapSearchMessage = nil
         isPlaceProfilePresented = false
+        resetCompactCardPresentation()
     }
 
     private func clearNativeMapFeatureSelection() {
@@ -1092,10 +1189,13 @@ struct MapScreen: View {
         mapSelectionRevision += 1
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
-        selectVisiblePlace(visiblePlace)
-        selectedSearchCandidateID = nil
-        mapSearchCandidates = []
-        isPlaceProfilePresented = false
+        replaceCompactSelectionIfNeeded {
+            selectVisiblePlace(visiblePlace)
+            selectedSearchCandidateID = nil
+            mapSearchCandidates = []
+            isPlaceProfilePresented = false
+            centerCompactSelection(on: visiblePlace)
+        }
     }
 
     private func selectSearchCandidateFromMapTap(_ candidate: PlaceCandidate) {
@@ -1104,10 +1204,13 @@ struct MapScreen: View {
         routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
-        mapSearchCandidates = [candidate]
-        selectedSearchCandidateID = candidate.id
-        selectedPlaceGroupKey = nil
-        isPlaceProfilePresented = false
+        replaceCompactSelectionIfNeeded {
+            mapSearchCandidates = [candidate]
+            selectedSearchCandidateID = candidate.id
+            selectedPlaceGroupKey = nil
+            isPlaceProfilePresented = false
+            centerCompactSelection(on: candidate)
+        }
     }
 
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
@@ -1125,8 +1228,17 @@ struct MapScreen: View {
                   selectedMapFeature == nil
             else { return }
 
-            clearMapSelectionAndSearch()
+            dismissCompactSelection()
         }
+    }
+
+    private func handleMapPanStart() {
+        guard hasSelectedProfile,
+              compactCardPhase != .dismissing
+        else { return }
+
+        dismissMoreFilters()
+        dismissCompactSelection()
     }
 
     private func handleMapLongPress(at point: CGPoint, proxy: MapProxy) -> Bool {
@@ -1140,11 +1252,14 @@ struct MapScreen: View {
         routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
-        mapSearchCandidates = [candidate]
-        selectedPlaceGroupKey = nil
-        selectedSearchCandidateID = candidate.id
-        isPlaceProfilePresented = false
-        mapSearchMessage = "Dropped pin. Tap + to add it."
+        replaceCompactSelectionIfNeeded {
+            mapSearchCandidates = [candidate]
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = candidate.id
+            isPlaceProfilePresented = false
+            mapSearchMessage = "Dropped pin. Tap + to add it."
+            centerCompactSelection(on: candidate)
+        }
         return true
     }
 
@@ -1251,6 +1366,13 @@ struct MapScreen: View {
         guard !didResolveInitialCamera,
               initialPlaceQuery == nil
         else { return }
+
+        // Keep first-run location access behind the explicit Nearby education
+        // prompt. CoreLocationProvider requests authorization when queried.
+        guard Self.canShowUserLocation else {
+            didResolveInitialCamera = true
+            return
+        }
 
         let coordinate = await currentUserCoordinate()
         guard !Task.isCancelled,
@@ -1381,6 +1503,220 @@ struct MapScreen: View {
             in: visiblePlaces,
             currentUserID: store.currentUser.id
         )?.key ?? VisiblePlaceGrouping.key(for: visiblePlace)
+    }
+
+    private func handleCompactSelectionIdentityChange(
+        from previous: String?,
+        to current: String?
+    ) {
+        guard current != nil else {
+            if compactCardPhase != .dismissing {
+                resetCompactCardPresentation()
+            }
+            return
+        }
+
+        if previous == nil || compactCardPhase == .hidden {
+            presentCompactCard()
+        }
+    }
+
+    private func presentCompactCard() {
+        compactCardMotionTask?.cancel()
+
+        if reduceMotion {
+            compactCardPhase = .presented
+            compactCardVerticalOffset = 0
+            compactCardContentOpacity = 1
+            nearbyLift = MapControlLayout.compactCardNearbyLift
+            nearbyOpacity = 0
+            return
+        }
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            compactCardPhase = .entering
+            compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
+            compactCardContentOpacity = 1
+            nearbyLift = 0
+            nearbyOpacity = 1
+        }
+
+        compactCardMotionTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled,
+                  compactCardPhase == .entering
+            else { return }
+
+            withAnimation(MapCompactCardMotionStyle.entranceAnimation) {
+                compactCardVerticalOffset = 0
+                nearbyLift = MapControlLayout.compactCardNearbyLift
+            }
+
+            do {
+                try await Task.sleep(for: .seconds(MapCompactCardMotionStyle.entranceDuration))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  compactCardPhase == .entering
+            else { return }
+
+            compactCardPhase = .presented
+            withAnimation(MapCompactCardMotionStyle.nearbyFadeAnimation) {
+                nearbyOpacity = 0
+            }
+            compactCardMotionTask = nil
+        }
+    }
+
+    private func replaceCompactSelectionIfNeeded(
+        _ updateSelection: @escaping @MainActor () -> Void
+    ) {
+        compactCardReplacementTask?.cancel()
+
+        if compactCardPhase == .dismissing {
+            resetCompactCardPresentation()
+            updateSelection()
+            presentCompactCard()
+            return
+        }
+
+        guard hasSelectedProfile,
+              compactCardPhase != .hidden,
+              !reduceMotion
+        else {
+            updateSelection()
+            compactCardContentOpacity = 1
+            return
+        }
+
+        let revision = mapSelectionRevision
+        withAnimation(MapCompactCardMotionStyle.replacementFadeOutAnimation) {
+            compactCardContentOpacity = 0
+        }
+
+        compactCardReplacementTask = Task { @MainActor in
+            do {
+                try await Task.sleep(
+                    for: .seconds(MapCompactCardMotionStyle.replacementFadeOutDuration)
+                )
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  revision == mapSelectionRevision
+            else { return }
+
+            updateSelection()
+            await Task.yield()
+            guard !Task.isCancelled,
+                  revision == mapSelectionRevision
+            else { return }
+
+            withAnimation(MapCompactCardMotionStyle.replacementFadeInAnimation) {
+                compactCardContentOpacity = 1
+            }
+            compactCardReplacementTask = nil
+        }
+    }
+
+    private func dismissCompactSelection() {
+        guard hasSelectedProfile else {
+            clearNativeMapFeatureSelection()
+            return
+        }
+        guard compactCardPhase != .dismissing else { return }
+
+        mapSelectionRevision += 1
+        let revision = mapSelectionRevision
+        compactCardMotionTask?.cancel()
+        compactCardReplacementTask?.cancel()
+        mapFeatureResolutionTask?.cancel()
+        mapFeatureResolutionTask = nil
+        clearNativeMapFeatureSelection()
+        compactCardPhase = .dismissing
+        isPlaceProfilePresented = false
+
+        guard !reduceMotion else {
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = nil
+            walkthroughFallbackMemory = nil
+            resetCompactCardPresentation()
+            return
+        }
+
+        withAnimation(MapCompactCardMotionStyle.dismissalAnimation) {
+            compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
+            nearbyLift = 0
+            nearbyOpacity = 1
+        }
+
+        compactCardMotionTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(MapCompactCardMotionStyle.dismissalDuration))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  revision == mapSelectionRevision,
+                  compactCardPhase == .dismissing
+            else { return }
+
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = nil
+            walkthroughFallbackMemory = nil
+            resetCompactCardPresentation()
+            compactCardMotionTask = nil
+        }
+    }
+
+    private func resetCompactCardPresentation() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            compactCardPhase = .hidden
+            compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
+            compactCardContentOpacity = 1
+            nearbyLift = 0
+            nearbyOpacity = 1
+        }
+    }
+
+    private func centerCompactSelection(on visiblePlace: VisiblePlace) {
+        centerCompactSelection(
+            latitude: visiblePlace.place.latitude,
+            longitude: visiblePlace.place.longitude
+        )
+    }
+
+    private func centerCompactSelection(on candidate: PlaceCandidate) {
+        guard let latitude = candidate.latitude,
+              let longitude = candidate.longitude
+        else { return }
+
+        centerCompactSelection(latitude: latitude, longitude: longitude)
+    }
+
+    private func centerCompactSelection(latitude: Double, longitude: Double) {
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return }
+
+        let region = MapSelectionViewport.region(
+            centeredOn: coordinate,
+            preserving: currentSearchRegion.span,
+            viewportHeight: measuredMapViewportHeight,
+            obscuredBottomHeight: selectedPlaceRecenterClearance
+        )
+        currentSearchRegion = region
+        withAnimation(
+            reduceMotion
+                ? MapCompactCardMotionStyle.reducedMotionAnimation
+                : MapCompactCardMotionStyle.mapRecenterAnimation
+        ) {
+            position = .region(region)
+        }
     }
 
     private func selectSavedResult(_ result: SaveResult) {
@@ -1885,7 +2221,7 @@ struct MapScreen: View {
             if ignoreNextMapFeatureClear {
                 ignoreNextMapFeatureClear = false
             } else {
-                clearMapSelectionAndSearch()
+                dismissCompactSelection()
             }
             return
         }
@@ -1927,20 +2263,26 @@ struct MapScreen: View {
         if let visiblePlace = visiblePlace(matching: candidate) {
             clearNativeMapFeatureSelection()
             clearSearchTextForMapInteraction()
-            selectVisiblePlace(visiblePlace)
-            selectedSearchCandidateID = nil
-            mapSearchCandidates = []
-            isPlaceProfilePresented = false
-            mapSearchMessage = nil
+            replaceCompactSelectionIfNeeded {
+                selectVisiblePlace(visiblePlace)
+                selectedSearchCandidateID = nil
+                mapSearchCandidates = []
+                isPlaceProfilePresented = false
+                mapSearchMessage = nil
+                centerCompactSelection(on: visiblePlace)
+            }
             return
         }
 
         clearSearchTextForMapInteraction()
-        mapSearchCandidates = [candidate]
-        selectedPlaceGroupKey = nil
-        selectedSearchCandidateID = candidate.id
-        isPlaceProfilePresented = false
-        mapSearchMessage = "Map place. Tap + to add it."
+        replaceCompactSelectionIfNeeded {
+            mapSearchCandidates = [candidate]
+            selectedPlaceGroupKey = nil
+            selectedSearchCandidateID = candidate.id
+            isPlaceProfilePresented = false
+            mapSearchMessage = "Map place. Tap + to add it."
+            centerCompactSelection(on: candidate)
+        }
     }
 
     private func isNativeSelectedFeatureCandidate(_ candidate: PlaceCandidate) -> Bool {
@@ -2824,7 +3166,67 @@ struct MapScreen: View {
         )
     }
 
-    private func recenterOnUser() {
+    private func handleNearbyTap() {
+        guard !isRecenteringOnUser else { return }
+
+        locationPermission.refreshAuthorizationStatus()
+        if MapNearbyPermissionPolicy.showsAttentionBadge(
+            for: locationPermission.authorizationStatus
+        ) {
+            isLocationEducationPresented = true
+        } else {
+            performCurrentLocationRecenter()
+        }
+    }
+
+    private func allowLocationFromEducation() {
+        switch OnboardingLocationPermissionPolicy.action(
+            for: locationPermission.authorizationStatus
+        ) {
+        case .skip:
+            isLocationEducationPresented = false
+            performCurrentLocationRecenter()
+        case .request:
+            guard !isRequestingLocationPermission else { return }
+            Task { @MainActor in
+                isRequestingLocationPermission = true
+                let granted = await locationPermission.requestAccess()
+                isRequestingLocationPermission = false
+                trackMapLocationPermissionResult(granted ? "true" : "false")
+                if granted {
+                    isLocationEducationPresented = false
+                    performCurrentLocationRecenter()
+                }
+            }
+        case .openSettings:
+            trackMapLocationPermissionResult("settings")
+            shouldRecenterAfterLocationSettings = true
+            isLocationEducationPresented = false
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            openURL(url)
+        case .continueWithoutAccess:
+            trackMapLocationPermissionResult("restricted")
+            isLocationEducationPresented = false
+        }
+    }
+
+    private func cancelLocationEducation() {
+        trackMapLocationPermissionResult("cancelled")
+        isLocationEducationPresented = false
+    }
+
+    private func trackMapLocationPermissionResult(_ result: String) {
+        store.trackDiscoverSearchEvent(
+            WanderAnalyticsEvents.locationPermissionResult,
+            properties: [
+                "permission": "location",
+                "granted": result,
+                "surface": "map_nearby"
+            ]
+        )
+    }
+
+    private func performCurrentLocationRecenter() {
         guard !isRecenteringOnUser else { return }
 
         isRecenteringOnUser = true
@@ -3148,8 +3550,81 @@ private struct HideNativeMapFeatureAccessory: ViewModifier {
     }
 }
 
+enum MapCompactCardPhase: Equatable {
+    case hidden
+    case entering
+    case presented
+    case dismissing
+}
+
+@MainActor
+enum MapCompactCardMotionStyle {
+    static let entranceDuration: TimeInterval = 0.42
+    static let dismissalDuration: TimeInterval = 0.34
+    static let replacementFadeOutDuration: TimeInterval = 0.12
+    static let nearbyFadeDuration: TimeInterval = 0.46
+    static let hiddenVerticalOffset: CGFloat = 340
+
+    static let entranceAnimation = Animation.spring(
+        duration: entranceDuration,
+        bounce: 0.10
+    )
+    static let dismissalAnimation = Animation.easeInOut(duration: dismissalDuration)
+    static let replacementFadeOutAnimation = Animation.easeOut(
+        duration: replacementFadeOutDuration
+    )
+    static let replacementFadeInAnimation = Animation.easeIn(duration: 0.18)
+    static let nearbyFadeAnimation = Animation.easeOut(duration: nearbyFadeDuration)
+    static let mapRecenterAnimation = Animation.easeInOut(duration: entranceDuration)
+    static let reducedMotionAnimation = Animation.easeOut(duration: 0.12)
+}
+
+enum MapSelectionViewport {
+    static func region(
+        centeredOn coordinate: CLLocationCoordinate2D,
+        preserving span: MKCoordinateSpan,
+        viewportHeight: CGFloat,
+        obscuredBottomHeight: CGFloat
+    ) -> MKCoordinateRegion {
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              span.latitudeDelta.isFinite,
+              span.latitudeDelta > 0,
+              span.longitudeDelta.isFinite,
+              span.longitudeDelta > 0,
+              viewportHeight.isFinite,
+              viewportHeight > 0,
+              obscuredBottomHeight.isFinite
+        else {
+            return MKCoordinateRegion(center: coordinate, span: span)
+        }
+
+        let bottomHeight = min(max(obscuredBottomHeight, 0), viewportHeight * 0.75)
+        let latitudeOffset = Double(bottomHeight / (2 * viewportHeight)) * span.latitudeDelta
+        let latitudeCenterLimit = max(0, (180 - span.latitudeDelta) / 2)
+        let latitude = min(
+            max(coordinate.latitude - latitudeOffset, -latitudeCenterLimit),
+            latitudeCenterLimit
+        )
+
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: latitude,
+                longitude: coordinate.longitude
+            ),
+            span: span
+        )
+    }
+}
+
+enum MapNearbyPermissionPolicy {
+    static func showsAttentionBadge(for status: CLAuthorizationStatus) -> Bool {
+        status != .authorizedAlways && status != .authorizedWhenInUse
+    }
+}
+
 enum MapHitTesting {
     static let markerTapRadius: CGFloat = 34
+    static let panDismissalDistance: CGFloat = 8
 
     static func isScreenPoint(_ point: CGPoint, nearAny markerPoints: [CGPoint], radius: CGFloat = markerTapRadius) -> Bool {
         markerPoints.contains { markerPoint in
@@ -3824,9 +4299,19 @@ enum MapSocialOwnerSelection {
 private enum MapControlLayout {
     static let searchDockClearance: CGFloat = 64
     static let selectedPlaceRecenterClearance: CGFloat = 218
+    static let compactCardNearbyLift = selectedPlaceRecenterClearance - searchDockClearance
+    static let fallbackViewportHeight: CGFloat = 844
 }
 
 private struct MapSearchDockHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct MapViewportHeightPreferenceKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -4149,6 +4634,7 @@ private struct MapSearchMessage: View {
 
 private struct RecenterButton: View {
     let isLoading: Bool
+    let showsAttentionBadge: Bool
     let action: () -> Void
 
     var body: some View {
@@ -4160,10 +4646,113 @@ private struct RecenterButton: View {
                 .foregroundStyle(WanderTheme.pinSocial.color)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(WanderTheme.pinSocial.color, lineWidth: 2))
+                .overlay(alignment: .topLeading) {
+                    if showsAttentionBadge {
+                        Circle()
+                            .fill(WanderTheme.stateError.color)
+                            .frame(width: 11, height: 11)
+                            .overlay {
+                                Circle()
+                                    .stroke(WanderTheme.surfaceRaised.color, lineWidth: 2)
+                            }
+                            .offset(x: -1, y: 1)
+                    }
+                }
                 .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 5)
         }
         .disabled(isLoading)
+        .accessibilityIdentifier("map.nearby")
         .accessibilityLabel("Center on my location")
+        .accessibilityValue(showsAttentionBadge ? "Location permission needed" : "Location available")
+    }
+}
+
+private struct MapLocationEducationPrompt: View {
+    let isRequesting: Bool
+    let onAllow: () -> Void
+    let onCancel: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.42)
+                .ignoresSafeArea()
+
+            VStack(spacing: WanderTheme.spacing4) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)
+                        .fill(WanderTheme.skyTint.color)
+                        .frame(width: 112, height: 88)
+
+                    Image(systemName: "map.fill")
+                        .font(.system(size: 48, weight: .semibold))
+                        .foregroundStyle(WanderTheme.pinSocial.color.opacity(0.72))
+
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .offset(x: 24, y: -10)
+                }
+                .accessibilityHidden(true)
+
+                VStack(spacing: WanderTheme.spacing2) {
+                    Text("rec.me works best with your location")
+                        .font(WanderTypography.editorialTitle)
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .multilineTextAlignment(.center)
+
+                    Text("See nearby places, get better search results, and bring the map back to you when Location Services are on.")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button(action: onAllow) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        if isRequesting {
+                            ProgressView()
+                                .tint(WanderTheme.textOnAction.color)
+                        }
+                        Text(isRequesting ? "Requesting location…" : "Allow Location")
+                    }
+                    .font(.system(size: 17, weight: .black))
+                    .foregroundStyle(WanderTheme.textOnAction.color)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(WanderTheme.terracotta.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(isRequesting)
+                .accessibilityIdentifier("map.locationEducation.allow")
+
+                Button("Cancel", action: onCancel)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .disabled(isRequesting)
+                    .accessibilityIdentifier("map.locationEducation.cancel")
+            }
+            .padding(.horizontal, WanderTheme.spacing4)
+            .padding(.top, WanderTheme.spacing6)
+            .padding(.bottom, WanderTheme.spacing3)
+            .frame(maxWidth: 380)
+            .background(WanderTheme.surfaceBone.color)
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .stroke(WanderTheme.surfaceRaised.color.opacity(0.78), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.24), radius: 32, x: 0, y: 18)
+            .padding(.horizontal, WanderTheme.spacing3)
+            .transition(
+                reduceMotion
+                    ? .opacity
+                    : .scale(scale: 0.94).combined(with: .opacity)
+            )
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
     }
 }
 
@@ -4514,8 +5103,8 @@ private struct SearchResultMarker: View {
                     .padding(-5)
             )
             .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: isSelected ? 9 : 6, x: 0, y: 2)
-            .scaleEffect(isSelected ? 1.08 : 1)
-            .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isSelected)
+            .scaleEffect(isSelected ? MapPinSelectionMotionStyle.selectedScale : 1)
+            .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
             .accessibilityLabel("Map search result, \(candidate.name)")
     }
 
@@ -4533,8 +5122,8 @@ private struct MapPlaceMarker: View {
             outlines: MapPinOutlineBuilder.outlines(for: saveStates),
             isSelected: isSelected
         )
-        .scaleEffect(isSelected ? 1.08 : 1)
-        .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isSelected)
+        .scaleEffect(isSelected ? MapPinSelectionMotionStyle.selectedScale : 1)
+        .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
     }
 
     private var saveStates: [MapPinSaveState] {
@@ -4681,6 +5270,14 @@ enum MapPinVisualMetrics {
     static let secondaryOutlinePadding: CGFloat = -6
     static let selectionHaloPadding: CGFloat = -10
     static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
+}
+
+@MainActor
+enum MapPinSelectionMotionStyle {
+    static let selectedScale: CGFloat = 1.16
+    static let duration: TimeInterval = 0.42
+    static let bounce = 0.44
+    static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
 struct MapPinOutline: Identifiable, Equatable {

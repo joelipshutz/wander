@@ -46,7 +46,6 @@ struct PlaceProfileMapSurface: View {
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing3)
         }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 

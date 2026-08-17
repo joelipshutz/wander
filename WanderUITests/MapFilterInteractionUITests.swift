@@ -49,6 +49,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         let message = app.staticTexts["map.searchMessage"]
         let search = app.textFields["map.searchField"]
         let addButton = app.buttons["map.headerAdd"]
+        let nearby = app.buttons["map.nearby"]
 
         XCTAssertTrue(ticket.waitForExistence(timeout: 5))
         XCTAssertTrue(search.waitForExistence(timeout: 5))
@@ -58,9 +59,36 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(addButton.frame.width, 44)
         XCTAssertGreaterThanOrEqual(addButton.frame.height, 44)
         XCTAssertTrue(addButton.isHittable)
+        XCTAssertFalse(nearby.isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-283 selected ticket without result message"
+        screenshot.name = "REC-289 selected ticket with Nearby hidden"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testNearbyPermissionEducationAppearsBeforeTheSystemPrompt() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures"
+        ]
+        app.launch()
+
+        let nearby = app.buttons["map.nearby"]
+        XCTAssertTrue(nearby.waitForExistence(timeout: 5))
+        guard nearby.value as? String == "Location permission needed" else {
+            throw XCTSkip("Simulator already has location permission")
+        }
+
+        nearby.tap()
+        XCTAssertTrue(
+            app.buttons["map.locationEducation.allow"].waitForExistence(timeout: 2)
+        )
+        XCTAssertTrue(app.buttons["map.locationEducation.cancel"].isHittable)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-289 Nearby location education"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -117,6 +145,10 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(nearby.isHittable)
         nearby.tap()
         XCTAssertTrue(panel.waitForNonExistence(timeout: 2))
+        let cancelLocationEducation = app.buttons["map.locationEducation.cancel"]
+        if cancelLocationEducation.waitForExistence(timeout: 1) {
+            cancelLocationEducation.tap()
+        }
         assertOneSelectedFilter(in: app)
 
         app.buttons["map.filter.more"].tap()
