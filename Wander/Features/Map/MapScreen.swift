@@ -132,6 +132,10 @@ struct MapScreen: View {
     @State private var ignoreNextMapFeatureClear = false
     @State private var ignoreNextMapTap = false
     @State private var lastMapPressPoint: CGPoint?
+    @State private var isMapMagnifying = false
+    @State private var isMapPanGestureActive = false
+    @State private var isMapPanDismissalSuppressed = false
+    @State private var mapPanDismissalTask: Task<Void, Never>?
     @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
@@ -403,6 +407,8 @@ struct MapScreen: View {
                         ForEach(Array(annotationGroups.enumerated()), id: \.element.key) { index, group in
                             let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
                             let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                            let isSelected = highlightsCompactSelection
+                                && group.key == selectedPlaceGroupKey
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -417,12 +423,15 @@ struct MapScreen: View {
                                         visiblePlace: group.primary,
                                         saves: saveSummaries(for: group),
                                         currentUserID: store.currentUser.id,
-                                        isSelected: highlightsCompactSelection
-                                            && group.key == selectedPlaceGroupKey
+                                        isSelected: isSelected
                                     )
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
+                                .padding(
+                                    .bottom,
+                                    isSelected ? MapPinVisualMetrics.activeTitleClearance : 0
+                                )
                                 .modifier(
                                     MapPinEntranceModifier(
                                         isVisible: isTransitionVisible,
@@ -430,10 +439,7 @@ struct MapScreen: View {
                                     )
                                 )
                                 .zIndex(
-                                    highlightsCompactSelection
-                                        && group.key == selectedPlaceGroupKey
-                                        ? 1
-                                        : 0
+                                    isSelected ? 1 : 0
                                 )
                             }
                         }
@@ -442,6 +448,8 @@ struct MapScreen: View {
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
                                 let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                                let isSelected = highlightsCompactSelection
+                                    && selectedSearchCandidateID == candidate.id
                                 Annotation(
                                     candidate.name,
                                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -451,12 +459,15 @@ struct MapScreen: View {
                                     } label: {
                                         SearchResultMarker(
                                             candidate: candidate,
-                                            isSelected: highlightsCompactSelection
-                                                && selectedSearchCandidateID == candidate.id
+                                            isSelected: isSelected
                                         )
                                     }
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 44)
+                                    .padding(
+                                        .bottom,
+                                        isSelected ? MapPinVisualMetrics.activeTitleClearance : 0
+                                    )
                                     .modifier(
                                         MapPinEntranceModifier(
                                             isVisible: true,
@@ -502,7 +513,19 @@ struct MapScreen: View {
                     .simultaneousGesture(
                         DragGesture(minimumDistance: MapHitTesting.panDismissalDistance, coordinateSpace: .local)
                             .onChanged { _ in
-                                handleMapPanStart()
+                                handleMapPanChange()
+                            }
+                            .onEnded { _ in
+                                handleMapPanEnd()
+                            }
+                    )
+                    .simultaneousGesture(
+                        MagnifyGesture(minimumScaleDelta: MapSelectionGesturePolicy.minimumMagnificationDelta)
+                            .onChanged { _ in
+                                handleMapMagnificationChange()
+                            }
+                            .onEnded { _ in
+                                handleMapMagnificationEnd()
                             }
                     )
                     .simultaneousGesture(
@@ -809,6 +832,7 @@ struct MapScreen: View {
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
                 mapPinTransitionTask?.cancel()
+                mapPanDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
                 compactCardReplacementTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
@@ -1241,6 +1265,63 @@ struct MapScreen: View {
             else { return }
 
             dismissCompactSelection()
+        }
+    }
+
+    private func handleMapPanChange() {
+        guard hasSelectedProfile,
+              compactCardPhase != .dismissing
+        else { return }
+
+        isMapPanGestureActive = true
+        guard MapSelectionGesturePolicy.allowsPanDismissal(
+            isMagnifying: isMapMagnifying,
+            isSuppressed: isMapPanDismissalSuppressed
+        ), mapPanDismissalTask == nil
+        else { return }
+
+        let revision = mapSelectionRevision
+        mapPanDismissalTask = Task { @MainActor in
+            do {
+                try await Task.sleep(
+                    nanoseconds: MapSelectionGesturePolicy.panDismissalDelayNanoseconds
+                )
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled,
+                  revision == mapSelectionRevision,
+                  MapSelectionGesturePolicy.allowsPanDismissal(
+                    isMagnifying: isMapMagnifying,
+                    isSuppressed: isMapPanDismissalSuppressed
+                  )
+            else {
+                mapPanDismissalTask = nil
+                return
+            }
+
+            mapPanDismissalTask = nil
+            handleMapPanStart()
+        }
+    }
+
+    private func handleMapPanEnd() {
+        isMapPanGestureActive = false
+        isMapPanDismissalSuppressed = false
+    }
+
+    private func handleMapMagnificationChange() {
+        isMapMagnifying = true
+        isMapPanDismissalSuppressed = true
+        mapPanDismissalTask?.cancel()
+        mapPanDismissalTask = nil
+    }
+
+    private func handleMapMagnificationEnd() {
+        isMapMagnifying = false
+        if !isMapPanGestureActive {
+            isMapPanDismissalSuppressed = false
         }
     }
 
@@ -5375,6 +5456,19 @@ enum MapPinVisualMetrics {
     static let outlineWidth: CGFloat = 3
     static let secondaryOutlinePadding: CGFloat = -6
     static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
+    static let activeTitleClearance: CGFloat = 2
+}
+
+enum MapSelectionGesturePolicy {
+    static let minimumMagnificationDelta: CGFloat = 0.01
+    static let panDismissalDelayNanoseconds: UInt64 = 80_000_000
+
+    static func allowsPanDismissal(
+        isMagnifying: Bool,
+        isSuppressed: Bool
+    ) -> Bool {
+        !isMagnifying && !isSuppressed
+    }
 }
 
 @MainActor
