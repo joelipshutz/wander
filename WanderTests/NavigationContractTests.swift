@@ -315,7 +315,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discover.contains("suggestedSearchesSection"))
         XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
         XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
-        XCTAssertTrue(feed.contains("private enum FeedSurface"))
+        XCTAssertTrue(feed.contains("enum FeedSurface"))
         XCTAssertTrue(feed.contains("private struct FeedSurfaceTabs"))
         XCTAssertTrue(feed.contains("case .people:"))
         XCTAssertTrue(feed.contains("FeedPeopleSurface("))
@@ -3833,6 +3833,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("onClose: closeDiscoverSearch"))
         XCTAssertTrue(feed.contains("walkthroughs.consumeRequestedSurface(.feed)"))
         XCTAssertTrue(feed.contains("selectedSurface = .people"))
+        XCTAssertTrue(feed.contains("restoreFeedWalkthroughAfterDiscoverDismissal()"))
+        XCTAssertTrue(feed.contains("FeedSurface.walkthroughDestination("))
+        XCTAssertTrue(feed.contains("guard activeSurface == .feed else { return nil }"))
         XCTAssertTrue(resultsBack.contains("exitPlaceSearch()"))
         XCTAssertFalse(discover.contains("feedSearchExitBack"))
 

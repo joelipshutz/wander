@@ -490,6 +490,35 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(store.checkpoint(for: "ryan")?.target, .feedPeopleSearch)
     }
 
+    func testDiscoverCoverDismissalRestoresPeopleTabFromAtomicFeedHandoff() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+
+        coordinator.activate(.feed)
+        coordinator.advancePassiveStep()
+        coordinator.perform(.feedDiscoverSearch)
+        coordinator.transition(to: .feedSearch)
+        coordinator.advancePassiveStep()
+        coordinator.perform(.feedSmartSearch)
+        coordinator.perform(.feedSearchResultsBack)
+
+        XCTAssertNil(
+            coordinator.requestedSurface,
+            "The atomic handoff intentionally has no transient routing request."
+        )
+        XCTAssertEqual(coordinator.activeSurface, .feed)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedPeopleSearch)
+        XCTAssertEqual(
+            FeedSurface.walkthroughDestination(
+                activeSurface: coordinator.activeSurface,
+                target: coordinator.currentStep?.target
+            ),
+            .people,
+            "Closing Discover must restore the People target even when Feed was covered during the state change."
+        )
+    }
+
     func testAutomaticWalkthroughTimingUsesAnAverageReadingBeat() {
         let shortDelay = FirstVisitWalkthroughContent
             .automaticReadingDelayMilliseconds(for: .saveDate)

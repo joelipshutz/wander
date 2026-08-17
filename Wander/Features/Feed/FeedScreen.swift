@@ -142,7 +142,7 @@ struct FeedScreen: View {
             }
             .onChange(of: isShowingSearch) { _, isShowing in
                 if !isShowing {
-                    walkthroughs.activate(.feed)
+                    restoreFeedWalkthroughAfterDiscoverDismissal()
                 }
             }
         }
@@ -232,12 +232,24 @@ struct FeedScreen: View {
 
     private func closeDiscoverSearch() {
         isShowingSearch = false
-        guard walkthroughs.requestedSurface == .feed else { return }
-        walkthroughs.consumeRequestedSurface(.feed)
-        walkthroughs.activate(.feed)
-        if walkthroughs.currentStep?.target == .feedPeopleSearch {
-            selectedSurface = .people
+        restoreFeedWalkthroughAfterDiscoverDismissal()
+    }
+
+    /// Discover is a full-screen cover above Feed, so Feed's ordinary
+    /// `onChange` observers are not guaranteed to render the destination tab
+    /// before the cover disappears on a real device. Resolve both supported
+    /// coordinator handoff states synchronously while the cover closes.
+    private func restoreFeedWalkthroughAfterDiscoverDismissal() {
+        if walkthroughs.requestedSurface == .feed {
+            walkthroughs.consumeRequestedSurface(.feed)
+            walkthroughs.activate(.feed)
         }
+
+        guard let destination = FeedSurface.walkthroughDestination(
+            activeSurface: walkthroughs.activeSurface,
+            target: walkthroughs.currentStep?.target
+        ) else { return }
+        selectedSurface = destination
     }
 
     @ViewBuilder
@@ -550,7 +562,7 @@ struct FeedScreen: View {
     }
 }
 
-private enum FeedSurface: String, CaseIterable, Identifiable {
+enum FeedSurface: String, CaseIterable, Identifiable {
     case places
     case people
 
@@ -579,6 +591,21 @@ private enum FeedSurface: String, CaseIterable, Identifiable {
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else { return .places }
         return FeedSurface(rawValue: arguments[valueIndex]) ?? .places
+    }
+
+    static func walkthroughDestination(
+        activeSurface: WalkthroughSurface?,
+        target: WalkthroughTargetID?
+    ) -> FeedSurface? {
+        guard activeSurface == .feed else { return nil }
+        switch target {
+        case .feedPeopleSearch, .feedInvite:
+            return .people
+        case .feedActivity, .feedDiscoverSearch:
+            return .places
+        default:
+            return nil
+        }
     }
 }
 
