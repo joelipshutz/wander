@@ -10,6 +10,32 @@ Rules:
 - Mention dirty worktree changes you did not make. Do not revert them without explicit instruction.
 - Keep entries concrete enough that another agent can resume without reading the whole chat.
 
+## 2026-08-17 10:58 PDT - Codex - build-155 feature split and branch archival update
+
+Agent: Codex
+Branch: `joe/phone-build-latest`
+Worktree: current checkout
+
+Goal: recover from the main-line drift by splitting recent landing commits into
+isolated feature branches without deleting the `testflight/build-155` historical
+tag.
+
+- Kept `testflight/build-155` at `910f1575` as the historical anchor for build
+  comparison/repro reference.
+- Created one branch per feature from that tag:
+  - `codex/feature-454-first-save-checkin` (`81064d87`)
+  - `codex/feature-456-map-layout` (`0ecf9d73`)
+  - `codex/feature-457-semantic-discover` (`ccfd07c4`)
+  - `codex/feature-458-feed-glass-controls` (`f0fc851c`)
+  - `codex/feature-459-map-search-polish` (`0c9abb78`)
+  - `codex/feature-461-save-confirmation-ctas` (`e5325b19`)
+- All branches now contain only one cherry-picked feature commit each (with
+  resolved conflict handling for historical doc/test-file deltas where needed).
+- No build-number increment, TestFlight release, or archive activity was performed as
+  part of this branch-splitting step.
+- Next step on request: if needed, delete only the temporary `tmp/` artifact in
+  checkout and keep release tags unchanged.
+
 ## 2026-06-01 - Codex - Morning Reset, M2 Local Loop, Handoff Docs
 
 Agent: Codex
