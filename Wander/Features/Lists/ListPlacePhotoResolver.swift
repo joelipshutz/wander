@@ -6,7 +6,7 @@ struct ListPlaceResolvedPhoto {
     let image: UIImage
 }
 
-private final class ListPlaceDecodedImage: @unchecked Sendable {
+final class PlacePhotoDecodedImage: @unchecked Sendable {
     let image: UIImage
 
     init(image: UIImage) {
@@ -19,8 +19,8 @@ private final class ListPlaceDecodedImage: @unchecked Sendable {
     }
 }
 
-private actor ListPlacePhotoImagePipeline {
-    static let shared = ListPlacePhotoImagePipeline()
+actor PlacePhotoImagePipeline {
+    static let shared = PlacePhotoImagePipeline()
 
     private struct CacheKey: Hashable, Sendable {
         let photoKey: String
@@ -33,14 +33,14 @@ private actor ListPlacePhotoImagePipeline {
 
     private struct InFlightEntry {
         let id: UUID
-        let task: Task<ListPlaceDecodedImage?, Never>
+        let task: Task<PlacePhotoDecodedImage?, Never>
     }
 
-    private let cache: NSCache<NSString, ListPlaceDecodedImage>
+    private let cache: NSCache<NSString, PlacePhotoDecodedImage>
     private var inFlight: [CacheKey: InFlightEntry] = [:]
 
     init(countLimit: Int = 128, totalCostLimit: Int = 32 * 1_024 * 1_024) {
-        cache = NSCache<NSString, ListPlaceDecodedImage>()
+        cache = NSCache<NSString, PlacePhotoDecodedImage>()
         cache.countLimit = max(1, countLimit)
         cache.totalCostLimit = max(1, totalCostLimit)
     }
@@ -49,7 +49,7 @@ private actor ListPlacePhotoImagePipeline {
         from data: Data,
         photoKey: String,
         targetPixelSize: Int
-    ) async -> ListPlaceDecodedImage? {
+    ) async -> PlacePhotoDecodedImage? {
         guard !Task.isCancelled else { return nil }
 
         let key = CacheKey(
@@ -65,7 +65,7 @@ private actor ListPlacePhotoImagePipeline {
             entry = existing
         } else {
             let id = UUID()
-            let task = Task<ListPlaceDecodedImage?, Never>.detached(priority: .utility) {
+            let task = Task<PlacePhotoDecodedImage?, Never>.detached(priority: .utility) {
                 guard !Task.isCancelled,
                       let image = Self.downsampledImage(
                           from: data,
@@ -75,7 +75,7 @@ private actor ListPlacePhotoImagePipeline {
                 else {
                     return nil
                 }
-                return ListPlaceDecodedImage(image: image)
+                return PlacePhotoDecodedImage(image: image)
             }
             let newEntry = InFlightEntry(id: id, task: task)
             inFlight[key] = newEntry
@@ -234,7 +234,7 @@ enum ListPlacePhotoResolver {
                 data = try await backend.placePhotoImageData(for: photo)
             }
             try Task.checkCancellation()
-            guard let decodedImage = await ListPlacePhotoImagePipeline.shared.image(
+            guard let decodedImage = await PlacePhotoImagePipeline.shared.image(
                 from: data,
                 photoKey: photo.cacheKey,
                 targetPixelSize: targetPixelSize

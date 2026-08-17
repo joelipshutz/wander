@@ -490,6 +490,10 @@ struct WanderRootView: View {
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
         .task(id: selectedTab) {
+            // Let the native tab selection and Liquid Glass transition commit
+            // before analytics work begins on the main actor.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.appSurfaceViewed,

@@ -196,6 +196,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private static var tabBarImageCache: [String: UIImage] = [:]"))
         XCTAssertFalse(root.contains("tabBar.selectedItem ="))
         XCTAssertTrue(root.contains("Let the native tab bar commit navigation on touch-up first."))
+        XCTAssertTrue(root.contains("observedControls.allSatisfy({ $0.window === window })"))
+        XCTAssertTrue(root.contains("Let the native tab selection and Liquid Glass transition commit"))
         XCTAssertFalse(root.contains(".toolbar(.hidden, for: .tabBar)"))
     }
 
@@ -1353,7 +1355,9 @@ final class NavigationContractTests: XCTestCase {
             discover.components(separatedBy: "private struct DiscoverSearchField: View").last?
                 .components(separatedBy: "private struct DiscoverPlaceResultCard: View").first
         )
-        XCTAssertTrue(discoverSearch.contains("TextField(\"\", text: $text)\n                    .font(.system(size: 15, weight: .bold))"))
+        XCTAssertTrue(discoverSearch.contains("@State private var draftText"))
+        XCTAssertTrue(discoverSearch.contains("TextField(\"\", text: $draftText)\n                    .font(.system(size: 15, weight: .bold))"))
+        XCTAssertTrue(discoverSearch.contains("Task.sleep(for: .milliseconds(80))"))
         XCTAssertFalse(discoverSearch.contains("WanderTypography.editorial"))
         XCTAssertTrue(discoverSearch.contains(".wanderGlassCapsule()"))
         XCTAssertFalse(discoverSearch.contains(".background(WanderTheme.surfaceRaised.color)"))

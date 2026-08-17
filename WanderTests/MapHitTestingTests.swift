@@ -4,6 +4,31 @@ import XCTest
 @testable import Wander
 
 final class MapHitTestingTests: XCTestCase {
+    @MainActor
+    func testRenderProjectionCacheReusesStableInputsAndRebuildsAfterChange() {
+        let cache = MapRenderProjectionCache<String, Int>()
+        var builds = 0
+
+        let first = cache.value(for: "stable") {
+            builds += 1
+            return 41
+        }
+        let second = cache.value(for: "stable") {
+            builds += 1
+            return 99
+        }
+        let changed = cache.value(for: "changed") {
+            builds += 1
+            return 42
+        }
+
+        XCTAssertEqual(first, 41)
+        XCTAssertEqual(second, 41)
+        XCTAssertEqual(changed, 42)
+        XCTAssertEqual(builds, 2)
+        XCTAssertEqual(cache.buildCount, 2)
+    }
+
     func testScreenPointWithinMarkerRadius() {
         let marker = CGPoint(x: 120, y: 240)
 
@@ -429,6 +454,14 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenScale"))
         XCTAssertTrue(map.contains("MapPinEntranceStyle.hiddenVerticalOffset"))
         XCTAssertTrue(map.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
+        let pinModifier = try XCTUnwrap(
+            map.components(separatedBy: "private struct MapPinEntranceModifier: ViewModifier {").last?
+                .components(separatedBy: "enum MapStatusFilter").first
+        )
+        XCTAssertFalse(pinModifier.contains("@State"))
+        XCTAssertTrue(pinModifier.contains(".animation("))
+        XCTAssertTrue(map.contains("mapPressLocation.location = value.location"))
+        XCTAssertFalse(map.contains("@State private var lastMapPressPoint"))
         XCTAssertFalse(map.contains("incomingGroups + departingGroups"))
         XCTAssertTrue(theme.contains("if #available(iOS 26.0, *) {"))
         XCTAssertFalse(theme.contains("isElevated"))
@@ -459,6 +492,8 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(searchBarSource.contains("minHeight: isFocused.wrappedValue ? 56 : 48"))
         XCTAssertTrue(searchBarSource.contains(".snappy(duration: 0.24, extraBounce: 0.08)"))
         XCTAssertTrue(searchBarSource.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
+        XCTAssertTrue(searchBarSource.contains("@State private var draftQuery"))
+        XCTAssertTrue(searchBarSource.contains("Task.sleep(for: .milliseconds(80))"))
         XCTAssertTrue(searchSurfaceSource.contains("if #available(iOS 26.0, *)"))
         XCTAssertTrue(searchSurfaceSource.contains(".glassEffect(.regular.interactive(true), in: Capsule())"))
         XCTAssertTrue(searchSurfaceSource.contains(".background(.ultraThinMaterial, in: Capsule())"))
