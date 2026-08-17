@@ -887,7 +887,10 @@ struct MapScreen: View {
                 .zIndex(40)
 
                 selectedPlaceProfileSurface
-                    .padding(.bottom, mapSearchDockClearance)
+                    .padding(
+                        .bottom,
+                        mapSearchDockClearance + MapControlLayout.selectedPlaceCardSearchGap
+                    )
                     .offset(y: compactCardVerticalOffset)
                     .opacity(compactCardContentOpacity)
                     .allowsHitTesting(
@@ -4785,6 +4788,7 @@ enum MapSocialOwnerSelection {
 
 private enum MapControlLayout {
     static let searchDockClearance: CGFloat = 64
+    static let selectedPlaceCardSearchGap: CGFloat = 12
     static let selectedPlaceRecenterClearance: CGFloat = 218
     static let compactCardNearbyLift = selectedPlaceRecenterClearance - searchDockClearance
     static let fallbackViewportHeight: CGFloat = 844

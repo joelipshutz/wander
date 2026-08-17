@@ -26,7 +26,7 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(app.buttons["map.selectedPlaceAction"].exists)
         let shareButton = app.buttons["map.selectedPlaceShare"]
         XCTAssertTrue(shareButton.exists)
-        XCTAssertTrue(app.descendants(matching: .any)["map.selectedPlaceAttribution"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["map.selectedPlaceAttribution"].exists)
         capture("rec-293-place-card-collapsed")
 
         shareButton.tap()

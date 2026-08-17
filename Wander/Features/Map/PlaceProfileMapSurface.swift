@@ -49,7 +49,6 @@ struct PlaceProfileMapSurface: View {
             .walkthroughTarget(.mapMemory)
             .walkthroughEmphasis(.mapMemory)
             .padding(.horizontal, WanderTheme.spacing3)
-            .padding(.bottom, WanderTheme.spacing3)
         }
     }
 }
@@ -288,7 +287,7 @@ private struct PlaceProfilePreviewCard: View {
     @State private var isShareSheetPresented = false
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        VStack(alignment: .trailing, spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 Button(action: onOpen) {
                     cardPhoto
@@ -381,10 +380,6 @@ private struct PlaceProfilePreviewCard: View {
                     }
                 }
                 .padding(14)
-            }
-
-            if let photo, photo.isGooglePlacesPhoto {
-                PlaceCardPhotoAttribution(photo: photo)
             }
         }
         .task(id: photoResolutionKey) {
@@ -598,38 +593,6 @@ private struct PlaceProfilePreviewCard: View {
 
 }
 
-private struct PlaceCardPhotoAttribution: View {
-    let photo: PlacePhoto
-
-    var body: some View {
-        HStack(spacing: 4) {
-            if let authorName = photo.authorName, !authorName.isEmpty {
-                if let authorURL = photo.authorProfileURL {
-                    Link("Photo by \(authorName)", destination: authorURL)
-                } else {
-                    Text("Photo by \(authorName)")
-                }
-                Text("·")
-            }
-
-            if let sourceURL = photo.sourcePhotoURL {
-                Link("Google Maps", destination: sourceURL)
-            } else {
-                Text("Google Maps")
-            }
-        }
-        .font(.system(size: 10, weight: .medium))
-        .foregroundStyle(WanderTheme.textMuted.color)
-        .tint(WanderTheme.textMuted.color)
-        .lineLimit(1)
-        .padding(.horizontal, 8)
-        .frame(minHeight: 32)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("map.selectedPlaceAttribution")
-    }
-}
-
 private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -659,7 +622,7 @@ private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
                 x: 0,
                 y: configuration.isPressed ? 0 : 4
             )
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 1.6 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 1.4 : 1)
             .animation(
                 reduceMotion ? .none : .spring(response: 0.24, dampingFraction: 0.68),
                 value: configuration.isPressed

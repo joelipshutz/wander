@@ -358,7 +358,12 @@ final class MapFilterSelectionTests: XCTestCase {
 
         XCTAssertLessThan(filters.lowerBound, mapSpace.lowerBound)
         XCTAssertLessThan(mapSpace.lowerBound, search.lowerBound)
-        XCTAssertTrue(map.contains("selectedPlaceProfileSurface\n                    .padding(.bottom, mapSearchDockClearance)"))
+        XCTAssertTrue(
+            map.contains(
+                "mapSearchDockClearance + MapControlLayout.selectedPlaceCardSearchGap"
+            )
+        )
+        XCTAssertTrue(map.contains("static let selectedPlaceCardSearchGap: CGFloat = 12"))
         XCTAssertTrue(map.contains("MapSearchDockHeightPreferenceKey"))
         XCTAssertTrue(map.contains("measuredMapSearchDockHeight = height"))
         XCTAssertTrue(map.contains(".overlay(alignment: .bottomTrailing)"))
