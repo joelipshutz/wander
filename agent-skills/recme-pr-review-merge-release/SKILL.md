@@ -57,6 +57,71 @@ Joe or Ryan decides the batch is worth testing.
 4. Keep the Linear issue and PR current with branch, validation, decisions, and
    exact handoff state.
 
+## Efficient Execution And Human Checkpoints
+
+Keep the safety gates below, but do not turn deterministic release mechanics
+into dozens of model turns. The normal execution shape is five visible phases:
+
+1. `Scope` — requested PRs/build, linked Linear records, authorization, and
+   immutable baseline are known.
+2. `Candidate` — manifest snapshot passes and the exact candidate is locked.
+3. `Validate` — tests, build, archive prerequisites, and required hosted smoke
+   checks pass on that candidate.
+4. `Release` — archive/upload and `testflight-release.mjs` finish.
+5. `Finalize` — immutable tag, manifest baseline, Linear evidence, and the one
+   Slack tester announcement finish.
+
+At each phase transition, send one compact status line containing the phase,
+the evidence just established, and the next possible human gate. Send another
+message only when the state changes, a human action is required, or an
+unexpected failure changes the plan. Do not narrate unchanged polls or every
+individual connector call.
+
+Human intervention remains explicit for:
+
+- initial merge/TestFlight authorization when it is not already in the prompt;
+- credential, password, device-code, signing, or browser confirmation;
+- a required product, data, migration, or release decision;
+- a destructive or permission-widening action; and
+- an unexpected validation failure whose resolution changes scope or risk.
+
+Optimize everything between those gates:
+
+- Batch independent read-only GitHub and Linear lookups once, reuse resolved
+  issue/PR/candidate identifiers, and avoid broad list/history reads. Generated
+  manifest copy is the Slack source; reading channel history is unnecessary.
+- Run each long Xcode validation/archive command once in a long-lived command
+  session with `-quiet`. Poll no more often than needed to keep the user updated
+  (normally 45–55 seconds), and inspect focused diagnostics only after a
+  nonzero exit. Do not feed successful compiler logs back into model context.
+- Group deterministic commands by phase so one tool invocation can establish
+  one checkpoint. Keep decision-making in the model; keep waiting, polling,
+  hashing, and state-transition mechanics in scripts.
+- After a credential pause, perform one compact drift check of the locked
+  candidate and manifest, then resume from the recorded phase. Do not replay
+  completed review, validation, or connector discovery.
+- Treat a repeated environment/auth failure as a human gate after the second
+  unchanged attempt. Record the exact restart state instead of opening a retry
+  loop.
+
+For expensive or benchmarked tasks, capture a privacy-safe aggregate report
+from the local Codex rollout with:
+
+```bash
+node scripts/codex-task-metrics.mjs \
+  --session <rollout.jsonl> \
+  --from <phase-start-iso> \
+  --to <phase-end-iso> \
+  --reported-tokens <optional-app-goal-total>
+```
+
+The metrics command ignores message text, tool arguments/results, credentials,
+and environment values. Record only aggregate raw/cached/fresh/output tokens,
+task/tool counts, failures, compactions, phase duration, time to first token,
+and the task-complete-to-next-user-message human-gate wait estimate. Raw rollout
+counters and app-reported goal usage are different measures; label both when
+both are available.
+
 ## Linear Status Contract
 
 - `Backlog`: untriaged feedback, or a decision-needed issue with an unanswered

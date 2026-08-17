@@ -39,6 +39,36 @@ During work and at handoff:
 - If local-only work is incomplete, leave a Linear comment naming the worktree,
   branch, last verified commit, commands already run, and exact next action.
 
+## Agent Execution Efficiency
+
+Be conclusive and preserve human control, while keeping routine mechanics out
+of repeated model turns.
+
+- Organize non-trivial work into a small number of named phases. Give the user
+  one compact update at each phase transition with evidence established and the
+  next possible human gate. Send another update only for a state change,
+  decision, intervention, or unexpected failure; do not narrate unchanged
+  polling or every connector call.
+- Batch independent read-only checks and reuse resolved issue, PR, branch,
+  commit, build, and account identifiers. Avoid broad connector discovery or
+  history reads when a direct lookup is available.
+- Keep judgment in the agent and deterministic mechanics in commands/scripts.
+  Run long builds, tests, archives, and poll loops in one long-lived session,
+  prefer quiet output, and inspect focused diagnostics only after failure.
+- Preserve explicit intervention for credentials, passwords, device codes,
+  signing, approvals, permission changes, destructive actions, product/data
+  decisions, and unexpected validation failures. Do not optimize away these
+  gates or claim success while one is outstanding.
+- After a pause, perform one compact drift check and resume from the durable
+  checkpoint. Do not replay completed reviews, tests, connector discovery, or
+  release-note reconstruction.
+- Treat two unchanged environment/auth failures as a human gate. Record the
+  exact restart state instead of opening an unbounded retry loop.
+- Never copy raw command output, prompts, credentials, environment values, or
+  Codex task content into repo metrics. When usage analysis is requested, use
+  `scripts/codex-task-metrics.mjs` and report aggregate counters only. Label raw
+  rollout token counters separately from any app-reported/goal token total.
+
 ## Required Linear Tracking
 
 Agents must work from a Linear issue for any non-trivial feature, fix, release,
