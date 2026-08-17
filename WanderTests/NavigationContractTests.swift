@@ -1826,6 +1826,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(plannedDateSection.contains("Text(\"add a date\")"))
         XCTAssertTrue(plannedDateSection.contains("MultiDatePicker("))
+        XCTAssertTrue(plannedDateSection.contains("isShowingPlannedDatePicker = false"))
         XCTAssertTrue(
             plannedDateSection.contains(
                 "If notifications are on, rec.me will remind you three days before."
@@ -1839,6 +1840,14 @@ final class NavigationContractTests: XCTestCase {
                 "let suggestedDate = Calendar.autoupdatingCurrent.date(byAdding: .day"
             )
         )
+
+        let dateAssignment = try XCTUnwrap(
+            plannedDateSection.range(of: "plannedDate = WannaGoDate.singleDate(")
+        )
+        let collapseAssignment = try XCTUnwrap(
+            plannedDateSection.range(of: "isShowingPlannedDatePicker = false")
+        )
+        XCTAssertLessThan(dateAssignment.lowerBound, collapseAssignment.lowerBound)
     }
 
     func testRequestedMemberEntryPointsPresentTheFullProfileDetail() throws {
@@ -1903,6 +1912,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(checkInDateSection.contains(".hourAndMinute"))
         XCTAssertFalse(checkInDateSection.contains("Defaults to now."))
         XCTAssertFalse(checkInDateSection.contains("Pick an earlier date for a past check-in."))
+
+        let dateAssignment = try XCTUnwrap(
+            checkInDateSection.range(of: "visitedAt = CheckInDatePickerSelection.resolvedDate(")
+        )
+        let collapseAssignment = try XCTUnwrap(
+            checkInDateSection.range(of: "presentation.isExpanded = false")
+        )
+        XCTAssertLessThan(dateAssignment.lowerBound, collapseAssignment.lowerBound)
     }
 
     func testCheckInDatePickerSelectionConfirmsTheCurrentDayWithoutChangingItsTimestamp() throws {

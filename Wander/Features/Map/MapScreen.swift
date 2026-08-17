@@ -6956,6 +6956,7 @@ struct MapPlaceSaveEditor: View {
                                     from: nextSelection,
                                     replacing: plannedDate
                                 )
+                                isShowingPlannedDatePicker = false
                             }
                         ),
                         in: WannaGoDate.normalized(.now)...
