@@ -266,11 +266,21 @@ struct MapCapturePlacePhotoRepository: PlacePhotoRepository {
     ) -> PlacePhoto {
         let tileIndex = Self.tileIndex(from: providerPlaceID)
         let tileSize = Self.croppedAssetImage(tileIndex: tileIndex)?.size
+        let isCoffeeShop = request.name.localizedCaseInsensitiveContains("coffee")
         return PlacePhoto(
             provider: provider,
             providerPlaceID: providerPlaceID,
-            providerPrimaryType: "restaurant",
-            providerTypes: ["restaurant", "food", "point_of_interest"],
+            providerPrimaryType: isCoffeeShop ? "coffee_shop" : "restaurant",
+            providerTypes: isCoffeeShop
+                ? ["coffee_shop", "cafe", "point_of_interest"]
+                : ["restaurant", "food", "point_of_interest"],
+            providerRating: provider == "google_places" ? 4.7 : nil,
+            providerUserRatingCount: provider == "google_places" ? 138 : nil,
+            providerOpenNow: provider == "google_places" ? false : nil,
+            providerNextOpenTimeString: provider == "google_places"
+                ? "2026-08-18T15:00:00Z"
+                : nil,
+            providerUTCOffsetMinutes: provider == "google_places" ? -420 : nil,
             photoURLString: "capture://place-carousel/\(tileIndex)",
             width: tileSize.map { Int($0.width) },
             height: tileSize.map { Int($0.height) },

@@ -1036,6 +1036,12 @@ struct PlacePhoto: Decodable, Equatable {
     let providerPlaceID: String
     let providerPrimaryType: String?
     let providerTypes: [String]?
+    let providerRating: Double?
+    let providerUserRatingCount: Int?
+    let providerOpenNow: Bool?
+    let providerNextOpenTimeString: String?
+    let providerNextCloseTimeString: String?
+    let providerUTCOffsetMinutes: Int?
     let photoURLString: String
     let width: Int?
     let height: Int?
@@ -1053,6 +1059,12 @@ struct PlacePhoto: Decodable, Equatable {
         providerPlaceID: String,
         providerPrimaryType: String? = nil,
         providerTypes: [String]? = nil,
+        providerRating: Double? = nil,
+        providerUserRatingCount: Int? = nil,
+        providerOpenNow: Bool? = nil,
+        providerNextOpenTimeString: String? = nil,
+        providerNextCloseTimeString: String? = nil,
+        providerUTCOffsetMinutes: Int? = nil,
         photoURLString: String,
         width: Int?,
         height: Int?,
@@ -1069,6 +1081,12 @@ struct PlacePhoto: Decodable, Equatable {
         self.providerPlaceID = providerPlaceID
         self.providerPrimaryType = providerPrimaryType
         self.providerTypes = providerTypes
+        self.providerRating = providerRating
+        self.providerUserRatingCount = providerUserRatingCount
+        self.providerOpenNow = providerOpenNow
+        self.providerNextOpenTimeString = providerNextOpenTimeString
+        self.providerNextCloseTimeString = providerNextCloseTimeString
+        self.providerUTCOffsetMinutes = providerUTCOffsetMinutes
         self.photoURLString = photoURLString
         self.width = width
         self.height = height
@@ -1105,6 +1123,12 @@ struct PlacePhoto: Decodable, Equatable {
         case providerPlaceID = "provider_place_id"
         case providerPrimaryType = "provider_primary_type"
         case providerTypes = "provider_types"
+        case providerRating = "provider_rating"
+        case providerUserRatingCount = "provider_user_rating_count"
+        case providerOpenNow = "provider_open_now"
+        case providerNextOpenTimeString = "provider_next_open_time"
+        case providerNextCloseTimeString = "provider_next_close_time"
+        case providerUTCOffsetMinutes = "provider_utc_offset_minutes"
         case photoURLString = "photo_url"
         case width
         case height

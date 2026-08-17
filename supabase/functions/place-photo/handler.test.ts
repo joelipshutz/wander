@@ -50,6 +50,13 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
             location: { latitude: 34.0777, longitude: -118.2588 },
             primaryType: "coffee_shop",
             types: ["coffee_shop", "cafe"],
+            rating: 4.7,
+            userRatingCount: 138,
+            currentOpeningHours: {
+              openNow: false,
+              nextOpenTime: "2026-08-14T15:00:00Z",
+            },
+            utcOffsetMinutes: -420,
             photos: [{
               name: "places/google-woodcat/photos/storefront",
               widthPx: 1_600,
@@ -104,10 +111,18 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
     "https://example.supabase.co/storage/v1/object/sign/",
   );
   assertEquals(firstPayload.author_name, "Photo Author");
+  assertEquals(firstPayload.provider_rating, 4.7);
+  assertEquals(firstPayload.provider_user_rating_count, 138);
+  assertEquals(firstPayload.provider_open_now, false);
+  assertEquals(firstPayload.provider_next_open_time, "2026-08-14T15:00:00Z");
+  assertEquals(firstPayload.provider_utc_offset_minutes, -420);
   assert(cachedRow !== null, "cache metadata was not written");
   const writtenRow = cachedRow as unknown as Record<string, unknown>;
   assertEquals(writtenRow.content_type, "image/jpeg");
   assertEquals(writtenRow.byte_size, 4);
+  assertEquals(writtenRow.provider_rating, 4.7);
+  assertEquals(writtenRow.provider_user_rating_count, 138);
+  assertEquals(writtenRow.provider_open_now, false);
   assertEquals("expires_at" in writtenRow, false);
   assertEquals(storageCacheControl, "86400");
   assertEquals(signedURLExpirySeconds, 86_400);
@@ -213,7 +228,7 @@ Deno.test("place-photo reuses legacy cache rows without applying their former ex
 
   const response = await handleRequest(photoRequest(), dependencies);
   assertEquals(response.status, 200);
-  assertEquals(searchCount, 0);
+  assertEquals(searchCount, 1);
   assertEquals(deletedStorageObject, false);
   assertEquals(deletedMetadata, false);
 });

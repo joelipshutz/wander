@@ -10,6 +10,7 @@ import {
 const googlePlacesBaseURL = "https://places.googleapis.com/v1";
 const cacheBucket = "google-place-photo-cache";
 const signedURLLifetimeSeconds = 24 * 60 * 60;
+const businessMetadataFreshnessMilliseconds = 15 * 60 * 1_000;
 const maximumCachedImageBytes = 10 * 1_024 * 1_024;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
@@ -31,6 +32,12 @@ type CachedPhotoRow = {
   provider_place_id: string;
   provider_primary_type: string | null;
   provider_types: string[];
+  provider_rating: number | null;
+  provider_user_rating_count: number | null;
+  provider_open_now: boolean | null;
+  provider_next_open_time: string | null;
+  provider_next_close_time: string | null;
+  provider_utc_offset_minutes: number | null;
   width: number | null;
   height: number | null;
   content_type: string | null;
@@ -49,6 +56,12 @@ type PlacePhotoPayload = {
   provider_place_id: string;
   provider_primary_type: string | null;
   provider_types: string[];
+  provider_rating: number | null;
+  provider_user_rating_count: number | null;
+  provider_open_now: boolean | null;
+  provider_next_open_time: string | null;
+  provider_next_close_time: string | null;
+  provider_utc_offset_minutes: number | null;
   photo_url: string;
   width: number | null;
   height: number | null;
@@ -94,24 +107,70 @@ export async function handleRequest(
   }
 
   const cacheKey = await placePhotoCacheKey(input);
-  if (supabase.serviceRoleKey) {
-    const cached = await readCachedPhoto(cacheKey, supabase, dependencies);
-    if (cached) {
-      const payload = await cachedPayload(
-        cached,
-        input,
-        supabase,
-        dependencies,
-      );
-      if (payload) {
-        console.log("place_photo_cache_hit");
-        return Response.json(payload, { headers: noStoreHeaders });
+  const cached = supabase.serviceRoleKey
+    ? await readCachedPhoto(cacheKey, supabase, dependencies)
+    : null;
+  if (cached && businessMetadataIsFresh(cached, dependencies.now())) {
+    const payload = await cachedPayload(
+      cached,
+      input,
+      supabase,
+      dependencies,
+    );
+    if (payload) {
+      console.log("place_photo_cache_hit");
+      return Response.json(payload, { headers: noStoreHeaders });
+    }
+  }
+
+  const apiKey = googlePlacesAPIKey(dependencies);
+  if (cached) {
+    if (apiKey && supabase.serviceRoleKey) {
+      try {
+        const refreshedPlace = await resolvePlace(
+          { ...input, requiresPhoto: false },
+          apiKey,
+          dependencies,
+        );
+        if (refreshedPlace?.id) {
+          const refreshedRow = refreshingBusinessMetadata(
+            cached,
+            placePayload(refreshedPlace),
+            dependencies.now(),
+          );
+          await upsertCacheRow(refreshedRow, supabase, dependencies);
+          const payload = await cachedPayload(
+            refreshedRow,
+            input,
+            supabase,
+            dependencies,
+          );
+          if (payload) {
+            console.log("place_photo_business_metadata_refreshed");
+            return Response.json(payload, { headers: noStoreHeaders });
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "place_photo_business_metadata_refresh_failed",
+          error instanceof Error ? error.message : "unknown_error",
+        );
       }
+    }
+
+    const payload = await cachedPayload(
+      omittingStaleOpeningHours(cached),
+      input,
+      supabase,
+      dependencies,
+    );
+    if (payload) {
+      console.log("place_photo_cache_hit_without_current_hours");
+      return Response.json(payload, { headers: noStoreHeaders });
     }
   }
 
   console.log("place_photo_cache_miss");
-  const apiKey = googlePlacesAPIKey(dependencies);
   if (!apiKey) {
     return jsonResponse({ error: "provider_unavailable" }, 503);
   }
@@ -185,11 +244,11 @@ async function resolvePlace(
   dependencies: PlacePhotoDependencies,
 ): Promise<GooglePlace | null> {
   const directFieldMask = input.requiresPhoto
-    ? "id,displayName,formattedAddress,location,primaryType,types,photos"
-    : "id,displayName,formattedAddress,location,primaryType,types";
+    ? "id,displayName,formattedAddress,location,primaryType,types,rating,userRatingCount,currentOpeningHours,utcOffsetMinutes,photos"
+    : "id,displayName,formattedAddress,location,primaryType,types,rating,userRatingCount,currentOpeningHours,utcOffsetMinutes";
   const searchFieldMask = input.requiresPhoto
-    ? "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.photos"
-    : "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types";
+    ? "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.currentOpeningHours,places.utcOffsetMinutes,places.photos"
+    : "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.currentOpeningHours,places.utcOffsetMinutes";
 
   if (isGoogleProvider(input.sourceProvider) && input.sourceProviderPlaceID) {
     try {
@@ -281,6 +340,12 @@ async function cachedPayload(
     provider_place_id: row.provider_place_id,
     provider_primary_type: row.provider_primary_type,
     provider_types: row.provider_types,
+    provider_rating: row.provider_rating,
+    provider_user_rating_count: row.provider_user_rating_count,
+    provider_open_now: row.provider_open_now,
+    provider_next_open_time: row.provider_next_open_time,
+    provider_next_close_time: row.provider_next_close_time,
+    provider_utc_offset_minutes: row.provider_utc_offset_minutes,
     photo_url: photoURL,
     width: row.width,
     height: row.height,
@@ -359,6 +424,12 @@ function cacheRow(
     provider_place_id: payload.provider_place_id,
     provider_primary_type: payload.provider_primary_type,
     provider_types: payload.provider_types,
+    provider_rating: payload.provider_rating,
+    provider_user_rating_count: payload.provider_user_rating_count,
+    provider_open_now: payload.provider_open_now,
+    provider_next_open_time: payload.provider_next_open_time,
+    provider_next_close_time: payload.provider_next_close_time,
+    provider_utc_offset_minutes: payload.provider_utc_offset_minutes,
     width: payload.width,
     height: payload.height,
     content_type: null,
@@ -370,6 +441,43 @@ function cacheRow(
     flag_content_url: payload.flag_content_url,
     fetched_at: fetchedAt.toISOString(),
     last_accessed_at: fetchedAt.toISOString(),
+  };
+}
+
+function businessMetadataIsFresh(row: CachedPhotoRow, now: Date): boolean {
+  const fetchedAt = Date.parse(row.fetched_at);
+  const age = now.getTime() - fetchedAt;
+  return Number.isFinite(fetchedAt) && age >= 0 &&
+    age <= businessMetadataFreshnessMilliseconds;
+}
+
+function refreshingBusinessMetadata(
+  row: CachedPhotoRow,
+  payload: PlacePhotoPayload,
+  fetchedAt: Date,
+): CachedPhotoRow {
+  return {
+    ...row,
+    provider_place_id: payload.provider_place_id,
+    provider_primary_type: payload.provider_primary_type,
+    provider_types: payload.provider_types,
+    provider_rating: payload.provider_rating,
+    provider_user_rating_count: payload.provider_user_rating_count,
+    provider_open_now: payload.provider_open_now,
+    provider_next_open_time: payload.provider_next_open_time,
+    provider_next_close_time: payload.provider_next_close_time,
+    provider_utc_offset_minutes: payload.provider_utc_offset_minutes,
+    fetched_at: fetchedAt.toISOString(),
+    last_accessed_at: fetchedAt.toISOString(),
+  };
+}
+
+function omittingStaleOpeningHours(row: CachedPhotoRow): CachedPhotoRow {
+  return {
+    ...row,
+    provider_open_now: null,
+    provider_next_open_time: null,
+    provider_next_close_time: null,
   };
 }
 
@@ -577,6 +685,12 @@ function placePayload(place: GooglePlace): PlacePhotoPayload {
     provider_place_id: place.id ?? "",
     provider_primary_type: cleanString(place.primaryType),
     provider_types: cleanStrings(place.types),
+    provider_rating: finiteNumber(place.rating),
+    provider_user_rating_count: finiteInteger(place.userRatingCount),
+    provider_open_now: place.currentOpeningHours?.openNow ?? null,
+    provider_next_open_time: cleanString(place.currentOpeningHours?.nextOpenTime),
+    provider_next_close_time: cleanString(place.currentOpeningHours?.nextCloseTime),
+    provider_utc_offset_minutes: finiteInteger(place.utcOffsetMinutes),
     photo_url: "",
     width: null,
     height: null,
@@ -697,8 +811,19 @@ function coordinate(
 }
 
 function finiteInteger(value: unknown): number | null {
+  if (value === null || typeof value === "undefined" || value === "") {
+    return null;
+  }
   const number = Number(value);
   return Number.isFinite(number) ? Math.round(number) : null;
+}
+
+function finiteNumber(value: unknown): number | null {
+  if (value === null || typeof value === "undefined" || value === "") {
+    return null;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function cleanString(value: unknown): string | null {

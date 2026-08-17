@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(12);
+select plan(18);
 
 select ok(
   exists(select 1 from storage.buckets where id = 'google-place-photo-cache'),
@@ -83,6 +83,43 @@ select ok(
       and is_nullable = 'YES'
   ),
   'cache metadata has no automatic expiry boundary'
+);
+
+select has_column(
+  'public',
+  'google_place_photo_cache',
+  'provider_rating',
+  'cache metadata stores the provider rating'
+);
+select has_column(
+  'public',
+  'google_place_photo_cache',
+  'provider_user_rating_count',
+  'cache metadata stores the provider rating count'
+);
+select has_column(
+  'public',
+  'google_place_photo_cache',
+  'provider_open_now',
+  'cache metadata stores the provider open state'
+);
+select has_column(
+  'public',
+  'google_place_photo_cache',
+  'provider_next_open_time',
+  'cache metadata stores the next opening time'
+);
+select has_column(
+  'public',
+  'google_place_photo_cache',
+  'provider_next_close_time',
+  'cache metadata stores the next closing time'
+);
+select has_column(
+  'public',
+  'google_place_photo_cache',
+  'provider_utc_offset_minutes',
+  'cache metadata stores the provider timezone offset'
 );
 
 select * from finish();
