@@ -16,8 +16,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertTrue(AddSuggestedPlaces.walkthroughRequiresExpansion(candidateCount: 4))
     }
 
-    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtyOneGuidedSteps() {
-        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 31)
+    func testCondensedWalkthroughCoversEveryActiveSurfaceWithThirtyTwoGuidedSteps() {
+        XCTAssertEqual(FirstVisitWalkthroughContent.allSteps.count, 32)
         XCTAssertEqual(
             Set(FirstVisitWalkthroughContent.stepsBySurface.keys),
             Set(WalkthroughSurface.allCases)
@@ -52,7 +52,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
                 .saveDate,
                 .saveRating,
                 .saveMoreOptions,
-                .saveSubmit
+                .saveSubmit,
+                .saveReview
             ]
         )
         XCTAssertEqual(
@@ -94,6 +95,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .mapSearch,
             .mapTabs,
             .addImport,
+            .saveReview,
             .feedActivity,
             .feedPeopleSearch,
             .feedInvite,
@@ -153,6 +155,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
             .saveRating,
             .saveMoreOptions,
             .saveSubmit,
+            .saveReview,
             .feedActivity,
             .feedInvite,
             .feedSearchField,
@@ -464,6 +467,57 @@ final class FirstVisitWalkthroughTests: XCTestCase {
 
         XCTAssertTrue(store.isComplete(for: "ryan", surface: .feed))
         XCTAssertEqual(coordinator.requestedSurface, .lists)
+    }
+
+    func testDiscoverResultsReturnAtomicallyToThePendingFeedStep() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+
+        coordinator.activate(.feed)
+        coordinator.advancePassiveStep()
+        coordinator.perform(.feedDiscoverSearch)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedPeopleSearch)
+
+        coordinator.transition(to: .feedSearch)
+        coordinator.advancePassiveStep()
+        coordinator.perform(.feedSmartSearch)
+        coordinator.perform(.feedSearchResultsBack)
+
+        XCTAssertEqual(coordinator.activeSurface, .feed)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedPeopleSearch)
+        XCTAssertNil(coordinator.requestedSurface)
+        XCTAssertEqual(store.checkpoint(for: "ryan")?.target, .feedPeopleSearch)
+    }
+
+    func testAutomaticWalkthroughTimingUsesAnAverageReadingBeat() {
+        let shortDelay = FirstVisitWalkthroughContent
+            .automaticReadingDelayMilliseconds(for: .saveDate)
+        let longerDelay = FirstVisitWalkthroughContent
+            .automaticReadingDelayMilliseconds(for: .saveMoreOptions)
+
+        XCTAssertGreaterThanOrEqual(shortDelay, 2_800)
+        XCTAssertGreaterThan(longerDelay, shortDelay)
+        XCTAssertLessThanOrEqual(longerDelay, 6_500)
+    }
+
+    func testSaveStatusCanBeCorrectedFromTheAutomatedDetailsFlow() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "ryan", store: store)
+
+        coordinator.forceActivate(.saveStatus)
+        coordinator.recordTutorialSelectedStatus(.been)
+        coordinator.perform(.saveStatus)
+        coordinator.perform(.saveContinue)
+        XCTAssertEqual(coordinator.currentStep?.target, .saveDate)
+        XCTAssertTrue(coordinator.canGoBack)
+
+        coordinator.goBack()
+
+        XCTAssertEqual(coordinator.currentStep?.target, .saveStatus)
+        XCTAssertNil(coordinator.tutorialSelectedStatus)
+        XCTAssertEqual(store.checkpoint(for: "ryan")?.target, .saveStatus)
     }
 
     func testRequestedRoutingSkipsMultipleCompletedDestinations() throws {
@@ -952,11 +1006,13 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.advancePassiveStep()
         coordinator.perform(.feedSmartSearch)
         coordinator.perform(.feedSearchResultsBack)
-        XCTAssertNil(coordinator.activeSurface)
-        XCTAssertEqual(coordinator.requestedSurface, .feed)
+        XCTAssertEqual(coordinator.activeSurface, .feed)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedActivity)
+        XCTAssertNil(coordinator.requestedSurface)
 
         coordinator.transition(to: .feedSearch)
-        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertEqual(coordinator.activeSurface, .feed)
+        XCTAssertEqual(coordinator.currentStep?.target, .feedActivity)
         XCTAssertTrue(store.isComplete(for: "ryan", surface: .feedSearch))
     }
 
@@ -1576,11 +1632,8 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.perform(.feedSmartSearch)
         XCTAssertEqual(coordinator.currentStep?.target, .feedSearchResultsBack)
         coordinator.perform(.feedSearchResultsBack)
-        XCTAssertNil(coordinator.activeSurface)
-        XCTAssertEqual(coordinator.requestedSurface, .feed)
-
-        coordinator.consumeRequestedSurface(.feed)
-        coordinator.activate(.feed)
+        XCTAssertEqual(coordinator.activeSurface, .feed)
+        XCTAssertNil(coordinator.requestedSurface)
         XCTAssertEqual(coordinator.currentStep?.target, .feedPeopleSearch)
         coordinator.advancePassiveStep()
         XCTAssertEqual(coordinator.currentStep?.target, .feedInvite)

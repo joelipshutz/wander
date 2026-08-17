@@ -42,6 +42,7 @@ enum WalkthroughTargetID: String, Codable, Sendable {
     case saveTags
     case savePrivacy
     case saveSubmit
+    case saveReview
     case feedActivity
     case feedSurfaceSwitch
     case feedPeopleSearch
@@ -274,10 +275,19 @@ enum FirstVisitWalkthroughContent {
                 .saveFlow,
                 .saveSubmit,
                 "Putting it on your map",
-                "Your first place memory is ready.",
+                "We’ll save the details you just watched come together.",
                 allowsTargetInteraction: false,
                 coachTheme: .save,
                 automaticallyAdvances: true
+            ),
+            step(
+                .saveFlow,
+                .saveReview,
+                "Your first place is ready",
+                "Take a look, then tap Next when you’re ready to keep exploring.",
+                advance: .next,
+                allowsTargetInteraction: false,
+                coachTheme: .save
             )
         ],
         .feed: [
@@ -401,6 +411,17 @@ enum FirstVisitWalkthroughContent {
 
     static var allSteps: [WalkthroughStep] {
         WalkthroughSurface.allCases.flatMap { stepsBySurface[$0, default: []] }
+    }
+
+    /// Gives automatic demonstrations enough time for an average reader to
+    /// understand the coach copy before the UI moves on.
+    static func automaticReadingDelayMilliseconds(for target: WalkthroughTargetID) -> Int {
+        guard let step = allSteps.first(where: { $0.target == target }) else { return 3_000 }
+        let wordCount = (step.title + " " + step.message)
+            .split(whereSeparator: { $0.isWhitespace })
+            .count
+        let readingMilliseconds = Int(ceil((Double(wordCount) / 220) * 60_000))
+        return min(max(readingMilliseconds + 850, 2_800), 6_500)
     }
 
     // Retained for a later Lists NUX re-enable. These lessons stay compiled and their
@@ -1049,6 +1070,10 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 
     var canGoBack: Bool {
+        if activeSurface == .saveFlow, currentStep?.target == .saveDate {
+            return true
+        }
+
         guard
             let activeSurface,
             currentStepIndex > 0,
@@ -1316,7 +1341,47 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
     func perform(_ target: WalkthroughTargetID) {
         guard currentStep?.target == target, currentStep?.advance == .action else { return }
+        if target == .feedSearchResultsBack {
+            completeAction(target, transitioningImmediatelyTo: .feed)
+            return
+        }
         advance()
+    }
+
+    /// Discover is presented above Feed. Returning through a transient
+    /// `requestedSurface` left a timing window where cover dismissal consumed
+    /// the handoff before Feed remounted its walkthrough presenter.
+    private func completeAction(
+        _ target: WalkthroughTargetID,
+        transitioningImmediatelyTo destination: WalkthroughSurface
+    ) {
+        guard currentStep?.target == target,
+              currentStep?.advance == .action,
+              let source = activeSurface
+        else { return }
+
+        let sourceSteps = FirstVisitWalkthroughContent.stepsBySurface[source, default: []]
+        let sourceNextIndex = currentStepIndex + 1
+        store.setProgress(sourceNextIndex, for: userID, surface: source)
+        if sourceNextIndex >= sourceSteps.count {
+            store.markComplete(for: userID, surface: source)
+        }
+
+        guard let destinationTarget = nextIncompleteTarget(for: destination),
+              let destinationIndex = FirstVisitWalkthroughContent.stepsBySurface[destination]?
+                .firstIndex(where: { $0.target == destinationTarget })
+        else {
+            activeSurface = nil
+            currentStepIndex = 0
+            requestedSurface = nil
+            requestNextIncompleteDestination(after: destination)
+            return
+        }
+
+        requestedSurface = nil
+        activeSurface = destination
+        currentStepIndex = destinationIndex
+        persistCheckpoint()
     }
 
     func perform(
@@ -1364,6 +1429,11 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 
     func goBack() {
+        if activeSurface == .saveFlow, currentStep?.target == .saveDate {
+            rewindTutorialSaveStatusSelection()
+            return
+        }
+
         guard canGoBack, let surface = activeSurface else { return }
         let previousIndex = currentStepIndex - 1
         isRequestingContactInvite = false
@@ -1397,6 +1467,17 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
 
     func recordTutorialSelectedStatus(_ status: PlaceStatus) {
         tutorialSelectedStatus = status
+        persistCheckpoint()
+    }
+
+    func rewindTutorialSaveStatusSelection() {
+        guard activeSurface == .saveFlow,
+              let index = FirstVisitWalkthroughContent.stepsBySurface[.saveFlow]?
+                .firstIndex(where: { $0.target == .saveStatus })
+        else { return }
+        tutorialSelectedStatus = nil
+        store.setProgress(index, for: userID, surface: .saveFlow)
+        currentStepIndex = index
         persistCheckpoint()
     }
 
@@ -2340,10 +2421,10 @@ private struct FirstVisitWalkthroughOverlay: View {
 
     private var cardWidth: CGFloat {
         if step.target == .mapFeatured {
-            return min(300, max(260, containerSize.width - 32))
+            return min(270, max(244, containerSize.width - 32))
         }
         if step.target == .mapFriends || step.target == .mapYou {
-            return min(286, max(260, containerSize.width - 32))
+            return min(264, max(244, containerSize.width - 32))
         }
         let characterCount = step.title.count + step.message.count
         let preferred: CGFloat
@@ -2399,6 +2480,7 @@ private struct FirstVisitWalkthroughOverlay: View {
     }
 
     private var visibleEmphasisFrames: [CGRect] {
+        guard step.allowsTargetInteraction else { return [] }
         if step.target == .mapFeatured {
             return []
         }
@@ -2558,10 +2640,10 @@ private struct FirstVisitWalkthroughOverlay: View {
                 alignment: .leading,
                 spacing: isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing2
             ) {
-                HStack(alignment: .top, spacing: WanderTheme.spacing2) {
+                HStack(alignment: isCompactFilterCoach ? .center : .top, spacing: WanderTheme.spacing2) {
                     if step.coachTheme != .standard {
                         WalkthroughCoachThemeBadge(theme: step.coachTheme)
-                            .padding(.top, 1)
+                            .padding(.top, isCompactFilterCoach ? 0 : 1)
                     }
 
                     Text(step.title)
@@ -2612,10 +2694,11 @@ private struct FirstVisitWalkthroughOverlay: View {
                             .accessibilityIdentifier("walkthrough.next.\(step.id)")
                         }
                     }
+                    .padding(.top, isCompactFilterCoach ? -WanderTheme.spacing1 : 0)
                 }
             }
             .padding(.horizontal, isCompactFilterCoach ? WanderTheme.spacing3 : WanderTheme.spacing4)
-            .padding(.vertical, isCompactFilterCoach ? WanderTheme.spacing1 : WanderTheme.spacing3)
+            .padding(.vertical, isCompactFilterCoach ? 8 : WanderTheme.spacing3)
             .frame(width: cardWidth, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)

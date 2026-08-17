@@ -1796,7 +1796,8 @@ final class NavigationContractTests: XCTestCase {
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
         )
-        XCTAssertTrue(mapScreen.contains("if step == .details && context.requiresStatusConfirmation"))
+        XCTAssertTrue(mapScreen.contains("if presentedStep == .details,"))
+        XCTAssertTrue(mapScreen.contains("walkthroughs.activeSurface != .saveFlow"))
         XCTAssertEqual(mapScreen.components(separatedBy: "Text(flowTitle)").count - 1, 1)
         XCTAssertTrue(mapScreen.contains("ZStack {"))
         XCTAssertTrue(mapScreen.contains(".multilineTextAlignment(.center)"))

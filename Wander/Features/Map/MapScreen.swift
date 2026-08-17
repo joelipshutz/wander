@@ -5884,12 +5884,18 @@ extension PlaceSaveDraft {
         now: Date = .now
     ) -> PlaceSaveDraft? {
         guard case .add = context.mode else { return nil }
-        return restorableFlow(ownerUserID: ownerUserID, context: context, now: now)
+        return restorableFlow(
+            ownerUserID: ownerUserID,
+            context: context,
+            walkthroughContentVersion: walkthroughContentVersion,
+            now: now
+        )
     }
 
     static func restorableFlow(
         ownerUserID: String,
         context: MapPlaceSaveContext,
+        walkthroughContentVersion: Int? = nil,
         now: Date = .now
     ) -> PlaceSaveDraft? {
         let sourceType: AddSourceType
@@ -6528,6 +6534,7 @@ struct MapPlaceSaveEditor: View {
     @State private var isMoreOptionsArrowPulsing = false
     @State private var saveAttemptedAt: Date?
     @State private var didStartWalkthroughAutoSave = false
+    @State private var pendingWalkthroughSaveResult: SaveResult?
 
     init(
         context: MapPlaceSaveContext,
@@ -6625,7 +6632,7 @@ struct MapPlaceSaveEditor: View {
     private var draftUpdate: PlaceSaveDraftUpdate {
         PlaceSaveDraftUpdate(
             form: PlaceSaveDraftForm(
-                step: step == .details ? .details : .confirm,
+                step: presentedStep == .details ? .details : .confirm,
                 selectedAssignment: selectedAssignment,
                 selectedStatus: selectedStatus,
                 selectedVisibility: selectedVisibility,
@@ -6646,6 +6653,24 @@ struct MapPlaceSaveEditor: View {
 
     private var questionBlocks: [AddQuestionBlock] {
         questionBlocksCache.blocks
+    }
+
+    /// The walkthrough coordinator is the durable source of truth when the
+    /// user rewinds from the automated details demo. SwiftUI may reconstruct
+    /// the sheet while that transition is publishing, so rendering directly
+    /// from the coordinator prevents a stale local `.details` value from
+    /// trapping the user on the wrong screen.
+    private var presentedStep: MapPlaceSaveStep {
+        isPresentingWalkthroughStatusSelection ? .confirm : step
+    }
+
+    private var presentedHasSelectedStatus: Bool {
+        isPresentingWalkthroughStatusSelection ? false : hasSelectedStatus
+    }
+
+    private var isPresentingWalkthroughStatusSelection: Bool {
+        walkthroughs.activeSurface == .saveFlow
+            && walkthroughs.currentStep?.target == .saveStatus
     }
 
     private var selectedCandidate: PlaceCandidate {
@@ -6686,19 +6711,19 @@ struct MapPlaceSaveEditor: View {
         NavigationStack {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
+                    VStack(alignment: .leading, spacing: presentedStep == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
                         if presentation == .sheet {
                             header
                         }
 
-                        switch step {
+                        switch presentedStep {
                         case .confirm:
                             confirmContent
                         case .details:
                             detailsContent
                         }
                     }
-                    .walkthroughTarget(step == .confirm ? .saveStatus : nil)
+                    .walkthroughTarget(presentedStep == .confirm ? .saveStatus : nil)
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, presentation == .attached ? WanderTheme.spacing1 : WanderTheme.spacing3)
                     .padding(.bottom, presentation == .attached ? WanderTheme.spacing3 : WanderTheme.spacing6)
@@ -6706,7 +6731,7 @@ struct MapPlaceSaveEditor: View {
                 .scrollDismissesKeyboard(.interactively)
                 .background(editorBackground)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if step == .details {
+                    if presentedStep == .details {
                         saveFooter
                     }
                 }
@@ -6730,7 +6755,7 @@ struct MapPlaceSaveEditor: View {
                     if store.isPrivateProfile {
                         selectedVisibility = .selfOnly
                     }
-                    if step == .details {
+                    if presentedStep == .details {
                         refreshQuestionBlocksIfNeeded()
                         syncAnswersForCurrentQuestions()
                     }
@@ -6756,6 +6781,13 @@ struct MapPlaceSaveEditor: View {
                 }
                 .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                     prepareWalkthroughTarget(target, with: walkthroughScrollProxy)
+                }
+                .onChange(of: walkthroughs.requestedSurface) { _, requestedSurface in
+                    guard requestedSurface == .map,
+                          let result = pendingWalkthroughSaveResult
+                    else { return }
+                    pendingWalkthroughSaveResult = nil
+                    onSaveCompleted(result)
                 }
                 .task(id: walkthroughAutomationTaskID) {
                     await runWalkthroughAutomationIfNeeded(with: walkthroughScrollProxy)
@@ -6795,10 +6827,11 @@ struct MapPlaceSaveEditor: View {
                     )
 
                 HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                    if step == .details && context.requiresStatusConfirmation {
+                    if presentedStep == .details,
+                       context.requiresStatusConfirmation,
+                       walkthroughs.activeSurface != .saveFlow {
                         Button {
-                            errorMessage = nil
-                            step = .confirm
+                            returnToStatusSelection()
                         } label: {
                             Label("back", systemImage: "chevron.left")
                                 .font(WanderTypography.label)
@@ -6830,7 +6863,7 @@ struct MapPlaceSaveEditor: View {
                 }
             }
 
-            if step == .confirm {
+            if presentedStep == .confirm {
                 Text(context.subtitle)
                     .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -6842,7 +6875,7 @@ struct MapPlaceSaveEditor: View {
     private var flowTitle: String {
         return context.flowTitle(
             status: selectedStatus,
-            isShowingDetails: step == .details
+            isShowingDetails: presentedStep == .details
         )
     }
 
@@ -6854,14 +6887,14 @@ struct MapPlaceSaveEditor: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     MapSaveChoicePill(
                         title: CheckInCopy.verb,
-                        isSelected: hasSelectedStatus && selectedStatus == .been
+                        isSelected: presentedHasSelectedStatus && selectedStatus == .been
                     ) {
                         selectStatus(.been)
                     }
                     if context.allowsWannaGoSelection {
                         MapSaveChoicePill(
                             title: "wanna go",
-                            isSelected: hasSelectedStatus && selectedStatus == .wannaGo
+                            isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
                         ) {
                             selectStatus(.wannaGo)
                         }
@@ -6870,7 +6903,7 @@ struct MapPlaceSaveEditor: View {
                 .walkthroughEmphasis(.saveStatus)
             }
 
-            if hasSelectedStatus {
+            if presentedHasSelectedStatus && walkthroughs.activeSurface != .saveFlow {
                 WanderPrimaryButton(
                     title: "continue to details",
                     systemImage: "arrow.right",
@@ -6883,7 +6916,7 @@ struct MapPlaceSaveEditor: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: hasSelectedStatus)
+        .animation(.easeInOut(duration: 0.2), value: presentedHasSelectedStatus)
     }
 
     private var detailsContent: some View {
@@ -6980,6 +7013,7 @@ struct MapPlaceSaveEditor: View {
         .padding(.vertical, WanderTheme.spacing2)
         .background(editorBackground)
         .walkthroughTarget(.saveSubmit)
+        .walkthroughTarget(.saveReview)
     }
 
     private var primaryActionTitle: String {
@@ -7485,6 +7519,20 @@ struct MapPlaceSaveEditor: View {
         step = .details
     }
 
+    private func returnToStatusSelection() {
+        errorMessage = nil
+        hasSelectedStatus = false
+        if let draftID {
+            var form = draftUpdate.form
+            form.step = .confirm
+            onDraftChange(draftID, form, saveAttemptedAt)
+        }
+        step = .confirm
+        guard walkthroughs.activeSurface == .saveFlow else { return }
+        walkthroughs.rewindTutorialSaveStatusSelection()
+        step = .confirm
+    }
+
     private func applyDefaults(from nextContext: MapPlaceSaveContext) {
         context = nextContext
         selectedAssignment = nextContext.candidate.categoryAssignment
@@ -7733,7 +7781,7 @@ struct MapPlaceSaveEditor: View {
     private var walkthroughAutomationTaskID: String {
         let surface = walkthroughs.activeSurface?.rawValue ?? "none"
         let target = walkthroughs.currentStep?.target.rawValue ?? "none"
-        let sheetStep = step == .details ? "details" : "confirm"
+        let sheetStep = presentedStep == .details ? "details" : "confirm"
         let saveAttempt = target == WalkthroughTargetID.saveSubmit.rawValue
             ? ".\(didStartWalkthroughAutoSave)"
             : ""
@@ -7743,7 +7791,7 @@ struct MapPlaceSaveEditor: View {
     @MainActor
     private func runWalkthroughAutomationIfNeeded(with proxy: ScrollViewProxy) async {
         guard walkthroughs.activeSurface == .saveFlow,
-              step == .details,
+              presentedStep == .details,
               let target = walkthroughs.currentStep?.target
         else { return }
 
@@ -7770,7 +7818,7 @@ struct MapPlaceSaveEditor: View {
 
     @MainActor
     private func runWalkthroughDateDemo(for target: WalkthroughTargetID) async {
-        guard await waitForWalkthroughBeat(.milliseconds(1_050), target: target) else { return }
+        guard await waitForWalkthroughReadingBeat(target) else { return }
 
         let offset = tutorialDateOffset
         if selectedStatus == .been {
@@ -7793,23 +7841,20 @@ struct MapPlaceSaveEditor: View {
             }
         }
 
-        guard await waitForWalkthroughBeat(.milliseconds(1_050), target: target) else { return }
+        guard await waitForWalkthroughBeat(.milliseconds(1_200), target: target) else { return }
         completeWalkthroughTarget(target)
     }
 
     @MainActor
     private func runWalkthroughRatingDemo(for target: WalkthroughTargetID) async {
-        guard await waitForWalkthroughBeat(.milliseconds(900), target: target) else { return }
+        guard await waitForWalkthroughReadingBeat(target) else { return }
 
         if reduceMotion {
             selectedRatingScore = 5
         } else {
             for score in [2.0, 3.5, 5.0] {
-                guard isCurrentWalkthroughTarget(target) else { return }
-                withAnimation(.smooth(duration: 0.72)) {
-                    selectedRatingScore = score
-                }
-                guard await waitForWalkthroughBeat(.milliseconds(820), target: target) else { return }
+                guard await glideWalkthroughRating(to: score, target: target) else { return }
+                guard await waitForWalkthroughBeat(.milliseconds(500), target: target) else { return }
             }
         }
 
@@ -7822,7 +7867,7 @@ struct MapPlaceSaveEditor: View {
         for target: WalkthroughTargetID,
         with proxy: ScrollViewProxy
     ) async {
-        guard await waitForWalkthroughBeat(.milliseconds(950), target: target) else { return }
+        guard await waitForWalkthroughReadingBeat(target) else { return }
         refreshQuestionBlocksIfNeeded()
         syncAnswersForCurrentQuestions()
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
@@ -7834,9 +7879,10 @@ struct MapPlaceSaveEditor: View {
         // Dedicated note/tag coach steps can opt into the same runner later. The current
         // compact flow demonstrates both details inside this single More Options chapter.
         if !walkthroughHasDedicatedNoteOrTagSteps {
-            await selectWalkthroughParkTag(for: target, with: proxy)
-            guard isCurrentWalkthroughTarget(target) else { return }
             await typeWalkthroughNote(for: target, with: proxy)
+            guard isCurrentWalkthroughTarget(target) else { return }
+            guard await waitForWalkthroughBeat(.milliseconds(900), target: target) else { return }
+            await selectWalkthroughParkTags(for: target, with: proxy)
             guard isCurrentWalkthroughTarget(target) else { return }
         }
 
@@ -7872,14 +7918,14 @@ struct MapPlaceSaveEditor: View {
             }
         }
         guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
-        await selectWalkthroughParkTag(for: target, with: proxy)
+        await selectWalkthroughParkTags(for: target, with: proxy)
         guard isCurrentWalkthroughTarget(target) else { return }
         guard await waitForWalkthroughBeat(.milliseconds(850), target: target) else { return }
         completeWalkthroughTarget(target)
     }
 
     @MainActor
-    private func selectWalkthroughParkTag(
+    private func selectWalkthroughParkTags(
         for target: WalkthroughTargetID,
         with proxy: ScrollViewProxy
     ) async {
@@ -7887,12 +7933,17 @@ struct MapPlaceSaveEditor: View {
             proxy.scrollTo(WalkthroughTargetID.saveTags, anchor: .center)
         }
         guard await waitForWalkthroughBeat(.milliseconds(700), target: target) else { return }
-        guard let block = unifiedTagBlock,
-              let tag = walkthroughParkTag(from: block.options)
-        else { return }
+        guard let block = unifiedTagBlock else { return }
+        let tags = walkthroughParkTags(from: block.options)
+        guard !tags.isEmpty else { return }
 
-        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76)) {
-            unifiedTags = [tag]
+        unifiedTags = []
+        for tag in tags {
+            guard isCurrentWalkthroughTarget(target) else { return }
+            withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76)) {
+                _ = unifiedTags.insert(tag)
+            }
+            guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
         }
     }
 
@@ -7927,9 +7978,7 @@ struct MapPlaceSaveEditor: View {
     @MainActor
     private func runWalkthroughSaveDemo(for target: WalkthroughTargetID) async {
         guard !didStartWalkthroughAutoSave else { return }
-        // Give the final coach a full reading beat before rec.me presses the
-        // disabled CTA on the user's behalf.
-        guard await waitForWalkthroughBeat(.milliseconds(2_400), target: target) else { return }
+        guard await waitForWalkthroughReadingBeat(target) else { return }
         guard isCurrentWalkthroughTarget(target), !isSaving else { return }
         didStartWalkthroughAutoSave = true
         save()
@@ -7945,7 +7994,7 @@ struct MapPlaceSaveEditor: View {
             || steps.contains(where: { $0.target == .saveTags })
     }
 
-    private func walkthroughParkTag(from options: [String]) -> String? {
+    private func walkthroughParkTags(from options: [String]) -> [String] {
         let preferences = [
             "reset spot",
             "low effort",
@@ -7954,9 +8003,39 @@ struct MapPlaceSaveEditor: View {
             "bring visitors",
             "views"
         ]
-        return preferences.lazy.compactMap { preferred in
+        let preferredTags = preferences.compactMap { preferred in
             options.first(where: { $0.caseInsensitiveCompare(preferred) == .orderedSame })
-        }.first ?? options.first
+        }
+        return Array((preferredTags + options).reduce(into: [String]()) { result, tag in
+            guard !result.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
+            result.append(tag)
+        }.prefix(3))
+    }
+
+    @MainActor
+    private func glideWalkthroughRating(
+        to destination: Double,
+        target: WalkthroughTargetID
+    ) async -> Bool {
+        let start = selectedRatingScore
+        let frameCount = 28
+        for frame in 1...frameCount {
+            guard isCurrentWalkthroughTarget(target) else { return false }
+            let linear = Double(frame) / Double(frameCount)
+            let eased = linear * linear * (3 - (2 * linear))
+            selectedRatingScore = start + ((destination - start) * eased)
+            guard await waitForWalkthroughBeat(.milliseconds(38), target: target) else { return false }
+        }
+        selectedRatingScore = destination
+        return true
+    }
+
+    @MainActor
+    private func waitForWalkthroughReadingBeat(_ target: WalkthroughTargetID) async -> Bool {
+        await waitForWalkthroughBeat(
+            .milliseconds(FirstVisitWalkthroughContent.automaticReadingDelayMilliseconds(for: target)),
+            target: target
+        )
     }
 
     @MainActor
@@ -8055,8 +8134,13 @@ struct MapPlaceSaveEditor: View {
                         walkthroughs.recordTutorialMemorySnapshot(tutorialSnapshot)
                     }
                     walkthroughs.recordTutorialSave(userPlaceID: result.userPlaceID)
-                    walkthroughs.perform(.saveSubmit)
-                    onSaveCompleted(result)
+                    if walkthroughs.activeSurface == .saveFlow,
+                       walkthroughs.currentStep?.target == .saveSubmit {
+                        pendingWalkthroughSaveResult = result
+                        walkthroughs.perform(.saveSubmit)
+                    } else {
+                        onSaveCompleted(result)
+                    }
                 } else if auth.isSignedIn {
                     saveAttemptedAt = nil
                     resetWalkthroughAutoSaveForRetry()
@@ -8121,6 +8205,11 @@ struct MapPlaceSaveEditor: View {
         _ target: WalkthroughTargetID?,
         with proxy: ScrollViewProxy
     ) {
+        if walkthroughs.activeSurface == .saveFlow, target == .saveStatus {
+            step = .confirm
+            hasSelectedStatus = false
+        }
+
         if selectedStatus == .wannaGo {
             while let currentTarget = walkthroughs.currentStep?.target,
                   [.saveFriends, .savePhotos].contains(currentTarget) {
@@ -8136,12 +8225,26 @@ struct MapPlaceSaveEditor: View {
         hasSelectedStatus = true
         walkthroughs.recordTutorialSelectedStatus(status)
         walkthroughs.perform(.saveStatus)
+        if walkthroughs.activeSurface == .saveFlow,
+           walkthroughs.currentStep?.target == .saveContinue {
+            walkthroughs.perform(.saveContinue)
+            prepareDetails()
+        }
     }
 
     private func restoreWalkthroughSavePresentationIfNeeded() {
         guard walkthroughs.activeSurface == .saveFlow,
               let target = walkthroughs.currentStep?.target
         else { return }
+
+        if target == .saveReview,
+           pendingWalkthroughSaveResult == nil,
+           let userPlaceID = walkthroughs.tutorialUserPlaceID {
+            pendingWalkthroughSaveResult = SaveResult(
+                userPlaceID: userPlaceID,
+                syncState: .synced
+            )
+        }
 
         if let restoredStatus = walkthroughs.tutorialSelectedStatus {
             selectedStatus = restoredStatus
@@ -8150,7 +8253,7 @@ struct MapPlaceSaveEditor: View {
             hasSelectedStatus = true
         }
         if step == .confirm,
-           [.saveDate, .saveRating, .saveMoreOptions, .saveNote, .saveTags, .saveSubmit]
+           [.saveDate, .saveRating, .saveMoreOptions, .saveNote, .saveTags, .saveSubmit, .saveReview]
             .contains(target) {
             prepareDetails()
         }

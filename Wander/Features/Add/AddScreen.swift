@@ -787,11 +787,11 @@ struct AddScreen: View {
             )
         }
 
-        // Keep the selected result visible long enough to understand what the
-        // demo chose before moving into the save sheet.
-        try? await Task.sleep(
-            for: reduceMotion ? .milliseconds(900) : .milliseconds(1_700)
-        )
+        // Keep the selected result and its explanation visible for an average
+        // reading beat before moving into the save sheet.
+        try? await Task.sleep(for: .milliseconds(
+            FirstVisitWalkthroughContent.automaticReadingDelayMilliseconds(for: .addSearch)
+        ))
         guard !Task.isCancelled,
               walkthroughs.currentStep?.target == .addSearch
         else { return }
@@ -839,9 +839,9 @@ struct AddScreen: View {
         }
 
         settleWalkthroughSheet(candidateCount: candidates.count)
-        try? await Task.sleep(
-            for: reduceMotion ? .milliseconds(1_000) : .milliseconds(2_200)
-        )
+        try? await Task.sleep(for: .milliseconds(
+            FirstVisitWalkthroughContent.automaticReadingDelayMilliseconds(for: .addPlace)
+        ))
         guard !Task.isCancelled,
               walkthroughs.activeSurface == .add,
               walkthroughs.currentStep?.target == .addPlace,
@@ -1077,7 +1077,6 @@ struct AddScreen: View {
             }
             walkthroughs.recordTutorialSave(userPlaceID: currentSave.userPlace.id)
             walkthroughs.perform(.saveSubmit)
-            return
         }
 
         selectedSource = .manual

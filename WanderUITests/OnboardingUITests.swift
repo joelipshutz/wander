@@ -297,7 +297,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertFalse(searchField.isEnabled)
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.add.addPlace"]
-                .waitForExistence(timeout: 8)
+                .waitForExistence(timeout: 12)
         )
         XCTAssertEqual(searchField.value as? String, "Hotchkiss Park")
         let selectedPark = app.descendants(matching: .any)[
@@ -465,6 +465,30 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(feedSectionButtons.element(boundBy: 1).isSelected)
         XCTAssertTrue(app.descendants(matching: .any)["Search people"].exists)
         XCTAssertTrue(app.buttons["Next"].isHittable)
+
+        app.buttons["walkthrough.next.feed.feedPeopleSearch"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
+                .waitForExistence(timeout: 4)
+        )
+        app.buttons["walkthrough.next.feed.feedInvite"].tap()
+        let inviteNext = app.buttons["invite.primaryAction"]
+        XCTAssertTrue(inviteNext.waitForExistence(timeout: 4))
+        inviteNext.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
+                .waitForExistence(timeout: 6)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.lists.listsOpenPlan"]
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(app.buttons["walkthrough.next.sendoff.mapSendoff"].isHittable)
     }
 
     func testTypedDiscoverQueryAlsoStaysInGuidedResults() {
@@ -831,7 +855,7 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.add.addPlace"]
-                .waitForExistence(timeout: 8)
+                .waitForExistence(timeout: 12)
         )
         XCTAssertEqual(searchField.value as? String, "Hotchkiss Park")
 
@@ -851,10 +875,20 @@ final class OnboardingUITests: XCTestCase {
         add(statusScreenshot)
 
         checkInChoice.tap()
-        XCTAssertEqual(checkInChoice.value as? String, "selected")
-        XCTAssertTrue(app.buttons["continue to details"].waitForExistence(timeout: 3))
-        app.buttons["continue to details"].tap()
-
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveDate"]
+                .waitForExistence(timeout: 4)
+        )
+        XCTAssertFalse(app.buttons["continue to details"].exists)
+        let backButton = app.buttons["walkthrough.back.saveFlow.saveDate"]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 2))
+        backButton.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
+                .waitForExistence(timeout: 3)
+        )
+        XCTAssertEqual(checkInChoice.value as? String, "not selected")
+        checkInChoice.tap()
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveDate"]
                 .waitForExistence(timeout: 4)
@@ -863,7 +897,7 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveRating"]
-                .waitForExistence(timeout: 5)
+                .waitForExistence(timeout: 8)
         )
         let rating = app.otherElements["place-rating-slider"]
         XCTAssertTrue(rating.waitForExistence(timeout: 3))
@@ -876,7 +910,7 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveMoreOptions"]
-                .waitForExistence(timeout: 8)
+                .waitForExistence(timeout: 20)
         )
         let moreOptionsScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         moreOptionsScreenshot.name = "REC-236 automated tag and note demo"
@@ -887,9 +921,18 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveSubmit"]
-                .waitForExistence(timeout: 12)
+                .waitForExistence(timeout: 24)
         )
         XCTAssertFalse(app.buttons["Check in"].isEnabled)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveReview"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["walkthrough.map.mapAddAgain"].exists
+        )
+        app.buttons["walkthrough.next.saveFlow.saveReview"].tap()
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
@@ -945,12 +988,12 @@ final class OnboardingUITests: XCTestCase {
         )
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.add.addPlace"]
-                .waitForExistence(timeout: 8)
+                .waitForExistence(timeout: 12)
         )
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveStatus"]
-                .waitForExistence(timeout: 5)
+                .waitForExistence(timeout: 8)
         )
         let checkInChoice = app.buttons["check in"]
         let wannaGoChoice = app.buttons["wanna go"]
@@ -958,13 +1001,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertEqual(wannaGoChoice.value as? String, "not selected")
         XCTAssertFalse(app.buttons["continue to details"].exists)
         wannaGoChoice.tap()
-        XCTAssertEqual(wannaGoChoice.value as? String, "selected")
-
-        XCTAssertTrue(
-            app.descendants(matching: .any)["walkthrough.saveFlow.saveContinue"]
-                .waitForExistence(timeout: 3)
-        )
-        app.buttons["continue to details"].tap()
+        XCTAssertFalse(app.buttons["continue to details"].exists)
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveDate"]
@@ -973,17 +1010,23 @@ final class OnboardingUITests: XCTestCase {
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveMoreOptions"]
-                .waitForExistence(timeout: 6)
+                .waitForExistence(timeout: 20)
         )
         XCTAssertFalse(app.buttons["Next"].exists)
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.saveFlow.saveSubmit"]
-                .waitForExistence(timeout: 12)
+                .waitForExistence(timeout: 24)
         )
         let saveButton = app.buttons["Add to Wanna"]
         XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
         XCTAssertFalse(saveButton.isEnabled)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.saveFlow.saveReview"]
+                .waitForExistence(timeout: 10)
+        )
+        app.buttons["walkthrough.next.saveFlow.saveReview"].tap()
 
         XCTAssertTrue(
             app.descendants(matching: .any)["walkthrough.map.mapAddAgain"]
