@@ -27,6 +27,53 @@ struct MapSaveFlowSelectionCoordinator {
     }
 }
 
+@MainActor
+final class MapRenderProjectionCache<Key: Equatable, Value> {
+    private var cachedKey: Key?
+    private var cachedValue: Value?
+
+    #if DEBUG
+    private(set) var buildCount = 0
+    #endif
+
+    func value(for key: Key, build: () -> Value) -> Value {
+        if cachedKey == key, let cachedValue {
+            return cachedValue
+        }
+
+        let value = build()
+        cachedKey = key
+        cachedValue = value
+        #if DEBUG
+        buildCount += 1
+        #endif
+        return value
+    }
+}
+
+private final class MapPressLocationTracker {
+    var location: CGPoint?
+}
+
+private struct MapRenderProjectionKey: Equatable {
+    let storeRevision: UInt64
+    let featuredPlacesRevision: UInt64
+    let filterState: MapFilterState
+    let query: String
+    let routedVisiblePlaceID: String?
+    let currentUserID: String
+    let rankingCenterLatitude: CLLocationDegrees
+    let rankingCenterLongitude: CLLocationDegrees
+    let rankingLatitudeDelta: CLLocationDegrees
+    let rankingLongitudeDelta: CLLocationDegrees
+}
+
+private struct MapRenderProjection {
+    let baseVisiblePlaces: [VisiblePlace]
+    let visiblePlaces: [VisiblePlace]
+    let visiblePlaceGroups: [VisiblePlaceGroup]
+}
+
 enum MapWalkthroughMemoryPolicy {
     static func preferredVisiblePlace(
         from visiblePlaces: [VisiblePlace],
@@ -129,7 +176,7 @@ struct MapScreen: View {
     @State private var selectedMapFeature: MapFeature?
     @State private var ignoreNextMapFeatureClear = false
     @State private var ignoreNextMapTap = false
-    @State private var lastMapPressPoint: CGPoint?
+    @State private var mapPressLocation = MapPressLocationTracker()
     @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
@@ -153,6 +200,7 @@ struct MapScreen: View {
     @State private var currentSearchRegion = Self.defaultRegion
     @State private var featuredRankingRegion = Self.defaultRegion
     @State private var featuredViewportPlaces: [VisiblePlace]?
+    @State private var featuredPlacesRevision: UInt64 = 0
     @State private var loadedFeaturedViewport: MapViewport?
     @State private var featuredViewportRefreshTask: Task<Void, Never>?
     @State private var isLoadingMapSources = true
@@ -170,6 +218,10 @@ struct MapScreen: View {
     @State private var walkthroughFallbackMemory: VisiblePlace?
     @State private var measuredMapSearchDockHeight = MapControlLayout.searchDockClearance
     @FocusState private var isMapSearchFocused: Bool
+    @State private var renderProjectionCache = MapRenderProjectionCache<
+        MapRenderProjectionKey,
+        MapRenderProjection
+    >()
 
     private static let defaultRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.075, longitude: -118.285),
@@ -188,9 +240,7 @@ struct MapScreen: View {
     private let onSearchLaunchRequestHandled: (UUID) -> Void
     private let onAdd: () -> Void
 
-    private var baseVisiblePlaces: [VisiblePlace] {
-        let followedOwnerIDs = Set(store.following(of: store.currentUser.id).map(\.id))
-
+    private func baseVisiblePlaces(followedOwnerIDs: Set<String>) -> [VisiblePlace] {
         switch mapFilterState.source {
         case .featured:
             return MapFeaturedSelection.places(
@@ -215,6 +265,48 @@ struct MapScreen: View {
                 refinements: mapFilterState.more
             )
         }
+    }
+
+    private var renderProjection: MapRenderProjection {
+        let currentUserID = store.currentUser.id
+        let key = MapRenderProjectionKey(
+            storeRevision: store.presentationRevision,
+            featuredPlacesRevision: featuredPlacesRevision,
+            filterState: mapFilterState,
+            query: mapQuery,
+            routedVisiblePlaceID: routedVisiblePlace?.id,
+            currentUserID: currentUserID,
+            rankingCenterLatitude: featuredRankingRegion.center.latitude,
+            rankingCenterLongitude: featuredRankingRegion.center.longitude,
+            rankingLatitudeDelta: featuredRankingRegion.span.latitudeDelta,
+            rankingLongitudeDelta: featuredRankingRegion.span.longitudeDelta
+        )
+
+        return renderProjectionCache.value(for: key) {
+            let followedOwnerIDs = Set(store.following(of: currentUserID).map(\.id))
+            let basePlaces = baseVisiblePlaces(followedOwnerIDs: followedOwnerIDs)
+            var places = basePlaces
+            if let routedVisiblePlace,
+               !places.contains(where: { $0.id == routedVisiblePlace.id }) {
+                places.append(routedVisiblePlace)
+            }
+            let query = TrustedPlaceSearchQuery(mapQuery)
+            if query.hasMeaningfulTokens {
+                places = TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
+            }
+            return MapRenderProjection(
+                baseVisiblePlaces: basePlaces,
+                visiblePlaces: places,
+                visiblePlaceGroups: VisiblePlaceGrouping.groups(
+                    from: places,
+                    currentUserID: currentUserID
+                )
+            )
+        }
+    }
+
+    private var baseVisiblePlaces: [VisiblePlace] {
+        renderProjection.baseVisiblePlaces
     }
 
     init(
@@ -249,14 +341,7 @@ struct MapScreen: View {
     }
 
     private var visiblePlaces: [VisiblePlace] {
-        var places = baseVisiblePlaces
-        if let routedVisiblePlace,
-           !places.contains(where: { $0.id == routedVisiblePlace.id }) {
-            places.append(routedVisiblePlace)
-        }
-        let query = TrustedPlaceSearchQuery(mapQuery)
-        guard query.hasMeaningfulTokens else { return places }
-        return TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
+        renderProjection.visiblePlaces
     }
 
     private var mapSearchDockClearance: CGFloat {
@@ -269,10 +354,7 @@ struct MapScreen: View {
     }
 
     private var visiblePlaceGroups: [VisiblePlaceGroup] {
-        VisiblePlaceGrouping.groups(
-            from: visiblePlaces,
-            currentUserID: store.currentUser.id
-        )
+        renderProjection.visiblePlaceGroups
     }
 
     private var mapAnnotationPlaces: [VisiblePlace] {
@@ -442,17 +524,17 @@ struct MapScreen: View {
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 0, coordinateSpace: .local)
                             .onChanged { value in
-                                lastMapPressPoint = value.location
+                                mapPressLocation.location = value.location
                             }
                     )
                     .simultaneousGesture(
                         LongPressGesture(minimumDuration: 0.48)
                             .onEnded { didComplete in
-                                guard didComplete, let point = lastMapPressPoint else { return }
+                                guard didComplete, let point = mapPressLocation.location else { return }
                                 if handleMapLongPress(at: point, proxy: proxy) {
                                     ignoreNextMapTap = true
                                 }
-                                lastMapPressPoint = nil
+                                mapPressLocation.location = nil
                             }
                     )
                 }
@@ -672,7 +754,7 @@ struct MapScreen: View {
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
                 guard isSignedIn else {
                     featuredViewportRefreshTask?.cancel()
-                    featuredViewportPlaces = store.visiblePlaces()
+                    updateFeaturedViewportPlaces(store.visiblePlaces())
                     loadedFeaturedViewport = nil
                     featuredRankingRegion = currentSearchRegion
                     isLoadingMapSources = false
@@ -1031,6 +1113,9 @@ struct MapScreen: View {
             guard !Task.isCancelled else { return }
 
             transitioningAnnotationGroups = incomingGroups
+            visibleTransitionGroupKeys = []
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             visibleTransitionGroupKeys = incomingKeys
 
             try? await Task.sleep(for: .seconds(MapPinEntranceStyle.entranceWindowDuration))
@@ -1200,7 +1285,7 @@ struct MapScreen: View {
         _ = await socialRefresh
         guard !Task.isCancelled else { return }
 
-        featuredViewportPlaces = remoteFeaturedPlaces ?? store.visiblePlaces()
+        updateFeaturedViewportPlaces(remoteFeaturedPlaces ?? store.visiblePlaces())
         loadedFeaturedViewport = requestedViewport
         featuredRankingRegion = currentSearchRegion
         isLoadingMapSources = false
@@ -1241,10 +1326,15 @@ struct MapScreen: View {
                   !Task.isCancelled
             else { return }
 
-            featuredViewportPlaces = places
+            updateFeaturedViewportPlaces(places)
             loadedFeaturedViewport = requestedViewport
             featuredRankingRegion = region
         }
+    }
+
+    private func updateFeaturedViewportPlaces(_ places: [VisiblePlace]) {
+        featuredViewportPlaces = places
+        featuredPlacesRevision &+= 1
     }
 
     private func centerMapOnCurrentCityIfNeeded() async {
@@ -3240,56 +3330,23 @@ private struct MapPinEntranceModifier: ViewModifier {
     let isVisible: Bool
     let delay: TimeInterval
 
-    @State private var hasEntered = false
-
-    private var isPresented: Bool {
-        reduceMotion ? isVisible : hasEntered
-    }
-
     func body(content: Content) -> some View {
         content
-            .opacity(isPresented ? 1 : 0)
+            .opacity(isVisible ? 1 : 0)
             .scaleEffect(
-                isPresented ? 1 : MapPinEntranceStyle.hiddenScale,
+                isVisible ? 1 : MapPinEntranceStyle.hiddenScale,
                 anchor: .bottom
             )
-            .offset(y: isPresented ? 0 : MapPinEntranceStyle.hiddenVerticalOffset)
-            .allowsHitTesting(isPresented)
-            .onAppear {
-                updatePresentation(for: isVisible)
-            }
-            .onChange(of: isVisible) { _, visible in
-                updatePresentation(for: visible)
-            }
-            .onChange(of: reduceMotion) { _, _ in
-                updatePresentation(for: isVisible)
-            }
-    }
-
-    private func updatePresentation(for visible: Bool) {
-        if reduceMotion {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                hasEntered = visible
-            }
-            return
-        }
-
-        if visible {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                hasEntered = false
-            }
-            withAnimation(MapPinEntranceStyle.entranceAnimation.delay(delay)) {
-                hasEntered = true
-            }
-        } else {
-            withAnimation(MapPinEntranceStyle.fadeOutAnimation) {
-                hasEntered = false
-            }
-        }
+            .offset(y: isVisible ? 0 : MapPinEntranceStyle.hiddenVerticalOffset)
+            .allowsHitTesting(isVisible)
+            .animation(
+                reduceMotion
+                    ? nil
+                    : isVisible
+                        ? MapPinEntranceStyle.entranceAnimation.delay(delay)
+                        : MapPinEntranceStyle.fadeOutAnimation,
+                value: isVisible
+            )
     }
 }
 
@@ -3870,12 +3927,29 @@ private struct SearchBar: View {
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
     let onSubmit: () -> Void
+    @State private var draftQuery: String
+    @State private var queryCommitTask: Task<Void, Never>?
+
+    init(
+        query: Binding<String>,
+        isFocused: FocusState<Bool>.Binding,
+        focusRequestID: UUID?,
+        onFocusRequestHandled: @escaping (UUID) -> Void,
+        onSubmit: @escaping () -> Void
+    ) {
+        _query = query
+        self.isFocused = isFocused
+        self.focusRequestID = focusRequestID
+        self.onFocusRequestHandled = onFocusRequestHandled
+        self.onSubmit = onSubmit
+        _draftQuery = State(initialValue: query.wrappedValue)
+    }
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(WanderTheme.textMuted.color)
-            TextField("search your map or people...", text: $query)
+            TextField("search your map or people...", text: $draftQuery)
                 .focused(isFocused)
                 .accessibilityIdentifier("map.searchField")
                 .font(.system(size: 14, weight: .medium))
@@ -3884,7 +3958,10 @@ private struct SearchBar: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
-                .onSubmit(onSubmit)
+                .onSubmit {
+                    commitDraftQuery()
+                    onSubmit()
+                }
                 .task(id: focusRequestID) {
                     await focusIfRequested()
                 }
@@ -3895,8 +3972,10 @@ private struct SearchBar: View {
                     }
                 }
             Spacer()
-            if !query.isEmpty {
+            if !draftQuery.isEmpty {
                 Button {
+                    queryCommitTask?.cancel()
+                    draftQuery = ""
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -3914,6 +3993,34 @@ private struct SearchBar: View {
             reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
             value: isFocused.wrappedValue
         )
+        .onChange(of: draftQuery) { _, value in
+            scheduleDraftQueryCommit(value)
+        }
+        .onChange(of: query) { _, value in
+            guard value != draftQuery else { return }
+            queryCommitTask?.cancel()
+            draftQuery = value
+        }
+        .onDisappear {
+            queryCommitTask?.cancel()
+        }
+    }
+
+    private func scheduleDraftQueryCommit(_ value: String) {
+        queryCommitTask?.cancel()
+        guard value != query else { return }
+        queryCommitTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled, draftQuery == value else { return }
+            query = value
+            queryCommitTask = nil
+        }
+    }
+
+    private func commitDraftQuery() {
+        queryCommitTask?.cancel()
+        queryCommitTask = nil
+        query = draftQuery
     }
 
     @MainActor

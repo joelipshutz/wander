@@ -38,7 +38,7 @@ struct DiscoverScreen: View {
     @State private var followInFlightProfileIDs: Set<String> = []
     @State private var followFailedProfileIDs: Set<String> = []
     @State private var lastHandledAuthState: Bool?
-    @State private var lastHandledVisiblePlaceSignature: [DiscoverVisiblePlaceSignature]?
+    @State private var lastHandledVisiblePlaceRevision: UInt64?
     @FocusState private var searchFieldFocused: Bool
     @Binding private var requestedSection: DiscoverSection?
     private let onClose: (() -> Void)?
@@ -77,10 +77,6 @@ struct DiscoverScreen: View {
     private var friendProfiles: [ProfileShell] {
         store.following(of: store.currentUser.id)
             .map(store.shell(for:))
-    }
-
-    private var visiblePlaceSignature: [DiscoverVisiblePlaceSignature] {
-        store.visiblePlaces().map(DiscoverVisiblePlaceSignature.init)
     }
 
     private var placeGroups: [VisiblePlaceGroup] {
@@ -272,7 +268,7 @@ struct DiscoverScreen: View {
                 activityLoadState = .loading
                 await refreshDiscoverDefaultContent()
                 lastHandledAuthState = auth.isSignedIn
-                lastHandledVisiblePlaceSignature = visiblePlaceSignature
+                lastHandledVisiblePlaceRevision = store.presentationRevision
             }
             .task(id: auth.isSignedIn) {
                 let requestedAuthState = auth.isSignedIn
@@ -332,14 +328,14 @@ struct DiscoverScreen: View {
                     searchFieldFocused = false
                 }
             }
-            .task(id: visiblePlaceSignature) {
-                let signature = visiblePlaceSignature
-                guard let previousSignature = lastHandledVisiblePlaceSignature else {
-                    lastHandledVisiblePlaceSignature = signature
+            .task(id: store.presentationRevision) {
+                let revision = store.presentationRevision
+                guard let previousRevision = lastHandledVisiblePlaceRevision else {
+                    lastHandledVisiblePlaceRevision = revision
                     return
                 }
-                guard previousSignature != signature else { return }
-                lastHandledVisiblePlaceSignature = signature
+                guard previousRevision != revision else { return }
+                lastHandledVisiblePlaceRevision = revision
                 if submittedPlacesQuery != nil {
                     await refreshPlaces(query: placesQuery)
                 }
@@ -1695,22 +1691,6 @@ struct DiscoverScreen: View {
 
 }
 
-private struct DiscoverVisiblePlaceSignature: Equatable {
-    let id: String
-    let ownerID: String
-    let ownerAvatarURL: String?
-    let status: PlaceStatus
-    let visibility: PlaceVisibility
-
-    init(_ visiblePlace: VisiblePlace) {
-        id = visiblePlace.id
-        ownerID = visiblePlace.owner.id
-        ownerAvatarURL = visiblePlace.owner.avatarURL
-        status = visiblePlace.userPlace.status
-        visibility = visiblePlace.userPlace.visibility
-    }
-}
-
 private enum DiscoverMode: String, CaseIterable, Identifiable {
     case places
     case members
@@ -2021,6 +2001,29 @@ private struct DiscoverSearchField: View {
     let onSubmit: () -> Void
     let onClear: () -> Void
     @State private var placeholderIndex = 0
+    @State private var draftText: String
+    @State private var textCommitTask: Task<Void, Never>?
+
+    init(
+        text: Binding<String>,
+        placeholders: [String],
+        isTicker: Bool,
+        accessibilityLabel: String,
+        accessibilityIdentifier: String,
+        onFocus: @escaping () -> Void,
+        onSubmit: @escaping () -> Void,
+        onClear: @escaping () -> Void
+    ) {
+        _text = text
+        self.placeholders = placeholders
+        self.isTicker = isTicker
+        self.accessibilityLabel = accessibilityLabel
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.onFocus = onFocus
+        self.onSubmit = onSubmit
+        self.onClear = onClear
+        _draftText = State(initialValue: text.wrappedValue)
+    }
 
     private var placeholder: String {
         guard !placeholders.isEmpty else { return "" }
@@ -2034,7 +2037,7 @@ private struct DiscoverSearchField: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
 
             ZStack(alignment: .leading) {
-                if text.isEmpty {
+                if draftText.isEmpty {
                     Text(placeholder)
                         .id(placeholder)
                         .font(.system(size: 15, weight: .bold))
@@ -2044,7 +2047,7 @@ private struct DiscoverSearchField: View {
                         .allowsHitTesting(false)
                 }
 
-                TextField("", text: $text)
+                TextField("", text: $draftText)
                     .font(.system(size: 15, weight: .bold))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -2053,11 +2056,16 @@ private struct DiscoverSearchField: View {
                     .accessibilityLabel(accessibilityLabel)
                     .accessibilityIdentifier(accessibilityIdentifier)
                     .onTapGesture(perform: onFocus)
-                    .onSubmit(onSubmit)
+                    .onSubmit {
+                        commitDraftText()
+                        onSubmit()
+                    }
             }
 
-            if !text.isEmpty {
+            if !draftText.isEmpty {
                 Button {
+                    textCommitTask?.cancel()
+                    draftText = ""
                     text = ""
                     onClear()
                 } label: {
@@ -2070,13 +2078,41 @@ private struct DiscoverSearchField: View {
             }
         }
         .padding(.leading, WanderTheme.spacing3)
-        .padding(.trailing, text.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
+        .padding(.trailing, draftText.isEmpty ? WanderTheme.spacing3 : WanderTheme.spacing1)
         .frame(minHeight: WanderTheme.tapMinimum)
         .contentShape(Capsule())
         .wanderGlassCapsule()
         .task {
             await runPlaceholderTicker()
         }
+        .onChange(of: draftText) { _, value in
+            scheduleDraftTextCommit(value)
+        }
+        .onChange(of: text) { _, value in
+            guard value != draftText else { return }
+            textCommitTask?.cancel()
+            draftText = value
+        }
+        .onDisappear {
+            textCommitTask?.cancel()
+        }
+    }
+
+    private func scheduleDraftTextCommit(_ value: String) {
+        textCommitTask?.cancel()
+        guard value != text else { return }
+        textCommitTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled, draftText == value else { return }
+            text = value
+            textCommitTask = nil
+        }
+    }
+
+    private func commitDraftText() {
+        textCommitTask?.cancel()
+        textCommitTask = nil
+        text = draftText
     }
 
     private func runPlaceholderTicker() async {
@@ -2088,7 +2124,7 @@ private struct DiscoverSearchField: View {
             } catch {
                 return
             }
-            guard text.isEmpty else { continue }
+            guard draftText.isEmpty else { continue }
             withAnimation(.easeInOut(duration: 0.24)) {
                 placeholderIndex = (placeholderIndex + 1) % placeholders.count
             }

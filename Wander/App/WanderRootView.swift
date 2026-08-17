@@ -476,6 +476,10 @@ struct WanderRootView: View {
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
         .task(id: selectedTab) {
+            // Let the native tab selection and Liquid Glass transition commit
+            // before analytics work begins on the main actor.
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             analytics.track(
                 AnalyticsEvent(
                     name: WanderAnalyticsEvents.appSurfaceViewed,
@@ -2217,6 +2221,14 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
 
         func update(observer: WanderNativeTabTouchObserver, window: UIWindow?) {
             self.observer = observer
+            if let window,
+               let observedTabBar,
+               observedTabBar.window === window,
+               observedTabBar.items?.count == observer.tabs.count,
+               observedControls.count == observer.tabs.count,
+               observedControls.allSatisfy({ $0.window === window }) {
+                return
+            }
             attachIfNeeded(in: window)
         }
 

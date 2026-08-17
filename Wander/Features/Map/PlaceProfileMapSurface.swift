@@ -2530,10 +2530,15 @@ struct PlaceProfilePhotoImage: View {
     var contentMode: ContentMode = .fill
     var onLoadFailure: ((PlacePhoto) -> Void)? = nil
     @EnvironmentObject private var backend: WanderBackend
+    @Environment(\.displayScale) private var displayScale
     @State private var image: Image?
 
     var body: some View {
         GeometryReader { proxy in
+            let targetPixelSize = max(
+                1,
+                Int(ceil(max(proxy.size.width, proxy.size.height) * displayScale))
+            )
             ZStack {
                 Color.clear
 
@@ -2545,31 +2550,44 @@ struct PlaceProfilePhotoImage: View {
                         .clipped()
                         .transition(.opacity)
                         .accessibilityLabel("Photo of \(placeName)")
-                }
+                    }
+            }
+            .task(id: "\(photo.cacheKey)|target-px:\(targetPixelSize)") {
+                await loadImage(targetPixelSize: targetPixelSize)
             }
         }
         .clipped()
-        .task(id: photo) {
-            image = nil
-            let uiImage: UIImage?
-            if let localAssetRef = photo.localAssetRef,
-               let localImage = VisitPhotoLocalFileStore.image(from: localAssetRef) {
-                uiImage = localImage
-            } else if let data = try? await backend.placePhotoImageData(for: photo) {
-                uiImage = UIImage(data: data)
-            } else {
-                uiImage = nil
-            }
+    }
 
-            guard !Task.isCancelled else { return }
-            guard let uiImage else {
+    private func loadImage(targetPixelSize: Int) async {
+        image = nil
+        let data: Data?
+        if let localAssetRef = photo.localAssetRef,
+           let localData = await Task.detached(priority: .utility, operation: {
+               VisitPhotoLocalFileStore.data(from: localAssetRef)
+           }).value {
+            data = localData
+        } else {
+            data = try? await backend.placePhotoImageData(for: photo)
+        }
+
+        guard !Task.isCancelled,
+              let data,
+              let decodedImage = await PlacePhotoImagePipeline.shared.image(
+                  from: data,
+                  photoKey: photo.cacheKey,
+                  targetPixelSize: targetPixelSize
+              ),
+              !Task.isCancelled
+        else {
+            if !Task.isCancelled {
                 onLoadFailure?(photo)
-                return
             }
+            return
+        }
 
-            withAnimation(.easeOut(duration: 0.24)) {
-                image = Image(uiImage: uiImage)
-            }
+        withAnimation(.easeOut(duration: 0.24)) {
+            image = Image(uiImage: decodedImage.image)
         }
     }
 }
