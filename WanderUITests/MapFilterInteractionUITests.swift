@@ -67,6 +67,33 @@ final class MapFilterInteractionUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testLongPressShowsDroppedPinAsAStandardPlaceCard() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 5))
+        map.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: 0.45))
+            .press(forDuration: 0.7)
+
+        XCTAssertTrue(app.buttons["Open Dropped pin"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["map.searchMessage"].exists)
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-289 dropped pin standard place card"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let coordinates = app.staticTexts["map.droppedPinCoordinates"]
+        XCTAssertTrue(coordinates.waitForExistence(timeout: 2))
+        coordinates.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["Copy coordinates"].waitForExistence(timeout: 2))
+    }
+
     func testNearbyPermissionEducationAppearsBeforeTheSystemPrompt() throws {
         let app = XCUIApplication()
         app.launchArguments = [

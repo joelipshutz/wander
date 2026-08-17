@@ -168,6 +168,7 @@ struct MapScreen: View {
     @State private var nearbyOpacity: Double = 1
     @State private var compactCardMotionTask: Task<Void, Never>?
     @State private var compactCardReplacementTask: Task<Void, Never>?
+    @State private var droppedPinGeocodingTask: Task<Void, Never>?
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
@@ -802,6 +803,7 @@ struct MapScreen: View {
                 mapPinTransitionTask?.cancel()
                 compactCardMotionTask?.cancel()
                 compactCardReplacementTask?.cancel()
+                droppedPinGeocodingTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
                 store.saveFlowDidDismiss(.saveSheet)
@@ -1249,6 +1251,7 @@ struct MapScreen: View {
 
         let candidate = Self.coordinateCandidate(at: coordinate)
         mapSelectionRevision += 1
+        let revision = mapSelectionRevision
         routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
@@ -1257,10 +1260,40 @@ struct MapScreen: View {
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
-            mapSearchMessage = "Dropped pin. Tap + to add it."
+            mapSearchMessage = nil
             centerCompactSelection(on: candidate)
+            resolveDroppedPinLocality(
+                for: coordinate,
+                candidateID: candidate.id,
+                selectionRevision: revision
+            )
         }
         return true
+    }
+
+    private func resolveDroppedPinLocality(
+        for coordinate: CLLocationCoordinate2D,
+        candidateID: String,
+        selectionRevision: Int
+    ) {
+        droppedPinGeocodingTask?.cancel()
+        droppedPinGeocodingTask = Task { @MainActor in
+            let locality = await DroppedPinLocalityResolver.locality(for: coordinate)
+            guard !Task.isCancelled,
+                  selectionRevision == mapSelectionRevision,
+                  selectedSearchCandidateID == candidateID,
+                  let locality
+            else { return }
+
+            let enrichedCandidate = Self.coordinateCandidate(
+                at: coordinate,
+                locality: locality
+            )
+            mapSearchCandidates = mapSearchCandidates.map { candidate in
+                candidate.id == candidateID ? enrichedCandidate : candidate
+            }
+            droppedPinGeocodingTask = nil
+        }
     }
 
     private func isTapNearSelectableMarker(_ point: CGPoint, proxy: MapProxy) -> Bool {
@@ -1635,6 +1668,8 @@ struct MapScreen: View {
         compactCardReplacementTask?.cancel()
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
+        droppedPinGeocodingTask?.cancel()
+        droppedPinGeocodingTask = nil
         clearNativeMapFeatureSelection()
         compactCardPhase = .dismissing
         isPlaceProfilePresented = false
@@ -1649,8 +1684,6 @@ struct MapScreen: View {
 
         withAnimation(MapCompactCardMotionStyle.dismissalAnimation) {
             compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
-            nearbyLift = 0
-            nearbyOpacity = 1
         }
 
         compactCardMotionTask = Task { @MainActor in
@@ -1667,7 +1700,33 @@ struct MapScreen: View {
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = nil
             walkthroughFallbackMemory = nil
-            resetCompactCardPresentation()
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                compactCardPhase = .hidden
+                compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
+                compactCardContentOpacity = 1
+                nearbyLift = 0
+                nearbyOpacity = 0
+            }
+
+            await Task.yield()
+            guard !Task.isCancelled,
+                  revision == mapSelectionRevision,
+                  compactCardPhase == .hidden
+            else { return }
+
+            withAnimation(MapCompactCardMotionStyle.nearbyReturnFadeAnimation) {
+                nearbyOpacity = 1
+            }
+            do {
+                try await Task.sleep(
+                    for: .seconds(MapCompactCardMotionStyle.nearbyReturnFadeDuration)
+                )
+            } catch {
+                return
+            }
             compactCardMotionTask = nil
         }
     }
@@ -3503,7 +3562,10 @@ struct MapScreen: View {
         return interval
     }
 
-    static func coordinateCandidate(at coordinate: CLLocationCoordinate2D) -> PlaceCandidate {
+    static func coordinateCandidate(
+        at coordinate: CLLocationCoordinate2D,
+        locality: String? = nil
+    ) -> PlaceCandidate {
         let display = coordinateDisplay(for: coordinate)
         let latitude = Int((coordinate.latitude * 100_000).rounded())
         let longitude = Int((coordinate.longitude * 100_000).rounded())
@@ -3519,7 +3581,7 @@ struct MapScreen: View {
             categoryConfidence: nil,
             rawProviderType: nil,
             address: display,
-            locality: nil,
+            locality: locality,
             region: nil,
             country: nil,
             latitude: coordinate.latitude,
@@ -3563,6 +3625,7 @@ enum MapCompactCardMotionStyle {
     static let dismissalDuration: TimeInterval = 0.34
     static let replacementFadeOutDuration: TimeInterval = 0.12
     static let nearbyFadeDuration: TimeInterval = 0.46
+    static let nearbyReturnFadeDuration: TimeInterval = 0.34
     static let hiddenVerticalOffset: CGFloat = 340
 
     static let entranceAnimation = Animation.spring(
@@ -3575,6 +3638,7 @@ enum MapCompactCardMotionStyle {
     )
     static let replacementFadeInAnimation = Animation.easeIn(duration: 0.18)
     static let nearbyFadeAnimation = Animation.easeOut(duration: nearbyFadeDuration)
+    static let nearbyReturnFadeAnimation = Animation.easeIn(duration: nearbyReturnFadeDuration)
     static let mapRecenterAnimation = Animation.easeInOut(duration: entranceDuration)
     static let reducedMotionAnimation = Animation.easeOut(duration: 0.12)
 }
@@ -3613,6 +3677,33 @@ enum MapSelectionViewport {
             ),
             span: span
         )
+    }
+}
+
+@MainActor
+enum DroppedPinLocalityResolver {
+    static func locality(for coordinate: CLLocationCoordinate2D) async -> String? {
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+
+        let location = CLLocation(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        )
+        guard let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first else {
+            return nil
+        }
+
+        return [
+            placemark.locality,
+            placemark.subLocality,
+            placemark.subAdministrativeArea,
+            placemark.administrativeArea
+        ]
+        .compactMap { value in
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed?.isEmpty == false ? trimmed : nil
+        }
+        .first
     }
 }
 
@@ -5089,20 +5180,20 @@ private struct SearchResultMarker: View {
     let isSelected: Bool
 
     var body: some View {
-        WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: isSelected ? 17 : 15)
-            .frame(width: isSelected ? 42 : 38, height: isSelected ? 42 : 38)
+        WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: MapPinVisualMetrics.emojiDiameter)
+            .frame(width: MapPinVisualMetrics.discDiameter, height: MapPinVisualMetrics.discDiameter)
             .background(WanderTheme.pinSocial.color)
             .clipShape(Circle())
             .overlay(
                 Circle()
-                    .stroke(WanderTheme.surfaceRaised.color, lineWidth: isSelected ? 4 : 3)
+                    .stroke(WanderTheme.surfaceRaised.color, lineWidth: MapPinVisualMetrics.outlineWidth)
             )
             .overlay(
                 Circle()
                     .stroke(WanderTheme.pinSocial.color, style: StrokeStyle(lineWidth: 2, dash: [4, 4]))
                     .padding(-5)
             )
-            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: isSelected ? 9 : 6, x: 0, y: 2)
+            .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 6, x: 0, y: 2)
             .scaleEffect(isSelected ? MapPinSelectionMotionStyle.selectedScale : 1)
             .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
             .accessibilityLabel("Map search result, \(candidate.name)")
@@ -5119,8 +5210,7 @@ private struct MapPlaceMarker: View {
     var body: some View {
         WanderMapPin(
             visiblePlace: visiblePlace,
-            outlines: MapPinOutlineBuilder.outlines(for: saveStates),
-            isSelected: isSelected
+            outlines: MapPinOutlineBuilder.outlines(for: saveStates)
         )
         .scaleEffect(isSelected ? MapPinSelectionMotionStyle.selectedScale : 1)
         .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
@@ -5150,16 +5240,17 @@ private struct MapPlaceMarker: View {
 private struct WanderMapPin: View {
     let visiblePlace: VisiblePlace
     let outlines: [MapPinOutline]
-    let isSelected: Bool
 
     var body: some View {
-        WanderCategoryEmoji(emoji: visiblePlace.categoryEmoji, size: 16)
+        WanderCategoryEmoji(
+            emoji: visiblePlace.categoryEmoji,
+            size: MapPinVisualMetrics.emojiDiameter
+        )
             .frame(width: MapPinVisualMetrics.discDiameter, height: MapPinVisualMetrics.discDiameter)
             .background(WanderTheme.surfaceRaised.color)
             .clipShape(Circle())
-            .background(selectionHalo)
             .overlay(outlineLayer)
-            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: isSelected ? 9 : 6, x: 0, y: 2)
+            .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)
             .accessibilityLabel(
                 MapPinAccessibility.label(
                     outlines: outlines,
@@ -5167,20 +5258,6 @@ private struct WanderMapPin: View {
                     placeName: visiblePlace.place.canonicalName
                 )
             )
-    }
-
-    @ViewBuilder
-    private var selectionHalo: some View {
-        if isSelected {
-            ZStack {
-                Circle()
-                    .fill(WanderTheme.surfaceBone.color.opacity(0.96))
-                    .padding(MapPinVisualMetrics.selectionHaloPadding)
-                Circle()
-                    .stroke(WanderTheme.textInk.color.opacity(0.16), lineWidth: 1)
-                    .padding(MapPinVisualMetrics.selectionHaloPadding)
-            }
-        }
     }
 
     private var outlineLayer: some View {
@@ -5266,17 +5343,17 @@ struct MapPinSaveState: Equatable {
 
 enum MapPinVisualMetrics {
     static let discDiameter: CGFloat = 38
+    static let emojiDiameter: CGFloat = 21
     static let outlineWidth: CGFloat = 3
     static let secondaryOutlinePadding: CGFloat = -6
-    static let selectionHaloPadding: CGFloat = -10
     static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
 }
 
 @MainActor
 enum MapPinSelectionMotionStyle {
     static let selectedScale: CGFloat = 1.16
-    static let duration: TimeInterval = 0.42
-    static let bounce = 0.44
+    static let duration: TimeInterval = 0.55
+    static let bounce = 0.55
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
@@ -5553,6 +5630,19 @@ struct PlaceSheetPlace {
     }
 
     var photoLookupKey: String { photoRequest.lookupKey }
+
+    var isDroppedPin: Bool {
+        sourceProvider == "coordinate"
+    }
+
+    var droppedPinCoordinateDisplay: String? {
+        guard isDroppedPin,
+              let latitude,
+              let longitude
+        else { return nil }
+
+        return String(format: "%.5f, %.5f", latitude, longitude)
+    }
 
     init(visiblePlace: VisiblePlace) {
         self.id = visiblePlace.place.id

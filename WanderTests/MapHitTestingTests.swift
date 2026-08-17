@@ -62,9 +62,11 @@ final class MapSelectionMotionTests: XCTestCase {
     func testSelectionMotionUsesAStagedCardAndBouncyPinContract() {
         XCTAssertEqual(MapCompactCardMotionStyle.entranceDuration, 0.42, accuracy: 0.001)
         XCTAssertEqual(MapCompactCardMotionStyle.nearbyFadeDuration, 0.46, accuracy: 0.001)
+        XCTAssertEqual(MapCompactCardMotionStyle.nearbyReturnFadeDuration, 0.34, accuracy: 0.001)
         XCTAssertGreaterThan(MapCompactCardMotionStyle.hiddenVerticalOffset, 300)
         XCTAssertGreaterThan(MapPinSelectionMotionStyle.selectedScale, 1.1)
-        XCTAssertGreaterThan(MapPinSelectionMotionStyle.bounce, 0.4)
+        XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.55, accuracy: 0.001)
+        XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.55, accuracy: 0.001)
     }
 
     func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
@@ -83,7 +85,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("compactCardContentOpacity"))
         XCTAssertTrue(map.contains("nearbyFadeAnimation"))
+        XCTAssertTrue(map.contains("nearbyReturnFadeAnimation"))
         XCTAssertTrue(map.contains("centerCompactSelection(on: candidate)"))
+        XCTAssertFalse(map.contains("Dropped pin. Tap + to add it."))
+        XCTAssertTrue(card.contains(".textSelection(.enabled)"))
+        XCTAssertTrue(card.contains("Label(\"Copy coordinates\", systemImage: \"doc.on.doc\")"))
         XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
     }
 
@@ -130,6 +136,18 @@ final class MapCoordinateCandidateTests: XCTestCase {
         let coordinate = CLLocationCoordinate2D(latitude: 33.999994, longitude: -118.000005)
 
         XCTAssertEqual(MapScreen.coordinateDisplay(for: coordinate), "33.99999, -118.00001")
+    }
+
+    @MainActor
+    func testCoordinateCandidateCarriesResolvedCityIntoCopyableCardMetadata() {
+        let coordinate = CLLocationCoordinate2D(latitude: 34.083238, longitude: -118.361472)
+        let candidate = MapScreen.coordinateCandidate(at: coordinate, locality: "West Hollywood")
+        let place = PlaceSheetPlace(candidate: candidate)
+
+        XCTAssertEqual(candidate.locality, "West Hollywood")
+        XCTAssertTrue(place.isDroppedPin)
+        XCTAssertEqual(place.locality, "West Hollywood")
+        XCTAssertEqual(place.droppedPinCoordinateDisplay, "34.08324, -118.36147")
     }
 }
 
@@ -990,12 +1008,20 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(personalOutline.dashPattern, [])
     }
 
-    func testDirectionAVisualMetricsKeepThreePointConcentricRingsAndSelectionHalo() {
+    func testPinVisualMetricsTightenEmojiSpacingWithoutASelectionHalo() throws {
         XCTAssertEqual(MapPinVisualMetrics.discDiameter, 38)
+        XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 21)
         XCTAssertEqual(MapPinVisualMetrics.outlineWidth, 3)
         XCTAssertEqual(MapPinVisualMetrics.secondaryOutlinePadding, -6)
-        XCTAssertEqual(MapPinVisualMetrics.selectionHaloPadding, -10)
         XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 3.5])
+
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        XCTAssertFalse(map.contains("selectionHalo"))
     }
 
     func testAccessibilityLabelDescribesOwnershipAndEveryVisibleStatusWithoutSaveCopy() {
