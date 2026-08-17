@@ -283,6 +283,21 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(explicitUserChoice.subcategory, "Restaurant")
     }
 
+    func testCompactCoffeeTypeUsesSpecificCoffeeShopNounInsteadOfCafeAlias() {
+        let assignment = PlaceCategoryAssignment(
+            primaryCategory: WanderPlaceCategory.coffeeTeaSweets,
+            subcategory: "Cafe",
+            source: PlaceCategorySource.provider.rawValue,
+            confidence: 0.98,
+            rawProviderType: "cafe"
+        )
+
+        XCTAssertEqual(
+            WanderPlaceCategory.display(for: assignment).compactType(),
+            "Coffee shop"
+        )
+    }
+
     func testSavedCuisineOutranksProviderCuisineWithoutOverstatingJapanese() {
         let menya = PlaceCategoryAssignment(
             primaryCategory: WanderPlaceCategory.restaurantsFood,

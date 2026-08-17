@@ -16,6 +16,7 @@ struct PlaceProfileMapSurface: View {
     let saves: [PlaceSaveSummary]
     let tasteSaves: [PlaceSaveSummary]
     let currentUserID: String
+    let viewerLocation: CLLocation?
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
@@ -38,6 +39,7 @@ struct PlaceProfileMapSurface: View {
                 presentation: presentation,
                 saves: saves,
                 currentUserID: currentUserID,
+                viewerLocation: viewerLocation,
                 action: action,
                 onOpen: onOpen,
                 onAction: onAction
@@ -238,26 +240,12 @@ struct PlaceProfileFullScreen: View {
     }
 }
 
-struct PlaceProfileSlideContainer<Content: View>: View {
-    let reduceMotion: Bool
-    let isGestureDismissEnabled: Bool
-    let onDismissed: () -> Void
+struct PlaceProfileVerticalContainer<Content: View>: View {
     let content: Content
 
-    @State private var horizontalOffset: CGFloat = 0
-    @State private var isTrackingEdgeSwipe = false
-    @State private var isCompletingDismissal = false
-    @GestureState private var isEdgeSwipeGestureActive = false
-
     init(
-        reduceMotion: Bool,
-        isGestureDismissEnabled: Bool,
-        onDismissed: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
-        self.reduceMotion = reduceMotion
-        self.isGestureDismissEnabled = isGestureDismissEnabled
-        self.onDismissed = onDismissed
         self.content = content()
     }
 
@@ -266,106 +254,7 @@ struct PlaceProfileSlideContainer<Content: View>: View {
             content
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .background(WanderTheme.surfaceBone.color)
-                .scrollDisabled(isTrackingEdgeSwipe)
-                .offset(x: horizontalOffset)
-                .contentShape(Rectangle())
-                .simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))
-                .onChange(of: isEdgeSwipeGestureActive) { wasActive, isActive in
-                    guard wasActive, !isActive else { return }
-                    Task { @MainActor in
-                        await Task.yield()
-                        guard !isEdgeSwipeGestureActive,
-                              isTrackingEdgeSwipe,
-                              !isCompletingDismissal
-                        else { return }
-                        isTrackingEdgeSwipe = false
-                        restoreAfterCancelledSwipe()
-                    }
-                }
         }
-    }
-
-    private func edgeSwipeGesture(containerWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .local)
-            .updating($isEdgeSwipeGestureActive) { _, isActive, _ in
-                isActive = true
-            }
-            .onChanged { value in
-                guard isGestureDismissEnabled,
-                      !isCompletingDismissal
-                else { return }
-
-                if isTrackingEdgeSwipe {
-                    horizontalOffset = min(max(value.translation.width, 0), containerWidth)
-                    return
-                }
-
-                guard value.translation.width > 0,
-                      let offset = PlaceProfileFullScreen.interactiveEdgeSwipeOffset(
-                          startX: value.startLocation.x,
-                          translation: value.translation,
-                          containerWidth: containerWidth
-                      )
-                else { return }
-
-                isTrackingEdgeSwipe = true
-                horizontalOffset = offset
-            }
-            .onEnded { value in
-                guard !isCompletingDismissal else { return }
-                let wasTrackingEdgeSwipe = isTrackingEdgeSwipe
-                isTrackingEdgeSwipe = false
-                guard isGestureDismissEnabled, wasTrackingEdgeSwipe else {
-                    restoreAfterCancelledSwipe()
-                    return
-                }
-
-                if PlaceProfileFullScreen.shouldCompleteInteractiveEdgeSwipe(
-                    startX: value.startLocation.x,
-                    translation: value.translation,
-                    predictedEndTranslation: value.predictedEndTranslation
-                ) {
-                    collapse(containerWidth: containerWidth)
-                } else {
-                    restoreAfterCancelledSwipe()
-                }
-            }
-    }
-
-    private func restoreAfterCancelledSwipe() {
-        guard horizontalOffset > 0 else { return }
-        if reduceMotion {
-            horizontalOffset = 0
-        } else {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
-                horizontalOffset = 0
-            }
-        }
-    }
-
-    private func collapse(containerWidth: CGFloat) {
-        guard !isCompletingDismissal else { return }
-        isCompletingDismissal = true
-
-        guard !reduceMotion else {
-            finishCollapse()
-            return
-        }
-
-        let dismissalWidth = max(containerWidth, 1)
-        withAnimation(.easeOut(duration: 0.22)) {
-            horizontalOffset = dismissalWidth
-        } completion: {
-            guard isCompletingDismissal else { return }
-            finishCollapse()
-        }
-    }
-
-    private func finishCollapse() {
-        onDismissed()
-        horizontalOffset = 0
-        isTrackingEdgeSwipe = false
-        isCompletingDismissal = false
     }
 }
 
@@ -379,10 +268,13 @@ enum PlaceProfilePreviewPhotoPolicy {
 }
 
 private struct PlaceProfilePreviewCard: View {
+    private static let cardHeight: CGFloat = 232
+
     let place: PlaceSheetPlace
     let presentation: PlaceProfilePresentation
     let saves: [PlaceSaveSummary]
     let currentUserID: String
+    let viewerLocation: CLLocation?
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
@@ -392,98 +284,204 @@ private struct PlaceProfilePreviewCard: View {
     @State private var failedGooglePhotoID: String?
 
     var body: some View {
-        Button(action: onOpen) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-                PlaceProfilePhotoThumb(
-                    place: place,
-                    photo: photo,
-                    size: 88,
-                    onLoadFailure: handlePhotoLoadFailure
-                )
+        ZStack(alignment: .topTrailing) {
+            Button(action: onOpen) {
+                ZStack(alignment: .topLeading) {
+                    cardPhoto
 
-                VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text(place.name)
-                        .font(WanderTypography.editorialTitle)
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.78)
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.58),
+                            Color.black.opacity(0.12),
+                            Color.black.opacity(0.78)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
 
-                    if place.isDroppedPin {
-                        droppedPinMetadata
-                    } else if let heroMetadata {
-                        Text(heroMetadata)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
-                    }
-
-                    if let previewSignal {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            Circle()
-                                .fill(ticketAccentColor)
-                                .frame(width: 8, height: 8)
-                            Text(previewSignal)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(WanderTheme.textMuted.color)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    if let fitSentence {
-                        Text(fitSentence)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(place.name)
+                            .font(.system(size: 25, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
                             .lineLimit(2)
-                    }
+                            .minimumScaleFactor(0.82)
+                            .multilineTextAlignment(.leading)
+                            .padding(.trailing, action == .none ? 0 : 54)
 
-                    PlaceProfileTagRail(tags: displayTags, compact: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(place.compactPlaceType)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.88))
+                            .lineLimit(1)
+                            .accessibilityIdentifier("map.selectedPlaceCategory")
 
-                VStack(spacing: WanderTheme.spacing2) {
-                    if action != .none {
-                        Button(action: onAction) {
-                            Image(systemName: action.systemImage)
-                                .font(.system(size: 17, weight: .black))
-                                .frame(width: 44, height: 44)
-                                .background(WanderTheme.surfaceRaised.color)
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .clipShape(Circle())
-                                .overlay(
-                                    Circle()
-                                        .stroke(ticketAccentColor.opacity(0.82), lineWidth: 1.5)
-                                )
+                        if place.isDroppedPin {
+                            droppedPinMetadata
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(action.accessibilityLabel)
-                    }
 
-                    if let shareURL {
-                        WanderShareButton(content: .place(item: shareURL, name: place.name, message: shareText)) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 15, weight: .black))
-                                .frame(width: 44, height: 44)
-                                .background(WanderTheme.surfaceSand.color)
-                                .foregroundStyle(WanderTheme.textInk.color)
-                                .clipShape(Circle())
+                        if ratingPresentation != nil || distanceText != nil {
+                            PlaceCardRatingDistanceRow(
+                                rating: ratingPresentation,
+                                distanceText: distanceText
+                            )
                         }
-                        .accessibilityLabel("Share place")
+
+                        if let hoursPresentation {
+                            PlaceCardHoursBadge(presentation: hoursPresentation)
+                                .padding(.top, 2)
+                        }
+
+                        Spacer(minLength: 0)
                     }
+                    .padding(18)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: Self.cardHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
+                .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
             }
-            .padding(WanderTheme.spacing3)
-            .checkInTicketSurface(
-                accent: ticketAccentColor,
-                surface: WanderTheme.surfaceBone.color.opacity(0.98),
-                surroundingSurface: WanderTheme.canvasWarm.color,
-                notchEdges: .trailing
-            )
+            .buttonStyle(PlaceCardPressStyle())
+            .accessibilityIdentifier("map.selectedPlaceCard")
+            .accessibilityLabel(cardAccessibilityLabel)
+            .accessibilityHint("Opens the full place page")
+
+            if action != .none {
+                Button(action: onAction) {
+                    Image(systemName: action.systemImage)
+                        .font(.system(size: 17, weight: .black))
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                .stroke(Color.white.opacity(0.45), lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(action.accessibilityLabel)
+                .padding(14)
+            }
+
+            if let attributionURL {
+                Link(destination: attributionURL) {
+                    Text("Google Maps")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.92))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.52))
+                        .clipShape(Capsule())
+                        .frame(minHeight: 44)
+                }
+                .accessibilityLabel("Photo from Google Maps")
+                .padding(.trailing, 13)
+                .padding(.top, Self.cardHeight - 52)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("map.placeMemory.open")
-        .accessibilityLabel("Open \(place.name)")
         .task(id: photoResolutionKey) {
             await resolvePhoto()
+        }
+    }
+
+    @ViewBuilder
+    private var cardPhoto: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    WanderTheme.terracotta.color.opacity(0.92),
+                    WanderTheme.surfaceSand.color,
+                    WanderTheme.textInk.color.opacity(0.88)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Text(place.categoryEmoji)
+                .font(.system(size: 82))
+                .opacity(0.48)
+                .offset(x: 92, y: 28)
+
+            if let photo {
+                PlaceProfilePhotoImage(
+                    photo: photo,
+                    placeName: place.name,
+                    onLoadFailure: handlePhotoLoadFailure
+                )
+            }
+        }
+    }
+
+    private var ratingPresentation: PlaceCardRatingPresentation? {
+        PlaceCardPresentation.rating(
+            providerScore: photo?.providerRating,
+            providerCount: photo?.providerUserRatingCount,
+            recmeRating: presentation.overallRating ?? presentation.ownRating
+        )
+    }
+
+    private var distanceText: String? {
+        PlaceCardPresentation.distanceText(
+            viewerLocation: viewerLocation,
+            latitude: place.latitude,
+            longitude: place.longitude
+        )
+    }
+
+    private var hoursPresentation: PlaceCardHoursPresentation? {
+        PlaceCardPresentation.hours(
+            isOpen: photo?.providerOpenNow,
+            nextOpenTimeString: photo?.providerNextOpenTimeString,
+            nextCloseTimeString: photo?.providerNextCloseTimeString,
+            utcOffsetMinutes: photo?.providerUTCOffsetMinutes
+        )
+    }
+
+    private var attributionURL: URL? {
+        guard photo?.isGooglePlacesPhoto == true else { return nil }
+        return photo?.sourcePhotoURL
+    }
+
+    private var cardAccessibilityLabel: String {
+        [
+            place.name,
+            place.compactPlaceType,
+            ratingPresentation.map { "Rated \($0.scoreText) out of 5" },
+            distanceText,
+            hoursPresentation.map { [$0.statusText, $0.detailText].compactMap { $0 }.joined(separator: ", ") }
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+
+    private var droppedPinMetadata: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding city…")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.88))
+                .lineLimit(1)
+
+            if let coordinates = place.droppedPinCoordinateDisplay {
+                Text(coordinates)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = coordinates
+                        } label: {
+                            Label("Copy coordinates", systemImage: "doc.on.doc")
+                        }
+                    }
+                    .accessibilityIdentifier("map.droppedPinCoordinates")
+                    .accessibilityLabel("Coordinates \(coordinates)")
+                    .accessibilityHint("Touch and hold to copy")
+            }
         }
     }
 
@@ -550,129 +548,89 @@ private struct PlaceProfilePreviewCard: View {
         }
     }
 
-    private var previewSignal: String? {
-        if let rating = presentation.overallRating {
-            let prefix = socialStatusSignal ?? rating.title
-            return "\(prefix) · ★ \(rating.displayScore)"
-        }
+}
 
-        if let rating = presentation.ownRating {
-            let prefix = ownStatus == .been ? "You checked in" : "You"
-            return "\(prefix) · ★ \(rating.displayScore)"
-        }
+private struct PlaceCardRatingDistanceRow: View {
+    let rating: PlaceCardRatingPresentation?
+    let distanceText: String?
 
-        let names = participantNames(limit: 2)
-        if !names.isEmpty {
-            return socialStatusSignal
-        }
+    var body: some View {
+        HStack(spacing: 6) {
+            if let rating {
+                Text(rating.scoreText)
+                    .font(.system(size: 14, weight: .bold))
+                    .accessibilityIdentifier("map.selectedPlaceRating")
 
-        return nil
-    }
-
-    private var ownStatus: PlaceStatus? {
-        saves.first { $0.visiblePlace.owner.id == currentUserID }?.visiblePlace.userPlace.status
-    }
-
-    private var socialSaves: [PlaceSaveSummary] {
-        saves.filter {
-            $0.visiblePlace.owner.id != currentUserID
-                && !$0.visiblePlace.isCommunityAggregate
-        }
-    }
-
-    private var ticketAccentColor: Color {
-        if ownStatus != nil {
-            return WanderTheme.pinYou.color
-        }
-        if !socialSaves.isEmpty {
-            return WanderTheme.pinSocial.color
-        }
-        return WanderTheme.textInk.color
-    }
-
-    private var socialStatusSignal: String? {
-        let checkedInNames = socialSaves
-            .filter { $0.visiblePlace.userPlace.status == .been }
-            .map { firstName(for: $0.visiblePlace.owner) }
-            .uniquePreservingOrder()
-        let wannaNames = socialSaves
-            .filter { $0.visiblePlace.userPlace.status == .wannaGo }
-            .map { firstName(for: $0.visiblePlace.owner) }
-            .uniquePreservingOrder()
-
-        if !checkedInNames.isEmpty, !wannaNames.isEmpty {
-            return "\(checkedInNames.prefix(2).joined(separator: " + ")) checked in · \(wannaNames.prefix(2).joined(separator: " + ")) wanna"
-        }
-        if !checkedInNames.isEmpty {
-            return "\(checkedInNames.prefix(2).joined(separator: " + ")) checked in"
-        }
-        if !wannaNames.isEmpty {
-            return "\(wannaNames.prefix(2).joined(separator: " + ")) wanna"
-        }
-        return nil
-    }
-
-    private var heroMetadata: String? {
-        PlaceProfileCopy.heroMetadata(for: place)
-    }
-
-    private var droppedPinMetadata: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding city…")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(WanderTheme.textMuted.color)
-                .lineLimit(1)
-
-            if let coordinates = place.droppedPinCoordinateDisplay {
-                Text(coordinates)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .lineLimit(1)
-                    .textSelection(.enabled)
-                    .contextMenu {
-                        Button {
-                            UIPasteboard.general.string = coordinates
-                        } label: {
-                            Label("Copy coordinates", systemImage: "doc.on.doc")
-                        }
+                HStack(spacing: 1) {
+                    ForEach(0 ..< 5, id: \.self) { index in
+                        Image(systemName: starSymbol(index: index, score: rating.score))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.yellow)
                     }
-                    .accessibilityIdentifier("map.droppedPinCoordinates")
-                    .accessibilityLabel("Coordinates \(coordinates)")
-                    .accessibilityHint("Touch and hold to copy")
+                }
+
+                if let count = rating.count {
+                    Text("(\(count))")
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+            }
+
+            if rating != nil, distanceText != nil {
+                Text("·")
+                    .foregroundStyle(.white.opacity(0.76))
+            }
+
+            if let distanceText {
+                Text(distanceText)
             }
         }
+        .font(.system(size: 14, weight: .semibold))
+        .foregroundStyle(.white)
+        .lineLimit(1)
+        .shadow(color: .black.opacity(0.34), radius: 2, x: 0, y: 1)
     }
 
-    private var fitSentence: String? {
-        PlaceProfileCopy.fitSentence(place: place, presentation: presentation)
+    private func starSymbol(index: Int, score: Double) -> String {
+        let remainder = score - Double(index)
+        if remainder >= 0.75 { return "star.fill" }
+        if remainder >= 0.25 { return "star.leadinghalf.filled" }
+        return "star"
+    }
+}
+
+private struct PlaceCardHoursBadge: View {
+    let presentation: PlaceCardHoursPresentation
+
+    private var tint: Color {
+        presentation.isOpen ? WanderTheme.stateSuccess.color : WanderTheme.stateError.color
     }
 
-    private var displayTags: [String] {
-        PlaceProfileCopy.displayTags(place: place, presentation: presentation)
-    }
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(tint)
+                .frame(width: 7, height: 7)
 
-    private var shareURL: URL? {
-        PlaceProfileCopy.shareURL(for: place)
-    }
+            Text(presentation.statusText)
+                .fontWeight(.bold)
+                .accessibilityIdentifier("map.selectedPlaceHoursStatus")
 
-    private var shareText: String {
-        PlaceProfileCopy.shareText(for: place)
-    }
-
-    private func participantNames(limit: Int) -> [String] {
-        saves
-            .filter {
-                $0.visiblePlace.owner.id != currentUserID
-                    && !$0.visiblePlace.isCommunityAggregate
+            if let detailText = presentation.detailText {
+                Text("·")
+                    .opacity(0.7)
+                Text(detailText)
+                    .lineLimit(1)
             }
-            .map { firstName(for: $0.visiblePlace.owner) }
-            .uniquePreservingOrder()
-            .prefix(limit)
-            .map { $0 }
-    }
-
-    private func firstName(for profile: LocalProfile) -> String {
-        profile.displayName.components(separatedBy: " ").first ?? profile.displayName
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(tint.opacity(0.24))
+        .clipShape(Capsule())
+        .overlay {
+            Capsule().stroke(tint.opacity(0.58), lineWidth: 1)
+        }
     }
 }
 

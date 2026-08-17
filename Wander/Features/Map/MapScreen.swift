@@ -265,6 +265,7 @@ struct MapScreen: View {
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
+    @State private var mapCardViewerLocation: CLLocation? = nil
     @State private var isLocationEducationPresented = false
     @State private var isRequestingLocationPermission = false
     @State private var shouldRecenterAfterLocationSettings = false
@@ -895,6 +896,10 @@ struct MapScreen: View {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
                 resolveInitialSearchIfNeeded()
+                Task { await refreshMapCardViewerLocation() }
+            }
+            .onChange(of: locationPermission.authorizationStatus) { _, _ in
+                Task { await refreshMapCardViewerLocation() }
             }
             .onChange(of: compactSelectionIdentity, initial: true) { previous, current in
                 handleCompactSelectionIdentityChange(from: previous, to: current)
@@ -2105,6 +2110,7 @@ struct MapScreen: View {
                 saves: saveSummaries(for: selectedSearchCandidate),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
+                viewerLocation: mapCardViewerLocation,
                 action: action(for: selectedSearchCandidate),
                 onOpen: openSelectedPlaceProfile
             ) {
@@ -2120,6 +2126,7 @@ struct MapScreen: View {
                 saves: saveSummaries(for: selectedPlace),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
+                viewerLocation: mapCardViewerLocation,
                 action: action(for: selectedPlace),
                 onOpen: openSelectedPlaceProfile
             ) {
@@ -2138,6 +2145,7 @@ struct MapScreen: View {
                 ],
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
+                viewerLocation: mapCardViewerLocation,
                 action: .none,
                 onOpen: openSelectedPlaceProfile,
                 onAction: {}
@@ -2149,11 +2157,7 @@ struct MapScreen: View {
     @ViewBuilder
     private var selectedPlaceProfileOverlay: some View {
         if isPlaceProfileOverlayVisible {
-            PlaceProfileSlideContainer(
-                reduceMotion: reduceMotion,
-                isGestureDismissEnabled: walkthroughs.activeSurface != .placeDetail,
-                onDismissed: closeWalkthroughPlaceDetail
-            ) {
+            PlaceProfileVerticalContainer {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
@@ -2166,7 +2170,7 @@ struct MapScreen: View {
                 guard walkthroughs.activeSurface != .placeDetail else { return }
                 collapseSelectedPlaceProfile()
             }
-            .transition(.move(edge: .trailing))
+            .transition(.move(edge: .bottom))
             .zIndex(100)
         }
     }
@@ -2336,7 +2340,7 @@ struct MapScreen: View {
         if reduceMotion {
             isPlaceProfilePresented = true
         } else {
-            withAnimation(.easeOut(duration: 0.28)) {
+            withAnimation(PlaceProfileVerticalMotionStyle.presentationAnimation) {
                 isPlaceProfilePresented = true
             }
         }
@@ -2353,7 +2357,7 @@ struct MapScreen: View {
             return
         }
 
-        withAnimation(.easeOut(duration: 0.22)) {
+        withAnimation(PlaceProfileVerticalMotionStyle.dismissalAnimation) {
             closeWalkthroughPlaceDetail()
         } completion: {
             completion?()
@@ -3675,6 +3679,31 @@ struct MapScreen: View {
         } catch {
             return nil
         }
+    }
+
+    private func refreshMapCardViewerLocation() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderMapCardLocationFixture") {
+            mapCardViewerLocation = CLLocation(
+                latitude: Self.defaultRegion.center.latitude,
+                longitude: Self.defaultRegion.center.longitude
+            )
+            return
+        }
+        #endif
+        let status = locationPermission.authorizationStatus
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else {
+            mapCardViewerLocation = nil
+            return
+        }
+        guard let coordinate = await currentUserCoordinate() else {
+            mapCardViewerLocation = nil
+            return
+        }
+        mapCardViewerLocation = CLLocation(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        )
     }
 
     private func searchOriginLocation() async -> CLLocation {
