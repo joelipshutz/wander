@@ -75,6 +75,7 @@ Every event receives `analytics_schema_version`, `app_version`, `build_number`, 
 | `activity_comment_created` | Comment succeeds locally/remotely | `outcome` |
 | `activity_share_opened` | Share preview opens | `ticket_kind` |
 | `activity_share_completed` | A destination completes, hands off, saves, fails, or cancels | `destination`, `outcome` |
+| `place_share_completed` | The native place share sheet completes or cancels | `surface`, `outcome` |
 | `place_list_created` | A list is created | `visibility`, `collaborator_count` |
 | `shared_visit_invites_queued` | Shared-visit invitees are queued | `invitee_count` |
 | `shared_visit_accepted` | Shared visit becomes the recipient’s visit | `created_new_place`, `photo_count` |

@@ -20,6 +20,7 @@ struct PlaceProfileMapSurface: View {
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
+    let onReady: () -> Void
 
     private var presentation: PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
@@ -42,7 +43,8 @@ struct PlaceProfileMapSurface: View {
                 viewerLocation: viewerLocation,
                 action: action,
                 onOpen: onOpen,
-                onAction: onAction
+                onAction: onAction,
+                onReady: onReady
             )
             .walkthroughTarget(.mapMemory)
             .walkthroughEmphasis(.mapMemory)
@@ -278,142 +280,165 @@ private struct PlaceProfilePreviewCard: View {
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
+    let onReady: () -> Void
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var store: WanderStore
     @State private var photo: PlacePhoto? = nil
-    @State private var failedGooglePhotoID: String?
+    @State private var preparedImage: UIImage?
+    @State private var isShareSheetPresented = false
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Button(action: onOpen) {
-                ZStack(alignment: .topLeading) {
+        VStack(alignment: .trailing, spacing: 4) {
+            ZStack(alignment: .topTrailing) {
+                Button(action: onOpen) {
                     cardPhoto
-
-                    LinearGradient(
-                        colors: [
-                            Color.black.opacity(0.58),
-                            Color.black.opacity(0.12),
-                            Color.black.opacity(0.78)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(place.name)
-                            .font(.system(size: 25, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.82)
-                            .multilineTextAlignment(.leading)
-                            .padding(.trailing, action == .none ? 0 : 54)
-
-                        Text(place.compactPlaceType)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.88))
-                            .lineLimit(1)
-                            .accessibilityIdentifier("map.selectedPlaceCategory")
-
-                        if place.isDroppedPin {
-                            droppedPinMetadata
-                        }
-
-                        if ratingPresentation != nil || distanceText != nil {
-                            PlaceCardRatingDistanceRow(
-                                rating: ratingPresentation,
-                                distanceText: distanceText
+                        .frame(maxWidth: .infinity)
+                        .frame(height: Self.cardHeight)
+                        .clipped()
+                        .overlay {
+                            LinearGradient(
+                                colors: [
+                                    Color.black.opacity(0.58),
+                                    Color.black.opacity(0.12),
+                                    Color.black.opacity(0.78)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
                             )
                         }
+                        .overlay(alignment: .topLeading) {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(place.name)
+                                    .font(WanderTypography.editorialTitle)
+                                    .foregroundStyle(.white)
+                                    .shadow(color: .black.opacity(0.32), radius: 3, y: 1)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.82)
+                                    .multilineTextAlignment(.leading)
+                                    .padding(.trailing, hasCardActions ? 58 : 0)
 
-                        if let hoursPresentation {
-                            PlaceCardHoursBadge(presentation: hoursPresentation)
-                                .padding(.top, 2)
+                                Text(place.compactPlaceType)
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.88))
+                                    .lineLimit(1)
+                                    .accessibilityIdentifier("map.selectedPlaceCategory")
+
+                                if place.isDroppedPin {
+                                    droppedPinMetadata
+                                }
+
+                                if ratingPresentation != nil || distanceText != nil {
+                                    PlaceCardRatingDistanceRow(
+                                        rating: ratingPresentation,
+                                        distanceText: distanceText
+                                    )
+                                }
+
+                                if let hoursPresentation {
+                                    PlaceCardHoursBadge(presentation: hoursPresentation)
+                                        .padding(.top, 2)
+                                }
+                            }
+                            .padding(18)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-
-                        Spacer(minLength: 0)
+                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            .stroke(Color.white.opacity(0.22), lineWidth: 1)
                     }
-                    .padding(18)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
+                    .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: Self.cardHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .stroke(Color.white.opacity(0.22), lineWidth: 1)
-                }
-                .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
-                .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-            }
-            .buttonStyle(PlaceCardPressStyle())
-            .accessibilityIdentifier("map.selectedPlaceCard")
-            .accessibilityLabel(cardAccessibilityLabel)
-            .accessibilityHint("Opens the full place page")
+                .buttonStyle(PlaceCardPressStyle())
+                .accessibilityIdentifier("map.selectedPlaceCard")
+                .accessibilityLabel(cardAccessibilityLabel)
+                .accessibilityHint("Opens the full place page")
 
-            if action != .none {
-                Button(action: onAction) {
-                    Image(systemName: action.systemImage)
-                        .font(.system(size: 17, weight: .black))
-                        .frame(width: 44, height: 44)
-                        .background(.ultraThinMaterial)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                .stroke(Color.white.opacity(0.45), lineWidth: 1)
+                VStack(spacing: 18) {
+                    if action != .none {
+                        Button(action: onAction) {
+                            Image(systemName: action.systemImage)
+                                .font(.system(size: 17, weight: .black))
+                                .frame(width: 44, height: 44)
                         }
+                        .buttonStyle(PlaceCardGlassActionButtonStyle())
+                        .accessibilityIdentifier("map.selectedPlaceAction")
+                        .accessibilityLabel(action.accessibilityLabel)
+                    }
+
+                    if shareContent != nil {
+                        Button {
+                            isShareSheetPresented = true
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16, weight: .black))
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(PlaceCardGlassActionButtonStyle())
+                        .accessibilityIdentifier("map.selectedPlaceShare")
+                        .accessibilityLabel("Share place")
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(action.accessibilityLabel)
                 .padding(14)
             }
 
-            if let attributionURL {
-                Link(destination: attributionURL) {
-                    Text("Google Maps")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.52))
-                        .clipShape(Capsule())
-                        .frame(minHeight: 44)
-                }
-                .accessibilityLabel("Photo from Google Maps")
-                .padding(.trailing, 13)
-                .padding(.top, Self.cardHeight - 52)
+            if let photo, photo.isGooglePlacesPhoto {
+                PlaceCardPhotoAttribution(photo: photo)
             }
         }
         .task(id: photoResolutionKey) {
             await resolvePhoto()
         }
+        .sheet(isPresented: $isShareSheetPresented) {
+            if let shareContent {
+                WanderShareSheet(content: shareContent) { completed in
+                    Task { @MainActor in
+                        store.trackPlaceShareCompletion(completed: completed)
+                        isShareSheetPresented = false
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private var cardPhoto: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    WanderTheme.terracotta.color.opacity(0.92),
-                    WanderTheme.surfaceSand.color,
-                    WanderTheme.textInk.color.opacity(0.88)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Text(place.categoryEmoji)
-                .font(.system(size: 82))
-                .opacity(0.48)
-                .offset(x: 92, y: 28)
-
-            if let photo {
-                PlaceProfilePhotoImage(
-                    photo: photo,
-                    placeName: place.name,
-                    onLoadFailure: handlePhotoLoadFailure
-                )
-            }
+        if let preparedImage {
+            Image(uiImage: preparedImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .accessibilityLabel("Photo of \(place.name)")
         }
+    }
+
+    private var hasCardActions: Bool {
+        action != .none || shareContent != nil
+    }
+
+    private var shareContent: WanderShareContent? {
+        guard let shareURL else { return nil }
+        return .place(
+            item: shareURL,
+            name: place.name,
+            message: PlaceProfileCopy.shareText(for: place)
+        )
+    }
+
+    private var shareURL: URL? {
+        if let deepLink = PlaceProfileCopy.shareURL(for: place) {
+            return deepLink
+        }
+        guard let latitude = place.latitude,
+              let longitude = place.longitude
+        else { return nil }
+        return PlaceExternalLinks.directionsAction(
+            placeName: place.name,
+            latitude: latitude,
+            longitude: longitude
+        )?.url
     }
 
     private var ratingPresentation: PlaceCardRatingPresentation? {
@@ -439,11 +464,6 @@ private struct PlaceProfilePreviewCard: View {
             nextCloseTimeString: photo?.providerNextCloseTimeString,
             utcOffsetMinutes: photo?.providerUTCOffsetMinutes
         )
-    }
-
-    private var attributionURL: URL? {
-        guard photo?.isGooglePlacesPhoto == true else { return nil }
-        return photo?.sourcePhotoURL
     }
 
     private var cardAccessibilityLabel: String {
@@ -497,57 +517,154 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var photoResolutionKey: String {
-        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")|\(failedGooglePhotoID ?? "ready")"
+        "\(place.photoLookupKey)|\(localPhoto?.providerPlaceID ?? "none")"
     }
 
     private func resolvePhoto() async {
         let resolutionKey = photoResolutionKey
         let localPhoto = localPhoto
         guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
-        photo = localPhoto
-        guard !place.isDroppedPin else { return }
+
+        photo = nil
+        preparedImage = nil
+
+        if place.isDroppedPin {
+            await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
+            return
+        }
+
         do {
             let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
             try Task.checkCancellation()
-            let resolvedPhoto: PlacePhoto
-            if remotePhoto.isGooglePlacesPhoto,
-               remotePhoto.providerPlaceID == failedGooglePhotoID {
-                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
-            } else {
-                resolvedPhoto = remotePhoto
-            }
-            try Task.checkCancellation()
-            guard resolutionKey == photoResolutionKey else { return }
-            if resolvedPhoto.providerPlaceID != localPhoto?.providerPlaceID {
-                photo = resolvedPhoto
-            }
-            if resolvedPhoto.isGooglePlacesPhoto {
+
+            if remotePhoto.isGooglePlacesPhoto {
                 await store.applyProviderCategoryEnrichment(
                     placeID: place.id,
-                    primaryType: resolvedPhoto.providerPrimaryType,
-                    types: resolvedPhoto.providerTypes ?? [],
+                    primaryType: remotePhoto.providerPrimaryType,
+                    types: remotePhoto.providerTypes ?? [],
                     backend: backend
                 )
             }
+
+            if await prepareCard(using: remotePhoto, resolutionKey: resolutionKey) {
+                return
+            }
+
+            if remotePhoto.isGooglePlacesPhoto {
+                let visibleUserPhoto = try await backend.visibleUserPlacePhoto(for: place.photoRequest)
+                if await prepareCard(using: visibleUserPhoto, resolutionKey: resolutionKey) {
+                    return
+                }
+            }
+
+            await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         } catch is CancellationError {
             return
         } catch {
-            guard resolutionKey == photoResolutionKey else { return }
-            photo = localPhoto
+            await prepareCard(using: localPhoto, resolutionKey: resolutionKey)
         }
     }
 
-    private func handlePhotoLoadFailure(_ failedPhoto: PlacePhoto) {
-        guard failedPhoto.providerPlaceID == photo?.providerPlaceID else { return }
-        if failedPhoto.isGooglePlacesPhoto {
-            failedGooglePhotoID = failedPhoto.providerPlaceID
-        } else if localPhoto?.providerPlaceID == failedPhoto.providerPlaceID {
-            photo = nil
+    @discardableResult
+    private func prepareCard(using candidate: PlacePhoto?, resolutionKey: String) async -> Bool {
+        guard let candidate,
+              let image = await preparedImage(for: candidate),
+              !Task.isCancelled,
+              resolutionKey == photoResolutionKey
+        else { return false }
+
+        photo = candidate
+        preparedImage = image
+        await Task.yield()
+        guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return false }
+        onReady()
+        return true
+    }
+
+    private func preparedImage(for photo: PlacePhoto) async -> UIImage? {
+        let image: UIImage?
+        if let localAssetRef = photo.localAssetRef,
+           let localImage = VisitPhotoLocalFileStore.image(from: localAssetRef) {
+            image = localImage
+        } else if let data = try? await backend.placePhotoImageData(for: photo) {
+            image = UIImage(data: data)
         } else {
-            photo = localPhoto
+            image = nil
         }
+
+        guard !Task.isCancelled, let image else { return nil }
+        return await image.byPreparingForDisplay() ?? image
     }
 
+}
+
+private struct PlaceCardPhotoAttribution: View {
+    let photo: PlacePhoto
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let authorName = photo.authorName, !authorName.isEmpty {
+                if let authorURL = photo.authorProfileURL {
+                    Link("Photo by \(authorName)", destination: authorURL)
+                } else {
+                    Text("Photo by \(authorName)")
+                }
+                Text("·")
+            }
+
+            if let sourceURL = photo.sourcePhotoURL {
+                Link("Google Maps", destination: sourceURL)
+            } else {
+                Text("Google Maps")
+            }
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(WanderTheme.textMuted.color)
+        .tint(WanderTheme.textMuted.color)
+        .lineLimit(1)
+        .padding(.horizontal, 8)
+        .frame(minHeight: 32)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("map.selectedPlaceAttribution")
+    }
+}
+
+private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .wanderGlassRoundedRectangle(
+                tone: configuration.isPressed ? .accent : .darkOverlay,
+                cornerRadius: 15,
+                material: .clear,
+                interactive: true
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(
+                        configuration.isPressed
+                            ? WanderTheme.terracotta.color.opacity(0.98)
+                            : Color.white.opacity(0.42),
+                        lineWidth: configuration.isPressed ? 2 : 1
+                    )
+            }
+            .shadow(
+                color: configuration.isPressed
+                    ? WanderTheme.terracotta.color.opacity(0.78)
+                    : Color.black.opacity(0.22),
+                radius: configuration.isPressed ? 18 : 7,
+                x: 0,
+                y: configuration.isPressed ? 0 : 4
+            )
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 1.6 : 1)
+            .animation(
+                reduceMotion ? .none : .spring(response: 0.24, dampingFraction: 0.68),
+                value: configuration.isPressed
+            )
+    }
 }
 
 private struct PlaceCardRatingDistanceRow: View {

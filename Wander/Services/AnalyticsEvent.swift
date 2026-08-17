@@ -261,6 +261,7 @@ enum WanderAnalyticsEvents {
     static let activityCommentCreated = "activity_comment_created"
     static let activityShareOpened = "activity_share_opened"
     static let activityShareCompleted = "activity_share_completed"
+    static let placeShareCompleted = "place_share_completed"
     static let contactInviteSheetOpened = "contact_invite_sheet_opened"
     static let contactInviteDeliveryStarted = "contact_invite_delivery_started"
     static let contactInviteCompleted = "contact_invite_completed"

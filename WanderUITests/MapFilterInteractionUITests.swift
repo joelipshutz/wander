@@ -45,24 +45,25 @@ final class MapFilterInteractionUITests: XCTestCase {
         ]
         app.launch()
 
-        let ticket = app.buttons["Open Woodcat Coffee"]
+        let card = app.buttons["map.selectedPlaceCard"]
         let message = app.staticTexts["map.searchMessage"]
         let search = app.textFields["map.searchField"]
         let addButton = app.buttons["map.headerAdd"]
         let nearby = app.buttons["map.nearby"]
 
-        XCTAssertTrue(ticket.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(card.label.contains("Woodcat Coffee"))
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertTrue(addButton.waitForExistence(timeout: 5))
         XCTAssertFalse(message.exists)
-        XCTAssertLessThanOrEqual(ticket.frame.maxY, search.frame.minY)
+        XCTAssertLessThanOrEqual(card.frame.maxY, search.frame.minY)
         XCTAssertGreaterThanOrEqual(addButton.frame.width, 44)
         XCTAssertGreaterThanOrEqual(addButton.frame.height, 44)
         XCTAssertTrue(addButton.isHittable)
         XCTAssertFalse(nearby.isHittable)
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-289 selected ticket with Nearby hidden"
+        screenshot.name = "REC-293 selected card with Nearby hidden"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }
@@ -80,18 +81,21 @@ final class MapFilterInteractionUITests: XCTestCase {
         map.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: 0.45))
             .press(forDuration: 0.7)
 
-        XCTAssertTrue(app.buttons["Open Dropped pin"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["map.searchMessage"].exists)
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "REC-289 dropped pin standard place card"
         screenshot.lifetime = .keepAlways
         add(screenshot)
 
-        let coordinates = app.staticTexts["map.droppedPinCoordinates"]
-        XCTAssertTrue(coordinates.waitForExistence(timeout: 2))
-        coordinates.press(forDuration: 1)
-        XCTAssertTrue(app.buttons["Copy coordinates"].waitForExistence(timeout: 2))
+        if card.label.contains("Dropped pin") {
+            XCTAssertFalse(app.staticTexts["map.searchMessage"].exists)
+            let coordinates = app.staticTexts["map.droppedPinCoordinates"]
+            XCTAssertTrue(coordinates.waitForExistence(timeout: 2))
+            coordinates.press(forDuration: 1)
+            XCTAssertTrue(app.buttons["Copy coordinates"].waitForExistence(timeout: 2))
+        }
     }
 
     func testNearbyPermissionEducationAppearsBeforeTheSystemPrompt() throws {

@@ -23,7 +23,17 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [metadataLoaded], timeout: 5), .completed)
         XCTAssertTrue(card.label.contains("Coffee shop"))
         XCTAssertTrue(card.label.contains("Rated 4.7"))
+        XCTAssertTrue(app.buttons["map.selectedPlaceAction"].exists)
+        let shareButton = app.buttons["map.selectedPlaceShare"]
+        XCTAssertTrue(shareButton.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["map.selectedPlaceAttribution"].exists)
         capture("rec-293-place-card-collapsed")
+
+        shareButton.tap()
+        let activityList = app.otherElements["ActivityListView"]
+        XCTAssertTrue(activityList.waitForExistence(timeout: 5))
+        app.buttons["Close"].tap()
+        XCTAssertFalse(activityList.waitForExistence(timeout: 3))
 
         card.press(forDuration: 0.8)
         XCTAssertTrue(card.exists)
