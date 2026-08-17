@@ -263,11 +263,10 @@ struct MapScreen: View {
     }
 
     private var visiblePlaces: [VisiblePlace] {
-        var places = baseVisiblePlaces
-        if let routedVisiblePlace,
-           !places.contains(where: { $0.id == routedVisiblePlace.id }) {
-            places.append(routedVisiblePlace)
-        }
+        let places = MapActivePinRetention.places(
+            from: baseVisiblePlaces,
+            retaining: routedVisiblePlace
+        )
         let query = TrustedPlaceSearchQuery(mapQuery)
         guard query.hasMeaningfulTokens else { return places }
         return TrustedPlaceSearch.matches(query: query, in: places).map(\.place)
@@ -769,8 +768,17 @@ struct MapScreen: View {
             }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
                 if let current = selectedPlaceGroupKey, !keys.contains(current) {
-                    selectedPlaceGroupKey = nil
-                    isPlaceProfilePresented = false
+                    if let routedVisiblePlace,
+                       let retainedGroup = VisiblePlaceGrouping.matchingGroup(
+                           for: routedVisiblePlace,
+                           in: visiblePlaces,
+                           currentUserID: store.currentUser.id
+                       ) {
+                        selectedPlaceGroupKey = retainedGroup.key
+                    } else {
+                        selectedPlaceGroupKey = nil
+                        isPlaceProfilePresented = false
+                    }
                 }
                 resolveInitialSelection()
             }
@@ -1001,6 +1009,7 @@ struct MapScreen: View {
 
             mapQuery = ""
             mapSearchCandidates = [candidate]
+            routedVisiblePlace = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
@@ -1142,6 +1151,7 @@ struct MapScreen: View {
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
         selectedMapFeature = nil
+        routedVisiblePlace = nil
         selectedPlaceGroupKey = nil
         selectedSearchCandidateID = nil
         isPlaceProfilePresented = false
@@ -1531,6 +1541,7 @@ struct MapScreen: View {
     }
 
     private func selectVisiblePlace(_ visiblePlace: VisiblePlace) {
+        routedVisiblePlace = visiblePlace
         selectedPlaceGroupKey = VisiblePlaceGrouping.matchingGroup(
             for: visiblePlace,
             in: visiblePlaces,
@@ -1675,6 +1686,7 @@ struct MapScreen: View {
         isPlaceProfilePresented = false
 
         guard !reduceMotion else {
+            routedVisiblePlace = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = nil
             walkthroughFallbackMemory = nil
@@ -1697,6 +1709,7 @@ struct MapScreen: View {
                   compactCardPhase == .dismissing
             else { return }
 
+            routedVisiblePlace = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = nil
             walkthroughFallbackMemory = nil
@@ -2222,11 +2235,13 @@ struct MapScreen: View {
                 selectedSearchCandidateID = nil
                 mapSearchMessage = nil
             } else if let firstCandidate = mapSearchCandidates.first {
+                routedVisiblePlace = nil
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
                 center(on: firstCandidate)
                 mapSearchMessage = nil
             } else {
+                routedVisiblePlace = nil
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
                 mapSearchMessage = "No places on your map or map results found."
@@ -2336,6 +2351,7 @@ struct MapScreen: View {
         clearSearchTextForMapInteraction()
         replaceCompactSelectionIfNeeded {
             mapSearchCandidates = [candidate]
+            routedVisiblePlace = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
@@ -2949,11 +2965,13 @@ struct MapScreen: View {
 
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
+            routedVisiblePlace = nil
             if let remainingGroup = VisiblePlaceGrouping.matchingGroup(
                 for: visiblePlace,
                 in: visiblePlaces,
                 currentUserID: store.currentUser.id
             ) {
+                routedVisiblePlace = remainingGroup.primary
                 selectedPlaceGroupKey = remainingGroup.key
             } else {
                 selectedPlaceGroupKey = nil
@@ -3130,6 +3148,7 @@ struct MapScreen: View {
             mapSearchCandidates = []
             center(on: visiblePlace)
         case .mapKit(let candidate):
+            routedVisiblePlace = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
@@ -3156,6 +3175,7 @@ struct MapScreen: View {
             center(on: visiblePlace)
             performAction(for: visiblePlace)
         case .mapKit(let candidate):
+            routedVisiblePlace = nil
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
@@ -5194,7 +5214,11 @@ private struct SearchResultMarker: View {
                     .padding(-5)
             )
             .shadow(color: WanderTheme.textInk.color.opacity(0.18), radius: 6, x: 0, y: 2)
-            .scaleEffect(isSelected ? MapPinSelectionMotionStyle.selectedScale : 1)
+            .scaleEffect(
+                isSelected
+                    ? MapPinSelectionMotionStyle.selectedScale
+                    : MapPinSelectionMotionStyle.inactiveScale
+            )
             .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
             .accessibilityLabel("Map search result, \(candidate.name)")
     }
@@ -5212,7 +5236,11 @@ private struct MapPlaceMarker: View {
             visiblePlace: visiblePlace,
             outlines: MapPinOutlineBuilder.outlines(for: saveStates)
         )
-        .scaleEffect(isSelected ? MapPinSelectionMotionStyle.selectedScale : 1)
+        .scaleEffect(
+            isSelected
+                ? MapPinSelectionMotionStyle.selectedScale
+                : MapPinSelectionMotionStyle.inactiveScale
+        )
         .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
     }
 
@@ -5343,7 +5371,7 @@ struct MapPinSaveState: Equatable {
 
 enum MapPinVisualMetrics {
     static let discDiameter: CGFloat = 38
-    static let emojiDiameter: CGFloat = 26
+    static let emojiDiameter: CGFloat = 24
     static let outlineWidth: CGFloat = 3
     static let secondaryOutlinePadding: CGFloat = -6
     static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
@@ -5351,10 +5379,24 @@ enum MapPinVisualMetrics {
 
 @MainActor
 enum MapPinSelectionMotionStyle {
-    static let selectedScale: CGFloat = 1.16 * 1.30
+    static let inactiveScale: CGFloat = 0.90
+    static let selectedScale: CGFloat = 1.45
     static let duration: TimeInterval = 0.55
     static let bounce = 0.75
     static let animation = Animation.spring(duration: duration, bounce: bounce)
+}
+
+enum MapActivePinRetention {
+    static func places(
+        from places: [VisiblePlace],
+        retaining activePlace: VisiblePlace?
+    ) -> [VisiblePlace] {
+        guard let activePlace,
+              !places.contains(where: { $0.id == activePlace.id })
+        else { return places }
+
+        return places + [activePlace]
+    }
 }
 
 struct MapPinOutline: Identifiable, Equatable {

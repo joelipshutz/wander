@@ -64,9 +64,57 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapCompactCardMotionStyle.nearbyFadeDuration, 0.46, accuracy: 0.001)
         XCTAssertEqual(MapCompactCardMotionStyle.nearbyReturnFadeDuration, 0.34, accuracy: 0.001)
         XCTAssertGreaterThan(MapCompactCardMotionStyle.hiddenVerticalOffset, 300)
-        XCTAssertEqual(MapPinSelectionMotionStyle.selectedScale, 1.16 * 1.30, accuracy: 0.001)
+        XCTAssertEqual(MapPinSelectionMotionStyle.inactiveScale, 0.90, accuracy: 0.001)
+        XCTAssertEqual(MapPinSelectionMotionStyle.selectedScale, 1.45, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.55, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.75, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testActivePinRemainsInAnnotationsWhenAViewportRefreshDropsIt() throws {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+        let allPlaces = store.visiblePlaces()
+        let activePlace = try XCTUnwrap(allPlaces.first)
+        let refreshedPlaces = allPlaces.filter { $0.id != activePlace.id }
+
+        let retainedPlaces = MapActivePinRetention.places(
+            from: refreshedPlaces,
+            retaining: activePlace
+        )
+
+        XCTAssertEqual(retainedPlaces.filter { $0.id == activePlace.id }.count, 1)
+        XCTAssertEqual(
+            MapActivePinRetention.places(
+                from: allPlaces,
+                retaining: activePlace
+            ).filter { $0.id == activePlace.id }.count,
+            1
+        )
+
+        let retainedGroup = VisiblePlaceGrouping.matchingGroup(
+            for: activePlace,
+            in: retainedPlaces,
+            currentUserID: store.currentUser.id
+        )
+        XCTAssertNotNil(retainedGroup)
+    }
+
+    func testActivePinRefreshRegressionFixtureRequiresPersistentSelection() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: root.appendingPathComponent(
+                "WanderTests/Fixtures/ios-fix/rec-289-selected-pin-regional-refresh-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let expected = try XCTUnwrap(fixture["expected_refresh_result"] as? [String: Any])
+
+        XCTAssertEqual(expected["selected_place_id"] as? String, "selected-place-b")
+        XCTAssertEqual(expected["selected_pin_is_annotated"] as? Bool, true)
     }
 
     func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
@@ -83,6 +131,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("DragGesture(minimumDistance: MapHitTesting.panDismissalDistance"))
         XCTAssertTrue(map.contains("handleMapPanStart()"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
+        XCTAssertTrue(map.contains("MapActivePinRetention.places("))
+        XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))
+        XCTAssertTrue(map.contains("let retainedGroup = VisiblePlaceGrouping.matchingGroup("))
         XCTAssertTrue(map.contains("compactCardContentOpacity"))
         XCTAssertTrue(map.contains("nearbyFadeAnimation"))
         XCTAssertTrue(map.contains("nearbyReturnFadeAnimation"))
@@ -1010,7 +1061,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
 
     func testPinVisualMetricsTightenEmojiSpacingWithoutASelectionHalo() throws {
         XCTAssertEqual(MapPinVisualMetrics.discDiameter, 38)
-        XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 26)
+        XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 24)
         XCTAssertEqual(MapPinVisualMetrics.outlineWidth, 3)
         XCTAssertEqual(MapPinVisualMetrics.secondaryOutlinePadding, -6)
         XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 3.5])
