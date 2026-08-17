@@ -5343,7 +5343,7 @@ struct MapPinSaveState: Equatable {
 
 enum MapPinVisualMetrics {
     static let discDiameter: CGFloat = 38
-    static let emojiDiameter: CGFloat = 21
+    static let emojiDiameter: CGFloat = 26
     static let outlineWidth: CGFloat = 3
     static let secondaryOutlinePadding: CGFloat = -6
     static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
@@ -5351,9 +5351,9 @@ enum MapPinVisualMetrics {
 
 @MainActor
 enum MapPinSelectionMotionStyle {
-    static let selectedScale: CGFloat = 1.16
+    static let selectedScale: CGFloat = 1.16 * 1.30
     static let duration: TimeInterval = 0.55
-    static let bounce = 0.55
+    static let bounce = 0.75
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 

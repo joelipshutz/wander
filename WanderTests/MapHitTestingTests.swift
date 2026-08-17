@@ -64,9 +64,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(MapCompactCardMotionStyle.nearbyFadeDuration, 0.46, accuracy: 0.001)
         XCTAssertEqual(MapCompactCardMotionStyle.nearbyReturnFadeDuration, 0.34, accuracy: 0.001)
         XCTAssertGreaterThan(MapCompactCardMotionStyle.hiddenVerticalOffset, 300)
-        XCTAssertGreaterThan(MapPinSelectionMotionStyle.selectedScale, 1.1)
+        XCTAssertEqual(MapPinSelectionMotionStyle.selectedScale, 1.16 * 1.30, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.55, accuracy: 0.001)
-        XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.55, accuracy: 0.001)
+        XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.75, accuracy: 0.001)
     }
 
     func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
@@ -1010,7 +1010,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
 
     func testPinVisualMetricsTightenEmojiSpacingWithoutASelectionHalo() throws {
         XCTAssertEqual(MapPinVisualMetrics.discDiameter, 38)
-        XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 21)
+        XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 26)
         XCTAssertEqual(MapPinVisualMetrics.outlineWidth, 3)
         XCTAssertEqual(MapPinVisualMetrics.secondaryOutlinePadding, -6)
         XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 3.5])
