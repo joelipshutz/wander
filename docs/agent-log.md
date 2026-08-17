@@ -30230,3 +30230,31 @@ Outcome and validation:
   local machine does not have the Supabase CLI, so hosted migration/pgTAP
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
+
+## 2026-08-16 21:00 PDT - Codex - REC-279 continuation handoff
+
+Agent: Codex
+
+Branch: `codex/rec-279-multi-account-design`
+
+Temporary documentation worktree: `/private/tmp/recme-rec279-handoff`
+
+Linear: `REC-279` (`In Progress`)
+
+Goal:
+
+- Identify whether Joe's six supplied feature branches contain the multi-account work and persist the complete available conversation and engineering continuation context for another coding agent.
+
+Branch and overlap audit:
+
+- None of `codex/feature-454-first-save-checkin`, `codex/feature-456-map-layout`, `codex/feature-458-feed-glass-controls`, `codex/feature-457-semantic-discover`, `codex/feature-459-map-search-polish`, or `codex/feature-461-save-confirmation-ctas` contains checkpoint `2f48cd92`.
+- The matching local/remote branch is `codex/rec-279-multi-account-design`.
+- The REC-279 checkpoint is based at merge base `40811705`; current `origin/main` is `7b649a9b` and already contains the six landed feature equivalents. The next agent should rebase onto `origin/main`, not cherry-pick the six pointers.
+- The original REC-279 worktree has only untracked `DerivedData-rec279/`; it was not edited for this handoff.
+
+Outcome:
+
+- Added `docs/2026-08-16-rec-279-multi-account-conversation-handoff.md` with the full available user-visible conversation, product/security invariants, implementation file map, branch topology, exact validation truth, known risks, remaining work, relevant references, restart commands, and definition of done.
+- Updated the REC-279 architecture plan status and linked it to the continuation handoff.
+- Documentation-only handoff. No product source, schema/RLS/RPC, hosted data, build number, archive, TestFlight, Slack, merge, or release action was performed.
+- No build or tests were run because this commit only preserves continuation context; the handoff explicitly records that checkpoint `2f48cd92` remains uncompiled and untested.

@@ -1,8 +1,10 @@
 # REC-279: Multi-account switching and account isolation
 
-Status: design spike; no production implementation in this branch
+Status: implementation checkpoint at `2f48cd92`; incomplete and unvalidated
 
-Linear: [REC-279](https://linear.app/recme/issue/REC-279/design-multi-account-switching-and-account-isolation-architecture)
+Linear: [REC-279](https://linear.app/recme/issue/REC-279/build-multi-account-switching-and-account-isolation)
+
+Continuation handoff: `docs/2026-08-16-rec-279-multi-account-conversation-handoff.md`
 
 Interactive prototype: `/Users/joelipshutz/.gstack/projects/joelipshutz-wander/designs/multi-account-switcher-20260816/finalized.html`
 
