@@ -615,18 +615,42 @@ struct DiscoverScreen: View {
             }
 
             do {
-                let candidates = try await backend.searchRecmePlaces(request)
+                let remoteClock = ContinuousClock()
+                let remoteStart = remoteClock.now
+                let semanticServerFlag = auth.state.session.flatMap { session in
+                    backend.featureFlag(.semanticPlaceSearchV1, for: session.userID)
+                }
+                let semanticEnabled = SemanticPlaceSearchAccessPolicy.isEnabled(
+                    serverFlag: semanticServerFlag
+                )
+                let outcome = try await backend.searchRecmePlaces(
+                    request,
+                    includesSemanticProvider: semanticEnabled
+                )
                 guard !Task.isCancelled,
                       isPlaceSearchPresented,
                       activePlaceSearchSubmissionID == submissionID,
                       submittedPlacesQuery == query,
                       normalizedSearchQuery(placesQuery) == normalizedSearchQuery(query)
                 else { return }
-                communityPlaceCandidates = candidates
+                communityPlaceCandidates = outcome.candidates
                 communityPlaceSearchFailed = false
                 isPlaceSearchLoading = false
                 isCommunityPlaceSearchLoading = false
                 communityPlaceSearchTask = nil
+                store.trackDiscoverSearchEvent(
+                    WanderAnalyticsEvents.trustedPlaceSearchRemoteResults,
+                    properties: [
+                        "surface": "discover",
+                        "result_count": discoverResultCountBucket(outcome.candidates.count),
+                        "lexical_count": discoverResultCountBucket(outcome.lexicalCount),
+                        "semantic_count": discoverResultCountBucket(outcome.semanticCount),
+                        "provider_overlap": discoverResultCountBucket(outcome.overlapCount),
+                        "semantic_status": outcome.semanticStatus.rawValue,
+                        "ranking_policy": RecmePlaceSearchOutcome.rankingPolicyVersion,
+                        "latency": trustedSearchLatencyBucket(remoteStart.duration(to: remoteClock.now))
+                    ]
+                )
             } catch is CancellationError {
                 return
             } catch {

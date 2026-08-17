@@ -20,6 +20,7 @@ Project root: `/Users/joelipshutz/Developer/Wander (nametbd)`
 - Original mock PDF: [docs/source/wander-mocks.pdf](../source/wander-mocks.pdf)
 - Original mock page renders: [docs/source/wander-mocks-pages](../source/wander-mocks-pages)
 - Deferred work: [TODOS.md](../../TODOS.md)
+- Search and Featured retrieval platform: [docs/specs/search-featured-retrieval-platform.md](search-featured-retrieval-platform.md)
 - Slate reference app: `/Users/joelipshutz/Developer/Slate`
 - Competitive references:
   - Mapstr: https://en.mapstr.com/

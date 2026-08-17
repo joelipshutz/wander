@@ -386,7 +386,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
     }
 
     nonisolated static func canRetryFunctionAfterAuthorizationFailure(_ name: String) -> Bool {
-        name == "place-photo"
+        name == "place-photo" || name == "semantic-place-search"
     }
 
     private func rpcResponse<Params: Encodable>(

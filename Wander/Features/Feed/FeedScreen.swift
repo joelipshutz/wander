@@ -15,6 +15,9 @@ struct FeedScreen: View {
     @State private var followingProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
     @State private var selectedSurface: FeedSurface
+    @State private var peopleQuery = ""
+    @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
+    @FocusState private var peopleSearchFieldFocused: Bool
     private let onAdd: () -> Void
 
     init(onAdd: @escaping () -> Void = {}) {
@@ -33,29 +36,35 @@ struct FeedScreen: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    FeedSurfaceTabs(selectedSurface: $selectedSurface)
-                    .walkthroughTarget(.feedSurfaceSwitch)
-
-                    WanderGlassActionButton(
-                        systemImage: "plus",
-                        accessibilityLabel: "Add a place",
-                        accessibilityIdentifier: "feed.headerAdd",
-                        action: onAdd
-                    )
-                }
-                .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing2)
-
+            ZStack(alignment: .top) {
                 switch selectedSurface {
                 case .places:
                     placesSurface
                 case .people:
-                    FeedPeopleSurface(openProfile: openProfile)
+                    FeedPeopleSurface(
+                        memberQuery: $peopleQuery,
+                        contentTopInset: feedContentTopInset,
+                        dismissSearchFocus: { peopleSearchFieldFocused = false },
+                        openProfile: openProfile
+                    )
                 }
+
+                floatingHeader
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: FeedFloatingHeaderHeightPreferenceKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    }
+                    .zIndex(1)
             }
             .wanderScreen()
+            .onPreferenceChange(FeedFloatingHeaderHeightPreferenceKey.self) { height in
+                guard height > 0 else { return }
+                floatingHeaderHeight = height
+            }
             .task(id: auth.isSignedIn) {
                 await refresh()
             }
@@ -104,7 +113,11 @@ struct FeedScreen: View {
             } message: {
                 Text(savedMessage ?? "")
             }
-            .onChange(of: selectedSurface) { _, _ in
+            .onChange(of: selectedSurface) { _, surface in
+                peopleSearchFieldFocused = false
+                if surface != .people {
+                    peopleQuery = ""
+                }
                 walkthroughs.perform(.feedSurfaceSwitch)
             }
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
@@ -112,6 +125,14 @@ struct FeedScreen: View {
                     selectedSurface = .places
                 } else if target == .feedPeopleSearch || target == .feedInvite {
                     selectedSurface = .people
+                }
+                if target == .feedInvite {
+                    peopleSearchFieldFocused = false
+                }
+            }
+            .onChange(of: peopleSearchFieldFocused) { _, isFocused in
+                if isFocused {
+                    walkthroughs.perform(.feedPeopleSearch)
                 }
             }
             .onChange(of: walkthroughs.activeSurface, initial: true) { _, surface in
@@ -130,21 +151,57 @@ struct FeedScreen: View {
         }
     }
 
+    @ViewBuilder
+    private var floatingHeader: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: WanderTheme.spacing2) {
+                floatingHeaderContent
+            }
+        } else {
+            floatingHeaderContent
+        }
+    }
+
+    private var floatingHeaderContent: some View {
+        VStack(spacing: WanderTheme.spacing2) {
+            switch selectedSurface {
+            case .places:
+                FeedSearchLauncher(
+                    placeholders: tickerSuggestions,
+                    isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
+                    action: openDiscoverSearch
+                )
+                .walkthroughTarget(.feedDiscoverSearch)
+            case .people:
+                FeedPeopleSearchField(text: $peopleQuery)
+                    .focused($peopleSearchFieldFocused)
+                    .walkthroughTarget(.feedPeopleSearch)
+            }
+
+            HStack(spacing: WanderTheme.spacing2) {
+                FeedSurfaceTabs(selectedSurface: $selectedSurface)
+                    .walkthroughTarget(.feedSurfaceSwitch)
+
+                WanderGlassActionButton(
+                    systemImage: "plus",
+                    accessibilityLabel: "Add a place",
+                    accessibilityIdentifier: "feed.headerAdd",
+                    action: onAdd
+                )
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing2)
+    }
+
     private var placesSurface: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                    FeedSearchLauncher(
-                        placeholders: tickerSuggestions,
-                        isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
-                        action: openDiscoverSearch
-                    )
-                    .walkthroughTarget(.feedDiscoverSearch)
-
                     content
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
-                .padding(.top, WanderTheme.spacing3)
+                .padding(.top, feedContentTopInset)
                 .padding(.bottom, WanderTheme.spacing16)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -158,6 +215,10 @@ struct FeedScreen: View {
                 scrollToFocusedActivity(focusedActivityID, proxy: proxy)
             }
         }
+    }
+
+    private var feedContentTopInset: CGFloat {
+        floatingHeaderHeight + WanderTheme.spacing3
     }
 
     private func openDiscoverSearch() {
@@ -543,14 +604,15 @@ private struct FeedPeopleSurface: View {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
+    @Binding var memberQuery: String
+    let contentTopInset: CGFloat
+    let dismissSearchFocus: () -> Void
     let openProfile: (ProfileShell) -> Void
 
-    @State private var memberQuery = ""
     @State private var memberResults: [ProfileShell] = []
     @State private var followInFlightProfileIDs: Set<String> = []
     @State private var followFailedProfileIDs: Set<String> = []
     @State private var isPresentingContactInvites = false
-    @FocusState private var searchFieldFocused: Bool
 
     private var isMemberSearchActive: Bool {
         !memberQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -564,11 +626,8 @@ private struct FeedPeopleSurface: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                FeedPeopleSearchField(text: $memberQuery)
-                    .focused($searchFieldFocused)
-                    .walkthroughTarget(.feedPeopleSearch)
-
                 InviteEntryPointButton(surface: .feedPeople) {
+                    dismissSearchFocus()
                     walkthroughs.perform(.feedInvite)
                     isPresentingContactInvites = true
                 }
@@ -583,7 +642,7 @@ private struct FeedPeopleSurface: View {
                 }
             }
             .padding(.horizontal, WanderTheme.spacing4)
-            .padding(.top, WanderTheme.spacing3)
+            .padding(.top, contentTopInset)
             .padding(.bottom, WanderTheme.spacing16)
         }
         .scrollDismissesKeyboard(.interactively)
@@ -597,19 +656,9 @@ private struct FeedPeopleSurface: View {
             walkthroughs.recordUserActivity()
             await refreshMembers(query: memberQuery, debounce: true)
         }
-        .onChange(of: searchFieldFocused) { _, isFocused in
-            if isFocused {
-                walkthroughs.perform(.feedPeopleSearch)
-            }
-        }
-        .onChange(of: walkthroughs.currentStep?.target) { _, target in
-            if target == .feedInvite {
-                searchFieldFocused = false
-            }
-        }
         .onChange(of: walkthroughs.isRequestingContactInvite, initial: true) { _, isRequested in
             guard isRequested else { return }
-            searchFieldFocused = false
+            dismissSearchFocus()
             isPresentingContactInvites = true
         }
         .sheet(isPresented: $isPresentingContactInvites, onDismiss: {
@@ -1004,6 +1053,21 @@ private struct FeedFollowedPersonRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open \(profile.displayName)'s profile")
+    }
+}
+
+private enum FeedFloatingHeaderMetrics {
+    static let estimatedHeight = WanderTheme.spacing2
+        + WanderTheme.tapMinimum
+        + WanderTheme.spacing2
+        + WanderTheme.tapMinimum
+}
+
+private struct FeedFloatingHeaderHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

@@ -1,0 +1,20 @@
+{
+  "issue": "REC-284",
+  "captured_at": "2026-08-16T09:51:13-07:00",
+  "reported_behavior": "The attached Check in and Wanna editor always occupies a fixed 520-point tray, leaving dead space for shorter content and offering no grab-to-expand, collapse, or swipe-to-dismiss interaction.",
+  "expected_behavior": "The editor rests at a lower compact height, expands close to the top of the place profile when the user drags upward or opens more content, collapses when dragged downward, and dismisses when dragged downward again from compact.",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; Joe's live Simulator review plus /private/tmp/rec-284-sheet-detents-pre.png and the existing attached-flow UI screenshots are the pre-fix evidence",
+  "device": {
+    "name": "S3B Espresso + Note Test",
+    "udid": "AC52441A-D833-4DC1-A1EE-3632D3F7F9AE",
+    "surface": "Map place profile attached Check in/Wanna editor"
+  },
+  "root_cause": "PlaceSaveAttachedTray applies one fixed maximumHeight and has no compact/expanded position state or drag gesture.",
+  "interaction_contract": [
+    "The compact tray is shorter than the prior 520-point fixed tray.",
+    "An upward grab expands the tray close to the top of the available profile height.",
+    "A downward grab from expanded collapses to compact.",
+    "A downward grab from compact dismisses and reveals the floating place actions.",
+    "Opening More options requests the expanded tray automatically."
+  ]
+}

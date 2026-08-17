@@ -632,7 +632,11 @@ struct AddScreen: View {
     }
 
     private var candidateSaveAction: some View {
-        WanderPrimaryButton(title: "Save", systemImage: "arrow.right") {
+        WanderPrimaryButton(
+            title: "Save",
+            systemImage: "arrow.right",
+            tone: .espressoConfirmation
+        ) {
             openSharedSaveFlow()
         }
     }

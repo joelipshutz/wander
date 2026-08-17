@@ -40,7 +40,9 @@ struct SupabaseFeatureFlagRepository: FeatureFlagRepository {
             )
         }
         for row in rows where row.userID == userID {
-            guard let key = FeatureFlagKey(rawValue: row.key) else { continue }
+            guard let key = FeatureFlagKey(rawValue: row.key),
+                  key.allowsAccountOverride
+            else { continue }
             values[key] = ResolvedFeatureFlagValue(
                 isEnabled: row.enabled,
                 source: .accountOverride
@@ -353,9 +355,11 @@ private struct SubmitContentReportParams: Encodable {
 
 struct SupabasePlaceRepository: PlaceRepository {
     private let rpc: RemoteProcedureCalling
+    private let functions: (any RemoteFunctionCalling)?
 
-    init(rpc: RemoteProcedureCalling) {
+    init(rpc: RemoteProcedureCalling, functions: (any RemoteFunctionCalling)? = nil) {
         self.rpc = rpc
+        self.functions = functions
     }
 
     func places(in viewport: MapViewport) async throws -> [VisiblePlace] {
@@ -380,6 +384,17 @@ struct SupabasePlaceRepository: PlaceRepository {
             params: RecmePlaceSearchParams(request: request)
         )
         return rows.compactMap { $0.placeCandidate() }
+    }
+
+    func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
+        guard let functions else {
+            throw WanderRemoteError.notConfigured
+        }
+        let response: SemanticPlaceSearchFunctionResponse = try await functions.invoke(
+            "semantic-place-search",
+            body: SemanticPlaceSearchBody(request: request)
+        )
+        return response.candidates.compactMap { $0.placeCandidate() }
     }
 
     func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {
@@ -414,6 +429,37 @@ struct SupabasePlaceRepository: PlaceRepository {
         )
         return preview.placeCandidate()
     }
+}
+
+private struct SemanticPlaceSearchBody: Encodable {
+    let query: String
+    let categories: [String]
+    let area: String?
+    let favoriteOnly: Bool
+    let scope: String
+    let limit: Int
+
+    init(request: RecmePlaceSearchRequest) {
+        query = request.semanticQuery
+        categories = request.categories
+        area = request.area
+        favoriteOnly = request.favoriteOnly
+        scope = request.scope.rawValue
+        limit = request.limit
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case query
+        case categories
+        case area
+        case favoriteOnly = "favorite_only"
+        case scope
+        case limit
+    }
+}
+
+private struct SemanticPlaceSearchFunctionResponse: Decodable {
+    let candidates: [RemoteRecmePlaceSearchDTO]
 }
 
 private struct RecmePlaceSearchParams: Encodable {

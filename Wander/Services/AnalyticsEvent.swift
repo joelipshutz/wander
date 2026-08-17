@@ -278,6 +278,7 @@ enum WanderAnalyticsEvents {
     static let discoverSearchExited = "discover_search_exited"
     static let trustedPlaceSearchLocalResults = "trusted_place_search_local_results"
     static let trustedPlaceSearchRefinedResults = "trusted_place_search_refined_results"
+    static let trustedPlaceSearchRemoteResults = "trusted_place_search_remote_results"
     static let trustedPlaceSearchResultSelected = "trusted_place_search_result_selected"
     static let socialPlaceSaved = "social_place_saved"
     static let ownPlaceSyncAttempted = "own_place_sync_attempted"

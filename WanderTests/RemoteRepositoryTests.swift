@@ -1404,6 +1404,59 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls[0].body["input_limit"] as? Int, 20)
     }
 
+    func testSemanticRecmePlaceSearchUsesFullQueryAndFunctionBoundary() async throws {
+        let rpc = RecordingRPC()
+        let placeID = "8bdfb34e-521e-4bc8-8466-0315adf12a5a"
+        rpc.responses["function:semantic-place-search"] = """
+        {
+          "provider": "semantic_v1",
+          "candidates": [
+            {
+              "id": "\(placeID)",
+              "canonical_name": "Rainy Day Coffee",
+              "category": "coffee_tea_sweets",
+              "primary_category": "coffee_tea_sweets",
+              "subcategory": "coffee_shop",
+              "category_source": "provider",
+              "category_confidence": 0.98,
+              "raw_provider_type": "cafe",
+              "address": "123 Sunset Boulevard",
+              "locality": "Los Angeles",
+              "region": "CA",
+              "country": "US",
+              "latitude": 34.05,
+              "longitude": -118.24,
+              "source_provider": "google_places",
+              "source_provider_place_id": "rainy-coffee",
+              "confidence": 0.97
+            }
+          ]
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlaceRepository(rpc: rpc, functions: rpc)
+
+        let places = try await repository.searchRecmePlacesSemantic(
+            RecmePlaceSearchRequest(
+                query: "rainy",
+                semanticQuery: "cozy coffee for a rainy afternoon",
+                categories: [WanderPlaceCategory.coffeeTeaSweets],
+                area: "Los Angeles",
+                favoriteOnly: false,
+                scope: .everyone,
+                limit: 20
+            )
+        )
+
+        XCTAssertEqual(places.map(\.name), ["Rainy Day Coffee"])
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:semantic-place-search"])
+        XCTAssertEqual(rpc.calls[0].body["query"] as? String, "cozy coffee for a rainy afternoon")
+        XCTAssertEqual(rpc.calls[0].body["categories"] as? [String], [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(rpc.calls[0].body["area"] as? String, "Los Angeles")
+        XCTAssertEqual(rpc.calls[0].body["favorite_only"] as? Bool, false)
+        XCTAssertEqual(rpc.calls[0].body["scope"] as? String, "everyone")
+        XCTAssertEqual(rpc.calls[0].body["limit"] as? Int, 20)
+    }
+
     func testSocialGraphRepositoriesCallExpectedRPCs() async throws {
         let rpc = RecordingRPC()
         let graphJSON = """
@@ -3196,10 +3249,10 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.first?.body["input_details"] as? String, "They wrote: go kill yourself")
     }
 
-    func testFeatureFlagRepositoryAppliesOwnOverrideOverGlobalDefault() async throws {
+    func testFeatureFlagRepositoryAppliesSupportedOverridesAndKeepsSemanticGlobal() async throws {
         let table = RecordingTable()
         table.responses["GET:feature_flags"] = Data(
-            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
         )
         let repository = SupabaseFeatureFlagRepository(table: table)
 
@@ -3219,6 +3272,10 @@ final class RemoteRepositoryTests: XCTestCase {
                 .placeProfileSaveTrayV1: ResolvedFeatureFlagValue(
                     isEnabled: true,
                     source: .accountOverride
+                ),
+                .semanticPlaceSearchV1: ResolvedFeatureFlagValue(
+                    isEnabled: false,
+                    source: .globalDefault
                 )
             ]
         )
@@ -3231,7 +3288,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 URLQueryItem(name: "select", value: "key,user_id,enabled"),
                 URLQueryItem(
                     name: "key",
-                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1)"
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1)"
                 )
             ]
         )
@@ -3274,6 +3331,24 @@ final class RemoteRepositoryTests: XCTestCase {
         )
         XCTAssertFalse(
             DebugSettingsAccessPolicy.isEntitled(serverFlag: false, isSimulator: false)
+        )
+    }
+
+    func testSemanticPlaceSearchAccessPolicyUsesDebugBuildWithoutAnAccountFlag() {
+        XCTAssertTrue(
+            SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: nil, isDebugBuild: true)
+        )
+        XCTAssertTrue(
+            SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: false, isDebugBuild: true)
+        )
+        XCTAssertFalse(
+            SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: nil, isDebugBuild: false)
+        )
+        XCTAssertFalse(
+            SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: false, isDebugBuild: false)
+        )
+        XCTAssertTrue(
+            SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: true, isDebugBuild: false)
         )
     }
 

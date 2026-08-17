@@ -671,15 +671,10 @@ struct MapScreen: View {
                             if isMapSearchFocused {
                                 MapSearchCancelButton(action: cancelMapSearch)
                             } else {
-                                WanderGlassActionButton(
-                                    systemImage: "plus",
-                                    accessibilityLabel: "Add a place",
-                                    accessibilityIdentifier: "map.headerAdd",
-                                    action: {
-                                        dismissMoreFilters()
-                                        onAdd()
-                                    }
-                                )
+                                MapSolidAddButton {
+                                    dismissMoreFilters()
+                                    onAdd()
+                                }
                                 .walkthroughTarget(
                                     walkthroughs.currentStep?.target == .mapAddAgain
                                         ? .mapAddAgain
@@ -1774,8 +1769,17 @@ struct MapScreen: View {
             resolvedFlagValue: backend.featureFlag(
                 .placeProfileSaveTrayV1,
                 for: store.currentUser.id
-            )
+            ),
+            isSimulator: Self.isSimulatorBuild
         )
+    }
+
+    private static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
     }
 
     private func dismissPlaceProfileThen(_ action: @MainActor @escaping () -> Void) {
@@ -1938,12 +1942,12 @@ struct MapScreen: View {
             if let firstVisiblePlace = visiblePlaces.first {
                 selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
-                mapSearchMessage = mapSearchCandidates.isEmpty ? nil : "Also showing new map results."
+                mapSearchMessage = nil
             } else if let firstCandidate = mapSearchCandidates.first {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = firstCandidate.id
                 center(on: firstCandidate)
-                mapSearchMessage = "Map result. Tap + to add it."
+                mapSearchMessage = nil
             } else {
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
@@ -2197,16 +2201,23 @@ struct MapScreen: View {
             hasSharedVisitInvitation: false,
             isReadOnly: walkthroughs.activeSurface == .placeDetail
         )
-        let context = MapPlaceSaveContext.addVisiblePlace(
+        let currentUserSave = currentUserSave(matching: visiblePlace)
+        let context = currentUserSave.map {
+            MapPlaceSaveContext.reselectCurrentUserSave(
+                $0,
+                defaultVisibility: store.effectiveDefaultVisibility,
+                attributes: store.attributes(for: $0.userPlace.id),
+                latestVisit: store.visits(for: $0.userPlace.id).first
+            )
+        } ?? MapPlaceSaveContext.addVisiblePlace(
             visiblePlace,
             defaultVisibility: store.effectiveDefaultVisibility,
             attributes: store.attributes(for: visiblePlace.userPlace.id)
         )
-        if currentUserSave(matching: visiblePlace) == nil,
-           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
-            route: .floatingActions,
-            state: state,
-            action: saveAction,
+        if let attachedContext = PlaceProfileSaveActionPolicy.attachedSaveContext(
+               route: .floatingActions,
+               state: state,
+               action: saveAction,
             baseContext: context
         ) {
             presentAttachedSaveFlow(attachedContext)
@@ -2249,11 +2260,10 @@ struct MapScreen: View {
             sourceType: .manual,
             defaultVisibility: defaultVisibility
         )
-        if currentUserSave(matching: candidate) == nil,
-           let attachedContext = PlaceProfileSaveActionPolicy.attachedFirstSaveContext(
-            route: .floatingActions,
-            state: state,
-            action: saveAction,
+        if let attachedContext = PlaceProfileSaveActionPolicy.attachedSaveContext(
+               route: .floatingActions,
+               state: state,
+               action: saveAction,
             baseContext: context
         ) {
             presentAttachedSaveFlow(attachedContext)
@@ -2293,7 +2303,7 @@ struct MapScreen: View {
                     submittedAt: nil
                 )
             }
-        } else if let draft = PlaceSaveDraft.addFlow(
+        } else if let draft = PlaceSaveDraft.restorableFlow(
             ownerUserID: store.currentUser.id,
             context: context
         ) {
@@ -2651,6 +2661,7 @@ struct MapScreen: View {
                 return false
             }
             await pushNotifications.reconcileWannaGoReminders(store.wannaGoReminderItems)
+            placeSaveDraftStore.clear()
 
             clearNativeMapFeatureSelection()
             selectedSearchCandidateID = nil
@@ -2839,7 +2850,6 @@ struct MapScreen: View {
             selectedSearchCandidateID = candidate.id
             mapSearchCandidates = isAlreadyVisible(candidate: candidate) ? [] : [candidate]
             center(on: candidate)
-            mapSearchMessage = "Map result. Tap + to add it."
         }
     }
 
@@ -3536,6 +3546,8 @@ enum MapViewportRefreshPolicy {
 }
 
 enum MapFeaturedSelection {
+    // Canonical Search + Featured contract:
+    // docs/specs/search-featured-retrieval-platform.md
     static let maximumPlaceGroupCount = 24
     private static let maximumCandidateRowCount = 480
     private static let reservedRelationshipRowCount = 240
@@ -3939,8 +3951,37 @@ private struct MapSearchDockHeightPreferenceKey: PreferenceKey {
     }
 }
 
+private struct MapSolidAddButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .black))
+                .frame(width: 44, height: 44)
+                .foregroundStyle(WanderTheme.textOnAction.color)
+                .background(WanderTheme.terracotta.color, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(WanderTheme.terracottaDark.color.opacity(0.32), lineWidth: 1)
+                }
+                .contentShape(Circle())
+                .shadow(
+                    color: WanderTheme.textInk.color.opacity(0.16),
+                    radius: 6,
+                    x: 0,
+                    y: 3
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a place")
+        .accessibilityIdentifier("map.headerAdd")
+    }
+}
+
 private struct SearchBar: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var query: String
     let isFocused: FocusState<Bool>.Binding
     let focusRequestID: UUID?
@@ -3983,9 +4024,13 @@ private struct SearchBar: View {
             }
         }
         .padding(.horizontal, WanderTheme.spacing3)
-        .frame(maxWidth: .infinity, minHeight: 48)
+        .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
         .contentShape(Capsule())
         .mapSearchCapsuleSurface()
+        .animation(
+            reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
+            value: isFocused.wrappedValue
+        )
     }
 
     @MainActor
@@ -4007,14 +4052,24 @@ private struct SearchBar: View {
 }
 
 private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: Capsule())
-            .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
-            }
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.interactive(true), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                }
+        }
     }
 }
 
@@ -5828,7 +5883,30 @@ extension PlaceSaveDraft {
         walkthroughContentVersion: Int? = nil,
         now: Date = .now
     ) -> PlaceSaveDraft? {
-        guard case .add(let sourceType) = context.mode else { return nil }
+        guard case .add = context.mode else { return nil }
+        return restorableFlow(ownerUserID: ownerUserID, context: context, now: now)
+    }
+
+    static func restorableFlow(
+        ownerUserID: String,
+        context: MapPlaceSaveContext,
+        now: Date = .now
+    ) -> PlaceSaveDraft? {
+        let sourceType: AddSourceType
+        let baselineUserPlaceLocalID: String?
+        switch context.mode {
+        case .add(let addSourceType):
+            sourceType = addSourceType
+            baselineUserPlaceLocalID = context.existingCurrentUserSave?.userPlace.localID
+        case .addVisit(let visiblePlace):
+            sourceType = AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual
+            baselineUserPlaceLocalID = visiblePlace.userPlace.localID
+        case .editWant(let visiblePlace):
+            sourceType = AddSourceType(rawValue: visiblePlace.userPlace.sourceType) ?? .manual
+            baselineUserPlaceLocalID = visiblePlace.userPlace.localID
+        case .sharedVisit, .editVisit:
+            return nil
+        }
 
         let initialCuisine = context.candidate.primaryCategory == WanderPlaceCategory.restaurantsFood
             ? context.initialCuisine
@@ -5852,7 +5930,7 @@ extension PlaceSaveDraft {
             updatedAt: now,
             sourceType: sourceType,
             candidate: context.candidate,
-            baselineUserPlaceLocalID: context.existingCurrentUserSave?.userPlace.localID,
+            baselineUserPlaceLocalID: baselineUserPlaceLocalID,
             baselineVisitLocalID: context.existingLatestVisit?.localID,
             walkthroughContentVersion: walkthroughContentVersion,
             form: PlaceSaveDraftForm(
@@ -6275,6 +6353,7 @@ private final class CheckInDateTrayPresentation: ObservableObject {
 private struct MapCheckInDateSection: View {
     @Binding var visitedAt: Date
     @ObservedObject var presentation: CheckInDateTrayPresentation
+    let onExpansionRequested: @MainActor () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -6284,7 +6363,11 @@ private struct MapCheckInDateSection: View {
 
             VStack(spacing: 0) {
                 Button {
+                    let isOpening = !presentation.isExpanded
                     presentation.isExpanded.toggle()
+                    if isOpening {
+                        onExpansionRequested()
+                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar")
@@ -6407,6 +6490,7 @@ struct MapPlaceSaveEditor: View {
     let presentation: MapPlaceSaveEditorPresentation
     let onDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onClose: @MainActor () -> Void
+    let onContentExpansionRequested: @MainActor () -> Void
     let onSaveCompleted: @MainActor (SaveResult) -> Void
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -6453,6 +6537,7 @@ struct MapPlaceSaveEditor: View {
         onSave: @escaping @MainActor (MapPlaceSaveSubmission) async -> SaveResult?,
         onRemove: @escaping @MainActor (MapPlaceSaveContext) async -> Bool,
         onClose: @escaping @MainActor () -> Void,
+        onContentExpansionRequested: @escaping @MainActor () -> Void = {},
         onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
         _context = State(initialValue: context)
@@ -6462,6 +6547,7 @@ struct MapPlaceSaveEditor: View {
         self.onSave = onSave
         self.onRemove = onRemove
         self.onClose = onClose
+        self.onContentExpansionRequested = onContentExpansionRequested
         self.onSaveCompleted = onSaveCompleted
         let restoredForm = draft?.form
         let initialStep: MapPlaceSaveStep = restoredForm?.step == .details
@@ -6785,7 +6871,11 @@ struct MapPlaceSaveEditor: View {
             }
 
             if hasSelectedStatus {
-                WanderPrimaryButton(title: "continue to details", systemImage: "arrow.right") {
+                WanderPrimaryButton(
+                    title: "continue to details",
+                    systemImage: "arrow.right",
+                    tone: .espressoConfirmation
+                ) {
                     walkthroughs.perform(.saveContinue)
                     prepareDetails()
                 }
@@ -6805,7 +6895,8 @@ struct MapPlaceSaveEditor: View {
             if selectedStatus == .been {
                 MapCheckInDateSection(
                     visitedAt: $visitedAt,
-                    presentation: checkInDateTrayPresentation
+                    presentation: checkInDateTrayPresentation,
+                    onExpansionRequested: onContentExpansionRequested
                 )
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
@@ -6814,6 +6905,10 @@ struct MapPlaceSaveEditor: View {
                     .id(WalkthroughTargetID.saveDate)
                     .walkthroughTarget(.saveDate)
             }
+
+            noteSection
+                .id(WalkthroughTargetID.saveNote)
+                .walkthroughTarget(.saveNote)
 
             if presentation == .sheet {
                 placeTypeSection
@@ -6876,7 +6971,8 @@ struct MapPlaceSaveEditor: View {
             isDisabled: isSaving
                 || isRemoving
                 || isWalkthroughAutomating(.saveSubmit)
-                || didStartWalkthroughAutoSave
+                || didStartWalkthroughAutoSave,
+            tone: .espressoConfirmation
         ) {
             save()
         }
@@ -6897,7 +6993,10 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var progressActionTitle: String {
-        selectedStatus == .been ? "Checking in..." : "Adding to Wanna..."
+        if case .editWant = context.mode {
+            return "Updating Wanna..."
+        }
+        return selectedStatus == .been ? "Checking in..." : "Adding to Wanna..."
     }
 
     private var noteSection: some View {
@@ -6907,6 +7006,7 @@ struct MapPlaceSaveEditor: View {
                 .foregroundStyle(WanderTheme.textMuted.color)
             TextField("what you'll want to remember, who told you...", text: $note, axis: .vertical)
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("save.note")
                 .foregroundStyle(WanderTheme.textInk.color)
                 .tint(WanderTheme.terracotta.color)
                 .lineLimit(3, reservesSpace: true)
@@ -6924,7 +7024,11 @@ struct MapPlaceSaveEditor: View {
 
             VStack(spacing: 0) {
                 Button {
+                    let isOpening = !isShowingPlannedDatePicker
                     isShowingPlannedDatePicker.toggle()
+                    if isOpening {
+                        onContentExpansionRequested()
+                    }
                 } label: {
                     HStack(spacing: WanderTheme.spacing3) {
                         Image(systemName: "calendar.badge.clock")
@@ -6982,6 +7086,7 @@ struct MapPlaceSaveEditor: View {
                                     from: nextSelection,
                                     replacing: plannedDate
                                 )
+                                isShowingPlannedDatePicker = false
                             }
                         ),
                         in: WannaGoDate.normalized(.now)...
@@ -7091,7 +7196,11 @@ struct MapPlaceSaveEditor: View {
                 if walkthroughs.currentStep?.target == .saveMoreOptions {
                     return
                 } else {
+                    let isOpening = !isShowingOptionalDetails
                     isShowingOptionalDetails.toggle()
+                    if isOpening {
+                        onContentExpansionRequested()
+                    }
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
@@ -7136,7 +7245,7 @@ struct MapPlaceSaveEditor: View {
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
-                    ? "This walkthrough points out where optional note, fit, tag, and privacy fields live. Use Next to continue."
+                    ? "This walkthrough points out where optional fit, tag, and privacy fields live. Use Next to continue."
                     : "Optional. Continue without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)
@@ -7165,10 +7274,6 @@ struct MapPlaceSaveEditor: View {
                             .walkthroughTarget(.saveFriends)
                     }
                 }
-                noteSection
-                    .id(WalkthroughTargetID.saveNote)
-                    .walkthroughTarget(.saveNote)
-                    .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
                 questionAndLabelSections
                     .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
                 visibilitySection
@@ -7180,12 +7285,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var optionalDetailsSummary: String {
-        if selectedStatus == .wannaGo, let plannedDate {
-            return "planned \(plannedDate.formatted(.dateTime.month(.abbreviated).day())) · note, fit & privacy"
-        }
-        return selectedStatus == .wannaGo
-            ? "date, note, fit, tags & privacy"
-            : "note, fit, tags & privacy"
+        "fit, tags & privacy"
     }
 
     private var removeSaveSection: some View {

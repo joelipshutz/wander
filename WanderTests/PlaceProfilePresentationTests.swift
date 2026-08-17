@@ -4,6 +4,14 @@ import XCTest
 @testable import Wander
 
 final class PlaceProfilePresentationTests: XCTestCase {
+    func testAttachedSheetUsesCompactAndSystemLargeDetents() {
+        XCTAssertEqual(PlaceSaveAttachedSheet.compactHeight, 430)
+        XCTAssertEqual(
+            PlaceSaveAttachedSheet.compactDetent,
+            PresentationDetent.height(430)
+        )
+    }
+
     func testAttachedEditorRoutingIsLimitedToFlaggedNewSaveModes() throws {
         let checkIn = try XCTUnwrap(
             PlaceProfileSaveActionPolicy.resolve(state: .unsaved).actions.first {
@@ -145,6 +153,101 @@ final class PlaceProfilePresentationTests: XCTestCase {
                 )
             )
         }
+    }
+
+    func testAttachedEditorRoutesExistingWannaEditAndCheckInConversion() throws {
+        let currentUser = profile(id: "user_current_edit_wanna", handle: "current")
+        let currentWanna = summary(
+            owner: currentUser,
+            place: place(id: "place_current_edit_wanna", category: "park"),
+            status: .wannaGo,
+            ratingScore: nil,
+            tags: ["sunset"]
+        ).visiblePlace
+        currentWanna.userPlace.note = "Bring a picnic blanket."
+        let base = MapPlaceSaveContext.reselectCurrentUserSave(
+            currentWanna,
+            defaultVisibility: .followers,
+            attributes: [],
+            latestVisit: nil
+        )
+        let wannaActions = PlaceProfileSaveActionPolicy.resolve(state: .wanna).actions
+        let checkIn = try XCTUnwrap(wannaActions.first { $0.kind == .checkIn })
+        let selectedWanna = try XCTUnwrap(wannaActions.first { $0.kind == .wanna })
+
+        let attached = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .floatingActions,
+                state: .wanna,
+                action: selectedWanna,
+                baseContext: base
+            )
+        )
+        guard case .editWant(let visiblePlace) = attached.mode else {
+            return XCTFail("The selected existing Wanna action must use the edit-Wanna path")
+        }
+        XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
+        XCTAssertEqual(attached.initialStatus, .wannaGo)
+        XCTAssertEqual(attached.initialNote, "Bring a picnic blanket.")
+        XCTAssertTrue(attached.startsOnDetails)
+        XCTAssertTrue(attached.showsRemoveControl)
+
+        let draft = try XCTUnwrap(
+            PlaceSaveDraft.restorableFlow(
+                ownerUserID: currentUser.id,
+                context: attached
+            )
+        )
+        XCTAssertEqual(draft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
+        XCTAssertEqual(draft.form.note, "Bring a picnic blanket.")
+        XCTAssertEqual(draft.form.selectedStatus, .wannaGo)
+        XCTAssertEqual(draft.form.step, .details)
+
+        let conversion = try XCTUnwrap(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .floatingActions,
+                state: .wanna,
+                action: checkIn,
+                baseContext: base
+            )
+        )
+        guard case .addVisit(let visiblePlace) = conversion.mode else {
+            return XCTFail("Existing Wanna to Check in must use the add-visit path")
+        }
+        XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
+        XCTAssertEqual(conversion.initialStatus, .been)
+        XCTAssertEqual(conversion.initialNote, "Bring a picnic blanket.")
+        XCTAssertTrue(conversion.startsOnDetails)
+        XCTAssertFalse(conversion.showsRemoveControl)
+        XCTAssertTrue(conversion.allowsPhotoAttachments)
+
+        let conversionDraft = try XCTUnwrap(
+            PlaceSaveDraft.restorableFlow(
+                ownerUserID: currentUser.id,
+                context: conversion
+            )
+        )
+        XCTAssertEqual(conversionDraft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
+        XCTAssertEqual(conversionDraft.form.note, "Bring a picnic blanket.")
+        XCTAssertEqual(conversionDraft.form.selectedStatus, .been)
+        XCTAssertEqual(conversionDraft.form.step, .details)
+
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .legacy,
+                state: .wanna,
+                action: selectedWanna,
+                baseContext: base
+            )
+        )
+        XCTAssertNil(
+            PlaceProfileSaveActionPolicy.attachedSaveContext(
+                route: .legacy,
+                state: .wanna,
+                action: checkIn,
+                baseContext: base
+            )
+        )
     }
 
     func testAttachedEditorRejectsMismatchedActionAndStatus() throws {
@@ -683,6 +786,27 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(openedProfile.presentation.actions.map(\.kind), [.checkIn, .wanna])
         XCTAssertEqual(laterFlagRefresh.route, .legacy)
         XCTAssertEqual(openedProfile.route, .floatingActions)
+    }
+
+    func testSimulatorBuildDefaultsToFloatingActionsAcrossManualRelaunches() {
+        let simulator = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: nil,
+            launchArguments: [],
+            isSimulator: true
+        )
+        let physicalDevice = PlaceProfileSaveActionPolicy.snapshot(
+            state: .unsaved,
+            isSignedIn: true,
+            resolvedFlagValue: nil,
+            launchArguments: [],
+            isSimulator: false
+        )
+
+        XCTAssertEqual(simulator.route, .floatingActions)
+        XCTAssertEqual(simulator.presentation.actions.map(\.kind), [.checkIn, .wanna])
+        XCTAssertEqual(physicalDevice.route, .legacy)
     }
 
     #if DEBUG

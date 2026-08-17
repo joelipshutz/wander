@@ -114,6 +114,7 @@ enum RecmePlaceSearchScope: String, Codable, Equatable, Sendable {
 
 struct RecmePlaceSearchRequest: Equatable, Sendable {
     let query: String
+    let semanticQuery: String
     let categories: [String]
     let area: String?
     let favoriteOnly: Bool
@@ -122,6 +123,7 @@ struct RecmePlaceSearchRequest: Equatable, Sendable {
 
     init(
         query: String,
+        semanticQuery: String? = nil,
         categories: [String] = [],
         area: String? = nil,
         favoriteOnly: Bool = false,
@@ -129,11 +131,42 @@ struct RecmePlaceSearchRequest: Equatable, Sendable {
         limit: Int = 20
     ) {
         self.query = query
+        self.semanticQuery = semanticQuery ?? query
         self.categories = categories
         self.area = area
         self.favoriteOnly = favoriteOnly
         self.scope = scope
         self.limit = min(max(limit, 1), 20)
+    }
+}
+
+enum RecmePlaceSearchProvider: String, Equatable, Hashable, Sendable {
+    case lexical
+    case semantic
+}
+
+enum RecmeSemanticSearchStatus: String, Equatable, Sendable {
+    case disabled
+    case succeeded
+    case failed
+}
+
+struct RecmePlaceSearchMatch: Equatable, Sendable {
+    let candidate: PlaceCandidate
+    let providers: Set<RecmePlaceSearchProvider>
+}
+
+struct RecmePlaceSearchOutcome: Equatable, Sendable {
+    static let rankingPolicyVersion = "search_rrf_v1"
+
+    let matches: [RecmePlaceSearchMatch]
+    let lexicalCount: Int
+    let semanticCount: Int
+    let overlapCount: Int
+    let semanticStatus: RecmeSemanticSearchStatus
+
+    var candidates: [PlaceCandidate] {
+        matches.map(\.candidate)
     }
 }
 
@@ -1707,6 +1740,7 @@ protocol PlaceCandidateResolving {
 protocol PlaceRepository {
     func places(in viewport: MapViewport) async throws -> [VisiblePlace]
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
+    func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate]
     func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace]
     func resolveCurrentLocation() async throws -> [PlaceCandidate]
     func resolveManualEntry(_ input: ManualPlaceInput) async throws -> [PlaceCandidate]
@@ -1716,6 +1750,10 @@ protocol PlaceRepository {
 extension PlaceRepository {
     func searchRecmePlaces(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
         throw WanderRemoteError.notImplemented("rec.me place search")
+    }
+
+    func searchRecmePlacesSemantic(_ request: RecmePlaceSearchRequest) async throws -> [PlaceCandidate] {
+        throw WanderRemoteError.notImplemented("semantic rec.me place search")
     }
 
     func featuredPlaces(in viewport: MapViewport) async throws -> [VisiblePlace] {

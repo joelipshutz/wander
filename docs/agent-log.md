@@ -30404,6 +30404,515 @@ Outcome and validation:
   verification remains a deployment follow-up; no hosted schema, data, RPC,
   auth, build-number, archive, TestFlight, or Slack release action was taken.
 
+## 2026-08-16 04:43 PDT - Codex - REC-275 S7.2 attached edit-Wanna start
+
+Agent: Codex
+Branch: `codex/rec-275-attached-edit-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-edit-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Starting state and scope:
+
+- S7.1 was squash-merged to `main` through PR #454 at `40811705`. No build
+  number, archive, TestFlight, hosted-data, or release action accompanied the
+  merge.
+- This clean worktree was created from that exact `origin/main` commit. No
+  overlapping uncommitted changes are present.
+- S7.2 is intentionally narrow: tapping the selected Wanna floating action for
+  the current user's existing Wanna should expand the existing edit-Wanna
+  context inside the Map place profile, prefilled through the same draft,
+  persistence, submit, remove, and reminder paths already used by the legacy
+  editor.
+- Wanna-to-Check-in conversion, repeat Check in, edit/history, shared
+  invitations, imports, and non-Map entry points remain on legacy routes.
+- Expected files: `Wander/Features/Map/PlaceProfileSaveActionPolicy.swift`,
+  `Wander/Features/Map/MapScreen.swift`, policy/navigation/UI tests, and this
+  log. No push, merge, build-number bump, or TestFlight release is implied by
+  this implementation gate.
+
+## 2026-08-16 05:03 PDT - Codex - REC-275 S7.2 validation handoff
+
+Agent: Codex
+Branch: `codex/rec-275-attached-edit-wanna`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/attached-edit-wanna`
+Linear: `REC-275` (`In Progress`)
+
+Outcome and validation:
+
+- Added the S7.2 gate on top of merged S7.1: tapping an already-selected Wanna
+  floating action now expands the existing edit-Wanna form inside the place
+  profile. The form preserves the existing note, optional fields, visibility,
+  date/reminder behavior, update action, and remove action.
+- Reused the existing edit-Wanna mutation path rather than introducing a new
+  persistence contract. The attached form also uses the shared local draft
+  store, so an in-progress edit survives collapse/reopen and app restart.
+- Existing-Wanna to Check in, repeat Check in, edit/history, invitations,
+  imports, and non-Map entry points intentionally remain on their current
+  routes for later gates.
+- Focused policy/navigation/presentation validation passed 163/163. The new
+  end-to-end existing-Wanna test passed 1/1, including prefill, optional fields,
+  collapse/reopen draft restoration, update labeling, and remove availability.
+  Result: `DerivedData-s72/Logs/Test/Test-Wander-2026.08.16_04-54-47--0700.xcresult`.
+- The five-flow UI regression gate passed 5/5: edge-swipe collapse, floating
+  actions after deep scrolling, first attached Check in, first attached Wanna,
+  and attached existing-Wanna editing. Result:
+  `DerivedData-s72/Logs/Test/Test-Wander-2026.08.16_04-57-43--0700.xcresult`.
+- Installed the exact S7.2 build on the dedicated `S7.2 Edit Wanna Test`
+  iPhone 16 Plus Simulator (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) and opened
+  it as authenticated `@joe` on the expanded Elysian Picnic Steps profile.
+  Tap the selected Wanna action to test the attached editor. Resting evidence:
+  `/private/tmp/s72-resting.png`.
+- Existing compiler/headermap warnings remain unchanged. No build-number bump,
+  archive, TestFlight upload, hosted schema/data/auth mutation, or Slack release
+  action was performed.
+
+## 2026-08-16 08:50 PDT - Codex - REC-275 attached Check-in routing correction
+
+Agent: Codex using the ios-fix evidence and verification loop
+Branch: codex/rec-275-attached-wanna-checkin
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-275 (In Progress)
+
+Starting state and diagnosis:
+
+- Joe reported from the dedicated S7.2 Simulator that tapping Check in leaves
+  the place profile before the editor appears. Captured the live pre-fix state
+  at /private/tmp/s73-pre-leaves-profile.png; the repository intentionally
+  has no StateServer, so the checked-in JSON fixture records the reproduction
+  contract instead of inventing debug infrastructure.
+- This worktree starts from exact S7.2 commit ed92cd3c and leaves PR #455
+  untouched. The fix is isolated as the next stacked gate.
+- Two concrete causes explain the report. First, the attached route is enabled
+  by a one-shot Simulator launch argument or hosted flag, so manually quitting
+  and reopening the app falls back to the legacy full-screen action. Second,
+  S7.2 deliberately rejects existing-Wanna to Check-in conversion, causing that
+  action to collapse the profile before opening the legacy sheet.
+- Scope: make the S7 route the default in every Simulator build while
+  preserving fail-closed physical/TestFlight behavior, and attach the
+  existing-Wanna to Check-in conversion using the existing add-visit mutation
+  path with draft restoration. Repeat Check in, edit/history, shared invites,
+  imports, and non-Map entry points remain later gates.
+- Expected files: save-action policy, shared draft routing, policy/navigation
+  and UI regressions, the reproduction fixture, and this log. No build-number
+  bump, TestFlight upload, hosted mutation, or release action is authorized.
+
+Validation handoff, 2026-08-16 09:06 PDT:
+
+- Simulator builds now select the floating/attached route by default, even
+  without the one-shot launch argument. Physical devices and TestFlight still
+  require the resolved hosted flag, preserving the launch cutoff.
+- Existing Wanna to Check in now resolves through the existing add-visit
+  context and attached editor. The current place profile stays mounted, the
+  Wanna note is preserved, and the draft survives collapse/reopen.
+- Focused place-profile presentation and navigation suites passed 153/153.
+  Result:
+  /private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_08-53-13--0700.xcresult.
+- Both targeted UI regressions passed 2/2: first Check in without the launch
+  argument, and existing-Wanna to attached Check-in conversion. Result:
+  /private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_09-02-41--0700.xcresult.
+- Inspected the exported conversion screenshot. It shows the Check-in editor
+  attached over Elysian Picnic Steps with the profile still visible underneath:
+  /private/tmp/s73-attachments/7398DE49-6EBD-4D2C-87DD-9C8D948C3982.png.
+- Installed the exact passing build on S7.2 Edit Wanna Test
+  (AC52441A-D833-4DC1-A1EE-3632D3F7F9AE) and relaunched authenticated at
+  Elysian Picnic Steps without the feature launch argument. Resting evidence:
+  /private/tmp/s73-ready-no-flag.png.
+- Existing warnings are unchanged. No build number, TestFlight, hosted flag,
+  schema/data, auth, or Slack release operation was performed.
+
+## 2026-08-16 09:08 PDT - Codex - REC-284 S3B Espresso confirmation CTAs
+
+Agent: Codex
+Branch: codex/rec-284-espresso-confirmation-ctas
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-284 (In Progress), child of REC-275
+
+Starting state and scope:
+
+- Joe selected S3B Option 2: Espresso for every large place-action
+  confirmation CTA. This branch is stacked on the passing attached Check-in
+  routing correction at 8e194054 so the comparison reflects the latest flow.
+- The approved S3B board is the source of truth: one dark espresso liquid-glass
+  treatment across Check in, Add to Wanna, Update Wanna, repeat/edit
+  confirmations, single-add handoff, batch import, loading, and retry states.
+  The locked floating pair remains deep-black Check in plus light Wanna.
+- Implement a named shared confirmation tone rather than recoloring every
+  WanderPrimaryButton globally. Onboarding, auth recovery, list editing,
+  moderation, Discover relaxation, and Instagram permission guidance are not
+  place-save confirmations and remain on the existing brand treatment.
+- Expected files: the design-system primary button, Map save editor, Add
+  candidate confirmation, import review/completion, source contract tests,
+  focused UI evidence, and this log. No build-number, TestFlight, hosted,
+  schema/data, auth, or release operation is authorized.
+
+Implementation and validation checkpoint, 2026-08-16 09:23 PDT:
+
+- Added the dedicated `espressoConfirmation` liquid-glass tone and applied it
+  only to the large place-action confirmations: save-flow continuation and
+  submit states, single-place Save handoff, and import commit/completion.
+  Floating place-profile actions and unrelated onboarding/auth CTAs retain
+  their separately approved treatments.
+- Based on Joe's attached-sheet review, moved the still-optional note into the
+  main form directly after the visit/Wanna date and before rating/place type.
+  `more options` now contains only secondary fit/tag/privacy fields (plus the
+  existing attached-only place/friend detail), and its helper/walkthrough copy
+  no longer says the note is hidden there.
+- Focused design, navigation, walkthrough, and presentation suites passed
+  191/191. Result:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_09-14-16--0700.xcresult`.
+- Attached-flow UI regressions passed 3/3: new Check in, new Wanna, and
+  existing-Wanna edit/conversion. Each verifies the note is available without
+  opening `more options` and draft content survives collapse/reopen. Result:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_09-19-45--0700.xcresult`.
+- A broader `WanderTests` run exercised the remaining functional suite and
+  surfaced one unrelated existing performance-threshold miss:
+  `TrustedPlaceSearchTests.testSearchOneThousandMemoriesP95UnderFiftyMilliseconds`
+  measured 54.35 ms against its 50 ms threshold. The machine then ran out of
+  temporary disk while Xcode finalized that result bundle, so this is recorded
+  as a non-passing broad run rather than being conflated with the fully passing
+  focused and attached-flow gates above. The failed temporary result bundle was
+  removed; the exact installed test build and passing UI evidence were kept.
+- Inspected exported screenshots for all three states:
+  `/private/tmp/s3b-note-attachments/848F1C17-CC71-48EF-8EAD-21C0592EF6A3.png`,
+  `/private/tmp/s3b-note-attachments/356E354F-7841-4574-A1EF-B102E0125DA0.png`,
+  and
+  `/private/tmp/s3b-note-attachments/A089C979-D73D-481F-9FBF-46460FE1B8C2.png`.
+- Installed the exact passing build on the renamed `S3B Espresso + Note Test`
+  iPhone 16 Plus Simulator (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) and left
+  it authenticated at Elysian Picnic Steps. Resting screenshot:
+  `/private/tmp/s3b-note-ready.png`.
+- Existing compiler/headermap warnings remain unchanged. No build number,
+  TestFlight, hosted flag, schema/data, auth, or Slack release action was
+  performed.
+
+Handoff, 2026-08-16 09:36 PDT:
+
+- Implementation commit: `20e07982` (`feat: apply espresso save confirmations`).
+- Pushed `codex/rec-284-espresso-confirmation-ctas` and opened stacked draft
+  PR #461 against `codex/rec-275-attached-wanna-checkin`:
+  https://github.com/joelipshutz/wander/pull/461
+- Moved REC-284 to In Review and added the exact validation, simulator, broad-
+  run caveat, and PR handoff. The dedicated Simulator remains ready for Joe's
+  test. No TestFlight or production operation was performed.
+- Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` could not be
+  advanced to Review because `localhost:4000` was not accepting connections;
+  Linear and the PR contain the durable current status.
+
+## 2026-08-16 09:51 PDT - Codex - REC-284 attached sheet detents
+
+Agent: Codex using the `ios-fix` and Linear workflows
+Branch: codex/rec-284-espresso-confirmation-ctas
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-284 (returned to In Progress)
+
+Starting state and scope:
+
+- Joe approved the S3B note and Espresso direction, then requested a lower
+  compact attached tray, a near-full-height expanded tray, and direct grab
+  interactions for expand, collapse, and dismiss.
+- Reproduced the current fixed-height behavior on `S3B Espresso + Note Test`
+  and captured `/private/tmp/rec-284-sheet-detents-pre.png`. The app has no
+  DebugBridge/StateServer snapshot API by documented design, so the durable
+  pre-state contract is
+  `WanderTests/Fixtures/ios-fix/rec-284-attached-sheet-detents-pre.json`.
+- Root cause: `PlaceSaveAttachedTray` uses one 520-point maximum height and has
+  no detent state or drag gesture. This is an isolated worktree; no uncommitted
+  overlap was present. `PlaceProfileMapSurface.swift` is high-conflict, so the
+  change will stay narrowly inside the attached-tray presentation path.
+- Expected files: attached tray, shared save-editor expansion callback,
+  focused navigation/UI regressions, the pre-state fixture, and this log. No
+  build-number, TestFlight, hosted flag, schema/data, auth, or release operation
+  is authorized.
+
+Implementation and validation handoff, 2026-08-16 10:28 PDT:
+
+- Replaced the fixed custom attached tray with a native SwiftUI sheet that
+  remains presented from the mounted place profile. It opens at a compact
+  430-point detent, supports the system grabber and spring interaction, expands
+  to the native large detent, collapses back to compact, and dismisses by
+  dragging down. Compact background interaction stays enabled through the
+  compact detent; the existing close lifecycle still preserves drafts.
+- Opening the date control or `more options` requests the large detent so the
+  user sees the added content. The shared editor is explicitly constrained to
+  the active native-sheet height, keeping the Espresso confirmation CTA pinned
+  at the bottom in both compact and expanded states.
+- Added a stable `save.note` accessibility identifier and updated the existing
+  attached-flow UI regressions for the native sheet hierarchy. No save,
+  mutation, authentication, or release contract changed.
+- Focused navigation and native-detent tests passed 2/2. The grabber regression
+  passed 1/1 and proves compact -> large -> compact -> dismissed, including
+  restoration of the floating actions after dismissal. Result bundles:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_10-11-53--0700.xcresult`
+  and `/private/tmp/rec284-native-ui-4.xcresult`.
+- The existing first-Wanna regression passed 1/1, including draft restoration
+  and switching into Check in. The standalone first Check in and existing-Wanna
+  edit/conversion regressions passed 2/2. Results:
+  `/private/tmp/rec284-native-wanna-regression.xcresult` and
+  `/private/tmp/rec284-native-regression-final.xcresult`.
+- Visually inspected the final native compact, large, and Check-in states:
+  `/private/tmp/rec284-native-screens-4/B6FB936C-8313-49CE-8BE9-D5D4066C523D.png`,
+  `/private/tmp/rec284-native-screens-4/5390C87F-00A9-46C1-8B6C-A6169546D656.png`,
+  and
+  `/private/tmp/rec284-native-regression-screens/A89C96C4-47FC-437C-B6CD-CA36E57A0808.png`.
+- Installed the exact passing build on `S3B Espresso + Note Test`
+  (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) and left it authenticated on the
+  Griffith Observatory Trail profile. Tap Check in or Wanna to test the native
+  sheet. Resting evidence: `/private/tmp/rec284-native-simulator-ready.png`.
+- Existing compiler/headermap warnings remain unchanged. No build number,
+  TestFlight, hosted flag, schema/data, auth, Slack, merge, or release action
+  was performed.
+
+PR and tracker handoff, 2026-08-16 10:30 PDT:
+
+- Implementation commit: `79e95d46` (`feat: use native detents for attached
+  saves`), following reproduction checkpoint `a57f7dc5`. Both commits are
+  pushed on `codex/rec-284-espresso-confirmation-ctas`.
+- Updated stacked draft PR #461 with the native-sheet behavior, exact
+  validation, and tester checklist:
+  https://github.com/joelipshutz/wander/pull/461
+- Returned REC-284 to In Review and added the passing test/simulator handoff.
+- Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` still could not
+  be advanced because `localhost:4000` is not accepting connections. Linear,
+  the PR, and this log contain the durable current status.
+
+## 2026-08-16 10:50 PDT - Codex - REC-284 confetti and CTA black polish
+
+Agent: Codex using the `ios-fix` and Linear workflows
+Branch: codex/rec-284-espresso-confirmation-ctas
+Worktree: /private/tmp/recme-rec275-attached-wanna-checkin
+Linear: REC-284 (returned to In Progress)
+
+Starting state and scope:
+
+- Joe reported that the same-day confetti feels cut off and requested a
+  slightly fuller, longer effect plus exact black parity between the large
+  confirmation CTA and the production place-profile Check in button.
+- Deterministic reproduction found the same-day overlay auto-dismisses after
+  720 ms while the existing final particle completes at roughly 1.84 seconds.
+  That truncation is the source of the bug-like finish. The confirmation CTA
+  maps to `.espressoAction`, while the floating Check in maps to the darker
+  `.deepBlackAction`.
+- Captured the current installed build at
+  `/private/tmp/rec-284-confetti-black-pre.png`; the durable pre-state contract
+  is
+  `WanderTests/Fixtures/ios-fix/rec-284-confetti-cta-polish-pre.json`.
+- Expected files: streak presentation/motion policy, shared CTA tone mapping,
+  focused unit/token regressions, and this log. No build number, TestFlight,
+  hosted flag, schema/data, auth, merge, or release action is authorized.
+
+Implementation and validation handoff, 2026-08-16 11:04 PDT:
+
+- Increased the same-day confetti recipe from 30 to 42 pieces, extended its
+  travel, and slowed its motion slightly. The last particle now completes at
+  roughly 2.02 seconds, and the overlay remains mounted for 2.25 seconds so
+  the animation finishes naturally instead of disappearing mid-flight.
+- Remapped the shared Espresso confirmation tone to `.deepBlackAction`, the
+  exact glass tone already used by the production floating Check in button.
+  This keeps the Espresso semantic at call sites while removing the lighter
+  near-black mismatch.
+- Added regression coverage for the 2.25-second presentation policy, particle
+  lifetime margin, fuller motion recipe, and exact confirmation/floating-action
+  tone parity. The focused streak and theme suites passed 19/19:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_10-54-28--0700.xcresult`.
+- The attached Check-in editor UI regression passed 1/1 and visually confirms
+  the dark confirmation CTA in the native compact sheet:
+  `/private/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_10-59-49--0700.xcresult`.
+  Inspected screenshot:
+  `/private/tmp/rec284-confetti-ui-attachments-final/78992096-2DFE-4838-8B74-0357783C1C6E.png`.
+- Initial clean-cache and UI attempts stopped before exercising app code due
+  to local disk exhaustion. Removed only disposable REC-284 derived data,
+  reused the existing task cache, and both reruns passed. No product failure
+  remains from those attempts.
+- No build number, TestFlight, hosted flag, schema/data, auth, merge, Slack, or
+  release action was performed.
+
+PR and tracker handoff, 2026-08-16 11:06 PDT:
+
+- Reproduction checkpoint `020e3e10` and implementation commit `9c17be1c`
+  are pushed on `codex/rec-284-espresso-confirmation-ctas`; draft PR #461 was
+  updated with the validation summary and remains unmerged.
+- Returned REC-284 to In Review and added the exact recipe, passing tests, and
+  dedicated simulator handoff.
+- Mission Control task `65ee363b-0823-4f5c-8975-e36d7809fea5` could not be
+  advanced because `localhost:4000` still is not accepting connections.
+  Linear, the draft PR, and this log contain the durable current status.
+- Reinstalled the exact passing build and left `S3B Espresso + Note Test`
+  (`AC52441A-D833-4DC1-A1EE-3632D3F7F9AE`) logged in on the map. Resting
+  evidence: `/private/tmp/rec-284-confetti-final-ready.png`.
+
+## 2026-08-16 11:20 PDT - Codex - REC-275/REC-284 main landing
+
+Agent: Codex using `recme-pr-review-merge-release` and `review`
+Branch: `codex/rec-284-espresso-confirmation-ctas`
+Worktree: `/private/tmp/recme-rec275-attached-wanna-checkin`
+Linear: REC-275 and REC-284
+
+Starting state and scope:
+
+- Joe explicitly requested pushing the approved/tested work to `main`. This is
+  merge authorization only; no TestFlight build, build-number bump, archive,
+  upload, Slack note, hosted mutation, schema/data, or auth operation is
+  authorized.
+- The delivery is a three-PR stack: #455 attaches existing-Wanna editing, #460
+  keeps Check in attached over the place profile, and #461 adds Espresso CTAs,
+  the visible optional note, native compact/large detents, and confetti/black
+  polish. The top branch is clean and pushed.
+- Latest `origin/main` has advanced since the stack began. A dry merge reports
+  only the append-only `docs/agent-log.md` as a textual conflict; Map source and
+  UI/navigation tests merge automatically. The final landing gate will review
+  the complete combined diff against latest `main`, rerun relevant validation,
+  then consolidate the stack into a single main-targeting PR if clean.
+- The latest completed explicit TestFlight release is build 94. There is no
+  pending release to resume, and this merge will ride the next explicitly
+  requested TestFlight batch.
+
+Landing-review checkpoint:
+
+- Integrated latest `origin/main` into the top stack. The only conflict was
+  this append-only coordination log; both histories were preserved.
+- Independent maintainability review found an unused Espresso glass tone and
+  a duplicated native-sheet height literal. Removed the dead tone and made the
+  sheet's initial selection use its named compact detent.
+- Independent design review found two pre-merge regressions: opening the
+  Check-in date from the compact attached sheet did not request the large
+  detent, and the shared primary button had lost explicit pressed feedback.
+  The date disclosure now promotes the sheet before revealing its calendar,
+  and all shared primary buttons use a subtle pressed scale/opacity style while
+  retaining native Liquid Glass interaction on iOS 26.
+- Swift parsing and `git diff --check` pass after these review fixes. Focused
+  post-integration unit and UI validation remains in progress before merge.
+
+Final landing validation:
+
+- Rejected the attempted programmatic detent promotion after direct iOS 18.6
+  simulator validation showed SwiftUI's bound selection changing without the
+  native sheet moving. No UIKit bridge, delay workaround, or unverified
+  auto-expansion behavior is landing. The supported interaction is the native
+  grabber: the user can drag compact -> large -> compact and swipe-dismiss.
+- After `origin/main` advanced to Map-search PR #459, merged `266303d7`
+  cleanly with no textual conflicts. The final post-integration focused unit
+  gate passed 46/46, covering all
+  `PlaceProfilePresentationTests`, the relevant navigation contracts, and the
+  Espresso theme-token contract. Result:
+  `/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_13-16-03--0700.xcresult`.
+- The native Wanna sheet UI gate passed: compact -> large -> compact -> dismiss,
+  with the place-profile floating actions restored afterward. The attached
+  Check-in UI gate also passed 1/1, verifying the editor remains over the place
+  profile, exposes rating/date/note/More Options above the fold, and preserves
+  the optional note draft after collapse and reopen. Check-in result:
+  `/tmp/DerivedData-s73/Logs/Test/Test-Wander-2026.08.16_13-12-52--0700.xcresult`.
+- Final Swift parsing and `git diff --check` pass. No build-number bump,
+  archive, TestFlight upload, Slack release note, hosted flag, schema/data, or
+  auth change was performed. Mission Control task
+  `65ee363b-0823-4f5c-8975-e36d7809fea5` remains unreachable because
+  `localhost:4000` is not accepting connections; Linear, PR #461, and this log
+  carry the durable handoff.
+## 2026-08-16 05:24 PDT - Codex - REC-281 Feed floating glass controls
+
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Progress`)
+
+Goal: move Feed search higher and make the Places/People selector plus Add
+action read as floating Liquid Glass controls over the Feed instead of a fixed
+row that visually cuts off the screen.
+
+Starting status and coordination:
+
+- Fetched `origin` and created this clean isolated worktree from exact
+  `origin/main` at `40811705`.
+- The primary checkout is 255 commits behind `origin/main` and contains an
+  unrelated untracked `tmp/`; it remains untouched.
+- No active agent-log entry declares overlapping Feed-header work. Existing
+  active worktrees focus on search ranking, Map actions, and onboarding/auth
+  debug flows; this branch remains scoped to Feed presentation.
+- Existing design-system glass primitives already provide native iOS 26
+  `glassEffect` plus the iOS 17-25 material fallback. The implementation will
+  reuse those primitives instead of adding a competing glass style.
+- Expected files: `Wander/Features/Feed/FeedScreen.swift`, focused Feed/
+  navigation tests, simulator screenshot evidence if available, and this log.
+  No backend, schema, RLS, RPC, data, build-number, archive, upload, release,
+  or TestFlight change is in scope.
+
+Implementation and focused validation checkpoint:
+
+- Reworked the Feed root as a content-backed `ZStack` with a floating header
+  overlay. Search now occupies the top row; the Places/People selector and Add
+  action float together beneath it without an opaque full-width header cutting
+  off the canvas.
+- Reused `GlassEffectContainer`, `wanderGlassCapsule`,
+  `WanderGlassSegmentedSwitch`, and `WanderGlassActionButton`, preserving native
+  iOS 26 Liquid Glass and the existing iOS 17-25 material fallback.
+- Hoisted People search state/focus into the Feed root so both Places and People
+  use the same floating search slot. Both scroll surfaces share a top content
+  inset and move underneath the persistent controls; existing walkthrough,
+  search, Add, and route behavior remains wired.
+- Generic iOS Simulator build passed: `BUILD SUCCEEDED` in 36.631 seconds using
+  `/private/tmp/recme-rec281-dd`.
+- Focused source-contract regression passed 1/1. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-39-51--0700.xcresult`.
+- New Feed UI regression passed 1/1 after narrowing an initially ambiguous
+  accessibility query to the People text field. It verifies the controls remain
+  fixed through scrolling and that People search replaces Places search in the
+  same elevated slot. Result:
+  `/private/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-42-09--0700.xcresult`.
+- Visually verified the Feed on iPhone 17 Pro / iOS 26.2 and iPhone 16e /
+  iOS 18.6. The canvas stays continuous, controls do not clip, and both native
+  glass and fallback material render correctly. Evidence:
+  `/private/tmp/rec281-feed-after-large.png` and
+  `/private/tmp/rec281-feed-after-small.png`. The People-state UI attachment is
+  `/private/tmp/rec281-ui-attachments/20D7D2C6-66D0-4A45-ADFE-30898D2C0C65.png`.
+- Removed only the two disposable task-specific Simulator devices and their
+  rebuildable index/module caches after preserving screenshots and test result
+  bundles. Source and validation evidence remain intact.
+
+Final validation before publication:
+
+- Ran the required complete scheme test command on iPhone 16 Plus / iOS 18.6.
+  It exercised the full unit and UI targets for 1,032.787 seconds. The new Feed
+  header UI test and existing Feed screenshot, search, walkthrough, and tab
+  navigation coverage passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_05-44-08--0700.xcresult`.
+- That aggregate run reproduced the existing Clerk cancellation trap and then
+  accumulated cascading signal-kill failures across 14 unrelated onboarding
+  tests after the app/test runner restarted. Four additional unrelated
+  onboarding/place-editor/map-search tests reported explicit failures. No Feed
+  floating-header test failed.
+- The complete run also exposed two stale source-contract expectations for the
+  old inline People search. Updated those tests to assert the new shared
+  floating search slot while preserving the invite-before-results contract.
+- Reran the two updated contracts together with the known Clerk cancellation
+  case: 3/3 passed. Result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-02-25--0700.xcresult`.
+- Reran the complete `WanderTests` target. After the known Clerk test trapped in
+  the aggregate process, the runner restarted and completed 1,203/1,203 tests
+  successfully; the same Clerk case passes alone. Aggregate result:
+  `/tmp/recme-rec281-dd/Logs/Test/Test-Wander-2026.08.16_06-03-12--0700.xcresult`.
+- Regenerated with XcodeGen. It attempted to add two unrelated pre-existing
+  ios-fix fixtures to the project; removed only that generated project drift so
+  this branch remains scoped to REC-281. No source membership change was needed.
+- Final generic iOS Simulator build passed in 8.211 seconds. `git diff --check`
+  passed, and the final diff contains only Feed presentation, its focused unit/
+  UI coverage, and this coordination log.
+- No backend, schema, auth implementation, data, build-number, archive,
+  TestFlight, App Store Connect, or Slack release action was taken.
+
+Publication and handoff:
+
+- Committed as `dd5bef9e` (`feat: float Feed glass controls`) and pushed branch
+  `codex/rec-281-feed-glass-controls`.
+- Opened ready PR #458: https://github.com/joelipshutz/wander/pull/458
+- REC-281 is ready for review. Merge-only handoff; no TestFlight release was
+  requested or performed.
+- GitHub's `validate-pr-payload` check failed because the manually-created PR
+  body omitted the required `recme-testflight-payload` JSON comment. Inspection
+  confirmed this is PR metadata only, not a source/build/test failure. Because
+  the branch changes app runtime files, the valid classification is `ship` with
+  REC-281 tester-facing change, what-to-test actions, `releaseOperations: none`,
+  validation evidence, and the known aggregate-runner limitation. The GitHub
+  CI-fix workflow requires explicit approval before mutating the PR body, so
+  that metadata-only correction is the sole pending handoff action.
 # 2026-08-16 05:44 PDT - Codex - REC-278 Option B landing
 
 Agent: Codex
@@ -30477,3 +30986,81 @@ Landing fixes and validation — 2026-08-16 06:37 PDT:
 - Maintainability and performance reviews were clean. The final UI remains
   Option B; the image-backed/liquid-glass ticket experiment remains deferred.
   No build-number bump, archive, TestFlight upload, or release was performed.
+## 2026-08-16 10:04 PDT - Codex - REC-281 PR #458 landing review
+
+Agent: Codex
+Branch: `codex/rec-281-feed-glass-controls`
+Worktree: `/Users/joelipshutz/Developer/Wander-worktrees/rec-281-feed-glass-controls`
+Linear: `REC-281` (`In Review`)
+
+- Joe explicitly requested that PR #458 be pushed to `main`; this is a
+  merge-only request. No build-number bump, archive, TestFlight upload, App
+  Store Connect action, or Slack release note is authorized.
+- Added the required hidden `recme-testflight-payload` to the PR body and
+  validated it locally against the repository parser. GitHub's
+  `validate-pr-payload` check now passes.
+- Integrated latest `origin/main` at `39aa45e1`. The only merge conflict was
+  the append-only coordination log; preserved both the REC-281 and REC-278
+  entries. GitHub now reports the PR cleanly mergeable.
+- Required gstack pre-landing review found no critical issue. Testing,
+  performance/design, and independent adversarial passes found no additional
+  findings. The maintainability pass identified static header-clearance math
+  and a whitespace-sensitive assertion; the red-team pass identified People
+  query state surviving while conditional result state was recreated.
+- Fixed all review findings: Feed content clearance now follows the measured
+  rendered floating-header height, the contract test uses bounded token checks,
+  and leaving People clears the query so returning cannot show a false empty
+  result while a new search is pending.
+- Final Swift syntax parsing, measured-header/query-lifetime source contracts,
+  and `git diff --check` pass. The earlier exact branch validation remains:
+  generic Simulator build, focused Feed contracts/UI test, full unit-target
+  execution, and iPhone 17 Pro plus iPhone 16e visual QA.
+- A redundant clean post-integration test attempt was blocked before tests ran
+  because the machine volume reached `No space left on device`. Removed only
+  the task-specific, rebuildable `/private/tmp/recme-rec281-landing-dd` and the
+  build/module/package/index caches under `/private/tmp/recme-rec281-dd`;
+  preserved its `Logs` and `TestResults` evidence. No unrelated DerivedData,
+  worktree, source, screenshot, or user file was removed.
+- Inspected the existing `testflight/build-155` state. No durable archive/upload
+  completion receipt was found; Joe's current instruction explicitly
+  prioritizes merging this PR, so that older release state remains untouched.
+- PR: https://github.com/joelipshutz/wander/pull/458. Ready for squash merge to
+  `main`; app behavior should ride the next explicitly requested TestFlight
+  batch.
+
+## 2026-08-16 04:45 PDT — Codex — REC-280 semantic Discover candidate provider
+
+- Goal: implement the Search-only, feature-flagged pgvector candidate provider approved by the REC-225 real-corpus relevance gate. Preserve local/FTS fallback, privacy eligibility, deterministic ranking, and the vector-free Featured policy.
+- Linear: `REC-280` (`In Progress`), child of `REC-225`.
+- Branch/worktree: `codex/rec-280-semantic-search` in `/private/tmp/recme-rec280-semantic-search`, created from `origin/main` at `40811705`.
+- Starting status: clean (`## codex/rec-280-semantic-search...origin/main`). Existing checkout `joe/phone-build-latest` is dirty with untracked `tmp/`; the pending evaluator uses `/private/tmp/recme-rec225-relevance-evaluator`, so this implementation is isolated.
+- Expected files: a new Supabase migration and pgTAP coverage, semantic-search/backfill Edge Functions and tests, hosted smoke coverage, place repository/DTO/orchestration/feature-flag code and focused iOS tests, plus REC-225/REC-280 docs as the implementation clarifies the shipped contract.
+- Locked privacy decision: Joe explicitly approved sending minimized canonical place documents to OpenAI for embeddings. The documents exclude user/profile identity, notes, labels, answers, ratings, photos, coordinates, and people embeddings. Map Featured will not use vectors.
+- Rollout correction from Joe: semantic Search no longer needs a Joe/account override for dogfood. Xcode Debug builds enable the provider at compile time; Release builds honor only the globally default-off launch flag. Updated implementation, tests, decision record, implementation plan, PR handoff, and KB memory to match.
+- Removed only this worktree's disposable `DerivedData-rec280` after an interrupted validation run filled the disk, then rebuilt from clean generated state. Focused semantic/Discover validation passed 23/23. The aggregate scheme still reproduces the pre-existing Clerk test-order fatal (`Clerk has not been configured`) while the same cancellation regression passes 1/1 alone; complete remainder validation continues with that known isolation case separated.
+- Final iOS validation: the complete `WanderTests` target excluding the known aggregate-only `AuthSessionTests` group executed 1,200 tests, with 1,199 passes and one signal-killed `testFeaturedLargeCandidateRankingStaysLightweight` runner. That exact Featured performance regression then passed 1/1 in isolation (9.662 seconds). Together with the isolated auth cancellation pass and the 23/23 semantic Search/repository/navigation suite, every affected test received a passing execution. Full-scheme UI automation continued to show unrelated pre-existing timeout/restart noise; no semantic assertion failed.
+- Backend validation remained green: semantic Edge Function 4/4, embedding refresh Edge Function 3/3, rollback-only hosted semantic pgTAP 18/18, feature-flag pgTAP 14/14, and the full hosted Supabase smoke suite. `node --check scripts/supabase-smoke-test.mjs` and `git diff --check` passed.
+- No hosted migration, Edge deployment, embedding backfill, feature-flag mutation, build-number bump, archive, TestFlight upload, or Slack release action was performed. Release remains globally off; Xcode Debug builds use semantic retrieval without any account-specific override.
+- Handoff: committed as `c384c2dd`, pushed `codex/rec-280-semantic-search`, and opened ready PR #457 (`https://github.com/joelipshutz/wander/pull/457`). Next step is review/merge; backend activation follows the documented deploy, migration, backfill, authenticated smoke, and Xcode-dogfood sequence rather than happening from this PR.
+- Corrected the PR's required TestFlight-manifest payload; GitHub `validate-pr-payload` passed. Opened `/private/tmp/recme-rec280-semantic-search/Wander.xcodeproj` as its own Xcode workspace document and verified its repository is on `codex/rec-280-semantic-search`, leaving Joe's other active Xcode projects/checkouts untouched.
+
+## 2026-08-16 09:15 PDT — Codex — REC-280 canonical retrieval spec
+
+- Goal: make the approved Search + Featured architecture easy to find from the repository, product docs, and both ranking implementations. No runtime behavior change.
+- Linear/PR: REC-280 (`In Review` before this documentation follow-up), PR #457.
+- Rebased `codex/rec-280-semantic-search` onto current `origin/main` (`39aa45e1`) and preserved both concurrent agent-log entries during the only conflict.
+- Expected files: a canonical `docs/specs/` retrieval document; links from README, product spec, handoff, and the dated implementation plan; source comments at Search fusion, Map Featured ranking, and the semantic migration; this log.
+- Outcome: added `docs/specs/search-featured-retrieval-platform.md` as the stable source of truth for Search, Featured, personalization boundaries, privacy, failure/performance behavior, monitoring, evaluation, future policy controls, implementation locations, and backend activation. Linked it from README, the product spec, the Codex handoff, and the detailed REC-280 implementation plan.
+- Added direct canonical-spec comments beside `RecmePlaceSearchFusion`, `MapFeaturedSelection`, and the semantic-search migration so maintainers can navigate from runtime policy to product contract. Source changes are comments only; no ranking or backend behavior changed.
+- Validation at 09:18 PDT: all referenced canonical implementation files exist, `git diff --check` passes, and the Swift/SQL diff contains only the intended comments. No build/test rerun is required for this documentation-only follow-up; the rebased implementation retains the previously recorded iOS, Edge, pgTAP, and hosted-smoke validation.
+- No hosted schema/data, Edge deployment, embedding backfill, feature flag, build number, archive, TestFlight, or release state changed.
+
+Pre-merge sweep — 2026-08-16 10:04 PDT:
+
+- Joe explicitly authorized squashing PR #457 into `main` for Xcode testing before any TestFlight release.
+- Initial sweep used `origin/main` at `39aa45e1`; the PR was clean, mergeable, and its required `validate-pr-payload` check passed.
+- Removed three accidental trailing-space markers from the canonical spec after the exact final `git diff --check` caught them. No product or runtime behavior changed.
+- Exact-commit focused iOS validation passed 24/24, including semantic fusion, lexical fallback, submitted-search cancellation, privacy/filter contracts, and the 1,000-place performance guard. Result: `/private/tmp/DerivedData-rec280-merge/Logs/Test/Test-Wander-2026.08.16_10-02-50--0700.xcresult`.
+- Exact-commit Edge validation passed 4/4 for semantic search and 3/3 for embedding refresh; `node --check scripts/supabase-smoke-test.mjs` and final `git diff --check` also pass.
+- While that clean build ran, PR #458 advanced `origin/main` to `0464822b`. Rebased again, preserving both REC-281 log blocks; source merged without conflict. The post-rebase focused suite passed 24/24 at `/private/tmp/DerivedData-rec280-merge/Logs/Test/Test-Wander-2026.08.16_10-18-59--0700.xcresult`.
+- Hosted activation, build-number bump, archive, TestFlight upload, and Slack release remain outside this merge.

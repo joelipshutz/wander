@@ -308,6 +308,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
                     title: isSaving ? "Saving…" : title,
                     systemImage: isSaving ? nil : bottomActionSystemImage,
                     isDisabled: isSaving,
+                    tone: .espressoConfirmation,
                     action: startSave
                 )
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -779,6 +780,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
             WanderPrimaryButton(
                 title: "Done",
                 systemImage: "checkmark",
+                tone: .espressoConfirmation,
                 action: onDone
             )
         }
