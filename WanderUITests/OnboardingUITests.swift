@@ -491,6 +491,89 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.buttons["walkthrough.next.sendoff.mapSendoff"].isHittable)
     }
 
+    func testSignedInLiveAccountCompletesFeedListsAndSendoffWalkthrough() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("This diagnostic requires the signed-in physical test device.")
+        #else
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderUseLiveAuth",
+            "-WanderEnableWalkthroughs",
+            "-WanderResetWalkthroughs",
+            "-WanderInitialTab",
+            "discover",
+            "-WanderWalkthroughTarget",
+            "feedDiscoverSearch"
+        ]
+        app.launch()
+
+        let launcher = app.buttons["feed.searchLauncher"]
+        XCTAssertTrue(
+            launcher.waitForExistence(timeout: 20),
+            "The normal app did not reach the signed-in Feed."
+        )
+        XCTAssertFalse(app.buttons["Continue offline"].exists)
+        XCTAssertFalse(app.buttons["Get started"].exists)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedDiscoverSearch"]
+                .waitForExistence(timeout: 8)
+        )
+        launcher.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchField"]
+                .waitForExistence(timeout: 8)
+        )
+        app.buttons["walkthrough.next.feedSearch.feedSearchField"].tap()
+
+        let suggestedSearch = app.buttons["Search coffee worth crossing town for"]
+        XCTAssertTrue(suggestedSearch.waitForExistence(timeout: 8))
+        suggestedSearch.tap()
+
+        let backButton = app.buttons["discover.searchBack"]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 12))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feedSearch.feedSearchResultsBack"]
+                .waitForExistence(timeout: 12)
+        )
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: backButton)
+        waitForExpectations(timeout: 6)
+        backButton.tap()
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedPeopleSearch"]
+                .waitForExistence(timeout: 8)
+        )
+        app.buttons["walkthrough.next.feed.feedPeopleSearch"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.feed.feedInvite"]
+                .waitForExistence(timeout: 8)
+        )
+        app.buttons["walkthrough.next.feed.feedInvite"].tap()
+
+        let inviteAction = app.buttons["invite.primaryAction"]
+        if inviteAction.waitForExistence(timeout: 6) {
+            inviteAction.tap()
+        } else if app.buttons["continue to contacts"].waitForExistence(timeout: 2) {
+            throw XCTSkip("Contacts permission is undecided on the signed-in device.")
+        }
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.lists.listsScope"]
+                .waitForExistence(timeout: 10)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.lists.listsOpenPlan"]
+                .waitForExistence(timeout: 12)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["walkthrough.sendoff.mapSendoff"]
+                .waitForExistence(timeout: 14)
+        )
+        XCTAssertTrue(app.buttons["walkthrough.next.sendoff.mapSendoff"].isHittable)
+        #endif
+    }
+
     func testTypedDiscoverQueryAlsoStaysInGuidedResults() {
         let app = XCUIApplication()
         app.launchArguments = [

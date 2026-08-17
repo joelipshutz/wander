@@ -858,12 +858,10 @@ struct DiscoverScreen: View {
     }
 
     private var walkthroughSearchBackTarget: WalkthroughTargetID? {
-        switch walkthroughs.currentStep?.target {
-        case .feedSearchResultsBack where isWalkthroughSearchResultReady:
-            .feedSearchResultsBack
-        default:
-            nil
-        }
+        DiscoverWalkthroughTargetPolicy.searchBackTarget(
+            activeSurface: walkthroughs.activeSurface,
+            target: walkthroughs.currentStep?.target
+        )
     }
 
     private var walkthroughSearchBackLabel: String {
@@ -873,16 +871,6 @@ struct DiscoverScreen: View {
         default:
             onClose == nil ? "Back to Discover" : "Back to Feed"
         }
-    }
-
-    private var isWalkthroughSearchResultReady: Bool {
-        guard submittedPlacesQuery != nil else { return false }
-        let hasRenderedResults = !placeGroups.isEmpty
-            || !filteredCommunityPlaceCandidates.isEmpty
-        let reachedTerminalEmptyState = !isPlaceSearchLoading
-            && !isPlaceSearchRefining
-            && !isCommunityPlaceSearchLoading
-        return hasRenderedResults || reachedTerminalEmptyState
     }
 
     @ViewBuilder
@@ -1724,6 +1712,21 @@ struct DiscoverScreen: View {
         return store.shell(for: localProfile)
     }
 
+}
+
+enum DiscoverWalkthroughTargetPolicy {
+    /// The guided Back control must remain registered while live search is
+    /// still loading. Waiting for local, refined, and community results to all
+    /// settle can leave a signed-in user on an unanchored walkthrough step.
+    static func searchBackTarget(
+        activeSurface: WalkthroughSurface?,
+        target: WalkthroughTargetID?
+    ) -> WalkthroughTargetID? {
+        guard activeSurface == .feedSearch,
+              target == .feedSearchResultsBack
+        else { return nil }
+        return .feedSearchResultsBack
+    }
 }
 
 private struct DiscoverVisiblePlaceSignature: Equatable {

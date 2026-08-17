@@ -519,6 +519,23 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
     }
 
+    func testTrustedSearchBackTargetRemainsAnchoredWhileSignedInResultsAreStillLoading() {
+        XCTAssertEqual(
+            DiscoverWalkthroughTargetPolicy.searchBackTarget(
+                activeSurface: .feedSearch,
+                target: .feedSearchResultsBack
+            ),
+            .feedSearchResultsBack,
+            "A slow live search must not make the NUX target disappear before the user can return to Feed."
+        )
+        XCTAssertNil(
+            DiscoverWalkthroughTargetPolicy.searchBackTarget(
+                activeSurface: .feed,
+                target: .feedSearchResultsBack
+            )
+        )
+    }
+
     func testAutomaticWalkthroughTimingUsesAnAverageReadingBeat() {
         let shortDelay = FirstVisitWalkthroughContent
             .automaticReadingDelayMilliseconds(for: .saveDate)

@@ -3837,6 +3837,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("FeedSurface.walkthroughDestination("))
         XCTAssertTrue(feed.contains("guard activeSurface == .feed else { return nil }"))
         XCTAssertTrue(resultsBack.contains("exitPlaceSearch()"))
+        XCTAssertTrue(discover.contains("DiscoverWalkthroughTargetPolicy.searchBackTarget("))
+        XCTAssertFalse(
+            discover.contains("case .feedSearchResultsBack where isWalkthroughSearchResultReady")
+        )
         XCTAssertFalse(discover.contains("feedSearchExitBack"))
 
         let listsAnimation = try sourceSection(
