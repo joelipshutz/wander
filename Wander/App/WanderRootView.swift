@@ -639,9 +639,11 @@ struct WanderRootView: View {
             ) {
                 switch presentation {
                 case .settings:
-                    SettingsScreen(
-                        onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser
-                    )
+                    NavigationStack {
+                        SettingsScreen(
+                            onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser
+                        )
+                    }
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)

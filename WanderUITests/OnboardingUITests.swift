@@ -1510,6 +1510,47 @@ final class OnboardingUITests: XCTestCase {
         add(collapsedScreenshot)
     }
 
+    func testSettingsUsesFullPagePushAndInteractiveEdgeSwipe() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderInitialTab",
+            "profile",
+        ]
+        app.launch()
+
+        let settingsButton = app.buttons["Settings"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 8))
+        settingsButton.tap()
+
+        let settingsScreen = app.descendants(matching: .any)["settings.screen"]
+        XCTAssertTrue(settingsScreen.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Settings"].exists)
+        let backButton = app.buttons["Back"]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["Done"].exists)
+        XCTAssertFalse(app.buttons["Profile"].isHittable)
+
+        let fullPageScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        fullPageScreenshot.name = "Settings full-page push"
+        fullPageScreenshot.lifetime = .keepAlways
+        add(fullPageScreenshot)
+
+        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
+        leftEdge.press(
+            forDuration: 0.1,
+            thenDragTo: rightSide,
+            withVelocity: .slow,
+            thenHoldForDuration: 0.1
+        )
+
+        XCTAssertTrue(settingsScreen.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Profile"].isHittable)
+    }
+
     func testFloatingPlaceActionsStayVisibleAndOpenThePreselectedLegacyEditor() {
         let app = XCUIApplication()
         app.launchArguments = [
