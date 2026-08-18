@@ -117,21 +117,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
     }
 
-    func testPrimaryTabsUseOutlinedSymbolsAtRestAndFilledSymbolsWhenSelected() throws {
+    func testPrimaryTabsUseStaticNativeSymbolsAndSystemSelectionFeedback() throws {
         XCTAssertEqual(WanderTab.primaryTabs, [.map, .discover, .lists, .profile])
         XCTAssertEqual(WanderTab.map.systemImage, "map")
-        XCTAssertEqual(WanderTab.map.selectedSystemImage, "map.fill")
         XCTAssertEqual(WanderTab.discover.systemImage, "newspaper")
-        XCTAssertEqual(WanderTab.discover.selectedSystemImage, "newspaper.fill")
         XCTAssertEqual(WanderTab.lists.systemImage, "bookmark.square")
-        XCTAssertEqual(WanderTab.lists.selectedSystemImage, "bookmark.square.fill")
         XCTAssertEqual(WanderTab.profile.systemImage, "person.crop.circle")
-        XCTAssertEqual(WanderTab.profile.selectedSystemImage, "person.crop.circle.fill")
-
-        for tab in [WanderTab.map, .discover, .lists, .profile] {
-            XCTAssertEqual(tab.systemImage(isSelected: false), tab.systemImage)
-            XCTAssertEqual(tab.systemImage(isSelected: true), tab.selectedSystemImage)
-        }
 
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
@@ -140,62 +131,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("WanderPrimaryTabBar"))
         XCTAssertFalse(root.contains("WanderNativeTabBarIconConfigurator"))
         XCTAssertEqual(root.components(separatedBy: ".tabItem { tabItemLabel(for:").count - 1, 4)
-        XCTAssertTrue(root.contains("isSelected: selectedTab == tab"))
-        XCTAssertTrue(root.contains("isPressed ? .alwaysOriginal : .alwaysTemplate"))
-    }
-
-    func testPrimaryTabPressStateActivatesImmediatelyAndCancelsWhenDraggedAway() throws {
-        var interaction = WanderTabPressInteraction()
-
-        interaction.begin(on: .lists)
-        XCTAssertEqual(interaction.initialTab, .lists)
-        XCTAssertEqual(interaction.pressedTab, .lists)
-
-        interaction.move(over: nil)
-        XCTAssertEqual(interaction.initialTab, .lists)
-        XCTAssertNil(interaction.pressedTab)
-
-        interaction.move(over: .lists)
-        XCTAssertEqual(interaction.pressedTab, .lists)
-        XCTAssertTrue(interaction.end(over: .lists))
-        XCTAssertNil(interaction.initialTab)
-        XCTAssertNil(interaction.pressedTab)
-
-        interaction.begin(on: .profile)
-        XCTAssertFalse(interaction.end(over: .map))
-        XCTAssertNil(interaction.initialTab)
-        XCTAssertNil(interaction.pressedTab)
-
-        let root = try String(
-            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
-        )
-        XCTAssertTrue(root.contains("WanderNativeTabTouchObserver("))
-        XCTAssertTrue(root.contains("for: .touchDown"))
-        XCTAssertTrue(root.contains("for: .touchUpInside"))
-        XCTAssertTrue(root.contains("items[index].image = tab.tabBarImage(isSelected: false, isPressed: true)"))
-        XCTAssertFalse(root.contains("@State private var pressedTab: WanderTab?"))
-        XCTAssertFalse(root.contains("UILongPressGestureRecognizer"))
-        XCTAssertFalse(root.contains("addGestureRecognizer"))
-        XCTAssertTrue(root.contains("isPressed ? .alwaysOriginal : .alwaysTemplate"))
-        XCTAssertTrue(root.contains("private static var tabBarImageCache: [String: UIImage] = [:]"))
-        XCTAssertFalse(root.contains("tabBar.selectedItem ="))
-        XCTAssertTrue(root.contains("Let the native tab bar commit navigation on touch-up first."))
-        XCTAssertTrue(root.contains("observedControls.allSatisfy({ $0.window === window })"))
+        XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
+        XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
+        XCTAssertFalse(root.contains("tabBarImage("))
         XCTAssertTrue(root.contains("Let the native tab selection and Liquid Glass transition commit"))
-        XCTAssertFalse(root.contains(".toolbar(.hidden, for: .tabBar)"))
-    }
-
-    @MainActor
-    func testTabBarImagesCacheTemplateAndPressedRenditions() {
-        let inactiveImage = WanderTab.discover.tabBarImage(isSelected: false)
-        let cachedInactiveImage = WanderTab.discover.tabBarImage(isSelected: false)
-        let pressedImage = WanderTab.discover.tabBarImage(isSelected: false, isPressed: true)
-        let cachedPressedImage = WanderTab.discover.tabBarImage(isSelected: false, isPressed: true)
-
-        XCTAssertTrue(inactiveImage === cachedInactiveImage)
-        XCTAssertTrue(pressedImage === cachedPressedImage)
-        XCTAssertEqual(inactiveImage.renderingMode, .alwaysTemplate)
-        XCTAssertEqual(pressedImage.renderingMode, .alwaysOriginal)
     }
 
     func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {
@@ -2914,7 +2853,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains(".task(id: placesQuery)"))
         XCTAssertTrue(source.contains(".task(id: memberQuery)"))
         XCTAssertTrue(source.contains(".onChange(of: placesQuery)"))
-        XCTAssertTrue(source.contains(".onSubmit(onSubmit)"))
+        XCTAssertTrue(source.contains(".onSubmit {"))
+        XCTAssertTrue(source.contains("onSubmit()"))
         XCTAssertTrue(source.contains("private func submitPlaceSearch()"))
         XCTAssertFalse(source.contains(".onChange(of: memberQuery)"))
     }

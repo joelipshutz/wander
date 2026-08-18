@@ -466,11 +466,6 @@ struct WanderRootView: View {
         }
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
-        .background {
-            WanderNativeTabTouchObserver(tabs: WanderTab.primaryTabs)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
         .environmentObject(store)
         .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
@@ -551,15 +546,7 @@ struct WanderRootView: View {
     }
 
     private func tabItemLabel(for tab: WanderTab) -> some View {
-        Label {
-            Text(tab.title)
-        } icon: {
-            Image(
-                uiImage: tab.tabBarImage(
-                    isSelected: selectedTab == tab
-                )
-            )
-        }
+        Label(tab.title, systemImage: tab.systemImage)
     }
 
     private var presentedRoot: some View {
@@ -2143,239 +2130,6 @@ struct WanderRootView: View {
     }
 }
 
-struct WanderTabPressInteraction: Equatable {
-    private(set) var initialTab: WanderTab?
-    private(set) var pressedTab: WanderTab?
-
-    mutating func begin(on tab: WanderTab) {
-        initialTab = tab
-        pressedTab = tab
-    }
-
-    mutating func move(over tab: WanderTab?) {
-        pressedTab = tab == initialTab ? initialTab : nil
-    }
-
-    @discardableResult
-    mutating func end(over tab: WanderTab?) -> Bool {
-        let endedInside = tab == initialTab
-        initialTab = nil
-        pressedTab = nil
-        return endedInside
-    }
-
-    mutating func cancel() {
-        initialTab = nil
-        pressedTab = nil
-    }
-}
-
-private final class WanderTabTouchAnchorView: UIView {
-    var onWindowChange: ((UIWindow?) -> Void)?
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        onWindowChange?(window)
-    }
-}
-
-private struct WanderNativeTabTouchObserver: UIViewRepresentable {
-    let tabs: [WanderTab]
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(observer: self)
-    }
-
-    func makeUIView(context: Context) -> WanderTabTouchAnchorView {
-        let view = WanderTabTouchAnchorView(frame: .zero)
-        view.isUserInteractionEnabled = false
-        view.onWindowChange = { [weak coordinator = context.coordinator] window in
-            coordinator?.attachIfNeeded(in: window)
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: WanderTabTouchAnchorView, context: Context) {
-        context.coordinator.update(observer: self, window: uiView.window)
-    }
-
-    static func dismantleUIView(
-        _ uiView: WanderTabTouchAnchorView,
-        coordinator: Coordinator
-    ) {
-        uiView.onWindowChange = nil
-        coordinator.detach()
-    }
-
-    @MainActor
-    final class Coordinator: NSObject {
-        private var observer: WanderNativeTabTouchObserver
-        private var interaction = WanderTabPressInteraction()
-        private weak var observedTabBar: UITabBar?
-        private var observedControls: [UIControl] = []
-        private var originalImages: [(image: UIImage?, selectedImage: UIImage?)] = []
-
-        init(observer: WanderNativeTabTouchObserver) {
-            self.observer = observer
-        }
-
-        func update(observer: WanderNativeTabTouchObserver, window: UIWindow?) {
-            self.observer = observer
-            if let window,
-               let observedTabBar,
-               observedTabBar.window === window,
-               observedTabBar.items?.count == observer.tabs.count,
-               observedControls.count == observer.tabs.count,
-               observedControls.allSatisfy({ $0.window === window }) {
-                return
-            }
-            attachIfNeeded(in: window)
-        }
-
-        func attachIfNeeded(in window: UIWindow?) {
-            guard let window,
-                  let tabBar = Self.findTabBar(in: window),
-                  tabBar.items?.count == observer.tabs.count,
-                  let itemControls = Self.itemControls(
-                    in: tabBar,
-                    expectedCount: observer.tabs.count
-                  )
-            else {
-                return
-            }
-
-            let controlsMatch = observedControls.count == itemControls.count
-                && zip(observedControls, itemControls).allSatisfy { $0 === $1 }
-            guard observedTabBar !== tabBar || !controlsMatch else { return }
-
-            detach()
-            observedTabBar = tabBar
-            observedControls = itemControls
-            originalImages = tabBar.items?.map { ($0.image, $0.selectedImage) } ?? []
-            for control in itemControls {
-                control.addTarget(self, action: #selector(handleTouchDown(_:)), for: .touchDown)
-                control.addTarget(self, action: #selector(handleTouchDragEnter(_:)), for: .touchDragEnter)
-                control.addTarget(self, action: #selector(handleTouchDragExit(_:)), for: .touchDragExit)
-                control.addTarget(self, action: #selector(handleTouchUpInside(_:)), for: .touchUpInside)
-                control.addTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchUpOutside)
-                control.addTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchCancel)
-            }
-        }
-
-        func detach() {
-            restoreOriginalImages()
-            for control in observedControls {
-                control.removeTarget(self, action: #selector(handleTouchDown(_:)), for: .touchDown)
-                control.removeTarget(self, action: #selector(handleTouchDragEnter(_:)), for: .touchDragEnter)
-                control.removeTarget(self, action: #selector(handleTouchDragExit(_:)), for: .touchDragExit)
-                control.removeTarget(self, action: #selector(handleTouchUpInside(_:)), for: .touchUpInside)
-                control.removeTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchUpOutside)
-                control.removeTarget(self, action: #selector(handleTouchCancelled(_:)), for: .touchCancel)
-            }
-            observedControls = []
-            originalImages = []
-            observedTabBar = nil
-            interaction.cancel()
-        }
-
-        @objc
-        private func handleTouchDown(_ control: UIControl) {
-            guard let tab = tab(for: control) else { return }
-            interaction.begin(on: tab)
-            showPressedTab(tab)
-        }
-
-        @objc
-        private func handleTouchDragEnter(_ control: UIControl) {
-            guard let tab = tab(for: control) else { return }
-            interaction.move(over: tab)
-            showPressedTab(tab)
-        }
-
-        @objc
-        private func handleTouchDragExit(_ control: UIControl) {
-            interaction.move(over: nil)
-            restoreSelectedTab()
-        }
-
-        @objc
-        private func handleTouchUpInside(_ control: UIControl) {
-            guard let tab = tab(for: control) else {
-                handleTouchCancelled(control)
-                return
-            }
-            _ = interaction.end(over: tab)
-            // Let the native tab bar commit navigation on touch-up first.
-            DispatchQueue.main.async { [weak self] in
-                self?.restoreOriginalImages()
-            }
-        }
-
-        @objc
-        private func handleTouchCancelled(_ control: UIControl) {
-            interaction.cancel()
-            restoreSelectedTab()
-        }
-
-        private func showPressedTab(_ tab: WanderTab) {
-            guard let index = observer.tabs.firstIndex(of: tab),
-                  let items = observedTabBar?.items,
-                  items.indices.contains(index)
-            else { return }
-            items[index].image = tab.tabBarImage(isSelected: false, isPressed: true)
-            items[index].selectedImage = tab.tabBarImage(isSelected: true, isPressed: true)
-        }
-
-        private func restoreSelectedTab() {
-            restoreOriginalImages()
-        }
-
-        private func restoreOriginalImages() {
-            guard let items = observedTabBar?.items,
-                  items.count == originalImages.count
-            else { return }
-            for (index, images) in originalImages.enumerated() {
-                items[index].image = images.image
-                items[index].selectedImage = images.selectedImage
-            }
-        }
-
-        private func tab(for control: UIControl) -> WanderTab? {
-            guard let index = observedControls.firstIndex(where: { $0 === control }),
-                  observer.tabs.indices.contains(index)
-            else { return nil }
-            return observer.tabs[index]
-        }
-
-        private static func itemControls(
-            in tabBar: UITabBar,
-            expectedCount: Int
-        ) -> [UIControl]? {
-            var controls = tabBar.subviews.compactMap { $0 as? UIControl }
-                .filter { !$0.isHidden && $0.alpha > 0 && $0.isUserInteractionEnabled }
-                .sorted { $0.frame.minX < $1.frame.minX }
-            if tabBar.effectiveUserInterfaceLayoutDirection == .rightToLeft {
-                controls.reverse()
-            }
-            return controls.count == expectedCount ? controls : nil
-        }
-
-        private static func findTabBar(in root: UIView) -> UITabBar? {
-            if let tabBar = root as? UITabBar, !tabBar.isHidden, tabBar.alpha > 0 {
-                return tabBar
-            }
-
-            for subview in root.subviews {
-                if let tabBar = findTabBar(in: subview) {
-                    return tabBar
-                }
-            }
-
-            return nil
-        }
-    }
-}
-
 enum WanderFixtureMode: Equatable {
     case empty
     case demo
@@ -2403,9 +2157,6 @@ enum WanderTab: String, CaseIterable, Hashable {
 
     static let primaryTabs: [WanderTab] = [.map, .discover, .lists, .profile]
 
-    @MainActor
-    private static var tabBarImageCache: [String: UIImage] = [:]
-
     var title: String {
         switch self {
         case .map: "Map"
@@ -2426,47 +2177,4 @@ enum WanderTab: String, CaseIterable, Hashable {
         }
     }
 
-    var selectedSystemImage: String {
-        switch self {
-        case .map: "map.fill"
-        case .discover: "newspaper.fill"
-        case .add: "plus"
-        case .lists: "bookmark.square.fill"
-        case .profile: "person.crop.circle.fill"
-        }
-    }
-
-    func systemImage(isSelected: Bool) -> String {
-        isSelected ? selectedSystemImage : systemImage
-    }
-
-    @MainActor
-    func tabBarImage(isSelected: Bool, isPressed: Bool = false) -> UIImage {
-        let configuration = UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
-        let name = systemImage(isSelected: isSelected || isPressed)
-        let cacheKey = "\(name)|\(isPressed ? "pressed" : "template")"
-        if let cachedImage = Self.tabBarImageCache[cacheKey] {
-            return cachedImage
-        }
-
-        guard let symbol = UIImage(systemName: name, withConfiguration: configuration) else {
-            return UIImage()
-        }
-
-        // SwiftUI automatically applies the fill symbol variant inside native tab items.
-        // Flatten the chosen variant first so the standard tab bar only tints the image.
-        let format = UIGraphicsImageRendererFormat()
-        format.opaque = false
-        format.scale = symbol.scale
-
-        let tintColor = isPressed ? UIColor(WanderTheme.terracotta.color) : .white
-        let flattenedSymbol = symbol.withTintColor(tintColor, renderingMode: .alwaysOriginal)
-        let flattenedImage = UIGraphicsImageRenderer(size: symbol.size, format: format)
-            .image { _ in
-                flattenedSymbol.draw(in: CGRect(origin: .zero, size: symbol.size))
-            }
-        let result = flattenedImage.withRenderingMode(isPressed ? .alwaysOriginal : .alwaysTemplate)
-        Self.tabBarImageCache[cacheKey] = result
-        return result
-    }
 }
