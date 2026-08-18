@@ -2086,6 +2086,34 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("if profile == nil"), "Full-screen loading and unavailable states need a dismiss control")
     }
 
+    func testOwnProfilePhotoSeparatesFullScreenViewingFromEditingActions() throws {
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let profileHome = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let profileEdit = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileEditScreen.swift")
+        )
+
+        XCTAssertTrue(profileScreen.contains("avatarAction: presentProfilePhotoViewer"))
+        XCTAssertTrue(profileScreen.contains(".fullScreenCover(isPresented: $showsProfilePhotoViewer)"))
+        XCTAssertTrue(profileEdit.contains("Color.black.ignoresSafeArea()"))
+        XCTAssertTrue(profileHome.contains("\"View profile photo\""))
+        XCTAssertFalse(profileHome.contains("\"Change profile photo\""))
+
+        XCTAssertTrue(profileEdit.contains("showsPhotoMenu = true"))
+        XCTAssertTrue(profileEdit.contains(".confirmationDialog(\"Profile photo\""))
+        XCTAssertTrue(profileEdit.contains("Button(\"Take Photo\")"))
+        XCTAssertTrue(profileEdit.contains("Button(\"Choose from Library\")"))
+        XCTAssertTrue(profileEdit.contains("Button(\"Delete Photo\", role: .destructive)"))
+        XCTAssertTrue(profileEdit.contains("isPresented: $showsPhotoLibrary"))
+        XCTAssertTrue(profileEdit.contains(".sheet(isPresented: $showsCamera)"))
+        XCTAssertTrue(profileEdit.contains("Could not load profile photo"))
+        XCTAssertFalse(profileEdit.contains("PhotosPicker(selection:"))
+    }
+
     func testNativeSharingStaysBehindTheSharedShareComponent() throws {
         let appRoot = projectRoot.appendingPathComponent("Wander")
         let sharedComponent = appRoot.appendingPathComponent("DesignSystem/WanderShareButton.swift").standardizedFileURL
