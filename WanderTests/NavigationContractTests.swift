@@ -1126,7 +1126,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(activitySection.contains("LazyVStack"))
     }
 
-    func testMapFeedAndPlaceHistoryShareTheDirectionATicketSurface() throws {
+    func testMapPlaceCardUsesPhotoBackedRoundedSurfaceWhileHistoryKeepsTickets() throws {
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -1153,7 +1153,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(ticketSurface.contains(".compositingGroup()"))
         XCTAssertTrue(ticketSurface.contains("case trailing"))
         XCTAssertTrue(ticketSurface.contains("case both"))
-        XCTAssertTrue(placeProfile.contains(".checkInTicketSurface("))
         let previewCard = try XCTUnwrap(
             placeProfile
                 .components(separatedBy: "private struct PlaceProfilePreviewCard: View")
@@ -1164,6 +1163,36 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(previewCard.contains("ticketEyebrow"))
         XCTAssertFalse(previewCard.contains("YOUR CHECK-IN"))
         XCTAssertFalse(previewCard.contains("YOUR WANNA"))
+        XCTAssertFalse(previewCard.contains(".checkInTicketSurface("))
+        XCTAssertFalse(previewCard.contains("PlaceProfilePhotoImage("))
+        XCTAssertTrue(previewCard.contains("Image(uiImage: preparedImage)"))
+        XCTAssertTrue(previewCard.contains("image.byPreparingForDisplay()"))
+        XCTAssertTrue(previewCard.contains("onReady()"))
+        XCTAssertFalse(previewCard.contains("Text(place.categoryEmoji)"))
+        XCTAssertTrue(previewCard.contains("WanderTypography.editorialTitle"))
+        XCTAssertTrue(previewCard.contains("cornerRadius: 30"))
+        XCTAssertTrue(previewCard.contains("PlaceCardRatingDistanceRow("))
+        XCTAssertTrue(previewCard.contains("PlaceCardHoursBadge("))
+        XCTAssertTrue(previewCard.contains("private var cardPressGesture: some Gesture"))
+        XCTAssertTrue(previewCard.contains("pressDuration < 0.45"))
+        XCTAssertTrue(previewCard.contains(".padding(.trailing, 74)"))
+        XCTAssertFalse(previewCard.contains("PlaceCardPhotoAttribution"))
+        XCTAssertFalse(previewCard.contains("map.selectedPlaceAttribution"))
+        XCTAssertTrue(previewCard.contains("GlassEffectContainer(spacing: 0)"))
+        XCTAssertTrue(previewCard.contains("VStack(spacing: 4)"))
+        XCTAssertTrue(previewCard.contains("activeCardAction: PlaceCardPreviewAction?"))
+        XCTAssertTrue(previewCard.contains("guard activeCardAction == nil else"))
+        XCTAssertTrue(previewCard.contains("PlaceCardGlassActionButtonStyle("))
+        XCTAssertTrue(previewCard.contains("showsBorder: false"))
+        XCTAssertTrue(previewCard.contains("Image(systemName: \"square.and.arrow.up\")"))
+        XCTAssertTrue(previewCard.contains("configuration.isPressed && !reduceMotion ? 1.3 : 1"))
+        XCTAssertTrue(previewCard.contains("anchor: .center"))
+        XCTAssertTrue(previewCard.contains("frame(width: 44, height: 44, alignment: .center)"))
+        XCTAssertTrue(previewCard.contains("WanderTheme.terracotta.color.opacity(0.18)"))
+        XCTAssertFalse(previewCard.contains("configuration.isPressed && !reduceMotion ? 1.4 : 1"))
+        XCTAssertFalse(previewCard.contains("scaleEffect(configuration.isPressed && !reduceMotion ? 1.6 : 1)"))
+        XCTAssertTrue(mapScreen.contains("handleCompactCardReady(for:"))
+        XCTAssertTrue(mapScreen.contains("prepareCompactCardForPhoto()"))
         XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
         XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityCard.contains("ticketAccentColor"))
@@ -2853,14 +2882,14 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("centerMapOnInitialPlacesIfNeeded"))
     }
 
-    func testMapPlaceProfileSlidesTheEntireNavigationSurfaceAboveCollapsedCard() throws {
+    func testMapPlaceProfileSlidesTheEntireNavigationSurfaceUpFromTheBottom() throws {
         let mapScreen = try String(contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift"))
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
 
         XCTAssertFalse(mapScreen.contains(".fullScreenCover(isPresented: placeProfileDestinationBinding)"))
-        XCTAssertTrue(mapScreen.contains("PlaceProfileSlideContainer("))
+        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalContainer"))
         XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
         XCTAssertTrue(mapScreen.contains(".overlay {\n            selectedPlaceProfileOverlay"))
         XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayVisible)"))
@@ -2871,23 +2900,21 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(.isModal)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
-        XCTAssertTrue(mapScreen.contains(".transition(.move(edge: .trailing))"))
+        XCTAssertTrue(mapScreen.contains(".transition(.move(edge: .bottom))"))
+        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.presentationAnimation"))
+        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.dismissalAnimation"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
         XCTAssertTrue(mapScreen.contains("usesInteractiveHorizontalDismissal: true"))
         XCTAssertFalse(mapScreen.contains("@State private var placeProfileHorizontalOffset"))
         XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
 
-        XCTAssertTrue(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: View"))
         XCTAssertTrue(placeProfile.contains("let content: Content"))
-        XCTAssertFalse(placeProfile.contains("let content: (PlaceProfileSlideDismissAction) -> Content"))
-        XCTAssertTrue(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
-        XCTAssertTrue(placeProfile.contains("@GestureState private var isEdgeSwipeGestureActive = false"))
-        XCTAssertTrue(placeProfile.contains(".offset(x: horizontalOffset)"))
-        XCTAssertTrue(placeProfile.contains(".scrollDisabled(isTrackingEdgeSwipe)"))
-        XCTAssertTrue(placeProfile.contains(".onChange(of: isEdgeSwipeGestureActive)"))
-        XCTAssertTrue(placeProfile.contains("await Task.yield()"))
+        XCTAssertFalse(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
+        XCTAssertFalse(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
+        XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
         XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
-        XCTAssertTrue(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
+        XCTAssertFalse(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
         XCTAssertTrue(placeProfile.contains(".toolbar(.visible, for: .navigationBar)"))
     }
 

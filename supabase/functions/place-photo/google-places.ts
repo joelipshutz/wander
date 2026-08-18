@@ -30,6 +30,14 @@ export type GooglePlace = {
   location?: { latitude?: number; longitude?: number };
   primaryType?: string;
   types?: string[];
+  rating?: number;
+  userRatingCount?: number;
+  currentOpeningHours?: {
+    openNow?: boolean;
+    nextOpenTime?: string;
+    nextCloseTime?: string;
+  };
+  utcOffsetMinutes?: number;
   photos?: GooglePhoto[];
 };
 

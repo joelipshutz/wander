@@ -4528,6 +4528,28 @@ final class WanderStore: ObservableObject {
         analytics.track(AnalyticsEvent(name: name, properties: properties))
     }
 
+    func trackPlaceShareCompletion(completed: Bool) {
+        let outcome = completed ? "shared" : "cancelled"
+        analytics.track(
+            AnalyticsEvent(
+                name: WanderAnalyticsEvents.placeShareCompleted,
+                properties: [
+                    "surface": "map_place_card",
+                    "outcome": outcome
+                ]
+            )
+        )
+        guard completed else { return }
+        analytics.track(
+            .engagement(
+                need: .expression,
+                action: .recommendationShared,
+                surface: "map_place_card",
+                properties: ["outcome": outcome]
+            )
+        )
+    }
+
     func parseDiscover(query: String) async -> DiscoverFilters {
         let schema = DiscoverFilterSchema()
         let cacheKey = normalizedParseCacheKey(query, schema: schema)

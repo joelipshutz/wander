@@ -255,6 +255,7 @@ struct MapScreen: View {
     @State private var visibleTransitionGroupKeys: Set<String>?
     @State private var mapPinTransitionTask: Task<Void, Never>?
     @State private var compactCardPhase = MapCompactCardPhase.hidden
+    @State private var compactCardReadyIdentity: String?
     @State private var compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
     @State private var compactCardContentOpacity: Double = 1
     @State private var nearbyLift: CGFloat = 0
@@ -265,6 +266,7 @@ struct MapScreen: View {
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
     @State private var isRecenteringOnUser = false
+    @State private var mapCardViewerLocation: CLLocation? = nil
     @State private var isLocationEducationPresented = false
     @State private var isRequestingLocationPermission = false
     @State private var shouldRecenterAfterLocationSettings = false
@@ -885,16 +887,26 @@ struct MapScreen: View {
                 .zIndex(40)
 
                 selectedPlaceProfileSurface
-                    .padding(.bottom, mapSearchDockClearance)
+                    .padding(
+                        .bottom,
+                        mapSearchDockClearance + MapControlLayout.selectedPlaceCardSearchGap
+                    )
                     .offset(y: compactCardVerticalOffset)
                     .opacity(compactCardContentOpacity)
-                    .allowsHitTesting(compactCardPhase != .dismissing)
+                    .allowsHitTesting(
+                        compactCardPhase == .entering || compactCardPhase == .presented
+                    )
+                    .accessibilityHidden(compactCardPhase == .hidden)
             }
             .background(WanderTheme.canvasWarm.color)
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
                 resolveInitialSearchIfNeeded()
+                Task { await refreshMapCardViewerLocation() }
+            }
+            .onChange(of: locationPermission.authorizationStatus) { _, _ in
+                Task { await refreshMapCardViewerLocation() }
             }
             .onChange(of: compactSelectionIdentity, initial: true) { previous, current in
                 handleCompactSelectionIdentityChange(from: previous, to: current)
@@ -1841,19 +1853,42 @@ struct MapScreen: View {
     }
 
     private func handleCompactSelectionIdentityChange(
-        from previous: String?,
+        from _: String?,
         to current: String?
     ) {
-        guard current != nil else {
+        guard let current else {
             if compactCardPhase != .dismissing {
                 resetCompactCardPresentation()
             }
             return
         }
 
-        if previous == nil || compactCardPhase == .hidden {
-            presentCompactCard()
+        guard current != compactCardReadyIdentity else { return }
+        prepareCompactCardForPhoto()
+    }
+
+    private func prepareCompactCardForPhoto() {
+        compactCardMotionTask?.cancel()
+        compactCardReadyIdentity = nil
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            compactCardPhase = .hidden
+            compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
+            compactCardContentOpacity = 1
+            nearbyLift = 0
+            nearbyOpacity = 1
         }
+    }
+
+    private func handleCompactCardReady(for identity: String) {
+        guard identity == compactSelectionIdentity,
+              compactCardReadyIdentity != identity
+        else { return }
+
+        compactCardReadyIdentity = identity
+        presentCompactCard()
     }
 
     private func presentCompactCard() {
@@ -1914,7 +1949,7 @@ struct MapScreen: View {
         if compactCardPhase == .dismissing {
             resetCompactCardPresentation()
             updateSelection()
-            presentCompactCard()
+            prepareCompactCardForPhoto()
             return
         }
 
@@ -1923,7 +1958,7 @@ struct MapScreen: View {
               !reduceMotion
         else {
             updateSelection()
-            compactCardContentOpacity = 1
+            prepareCompactCardForPhoto()
             return
         }
 
@@ -1945,14 +1980,7 @@ struct MapScreen: View {
             else { return }
 
             updateSelection()
-            await Task.yield()
-            guard !Task.isCancelled,
-                  revision == mapSelectionRevision
-            else { return }
-
-            withAnimation(MapCompactCardMotionStyle.replacementFadeInAnimation) {
-                compactCardContentOpacity = 1
-            }
+            prepareCompactCardForPhoto()
             compactCardReplacementTask = nil
         }
     }
@@ -2047,6 +2075,7 @@ struct MapScreen: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             compactCardPhase = .hidden
+            compactCardReadyIdentity = nil
             compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
             compactCardContentOpacity = 1
             nearbyLift = 0
@@ -2099,35 +2128,48 @@ struct MapScreen: View {
 
     @ViewBuilder
     private var selectedPlaceProfileSurface: some View {
-        if let selectedSearchCandidate {
+        if let selectedSearchCandidate,
+           let compactSelectionIdentity {
             PlaceProfileMapSurface(
                 place: PlaceSheetPlace(candidate: selectedSearchCandidate),
                 saves: saveSummaries(for: selectedSearchCandidate),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
+                viewerLocation: mapCardViewerLocation,
                 action: action(for: selectedSearchCandidate),
-                onOpen: openSelectedPlaceProfile
-            ) {
-                performAction(
-                    for: selectedSearchCandidate,
-                    defaultVisibility: store.effectiveDefaultVisibility
-                )
-            }
+                onOpen: openSelectedPlaceProfile,
+                onAction: {
+                    performAction(
+                        for: selectedSearchCandidate,
+                        defaultVisibility: store.effectiveDefaultVisibility
+                    )
+                },
+                onReady: {
+                    handleCompactCardReady(for: compactSelectionIdentity)
+                }
+            )
             .zIndex(30)
-        } else if let selectedPlace {
+        } else if let selectedPlace,
+                  let compactSelectionIdentity {
             PlaceProfileMapSurface(
                 place: PlaceSheetPlace(visiblePlace: selectedPlace),
                 saves: saveSummaries(for: selectedPlace),
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
+                viewerLocation: mapCardViewerLocation,
                 action: action(for: selectedPlace),
-                onOpen: openSelectedPlaceProfile
-            ) {
-                performAction(for: selectedPlace)
-            }
+                onOpen: openSelectedPlaceProfile,
+                onAction: {
+                    performAction(for: selectedPlace)
+                },
+                onReady: {
+                    handleCompactCardReady(for: compactSelectionIdentity)
+                }
+            )
             .zIndex(30)
         } else if let walkthroughFallbackMemory,
-                  walkthroughs.currentStep?.target == .mapMemory {
+                  walkthroughs.currentStep?.target == .mapMemory,
+                  let compactSelectionIdentity {
             PlaceProfileMapSurface(
                 place: PlaceSheetPlace(visiblePlace: walkthroughFallbackMemory),
                 saves: [
@@ -2138,9 +2180,13 @@ struct MapScreen: View {
                 ],
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
+                viewerLocation: mapCardViewerLocation,
                 action: .none,
                 onOpen: openSelectedPlaceProfile,
-                onAction: {}
+                onAction: {},
+                onReady: {
+                    handleCompactCardReady(for: compactSelectionIdentity)
+                }
             )
             .zIndex(30)
         }
@@ -2149,11 +2195,7 @@ struct MapScreen: View {
     @ViewBuilder
     private var selectedPlaceProfileOverlay: some View {
         if isPlaceProfileOverlayVisible {
-            PlaceProfileSlideContainer(
-                reduceMotion: reduceMotion,
-                isGestureDismissEnabled: walkthroughs.activeSurface != .placeDetail,
-                onDismissed: closeWalkthroughPlaceDetail
-            ) {
+            PlaceProfileVerticalContainer {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
@@ -2166,7 +2208,7 @@ struct MapScreen: View {
                 guard walkthroughs.activeSurface != .placeDetail else { return }
                 collapseSelectedPlaceProfile()
             }
-            .transition(.move(edge: .trailing))
+            .transition(.move(edge: .bottom))
             .zIndex(100)
         }
     }
@@ -2336,7 +2378,7 @@ struct MapScreen: View {
         if reduceMotion {
             isPlaceProfilePresented = true
         } else {
-            withAnimation(.easeOut(duration: 0.28)) {
+            withAnimation(PlaceProfileVerticalMotionStyle.presentationAnimation) {
                 isPlaceProfilePresented = true
             }
         }
@@ -2353,7 +2395,7 @@ struct MapScreen: View {
             return
         }
 
-        withAnimation(.easeOut(duration: 0.22)) {
+        withAnimation(PlaceProfileVerticalMotionStyle.dismissalAnimation) {
             closeWalkthroughPlaceDetail()
         } completion: {
             completion?()
@@ -3677,6 +3719,31 @@ struct MapScreen: View {
         }
     }
 
+    private func refreshMapCardViewerLocation() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-WanderMapCardLocationFixture") {
+            mapCardViewerLocation = CLLocation(
+                latitude: Self.defaultRegion.center.latitude,
+                longitude: Self.defaultRegion.center.longitude
+            )
+            return
+        }
+        #endif
+        let status = locationPermission.authorizationStatus
+        guard status == .authorizedWhenInUse || status == .authorizedAlways else {
+            mapCardViewerLocation = nil
+            return
+        }
+        guard let coordinate = await currentUserCoordinate() else {
+            mapCardViewerLocation = nil
+            return
+        }
+        mapCardViewerLocation = CLLocation(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude
+        )
+    }
+
     private func searchOriginLocation() async -> CLLocation {
         if let coordinate = await currentUserCoordinate() {
             return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
@@ -4721,6 +4788,7 @@ enum MapSocialOwnerSelection {
 
 private enum MapControlLayout {
     static let searchDockClearance: CGFloat = 64
+    static let selectedPlaceCardSearchGap: CGFloat = 12
     static let selectedPlaceRecenterClearance: CGFloat = 218
     static let compactCardNearbyLift = selectedPlaceRecenterClearance - searchDockClearance
     static let fallbackViewportHeight: CGFloat = 844

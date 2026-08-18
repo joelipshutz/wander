@@ -6294,6 +6294,29 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(serializedProperties.contains("-118.24"))
     }
 
+    func testPlaceShareTracksCompletionAndOnlyCountsSuccessfulRecommendations() {
+        let analytics = RecordingAnalyticsClient()
+        let store = WanderStore(fixtures: WanderFixtures.seed(), analytics: analytics)
+
+        store.trackPlaceShareCompletion(completed: false)
+        store.trackPlaceShareCompletion(completed: true)
+
+        let rawEvents = analytics.events.filter {
+            $0.name == WanderAnalyticsEvents.placeShareCompleted
+        }
+        XCTAssertEqual(rawEvents.map { $0.properties["outcome"] }, ["cancelled", "shared"])
+        XCTAssertTrue(rawEvents.allSatisfy { $0.properties["surface"] == "map_place_card" })
+
+        let engagementEvents = analytics.events.filter {
+            $0.name == WanderAnalyticsEvents.engagementActionPerformed
+        }
+        XCTAssertEqual(engagementEvents.count, 1)
+        XCTAssertEqual(engagementEvents.first?.properties["need"], "expression")
+        XCTAssertEqual(engagementEvents.first?.properties["action"], "recommendation_shared")
+        XCTAssertEqual(engagementEvents.first?.properties["surface"], "map_place_card")
+        XCTAssertEqual(engagementEvents.first?.properties["outcome"], "shared")
+    }
+
     func testDiscoverFreeTextSearchMatchesTrustedPlaceMemory() async {
         let store = makeStore()
 

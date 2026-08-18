@@ -1473,7 +1473,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(lowValue?.contains("1.5 out of 5") == true)
     }
 
-    func testMapPlaceProfileEdgeSwipeCollapsesToSelectedCompactCard() {
+    func testMapPlaceProfileBackButtonCollapsesToSelectedCompactCard() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
@@ -1483,51 +1483,29 @@ final class OnboardingUITests: XCTestCase {
         ]
         app.launch()
 
-        let compactCard = app.buttons["Open Woodcat Coffee"]
-        XCTAssertTrue(compactCard.waitForExistence(timeout: 5))
+        let compactCard = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(compactCard.waitForExistence(timeout: 8))
+        XCTAssertTrue(compactCard.label.contains("Woodcat Coffee"))
         compactCard.tap()
 
         let ratings = app.staticTexts["Ratings"]
         XCTAssertTrue(ratings.waitForExistence(timeout: 5))
         let backButton = app.buttons["Back"]
         XCTAssertTrue(backButton.waitForExistence(timeout: 3))
-        let initialBackMinX = backButton.frame.minX
-
         let expandedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         expandedScreenshot.name = "Place profile expanded after compact card tap"
         expandedScreenshot.lifetime = .keepAlways
         add(expandedScreenshot)
 
-        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        let shortSwipe = app.coordinate(withNormalizedOffset: CGVector(dx: 0.10, dy: 0.5))
-        leftEdge.press(
-            forDuration: 0.1,
-            thenDragTo: shortSwipe,
-            withVelocity: .slow,
-            thenHoldForDuration: 0.2
-        )
-
-        XCTAssertTrue(ratings.waitForExistence(timeout: 2))
-        XCTAssertTrue(backButton.isHittable)
-        let restoredPosition = XCTNSPredicateExpectation(
-            predicate: NSPredicate { object, _ in
-                guard let element = object as? XCUIElement else { return false }
-                return abs(element.frame.minX - initialBackMinX) <= 2
-            },
-            object: backButton
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [restoredPosition], timeout: 2), .completed)
-
-        let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: 0.5))
-        leftEdge.press(forDuration: 0.05, thenDragTo: rightSide)
-
+        backButton.tap()
         XCTAssertTrue(ratings.waitForNonExistence(timeout: 3))
-        let restoredCompactCard = app.buttons["Open Woodcat Coffee"]
+        let restoredCompactCard = app.buttons["map.selectedPlaceCard"]
         XCTAssertTrue(restoredCompactCard.waitForExistence(timeout: 3))
+        XCTAssertTrue(restoredCompactCard.label.contains("Woodcat Coffee"))
         XCTAssertTrue(app.buttons["map.headerAdd"].isHittable)
 
         let collapsedScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        collapsedScreenshot.name = "Place profile collapsed after edge swipe"
+        collapsedScreenshot.name = "Place profile collapsed after back button"
         collapsedScreenshot.lifetime = .keepAlways
         add(collapsedScreenshot)
     }
