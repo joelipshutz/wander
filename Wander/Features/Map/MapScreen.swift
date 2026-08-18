@@ -67,6 +67,31 @@ enum MapSearchPerformancePolicy {
     }
 }
 
+struct MapSearchSelectionSession: Equatable {
+    private(set) var isActive = false
+    private var selectedPlaceGroupKeyAtEntry: String?
+
+    mutating func begin(selectedPlaceGroupKey: String?) {
+        guard !isActive else { return }
+        isActive = true
+        selectedPlaceGroupKeyAtEntry = selectedPlaceGroupKey
+    }
+
+    mutating func cancel(currentSelectedPlaceGroupKey: String?) -> String? {
+        defer { reset() }
+        return isActive ? selectedPlaceGroupKeyAtEntry : currentSelectedPlaceGroupKey
+    }
+
+    mutating func finish() {
+        reset()
+    }
+
+    private mutating func reset() {
+        isActive = false
+        selectedPlaceGroupKeyAtEntry = nil
+    }
+}
+
 private final class MapPressLocationTracker {
     var location: CGPoint?
 }
@@ -336,6 +361,7 @@ struct MapScreen: View {
     @State private var isRequestingLocationPermission = false
     @State private var shouldRecenterAfterLocationSettings = false
     @State private var suppressNextQueryAutoSelection = false
+    @State private var mapSearchSelectionSession = MapSearchSelectionSession()
     @State private var didResolveInitialCamera = false
     @State private var didResolveInitialSearch = false
     @State private var handlingNotificationRequestID: UUID?
@@ -949,7 +975,12 @@ struct MapScreen: View {
             }
             .onChange(of: isMapSearchFocused) { _, isFocused in
                 if isFocused {
+                    mapSearchSelectionSession.begin(
+                        selectedPlaceGroupKey: selectedPlaceGroupKey
+                    )
                     dismissMoreFilters()
+                } else {
+                    mapSearchSelectionSession.finish()
                 }
             }
             .task {
@@ -2553,12 +2584,24 @@ struct MapScreen: View {
     }
 
     private func cancelMapSearch() {
+        let restoredPlaceGroupKey = mapSearchSelectionSession.cancel(
+            currentSelectedPlaceGroupKey: selectedPlaceGroupKey
+        )
         typeaheadTask?.cancel()
         typeaheadSuggestions = []
         isLoadingTypeahead = false
         mapSearchMessage = nil
+        if !mapQuery.isEmpty {
+            suppressNextQueryAutoSelection = true
+            mapQuery = ""
+        } else {
+            suppressNextQueryAutoSelection = false
+        }
+        mapSearchCandidates = []
+        selectedSearchCandidateID = nil
+        selectedPlaceGroupKey = restoredPlaceGroupKey
+        isPlaceProfilePresented = false
         isMapSearchFocused = false
-        mapQuery = ""
         dismissKeyboard()
     }
 
