@@ -79,6 +79,41 @@ enum FirstVisitWalkthroughEligibilityPolicy {
     }
 }
 
+struct FirstVisitWalkthroughDebugReplayResolution: Equatable {
+    let isEntitledReplayRequested: Bool
+    let shouldPreserveLocalJourney: Bool
+    let isAwaitingEntitlementResolution: Bool
+    let canRepairCompletedLocalJourney: Bool
+}
+
+enum FirstVisitWalkthroughDebugReplayPolicy {
+    static func resolve(
+        hasLocalReplayRequest: Bool,
+        isDebugSettingsEntitled: Bool,
+        isFeatureFlagResolutionPending: Bool
+    ) -> FirstVisitWalkthroughDebugReplayResolution {
+        let isAwaitingEntitlementResolution = hasLocalReplayRequest
+            && !isDebugSettingsEntitled
+            && isFeatureFlagResolutionPending
+        return FirstVisitWalkthroughDebugReplayResolution(
+            isEntitledReplayRequested: hasLocalReplayRequest
+                && isDebugSettingsEntitled,
+            shouldPreserveLocalJourney: hasLocalReplayRequest
+                && (isDebugSettingsEntitled || isFeatureFlagResolutionPending),
+            isAwaitingEntitlementResolution: isAwaitingEntitlementResolution,
+            canRepairCompletedLocalJourney: hasLocalReplayRequest
+                && isDebugSettingsEntitled
+        )
+    }
+
+    static func shouldRepairCompletedLocalJourney(
+        _ resolution: FirstVisitWalkthroughDebugReplayResolution,
+        hasCompletedPrimaryJourney: Bool
+    ) -> Bool {
+        resolution.canRepairCompletedLocalJourney && hasCompletedPrimaryJourney
+    }
+}
+
 /// Keeps a first-visit enrollment bound to the account that produced it.
 /// `WanderRootView` can remain mounted while authentication changes, so a
 /// bare eligibility Boolean is not sufficient to prevent cross-account NUX.
