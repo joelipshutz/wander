@@ -1,0 +1,20 @@
+{
+  "issue": "REC-289",
+  "capture_source": "supplied physical-device screen recording plus the current featured viewport refresh path",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "screenshot_capture": "not copied into the repository; the supplied recording remains outside the worktree",
+  "precondition": {
+    "selected_place_id": "selected-place-a",
+    "visible_place_ids": ["selected-place-a", "selected-place-b"]
+  },
+  "action": "select selected-place-b, then recenter far enough to trigger a featured viewport refresh",
+  "buggy_refresh_result": {
+    "featured_place_ids": ["regional-place-c", "regional-place-d"],
+    "selected_place_id": null
+  },
+  "expected_refresh_result": {
+    "selected_place_id": "selected-place-b",
+    "selected_pin_is_annotated": true,
+    "selected_pin_is_centered_in_unobscured_viewport": true
+  }
+}

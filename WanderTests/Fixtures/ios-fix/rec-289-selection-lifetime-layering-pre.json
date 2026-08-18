@@ -1,0 +1,29 @@
+{
+  "issue": "REC-289",
+  "capture_source": "supplied physical-device report plus inspection of the current MapKit selection binding and simultaneous gesture path",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "media_capture": "not copied into the repository; user-supplied media remains outside the worktree",
+  "precondition": {
+    "selected_place_id": "selected-place-a",
+    "compact_card_phase": "presented",
+    "selected_pin_scale": 1.45
+  },
+  "actions": [
+    "perform MapKit's one-finger double-tap-and-drag zoom gesture",
+    "leave the selected place open for at least 30 seconds while viewport work completes",
+    "allow inactive annotations to overlap the active annotation and title"
+  ],
+  "buggy_results": {
+    "one_finger_zoom_dismisses_selection": true,
+    "native_feature_binding_clear_dismisses_selection": true,
+    "active_title_can_be_covered_by_inactive_annotations": true
+  },
+  "expected_results": {
+    "one_finger_zoom_preserves_selection": true,
+    "selection_lifetime": "unbounded_until_explicit_dismissal",
+    "native_feature_binding_clear_preserves_selection": true,
+    "empty_map_tap_dismisses_selection": true,
+    "true_one_finger_pan_dismisses_selection": true,
+    "active_pin_and_title_render_after_all_inactive_annotations": true
+  }
+}
