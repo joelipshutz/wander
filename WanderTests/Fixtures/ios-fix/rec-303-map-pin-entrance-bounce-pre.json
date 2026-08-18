@@ -1,0 +1,23 @@
+{
+  "issue": "REC-303",
+  "capture_source": "origin/main 3db2d1965eceef0265ab3ffe3007cb83dbc1f74b on iPhone 17 / iOS 26.5 simulator with deterministic Map fixtures",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration; the fixture records the exact launch state and source contract instead",
+  "launch_arguments": [
+    "-WanderMapCapture",
+    "-WanderUseDemoFixtures",
+    "-WanderDisableWalkthroughs"
+  ],
+  "snapshot": {
+    "isVisible": true,
+    "presentationInitiallyVisible": false,
+    "reduceMotion": false
+  },
+  "screenshot": "rec-303-map-pin-entrance-bounce-pre.png",
+  "screenshot_sha256": "8a48b1b139be9c776798722f797e09114fa9f77d0126193290d3de8d9a990b5f",
+  "corrected_screenshot": "rec-303-map-pin-entrance-bounce-post.png",
+  "corrected_screenshot_sha256": "435ba90c730aeac7c85f02370de89f0e198daad7f6f35e38864386d26c6c4f24",
+  "reported_problem": "new Map annotations mount with isVisible already true, so MapPinEntranceModifier renders them at their final scale and offset and its value-driven animation never receives a false-to-true transition",
+  "expected_behavior": "newly mounted saved and search pins start at the hidden scale and vertical offset, then spring to their presented state with stagger when Reduce Motion is off; Reduce Motion presents them immediately",
+  "performance_contract": "entrance state is local to each mounted pin, changes only on mount or isVisible/reduceMotion changes, and never publishes camera-frame state or rebuilds the annotation collection per frame",
+  "selected_pin_contract": "the independent selected-pin reselection bounce remains unchanged"
+}
