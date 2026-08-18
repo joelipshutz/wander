@@ -79,6 +79,69 @@ final class MapHitTestingTests: XCTestCase {
         XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .you))
     }
 
+    func testCancelingMapSearchRestoresTheSelectionCapturedAtSearchEntry() {
+        var session = MapSearchSelectionSession()
+
+        session.begin(selectedPlaceGroupKey: "sushi-fumi")
+        session.begin(selectedPlaceGroupKey: "boulevard")
+        let restoredSelection = session.cancel(
+            currentSelectedPlaceGroupKey: "boulevard"
+        )
+
+        XCTAssertEqual(restoredSelection, "sushi-fumi")
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testCancelingMapSearchKeepsSelectionEmptyWhenSearchStartedEmpty() {
+        var session = MapSearchSelectionSession()
+
+        session.begin(selectedPlaceGroupKey: nil)
+        let restoredSelection = session.cancel(
+            currentSelectedPlaceGroupKey: "boulevard"
+        )
+
+        XCTAssertNil(restoredSelection)
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testCompletingMapSearchKeepsAnExplicitlySelectedResult() {
+        var session = MapSearchSelectionSession()
+
+        session.begin(selectedPlaceGroupKey: "sushi-fumi")
+        session.finish()
+        let selectedResult = session.cancel(
+            currentSelectedPlaceGroupKey: "rvr"
+        )
+
+        XCTAssertEqual(selectedResult, "rvr")
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testMapSearchCancelWiresRestorationBeforeDismissingFocus() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let cancelStart = try XCTUnwrap(map.range(of: "private func cancelMapSearch()"))
+        let cancelEnd = try XCTUnwrap(
+            map.range(
+                of: "@MainActor\n    private func handlePresentationResetRequest",
+                range: cancelStart.upperBound..<map.endIndex
+            )
+        )
+        let cancellation = map[cancelStart.lowerBound..<cancelEnd.lowerBound]
+
+        XCTAssertTrue(cancellation.contains("mapSearchSelectionSession.cancel("))
+        XCTAssertTrue(cancellation.contains("suppressNextQueryAutoSelection = true"))
+        XCTAssertTrue(cancellation.contains("selectedPlaceGroupKey = restoredPlaceGroupKey"))
+        XCTAssertLessThan(
+            try XCTUnwrap(cancellation.range(of: "selectedPlaceGroupKey = restoredPlaceGroupKey")).lowerBound,
+            try XCTUnwrap(cancellation.range(of: "isMapSearchFocused = false")).lowerBound
+        )
+    }
+
     func testMapSearchPipelineReusesImmediateProjectionWorkWithoutFreshLocationLookup() throws {
         let projectRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
