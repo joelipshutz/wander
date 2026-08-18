@@ -668,6 +668,21 @@ struct VisiblePlaceGroup: Identifiable {
 }
 
 enum VisiblePlaceGrouping {
+    private static let streetSuffixAliases = [
+        "avenue": "ave",
+        "boulevard": "blvd",
+        "circle": "cir",
+        "court": "ct",
+        "drive": "dr",
+        "highway": "hwy",
+        "lane": "ln",
+        "parkway": "pkwy",
+        "place": "pl",
+        "road": "rd",
+        "street": "st",
+        "terrace": "ter"
+    ]
+
     static func groups(
         from places: [VisiblePlace],
         currentUserID: String
@@ -857,7 +872,7 @@ enum VisiblePlaceGrouping {
 
         let name = normalizedText(place.canonicalName)
         if !name.isEmpty {
-            let address = normalizedText(place.address)
+            let address = normalizedAddressText(place.address)
             if !address.isEmpty {
                 append("address:\([name, address, normalizedText(place.locality), normalizedText(place.region), normalizedText(place.country)].joined(separator: "|"))")
             }
@@ -891,13 +906,22 @@ enum VisiblePlaceGrouping {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static func normalizedAddressText(_ value: String?) -> String {
+        normalizedText(value)
+            .split(separator: " ")
+            .map { token in
+                streetSuffixAliases[String(token)] ?? String(token)
+            }
+            .joined(separator: " ")
+    }
+
     private static func addressKey(
         address: String?,
         locality: String?,
         region: String?,
         country: String?
     ) -> String {
-        let normalizedAddress = normalizedText(address)
+        let normalizedAddress = normalizedAddressText(address)
         guard !normalizedAddress.isEmpty else { return "" }
         return [
             normalizedAddress,

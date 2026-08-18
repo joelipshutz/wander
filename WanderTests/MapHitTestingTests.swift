@@ -369,6 +369,34 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
     }
 
+    func testWalkthroughUsesTheCanonicalHotchkissFallback() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let add = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+
+        XCTAssertTrue(
+            add.contains("candidate = suggested ?? FirstVisitParkSuggestionPolicy.hotchkissPark")
+        )
+        XCTAssertFalse(add.contains("private static let hotchkissParkCandidate"))
+    }
+
+    func testActiveMapAnnotationsDoNotRenderDuplicateNativeTitles() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let emptyTitleAnnotations = map.components(
+            separatedBy: "Annotation(\n                                \"\","
+        ).count - 1
+
+        XCTAssertEqual(emptyTitleAnnotations, 2)
+    }
+
     func testProviderPhotoTransportReusesSessionAndProtocolCaching() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -1670,6 +1698,75 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         XCTAssertEqual(groups.count, 1)
         XCTAssertTrue(VisiblePlaceGrouping.matches(myWant, ryanBeen))
         XCTAssertEqual(groups[0].primary.owner.id, currentUser.id)
+    }
+
+    func testGroupsLegacyAndCanonicalHotchkissAddressesIntoOnePin() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let legacySave = visiblePlace(
+            owner: currentUser,
+            name: "Hotchkiss Park",
+            category: "park",
+            address: "2302 4th Street",
+            latitude: 34.0046,
+            longitude: -118.4845,
+            providerID: "hotchkiss-park-ocean-park",
+            status: .been
+        )
+        let canonicalSave = visiblePlace(
+            owner: ryan,
+            name: "Hotchkiss Park",
+            category: "park",
+            address: "2302 4th St",
+            latitude: 34.00585,
+            longitude: -118.4842,
+            sourceProvider: "walkthrough",
+            providerID: "hotchkiss-park-santa-monica",
+            status: .wannaGo
+        )
+
+        let groups = VisiblePlaceGrouping.groups(
+            from: [legacySave, canonicalSave],
+            currentUserID: currentUser.id
+        )
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertTrue(VisiblePlaceGrouping.matches(legacySave, canonicalSave))
+        XCTAssertEqual(groups[0].saveCount, 2)
+    }
+
+    func testDoesNotGroupSameNamedPlacesAtDifferentStreetNumbers() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let firstPlace = visiblePlace(
+            owner: currentUser,
+            name: "Corner Market",
+            category: "shop",
+            address: "2302 4th St",
+            latitude: 34.0046,
+            longitude: -118.4845,
+            providerID: "corner-market-first",
+            status: .been
+        )
+        let secondPlace = visiblePlace(
+            owner: ryan,
+            name: "Corner Market",
+            category: "shop",
+            address: "2303 4th Street",
+            latitude: 34.0146,
+            longitude: -118.4945,
+            providerID: "corner-market-second",
+            status: .wannaGo
+        )
+
+        XCTAssertFalse(VisiblePlaceGrouping.matches(firstPlace, secondPlace))
+        XCTAssertEqual(
+            VisiblePlaceGrouping.groups(
+                from: [firstPlace, secondPlace],
+                currentUserID: currentUser.id
+            ).count,
+            2
+        )
     }
 
     private func profile(id: String, handle: String, displayName: String) -> LocalProfile {

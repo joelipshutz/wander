@@ -1747,7 +1747,7 @@ struct MapScreen: View {
 
         routedVisiblePlace = initialPlace
         selectVisiblePlace(initialPlace)
-        center(on: initialPlace)
+        centerCompactSelection(on: initialPlace)
         didResolveInitialCamera = true
     }
 
