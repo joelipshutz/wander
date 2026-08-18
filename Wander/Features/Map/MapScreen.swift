@@ -71,6 +71,14 @@ private final class MapPressLocationTracker {
     var location: CGPoint?
 }
 
+private final class MapCameraRegionTracker {
+    var region: MKCoordinateRegion
+
+    init(region: MKCoordinateRegion) {
+        self.region = region
+    }
+}
+
 private struct MapRenderProjectionKey: Equatable {
     let storeRevision: UInt64
     let featuredPlacesRevision: UInt64
@@ -309,7 +317,7 @@ struct MapScreen: View {
     @State private var isMoreFiltersPresented: Bool
     @State private var mapTabBecameInactiveAt: Date?
     @State private var routedVisiblePlace: VisiblePlace?
-    @State private var currentSearchRegion = Self.defaultRegion
+    @State private var cameraRegionTracker = MapCameraRegionTracker(region: Self.defaultRegion)
     @State private var featuredRankingRegion = Self.defaultRegion
     @State private var featuredViewportPlaces: [VisiblePlace]?
     @State private var featuredPlacesRevision: UInt64 = 0
@@ -326,7 +334,6 @@ struct MapScreen: View {
     @State private var nearbyLift: CGFloat = 0
     @State private var nearbyOpacity: Double = 1
     @State private var compactCardMotionTask: Task<Void, Never>?
-    @State private var compactCardReplacementTask: Task<Void, Never>?
     @State private var droppedPinGeocodingTask: Task<Void, Never>?
     @State private var position: MapCameraPosition = .region(Self.defaultRegion)
     @State private var measuredMapViewportHeight = MapControlLayout.fallbackViewportHeight
@@ -355,6 +362,10 @@ struct MapScreen: View {
     )
     private static let recenterCameraDistance: CLLocationDistance = 1_500
     private static let currentLocationTint = Color(uiColor: .systemBlue)
+
+    private var currentSearchRegion: MKCoordinateRegion {
+        cameraRegionTracker.region
+    }
 
     private let initialPlaceQuery: String?
     private let defaultMapSource: MapSource
@@ -591,6 +602,10 @@ struct MapScreen: View {
         let inactiveSearchCandidates = indexedSearchCandidates.filter { _, candidate in
             !highlightsCompactSelection || candidate.id != selectedSearchCandidateID
         }
+        let activeAnnotationGroup = highlightsCompactSelection
+            ? annotationGroups.first(where: { $0.key == selectedPlaceGroupKey })
+            : nil
+        let activeSearchCandidate = highlightsCompactSelection ? selectedSearchCandidate : nil
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
             set: { selection in
@@ -667,6 +682,63 @@ struct MapScreen: View {
                             }
                         }
 
+                        if highlightsCompactSelection, let group = activeAnnotationGroup {
+                            Annotation(
+                                "",
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: group.primary.place.latitude,
+                                    longitude: group.primary.place.longitude
+                                )
+                            ) {
+                                Button {
+                                    replayActivePinBounce()
+                                } label: {
+                                    ActiveMapAnnotationContent(title: group.primary.place.canonicalName) {
+                                        MapPlaceMarker(
+                                            visiblePlace: group.primary,
+                                            saves: saveSummaries(for: group),
+                                            currentUserID: store.currentUser.id,
+                                            isSelected: true
+                                        )
+                                        .modifier(
+                                            MapPinReselectionBounceModifier(
+                                                trigger: activePinBounceRevision
+                                            )
+                                        )
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .frame(minWidth: 44, minHeight: 44)
+                            }
+                        }
+
+                        if highlightsCompactSelection, let candidate = activeSearchCandidate,
+                           let latitude = candidate.latitude,
+                           let longitude = candidate.longitude {
+                            Annotation(
+                                "",
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: latitude,
+                                    longitude: longitude
+                                )
+                            ) {
+                                Button {
+                                    replayActivePinBounce()
+                                } label: {
+                                    ActiveMapAnnotationContent(title: candidate.name) {
+                                        SearchResultMarker(candidate: candidate, isSelected: true)
+                                            .modifier(
+                                                MapPinReselectionBounceModifier(
+                                                    trigger: activePinBounceRevision
+                                                )
+                                            )
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .frame(minWidth: 44, minHeight: 44)
+                            }
+                        }
+
                     }
                     .mapStyle(.standard(elevation: .flat, emphasis: .muted))
                     .mapFeatureSelectionDisabled { feature in
@@ -676,9 +748,6 @@ struct MapScreen: View {
                     .modifier(HideNativeMapFeatureAccessory())
                     .tint(Self.currentLocationTint)
                     .ignoresSafeArea()
-                    .overlay {
-                        activeMapAnnotationOverlay(proxy: proxy)
-                    }
                     .background {
                         GeometryReader { geometry in
                             Color.clear.preference(
@@ -1044,7 +1113,6 @@ struct MapScreen: View {
                 mapInteractionClassificationTask?.cancel()
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
-                compactCardReplacementTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
@@ -1265,7 +1333,7 @@ struct MapScreen: View {
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
         )
         position = .region(region)
-        currentSearchRegion = region
+        cameraRegionTracker.region = region
     }
 
     private func selectMapSource(
@@ -1385,7 +1453,6 @@ struct MapScreen: View {
 
     private func clearMapSelection() {
         compactCardMotionTask?.cancel()
-        compactCardReplacementTask?.cancel()
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
         selectedMapFeature = nil
@@ -1469,65 +1536,6 @@ struct MapScreen: View {
         activePinBounceRevision &+= 1
     }
 
-    @ViewBuilder
-    private func activeMapAnnotationOverlay(proxy: MapProxy) -> some View {
-        GeometryReader { _ in
-            if highlightsCompactSelection,
-               let group = (transitioningAnnotationGroups ?? orderedVisiblePlaceGroups())
-                .first(where: { $0.key == selectedPlaceGroupKey }) {
-                let coordinate = CLLocationCoordinate2D(
-                    latitude: group.primary.place.latitude,
-                    longitude: group.primary.place.longitude
-                )
-                if let point = proxy.convert(coordinate, to: .local) {
-                    Button {
-                        replayActivePinBounce()
-                    } label: {
-                        ActiveMapAnnotationContent(title: group.primary.place.canonicalName) {
-                            MapPlaceMarker(
-                                visiblePlace: group.primary,
-                                saves: saveSummaries(for: group),
-                                currentUserID: store.currentUser.id,
-                                isSelected: true
-                            )
-                            .modifier(
-                                MapPinReselectionBounceModifier(
-                                    trigger: activePinBounceRevision
-                                )
-                            )
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .position(point)
-                }
-            } else if highlightsCompactSelection,
-                      let candidate = selectedSearchCandidate,
-                      let latitude = candidate.latitude,
-                      let longitude = candidate.longitude {
-                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-                if let point = proxy.convert(coordinate, to: .local) {
-                    Button {
-                        replayActivePinBounce()
-                    } label: {
-                        ActiveMapAnnotationContent(title: candidate.name) {
-                            SearchResultMarker(candidate: candidate, isSelected: true)
-                                .modifier(
-                                    MapPinReselectionBounceModifier(
-                                        trigger: activePinBounceRevision
-                                    )
-                                )
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .position(point)
-                }
-            }
-        }
-        .zIndex(MapAnnotationLayering.activeOverlayZIndex)
-    }
-
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
         dismissMoreFilters()
         cancelPendingMapTapDismissal()
@@ -1584,7 +1592,7 @@ struct MapScreen: View {
 
     private func handleMapCameraChange(_ region: MKCoordinateRegion) {
         let previousRegion = currentSearchRegion
-        currentSearchRegion = region
+        cameraRegionTracker.region = region
 
         let comparisonRegion = mapInteractionStartRegion ?? previousRegion
         if MapSelectionGesturePolicy.classify(
@@ -1834,7 +1842,7 @@ struct MapScreen: View {
             )
         )
         position = .region(region)
-        currentSearchRegion = region
+        cameraRegionTracker.region = region
     }
 
     private func savers(for selectedPlace: VisiblePlace) -> [LocalProfile] {
@@ -1951,7 +1959,7 @@ struct MapScreen: View {
     }
 
     private func handleCompactSelectionIdentityChange(
-        from _: String?,
+        from previous: String?,
         to current: String?
     ) {
         guard let current else {
@@ -1962,21 +1970,23 @@ struct MapScreen: View {
         }
 
         guard current != compactCardReadyIdentity else { return }
-        prepareCompactCardForPhoto()
-    }
-
-    private func prepareCompactCardForPhoto() {
         compactCardMotionTask?.cancel()
-        compactCardReadyIdentity = nil
+        compactCardReadyIdentity = current
 
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            compactCardPhase = .hidden
-            compactCardVerticalOffset = MapCompactCardMotionStyle.hiddenVerticalOffset
-            compactCardContentOpacity = 1
-            nearbyLift = 0
-            nearbyOpacity = 1
+        let keepsPresentedCardMounted = previous != nil
+            && (compactCardPhase == .entering || compactCardPhase == .presented)
+        if keepsPresentedCardMounted {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                compactCardPhase = .presented
+                compactCardVerticalOffset = 0
+                compactCardContentOpacity = 1
+                nearbyLift = 0
+                nearbyOpacity = 0
+            }
+        } else {
+            presentCompactCard()
         }
     }
 
@@ -2041,45 +2051,10 @@ struct MapScreen: View {
     private func replaceCompactSelectionIfNeeded(
         _ updateSelection: @escaping @MainActor () -> Void
     ) {
-        compactCardReplacementTask?.cancel()
-
         if compactCardPhase == .dismissing {
             resetCompactCardPresentation()
-            updateSelection()
-            prepareCompactCardForPhoto()
-            return
         }
-
-        guard hasSelectedProfile,
-              compactCardPhase != .hidden,
-              !reduceMotion
-        else {
-            updateSelection()
-            prepareCompactCardForPhoto()
-            return
-        }
-
-        let revision = mapSelectionRevision
-        withAnimation(MapCompactCardMotionStyle.replacementFadeOutAnimation) {
-            compactCardContentOpacity = 0
-        }
-
-        compactCardReplacementTask = Task { @MainActor in
-            do {
-                try await Task.sleep(
-                    for: .seconds(MapCompactCardMotionStyle.replacementFadeOutDuration)
-                )
-            } catch {
-                return
-            }
-            guard !Task.isCancelled,
-                  revision == mapSelectionRevision
-            else { return }
-
-            updateSelection()
-            prepareCompactCardForPhoto()
-            compactCardReplacementTask = nil
-        }
+        updateSelection()
     }
 
     private func requestCompactSelectionDismissal(
@@ -2099,7 +2074,6 @@ struct MapScreen: View {
         mapSelectionRevision += 1
         let revision = mapSelectionRevision
         compactCardMotionTask?.cancel()
-        compactCardReplacementTask?.cancel()
         mapFeatureResolutionTask?.cancel()
         mapFeatureResolutionTask = nil
         droppedPinGeocodingTask?.cancel()
@@ -2205,7 +2179,7 @@ struct MapScreen: View {
             viewportHeight: measuredMapViewportHeight,
             obscuredBottomHeight: selectedPlaceRecenterClearance
         )
-        currentSearchRegion = region
+        cameraRegionTracker.region = region
         withAnimation(
             reduceMotion
                 ? MapCompactCardMotionStyle.reducedMotionAnimation
@@ -3771,7 +3745,7 @@ struct MapScreen: View {
                                 pitch: 0
                             )
                         )
-                        currentSearchRegion = MKCoordinateRegion(
+                        cameraRegionTracker.region = MKCoordinateRegion(
                             center: center,
                             latitudinalMeters: Self.recenterCameraDistance * 2,
                             longitudinalMeters: Self.recenterCameraDistance * 2
@@ -4102,9 +4076,8 @@ enum MapCompactCardPhase: Equatable {
 
 @MainActor
 enum MapCompactCardMotionStyle {
-    static let entranceDuration: TimeInterval = 0.24
+    static let entranceDuration: TimeInterval = 0.18
     static let dismissalDuration: TimeInterval = 0.18
-    static let replacementFadeOutDuration: TimeInterval = 0.08
     static let nearbyFadeDuration: TimeInterval = 0.16
     static let nearbyReturnFadeDuration: TimeInterval = 0.16
     static let hiddenVerticalOffset: CGFloat = 220
@@ -4114,13 +4087,9 @@ enum MapCompactCardMotionStyle {
         bounce: 0.05
     )
     static let dismissalAnimation = Animation.easeInOut(duration: dismissalDuration)
-    static let replacementFadeOutAnimation = Animation.easeOut(
-        duration: replacementFadeOutDuration
-    )
-    static let replacementFadeInAnimation = Animation.easeIn(duration: 0.10)
     static let nearbyFadeAnimation = Animation.easeOut(duration: nearbyFadeDuration)
     static let nearbyReturnFadeAnimation = Animation.easeIn(duration: nearbyReturnFadeDuration)
-    static let mapRecenterAnimation = Animation.easeInOut(duration: entranceDuration)
+    static let mapRecenterAnimation = Animation.easeOut(duration: 0.16)
     static let reducedMotionAnimation = Animation.easeOut(duration: 0.12)
 }
 
@@ -5954,10 +5923,6 @@ enum MapSelectionLifetimePolicy {
     }
 }
 
-enum MapAnnotationLayering {
-    static let activeOverlayZIndex = 100.0
-}
-
 private struct MapPinReselectionBounceModifier: ViewModifier {
     let trigger: UInt64
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -5988,7 +5953,7 @@ private struct MapPinReselectionBounceModifier: ViewModifier {
 enum MapPinSelectionMotionStyle {
     static let inactiveScale: CGFloat = 0.90
     static let selectedScale: CGFloat = 1.45
-    static let duration: TimeInterval = 0.26
+    static let duration: TimeInterval = 0.18
     static let bounce = 0.32
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
