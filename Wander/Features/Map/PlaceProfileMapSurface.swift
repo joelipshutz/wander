@@ -491,13 +491,40 @@ private struct PlaceProfilePreviewCard: View {
 
     @ViewBuilder
     private var actionButtonCluster: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) {
+        ZStack {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 0) {
+                    actionButtons
+                }
+            } else {
                 actionButtons
             }
-        } else {
-            actionButtons
+
+            actionButtonGlyphs
+                .allowsHitTesting(false)
+                .zIndex(3)
         }
+    }
+
+    private var actionButtonGlyphs: some View {
+        VStack(spacing: 4) {
+            if action != .none {
+                actionButtonGlyph(systemName: action.systemImage, size: 17)
+            }
+
+            if shareContent != nil {
+                actionButtonGlyph(systemName: "square.and.arrow.up", size: 16)
+            }
+        }
+    }
+
+    private func actionButtonGlyph(systemName: String, size: CGFloat) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: size, weight: .black))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(Color.white)
+            .opacity(1)
+            .frame(width: 44, height: 44, alignment: .center)
     }
 
     private var actionButtons: some View {
@@ -803,6 +830,7 @@ private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
                 )
 
             configuration.label
+                .opacity(0.001)
                 .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44, alignment: .center)

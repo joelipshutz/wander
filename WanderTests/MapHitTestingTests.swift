@@ -199,7 +199,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(expected["selection_lifetime"] as? String, "unbounded_until_explicit_dismissal")
         XCTAssertEqual(expected["native_feature_binding_clear_preserves_selection"] as? Bool, true)
         XCTAssertEqual(expected["active_pin_and_title_render_after_all_inactive_annotations"] as? Bool, true)
-        XCTAssertGreaterThan(MapAnnotationLayering.activeZIndex, 0)
+        XCTAssertGreaterThan(MapAnnotationLayering.activeOverlayZIndex, 0)
     }
 
     func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
@@ -227,7 +227,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeZIndex)"))
+        XCTAssertTrue(map.contains("activeMapAnnotationOverlay(proxy: proxy)"))
+        XCTAssertTrue(map.contains("private func activeMapAnnotationOverlay(proxy: MapProxy)"))
+        XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
+        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
+        XCTAssertFalse(map.contains(".zIndex(MapAnnotationLayering.activeZIndex)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))

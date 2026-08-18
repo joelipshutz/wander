@@ -21,6 +21,11 @@
       "expected": "Every compact-card add and share button renders a centered white SF Symbol at rest and throughout the press animation."
     },
     {
+      "behavior": "The selected map pin and its title remain underneath nearby annotations on the first tap and can fall behind again after reselection.",
+      "source_evidence": "The active annotation applies zIndex only to content hosted inside MapKit, which does not reliably reorder sibling annotation views.",
+      "expected": "The selected pin and title render in a SwiftUI overlay above the Map on the first tap, remain frontmost, and replay their bounce without changing layers when tapped again."
+    },
+    {
       "behavior": "Tapping the already-selected map pin minimizes or replaces its compact card.",
       "source_evidence": "Both active and inactive annotations call the same selection replacement functions.",
       "expected": "An active pin tap preserves the selection and compact card and replays only the pin bounce."

@@ -490,14 +490,8 @@ struct MapScreen: View {
         let inactiveAnnotationGroups = indexedAnnotationGroups.filter { _, group in
             !highlightsCompactSelection || group.key != selectedPlaceGroupKey
         }
-        let activeAnnotationGroup = indexedAnnotationGroups.first { _, group in
-            highlightsCompactSelection && group.key == selectedPlaceGroupKey
-        }
         let inactiveSearchCandidates = indexedSearchCandidates.filter { _, candidate in
             !highlightsCompactSelection || candidate.id != selectedSearchCandidateID
-        }
-        let activeSearchCandidate = indexedSearchCandidates.first { _, candidate in
-            highlightsCompactSelection && candidate.id == selectedSearchCandidateID
         }
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
@@ -575,84 +569,6 @@ struct MapScreen: View {
                             }
                         }
 
-                        if let (index, group) = activeAnnotationGroup {
-                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
-                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                            Annotation(
-                                "",
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: group.primary.place.latitude,
-                                    longitude: group.primary.place.longitude
-                                )
-                            ) {
-                                Button {
-                                    replayActivePinBounce()
-                                } label: {
-                                    ActiveMapAnnotationContent(
-                                        title: group.primary.place.canonicalName
-                                    ) {
-                                        MapPlaceMarker(
-                                            visiblePlace: group.primary,
-                                            saves: saveSummaries(for: group),
-                                            currentUserID: store.currentUser.id,
-                                            isSelected: true
-                                        )
-                                        .modifier(
-                                            MapPinReselectionBounceModifier(
-                                                trigger: activePinBounceRevision
-                                            )
-                                        )
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .frame(minWidth: 44, minHeight: 44)
-                                .modifier(
-                                    MapPinEntranceModifier(
-                                        isVisible: isTransitionVisible,
-                                        delay: entranceDelay
-                                    )
-                                )
-                                .zIndex(MapAnnotationLayering.activeZIndex)
-                            }
-                        }
-
-                        if let (index, candidate) = activeSearchCandidate,
-                           let latitude = candidate.latitude,
-                           let longitude = candidate.longitude {
-                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                            Annotation(
-                                "",
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: latitude,
-                                    longitude: longitude
-                                )
-                            ) {
-                                Button {
-                                    replayActivePinBounce()
-                                } label: {
-                                    ActiveMapAnnotationContent(title: candidate.name) {
-                                        SearchResultMarker(
-                                            candidate: candidate,
-                                            isSelected: true
-                                        )
-                                        .modifier(
-                                            MapPinReselectionBounceModifier(
-                                                trigger: activePinBounceRevision
-                                            )
-                                        )
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .frame(minWidth: 44, minHeight: 44)
-                                .modifier(
-                                    MapPinEntranceModifier(
-                                        isVisible: true,
-                                        delay: entranceDelay
-                                    )
-                                )
-                                .zIndex(MapAnnotationLayering.activeZIndex)
-                            }
-                        }
                     }
                     .mapStyle(.standard(elevation: .flat, emphasis: .muted))
                     .mapFeatureSelectionDisabled { feature in
@@ -662,6 +578,9 @@ struct MapScreen: View {
                     .modifier(HideNativeMapFeatureAccessory())
                     .tint(Self.currentLocationTint)
                     .ignoresSafeArea()
+                    .overlay {
+                        activeMapAnnotationOverlay(proxy: proxy)
+                    }
                     .background {
                         GeometryReader { geometry in
                             Color.clear.preference(
@@ -1446,6 +1365,65 @@ struct MapScreen: View {
     private func replayActivePinBounce() {
         cancelPendingMapTapDismissal()
         activePinBounceRevision &+= 1
+    }
+
+    @ViewBuilder
+    private func activeMapAnnotationOverlay(proxy: MapProxy) -> some View {
+        GeometryReader { _ in
+            if highlightsCompactSelection,
+               let group = (transitioningAnnotationGroups ?? orderedVisiblePlaceGroups())
+                .first(where: { $0.key == selectedPlaceGroupKey }) {
+                let coordinate = CLLocationCoordinate2D(
+                    latitude: group.primary.place.latitude,
+                    longitude: group.primary.place.longitude
+                )
+                if let point = proxy.convert(coordinate, to: .local) {
+                    Button {
+                        replayActivePinBounce()
+                    } label: {
+                        ActiveMapAnnotationContent(title: group.primary.place.canonicalName) {
+                            MapPlaceMarker(
+                                visiblePlace: group.primary,
+                                saves: saveSummaries(for: group),
+                                currentUserID: store.currentUser.id,
+                                isSelected: true
+                            )
+                            .modifier(
+                                MapPinReselectionBounceModifier(
+                                    trigger: activePinBounceRevision
+                                )
+                            )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .position(point)
+                }
+            } else if highlightsCompactSelection,
+                      let candidate = selectedSearchCandidate,
+                      let latitude = candidate.latitude,
+                      let longitude = candidate.longitude {
+                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                if let point = proxy.convert(coordinate, to: .local) {
+                    Button {
+                        replayActivePinBounce()
+                    } label: {
+                        ActiveMapAnnotationContent(title: candidate.name) {
+                            SearchResultMarker(candidate: candidate, isSelected: true)
+                                .modifier(
+                                    MapPinReselectionBounceModifier(
+                                        trigger: activePinBounceRevision
+                                    )
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .position(point)
+                }
+            }
+        }
+        .zIndex(MapAnnotationLayering.activeOverlayZIndex)
     }
 
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
@@ -5873,7 +5851,7 @@ enum MapSelectionLifetimePolicy {
 }
 
 enum MapAnnotationLayering {
-    static let activeZIndex = 100.0
+    static let activeOverlayZIndex = 100.0
 }
 
 private struct MapPinReselectionBounceModifier: ViewModifier {
