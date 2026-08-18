@@ -265,7 +265,6 @@ struct ProfileOwnerHome: View {
     let sharedVisitInvitationCount: Int
     let insights: ProfileInsights
     @Binding var selectedMonth: Date
-    let isAvatarSaving: Bool
     let avatarAction: () -> Void
     let editAction: () -> Void
     let settingsAction: () -> Void
@@ -459,8 +458,9 @@ struct ProfileOwnerHome: View {
                             profileAvatar
                         }
                         .buttonStyle(.plain)
-                        .disabled(isAvatarSaving)
-                        .accessibilityLabel(profile.avatarURL == nil ? "Add profile photo" : "Change profile photo")
+                        .disabled(!hasProfilePhoto)
+                        .accessibilityLabel(hasProfilePhoto ? "View profile photo" : "Profile photo not set")
+                        .accessibilityHint(hasProfilePhoto ? "Opens the profile photo full screen" : "Use Edit profile to add a photo")
                     } else {
                         profileAvatar
                             .accessibilityLabel("\(profile.displayName)'s profile photo")
@@ -539,14 +539,12 @@ struct ProfileOwnerHome: View {
             )
             .shadow(color: WanderTheme.textInk.color.opacity(0.1), radius: 8, y: 4)
 
-            if isAvatarSaving && mode.isOwner {
-                Circle()
-                    .fill(WanderTheme.textInk.color.opacity(0.42))
-                    .frame(width: profileAvatarSize, height: profileAvatarSize)
-                ProgressView()
-                    .tint(WanderTheme.textOnAction.color)
-            }
         }
+    }
+
+    private var hasProfilePhoto: Bool {
+        guard let avatarURL = profile.avatarURL else { return false }
+        return !avatarURL.isEmpty
     }
 
     private var ownerLabel: String {

@@ -1,8 +1,6 @@
 import Foundation
 import MapKit
-import PhotosUI
 import SwiftUI
-import UIKit
 
 struct ProfileScreen: View {
     @EnvironmentObject private var store: WanderStore
@@ -11,12 +9,7 @@ struct ProfileScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var showsSettings = false
-    @State private var showsProfilePhotoMenu = false
-    @State private var showsProfilePhotoLibrary = false
-    @State private var showsProfileCamera = false
-    @State private var selectedProfilePhotoItem: PhotosPickerItem?
-    @State private var isProfilePhotoSaving = false
-    @State private var profilePhotoError: String?
+    @State private var showsProfilePhotoViewer = false
     @State private var socialGraphTab: ProfileSocialGraphTab?
     @State private var listMode: GraphListMode?
     @State private var selectedPeopleMode: GraphListMode = .following
@@ -40,10 +33,6 @@ struct ProfileScreen: View {
     private let onSettingsWillDismiss: (WanderDeepLinkPresentationToken) -> Void
     private let onSettingsDidDismiss: () -> Void
     let onFindFriends: () -> Void
-
-    private let profilePhotoMenuWidth: CGFloat = 232
-    private let profilePhotoMenuAnchorOffsetX: CGFloat = 35
-    private let profilePhotoMenuTopGap: CGFloat = 2
 
     init(
         visitInvitationInboxRequestID: Binding<UUID?> = .constant(nil),
@@ -78,8 +67,7 @@ struct ProfileScreen: View {
                 sharedVisitInvitationCount: store.sharedVisitInvitations.count,
                 insights: profileInsights,
                 selectedMonth: $selectedMonth,
-                isAvatarSaving: isProfilePhotoSaving,
-                avatarAction: toggleProfilePhotoMenu,
+                avatarAction: presentProfilePhotoViewer,
                 editAction: { showsEditProfile = true },
                 settingsAction: {
                     walkthroughs.perform(.profileSettings)
@@ -130,13 +118,6 @@ struct ProfileScreen: View {
                     }
                 }
                 .toolbar(showsSettings ? .hidden : .visible, for: .tabBar)
-                .sheet(isPresented: $showsProfileCamera) {
-                    ProfileCameraPicker { image in
-                        Task {
-                            await saveProfilePhoto(image: image)
-                        }
-                    }
-                }
                 .sheet(item: $socialGraphTab, onDismiss: {
                     walkthroughs.activate(.profile)
                 }) { tab in
@@ -155,16 +136,11 @@ struct ProfileScreen: View {
                         .environmentObject(auth)
                         .environmentObject(backend)
                 }
-                .photosPicker(
-                    isPresented: $showsProfilePhotoLibrary,
-                    selection: $selectedProfilePhotoItem,
-                    matching: .images
-                )
-                .onChange(of: selectedProfilePhotoItem) { _, item in
-                    guard let item else { return }
-                    Task {
-                        await importProfilePhoto(from: item)
-                    }
+                .fullScreenCover(isPresented: $showsProfilePhotoViewer) {
+                    ProfilePhotoFullScreenViewer(
+                        avatarURL: store.currentUser.avatarURL,
+                        displayName: store.currentUser.displayName
+                    )
                 }
                 .onChange(of: showsSettings) { _, isShowing in
                     if !isShowing {
@@ -226,16 +202,6 @@ struct ProfileScreen: View {
                 .onChange(of: visitInvitationInboxRequestID) { _, _ in
                     openRequestedVisitInvitationInbox()
                 }
-                .confirmationDialog("Profile photo", isPresented: $showsProfilePhotoMenu, titleVisibility: .visible) {
-                    if isCameraAvailable {
-                        Button("Take Photo") { presentProfileCamera() }
-                    }
-                    Button("Choose from Library") { presentProfilePhotoLibrary() }
-                    if hasProfilePhoto {
-                        Button("Delete Photo", role: .destructive) { confirmDeleteProfilePhoto() }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
         }
         .task(id: presentationResetRequest?.id) {
             handlePresentationResetRequest(presentationResetRequest)
@@ -277,10 +243,7 @@ struct ProfileScreen: View {
         activeCalendarLaunchRequest = nil
         visitInvitationInboxRequestID = nil
         showsSettings = false
-        showsProfilePhotoMenu = false
-        showsProfilePhotoLibrary = false
-        showsProfileCamera = false
-        selectedProfilePhotoItem = nil
+        showsProfilePhotoViewer = false
         socialGraphTab = nil
         listMode = nil
         savedListMode = nil
@@ -447,113 +410,6 @@ struct ProfileScreen: View {
             .lineLimit(1)
     }
 
-    private var ownerHeader: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            HStack(alignment: .top) {
-                Button {
-                    toggleProfilePhotoMenu()
-                } label: {
-                    EditableProfileAvatar(
-                        initials: store.currentUser.initials,
-                        avatarURL: store.currentUser.avatarURL,
-                        size: 56,
-                        isSaving: isProfilePhotoSaving
-                    )
-                    .anchorPreference(
-                        key: ProfilePhotoAvatarBoundsPreferenceKey.self,
-                        value: .bounds
-                    ) { bounds in
-                        bounds
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(isProfilePhotoSaving)
-                .accessibilityLabel(hasProfilePhoto ? "Change profile photo" : "Add profile photo")
-                .accessibilityHint("Opens photo options")
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text(store.currentUser.displayName)
-                        .font(.system(size: 24, weight: .black))
-                    Text("@\(store.currentUser.handle) · \(store.currentUser.homeArea ?? "Los Angeles")")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-
-                Spacer()
-
-                Button {
-                    presentSettings()
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .frame(width: 40, height: 40)
-                        .background(WanderTheme.surfaceSand.color)
-                        .clipShape(Circle())
-                }
-                .accessibilityLabel("Settings")
-            }
-
-            if let profilePhotoError {
-                Text(profilePhotoError)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.stateError.color)
-            }
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.surfaceBone.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-    }
-
-    @ViewBuilder
-    private func profilePhotoMenuOverlay(anchor: Anchor<CGRect>?, proxy: GeometryProxy) -> some View {
-        if showsProfilePhotoMenu, let anchor {
-            let avatarFrame = proxy[anchor]
-
-            Color.black.opacity(0.001)
-                .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    hideProfilePhotoMenu()
-                }
-                .accessibilityHidden(true)
-                .zIndex(1)
-
-            ProfilePhotoActionMenu(
-                isCameraAvailable: isCameraAvailable,
-                hasProfilePhoto: hasProfilePhoto,
-                takePhoto: {
-                    hideProfilePhotoMenu()
-                    presentProfileCamera()
-                },
-                chooseFromLibrary: {
-                    hideProfilePhotoMenu()
-                    presentProfilePhotoLibrary()
-                },
-                deletePhoto: {
-                    hideProfilePhotoMenu()
-                    confirmDeleteProfilePhoto()
-                }
-            )
-            .offset(
-                x: profilePhotoMenuLeading(for: avatarFrame, containerWidth: proxy.size.width),
-                y: profilePhotoMenuTop(for: avatarFrame)
-            )
-            .transition(.scale(scale: 0.97, anchor: .topLeading).combined(with: .opacity))
-            .zIndex(2)
-        }
-    }
-
-    private func profilePhotoMenuLeading(for avatarFrame: CGRect, containerWidth: CGFloat) -> CGFloat {
-        let preferredLeading = avatarFrame.midX - profilePhotoMenuAnchorOffsetX
-        let screenPadding = WanderTheme.spacing4
-        let maxLeading = max(screenPadding, containerWidth - profilePhotoMenuWidth - screenPadding)
-        return min(max(preferredLeading, screenPadding), maxLeading)
-    }
-
-    private func profilePhotoMenuTop(for avatarFrame: CGRect) -> CGFloat {
-        avatarFrame.maxY + profilePhotoMenuTopGap
-    }
-
     private var statsGrid: some View {
         HStack(spacing: WanderTheme.spacing3) {
             Button {
@@ -715,337 +571,9 @@ struct ProfileScreen: View {
         return !avatarURL.isEmpty
     }
 
-    private var isCameraAvailable: Bool {
-        UIImagePickerController.isSourceTypeAvailable(.camera)
-    }
-
-    private func toggleProfilePhotoMenu() {
-        guard !isProfilePhotoSaving else { return }
-        withAnimation(.easeOut(duration: 0.14)) {
-            showsProfilePhotoMenu.toggle()
-        }
-    }
-
-    private func hideProfilePhotoMenu() {
-        guard showsProfilePhotoMenu else { return }
-        withAnimation(.easeOut(duration: 0.12)) {
-            showsProfilePhotoMenu = false
-        }
-    }
-
-    private func presentProfileCamera() {
-        showsProfileCamera = true
-    }
-
-    private func presentProfilePhotoLibrary() {
-        showsProfilePhotoLibrary = true
-    }
-
-    private func confirmDeleteProfilePhoto() {
-        Task {
-            await deleteProfilePhoto()
-        }
-    }
-
-    @MainActor
-    private func importProfilePhoto(from item: PhotosPickerItem) async {
-        defer {
-            selectedProfilePhotoItem = nil
-        }
-
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self) else {
-                throw WanderImageProcessingError.invalidImageData
-            }
-            try await saveProfilePhoto(data: data)
-        } catch {
-            profilePhotoError = "Could not use that photo. Try another one."
-        }
-    }
-
-    @MainActor
-    private func saveProfilePhoto(image: UIImage) async {
-        do {
-            let jpegData = try WanderImageProcessor.squareJPEGData(from: image)
-            await saveProfilePhoto(jpegData: jpegData)
-        } catch {
-            profilePhotoError = "Could not use that photo. Try another one."
-        }
-    }
-
-    @MainActor
-    private func saveProfilePhoto(data: Data) async throws {
-        let jpegData = try await Task.detached(priority: .userInitiated) {
-            try WanderImageProcessor.squareJPEGData(from: data)
-        }.value
-        await saveProfilePhoto(jpegData: jpegData)
-    }
-
-    @MainActor
-    private func saveProfilePhoto(jpegData: Data) async {
-        isProfilePhotoSaving = true
-        defer { isProfilePhotoSaving = false }
-
-        do {
-            let url = try ProfileAvatarStorage.live.writeAvatarData(jpegData)
-            store.updateCurrentUserAvatarURL(url.absoluteString)
-            profilePhotoError = nil
-        } catch {
-            profilePhotoError = "Could not save this photo. Try again."
-            return
-        }
-
-        guard auth.isSignedIn, backend.canSyncProfileAvatars else { return }
-
-        do {
-            let result = try await backend.uploadProfileAvatar(
-                jpegData: jpegData,
-                userID: store.currentUser.id
-            )
-            store.updateCurrentUserAvatarURL(result.avatarURL)
-            profilePhotoError = nil
-        } catch {
-            profilePhotoError = "Saved on this phone. Could not sync profile photo yet."
-        }
-    }
-
-    @MainActor
-    private func deleteProfilePhoto() async {
-        isProfilePhotoSaving = true
-        defer { isProfilePhotoSaving = false }
-
-        if auth.isSignedIn, backend.canSyncProfileAvatars {
-            do {
-                try await backend.deleteProfileAvatar(userID: store.currentUser.id)
-            } catch {
-                profilePhotoError = "Could not delete this photo. Try again."
-                return
-            }
-        }
-
-        do {
-            try ProfileAvatarStorage.live.deleteAvatar()
-            store.updateCurrentUserAvatarURL(nil)
-            profilePhotoError = nil
-        } catch {
-            profilePhotoError = "Could not delete this photo. Try again."
-        }
-    }
-}
-
-private struct ProfilePhotoAvatarBoundsPreferenceKey: PreferenceKey {
-    static let defaultValue: Anchor<CGRect>? = nil
-
-    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
-        value = nextValue() ?? value
-    }
-}
-
-private struct ProfilePhotoActionMenu: View {
-    let isCameraAvailable: Bool
-    let hasProfilePhoto: Bool
-    let takePhoto: () -> Void
-    let chooseFromLibrary: () -> Void
-    let deletePhoto: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ProfilePhotoMenuCaret()
-                .fill(Color(.systemBackground).opacity(0.94))
-                .background(.regularMaterial, in: ProfilePhotoMenuCaret())
-                .frame(width: 18, height: 9)
-                .padding(.leading, 25)
-
-            VStack(spacing: 0) {
-                if isCameraAvailable {
-                    ProfilePhotoActionMenuButton(
-                        title: "Take Photo",
-                        systemImage: "camera.fill",
-                        action: takePhoto
-                    )
-                    menuDivider
-                }
-
-                ProfilePhotoActionMenuButton(
-                    title: "Choose from Library",
-                    systemImage: "photo.on.rectangle",
-                    action: chooseFromLibrary
-                )
-
-                if hasProfilePhoto {
-                    menuDivider
-                    ProfilePhotoActionMenuButton(
-                        title: "Delete Photo",
-                        systemImage: "trash",
-                        role: .destructive,
-                        isDestructive: true,
-                        action: deletePhoto
-                    )
-                }
-            }
-            .frame(width: 232)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(.systemBackground).opacity(0.94))
-            )
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
-            )
-            .shadow(color: Color.black.opacity(0.18), radius: 18, x: 0, y: 10)
-        }
-        .accessibilityElement(children: .contain)
-    }
-
-    private var menuDivider: some View {
-        Divider()
-            .padding(.leading, 48)
-    }
-}
-
-private struct ProfilePhotoActionMenuButton: View {
-    let title: String
-    let systemImage: String
-    var role: ButtonRole?
-    var isDestructive = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(role: role, action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 22)
-                    .foregroundStyle(iconColor)
-                    .accessibilityHidden(true)
-
-                Text(title)
-                    .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(textColor)
-
-                Spacer(minLength: 0)
-            }
-            .frame(height: 49)
-            .padding(.horizontal, 16)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var iconColor: Color {
-        isDestructive ? Color(.systemRed) : Color(.systemBlue)
-    }
-
-    private var textColor: Color {
-        isDestructive ? Color(.systemRed) : Color.primary
-    }
-}
-
-private struct ProfilePhotoMenuCaret: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            path.closeSubpath()
-        }
-    }
-}
-
-private struct EditableProfileAvatar: View {
-    let initials: String
-    let avatarURL: String?
-    let size: CGFloat
-    let isSaving: Bool
-
-    var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            WanderAvatar(
-                initials: initials,
-                avatarURL: avatarURL,
-                size: size,
-                color: WanderTheme.terracotta.color
-            )
-
-            if isSaving {
-                ProgressView()
-                    .controlSize(.mini)
-                    .tint(WanderTheme.textOnAction.color)
-                    .frame(width: 22, height: 22)
-                    .background(WanderTheme.textInk.color)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
-                    .accessibilityHidden(true)
-            } else {
-                Image(systemName: hasAvatar ? "pencil" : "camera.fill")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(WanderTheme.textOnAction.color)
-                    .frame(width: 22, height: 22)
-                    .background(WanderTheme.textInk.color)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(WanderTheme.surfaceBone.color, lineWidth: 2))
-                    .accessibilityHidden(true)
-            }
-        }
-        .frame(width: size + 4, height: size + 4)
-        .contentShape(Rectangle())
-    }
-
-    private var hasAvatar: Bool {
-        guard let avatarURL else { return false }
-        return !avatarURL.isEmpty
-    }
-}
-
-private struct ProfileCameraPicker: UIViewControllerRepresentable {
-    let onImage: @MainActor (UIImage) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.allowsEditing = true
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(
-            onImage: onImage,
-            dismiss: {
-                dismiss()
-            }
-        )
-    }
-
-    @MainActor
-    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        private let onImage: @MainActor (UIImage) -> Void
-        private let dismiss: () -> Void
-
-        init(onImage: @escaping @MainActor (UIImage) -> Void, dismiss: @escaping () -> Void) {
-            self.onImage = onImage
-            self.dismiss = dismiss
-        }
-
-        func imagePickerController(
-            _ picker: UIImagePickerController,
-            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-        ) {
-            let image = (info[.editedImage] ?? info[.originalImage]) as? UIImage
-            if let image {
-                onImage(image)
-            }
-            dismiss()
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            dismiss()
-        }
+    private func presentProfilePhotoViewer() {
+        guard hasProfilePhoto else { return }
+        showsProfilePhotoViewer = true
     }
 }
 
@@ -1096,7 +624,6 @@ struct ProfileDetailView: View {
                             sharedVisitInvitationCount: 0,
                             insights: profileInsights,
                             selectedMonth: $selectedMonth,
-                            isAvatarSaving: false,
                             avatarAction: {},
                             editAction: {},
                             settingsAction: {},

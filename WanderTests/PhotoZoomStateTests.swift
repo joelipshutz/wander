@@ -77,6 +77,11 @@ final class PhotoZoomStateTests: XCTestCase {
                 .appendingPathComponent("Wander/Features/Map/MapScreen.swift"),
             encoding: .utf8
         )
+        let profileSource = try String(
+            contentsOf: projectRoot
+                .appendingPathComponent("Wander/Features/Profile/ProfileEditScreen.swift"),
+            encoding: .utf8
+        )
 
         let galleryViewer = try XCTUnwrap(
             gallerySource
@@ -94,8 +99,17 @@ final class PhotoZoomStateTests: XCTestCase {
                 .components(separatedBy: "private struct VisitPhotoFullScreenImage: View")
                 .first
         )
+        let profileViewer = try XCTUnwrap(
+            profileSource
+                .components(separatedBy: "struct ProfilePhotoFullScreenViewer: View")
+                .dropFirst()
+                .first?
+                .components(separatedBy: "private struct ProfileEditFieldRow: View")
+                .first
+        )
 
         XCTAssertTrue(galleryViewer.contains("ZoomablePhoto {"))
         XCTAssertTrue(activityViewer.contains("ZoomablePhoto {"))
+        XCTAssertTrue(profileViewer.contains("ZoomablePhoto {"))
     }
 }
