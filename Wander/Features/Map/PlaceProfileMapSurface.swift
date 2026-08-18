@@ -959,13 +959,6 @@ private struct PlaceProfileFullView: View {
                         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                             heading
 
-                            if let fitSentence {
-                                Text(fitSentence)
-                                    .font(.system(size: 19, weight: .black))
-                                    .foregroundStyle(WanderTheme.textInk.color)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-
                             PlaceProfileTagRail(tags: displayTags, compact: false)
 
                             ratingSection
@@ -982,7 +975,6 @@ private struct PlaceProfileFullView: View {
                                     .walkthroughTarget(.placeActions)
                             }
 
-                            whyItFitsSection
                             bestForSection
                             VStack(spacing: 0) {
                                 PlaceActivitySection(saves: saves, currentUserID: currentUserID)
@@ -1418,36 +1410,6 @@ private struct PlaceProfileFullView: View {
     }
 
     @ViewBuilder
-    private var whyItFitsSection: some View {
-        if hasWhyItFitsEvidence {
-            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                sectionLabel("Why it fits")
-                HStack(alignment: .center, spacing: WanderTheme.spacing3) {
-                    PlaceProfileFacepile(saves: saves, currentUserID: currentUserID)
-                    VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text(whyItFitsPrimary)
-                            .font(.system(size: 14, weight: .black))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Text(whyItFitsSecondary)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(WanderTheme.spacing3)
-                .background(WanderTheme.surfaceSand.color)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(WanderTheme.borderHairline.color, lineWidth: 1)
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
     private var bestForSection: some View {
         if !displayTags.isEmpty {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -1484,20 +1446,8 @@ private struct PlaceProfileFullView: View {
         PlaceProfileCopy.heroMetadata(for: place)
     }
 
-    private var fitSentence: String? {
-        PlaceProfileCopy.fitSentence(place: place, presentation: presentation)
-    }
-
     private var displayTags: [String] {
-        PlaceProfileCopy.displayTags(place: place, presentation: presentation)
-    }
-
-    private var hasWhyItFitsEvidence: Bool {
-        !presentation.whyItFits.isEmpty
-            || presentation.overallRating != nil
-            || presentation.ownRating != nil
-            || !displayTags.isEmpty
-            || trustedSaves.count >= 2
+        PlaceProfileCopy.displayTags(presentation: presentation)
     }
 
     private var hasRatingSection: Bool {
@@ -1642,53 +1592,8 @@ private struct PlaceProfileFullView: View {
         PlaceProfileCopy.shareText(for: place)
     }
 
-    private var ownSave: PlaceSaveSummary? {
-        saves.first { $0.visiblePlace.owner.id == currentUserID }
-    }
-
-    private var trustedSaves: [PlaceSaveSummary] {
-        saves.filter {
-            $0.visiblePlace.owner.id != currentUserID && $0.viewerFollowsOwner
-        }
-    }
-
     private var displayRating: PlaceActualRating? {
         presentation.overallRating ?? presentation.ownRating
-    }
-
-    private var whyItFitsPrimary: String {
-        if let firstReason = presentation.whyItFits.first {
-            return firstReason
-        }
-        if let overallRating = presentation.overallRating {
-            if let trustedName = trustedSaves.first?.visiblePlace.owner.displayName.components(separatedBy: " ").first {
-                return "\(trustedName) rated this \(overallRating.displayScore)/5."
-            }
-            return "\(overallRating.subtitle.capitalized) average \(overallRating.displayScore)/5."
-        }
-        if let ownRating = presentation.ownRating {
-            return "You rated this \(ownRating.displayScore)/5."
-        }
-        if trustedSaves.count >= 2 {
-            return "\(trustedSaves.count) people you follow checked in here."
-        }
-        return "Check in to add your own take."
-    }
-
-    private var whyItFitsSecondary: String {
-        if presentation.fitRating != nil {
-            return "Based on your check-ins and people you follow."
-        }
-        if presentation.overallRating != nil || presentation.ownRating != nil {
-            return "Your map gets more personal with every check-in."
-        }
-        if displayTags.count >= 2 {
-            return "People mention: \(displayTags.prefix(3).joined(separator: ", "))."
-        }
-        if let category = PlaceProfileCopy.categoryDisplay(for: place) {
-            return "Category: \(category)."
-        }
-        return "Check in to add your own context."
     }
 
     private var addressLine: String? {
@@ -3064,53 +2969,6 @@ private struct LayoutItem {
     let size: CGSize
 }
 
-private struct PlaceProfileFacepile: View {
-    let saves: [PlaceSaveSummary]
-    let currentUserID: String
-
-    var body: some View {
-        HStack(spacing: -9) {
-            if displaySaves.isEmpty {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .black))
-                    .frame(width: 34, height: 34)
-                    .background(WanderTheme.terracottaTint.color)
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(WanderTheme.surfaceSand.color, lineWidth: 2))
-            } else {
-                ForEach(displaySaves) { save in
-                    WanderAvatar(
-                        initials: save.visiblePlace.owner.id == currentUserID ? "Y" : save.visiblePlace.owner.initials,
-                        avatarURL: save.visiblePlace.owner.avatarURL,
-                        size: 34,
-                        color: color(for: save.visiblePlace.owner)
-                    )
-                }
-            }
-        }
-        .frame(minWidth: 58, alignment: .leading)
-    }
-
-    private var displaySaves: [PlaceSaveSummary] {
-        Array(saves.filter { !$0.visiblePlace.isCommunityAggregate }.prefix(3))
-    }
-
-    private func color(for owner: LocalProfile) -> Color {
-        if owner.id == currentUserID { return WanderTheme.terracotta.color }
-        switch owner.handle.lowercased() {
-        case "ryan":
-            return WanderTheme.avatarRyan.color
-        case "andrew":
-            return WanderTheme.avatarAndrew.color
-        case "sofia", "maya":
-            return WanderTheme.avatarSofia.color
-        default:
-            return WanderTheme.pinSocial.color
-        }
-    }
-}
-
 private struct PlaceProfileSaveCard: View {
     let summary: PlaceSaveSummary
     let currentUserID: String
@@ -3299,36 +3157,7 @@ private enum PlaceProfileCopy {
         return display
     }
 
-    static func fitSentence(place: PlaceSheetPlace, presentation: PlaceProfilePresentation) -> String? {
-        let tags = displayTags(place: place, presentation: presentation).map { $0.lowercased() }
-        let questionCategory = WanderPlaceCategory.questionCategory(for: place.categoryAssignment)
-
-        if tags.contains("quiet"),
-           questionCategory == "coffee" || tags.contains("coffee"),
-           tags.contains(where: { $0.contains("laptop") || $0.contains("wifi") }) {
-            return "Good for quiet coffee + laptop time."
-        }
-
-        if !tags.isEmpty {
-            return "Good for \(phrase(from: Array(tags.prefix(3))))."
-        }
-
-        if presentation.fitRating != nil {
-            return "Strong fit based on your check-ins."
-        }
-
-        if let overallRating = presentation.overallRating {
-            return "Trusted rating: \(overallRating.displayScore)/5."
-        }
-
-        if let ownRating = presentation.ownRating {
-            return "You rated this \(ownRating.displayScore)/5."
-        }
-
-        return nil
-    }
-
-    static func displayTags(place: PlaceSheetPlace, presentation: PlaceProfilePresentation) -> [String] {
+    static func displayTags(presentation: PlaceProfilePresentation) -> [String] {
         presentation.commonTags.map(\.title)
     }
 
@@ -3380,13 +3209,6 @@ private enum PlaceProfileCopy {
     private static func joinedText(_ values: [String?]) -> String? {
         let parts = values.compactMap(trimmed)
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private static func phrase(from tags: [String]) -> String {
-        guard !tags.isEmpty else { return "this place" }
-        if tags.count == 1 { return tags[0] }
-        if tags.count == 2 { return "\(tags[0]) + \(tags[1])" }
-        return "\(tags[0]), \(tags[1]) + \(tags[2])"
     }
 
     private static func icon(for questionKey: String) -> String {
