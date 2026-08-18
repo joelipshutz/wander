@@ -488,7 +488,7 @@ private struct PlaceProfilePreviewCard: View {
     @ViewBuilder
     private var actionButtonCluster: some View {
         if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 6) {
+            GlassEffectContainer(spacing: 0) {
                 actionButtons
             }
         } else {
@@ -497,7 +497,7 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var actionButtons: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 4) {
             if action != .none {
                 Button {
                     activeCardAction = .primary
@@ -505,7 +505,6 @@ private struct PlaceProfilePreviewCard: View {
                 } label: {
                     Image(systemName: action.systemImage)
                         .font(.system(size: 17, weight: .black))
-                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(
                     PlaceCardGlassActionButtonStyle(
@@ -524,7 +523,6 @@ private struct PlaceProfilePreviewCard: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 16, weight: .black))
-                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(
                     PlaceCardGlassActionButtonStyle(
@@ -748,46 +746,61 @@ private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(.white)
-            .wanderGlassRoundedRectangle(
-                tone: configuration.isPressed ? .accent : .darkOverlay,
-                cornerRadius: 15,
-                material: .clear,
-                interactive: true,
-                showsBorder: false
-            )
-            .shadow(
-                color: configuration.isPressed
-                    ? WanderTheme.terracotta.color.opacity(0.92)
-                    : Color.black.opacity(0.22),
-                radius: configuration.isPressed ? 22 : 7,
-                x: 0,
-                y: configuration.isPressed ? 0 : 4
-            )
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 1.4 : 1)
-            .zIndex(configuration.isPressed ? 1 : 0)
-            .onChange(of: configuration.isPressed, initial: true) { _, isPressed in
-                if isPressed {
-                    activeAction = actionID
-                } else if activeAction == actionID {
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(160))
-                        if activeAction == actionID {
-                            activeAction = nil
-                        }
+        ZStack {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(
+                    configuration.isPressed
+                        ? WanderTheme.terracotta.color.opacity(0.18)
+                        : Color.clear
+                )
+                .frame(width: 44, height: 44)
+                .wanderGlassRoundedRectangle(
+                    tone: configuration.isPressed ? .accent : .darkOverlay,
+                    cornerRadius: 15,
+                    material: .clear,
+                    interactive: true,
+                    showsBorder: false
+                )
+                .shadow(
+                    color: configuration.isPressed
+                        ? WanderTheme.terracotta.color.opacity(0.96)
+                        : Color.black.opacity(0.22),
+                    radius: configuration.isPressed ? 20 : 7,
+                    x: 0,
+                    y: configuration.isPressed ? 0 : 4
+                )
+                .scaleEffect(
+                    configuration.isPressed && !reduceMotion ? 1.3 : 1,
+                    anchor: .center
+                )
+
+            configuration.label
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44, alignment: .center)
+        }
+        .frame(width: 44, height: 44, alignment: .center)
+        .zIndex(configuration.isPressed ? 1 : 0)
+        .onChange(of: configuration.isPressed, initial: true) { _, isPressed in
+            if isPressed {
+                activeAction = actionID
+            } else if activeAction == actionID {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(160))
+                    if activeAction == actionID {
+                        activeAction = nil
                     }
                 }
             }
-            .onDisappear {
-                if activeAction == actionID {
-                    activeAction = nil
-                }
+        }
+        .onDisappear {
+            if activeAction == actionID {
+                activeAction = nil
             }
-            .animation(
-                reduceMotion ? .none : .spring(response: 0.24, dampingFraction: 0.68),
-                value: configuration.isPressed
-            )
+        }
+        .animation(
+            reduceMotion ? .none : .spring(response: 0.24, dampingFraction: 0.68),
+            value: configuration.isPressed
+        )
     }
 }
 
