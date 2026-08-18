@@ -732,7 +732,7 @@ struct AddScreen: View {
             // navigation or backgrounding. A later resume must be free to
             // finish choosing the intended nearby park.
             guard !Task.isCancelled else { return }
-            candidate = suggested ?? Self.hotchkissParkCandidate
+            candidate = suggested ?? FirstVisitParkSuggestionPolicy.hotchkissPark
             walkthroughs.recordTutorialCandidate(candidate)
         }
         guard !Task.isCancelled,
@@ -830,26 +830,6 @@ struct AddScreen: View {
             selectedDetent = targetDetent
         }
     }
-
-    private static let hotchkissParkCandidate = PlaceCandidate(
-        id: "walkthrough-hotchkiss-park",
-        name: "Hotchkiss Park",
-        category: "park",
-        primaryCategory: WanderPlaceCategory.outdoorsNature,
-        subcategory: "Park",
-        categorySource: PlaceCategorySource.provider.rawValue,
-        categoryConfidence: 1,
-        rawProviderType: "park",
-        address: "2302 4th Street",
-        locality: "Santa Monica",
-        region: "CA",
-        country: "US",
-        latitude: 34.0046,
-        longitude: -118.4845,
-        sourceProvider: "mapkit",
-        sourceProviderPlaceID: "hotchkiss-park-ocean-park",
-        confidence: 1
-    )
 
     private var draftView: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {

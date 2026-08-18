@@ -2005,17 +2005,28 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     private let rpc: (any RemoteProcedureCalling)?
     private let functions: RemoteFunctionCalling
     private let storage: (any RemoteStorageCalling)?
+    private let photoSession: URLSession
 
-    init(functions: RemoteFunctionCalling) {
+    init(
+        functions: RemoteFunctionCalling,
+        photoSession: URLSession = .shared
+    ) {
         self.rpc = nil
         self.functions = functions
         self.storage = nil
+        self.photoSession = photoSession
     }
 
-    init(rpc: RemoteProcedureCalling, functions: RemoteFunctionCalling, storage: RemoteStorageCalling) {
+    init(
+        rpc: RemoteProcedureCalling,
+        functions: RemoteFunctionCalling,
+        storage: RemoteStorageCalling,
+        photoSession: URLSession = .shared
+    ) {
         self.rpc = rpc
         self.functions = functions
         self.storage = storage
+        self.photoSession = photoSession
     }
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
@@ -2147,15 +2158,8 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
         }
 
         var request = URLRequest(url: photoURL)
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.urlCache = nil
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-
-        let (data, response) = try await session.data(for: request)
+        request.cachePolicy = .useProtocolCachePolicy
+        let (data, response) = try await photoSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode)
         else {

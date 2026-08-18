@@ -289,6 +289,7 @@ private struct PlaceProfilePreviewCard: View {
     @State private var isCardPressed = false
     @State private var cardPressStartedAt: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 0) {
@@ -786,18 +787,26 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private func preparedImage(for photo: PlacePhoto) async -> UIImage? {
-        let image: UIImage?
+        let data: Data?
         if let localAssetRef = photo.localAssetRef,
-           let localImage = VisitPhotoLocalFileStore.image(from: localAssetRef) {
-            image = localImage
-        } else if let data = try? await backend.placePhotoImageData(for: photo) {
-            image = UIImage(data: data)
+           let localData = await Task.detached(priority: .utility, operation: {
+               VisitPhotoLocalFileStore.data(from: localAssetRef)
+           }).value {
+            data = localData
         } else {
-            image = nil
+            data = try? await backend.placePhotoImageData(for: photo)
         }
 
-        guard !Task.isCancelled, let image else { return nil }
-        return await image.byPreparingForDisplay() ?? image
+        guard !Task.isCancelled, let data else { return nil }
+        let targetPixelSize = max(
+            1,
+            Int(ceil(430 * displayScale))
+        )
+        return await PlacePhotoImagePipeline.shared.image(
+            from: data,
+            photoKey: photo.cacheKey,
+            targetPixelSize: targetPixelSize
+        )?.image
     }
 
 }

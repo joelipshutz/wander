@@ -198,13 +198,13 @@ final class MapSelectionMotionTests: XCTestCase {
 
     @MainActor
     func testSelectionMotionUsesAStagedCardAndBouncyPinContract() {
-        XCTAssertEqual(MapCompactCardMotionStyle.entranceDuration, 0.24, accuracy: 0.001)
+        XCTAssertEqual(MapCompactCardMotionStyle.entranceDuration, 0.18, accuracy: 0.001)
         XCTAssertEqual(MapCompactCardMotionStyle.nearbyFadeDuration, 0.16, accuracy: 0.001)
         XCTAssertEqual(MapCompactCardMotionStyle.nearbyReturnFadeDuration, 0.16, accuracy: 0.001)
         XCTAssertLessThanOrEqual(MapCompactCardMotionStyle.hiddenVerticalOffset, 220)
         XCTAssertEqual(MapPinSelectionMotionStyle.inactiveScale, 0.90, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.selectedScale, 1.45, accuracy: 0.001)
-        XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.26, accuracy: 0.001)
+        XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.18, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
     }
 
@@ -236,6 +236,9 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(feed.contains("LazyHStack(alignment: .top"))
         XCTAssertTrue(placeCard.contains(".onAppear(perform: onReady)"))
         XCTAssertTrue(placeCard.contains("PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 72)"))
+        XCTAssertTrue(placeCard.contains("PlacePhotoImagePipeline.shared.image("))
+        XCTAssertTrue(placeCard.contains("VisitPhotoLocalFileStore.data(from: localAssetRef)"))
+        XCTAssertFalse(placeCard.contains("return await image.byPreparingForDisplay() ?? image"))
         XCTAssertTrue(placeCard.contains("withAnimation(.easeOut(duration: 0.10))"))
     }
 
@@ -368,7 +371,18 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(expected["selection_lifetime"] as? String, "unbounded_until_explicit_dismissal")
         XCTAssertEqual(expected["native_feature_binding_clear_preserves_selection"] as? Bool, true)
         XCTAssertEqual(expected["active_pin_and_title_render_after_all_inactive_annotations"] as? Bool, true)
-        XCTAssertGreaterThan(MapAnnotationLayering.activeOverlayZIndex, 0)
+
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let inactiveAnnotations = try XCTUnwrap(map.range(of: "ForEach(inactiveAnnotationGroups"))
+        let activeAnnotation = try XCTUnwrap(
+            map.range(of: "if highlightsCompactSelection, let group = activeAnnotationGroup")
+        )
+
+        XCTAssertLessThan(inactiveAnnotations.lowerBound, activeAnnotation.lowerBound)
+        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertFalse(map.contains("proxy.convert(coordinate, to: .local)"))
     }
 
     func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
@@ -393,15 +407,18 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("handleMapDragEnd()"))
         XCTAssertTrue(map.contains("handleMapCameraChange(context.region)"))
         XCTAssertTrue(map.contains(".onMapCameraChange(frequency: .onEnd)"))
+        XCTAssertTrue(map.contains("@State private var cameraRegionTracker"))
+        XCTAssertFalse(map.contains("@State private var currentSearchRegion"))
+        XCTAssertTrue(map.contains("cameraRegionTracker.region = region"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertTrue(map.contains("activeMapAnnotationOverlay(proxy: proxy)"))
-        XCTAssertTrue(map.contains("private func activeMapAnnotationOverlay(proxy: MapProxy)"))
-        XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
-        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
-        XCTAssertFalse(map.contains(".zIndex(MapAnnotationLayering.activeZIndex)"))
+        XCTAssertTrue(map.contains("if highlightsCompactSelection, let group = activeAnnotationGroup"))
+        XCTAssertTrue(map.contains("if highlightsCompactSelection, let candidate = activeSearchCandidate"))
+        XCTAssertFalse(map.contains("activeMapAnnotationOverlay"))
+        XCTAssertFalse(map.contains("proxy.convert(coordinate, to: .local)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
+        XCTAssertFalse(map.contains("replacementFadeOutDuration"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))
         XCTAssertTrue(map.contains("let retainedGroup = VisiblePlaceGrouping.matchingGroup("))
@@ -413,6 +430,52 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(card.contains(".textSelection(.enabled)"))
         XCTAssertTrue(card.contains("Label(\"Copy coordinates\", systemImage: \"doc.on.doc\")"))
         XCTAssertFalse(card.contains(".transition(.move(edge: .bottom).combined(with: .opacity))"))
+    }
+
+    func testWalkthroughUsesTheCanonicalHotchkissFallback() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let add = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+
+        XCTAssertTrue(
+            add.contains("candidate = suggested ?? FirstVisitParkSuggestionPolicy.hotchkissPark")
+        )
+        XCTAssertFalse(add.contains("private static let hotchkissParkCandidate"))
+    }
+
+    func testActiveMapAnnotationsDoNotRenderDuplicateNativeTitles() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let emptyTitleAnnotations = map.components(
+            separatedBy: "Annotation(\n                                \"\","
+        ).count - 1
+
+        XCTAssertEqual(emptyTitleAnnotations, 2)
+    }
+
+    func testProviderPhotoTransportReusesSessionAndProtocolCaching() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let repository = try String(
+            contentsOf: root.appendingPathComponent(
+                "Wander/Services/Remote/SupabaseRepositories.swift"
+            )
+        )
+
+        XCTAssertTrue(repository.contains("private let photoSession: URLSession"))
+        XCTAssertTrue(repository.contains("photoSession: URLSession = .shared"))
+        XCTAssertTrue(repository.contains("request.cachePolicy = .useProtocolCachePolicy"))
+        XCTAssertTrue(repository.contains("photoSession.data(for: request)"))
+        XCTAssertFalse(repository.contains("request.setValue(\"no-store\""))
+        XCTAssertFalse(repository.contains("defer { session.invalidateAndCancel() }"))
     }
 
     func testNearbyPermissionEducationIsGatedBeforeTheSystemRequest() throws {
@@ -1700,6 +1763,75 @@ final class VisiblePlaceGroupingTests: XCTestCase {
         XCTAssertEqual(groups.count, 1)
         XCTAssertTrue(VisiblePlaceGrouping.matches(myWant, ryanBeen))
         XCTAssertEqual(groups[0].primary.owner.id, currentUser.id)
+    }
+
+    func testGroupsLegacyAndCanonicalHotchkissAddressesIntoOnePin() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let legacySave = visiblePlace(
+            owner: currentUser,
+            name: "Hotchkiss Park",
+            category: "park",
+            address: "2302 4th Street",
+            latitude: 34.0046,
+            longitude: -118.4845,
+            providerID: "hotchkiss-park-ocean-park",
+            status: .been
+        )
+        let canonicalSave = visiblePlace(
+            owner: ryan,
+            name: "Hotchkiss Park",
+            category: "park",
+            address: "2302 4th St",
+            latitude: 34.00585,
+            longitude: -118.4842,
+            sourceProvider: "walkthrough",
+            providerID: "hotchkiss-park-santa-monica",
+            status: .wannaGo
+        )
+
+        let groups = VisiblePlaceGrouping.groups(
+            from: [legacySave, canonicalSave],
+            currentUserID: currentUser.id
+        )
+
+        XCTAssertEqual(groups.count, 1)
+        XCTAssertTrue(VisiblePlaceGrouping.matches(legacySave, canonicalSave))
+        XCTAssertEqual(groups[0].saveCount, 2)
+    }
+
+    func testDoesNotGroupSameNamedPlacesAtDifferentStreetNumbers() {
+        let currentUser = profile(id: "user_joe", handle: "joe", displayName: "Joe")
+        let ryan = profile(id: "user_ryan", handle: "ryan", displayName: "Ryan")
+        let firstPlace = visiblePlace(
+            owner: currentUser,
+            name: "Corner Market",
+            category: "shop",
+            address: "2302 4th St",
+            latitude: 34.0046,
+            longitude: -118.4845,
+            providerID: "corner-market-first",
+            status: .been
+        )
+        let secondPlace = visiblePlace(
+            owner: ryan,
+            name: "Corner Market",
+            category: "shop",
+            address: "2303 4th Street",
+            latitude: 34.0146,
+            longitude: -118.4945,
+            providerID: "corner-market-second",
+            status: .wannaGo
+        )
+
+        XCTAssertFalse(VisiblePlaceGrouping.matches(firstPlace, secondPlace))
+        XCTAssertEqual(
+            VisiblePlaceGrouping.groups(
+                from: [firstPlace, secondPlace],
+                currentUserID: currentUser.id
+            ).count,
+            2
+        )
     }
 
     private func profile(id: String, handle: String, displayName: String) -> LocalProfile {
