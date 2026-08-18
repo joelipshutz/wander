@@ -167,9 +167,9 @@ struct ProfileSettingsHome: View {
             switch auth.state {
             case .signedIn(let session):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
-                accountRow("Change email", value: session.email, icon: "envelope")
-                accountRow("Change phone number", value: session.phoneNumber ?? "Optional", icon: "phone")
-                accountRow("Change password", value: nil, icon: "key")
+                ProfileSettingsAccountActions(session: session) {
+                    showsAccountManagement = true
+                }
             case .offline(let session, _):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
                 Label("Saved map available offline", systemImage: "wifi.slash")
@@ -382,32 +382,6 @@ struct ProfileSettingsHome: View {
             .rawValue
     }
 
-    private func accountRow(_ title: String, value: String?, icon: String) -> some View {
-        Button { showsAccountManagement = true } label: {
-            HStack(spacing: WanderTheme.spacing3) {
-                Label {
-                    Text(title)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                } icon: {
-                    Image(systemName: icon)
-                }
-                .layoutPriority(1)
-                Spacer(minLength: WanderTheme.spacing2)
-                if let value {
-                    Text(value)
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.textFaint.color)
-            }
-        }
-        .foregroundStyle(WanderTheme.textInk.color)
-    }
-
     private func destructiveSettingsLabel(_ title: String, icon: String, color: Color) -> some View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: icon)
@@ -589,24 +563,112 @@ private struct ProfileSettingsIdentityRow: View {
             WanderAvatar(
                 initials: String((session.displayName ?? session.handle ?? "You").prefix(2)).uppercased(),
                 avatarURL: avatarURL,
-                size: 44,
+                size: 52,
                 color: WanderTheme.avatarRyan.color
             )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
                 Text(session.displayName ?? "Your account")
-                    .font(.system(size: 15, weight: .black))
-                if let publicHandle = SettingsAccountIdentityPresentation.publicHandle(for: session) {
-                    Text(publicHandle)
-                        .font(.system(size: 13, weight: .medium))
+                    .font(.system(.headline, design: .default, weight: .bold))
+                if let emailAddress = SettingsAccountIdentityPresentation.emailAddress(for: session) {
+                    Text(emailAddress)
+                        .font(.system(.subheadline, design: .default, weight: .regular))
                         .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                if let phoneNumber = SettingsAccountIdentityPresentation.phoneNumber(for: session) {
+                    Text(phoneNumber)
+                        .font(.system(.subheadline, design: .default, weight: .regular))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
         }
-        .padding(.vertical, WanderTheme.spacing1)
+        .padding(.vertical, WanderTheme.spacing2)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct ProfileSettingsAccountActions: View {
+    let session: AuthSession
+    let onSelect: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            actionButton(
+                title: "Change email",
+                value: SettingsAccountIdentityPresentation.emailAddress(for: session) ?? "Not added",
+                icon: "envelope"
+            )
+
+            actionDivider
+
+            actionButton(
+                title: "Change phone number",
+                value: SettingsAccountIdentityPresentation.phoneNumber(for: session) ?? "Not added",
+                icon: "phone"
+            )
+
+            actionDivider
+
+            actionButton(
+                title: "Change password",
+                value: nil,
+                icon: "key"
+            )
+        }
+        .listRowInsets(EdgeInsets())
+    }
+
+    private func actionButton(title: String, value: String?, icon: String) -> some View {
+        Button(action: onSelect) {
+            VStack(spacing: WanderTheme.spacing2) {
+                Image(systemName: icon)
+                    .font(.system(.title3, design: .default, weight: .semibold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(height: 24)
+
+                Text(title)
+                    .font(.system(.caption, design: .default, weight: .semibold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let value {
+                    Text(value)
+                        .font(.system(.caption2, design: .default, weight: .regular))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            .padding(.horizontal, WanderTheme.spacing1)
+            .padding(.vertical, WanderTheme.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 116)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(value.map { "\(title), \($0)" } ?? title)
+    }
+
+    private var actionDivider: some View {
+        Divider()
+            .overlay(Color.gray.opacity(0.22))
+            .padding(.vertical, WanderTheme.spacing3)
     }
 }
 
 struct SettingsAccountIdentityPresentation {
+    static func emailAddress(for session: AuthSession) -> String? {
+        normalized(session.email)
+    }
+
+    static func phoneNumber(for session: AuthSession) -> String? {
+        normalized(session.phoneNumber)
+    }
+
     static func publicHandle(for session: AuthSession) -> String? {
         guard let handle = session.handle?.trimmingCharacters(in: .whitespacesAndNewlines),
               !handle.isEmpty else {
@@ -614,6 +676,15 @@ struct SettingsAccountIdentityPresentation {
         }
 
         return handle.hasPrefix("@") ? handle : "@\(handle)"
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+
+        return value
     }
 }
 
