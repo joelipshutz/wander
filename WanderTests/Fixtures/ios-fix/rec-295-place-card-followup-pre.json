@@ -1,0 +1,34 @@
+{
+  "linear_issue": "REC-295",
+  "branch": "codex/rec-295-place-card-followup",
+  "base_commit": "f35c03e40",
+  "captured_at": "2026-08-17",
+  "capture_method": "User report plus source-contract inspection; this checkout intentionally has no StateServer bridge.",
+  "reported_failures": [
+    {
+      "behavior": "Place-card action glyphs are not visible.",
+      "source_evidence": "PlaceCardGlassActionButtonStyle composites the caller label inside an expanding glass background without an explicit foreground glyph layer.",
+      "expected": "Every compact-card add and share button renders a centered white SF Symbol at rest and throughout the press animation."
+    },
+    {
+      "behavior": "Tapping the already-selected map pin minimizes or replaces its compact card.",
+      "source_evidence": "Both active and inactive annotations call the same selection replacement functions.",
+      "expected": "An active pin tap preserves the selection and compact card and replays only the pin bounce."
+    },
+    {
+      "behavior": "A coordinate-only dropped pin produces a malformed compact card.",
+      "source_evidence": "PlaceProfilePreviewCard.cardPhoto returns no view when a dropped pin has no image, while the entire card surface is built from cardPhoto.",
+      "expected": "A dropped pin always has a full 232-point compact surface titled Dropped Pin with distance, add, and share actions."
+    },
+    {
+      "behavior": "Nearby begins moving away while the compact card is still sliding.",
+      "source_evidence": "presentCompactCard animates nearbyLift in the same transaction as the card entrance.",
+      "expected": "Nearby remains fully present and stationary until the card entrance completes, and returns only after dismissal completes."
+    }
+  ],
+  "product_contract": {
+    "dropped_pin_name_scope": "Per user-place save; never mutates the canonical coordinate place.",
+    "shared_visibility": "The label may be shown with that user's memory only when the viewer is authorized to see it.",
+    "saved_footer": "Saved from a dropped pin"
+  }
+}

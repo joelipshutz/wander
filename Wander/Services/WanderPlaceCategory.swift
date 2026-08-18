@@ -169,6 +169,49 @@ struct RestaurantCuisineUse: Equatable {
 enum PlaceMemoryAttributeKeys {
     static let personalLabels = "personal_labels"
     static let restaurantCuisine = "restaurant_cuisine"
+    static let droppedPinName = "dropped_pin_name"
+}
+
+enum DroppedPinNamePolicy {
+    static let fallbackName = "Dropped Pin"
+    static let maximumLength = 80
+
+    static func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(maximumLength))
+    }
+
+    static func customName(from attributes: [LocalPlaceAttribute]) -> String? {
+        guard let attribute = attributes.last(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.droppedPinName
+        }) else { return nil }
+        return decodedName(from: attribute.valueJSON)
+    }
+
+    static func customName(from attributes: [PlaceAttributeDraft]) -> String? {
+        guard let attribute = attributes.last(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.droppedPinName
+        }) else { return nil }
+        return decodedName(from: attribute.valueJSON)
+    }
+
+    static func displayName(
+        canonicalName: String,
+        sourceProvider: String?,
+        attributes: [LocalPlaceAttribute]
+    ) -> String {
+        guard sourceProvider == "coordinate" else { return canonicalName }
+        return customName(from: attributes) ?? fallbackName
+    }
+
+    private static func decodedName(from valueJSON: String) -> String? {
+        guard let data = valueJSON.data(using: .utf8),
+              let value = try? JSONDecoder().decode(String.self, from: data)
+        else { return nil }
+        return normalized(value)
+    }
 }
 
 struct PlaceMemoryDefaultSuggestions: Equatable {

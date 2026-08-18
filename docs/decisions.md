@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-16
+Last updated: 2026-08-17
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -20,6 +20,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Profile merges self memory and social profile | Locked | Owner and other-user profile states share the same conceptual surface. |
 | Follow graph, not friend requests | Locked | One-way follows; mutual follows are friends. |
 | Public/private copy | Locked | UI says Everyone/Friends/Self; data stores `followers`/`mutuals`/`self`. |
+| Dropped-pin custom names | Locked for REC-295 | A dropped-pin rename is a label on one user's save, not a mutation of the shared canonical place. The owner sees their label throughout their map and save flow. Another user may see it only as part of that owner's memory when the existing visibility and block rules authorize the memory; it never renames another person's save or the canonical coordinate place. |
 | Block behavior | Locked | Hard block; remove follow edges and hide profiles/content both ways. |
 | People finding | Locked for REC-224 | Username search remains available. Native Contacts is now a contextual invite path from Check-in Friends, Discover People, and list collaborators; the app reads phone-bearing contacts only after an explicit primer and never uploads the address book. |
 | Contact invite relationship | Locked for REC-224 | Sending a contact invite opens a pre-addressed native Messages composer with the public TestFlight link and sender profile. It does not auto-follow either account. A generic TestFlight install cannot be attributed to the sender, so joined notifications and deferred check-in/list acceptance require a future attributed invite backend; until then the recipient may follow the sender and the sender can follow back from the resulting profile notification. |

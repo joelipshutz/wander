@@ -1183,8 +1183,13 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(previewCard.contains("activeCardAction: PlaceCardPreviewAction?"))
         XCTAssertTrue(previewCard.contains("guard activeCardAction == nil else"))
         XCTAssertTrue(previewCard.contains("PlaceCardGlassActionButtonStyle("))
+        XCTAssertTrue(previewCard.contains("let systemImage: String"))
+        XCTAssertTrue(previewCard.contains("Image(systemName: systemImage)"))
+        XCTAssertTrue(previewCard.contains(".zIndex(2)"))
         XCTAssertTrue(previewCard.contains("showsBorder: false"))
         XCTAssertTrue(previewCard.contains("Image(systemName: \"square.and.arrow.up\")"))
+        XCTAssertTrue(previewCard.contains("Image(systemName: \"mappin.and.ellipse\")"))
+        XCTAssertTrue(previewCard.contains("Text(\"Saved from a dropped pin\")"))
         XCTAssertTrue(previewCard.contains("configuration.isPressed && !reduceMotion ? 1.3 : 1"))
         XCTAssertTrue(previewCard.contains("anchor: .center"))
         XCTAssertTrue(previewCard.contains("frame(width: 44, height: 44, alignment: .center)"))
@@ -1193,6 +1198,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(previewCard.contains("scaleEffect(configuration.isPressed && !reduceMotion ? 1.6 : 1)"))
         XCTAssertTrue(mapScreen.contains("handleCompactCardReady(for:"))
         XCTAssertTrue(mapScreen.contains("prepareCompactCardForPhoto()"))
+        XCTAssertTrue(mapScreen.contains("private func replayActivePinBounce()"))
+        XCTAssertTrue(mapScreen.contains("MapPinReselectionBounceModifier("))
         XCTAssertTrue(mapScreen.contains("Text(\"check-in history\")"))
         XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityCard.contains("ticketAccentColor"))
@@ -1298,7 +1305,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(saveFlow.contains("Text(flowTitle)\n                    .font(WanderTypography.actionScreenTitle)"))
         XCTAssertTrue(
             saveFlow.contains(
-                "Text(context.candidate.name)\n                        .font(WanderTypography.editorialNamedContent)"
+                "Text(droppedPinDisplayName)\n                        .font(WanderTypography.editorialNamedContent)"
             )
         )
         XCTAssertEqual(saveFlow.components(separatedBy: "WanderTypography.editorial").count - 1, 1)

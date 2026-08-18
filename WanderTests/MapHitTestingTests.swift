@@ -268,7 +268,7 @@ final class MapCoordinateCandidateTests: XCTestCase {
         let candidate = MapScreen.coordinateCandidate(at: coordinate)
 
         XCTAssertEqual(candidate.id, "coordinate_3408324_-11836147")
-        XCTAssertEqual(candidate.name, "Dropped pin")
+        XCTAssertEqual(candidate.name, "Dropped Pin")
         XCTAssertEqual(candidate.address, "34.08324, -118.36147")
         XCTAssertEqual(candidate.category, WanderPlaceCategory.fallbackPlace)
         XCTAssertEqual(candidate.primaryCategory, WanderPlaceCategory.fallbackPlace)
@@ -297,6 +297,39 @@ final class MapCoordinateCandidateTests: XCTestCase {
         XCTAssertTrue(place.isDroppedPin)
         XCTAssertEqual(place.locality, "West Hollywood")
         XCTAssertEqual(place.droppedPinCoordinateDisplay, "34.08324, -118.36147")
+    }
+
+    func testDroppedPinNameIsScopedToTheVisibleMemoryAttributes() throws {
+        let customName = PlaceAttributeDraft(
+            questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+            valueType: "text",
+            stringValue: "Sunday overlook"
+        )
+        let localAttribute = LocalPlaceAttribute(
+            localID: "local_attr_dropped_pin_name",
+            userPlaceID: "up_dropped_pin",
+            questionKey: customName.questionKey,
+            valueType: customName.valueType,
+            valueJSON: customName.valueJSON
+        )
+
+        XCTAssertEqual(
+            DroppedPinNamePolicy.displayName(
+                canonicalName: "Dropped Pin",
+                sourceProvider: "coordinate",
+                attributes: [localAttribute]
+            ),
+            "Sunday overlook"
+        )
+        XCTAssertEqual(
+            DroppedPinNamePolicy.displayName(
+                canonicalName: "Canonical Cafe",
+                sourceProvider: "apple_maps",
+                attributes: [localAttribute]
+            ),
+            "Canonical Cafe"
+        )
+        XCTAssertEqual(DroppedPinNamePolicy.normalized("   "), nil)
     }
 }
 

@@ -3960,6 +3960,55 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(updatedVisiblePlace.userPlace.syncState, .pendingCreate)
     }
 
+    func testDroppedPinRenameUpdatesTheUserMemoryWithoutChangingCanonicalPlaceName() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let candidate = MapScreen.coordinateCandidate(
+            at: CLLocationCoordinate2D(latitude: 34.02123, longitude: -118.48191)
+        )
+        let result = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                    valueType: "text",
+                    stringValue: "Ocean steps"
+                )
+            ]
+        )
+        var visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(visiblePlace.place.canonicalName, DroppedPinNamePolicy.fallbackName)
+        XCTAssertEqual(PlaceSheetPlace(visiblePlace: visiblePlace).name, "Ocean steps")
+
+        _ = try XCTUnwrap(
+            store.createVisit(
+                userPlaceID: result.userPlaceID,
+                ratingScore: 4.5,
+                attributes: [
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                        valueType: "text",
+                        stringValue: "Sunset stairs"
+                    )
+                ]
+            )
+        )
+        visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(visiblePlace.place.canonicalName, DroppedPinNamePolicy.fallbackName)
+        XCTAssertEqual(PlaceSheetPlace(visiblePlace: visiblePlace).name, "Sunset stairs")
+        XCTAssertEqual(visiblePlace.userPlace.ratingScore, 4.5)
+    }
+
     func testImportStatusChangePreservesOptionalDetailsInsteadOfRebuildingStaleCandidate() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
