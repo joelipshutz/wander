@@ -224,7 +224,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(expected["selection_lifetime"] as? String, "unbounded_until_explicit_dismissal")
         XCTAssertEqual(expected["native_feature_binding_clear_preserves_selection"] as? Bool, true)
         XCTAssertEqual(expected["active_pin_and_title_render_after_all_inactive_annotations"] as? Bool, true)
-        XCTAssertGreaterThan(MapAnnotationLayering.activeZIndex, 0)
+        XCTAssertGreaterThan(MapAnnotationLayering.activeOverlayZIndex, 0)
     }
 
     func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
@@ -252,7 +252,11 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
-        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeZIndex)"))
+        XCTAssertTrue(map.contains("activeMapAnnotationOverlay(proxy: proxy)"))
+        XCTAssertTrue(map.contains("private func activeMapAnnotationOverlay(proxy: MapProxy)"))
+        XCTAssertTrue(map.contains("proxy.convert(coordinate, to: .local)"))
+        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeOverlayZIndex)"))
+        XCTAssertFalse(map.contains(".zIndex(MapAnnotationLayering.activeZIndex)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))
@@ -293,7 +297,7 @@ final class MapCoordinateCandidateTests: XCTestCase {
         let candidate = MapScreen.coordinateCandidate(at: coordinate)
 
         XCTAssertEqual(candidate.id, "coordinate_3408324_-11836147")
-        XCTAssertEqual(candidate.name, "Dropped pin")
+        XCTAssertEqual(candidate.name, "Dropped Pin")
         XCTAssertEqual(candidate.address, "34.08324, -118.36147")
         XCTAssertEqual(candidate.category, WanderPlaceCategory.fallbackPlace)
         XCTAssertEqual(candidate.primaryCategory, WanderPlaceCategory.fallbackPlace)
@@ -322,6 +326,39 @@ final class MapCoordinateCandidateTests: XCTestCase {
         XCTAssertTrue(place.isDroppedPin)
         XCTAssertEqual(place.locality, "West Hollywood")
         XCTAssertEqual(place.droppedPinCoordinateDisplay, "34.08324, -118.36147")
+    }
+
+    func testDroppedPinNameIsScopedToTheVisibleMemoryAttributes() throws {
+        let customName = PlaceAttributeDraft(
+            questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+            valueType: "text",
+            stringValue: "Sunday overlook"
+        )
+        let localAttribute = LocalPlaceAttribute(
+            localID: "local_attr_dropped_pin_name",
+            userPlaceID: "up_dropped_pin",
+            questionKey: customName.questionKey,
+            valueType: customName.valueType,
+            valueJSON: customName.valueJSON
+        )
+
+        XCTAssertEqual(
+            DroppedPinNamePolicy.displayName(
+                canonicalName: "Dropped Pin",
+                sourceProvider: "coordinate",
+                attributes: [localAttribute]
+            ),
+            "Sunday overlook"
+        )
+        XCTAssertEqual(
+            DroppedPinNamePolicy.displayName(
+                canonicalName: "Canonical Cafe",
+                sourceProvider: "apple_maps",
+                attributes: [localAttribute]
+            ),
+            "Canonical Cafe"
+        )
+        XCTAssertEqual(DroppedPinNamePolicy.normalized("   "), nil)
     }
 }
 

@@ -3960,6 +3960,177 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(updatedVisiblePlace.userPlace.syncState, .pendingCreate)
     }
 
+    func testDroppedPinLabelsStayPerMemoryAndOnlyAppearWhenThatMemoryIsVisible() throws {
+        let currentUser = LocalProfile(
+            localID: "local_profile_current",
+            serverID: "user_current",
+            handle: "current",
+            displayName: "Current",
+            syncState: .synced
+        )
+        let followedUser = LocalProfile(
+            localID: "local_profile_followed",
+            serverID: "user_followed",
+            handle: "followed",
+            displayName: "Followed",
+            syncState: .synced
+        )
+        let privateUser = LocalProfile(
+            localID: "local_profile_private",
+            serverID: "user_private",
+            handle: "private",
+            displayName: "Private",
+            syncState: .synced
+        )
+        let droppedPin = LocalPlace(
+            localID: "local_place_shared_coordinate",
+            serverID: "place_shared_coordinate",
+            canonicalName: DroppedPinNamePolicy.fallbackName,
+            category: WanderPlaceCategory.fallbackPlace,
+            latitude: 34.02123,
+            longitude: -118.48191,
+            sourceProvider: "coordinate",
+            syncState: .synced
+        )
+        let currentMemory = LocalUserPlace(
+            localID: "local_up_current_pin",
+            serverID: "up_current_pin",
+            userID: currentUser.id,
+            placeID: droppedPin.id,
+            status: .wannaGo,
+            visibility: .selfOnly,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let followedMemory = LocalUserPlace(
+            localID: "local_up_followed_pin",
+            serverID: "up_followed_pin",
+            userID: followedUser.id,
+            placeID: droppedPin.id,
+            status: .been,
+            visibility: .followers,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let privateMemory = LocalUserPlace(
+            localID: "local_up_private_pin",
+            serverID: "up_private_pin",
+            userID: privateUser.id,
+            placeID: droppedPin.id,
+            status: .been,
+            visibility: .selfOnly,
+            sourceType: "manual",
+            syncState: .synced
+        )
+        let attributes = [
+            LocalPlaceAttribute(
+                localID: "local_attr_current_pin_name",
+                userPlaceID: currentMemory.id,
+                questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                valueType: "text",
+                valueJSON: "\"My overlook\"",
+                syncState: .synced
+            ),
+            LocalPlaceAttribute(
+                localID: "local_attr_followed_pin_name",
+                userPlaceID: followedMemory.id,
+                questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                valueType: "text",
+                valueJSON: "\"Their overlook\"",
+                syncState: .synced
+            ),
+            LocalPlaceAttribute(
+                localID: "local_attr_private_pin_name",
+                userPlaceID: privateMemory.id,
+                questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                valueType: "text",
+                valueJSON: "\"Hidden overlook\"",
+                syncState: .synced
+            )
+        ]
+        let store = WanderStore(fixtures: WanderFixtures(
+            currentUser: currentUser,
+            profiles: [currentUser, followedUser, privateUser],
+            places: [droppedPin],
+            userPlaces: [currentMemory, followedMemory, privateMemory],
+            placeAttributes: attributes,
+            follows: [
+                LocalFollow(
+                    localID: "local_follow_current_followed",
+                    followerUserID: currentUser.id,
+                    followedUserID: followedUser.id,
+                    source: .profile,
+                    syncState: .synced
+                )
+            ],
+            blocks: [],
+            placeLists: [],
+            placeListMembers: [],
+            placeListItems: [],
+            contactProvider: FakeContactProvider(seededMatches: [])
+        ))
+
+        let visiblePlaces = store.visiblePlaces()
+        let namesByOwner = Dictionary(uniqueKeysWithValues: visiblePlaces.map {
+            ($0.owner.id, PlaceSheetPlace(visiblePlace: $0).name)
+        })
+
+        XCTAssertEqual(droppedPin.canonicalName, DroppedPinNamePolicy.fallbackName)
+        XCTAssertEqual(namesByOwner[currentUser.id], "My overlook")
+        XCTAssertEqual(namesByOwner[followedUser.id], "Their overlook")
+        XCTAssertNil(namesByOwner[privateUser.id])
+        XCTAssertFalse(visiblePlaces.flatMap(\.attributes).contains { $0.valueJSON == "\"Hidden overlook\"" })
+    }
+
+    func testDroppedPinRenameUpdatesTheUserMemoryWithoutChangingCanonicalPlaceName() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Ryan", handle: "ryan")))
+        let candidate = MapScreen.coordinateCandidate(
+            at: CLLocationCoordinate2D(latitude: 34.02123, longitude: -118.48191)
+        )
+        let result = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: nil,
+            sourceType: .manual,
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                    valueType: "text",
+                    stringValue: "Ocean steps"
+                )
+            ]
+        )
+        var visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(visiblePlace.place.canonicalName, DroppedPinNamePolicy.fallbackName)
+        XCTAssertEqual(PlaceSheetPlace(visiblePlace: visiblePlace).name, "Ocean steps")
+
+        _ = try XCTUnwrap(
+            store.createVisit(
+                userPlaceID: result.userPlaceID,
+                ratingScore: 4.5,
+                attributes: [
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                        valueType: "text",
+                        stringValue: "Sunset stairs"
+                    )
+                ]
+            )
+        )
+        visiblePlace = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == result.userPlaceID }
+        )
+
+        XCTAssertEqual(visiblePlace.place.canonicalName, DroppedPinNamePolicy.fallbackName)
+        XCTAssertEqual(PlaceSheetPlace(visiblePlace: visiblePlace).name, "Sunset stairs")
+        XCTAssertEqual(visiblePlace.userPlace.ratingScore, 4.5)
+    }
+
     func testImportStatusChangePreservesOptionalDetailsInsteadOfRebuildingStaleCandidate() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))

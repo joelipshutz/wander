@@ -273,6 +273,7 @@ struct MapScreen: View {
     @State private var mapTapDismissalSuppressionUntil = Date.distantPast
     @State private var previousMapTapDate = Date.distantPast
     @State private var mapSelectionRevision = 0
+    @State private var activePinBounceRevision: UInt64 = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
@@ -571,14 +572,8 @@ struct MapScreen: View {
         let inactiveAnnotationGroups = indexedAnnotationGroups.filter { _, group in
             !highlightsCompactSelection || group.key != selectedPlaceGroupKey
         }
-        let activeAnnotationGroup = indexedAnnotationGroups.first { _, group in
-            highlightsCompactSelection && group.key == selectedPlaceGroupKey
-        }
         let inactiveSearchCandidates = indexedSearchCandidates.filter { _, candidate in
             !highlightsCompactSelection || candidate.id != selectedSearchCandidateID
-        }
-        let activeSearchCandidate = indexedSearchCandidates.first { _, candidate in
-            highlightsCompactSelection && candidate.id == selectedSearchCandidateID
         }
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
@@ -656,74 +651,6 @@ struct MapScreen: View {
                             }
                         }
 
-                        if let (index, group) = activeAnnotationGroup {
-                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
-                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                            Annotation(
-                                "",
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: group.primary.place.latitude,
-                                    longitude: group.primary.place.longitude
-                                )
-                            ) {
-                                Button {
-                                    selectVisiblePlaceFromMapTap(group.primary)
-                                } label: {
-                                    ActiveMapAnnotationContent(
-                                        title: group.primary.place.canonicalName
-                                    ) {
-                                        MapPlaceMarker(
-                                            visiblePlace: group.primary,
-                                            saves: saveSummaries(for: group),
-                                            currentUserID: store.currentUser.id,
-                                            isSelected: true
-                                        )
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .frame(minWidth: 44, minHeight: 44)
-                                .modifier(
-                                    MapPinEntranceModifier(
-                                        isVisible: isTransitionVisible,
-                                        delay: entranceDelay
-                                    )
-                                )
-                                .zIndex(MapAnnotationLayering.activeZIndex)
-                            }
-                        }
-
-                        if let (index, candidate) = activeSearchCandidate,
-                           let latitude = candidate.latitude,
-                           let longitude = candidate.longitude {
-                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                            Annotation(
-                                "",
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: latitude,
-                                    longitude: longitude
-                                )
-                            ) {
-                                Button {
-                                    selectSearchCandidateFromMapTap(candidate)
-                                } label: {
-                                    ActiveMapAnnotationContent(title: candidate.name) {
-                                        SearchResultMarker(
-                                            candidate: candidate,
-                                            isSelected: true
-                                        )
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .frame(minWidth: 44, minHeight: 44)
-                                .modifier(
-                                    MapPinEntranceModifier(
-                                        isVisible: true,
-                                        delay: entranceDelay
-                                    )
-                                )
-                                .zIndex(MapAnnotationLayering.activeZIndex)
-                            }
-                        }
                     }
                     .mapStyle(.standard(elevation: .flat, emphasis: .muted))
                     .mapFeatureSelectionDisabled { feature in
@@ -733,6 +660,9 @@ struct MapScreen: View {
                     .modifier(HideNativeMapFeatureAccessory())
                     .tint(Self.currentLocationTint)
                     .ignoresSafeArea()
+                    .overlay {
+                        activeMapAnnotationOverlay(proxy: proxy)
+                    }
                     .background {
                         GeometryReader { geometry in
                             Color.clear.preference(
@@ -1488,6 +1418,7 @@ struct MapScreen: View {
 
     private func selectVisiblePlaceFromMapTap(_ visiblePlace: VisiblePlace) {
         dismissMoreFilters()
+        activePinBounceRevision = 0
         mapSelectionRevision += 1
         clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
@@ -1502,6 +1433,7 @@ struct MapScreen: View {
 
     private func selectSearchCandidateFromMapTap(_ candidate: PlaceCandidate) {
         dismissMoreFilters()
+        activePinBounceRevision = 0
         mapSelectionRevision += 1
         routedVisiblePlace = nil
         clearNativeMapFeatureSelection()
@@ -1513,6 +1445,70 @@ struct MapScreen: View {
             isPlaceProfilePresented = false
             centerCompactSelection(on: candidate)
         }
+    }
+
+    private func replayActivePinBounce() {
+        cancelPendingMapTapDismissal()
+        activePinBounceRevision &+= 1
+    }
+
+    @ViewBuilder
+    private func activeMapAnnotationOverlay(proxy: MapProxy) -> some View {
+        GeometryReader { _ in
+            if highlightsCompactSelection,
+               let group = (transitioningAnnotationGroups ?? orderedVisiblePlaceGroups())
+                .first(where: { $0.key == selectedPlaceGroupKey }) {
+                let coordinate = CLLocationCoordinate2D(
+                    latitude: group.primary.place.latitude,
+                    longitude: group.primary.place.longitude
+                )
+                if let point = proxy.convert(coordinate, to: .local) {
+                    Button {
+                        replayActivePinBounce()
+                    } label: {
+                        ActiveMapAnnotationContent(title: group.primary.place.canonicalName) {
+                            MapPlaceMarker(
+                                visiblePlace: group.primary,
+                                saves: saveSummaries(for: group),
+                                currentUserID: store.currentUser.id,
+                                isSelected: true
+                            )
+                            .modifier(
+                                MapPinReselectionBounceModifier(
+                                    trigger: activePinBounceRevision
+                                )
+                            )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .position(point)
+                }
+            } else if highlightsCompactSelection,
+                      let candidate = selectedSearchCandidate,
+                      let latitude = candidate.latitude,
+                      let longitude = candidate.longitude {
+                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+                if let point = proxy.convert(coordinate, to: .local) {
+                    Button {
+                        replayActivePinBounce()
+                    } label: {
+                        ActiveMapAnnotationContent(title: candidate.name) {
+                            SearchResultMarker(candidate: candidate, isSelected: true)
+                                .modifier(
+                                    MapPinReselectionBounceModifier(
+                                        trigger: activePinBounceRevision
+                                    )
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .position(point)
+                }
+            }
+        }
+        .zIndex(MapAnnotationLayering.activeOverlayZIndex)
     }
 
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
@@ -1988,7 +1984,7 @@ struct MapScreen: View {
             compactCardPhase = .presented
             compactCardVerticalOffset = 0
             compactCardContentOpacity = 1
-            nearbyLift = MapControlLayout.compactCardNearbyLift
+            nearbyLift = 0
             nearbyOpacity = 0
             return
         }
@@ -2011,7 +2007,6 @@ struct MapScreen: View {
 
             withAnimation(MapCompactCardMotionStyle.entranceAnimation) {
                 compactCardVerticalOffset = 0
-                nearbyLift = MapControlLayout.compactCardNearbyLift
             }
 
             do {
@@ -4062,7 +4057,7 @@ struct MapScreen: View {
 
         return PlaceCandidate(
             id: sourceID,
-            name: "Dropped pin",
+            name: DroppedPinNamePolicy.fallbackName,
             category: WanderPlaceCategory.fallbackPlace,
             primaryCategory: WanderPlaceCategory.fallbackPlace,
             subcategory: nil,
@@ -5244,7 +5239,7 @@ private struct RecenterButton: View {
                 .foregroundStyle(WanderTheme.pinSocial.color)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(WanderTheme.pinSocial.color, lineWidth: 2))
-                .overlay(alignment: .topLeading) {
+                .overlay(alignment: .topTrailing) {
                     if showsAttentionBadge {
                         Circle()
                             .fill(WanderTheme.stateError.color)
@@ -5253,7 +5248,7 @@ private struct RecenterButton: View {
                                 Circle()
                                     .stroke(WanderTheme.surfaceRaised.color, lineWidth: 2)
                             }
-                            .offset(x: -1, y: 1)
+                            .offset(x: 1, y: 1)
                     }
                 }
                 .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 5)
@@ -5963,7 +5958,33 @@ enum MapSelectionLifetimePolicy {
 }
 
 enum MapAnnotationLayering {
-    static let activeZIndex = 100.0
+    static let activeOverlayZIndex = 100.0
+}
+
+private struct MapPinReselectionBounceModifier: ViewModifier {
+    let trigger: UInt64
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var replayScale: CGFloat = 1
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(replayScale)
+            .task(id: trigger) {
+                guard trigger > 0, !reduceMotion else { return }
+
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    replayScale = 0.82
+                }
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+
+                withAnimation(MapPinSelectionMotionStyle.animation) {
+                    replayScale = 1
+                }
+            }
+    }
 }
 
 @MainActor
@@ -6277,7 +6298,11 @@ struct PlaceSheetPlace {
 
     init(visiblePlace: VisiblePlace) {
         self.id = visiblePlace.place.id
-        self.name = visiblePlace.place.canonicalName
+        self.name = DroppedPinNamePolicy.displayName(
+            canonicalName: visiblePlace.place.canonicalName,
+            sourceProvider: visiblePlace.place.sourceProvider,
+            attributes: visiblePlace.attributes
+        )
         self.category = visiblePlace.effectiveCategory
         self.primaryCategory = visiblePlace.effectiveCategory
         self.subcategory = visiblePlace.effectiveSubcategory
@@ -6788,7 +6813,20 @@ struct MapPlaceSaveContext: Identifiable {
         _ visit: LocalPlaceVisit,
         visiblePlace: VisiblePlace
     ) -> MapPlaceSaveContext {
-        let attributes = VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: visit.attributeAnswersJSON)
+        var attributes = VisitAttributeAnswers.drafts(fromAttributeAnswersJSON: visit.attributeAnswersJSON)
+        if !attributes.contains(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.droppedPinName
+        }), let droppedPinName = visiblePlace.attributes.last(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.droppedPinName
+        }) {
+            attributes.append(
+                PlaceAttributeDraft(
+                    questionKey: droppedPinName.questionKey,
+                    valueType: droppedPinName.valueType,
+                    valueJSON: droppedPinName.valueJSON
+                )
+            )
+        }
         return MapPlaceSaveContext(
             candidate: candidate(from: visiblePlace),
             mode: .editVisit(visiblePlace, visit),
@@ -6830,7 +6868,11 @@ struct MapPlaceSaveContext: Identifiable {
     private static func candidate(from visiblePlace: VisiblePlace) -> PlaceCandidate {
         PlaceCandidate(
             id: visiblePlace.place.id,
-            name: visiblePlace.place.canonicalName,
+            name: DroppedPinNamePolicy.displayName(
+                canonicalName: visiblePlace.place.canonicalName,
+                sourceProvider: visiblePlace.place.sourceProvider,
+                attributes: visiblePlace.attributes
+            ),
             category: visiblePlace.effectiveCategory,
             primaryCategory: visiblePlace.effectiveCategory,
             subcategory: visiblePlace.effectiveSubcategory,
@@ -7149,6 +7191,9 @@ extension PlaceSaveDraft {
                 selectedAnswers: selectedAnswers,
                 unifiedTags: unifiedTags,
                 selectedCuisine: initialCuisine,
+                droppedPinName: context.candidate.sourceProvider == "coordinate"
+                    ? context.initialAnswers[PlaceMemoryAttributeKeys.droppedPinName]?.first
+                    : nil,
                 note: context.initialNote,
                 visitedAt: context.editedVisit?.visitedAt ?? now,
                 plannedDate: plannedDate,
@@ -7715,6 +7760,7 @@ struct MapPlaceSaveEditor: View {
     @State private var lastUnifiedTagOptions: [String]
     @State private var lastQuestionOptions: [String: [String]]
     @State private var selectedCuisine: String?
+    @State private var droppedPinName: String
     @State private var isChoosingPlaceType = false
     @State private var placeTypePickerMode: PlaceTypePickerMode = .subcategory
     @State private var note: String
@@ -7777,6 +7823,11 @@ struct MapPlaceSaveEditor: View {
             }
         let initialAnswers = restoredForm?.selectedAnswers
             ?? context.initialAnswers.filter { !Self.isUnifiedTagKey($0.key) }
+        let initialDroppedPinName: String = if restoredForm != nil {
+            restoredForm?.droppedPinName ?? ""
+        } else {
+            context.initialAnswers[PlaceMemoryAttributeKeys.droppedPinName]?.first ?? ""
+        }
         let initialQuestionBlocks = AddQuestionTemplates.blocks(
             primaryCategory: initialAssignment.primaryCategory,
             subcategory: initialAssignment.subcategory,
@@ -7807,6 +7858,7 @@ struct MapPlaceSaveEditor: View {
             )
         )
         _selectedCuisine = State(initialValue: initialCuisine)
+        _droppedPinName = State(initialValue: initialDroppedPinName)
         _note = State(initialValue: restoredForm?.note ?? context.initialNote)
         _visitedAt = State(initialValue: restoredForm?.visitedAt ?? context.editedVisit?.visitedAt ?? .now)
         let today = WannaGoDate.normalized(.now)
@@ -7841,6 +7893,9 @@ struct MapPlaceSaveEditor: View {
                 selectedAnswers: selectedAnswers,
                 unifiedTags: unifiedTags,
                 selectedCuisine: selectedCuisine,
+                droppedPinName: context.candidate.sourceProvider == "coordinate"
+                    ? droppedPinName
+                    : nil,
                 note: note,
                 visitedAt: visitedAt,
                 plannedDate: plannedDate,
@@ -8126,6 +8181,10 @@ struct MapPlaceSaveEditor: View {
                 candidateCard
             }
 
+            if context.candidate.sourceProvider == "coordinate" {
+                droppedPinNameSection
+            }
+
             if selectedStatus == .been {
                 MapCheckInDateSection(
                     visitedAt: $visitedAt,
@@ -8249,6 +8308,34 @@ struct MapPlaceSaveEditor: View {
                 .padding(WanderTheme.spacing3)
                 .background(WanderTheme.surfaceRaised.color)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        }
+    }
+
+    private var droppedPinNameSection: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            Text("name this dropped pin")
+                .font(WanderTypography.metadata)
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            TextField(DroppedPinNamePolicy.fallbackName, text: $droppedPinName)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.words)
+                .submitLabel(.done)
+                .accessibilityIdentifier("save.droppedPinName")
+                .foregroundStyle(WanderTheme.textInk.color)
+                .tint(WanderTheme.terracotta.color)
+                .padding(WanderTheme.spacing3)
+                .background(WanderTheme.surfaceRaised.color)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .onChange(of: droppedPinName) { _, value in
+                    if value.count > DroppedPinNamePolicy.maximumLength {
+                        droppedPinName = String(value.prefix(DroppedPinNamePolicy.maximumLength))
+                    }
+                }
+
+            Text("This name belongs to your save. People who can see your memory can see the name; the shared map place is unchanged.")
+                .font(WanderTypography.metadata)
+                .foregroundStyle(WanderTheme.textMuted.color)
         }
     }
 
@@ -8632,7 +8719,7 @@ struct MapPlaceSaveEditor: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Text(context.candidate.name)
+                    Text(droppedPinDisplayName)
                         .font(WanderTypography.editorialNamedContent)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .lineLimit(1)
@@ -8666,6 +8753,14 @@ struct MapPlaceSaveEditor: View {
             includeDistance: false,
             includeCategory: false
         )
+    }
+
+    private var droppedPinDisplayName: String {
+        guard context.candidate.sourceProvider == "coordinate" else {
+            return context.candidate.name
+        }
+        return DroppedPinNamePolicy.normalized(droppedPinName)
+            ?? DroppedPinNamePolicy.fallbackName
     }
 
     private var cuisineSuggestionValue: String? {
@@ -8745,6 +8840,7 @@ struct MapPlaceSaveEditor: View {
 
         let initialCuisine = Self.initialCuisine(for: nextContext)
         selectedCuisine = initialCuisine
+        droppedPinName = nextContext.initialAnswers[PlaceMemoryAttributeKeys.droppedPinName]?.first ?? ""
         let initialQuestionBlocks = AddQuestionTemplates.blocks(
             primaryCategory: nextContext.candidate.primaryCategory,
             subcategory: nextContext.candidate.subcategory,
@@ -8892,6 +8988,26 @@ struct MapPlaceSaveEditor: View {
                     stringValue: selectedCuisine
                 )
             )
+        }
+
+        if context.candidate.sourceProvider == "coordinate" {
+            if let droppedPinName = DroppedPinNamePolicy.normalized(droppedPinName) {
+                drafts.append(
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                        valueType: "text",
+                        stringValue: droppedPinName
+                    )
+                )
+            } else {
+                drafts.append(
+                    PlaceAttributeDraft(
+                        questionKey: PlaceMemoryAttributeKeys.droppedPinName,
+                        valueType: "text",
+                        valueJSON: "null"
+                    )
+                )
+            }
         }
 
         return drafts

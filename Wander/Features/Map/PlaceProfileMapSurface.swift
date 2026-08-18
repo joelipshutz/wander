@@ -335,6 +335,7 @@ private struct PlaceProfilePreviewCard: View {
 
                 actionButtonCluster
                     .padding(14)
+                    .zIndex(2)
             }
         }
         .task(id: photoResolutionKey) {
@@ -405,14 +406,14 @@ private struct PlaceProfilePreviewCard: View {
                         .multilineTextAlignment(.leading)
                         .padding(.trailing, hasCardActions ? 58 : 0)
 
-                    Text(place.compactPlaceType)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.88))
-                        .lineLimit(1)
-                        .accessibilityIdentifier("map.selectedPlaceCategory")
-
                     if place.isDroppedPin {
                         droppedPinMetadata
+                    } else {
+                        Text(place.compactPlaceType)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.88))
+                            .lineLimit(1)
+                            .accessibilityIdentifier("map.selectedPlaceCategory")
                     }
 
                     if ratingPresentation != nil || distanceText != nil {
@@ -426,9 +427,18 @@ private struct PlaceProfilePreviewCard: View {
                         PlaceCardHoursBadge(presentation: hoursPresentation)
                             .padding(.top, 2)
                     }
+
+                    Spacer(minLength: 0)
+
+                    if isSavedDroppedPin {
+                        Text("Saved from a dropped pin")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.86))
+                            .accessibilityIdentifier("map.selectedPlaceDroppedPinSource")
+                    }
                 }
                 .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
             .overlay {
@@ -447,12 +457,6 @@ private struct PlaceProfilePreviewCard: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                     .padding(.trailing, hasCardActions ? 58 : 0)
-                    .hidden()
-                    .allowsHitTesting(false)
-
-                Text(place.compactPlaceType)
-                    .font(.system(size: 13, weight: .bold))
-                    .lineLimit(1)
                     .hidden()
                     .allowsHitTesting(false)
 
@@ -487,13 +491,40 @@ private struct PlaceProfilePreviewCard: View {
 
     @ViewBuilder
     private var actionButtonCluster: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 0) {
+        ZStack {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 0) {
+                    actionButtons
+                }
+            } else {
                 actionButtons
             }
-        } else {
-            actionButtons
+
+            actionButtonGlyphs
+                .allowsHitTesting(false)
+                .zIndex(3)
         }
+    }
+
+    private var actionButtonGlyphs: some View {
+        VStack(spacing: 4) {
+            if action != .none {
+                actionButtonGlyph(systemName: action.systemImage, size: 17)
+            }
+
+            if shareContent != nil {
+                actionButtonGlyph(systemName: "square.and.arrow.up", size: 16)
+            }
+        }
+    }
+
+    private func actionButtonGlyph(systemName: String, size: CGFloat) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: size, weight: .black))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(Color.white)
+            .opacity(1)
+            .frame(width: 44, height: 44, alignment: .center)
     }
 
     private var actionButtons: some View {
@@ -545,7 +576,31 @@ private struct PlaceProfilePreviewCard: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .accessibilityLabel("Photo of \(place.name)")
+        } else if place.isDroppedPin {
+            ZStack(alignment: .bottomTrailing) {
+                LinearGradient(
+                    colors: [
+                        WanderTheme.terracottaDark.color,
+                        WanderTheme.textInk.color,
+                        Color.black.opacity(0.92)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 112, weight: .thin))
+                    .foregroundStyle(Color.white.opacity(0.13))
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 14)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var isSavedDroppedPin: Bool {
+        place.isDroppedPin && !saves.isEmpty
     }
 
     private var hasCardActions: Bool {
@@ -775,10 +830,14 @@ private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
                 )
 
             configuration.label
+                .opacity(0.001)
+                .symbolRenderingMode(.monochrome)
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44, alignment: .center)
+                .zIndex(2)
         }
         .frame(width: 44, height: 44, alignment: .center)
+        .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .zIndex(configuration.isPressed ? 1 : 0)
         .onChange(of: configuration.isPressed, initial: true) { _, isPressed in
             if isPressed {

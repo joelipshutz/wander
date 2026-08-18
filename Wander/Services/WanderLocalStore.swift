@@ -3973,49 +3973,57 @@ final class WanderStore: ObservableObject {
         let cuisine = drafts.last(where: {
             $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
         })
-        guard cuisine != nil || clearsMissingCuisine else {
-            return false
-        }
-
         let userPlaceIDs = matchingUserPlaceIDs(userPlace.id)
-        let existingCuisineAttributes = placeAttributes.filter {
-            userPlaceIDs.contains($0.userPlaceID)
-                && $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
-        }
-        let shouldPersistCuisine = cuisine?.valueJSON != nil && cuisine?.valueJSON != "null"
-
-        if shouldPersistCuisine,
-           existingCuisineAttributes.count == 1,
-           let existing = existingCuisineAttributes.first,
-           existing.valueType == cuisine?.valueType,
-           existing.valueJSON == cuisine?.valueJSON {
-            return false
-        }
-        if !shouldPersistCuisine, existingCuisineAttributes.isEmpty {
-            return false
-        }
-
-        placeAttributes.removeAll {
-            userPlaceIDs.contains($0.userPlaceID)
-                && $0.questionKey == PlaceMemoryAttributeKeys.restaurantCuisine
-        }
-
+        let droppedPinName = drafts.last(where: {
+            $0.questionKey == PlaceMemoryAttributeKeys.droppedPinName
+        })
+        let semanticUpdates: [(draft: PlaceAttributeDraft?, key: String, clearsMissing: Bool)] = [
+            (cuisine, PlaceMemoryAttributeKeys.restaurantCuisine, clearsMissingCuisine),
+            (droppedPinName, PlaceMemoryAttributeKeys.droppedPinName, droppedPinName != nil)
+        ]
         let pendingState: SyncState = userPlace.serverID == nil ? .pendingCreate : .pendingUpdate
-        if shouldPersistCuisine, let cuisine {
-            placeAttributes.append(
-                LocalPlaceAttribute(
-                    localID: "local_attr_\(slug(userPlace.localID))_\(slug(cuisine.questionKey))",
-                    userPlaceID: userPlace.id,
-                    questionKey: cuisine.questionKey,
-                    valueType: cuisine.valueType,
-                    valueJSON: cuisine.valueJSON,
-                    syncState: pendingState,
-                    localUpdatedAt: date,
-                    createdAt: date,
-                    updatedAt: date
+        var didChange = false
+
+        for update in semanticUpdates where update.draft != nil || update.clearsMissing {
+            let existingAttributes = placeAttributes.filter {
+                userPlaceIDs.contains($0.userPlaceID) && $0.questionKey == update.key
+            }
+            let shouldPersist = update.draft?.valueJSON != nil
+                && update.draft?.valueJSON != "null"
+
+            if shouldPersist,
+               existingAttributes.count == 1,
+               let existing = existingAttributes.first,
+               existing.valueType == update.draft?.valueType,
+               existing.valueJSON == update.draft?.valueJSON {
+                continue
+            }
+            if !shouldPersist, existingAttributes.isEmpty {
+                continue
+            }
+
+            placeAttributes.removeAll {
+                userPlaceIDs.contains($0.userPlaceID) && $0.questionKey == update.key
+            }
+            if shouldPersist, let draft = update.draft {
+                placeAttributes.append(
+                    LocalPlaceAttribute(
+                        localID: "local_attr_\(slug(userPlace.localID))_\(slug(draft.questionKey))",
+                        userPlaceID: userPlace.id,
+                        questionKey: draft.questionKey,
+                        valueType: draft.valueType,
+                        valueJSON: draft.valueJSON,
+                        syncState: pendingState,
+                        localUpdatedAt: date,
+                        createdAt: date,
+                        updatedAt: date
+                    )
                 )
-            )
+            }
+            didChange = true
         }
+
+        guard didChange else { return false }
 
         userPlace.updatedAt = date
         userPlace.localUpdatedAt = date

@@ -24,6 +24,7 @@ struct PlaceSaveDraftForm: Codable, Equatable {
     var selectedAnswers: [String: Set<String>]
     var unifiedTags: Set<String>
     var selectedCuisine: String?
+    var droppedPinName: String? = nil
     var note: String
     var visitedAt: Date
     var plannedDate: Date?
