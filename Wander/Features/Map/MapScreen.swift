@@ -5154,7 +5154,7 @@ private struct RecenterButton: View {
                 .foregroundStyle(WanderTheme.pinSocial.color)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(WanderTheme.pinSocial.color, lineWidth: 2))
-                .overlay(alignment: .topLeading) {
+                .overlay(alignment: .topTrailing) {
                     if showsAttentionBadge {
                         Circle()
                             .fill(WanderTheme.stateError.color)
@@ -5163,7 +5163,7 @@ private struct RecenterButton: View {
                                 Circle()
                                     .stroke(WanderTheme.surfaceRaised.color, lineWidth: 2)
                             }
-                            .offset(x: -1, y: 1)
+                            .offset(x: 1, y: 1)
                     }
                 }
                 .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 5)

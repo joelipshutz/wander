@@ -6,6 +6,16 @@
   "capture_method": "User report plus source-contract inspection; this checkout intentionally has no StateServer bridge.",
   "reported_failures": [
     {
+      "behavior": "The compact-card add and share controls no longer respond to taps and their glyphs are absent.",
+      "source_evidence": "The custom ButtonStyle replaces configuration.label with a hit-testing-disabled duplicate image, so the native button label is no longer the visible interaction carrier.",
+      "expected": "The native button label remains centered above the expanding glass, receives taps, and preserves native drag-away cancellation."
+    },
+    {
+      "behavior": "The Nearby permission badge appears on the upper-left edge.",
+      "source_evidence": "RecenterButton attaches its badge with a topLeading overlay alignment.",
+      "expected": "The active red badge appears on the upper-right edge."
+    },
+    {
       "behavior": "Place-card action glyphs are not visible.",
       "source_evidence": "PlaceCardGlassActionButtonStyle composites the caller label inside an expanding glass background without an explicit foreground glyph layer.",
       "expected": "Every compact-card add and share button renders a centered white SF Symbol at rest and throughout the press animation."

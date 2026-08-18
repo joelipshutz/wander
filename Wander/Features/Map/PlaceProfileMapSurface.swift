@@ -335,6 +335,7 @@ private struct PlaceProfilePreviewCard: View {
 
                 actionButtonCluster
                     .padding(14)
+                    .zIndex(2)
             }
         }
         .task(id: photoResolutionKey) {
@@ -511,7 +512,6 @@ private struct PlaceProfilePreviewCard: View {
                 }
                 .buttonStyle(
                     PlaceCardGlassActionButtonStyle(
-                        systemImage: action.systemImage,
                         actionID: .primary,
                         activeAction: $activeCardAction
                     )
@@ -530,7 +530,6 @@ private struct PlaceProfilePreviewCard: View {
                 }
                 .buttonStyle(
                     PlaceCardGlassActionButtonStyle(
-                        systemImage: "square.and.arrow.up",
                         actionID: .share,
                         activeAction: $activeCardAction
                     )
@@ -770,7 +769,6 @@ private enum PlaceCardPreviewAction: Hashable {
 }
 
 private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
-    let systemImage: String
     let actionID: PlaceCardPreviewAction
     @Binding var activeAction: PlaceCardPreviewAction?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -804,15 +802,14 @@ private struct PlaceCardGlassActionButtonStyle: ButtonStyle {
                     anchor: .center
                 )
 
-            Image(systemName: systemImage)
+            configuration.label
                 .symbolRenderingMode(.monochrome)
-                .font(.system(size: 17, weight: .black))
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44, alignment: .center)
-                .allowsHitTesting(false)
                 .zIndex(2)
         }
         .frame(width: 44, height: 44, alignment: .center)
+        .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .zIndex(configuration.isPressed ? 1 : 0)
         .onChange(of: configuration.isPressed, initial: true) { _, isPressed in
             if isPressed {
