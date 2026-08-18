@@ -18,25 +18,25 @@ master above owns the design.
 
 ## Visual Contract
 
-The app icon is the approved matte liquid-glass map artwork:
+The app icon is the approved dark matte liquid-glass map artwork:
 
-- full-bleed warm neighborhood map with pale buildings and sage parks;
-- four terracotta map pins containing crisp Apple-style plate-and-cutlery,
-  tree, volleyball, and books symbols;
-- lowercase `rec.me` wordmark, verbatim, centered in a heavy black serif;
-- restrained frosted depth with a matte finish, never glossy or shiny;
-- a very subtle cool-blue gradient toward the bottom;
-- the original full-frame composition, with its bottom-left blue ocean accent
-  left at the canvas edge and no top/right crop or directional reframe.
+- full-bleed charcoal/navy aerial neighborhood map with outlined buildings and
+  one softly illuminated sage-green park;
+- lowercase `rec.me` wordmark, verbatim, centered in dimensional white glass;
+- restrained frosted depth, soft refraction, and fine edge highlights with a
+  matte finish, never glossy, metallic, neon, or prismatic;
+- subtle cool-blue undertones that preserve strong contrast at small sizes;
+- the selected full-frame square composition with no crop or directional
+  reframe.
 
 The PNG must be square and opaque. Do not bake rounded corners into the asset;
-iOS applies the platform mask. Do not alter the wordmark, pin count, emoji
-meanings, matte finish, or original framing without explicit approval.
+iOS applies the platform mask. Do not alter the wordmark, map geometry, matte
+finish, or selected framing without explicit approval.
 
 ## Editing Workflow
 
 1. Treat the Icon Composer PNG as the canonical pixel source. The approved
-   framing is the original full-frame 1024 px composition with no baked
+   framing is the selected full-frame 1024 px composition with no baked
    platform mask.
 2. Run `scripts/generate-app-icon-master.swift` to validate the source and copy
    it byte-for-byte to the fallback app-icon master.
