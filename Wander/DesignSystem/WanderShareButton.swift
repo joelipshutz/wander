@@ -95,18 +95,28 @@ struct WanderShareContent: Equatable {
         )
     }
 
-    static func appInvite(senderProfileID: String?, contextMessage: String? = nil) -> WanderShareContent {
+    static func appInvite(
+        senderProfileID: String?,
+        contextMessage: String? = nil,
+        includeInstallPrompt: Bool = true
+    ) -> WanderShareContent {
         let profileURL = senderProfileID.flatMap {
             WanderDeepLinkRoute.sharedProfile(profileID: $0).url
         }
         let opening = contextMessage ?? "Join me on rec.me."
+        let message: String
+        if includeInstallPrompt {
+            message = profileURL == nil
+                ? "\(opening) Install the TestFlight beta to get started."
+                : "\(opening) Install the TestFlight beta, then open my profile to connect."
+        } else {
+            message = opening
+        }
         return WanderShareContent(
             item: publicTestFlightURL,
             additionalItems: [profileURL].compactMap { $0 },
             subject: "Join me on rec.me",
-            message: profileURL == nil
-                ? "\(opening) Install the TestFlight beta to get started."
-                : "\(opening) Install the TestFlight beta, then open my profile to connect."
+            message: message
         )
     }
 

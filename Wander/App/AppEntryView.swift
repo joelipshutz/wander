@@ -101,8 +101,8 @@ struct AppEntryView: View {
                     initialSession: session,
                     isSessionValidated: auth.isSessionValidated,
                     isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible,
-                    onFirstVisitWalkthroughCompleted: {
-                        coordinator.completeFirstVisitWalkthrough(for: session)
+                    onFirstVisitWalkthroughCompleted: { completedUserID in
+                        coordinator.completeFirstVisitWalkthrough(forUserID: completedUserID)
                     },
                     deepLinkLaunchRequest: deepLinkInbox.request(
                         ifSessionValidated: auth.isSessionValidated
@@ -113,6 +113,7 @@ struct AppEntryView: View {
                     analytics: analytics,
                     parser: parser
                 )
+                .id(session.userID)
             case .recoverableFailure(_, let message, let canContinueOffline):
                 AppEntryRecoveryView(
                     title: "Your map is still here",

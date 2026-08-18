@@ -3261,10 +3261,22 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             flags,
             [
-                .firstVisitNUX: false,
-                .debugSettings: true,
-                .placeProfileSaveTrayV1: true,
-                .semanticPlaceSearchV1: false
+                .firstVisitNUX: ResolvedFeatureFlagValue(
+                    isEnabled: false,
+                    source: .accountOverride
+                ),
+                .debugSettings: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
+                ),
+                .placeProfileSaveTrayV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .accountOverride
+                ),
+                .semanticPlaceSearchV1: ResolvedFeatureFlagValue(
+                    isEnabled: false,
+                    source: .globalDefault
+                )
             ]
         )
         XCTAssertEqual(table.calls.count, 1)
@@ -3279,6 +3291,28 @@ final class RemoteRepositoryTests: XCTestCase {
                     value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1)"
                 )
             ]
+        )
+    }
+
+    func testFeatureFlagRepositoryPreservesGlobalDefaultProvenance() async throws {
+        let table = RecordingTable()
+        table.responses["GET:feature_flags"] = Data(
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":false}]"#.utf8
+        )
+        let repository = SupabaseFeatureFlagRepository(table: table)
+
+        let flags = try await repository.resolvedFlags(for: "user_test")
+        let flag = try XCTUnwrap(flags[.firstVisitNUX])
+
+        XCTAssertFalse(flag.isEnabled)
+        XCTAssertEqual(flag.source, .globalDefault)
+        XCTAssertNil(flag.explicitAccountOverride)
+        XCTAssertEqual(
+            ResolvedFeatureFlagValue(
+                isEnabled: false,
+                source: .accountOverride
+            ).explicitAccountOverride,
+            false
         )
     }
 
@@ -3320,25 +3354,133 @@ final class RemoteRepositoryTests: XCTestCase {
 
     func testBackendFeatureFlagsFailClosedAndNeverLeakAcrossAccounts() async {
         let repository = StubFeatureFlagRepository(
-            values: [.firstVisitNUX: true, .placeProfileSaveTrayV1: true],
+            values: [
+                .firstVisitNUX: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .globalDefault
+                ),
+                .placeProfileSaveTrayV1: ResolvedFeatureFlagValue(
+                    isEnabled: true,
+                    source: .globalDefault
+                )
+            ],
             error: nil
         )
         let backend = WanderBackend(featureFlagRepository: repository)
 
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_a"))
         XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_a"))
+        XCTAssertTrue(backend.featureFlagResolution.isPending(for: "user_a"))
         await backend.refreshFeatureFlags(for: "user_a")
         XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user_a"), true)
         XCTAssertEqual(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_a"), true)
+        XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_a"))
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_b"))
         XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_b"))
+        XCTAssertTrue(backend.featureFlagResolution.isPending(for: "user_b"))
 
         repository.error = WanderRemoteError.invalidResponse("expected")
         await backend.refreshFeatureFlags(for: "user_b")
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_b"))
         XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_b"))
+        XCTAssertFalse(
+            backend.featureFlagResolution.isPending(for: "user_b"),
+            "A failed fetch must stop suppressing normal non-NUX UI."
+        )
         XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_a"))
         XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_a"))
+    }
+
+    func testBackendMissingFlagRowIsResolvedAndNotPending() async {
+        let backend = WanderBackend(
+            featureFlagRepository: StubFeatureFlagRepository(values: [:], error: nil)
+        )
+
+        await backend.refreshFeatureFlags(for: "user_without_row")
+
+        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_without_row"))
+        XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_without_row"))
+    }
+
+    func testBackendIgnoresAnOlderFeatureFlagSuccessThatFinishesLast() async {
+        let disabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
+            .firstVisitNUX: ResolvedFeatureFlagValue(
+                isEnabled: false,
+                source: .accountOverride
+            )
+        ]
+        let enabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
+            .firstVisitNUX: ResolvedFeatureFlagValue(
+                isEnabled: true,
+                source: .accountOverride
+            )
+        ]
+        let repository = ControlledFeatureFlagRepository(
+            responses: [
+                .success(disabled),
+                .success(enabled)
+            ]
+        )
+        let backend = WanderBackend(featureFlagRepository: repository)
+
+        let older = Task { await backend.refreshFeatureFlags(for: "user") }
+        while repository.startedRequestCount < 1 { await Task.yield() }
+        let newer = Task { await backend.refreshFeatureFlags(for: "user") }
+        while repository.startedRequestCount < 2 { await Task.yield() }
+        repository.completeRequest(at: 1)
+        await newer.value
+        repository.completeRequest(at: 0)
+        await older.value
+
+        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user"), true)
+    }
+
+    func testBackendIgnoresAnOlderFeatureFlagFailureThatFinishesLast() async {
+        let enabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
+            .firstVisitNUX: ResolvedFeatureFlagValue(
+                isEnabled: true,
+                source: .accountOverride
+            )
+        ]
+        let repository = ControlledFeatureFlagRepository(
+            responses: [
+                .failure,
+                .success(enabled)
+            ]
+        )
+        let backend = WanderBackend(featureFlagRepository: repository)
+
+        let older = Task { await backend.refreshFeatureFlags(for: "user") }
+        while repository.startedRequestCount < 1 { await Task.yield() }
+        let newer = Task { await backend.refreshFeatureFlags(for: "user") }
+        while repository.startedRequestCount < 2 { await Task.yield() }
+        repository.completeRequest(at: 1)
+        await newer.value
+        repository.completeRequest(at: 0)
+        await older.value
+
+        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user"), true)
+        XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user"))
+    }
+
+    func testBackendClearFeatureFlagsInvalidatesAnInFlightRefresh() async {
+        let enabled: [FeatureFlagKey: ResolvedFeatureFlagValue] = [
+            .firstVisitNUX: ResolvedFeatureFlagValue(
+                isEnabled: true,
+                source: .accountOverride
+            )
+        ]
+        let repository = ControlledFeatureFlagRepository(responses: [.success(enabled)])
+        let backend = WanderBackend(featureFlagRepository: repository)
+
+        let refresh = Task { await backend.refreshFeatureFlags(for: "user") }
+        while repository.startedRequestCount < 1 { await Task.yield() }
+        backend.clearFeatureFlags()
+        repository.completeRequest(at: 0)
+        await refresh.value
+
+        XCTAssertEqual(backend.featureFlagResolution, .unresolved)
+        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user"))
     }
 }
 
@@ -3352,18 +3494,68 @@ private struct FeedRPCProbe: Decodable, Equatable {
 
 @MainActor
 private final class StubFeatureFlagRepository: FeatureFlagRepository {
-    let values: [FeatureFlagKey: Bool]
+    let values: [FeatureFlagKey: ResolvedFeatureFlagValue]
     var error: Error?
 
-    init(values: [FeatureFlagKey: Bool], error: Error?) {
+    init(values: [FeatureFlagKey: ResolvedFeatureFlagValue], error: Error?) {
         self.values = values
         self.error = error
     }
 
-    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: Bool] {
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue] {
         if let error { throw error }
         return values
     }
+}
+
+@MainActor
+private final class ControlledFeatureFlagRepository: FeatureFlagRepository {
+    enum Response {
+        case success([FeatureFlagKey: ResolvedFeatureFlagValue])
+        case failure
+    }
+
+    private let responses: [Response]
+    private var continuations: [
+        Int: CheckedContinuation<[FeatureFlagKey: ResolvedFeatureFlagValue], any Error>
+    ] = [:]
+    private(set) var startedRequestCount = 0
+
+    init(responses: [Response]) {
+        self.responses = responses
+    }
+
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue] {
+        let requestIndex = startedRequestCount
+        guard responses.indices.contains(requestIndex) else {
+            throw WanderRemoteError.invalidResponse("Missing feature-flag response")
+        }
+        startedRequestCount += 1
+
+        return try await withCheckedThrowingContinuation { continuation in
+            continuations[requestIndex] = continuation
+        }
+    }
+
+    func completeRequest(at index: Int) {
+        guard let continuation = continuations.removeValue(forKey: index) else {
+            XCTFail("Missing controlled feature-flag request at index \(index)")
+            return
+        }
+        guard responses.indices.contains(index) else {
+            XCTFail("Missing controlled feature-flag response at index \(index)")
+            return
+        }
+        switch responses[index] {
+        case .success(let values):
+            continuation.resume(returning: values)
+        case .failure:
+            continuation.resume(
+                throwing: WanderRemoteError.invalidResponse("Expected feature-flag failure")
+            )
+        }
+    }
+
 }
 
 @MainActor

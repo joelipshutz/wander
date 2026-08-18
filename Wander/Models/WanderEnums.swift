@@ -44,7 +44,7 @@ enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
 
     var walkthroughTarget: WalkthroughTargetID? {
         switch self {
-        case .featured: nil
+        case .featured: .mapFeatured
         case .friends: .mapFriends
         case .you: .mapYou
         }

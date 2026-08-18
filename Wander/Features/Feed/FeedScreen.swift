@@ -71,7 +71,7 @@ struct FeedScreen: View {
             .fullScreenCover(isPresented: $isShowingSearch) {
                 DiscoverScreen(
                     startsInPlaceSearch: true,
-                    onClose: { isShowingSearch = false }
+                    onClose: closeDiscoverSearch
                 )
                     .environmentObject(store)
                     .environmentObject(auth)
@@ -135,9 +135,14 @@ struct FeedScreen: View {
                     walkthroughs.perform(.feedPeopleSearch)
                 }
             }
+            .onChange(of: walkthroughs.activeSurface, initial: true) { _, surface in
+                if surface == .feedSearch {
+                    isShowingSearch = true
+                }
+            }
             .onChange(of: isShowingSearch) { _, isShowing in
                 if !isShowing {
-                    walkthroughs.activate(.feed)
+                    restoreFeedWalkthroughAfterDiscoverDismissal()
                 }
             }
         }
@@ -221,8 +226,30 @@ struct FeedScreen: View {
             walkthroughs.perform(.feedDiscoverSearch)
             walkthroughs.consumeRequestedSurface(.feedSearch)
         }
-        walkthroughs.activate(.feedSearch)
+        walkthroughs.transition(to: .feedSearch)
         isShowingSearch = true
+    }
+
+    private func closeDiscoverSearch() {
+        isShowingSearch = false
+        restoreFeedWalkthroughAfterDiscoverDismissal()
+    }
+
+    /// Discover is a full-screen cover above Feed, so Feed's ordinary
+    /// `onChange` observers are not guaranteed to render the destination tab
+    /// before the cover disappears on a real device. Resolve both supported
+    /// coordinator handoff states synchronously while the cover closes.
+    private func restoreFeedWalkthroughAfterDiscoverDismissal() {
+        if walkthroughs.requestedSurface == .feed {
+            walkthroughs.consumeRequestedSurface(.feed)
+            walkthroughs.activate(.feed)
+        }
+
+        guard let destination = FeedSurface.walkthroughDestination(
+            activeSurface: walkthroughs.activeSurface,
+            target: walkthroughs.currentStep?.target
+        ) else { return }
+        selectedSurface = destination
     }
 
     @ViewBuilder
@@ -239,7 +266,7 @@ struct FeedScreen: View {
                 )
             }
 
-            FeedSectionHeading(title: "See your friends’ check-ins here", detail: freshnessDetail)
+            FeedSectionHeading(title: "Activity", detail: freshnessDetail)
             FeedActivityList(
                 activity: page.activity,
                 openProfile: openProfile,
@@ -258,7 +285,7 @@ struct FeedScreen: View {
         } else if store.feedLoadState == .failed || store.feedLoadState == .stale {
             FeedRefreshRecoveryState(retry: refresh)
         } else {
-            FeedSectionHeading(title: "See your friends’ check-ins here")
+            FeedSectionHeading(title: "Activity")
             FeedEmptyState(
                 recommendations: peopleRecommendations,
                 followingProfileIDs: followingProfileIDs,
@@ -266,6 +293,7 @@ struct FeedScreen: View {
                 openProfile: openProfile,
                 follow: follow
             )
+            .walkthroughTarget(.feedActivity)
 
         }
     }
@@ -534,7 +562,7 @@ struct FeedScreen: View {
     }
 }
 
-private enum FeedSurface: String, CaseIterable, Identifiable {
+enum FeedSurface: String, CaseIterable, Identifiable {
     case places
     case people
 
@@ -563,6 +591,21 @@ private enum FeedSurface: String, CaseIterable, Identifiable {
         let valueIndex = arguments.index(after: flagIndex)
         guard arguments.indices.contains(valueIndex) else { return .places }
         return FeedSurface(rawValue: arguments[valueIndex]) ?? .places
+    }
+
+    static func walkthroughDestination(
+        activeSurface: WalkthroughSurface?,
+        target: WalkthroughTargetID?
+    ) -> FeedSurface? {
+        guard activeSurface == .feed else { return nil }
+        switch target {
+        case .feedPeopleSearch, .feedInvite:
+            return .people
+        case .feedActivity, .feedDiscoverSearch:
+            return .places
+        default:
+            return nil
+        }
     }
 }
 
@@ -637,6 +680,7 @@ private struct FeedPeopleSurface: View {
             await refreshRecommendations()
         }
         .task(id: memberQuery) {
+            walkthroughs.recordUserActivity()
             await refreshMembers(query: memberQuery, debounce: true)
         }
         .onChange(of: walkthroughs.isRequestingContactInvite, initial: true) { _, isRequested in
@@ -651,11 +695,14 @@ private struct FeedPeopleSurface: View {
                 surface: .feedPeople,
                 contactProvider: store.contactProvider,
                 senderProfileID: store.currentUser.id,
+                canDismiss: !walkthroughs.isRequestingContactInvite,
                 walkthroughSelectionGoal: walkthroughs.isRequestingContactInvite ? 5 : nil,
-                onWalkthroughDismiss: walkthroughDismissAction,
                 onPermissionDenied: walkthroughPermissionDeniedAction,
+                selectedContactIDs: walkthroughs.tutorialInvitedContactIDs,
+                onWalkthroughSelectionChange: walkthroughs.recordTutorialInvitedContactIDs,
                 analytics: store.productAnalytics
             )
+            .interactiveDismissDisabled(walkthroughs.isRequestingContactInvite)
         }
     }
 
@@ -663,13 +710,6 @@ private struct FeedPeopleSurface: View {
         guard walkthroughs.isRequestingContactInvite else { return nil }
         return {
             isPresentingContactInvites = false
-        }
-    }
-
-    private var walkthroughDismissAction: (() -> Void)? {
-        guard walkthroughs.isRequestingContactInvite else { return nil }
-        return {
-            walkthroughs.dismissEntireWalkthrough()
         }
     }
 
@@ -1779,7 +1819,7 @@ private struct FeedLoadingState: View {
                         .frame(width: 184, height: 218)
                 }
             }
-            FeedSectionHeading(title: "See your friends’ check-ins here")
+            FeedSectionHeading(title: "Activity")
             VStack(spacing: WanderTheme.spacing3) {
                 ForEach(0..<3, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -1804,7 +1844,7 @@ private struct FeedRefreshRecoveryState: View {
             FeedSectionHeading(title: "Featured for you")
             FeedRecoveryFeaturedRail()
 
-            FeedSectionHeading(title: "See your friends’ check-ins here", detail: "Unavailable")
+            FeedSectionHeading(title: "Activity", detail: "Unavailable")
             FeedRecoveryActivityList()
 
             FeedRetryRow(

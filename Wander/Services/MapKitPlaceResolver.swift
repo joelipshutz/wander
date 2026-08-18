@@ -27,6 +27,52 @@ extension PlaceResolutionError: LocalizedError {
     }
 }
 
+/// Supplies onboarding with location context only after the user has already
+/// made a system-level permission choice. In particular, `.notDetermined`
+/// returns `nil` instead of presenting a location permission alert.
+@MainActor
+final class CoreFirstVisitParkLocationContextProvider: FirstVisitParkLocationContextProviding {
+    private let locationProvider: CurrentLocationProviding
+    private let authorizationStatus: () -> CLAuthorizationStatus
+    private let postalCodeResolver: (CLLocation) async throws -> String?
+
+    init(
+        locationProvider: CurrentLocationProviding = CoreLocationProvider(),
+        authorizationStatus: @escaping () -> CLAuthorizationStatus = {
+            CLLocationManager().authorizationStatus
+        },
+        postalCodeResolver: @escaping (CLLocation) async throws -> String? = { location in
+            try await CLGeocoder().reverseGeocodeLocation(location).first?.postalCode
+        }
+    ) {
+        self.locationProvider = locationProvider
+        self.authorizationStatus = authorizationStatus
+        self.postalCodeResolver = postalCodeResolver
+    }
+
+    func alreadyAuthorizedLocationContext() async throws -> FirstVisitParkLocationContext? {
+        switch authorizationStatus() {
+        case .authorizedAlways, .authorizedWhenInUse:
+            break
+        case .denied, .notDetermined, .restricted:
+            return nil
+        @unknown default:
+            return nil
+        }
+
+        let location = try await locationProvider.currentLocation()
+        guard let rawPostalCode = try await postalCodeResolver(location),
+              let postalCode = FirstVisitParkSuggestionPolicy.normalizedPostalCode(rawPostalCode)
+        else {
+            return nil
+        }
+
+        return FirstVisitParkLocationContext(
+            postalCode: postalCode
+        )
+    }
+}
+
 @MainActor
 final class MapKitPlaceResolver: PlaceCandidateResolving {
     private let locationProvider: CurrentLocationProviding
@@ -386,6 +432,117 @@ final class MapKitPlaceResolver: PlaceCandidateResolving {
     }
 }
 
+extension MapKitPlaceResolver: FirstVisitParkSuggestionRepository {
+    func suggestion(near context: FirstVisitParkLocationContext) async throws -> PlaceCandidate {
+        guard let postalCode = FirstVisitParkSuggestionPolicy.normalizedPostalCode(
+            context.postalCode
+        ) else {
+            throw PlaceResolutionError.locationUnavailable
+        }
+        guard let center = try await CLGeocoder()
+            .geocodeAddressString("\(postalCode), United States")
+            .compactMap(\.location)
+            .first
+        else {
+            throw PlaceResolutionError.locationUnavailable
+        }
+
+        let radius = FirstVisitParkSuggestionPolicy.searchRadiusMeters
+        let region = MKCoordinateRegion(
+            center: center.coordinate,
+            latitudinalMeters: radius * 2,
+            longitudinalMeters: radius * 2
+        )
+
+        for query in FirstVisitParkSuggestionPolicy.searchQueries {
+            try Task.checkCancellation()
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = query
+            request.resultTypes = .pointOfInterest
+            request.region = region
+
+            do {
+                let response = try await MKLocalSearch(request: request).start()
+                try Task.checkCancellation()
+                guard let selectedItem = firstEligibleFirstVisitPark(
+                    in: response.mapItems,
+                    center: center
+                ),
+                    let candidate = mapItems(
+                        [selectedItem],
+                        fallbackCategory: "park",
+                        origin: center,
+                        maxDistance: radius,
+                        limit: 1
+                    ).first
+                else {
+                    continue
+                }
+
+                return candidate.recategorized(
+                    as: PlaceCategoryAssignment(
+                        primaryCategory: WanderPlaceCategory.outdoorsNature,
+                        subcategory: "Park",
+                        source: PlaceCategorySource.provider.rawValue,
+                        confidence: candidate.confidence,
+                        rawProviderType: candidate.rawProviderType ?? "park"
+                    )
+                )
+            } catch let error as CancellationError {
+                throw error
+            } catch {
+                if Task.isCancelled {
+                    throw CancellationError()
+                }
+                // A failed popularity query should not skip the ordinary park
+                // search. The caller supplies Hotchkiss if both attempts fail.
+                continue
+            }
+        }
+
+        throw PlaceResolutionError.noCandidates
+    }
+
+    private func firstEligibleFirstVisitPark(
+        in items: [MKMapItem],
+        center: CLLocation
+    ) -> MKMapItem? {
+        let resultFacts = items.map { item in
+            let name = item.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let coordinate = item.placemark.coordinate
+            let hasValidCoordinate = CLLocationCoordinate2DIsValid(coordinate)
+            let distance = hasValidCoordinate
+                ? center.distance(
+                    from: CLLocation(
+                        latitude: coordinate.latitude,
+                        longitude: coordinate.longitude
+                    )
+                )
+                : .infinity
+            let isPark = item.pointOfInterestCategory == .park
+                || item.pointOfInterestCategory == .nationalPark
+                || (
+                    item.pointOfInterestCategory == nil
+                        && name?.localizedCaseInsensitiveContains("park") == true
+                )
+
+            return FirstVisitParkSearchResult(
+                hasName: name?.isEmpty == false,
+                hasValidCoordinate: hasValidCoordinate,
+                isPark: isPark,
+                distanceMeters: distance
+            )
+        }
+
+        guard let index = FirstVisitParkSuggestionPolicy.firstEligibleResultIndex(
+            in: resultFacts
+        ) else {
+            return nil
+        }
+        return items[index]
+    }
+}
+
 struct ManualPlaceSearchPlan {
     let query: String
     let queries: [String]
@@ -495,9 +652,11 @@ protocol CurrentLocationProviding {
 final class CoreLocationProvider: NSObject, CurrentLocationProviding, @preconcurrency CLLocationManagerDelegate {
     private static let maximumLocationAge: TimeInterval = 120
     private static let maximumHorizontalAccuracy: CLLocationAccuracy = 300
+    private static let requestTimeout: Duration = .seconds(6)
     private let manager = CLLocationManager()
     private var authorizationContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
     private var locationContinuation: CheckedContinuation<CLLocation, Error>?
+    private var locationTimeoutTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -532,8 +691,16 @@ final class CoreLocationProvider: NSObject, CurrentLocationProviding, @preconcur
 
     private func requestLocation() async throws -> CLLocation {
         try await withCheckedThrowingContinuation { continuation in
+            locationTimeoutTask?.cancel()
             locationContinuation = continuation
             manager.requestLocation()
+            locationTimeoutTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: Self.requestTimeout)
+                guard !Task.isCancelled else { return }
+                self?.finishLocationRequest(
+                    with: .failure(PlaceResolutionError.locationUnavailable)
+                )
+            }
         }
     }
 
@@ -544,24 +711,27 @@ final class CoreLocationProvider: NSObject, CurrentLocationProviding, @preconcur
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let continuation = locationContinuation else { return }
-        locationContinuation = nil
-
         guard let location = locations
             .sorted(by: { $0.timestamp > $1.timestamp })
             .first(where: { Self.isUsableLocation($0) })
         else {
-            continuation.resume(throwing: PlaceResolutionError.locationUnavailable)
+            finishLocationRequest(with: .failure(PlaceResolutionError.locationUnavailable))
             return
         }
 
-        continuation.resume(returning: location)
+        finishLocationRequest(with: .success(location))
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        finishLocationRequest(with: .failure(PlaceResolutionError.locationUnavailable))
+    }
+
+    private func finishLocationRequest(with result: Result<CLLocation, Error>) {
         guard let continuation = locationContinuation else { return }
         locationContinuation = nil
-        continuation.resume(throwing: PlaceResolutionError.locationUnavailable)
+        locationTimeoutTask?.cancel()
+        locationTimeoutTask = nil
+        continuation.resume(with: result)
     }
 
     private static func isUsableLocation(_ location: CLLocation) -> Bool {

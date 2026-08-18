@@ -95,7 +95,9 @@ final class OnboardingStateTests: XCTestCase {
                 nextStep: .friends,
                 isComplete: true,
                 needsServerCompletion: true,
-                isFirstVisitWalkthroughEligible: true
+                isFirstVisitWalkthroughEligible: true,
+                firstVisitWalkthroughEnrollmentGeneration:
+                    FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration
             )
         )
         XCTAssertEqual(store.state(for: "user_b"), .fresh)
@@ -175,7 +177,7 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
-    func testNewUserCompletionEnablesFirstVisitWalkthrough() throws {
+    func testNewUserCompletionEnablesFirstVisitWalkthrough() async throws {
         let session = AuthSession(userID: "new-user", displayName: "Maya", handle: "maya")
         let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -183,10 +185,12 @@ final class OnboardingStateTests: XCTestCase {
         let completionStore = OnboardingCompletionStore(defaults: defaults)
         let coordinator = AppEntryCoordinator(
             auth: AuthSessionStore(provider: SuspendedRefreshAuthProvider(state: .signedIn(session))),
-            backend: WanderBackend(),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
             completionStore: completionStore
         )
 
+        await coordinator.start()
+        XCTAssertEqual(coordinator.state, .onboarding(session: session, step: .identity))
         coordinator.completeOnboarding(for: session, serverConfirmed: true)
 
         XCTAssertEqual(
@@ -195,13 +199,49 @@ final class OnboardingStateTests: XCTestCase {
         )
         XCTAssertTrue(completionStore.state(for: session.userID).shouldEnableFirstVisitWalkthrough)
 
-        coordinator.completeFirstVisitWalkthrough(for: session)
+        coordinator.completeFirstVisitWalkthrough(forUserID: session.userID)
 
         XCTAssertEqual(
             coordinator.state,
             .ready(session: session, firstVisitWalkthroughEligible: false)
         )
         XCTAssertFalse(completionStore.state(for: session.userID).shouldEnableFirstVisitWalkthrough)
+    }
+
+    func testStaleWalkthroughCompletionCannotRetireAnotherReadyAccount() async throws {
+        let sessionA = AuthSession(userID: "user-a", displayName: "A", handle: "a")
+        let sessionB = AuthSession(userID: "user-b", displayName: "B", handle: "b")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(provider: SuspendedRefreshAuthProvider(state: .signedIn(sessionA))),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        coordinator.completeOnboarding(for: sessionA, serverConfirmed: true)
+        completionStore.markComplete(
+            for: sessionB.userID,
+            needsServerCompletion: false,
+            firstVisitWalkthroughEligible: true
+        )
+
+        coordinator.completeFirstVisitWalkthrough(forUserID: sessionB.userID)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: sessionA, firstVisitWalkthroughEligible: true)
+        )
+        XCTAssertTrue(completionStore.state(for: sessionA.userID).shouldEnableFirstVisitWalkthrough)
+        XCTAssertTrue(completionStore.state(for: sessionB.userID).shouldEnableFirstVisitWalkthrough)
+
+        coordinator.completeFirstVisitWalkthrough(forUserID: sessionA.userID)
+
+        XCTAssertFalse(completionStore.state(for: sessionA.userID).shouldEnableFirstVisitWalkthrough)
+        XCTAssertTrue(completionStore.state(for: sessionB.userID).shouldEnableFirstVisitWalkthrough)
     }
 
     func testExistingRemoteUserWithoutLocalStateNeverEnablesFirstVisitWalkthrough() {
@@ -238,6 +278,318 @@ final class OnboardingStateTests: XCTestCase {
 
         XCTAssertTrue(state.isComplete)
         XCTAssertFalse(state.shouldEnableFirstVisitWalkthrough)
+    }
+
+    func testLegacyBooleanOnlyWalkthroughEligibilityFailsClosed() throws {
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = "legacy-eligible-user"
+        let legacyJSON = """
+        {"nextStep":"notifications","isComplete":true,"needsServerCompletion":false,"isFirstVisitWalkthroughEligible":true}
+        """.data(using: .utf8)
+        defaults.set(legacyJSON, forKey: "recme.onboarding.v1.\(userID)")
+
+        let state = OnboardingCompletionStore(defaults: defaults).state(for: userID)
+
+        XCTAssertEqual(state.isFirstVisitWalkthroughEligible, true)
+        XCTAssertNil(state.firstVisitWalkthroughEnrollmentGeneration)
+        XCTAssertFalse(state.shouldEnableFirstVisitWalkthrough)
+    }
+
+    func testCurrentEnrollmentGenerationIsRequiredForWalkthroughEligibility() {
+        XCTAssertTrue(
+            FirstVisitWalkthroughEligibilityPolicy.isEnrolled(
+                isPersistedEligible: true,
+                enrollmentGeneration:
+                    FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.isEnrolled(
+                isPersistedEligible: true,
+                enrollmentGeneration: nil
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.isEnrolled(
+                isPersistedEligible: true,
+                enrollmentGeneration:
+                    FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration + 1
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.isEnrolled(
+                isPersistedEligible: false,
+                enrollmentGeneration:
+                    FirstVisitWalkthroughEligibilityPolicy.currentEnrollmentGeneration
+            )
+        )
+    }
+
+    func testFirstVisitEligibilityContextNeverCrossesAccounts() {
+        let eligibleAccount = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: "user-a",
+            isEligible: true
+        )
+
+        XCTAssertTrue(eligibleAccount.applies(to: "user-a"))
+        XCTAssertFalse(eligibleAccount.applies(to: "user-b"))
+        XCTAssertFalse(eligibleAccount.applies(to: nil))
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityContext(
+                sourceUserID: "user-a",
+                isEligible: false
+            ).applies(to: "user-a")
+        )
+    }
+
+    func testEligibilityRetirementWaitsForMatchingAccountContext() {
+        let staleContext = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: "user-a",
+            isEligible: true
+        )
+        let activeContext = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: "user-b",
+            isEligible: true
+        )
+
+        XCTAssertFalse(
+            staleContext.shouldRetire(
+                for: "user-b",
+                whenRetirementIsRequested: true
+            ),
+            "A live auth change must not consume another account's retirement attempt."
+        )
+        XCTAssertTrue(
+            activeContext.shouldRetire(
+                for: "user-b",
+                whenRetirementIsRequested: true
+            ),
+            "Retirement must retry once AppEntry publishes the matching account context."
+        )
+        XCTAssertFalse(
+            activeContext.shouldRetire(
+                for: "user-b",
+                whenRetirementIsRequested: false
+            )
+        )
+    }
+
+    func testStaleOnboardingCompletionCannotEnrollAnotherValidatedAccount() async throws {
+        let staleSession = AuthSession(userID: "user-a", displayName: "A", handle: "a")
+        let activeSession = AuthSession(userID: "user-b", displayName: "B", handle: "b")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(
+                provider: SuspendedRefreshAuthProvider(state: .signedIn(activeSession))
+            ),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        coordinator.completeOnboarding(for: staleSession, serverConfirmed: true)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .onboarding(session: activeSession, step: .identity)
+        )
+        XCTAssertEqual(completionStore.state(for: staleSession.userID), .fresh)
+        XCTAssertEqual(completionStore.state(for: activeSession.userID), .fresh)
+    }
+
+    func testStaleOnboardingCompletionCannotReenrollAnAlreadyReadyAccount() async throws {
+        let session = AuthSession(userID: "established-user", displayName: "Joe", handle: "joe")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        completionStore.markComplete(
+            for: session.userID,
+            needsServerCompletion: false,
+            firstVisitWalkthroughEligible: false
+        )
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(
+                provider: SuspendedRefreshAuthProvider(state: .signedIn(session))
+            ),
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        coordinator.completeOnboarding(for: session, serverConfirmed: true)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .ready(session: session, firstVisitWalkthroughEligible: false)
+        )
+        XCTAssertFalse(completionStore.state(for: session.userID).shouldEnableFirstVisitWalkthrough)
+    }
+
+    func testOnboardingCompletionRequiresValidatedSession() async throws {
+        let session = AuthSession(userID: "user", displayName: "Maya", handle: "maya")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let completionStore = OnboardingCompletionStore(defaults: defaults)
+        let auth = AuthSessionStore(
+            provider: SuspendedRefreshAuthProvider(state: .signedIn(session))
+        )
+        let coordinator = AppEntryCoordinator(
+            auth: auth,
+            backend: WanderBackend(profileRepository: EmptyOnboardingProfileRepository()),
+            completionStore: completionStore
+        )
+
+        await coordinator.start()
+        auth.beginSessionValidation()
+        coordinator.completeOnboarding(for: session, serverConfirmed: true)
+
+        XCTAssertEqual(coordinator.state, .onboarding(session: session, step: .identity))
+        XCTAssertEqual(completionStore.state(for: session.userID), .fresh)
+    }
+
+    func testOnlyExplicitAccountDisableRequestsPersistedEligibilityRetirement() {
+        XCTAssertTrue(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement(
+                isUsingLiveData: true,
+                resolvedAccountOverride: false
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement(
+                isUsingLiveData: true,
+                resolvedAccountOverride: nil
+            ),
+            "An unresolved or failed flag fetch must fail closed without erasing enrollment."
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement(
+                isUsingLiveData: true,
+                resolvedAccountOverride: true
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement(
+                isUsingLiveData: false,
+                resolvedAccountOverride: false
+            ),
+            "Fixture and preview sessions must never mutate persisted account enrollment."
+        )
+    }
+
+    func testEligibleLiveUserWaitsForFlagBeforeRenderingNUXEmptyState() {
+        XCTAssertTrue(
+            FirstVisitWalkthroughEligibilityPolicy.isAwaitingFeatureFlagResolution(
+                isEnrolled: true,
+                isUsingLiveData: true,
+                resolutionIsPending: true
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.isAwaitingFeatureFlagResolution(
+                isEnrolled: true,
+                isUsingLiveData: true,
+                resolutionIsPending: false
+            )
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.isAwaitingFeatureFlagResolution(
+                isEnrolled: false,
+                isUsingLiveData: true,
+                resolutionIsPending: true
+            )
+        )
+    }
+
+    func testLocalJourneyRetirementRequiresDefinitiveIneligibilityOrDisablement() {
+        XCTAssertTrue(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: false,
+                isExplicitReplayEnabled: false,
+                isExplicitlyDisabled: false
+            ),
+            "Established accounts must discard stale NUX checkpoints."
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: true,
+                isExplicitReplayEnabled: false,
+                isExplicitlyDisabled: true
+            ),
+            "An explicit account or tester disable must retire the local journey."
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: true,
+                isExplicitReplayEnabled: false,
+                isExplicitlyDisabled: false
+            ),
+            "A missing or global flag value must preserve an enrolled user's 12-hour checkpoint."
+        )
+        XCTAssertFalse(
+            FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: false,
+                isExplicitReplayEnabled: true,
+                isExplicitlyDisabled: false
+            ),
+            "An entitled replay must remain available to an established tester."
+        )
+    }
+
+    func testWalkthroughEligibilityRetirementIsIdempotent() throws {
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = OnboardingCompletionStore(defaults: defaults)
+        let userID = "disabled-user"
+        store.markComplete(
+            for: userID,
+            needsServerCompletion: false,
+            firstVisitWalkthroughEligible: true
+        )
+
+        XCTAssertTrue(store.retireFirstVisitWalkthrough(for: userID))
+        XCTAssertFalse(store.retireFirstVisitWalkthrough(for: userID))
+        XCTAssertEqual(store.state(for: userID).isFirstVisitWalkthroughEligible, false)
+        XCTAssertNil(store.state(for: userID).firstVisitWalkthroughEnrollmentGeneration)
+    }
+
+    func testExplicitDisableCanRetireLegacyBooleanOnlyEnrollment() throws {
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let userID = "legacy-disabled-user"
+        let legacyJSON = """
+        {"nextStep":"notifications","isComplete":true,"needsServerCompletion":false,"isFirstVisitWalkthroughEligible":true}
+        """.data(using: .utf8)
+        defaults.set(legacyJSON, forKey: "recme.onboarding.v1.\(userID)")
+        let store = OnboardingCompletionStore(defaults: defaults)
+
+        XCTAssertTrue(store.retireFirstVisitWalkthrough(for: userID))
+        XCTAssertFalse(store.retireFirstVisitWalkthrough(for: userID))
+        XCTAssertEqual(store.state(for: userID).isFirstVisitWalkthroughEligible, false)
+    }
+
+    func testWalkthroughCompletionDoesNotRepublishReadyStateWithoutPersistedEnrollment() throws {
+        let session = AuthSession(userID: "already-retired-user", displayName: "Joe", handle: "joe")
+        let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let coordinator = AppEntryCoordinator(
+            auth: AuthSessionStore(provider: SuspendedRefreshAuthProvider(state: .signedIn(session))),
+            backend: WanderBackend(),
+            completionStore: OnboardingCompletionStore(defaults: defaults)
+        )
+
+        coordinator.completeFirstVisitWalkthrough(forUserID: session.userID)
+
+        XCTAssertEqual(coordinator.state, .launching)
     }
 
     func testIncompleteUserKeepsOfflineRecoveryInsteadOfBypassingOnboarding() {
@@ -344,6 +696,136 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testFirstVisitParkPolicyUsesHotchkissForUnavailableAndSantaMonicaZIPs() {
+        let fallback = FirstVisitParkSuggestionPolicy.hotchkissPark
+
+        XCTAssertEqual(fallback.name, "Hotchkiss Park")
+        XCTAssertEqual(fallback.address, "2302 4th St")
+        XCTAssertEqual(fallback.locality, "Santa Monica")
+        XCTAssertEqual(fallback.region, "CA")
+        XCTAssertEqual(fallback.subcategory, "Park")
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: nil))
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "90403"))
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "90405-1234"))
+        XCTAssertFalse(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "invalid"))
+        XCTAssertTrue(FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(postalCode: "10001"))
+    }
+
+    func testFirstVisitParkSelectionPreservesMapKitRelevanceOrderOverProximity() {
+        let results = [
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: 12_000
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: 500
+            )
+        ]
+
+        XCTAssertEqual(
+            FirstVisitParkSuggestionPolicy.firstEligibleResultIndex(in: results),
+            0,
+            "The more relevant MapKit result must win even when another park is closer."
+        )
+    }
+
+    func testFirstVisitParkSelectionEnforcesRadiusAndEligibility() {
+        let results = [
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: false,
+                distanceMeters: 400
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: FirstVisitParkSuggestionPolicy.searchRadiusMeters + 0.01
+            ),
+            FirstVisitParkSearchResult(
+                hasName: false,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: 600
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: false,
+                isPark: true,
+                distanceMeters: 700
+            ),
+            FirstVisitParkSearchResult(
+                hasName: true,
+                hasValidCoordinate: true,
+                isPark: true,
+                distanceMeters: FirstVisitParkSuggestionPolicy.searchRadiusMeters
+            )
+        ]
+
+        XCTAssertEqual(
+            FirstVisitParkSuggestionPolicy.firstEligibleResultIndex(in: results),
+            4
+        )
+    }
+
+    func testFirstVisitParkSearchPlanUsesPopularityThenOrdinaryParkFallback() {
+        XCTAssertEqual(
+            FirstVisitParkSuggestionPolicy.searchQueries,
+            ["popular parks", "park"]
+        )
+    }
+
+    func testFirstVisitParkLocationDoesNotPromptWhenAuthorizationIsUndetermined() async throws {
+        let locationProvider = RecordingFirstVisitLocationProvider()
+        let provider = CoreFirstVisitParkLocationContextProvider(
+            locationProvider: locationProvider,
+            authorizationStatus: { .notDetermined },
+            postalCodeResolver: { _ in
+                XCTFail("Postal code lookup must not run without existing authorization")
+                return "10001"
+            }
+        )
+
+        let context = try await provider.alreadyAuthorizedLocationContext()
+
+        XCTAssertNil(context)
+        XCTAssertEqual(locationProvider.requestCount, 0)
+    }
+
+    func testFirstVisitParkLocationUsesOnlyNormalizedZIPAfterAuthorization() async throws {
+        let locationProvider = RecordingFirstVisitLocationProvider()
+        let provider = CoreFirstVisitParkLocationContextProvider(
+            locationProvider: locationProvider,
+            authorizationStatus: { .authorizedWhenInUse },
+            postalCodeResolver: { _ in " 10001-4567 " }
+        )
+
+        let context = try await provider.alreadyAuthorizedLocationContext()
+
+        XCTAssertEqual(context, FirstVisitParkLocationContext(postalCode: "10001"))
+        XCTAssertEqual(locationProvider.requestCount, 1)
+    }
+
+    func testFirstVisitParkLocationFallsBackWhenReverseGeocodingHasNoZIP() async throws {
+        let locationProvider = RecordingFirstVisitLocationProvider()
+        let provider = CoreFirstVisitParkLocationContextProvider(
+            locationProvider: locationProvider,
+            authorizationStatus: { .authorizedAlways },
+            postalCodeResolver: { _ in nil }
+        )
+
+        let context = try await provider.alreadyAuthorizedLocationContext()
+
+        XCTAssertNil(context)
+        XCTAssertEqual(locationProvider.requestCount, 1)
+    }
+
     func testApprovedLocationValueCopyIsStable() {
         XCTAssertEqual(OnboardingLocationContent.eyebrow, "AROUND YOU")
         XCTAssertEqual(OnboardingLocationContent.title, "Find the good stuff nearby")
@@ -369,6 +851,16 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertTrue(source.contains("OnboardingLocationMapPin(pin: pin)"))
         XCTAssertTrue(source.contains("OnboardingLocationSelectedPlaceCard()"))
         XCTAssertTrue(source.contains("isSelected: true"))
+    }
+}
+
+@MainActor
+private final class RecordingFirstVisitLocationProvider: CurrentLocationProviding {
+    private(set) var requestCount = 0
+
+    func currentLocation() async throws -> CLLocation {
+        requestCount += 1
+        return CLLocation(latitude: 34.00585, longitude: -118.4842)
     }
 }
 
@@ -413,5 +905,20 @@ private final class SuspendedRefreshAuthProvider: AuthSessionProviding {
 
     func supabaseAccessToken() async throws -> String {
         throw AuthSessionError.tokenUnavailable
+    }
+}
+
+@MainActor
+private final class EmptyOnboardingProfileRepository: ProfileRepository {
+    func currentProfile() async throws -> LocalProfile? {
+        nil
+    }
+
+    func profile(id: String) async throws -> ProfileViewState {
+        throw WanderRemoteError.notConfigured
+    }
+
+    func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
+        []
     }
 }

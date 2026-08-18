@@ -23,10 +23,18 @@ struct ContactInvitePrimaryActionState: Equatable {
         walkthroughSelectionGoal: Int?,
         defaultTitle: String
     ) -> ContactInvitePrimaryActionState {
+        if let walkthroughSelectionGoal {
+            return ContactInvitePrimaryActionState(
+                title: "Next",
+                isEnabled: true,
+                isSubdued: selectionCount < walkthroughSelectionGoal
+            )
+        }
+
         if selectionCount == 0 {
             return ContactInvitePrimaryActionState(
-                title: walkthroughSelectionGoal == nil ? defaultTitle : "Next",
-                isEnabled: walkthroughSelectionGoal != nil,
+                title: defaultTitle,
+                isEnabled: false,
                 isSubdued: true
             )
         }
@@ -99,6 +107,7 @@ struct ContactInviteSheet: View {
     let walkthroughSelectionGoal: Int?
     let onWalkthroughDismiss: (() -> Void)?
     let onPermissionDenied: (() -> Void)?
+    let onWalkthroughSelectionChange: ((Set<String>) -> Void)?
     let analytics: AnalyticsClient
 
     @State private var contacts: [InviteContact]
@@ -129,6 +138,7 @@ struct ContactInviteSheet: View {
         walkthroughSelectionGoal: Int? = nil,
         onWalkthroughDismiss: (() -> Void)? = nil,
         onPermissionDenied: (() -> Void)? = nil,
+        onWalkthroughSelectionChange: ((Set<String>) -> Void)? = nil,
         analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
         self.surface = surface
@@ -138,6 +148,7 @@ struct ContactInviteSheet: View {
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
         self.onWalkthroughDismiss = onWalkthroughDismiss
         self.onPermissionDenied = onPermissionDenied
+        self.onWalkthroughSelectionChange = onWalkthroughSelectionChange
         self.analytics = analytics
         _contacts = State(initialValue: contacts)
         _accessState = State(initialValue: accessState)
@@ -154,6 +165,8 @@ struct ContactInviteSheet: View {
         walkthroughSelectionGoal: Int? = nil,
         onWalkthroughDismiss: (() -> Void)? = nil,
         onPermissionDenied: (() -> Void)? = nil,
+        selectedContactIDs: Set<String> = [],
+        onWalkthroughSelectionChange: ((Set<String>) -> Void)? = nil,
         analytics: AnalyticsClient = NoopAnalyticsClient()
     ) {
         self.surface = surface
@@ -163,12 +176,13 @@ struct ContactInviteSheet: View {
         self.walkthroughSelectionGoal = walkthroughSelectionGoal
         self.onWalkthroughDismiss = onWalkthroughDismiss
         self.onPermissionDenied = onPermissionDenied
+        self.onWalkthroughSelectionChange = onWalkthroughSelectionChange
         self.analytics = analytics
         _contacts = State(initialValue: [])
         _accessState = State(initialValue: .primer)
         _presentationState = State(initialValue: .choosing)
         _query = State(initialValue: "")
-        _selection = State(initialValue: InviteSelection())
+        _selection = State(initialValue: InviteSelection(contactIDs: selectedContactIDs))
     }
 
     private var sections: [InviteContactSection] {
@@ -181,6 +195,10 @@ struct ContactInviteSheet: View {
             walkthroughSelectionGoal: walkthroughSelectionGoal,
             defaultTitle: surface.primaryActionTitle
         )
+    }
+
+    private var isWalkthroughMode: Bool {
+        walkthroughSelectionGoal != nil
     }
 
     var body: some View {
@@ -223,6 +241,9 @@ struct ContactInviteSheet: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, contactProvider != nil else { return }
             Task { await refreshProviderState() }
+        }
+        .onChange(of: selection) { _, selection in
+            onWalkthroughSelectionChange?(selection.contactIDs)
         }
         .sheet(isPresented: $isPresentingMessageComposer) {
             if let messageRecipient {
@@ -273,36 +294,36 @@ struct ContactInviteSheet: View {
             }
 
             HStack {
-                Button {
-                    if canDismiss {
+                if canDismiss {
+                    Button {
                         onWalkthroughDismiss?()
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .black))
+                            .foregroundStyle(WanderTheme.textInk.color)
+                            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                            .background(WanderTheme.surfaceRaised.color)
+                            .clipShape(Circle())
+                            .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 8, y: 3)
                     }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .black))
-                        .foregroundStyle(WanderTheme.textInk.color)
-                        .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                        .background(WanderTheme.surfaceRaised.color)
-                        .clipShape(Circle())
-                        .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 8, y: 3)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        onWalkthroughDismiss == nil ? "Close" : "Dismiss walkthrough"
+                    )
+                    .accessibilityIdentifier(
+                        onWalkthroughDismiss == nil
+                            ? "invite.close"
+                            : "walkthrough.dismiss.contactInvite"
+                    )
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(
-                    onWalkthroughDismiss == nil ? "Close" : "Dismiss walkthrough"
-                )
-                .accessibilityIdentifier(
-                    onWalkthroughDismiss == nil
-                        ? "invite.close"
-                        : "walkthrough.dismiss.contactInvite"
-                )
 
                 Spacer()
 
                 if presentationState == .choosing && accessState == .authorized {
                     Button {
-                        if walkthroughSelectionGoal != nil, selection.count == 0 {
-                            if canDismiss { dismiss() }
+                        if isWalkthroughMode {
+                            dismiss()
                         } else {
                             beginInviteDelivery()
                         }
@@ -334,9 +355,11 @@ struct ContactInviteSheet: View {
                     .accessibilityIdentifier("invite.primaryAction")
                     .accessibilityLabel(primaryActionState.title)
                     .accessibilityHint(
-                        primaryActionState.isSubdued
-                            ? "Continues without inviting anyone"
-                            : "Invites the selected people"
+                        isWalkthroughMode
+                            ? "Continues the walkthrough"
+                            : (primaryActionState.isSubdued
+                                ? "Select at least one person to invite"
+                                : "Invites the selected people")
                     )
                 } else {
                     Color.clear.frame(width: 64, height: WanderTheme.tapMinimum)
@@ -463,50 +486,23 @@ struct ContactInviteSheet: View {
         }
     }
 
+    @ViewBuilder
     private func contactRow(_ contact: InviteContact) -> some View {
+        if let walkthroughSelectionGoal {
+            walkthroughContactRow(contact, goal: walkthroughSelectionGoal)
+        } else {
+            standardContactRow(contact)
+        }
+    }
+
+    private func standardContactRow(_ contact: InviteContact) -> some View {
         Button {
-            if !selection.contains(contact.id),
-               let walkthroughSelectionGoal,
-               selection.count >= walkthroughSelectionGoal {
-                return
-            }
             withAnimation(.easeInOut(duration: 0.15)) {
                 _ = selection.toggle(contact.id)
             }
         } label: {
             HStack(spacing: WanderTheme.spacing3) {
-                Text(contact.initials)
-                    .font(.system(size: 13, weight: .black))
-                    .foregroundStyle(avatarForeground(for: contact))
-                    .frame(width: 40, height: 40)
-                    .background(avatarBackground(for: contact))
-                    .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: WanderTheme.spacing1) {
-                        Text(contact.displayName)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .lineLimit(1)
-
-                        if contact.relationship.isOnRecme {
-                            Text("on rec.me")
-                                .font(.system(size: 9, weight: .black))
-                                .foregroundStyle(WanderTheme.stateInfo.color)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(WanderTheme.skyTint.color)
-                                .clipShape(Capsule())
-                        }
-                    }
-
-                    if let detail = rowDetail(for: contact) {
-                        Text(detail)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(WanderTheme.textMuted.color)
-                            .lineLimit(1)
-                    }
-                }
+                contactIdentity(contact)
 
                 Spacer(minLength: WanderTheme.spacing1)
 
@@ -524,10 +520,7 @@ struct ContactInviteSheet: View {
                             .foregroundStyle(WanderTheme.textOnAction.color)
                     }
                 }
-                .frame(
-                    width: walkthroughSelectionGoal == nil ? 25 : 32,
-                    height: walkthroughSelectionGoal == nil ? 25 : 32
-                )
+                .frame(width: 25, height: 25)
             }
             .frame(minHeight: 56)
             .contentShape(Rectangle())
@@ -535,7 +528,98 @@ struct ContactInviteSheet: View {
         .buttonStyle(.plain)
         .accessibilityLabel(contactAccessibilityLabel(for: contact))
         .accessibilityValue(selection.contains(contact.id) ? "Selected" : "Not selected")
-        .accessibilityHint(selection.contains(contact.id) ? "Double-tap to deselect" : "Double-tap to select")
+        .accessibilityHint(
+            selection.contains(contact.id) ? "Double-tap to deselect" : "Double-tap to select"
+        )
+    }
+
+    private func walkthroughContactRow(_ contact: InviteContact, goal: Int) -> some View {
+        let isSent = selection.contains(contact.id)
+        let canInvite = ContactInviteWalkthroughProgressReducer.canInvite(
+            contactID: contact.id,
+            state: selection,
+            goal: goal
+        )
+
+        return HStack(spacing: WanderTheme.spacing3) {
+            contactIdentity(contact)
+
+            Spacer(minLength: WanderTheme.spacing1)
+
+            Button {
+                beginWalkthroughInviteDelivery(for: contact)
+            } label: {
+                Text(isSent ? "Sent" : "Add")
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundStyle(
+                        isSent
+                            ? WanderTheme.stateSuccess.color
+                            : (canInvite
+                                ? WanderTheme.textOnAction.color
+                                : WanderTheme.textMuted.color)
+                    )
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(minWidth: 62, minHeight: WanderTheme.tapMinimum)
+                    .background(
+                        isSent
+                            ? WanderTheme.stateSuccess.color.opacity(0.12)
+                            : (canInvite
+                                ? WanderTheme.terracotta.color
+                                : WanderTheme.surfaceSand.color)
+                    )
+                    .clipShape(Capsule())
+                    .overlay {
+                        if isSent {
+                            Capsule()
+                                .stroke(WanderTheme.stateSuccess.color.opacity(0.5), lineWidth: 1)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(!canInvite)
+            .accessibilityIdentifier("invite.contactAdd.\(contact.id)")
+            .accessibilityLabel(isSent ? "Invitation sent to \(contact.displayName)" : "Invite \(contact.displayName)")
+            .accessibilityValue(isSent ? "Sent" : "Not sent")
+            .accessibilityHint(canInvite ? "Opens a text invitation" : "")
+        }
+        .frame(minHeight: 56)
+    }
+
+    private func contactIdentity(_ contact: InviteContact) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Text(contact.initials)
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(avatarForeground(for: contact))
+                .frame(width: 40, height: 40)
+                .background(avatarBackground(for: contact))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: WanderTheme.spacing1) {
+                    Text(contact.displayName)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(WanderTheme.textInk.color)
+                        .lineLimit(1)
+
+                    if contact.relationship.isOnRecme {
+                        Text("on rec.me")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundStyle(WanderTheme.stateInfo.color)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(WanderTheme.skyTint.color)
+                            .clipShape(Capsule())
+                    }
+                }
+
+                if let detail = rowDetail(for: contact) {
+                    Text(detail)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .lineLimit(1)
+                }
+            }
+        }
     }
 
     private var alphabetLetters: [String] {
@@ -804,7 +888,10 @@ struct ContactInviteSheet: View {
     private var inviteShareContent: WanderShareContent {
         WanderShareContent.appInvite(
             senderProfileID: senderProfileID,
-            contextMessage: surface.inviteMessage
+            contextMessage: isWalkthroughMode
+                ? ContactInviteWalkthroughContent.inviteProse
+                : surface.inviteMessage,
+            includeInstallPrompt: !isWalkthroughMode
         )
     }
 
@@ -828,6 +915,27 @@ struct ContactInviteSheet: View {
 
         trackInviteDeliveryStarted(mode: "messages", recipientCount: recipients.count)
         messageDeliveryPlan = InviteMessageDeliveryPlan(contacts: recipients)
+        presentNextMessageComposer()
+    }
+
+    private func beginWalkthroughInviteDelivery(for contact: InviteContact) {
+        guard let walkthroughSelectionGoal,
+              ContactInviteWalkthroughProgressReducer.canInvite(
+                contactID: contact.id,
+                state: selection,
+                goal: walkthroughSelectionGoal
+              ),
+              let recipient = contact.contactDetail,
+              isLikelyPhoneNumber(recipient)
+        else { return }
+
+        guard MFMessageComposeViewController.canSendText() else {
+            deliveryErrorMessage = "Messages are not available on this device. Try again on an iPhone that can send texts."
+            return
+        }
+
+        trackInviteDeliveryStarted(mode: "messages", recipientCount: 1)
+        messageDeliveryPlan = InviteMessageDeliveryPlan(contacts: [contact])
         presentNextMessageComposer()
     }
 
@@ -855,6 +963,11 @@ struct ContactInviteSheet: View {
         isPresentingMessageComposer = false
         messageRecipient = nil
 
+        if isWalkthroughMode {
+            handleWalkthroughMessageComposerResult(result)
+            return
+        }
+
         switch result {
         case .sent:
             if let sentContact = messageDeliveryPlan?.markCurrentSent() {
@@ -875,6 +988,7 @@ struct ContactInviteSheet: View {
                 sentCount: messageDeliveryPlan?.sentCount ?? 0
             )
             messageDeliveryPlan?.cancelRemaining()
+            messageDeliveryPlan = nil
         case .failed:
             trackInviteCompletion(
                 outcome: "failed",
@@ -882,6 +996,7 @@ struct ContactInviteSheet: View {
                 sentCount: messageDeliveryPlan?.sentCount ?? 0
             )
             messageDeliveryPlan?.cancelRemaining()
+            messageDeliveryPlan = nil
             deliveryErrorMessage = "Messages could not send this invitation. Try again."
         @unknown default:
             trackInviteCompletion(
@@ -890,8 +1005,65 @@ struct ContactInviteSheet: View {
                 sentCount: messageDeliveryPlan?.sentCount ?? 0
             )
             messageDeliveryPlan?.cancelRemaining()
+            messageDeliveryPlan = nil
             deliveryErrorMessage = "Messages returned an unknown result. Try again."
         }
+    }
+
+    private func handleWalkthroughMessageComposerResult(_ result: MessageComposeResult) {
+        guard let walkthroughSelectionGoal,
+              let contactID = messageDeliveryPlan?.currentContact?.id
+        else {
+            messageDeliveryPlan = nil
+            return
+        }
+
+        let outcome: ContactInviteWalkthroughComposerOutcome
+        let analyticsOutcome: String
+        let errorMessage: String?
+        switch result {
+        case .sent:
+            // MessageUI's `.sent` is only a successful handoff from the
+            // composer. It does not confirm carrier delivery or acceptance.
+            outcome = .sent
+            analyticsOutcome = "sent"
+            errorMessage = nil
+        case .cancelled:
+            outcome = .cancelled
+            analyticsOutcome = "cancelled"
+            errorMessage = nil
+        case .failed:
+            outcome = .failed
+            analyticsOutcome = "failed"
+            errorMessage = "Messages could not send this invitation. Try again."
+        @unknown default:
+            outcome = .failed
+            analyticsOutcome = "failed"
+            errorMessage = "Messages returned an unknown result. Try again."
+        }
+
+        let nextSelection = ContactInviteWalkthroughProgressReducer.reduce(
+            state: selection,
+            action: .messageComposerFinished(contactID: contactID, outcome: outcome),
+            goal: walkthroughSelectionGoal
+        )
+        let didAdvance = nextSelection.count > selection.count
+        if didAdvance {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.76)) {
+                selection = nextSelection
+            }
+        }
+
+        if outcome != .sent || didAdvance {
+            trackInviteCompletion(
+                outcome: analyticsOutcome,
+                deliveryMode: "messages",
+                sentCount: didAdvance ? 1 : 0
+            )
+        }
+        messageDeliveryPlan?.cancelRemaining()
+        messageDeliveryPlan = nil
+        deliveryErrorMessage = errorMessage
     }
 
     private func completeDelivery(
@@ -1119,7 +1291,7 @@ private struct ContactInviteWalkthroughGoalBanner: View {
                 )
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(completedCount) of \(goal) people selected")
+        .accessibilityLabel("\(completedCount) of \(goal) invitations sent")
         .onChange(of: isComplete, initial: true) { _, complete in
             guard complete, !reduceMotion else { return }
             withAnimation(.spring(response: 0.34, dampingFraction: 0.62)) {

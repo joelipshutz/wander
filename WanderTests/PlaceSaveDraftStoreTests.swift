@@ -76,6 +76,63 @@ final class PlaceSaveDraftStoreTests: XCTestCase {
         XCTAssertNil(persisted)
     }
 
+    func testOrdinaryDraftSurvivesWalkthroughExpiryCleanup() {
+        let ordinaryDraft = makeDraft()
+
+        XCTAssertFalse(
+            PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+                ordinaryDraft,
+                lastWalkthroughActivityAt: nil,
+                now: now
+            )
+        )
+        XCTAssertFalse(
+            PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+                ordinaryDraft,
+                lastWalkthroughActivityAt: now.addingTimeInterval(-24 * 60 * 60),
+                now: now
+            )
+        )
+    }
+
+    func testWalkthroughDraftSurvivesInsideTwelveHourResumeWindow() {
+        let walkthroughDraft = makeDraft(walkthroughContentVersion: 11)
+
+        XCTAssertFalse(
+            PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+                walkthroughDraft,
+                lastWalkthroughActivityAt: now.addingTimeInterval(-(12 * 60 * 60) + 1),
+                now: now
+            )
+        )
+    }
+
+    func testWalkthroughDraftIsDiscardedWithoutAValidRecentCheckpoint() {
+        let walkthroughDraft = makeDraft(walkthroughContentVersion: 11)
+
+        XCTAssertTrue(
+            PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+                walkthroughDraft,
+                lastWalkthroughActivityAt: nil,
+                now: now
+            )
+        )
+        XCTAssertTrue(
+            PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+                walkthroughDraft,
+                lastWalkthroughActivityAt: now.addingTimeInterval(-12 * 60 * 60),
+                now: now
+            )
+        )
+        XCTAssertTrue(
+            PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+                walkthroughDraft,
+                lastWalkthroughActivityAt: now.addingTimeInterval(1),
+                now: now
+            )
+        )
+    }
+
     func testEditingDraftRestoresWithoutCommitReconciliation() {
         XCTAssertEqual(
             PlaceSaveDraftRecoveryPolicy.outcome(
@@ -264,6 +321,7 @@ final class PlaceSaveDraftStoreTests: XCTestCase {
         status: PlaceStatus = .wannaGo,
         baselineUserPlaceLocalID: String? = nil,
         baselineVisitLocalID: String? = nil,
+        walkthroughContentVersion: Int? = nil,
         submittedAt: Date? = nil
     ) -> PlaceSaveDraft {
         PlaceSaveDraft(
@@ -288,6 +346,7 @@ final class PlaceSaveDraftStoreTests: XCTestCase {
             ),
             baselineUserPlaceLocalID: baselineUserPlaceLocalID,
             baselineVisitLocalID: baselineVisitLocalID,
+            walkthroughContentVersion: walkthroughContentVersion,
             form: PlaceSaveDraftForm(
                 step: .details,
                 selectedAssignment: PlaceCategoryAssignment(

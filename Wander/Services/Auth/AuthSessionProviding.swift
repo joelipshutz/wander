@@ -320,6 +320,7 @@ final class AuthSessionStore: ObservableObject, AuthSessionProviding {
         self.provider = provider
         self.state = provider.state
         sessionObservationTask = Task { @MainActor [weak self] in
+            guard !Task.isCancelled else { return }
             for await state in provider.sessionChanges() {
                 guard !Task.isCancelled else { return }
                 self?.refreshGeneration &+= 1
@@ -728,6 +729,7 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
     private(set) var verifiedEmailCodes: [String] = []
     private(set) var requestedPasswordSignInEmails: [String] = []
     private(set) var didResetPendingEmailVerification = false
+    private(set) var sessionChangesRequestCount = 0
 
     init(
         state: AuthState = .signedOut,
@@ -773,7 +775,10 @@ final class PreviewAuthSessionProvider: AuthSessionProviding {
         self.state = state
     }
 
-    func sessionChanges() -> AsyncStream<AuthState> { sessionChangeStream }
+    func sessionChanges() -> AsyncStream<AuthState> {
+        sessionChangesRequestCount += 1
+        return sessionChangeStream
+    }
 
     func refreshSession() async {}
 

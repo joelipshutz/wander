@@ -11,10 +11,33 @@ enum FeatureFlagKey: String, CaseIterable, Hashable {
     }
 }
 
+enum FeatureFlagValueSource: Equatable {
+    case globalDefault
+    case accountOverride
+}
+
+struct ResolvedFeatureFlagValue: Equatable {
+    let isEnabled: Bool
+    let source: FeatureFlagValueSource
+
+    var explicitAccountOverride: Bool? {
+        source == .accountOverride ? isEnabled : nil
+    }
+}
+
 enum FeatureFlagResolution: Equatable {
     case unresolved
-    case resolved(userID: String, values: [FeatureFlagKey: Bool])
+    case resolved(userID: String, values: [FeatureFlagKey: ResolvedFeatureFlagValue])
     case failed(userID: String)
+
+    func isPending(for userID: String) -> Bool {
+        switch self {
+        case .unresolved:
+            true
+        case .resolved(let resolvedUserID, _), .failed(let resolvedUserID):
+            resolvedUserID != userID
+        }
+    }
 }
 
 enum DebugSettingsAccessPolicy {
@@ -55,7 +78,7 @@ enum SemanticPlaceSearchAccessPolicy {
 
 @MainActor
 protocol FeatureFlagRepository {
-    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: Bool]
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue]
 }
 
 @MainActor
@@ -82,6 +105,7 @@ final class WanderBackend: ObservableObject {
     let notificationRepository: (any NotificationRepository)?
     let sharedVisitRepository: (any SharedVisitRepository)?
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
+    private var featureFlagRefreshGeneration = 0
     private var placePhotoCache: [String: PlacePhoto] = [:]
     private var placePhotoTasks: [String: Task<PlacePhoto, Error>] = [:]
     private let placePhotoImageCache: NSCache<NSString, NSData> = {
@@ -217,7 +241,11 @@ final class WanderBackend: ObservableObject {
     }
 
     func refreshFeatureFlags(for userID: String) async {
+        featureFlagRefreshGeneration &+= 1
+        let refreshGeneration = featureFlagRefreshGeneration
+
         guard let featureFlagRepository else {
+            guard refreshGeneration == featureFlagRefreshGeneration else { return }
             featureFlagResolution = .failed(userID: userID)
             return
         }
@@ -225,19 +253,29 @@ final class WanderBackend: ObservableObject {
         do {
             let values = try await featureFlagRepository.resolvedFlags(for: userID)
             try Task.checkCancellation()
+            guard refreshGeneration == featureFlagRefreshGeneration else { return }
             featureFlagResolution = .resolved(userID: userID, values: values)
         } catch is CancellationError {
             return
         } catch {
+            guard refreshGeneration == featureFlagRefreshGeneration else { return }
             featureFlagResolution = .failed(userID: userID)
         }
     }
 
     func clearFeatureFlags() {
+        featureFlagRefreshGeneration &+= 1
         featureFlagResolution = .unresolved
     }
 
     func featureFlag(_ key: FeatureFlagKey, for userID: String) -> Bool? {
+        resolvedFeatureFlag(key, for: userID)?.isEnabled
+    }
+
+    func resolvedFeatureFlag(
+        _ key: FeatureFlagKey,
+        for userID: String
+    ) -> ResolvedFeatureFlagValue? {
         guard case .resolved(let resolvedUserID, let values) = featureFlagResolution,
               resolvedUserID == userID
         else { return nil }

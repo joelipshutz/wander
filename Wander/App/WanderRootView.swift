@@ -324,8 +324,12 @@ struct WanderRootView: View {
     @State private var queuedAutomaticImportBatchIDs: Set<String> = []
     @State private var completedAutomaticImportBatchIDs: Set<String> = []
     @State private var restoredPlaceSaveDraftOwnerID: String?
+    @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
-    @State private var didApplyWalkthroughLaunchConfiguration = false
+    @State private var walkthroughLaunchConfiguredUserIDs: Set<String> = []
+    @State private var retiredWalkthroughUserIDs: Set<String> = []
+    @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
+    @State private var nativeTabItemControlsFrame: CGRect?
     @State private var placeProfileFloatingActionVariant = PlaceProfileFloatingActionVariant.productionDefault
     @StateObject private var store: WanderStore
     @StateObject private var importStore: PlaceImportStore
@@ -339,9 +343,9 @@ struct WanderRootView: View {
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
+    private let firstVisitWalkthroughEligibilityContext: FirstVisitWalkthroughEligibilityContext
+    private let onFirstVisitWalkthroughCompleted: (String) -> Void
     private let placeActionDebugPreferences: PlaceProfileFloatingActionDebugPreferences
-    private let isFirstVisitWalkthroughEligible: Bool
-    private let onFirstVisitWalkthroughCompleted: () -> Void
 
     init(
         initialTab: WanderTab? = nil,
@@ -350,7 +354,7 @@ struct WanderRootView: View {
         initialSession: AuthSession? = nil,
         isSessionValidated: Bool = true,
         isFirstVisitWalkthroughEligible: Bool = false,
-        onFirstVisitWalkthroughCompleted: @escaping () -> Void = {},
+        onFirstVisitWalkthroughCompleted: @escaping (String) -> Void = { _ in },
         deepLinkLaunchRequest: WanderDeepLinkLaunchRequest? = nil,
         onDeepLinkLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
         analytics: AnalyticsClient = NoopAnalyticsClient(),
@@ -365,8 +369,12 @@ struct WanderRootView: View {
         self.analytics = analytics
         let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
         self.walkthroughDebugPreferences = walkthroughDebugPreferences
+        let firstVisitWalkthroughEligibilityContext = FirstVisitWalkthroughEligibilityContext(
+            sourceUserID: initialSession?.userID,
+            isEligible: isFirstVisitWalkthroughEligible
+        )
+        self.firstVisitWalkthroughEligibilityContext = firstVisitWalkthroughEligibilityContext
         placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
-        self.isFirstVisitWalkthroughEligible = isFirstVisitWalkthroughEligible
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
@@ -396,16 +404,16 @@ struct WanderRootView: View {
         _walkthroughs = StateObject(
             wrappedValue: FirstVisitWalkthroughCoordinator(
                 isEnabled: FirstVisitWalkthroughFeatureFlag.isEnabled(
-                    isEligible: isFirstVisitWalkthroughEligible,
+                    isEligible: firstVisitWalkthroughEligibilityContext.applies(
+                        to: initialSession?.userID
+                    ),
                     isUsingLiveData: fixtureMode == .empty,
                     launchArguments: launchArguments,
                     resolvedValue: nil
                 ),
-                onCompleted: {
-                    if let userID = initialSession?.userID {
-                        walkthroughDebugPreferences.clearReplayRequest(for: userID)
-                    }
-                    onFirstVisitWalkthroughCompleted()
+                onCompleted: { completedUserID in
+                    walkthroughDebugPreferences.clearReplayRequest(for: completedUserID)
+                    onFirstVisitWalkthroughCompleted(completedUserID)
                 }
             )
         )
@@ -467,7 +475,13 @@ struct WanderRootView: View {
         .tint(WanderTheme.terracotta.color)
         .preferredColorScheme(.light)
         .background {
-            WanderNativeTabTouchObserver(tabs: WanderTab.primaryTabs)
+            WanderNativeTabTouchObserver(
+                tabs: WanderTab.primaryTabs,
+                onItemControlsFrameChange: { frame in
+                    guard nativeTabItemControlsFrame != frame else { return }
+                    nativeTabItemControlsFrame = frame
+                }
+            )
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
@@ -497,16 +511,11 @@ struct WanderRootView: View {
                 selectedTab = .discover
             }
         }
-        .overlay(alignment: .bottom) {
-            Color.clear
-                .frame(height: walkthroughTabBarTargetHeight)
-                .offset(y: walkthroughTabBarTargetVerticalOffset)
-                .contentShape(Rectangle())
-                .allowsHitTesting(false)
-                .walkthroughTarget(.mapTabs)
-                .padding(.horizontal, walkthroughTabBarTargetHorizontalInset)
-        }
-        .firstVisitWalkthroughOverlay(walkthroughs, surface: walkthroughSurface(for: selectedTab))
+        .firstVisitWalkthroughOverlay(
+            walkthroughs,
+            surface: walkthroughSurface(for: selectedTab),
+            externalTargetFrames: nativeTabItemControlsFrame.map { [.mapTabs: $0] } ?? [:]
+        )
         .walkthroughLaunchLessonOverlay(
             walkthroughs,
             onOpenImport: presentWalkthroughImportHub
@@ -575,7 +584,8 @@ struct WanderRootView: View {
                     resetToken: addTabResetToken,
                     selectedDetent: $addSheetDetent,
                     launchRequest: addLaunchRequest,
-                    onLaunchRequestHandled: consumeAddLaunchRequest
+                    onLaunchRequestHandled: consumeAddLaunchRequest,
+                    walkthroughParkSuggestion: resolveFirstVisitParkSuggestion
                 ) {
                     isPresentingAdd = false
                 }
@@ -656,6 +666,7 @@ struct WanderRootView: View {
     private var shouldDimBehindAddWalkthrough: Bool {
         walkthroughs.activeSurface == .add
             || walkthroughs.activeSurface == .saveFlow
+            || walkthroughs.requestedSurface == .map
     }
 
     private var lifecycleRoot: some View {
@@ -751,6 +762,8 @@ struct WanderRootView: View {
         .onChange(of: auth.state) { previousState, state in
             let nextUserID = state.session?.userID
             if previousState.session?.userID != nextUserID {
+                walkthroughFeatureFlagRefreshTask?.cancel()
+                walkthroughFeatureFlagRefreshTask = nil
                 placeProfileFloatingActionVariant = .productionDefault
             }
             if let automaticImportOwnerUserID,
@@ -851,8 +864,25 @@ struct WanderRootView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
                 placeSaveDraftStore.flush()
+                walkthroughs.recordSuspension()
             }
             guard phase == .active, isSessionValidated else { return }
+            switch walkthroughs.restoreJourneyIfNeeded() {
+            case .resumed(let surface):
+                if completeCommittedWalkthroughDraftIfNeeded() {
+                    routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
+                } else {
+                    routeWalkthrough(to: surface)
+                }
+            case .expired:
+                retireWalkthroughPresentationAndDraft(
+                    for: store.currentUser.id,
+                    forceRootCleanup: true
+                )
+            case .none:
+                break
+            }
+            refreshWalkthroughFeatureFlagsAfterForeground()
             drainPendingNotificationResponses()
             drainSharedPlaceImports()
             resumeAutomaticPlaceImports()
@@ -879,6 +909,8 @@ struct WanderRootView: View {
         ) {
             Button("OK", role: .cancel) {
                 interruptedSaveRecoveryMessage = nil
+                pendingCommittedWalkthroughDraft = nil
+                placeSaveDraftStore.clear()
             }
         } message: {
             Text(interruptedSaveRecoveryMessage ?? "")
@@ -894,8 +926,12 @@ struct WanderRootView: View {
                 cancelSignedInMaintenance()
             }
         }
+        .onChange(of: firstVisitWalkthroughEligibilityContext) { _, _ in
+            guard isSessionValidated else { return }
+            configureWalkthroughsForCurrentUser()
+        }
         .onChange(of: walkthroughs.isPresentingDeviceFeaturesLesson) { _, isPresented in
-            if !isPresented {
+            if !isPresented, !walkthroughs.hasActivePrimaryJourney {
                 walkthroughs.activate(walkthroughSurface(for: selectedTab))
             }
         }
@@ -927,7 +963,7 @@ struct WanderRootView: View {
         } else {
             walkthroughs.perform(.mapAdd)
         }
-        walkthroughs.activate(.add)
+        walkthroughs.transition(to: .add)
         placeSaveDraftStore.clear()
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
@@ -942,6 +978,33 @@ struct WanderRootView: View {
         )
     }
 
+    @MainActor
+    private func resolveFirstVisitParkSuggestion() async -> PlaceCandidate? {
+        // Demo fixtures have no trustworthy device location. Return the
+        // deterministic fallback immediately instead of waiting on a simulator
+        // that may be authorized but have no live location fix.
+        guard fixtureMode == .empty else {
+            return FirstVisitParkSuggestionPolicy.hotchkissPark
+        }
+
+        let context = try? await CoreFirstVisitParkLocationContextProvider()
+            .alreadyAuthorizedLocationContext()
+        guard let context,
+              FirstVisitParkSuggestionPolicy.shouldRequestNearbySuggestion(
+                  postalCode: context.postalCode
+              )
+        else {
+            return FirstVisitParkSuggestionPolicy.hotchkissPark
+        }
+
+        do {
+            return try await MapKitPlaceResolver().suggestion(near: context)
+        } catch {
+            guard !Task.isCancelled else { return nil }
+            return FirstVisitParkSuggestionPolicy.hotchkissPark
+        }
+    }
+
     private func restorePlaceSaveDraftIfNeeded() {
         let ownerUserID = store.currentUser.id
         guard restoredPlaceSaveDraftOwnerID != ownerUserID else { return }
@@ -950,6 +1013,17 @@ struct WanderRootView: View {
         guard case .restored(let draft) = placeSaveDraftStore.restore(
             ownerUserID: ownerUserID
         ) else { return }
+
+        let checkpoint = FirstVisitWalkthroughStore().checkpoint(for: ownerUserID)
+        if PlaceSaveDraftWalkthroughRecoveryPolicy.shouldDiscard(
+            draft,
+            lastWalkthroughActivityAt: checkpoint?.updatedAt,
+            now: .now,
+            resumeWindow: FirstVisitWalkthroughStore.resumeWindow
+        ) {
+            placeSaveDraftStore.clear()
+            return
+        }
 
         let currentSave = MapPlaceSaveContext.currentUserSave(
             matching: draft.candidate,
@@ -970,10 +1044,14 @@ struct WanderRootView: View {
 
         switch PlaceSaveDraftRecoveryPolicy.outcome(for: draft, evidence: evidence) {
         case .committed:
-            placeSaveDraftStore.clear()
-            interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
-                ? "Your check-in finished while rec.me was in the background."
-                : "This place was added to Wanna while rec.me was in the background."
+            pendingCommittedWalkthroughDraft = draft
+            if completeCommittedWalkthroughDraftIfNeeded() {
+                routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
+            } else {
+                interruptedSaveRecoveryMessage = draft.form.selectedStatus == .been
+                    ? "Your check-in finished while rec.me was in the background."
+                    : "This place was added to Wanna while rec.me was in the background."
+            }
         case .retry:
             placeSaveDraftStore.prepareRetry(
                 message: "Save was interrupted before rec.me could confirm it. Review your details and try again."
@@ -982,6 +1060,75 @@ struct WanderRootView: View {
         case .editing:
             presentRestoredAddSheet()
         }
+    }
+
+    @discardableResult
+    private func retireWalkthroughPresentationAndDraft(
+        for ownerUserID: String,
+        forceRootCleanup: Bool
+    ) -> Bool {
+        let persistedDraft: PlaceSaveDraft?
+        if let draft = placeSaveDraftStore.draft, draft.ownerUserID == ownerUserID {
+            persistedDraft = draft
+        } else if case .restored(let draft) = placeSaveDraftStore.restore(
+            ownerUserID: ownerUserID
+        ) {
+            persistedDraft = draft
+        } else {
+            persistedDraft = nil
+        }
+
+        let didDiscardWalkthroughDraft = persistedDraft?.walkthroughContentVersion != nil
+        if didDiscardWalkthroughDraft {
+            placeSaveDraftStore.clear()
+            restoredPlaceSaveDraftOwnerID = ownerUserID
+        }
+
+        guard forceRootCleanup || didDiscardWalkthroughDraft else { return false }
+        pendingCommittedWalkthroughDraft = nil
+        interruptedSaveRecoveryMessage = nil
+        presentationResetRequest = WanderPresentationResetRequest()
+        resetRootPresentationsForDeepLink()
+        selectedTab = .map
+        return true
+    }
+
+    @discardableResult
+    private func completeCommittedWalkthroughDraftIfNeeded() -> Bool {
+        guard let draft = pendingCommittedWalkthroughDraft,
+              draft.ownerUserID == store.currentUser.id,
+              walkthroughs.activeSurface == .saveFlow,
+              walkthroughs.currentStep?.target == .saveSubmit,
+              let currentSave = MapPlaceSaveContext.currentUserSave(
+                  matching: draft.candidate,
+                  in: store.currentUserVisiblePlaces
+              )
+        else { return false }
+
+        let form = draft.form
+        let snapshot = FirstVisitTutorialMemorySnapshot(
+            candidate: draft.candidate,
+            status: form.selectedStatus,
+            date: form.selectedStatus == .been
+                ? form.visitedAt
+                : (form.plannedDate ?? draft.updatedAt),
+            ratingScore: form.selectedStatus == .been ? form.selectedRatingScore : nil,
+            note: form.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "A peaceful neighborhood park with room to slow down and breathe."
+                : form.note,
+            tag: form.unifiedTags.sorted().first ?? "good walk"
+        )
+        walkthroughs.recordTutorialCandidate(draft.candidate)
+        walkthroughs.recordTutorialSelectedStatus(form.selectedStatus)
+        walkthroughs.recordTutorialMemorySnapshot(snapshot)
+        walkthroughs.recordTutorialSave(userPlaceID: currentSave.userPlace.id)
+        walkthroughs.perform(.saveSubmit)
+        // The next NUX checkpoint is now durable. Only now is it safe to drop
+        // the committed form that bridges a process kill during submission.
+        placeSaveDraftStore.clear()
+        pendingCommittedWalkthroughDraft = nil
+        interruptedSaveRecoveryMessage = nil
+        return true
     }
 
     private func presentRestoredAddSheet() {
@@ -1236,6 +1383,8 @@ struct WanderRootView: View {
 
     private func handleRootDisappear() {
         cancelSignedInMaintenance()
+        walkthroughFeatureFlagRefreshTask?.cancel()
+        walkthroughFeatureFlagRefreshTask = nil
         nearbyWidgetRefreshTask?.cancel()
         nearbyWidgetRefreshTask = nil
         deepLinkHandoffTask?.cancel()
@@ -1429,6 +1578,11 @@ struct WanderRootView: View {
     private func configureWalkthroughsForCurrentUser() {
         let launchArguments = ProcessInfo.processInfo.arguments
         let userID = auth.state.session?.userID ?? store.currentUser.id
+        // Bind persisted progress to the authenticated account before reading,
+        // retiring, or restoring any journey state. Disabled/established users
+        // still need their own stale checkpoints cleared, never the previous
+        // account's or the coordinator's placeholder account.
+        walkthroughs.setUserID(userID)
         let isDebugSettingsEntitled = DebugSettingsAccessPolicy.isEntitled(
             serverFlag: backend.featureFlag(.debugSettings, for: userID)
         )
@@ -1437,45 +1591,146 @@ struct WanderRootView: View {
             : nil
         let isReplayRequested = isDebugSettingsEntitled
             && walkthroughDebugPreferences.isReplayRequested(for: userID)
-        let resolvedValue = debugNUXOverride
-            ?? backend.featureFlag(.firstVisitNUX, for: userID)
+        let resolvedFlag = backend.resolvedFeatureFlag(.firstVisitNUX, for: userID)
+        let shouldRetireEligibility =
+            FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement(
+                isUsingLiveData: fixtureMode == .empty,
+                resolvedAccountOverride: resolvedFlag?.explicitAccountOverride
+            )
+        let enrollmentBelongsToCurrentUser =
+            firstVisitWalkthroughEligibilityContext.applies(to: userID)
+        if firstVisitWalkthroughEligibilityContext.shouldRetire(
+            for: userID,
+            whenRetirementIsRequested: shouldRetireEligibility
+        ),
+           retiredWalkthroughUserIDs.insert(userID).inserted {
+            onFirstVisitWalkthroughCompleted(userID)
+        }
+        let effectiveEligibility = enrollmentBelongsToCurrentUser
+            && !retiredWalkthroughUserIDs.contains(userID)
+        walkthroughs.setEligibilityResolutionPending(
+            FirstVisitWalkthroughEligibilityPolicy.isAwaitingFeatureFlagResolution(
+                isEnrolled: effectiveEligibility,
+                isUsingLiveData: fixtureMode == .empty,
+                resolutionIsPending: backend.featureFlagResolution.isPending(for: userID)
+            )
+        )
         let isEnabled = FirstVisitWalkthroughFeatureFlag.isEnabled(
-            isEligible: isFirstVisitWalkthroughEligible,
+            isEligible: effectiveEligibility,
             isUsingLiveData: fixtureMode == .empty,
             launchArguments: launchArguments,
-            resolvedValue: resolvedValue,
-            isEntitledDebugReplayRequested: isReplayRequested
+            resolvedValue: resolvedFlag?.isEnabled,
+            entitledDebugOverride: debugNUXOverride,
+            isEntitledDebugReplayRequested: isReplayRequested,
+            isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         )
+        let hadActiveWalkthroughPresentation = walkthroughs.hasActivePresentation
         walkthroughs.setEnabled(isEnabled)
 
-        guard isEnabled else { return }
+        guard isEnabled else {
+            let hasDebugLaunchDisable = FirstVisitWalkthroughFeatureFlag
+                .allowsLaunchArgumentOverride
+                && launchArguments.contains("-WanderDisableWalkthroughs")
+            let hasDebugLaunchEnable = FirstVisitWalkthroughFeatureFlag
+                .allowsLaunchArgumentOverride
+                && launchArguments.contains("-WanderEnableWalkthroughs")
+            let isExplicitlyDisabled = hasDebugLaunchDisable
+                || (isDebugSettingsEntitled && debugNUXOverride == false)
+                || resolvedFlag?.explicitAccountOverride == false
+            if FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
+                isEnrolled: effectiveEligibility,
+                isExplicitReplayEnabled: hasDebugLaunchEnable || isReplayRequested,
+                isExplicitlyDisabled: isExplicitlyDisabled
+            ) {
+                walkthroughs.retireJourneyForDisabledExperience()
+                retireWalkthroughPresentationAndDraft(
+                    for: userID,
+                    forceRootCleanup: hadActiveWalkthroughPresentation
+                )
+            }
+            return
+        }
 
-        walkthroughs.setUserID(userID)
-        if !didApplyWalkthroughLaunchConfiguration {
-            didApplyWalkthroughLaunchConfiguration = true
-            if ProcessInfo.processInfo.arguments.contains("-WanderResetWalkthroughs") {
+        let forcedWalkthroughTarget: WalkthroughTargetID? = {
+            guard let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") else {
+                return nil
+            }
+            let valueIndex = launchArguments.index(after: flagIndex)
+            guard launchArguments.indices.contains(valueIndex) else { return nil }
+            return WalkthroughTargetID(rawValue: launchArguments[valueIndex])
+        }()
+        let shouldApplyLaunchConfiguration = !walkthroughLaunchConfiguredUserIDs.contains(userID)
+        if shouldApplyLaunchConfiguration {
+            walkthroughLaunchConfiguredUserIDs.insert(userID)
+            if let forcedWalkthroughTarget {
+                walkthroughs.prepareDebugReplay(at: forcedWalkthroughTarget)
+            } else if launchArguments.contains("-WanderResetWalkthroughs") {
                 walkthroughs.resetCurrentUser()
             }
         }
         walkthroughs.registerLaunch(
-            forceImportLesson: ProcessInfo.processInfo.arguments.contains(
-                "-WanderShowImportWalkthrough"
-            ),
-            forceDeviceFeaturesLesson: ProcessInfo.processInfo.arguments.contains(
+            forceImportLesson: launchArguments.contains("-WanderShowImportWalkthrough"),
+            forceDeviceFeaturesLesson: launchArguments.contains(
                 "-WanderShowDeviceFeaturesWalkthrough"
             )
         )
-        if let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") {
-            let valueIndex = launchArguments.index(after: flagIndex)
-            if launchArguments.indices.contains(valueIndex),
-               let target = WalkthroughTargetID(rawValue: launchArguments[valueIndex]) {
-                walkthroughs.forceActivate(target)
-                return
+        if let forcedWalkthroughTarget {
+            // A forced replay can be configured before a sheet's target anchors
+            // exist. The authenticated-account refresh arrives once that sheet
+            // is mounted; re-publish the same step without resetting any of the
+            // clean replay state. Once the tester advances, the target no
+            // longer matches and later refreshes cannot rewind the journey.
+            if !shouldApplyLaunchConfiguration,
+               walkthroughs.currentStep?.target == forcedWalkthroughTarget {
+                walkthroughs.forceActivate(forcedWalkthroughTarget)
             }
+            if shouldApplyLaunchConfiguration,
+               let forcedSurface = walkthroughs.activeSurface {
+                routeWalkthrough(to: forcedSurface)
+            }
+            return
         }
+
+        switch walkthroughs.restoreJourneyIfNeeded() {
+        case .resumed(let surface):
+            if completeCommittedWalkthroughDraftIfNeeded() {
+                routeWalkthrough(to: walkthroughs.requestedSurface ?? .map)
+            } else {
+                routeWalkthrough(to: surface)
+            }
+            return
+        case .expired:
+            retireWalkthroughPresentationAndDraft(
+                for: userID,
+                forceRootCleanup: true
+            )
+            return
+        case .none:
+            break
+        }
+
+        if !walkthroughs.hasCompletedPrimaryJourney {
+            selectedTab = .map
+            isPresentingAdd = false
+            walkthroughs.activate(.map)
+            return
+        }
+
         presentLaunchLessonIfAppropriate()
         if !walkthroughs.isPresentingLaunchLesson {
             walkthroughs.activate(walkthroughSurface(for: selectedTab))
+        }
+    }
+
+    private func refreshWalkthroughFeatureFlagsAfterForeground() {
+        walkthroughFeatureFlagRefreshTask?.cancel()
+        guard let userID = featureFlagLoadUserID else { return }
+
+        walkthroughFeatureFlagRefreshTask = Task { @MainActor in
+            await backend.refreshFeatureFlags(for: userID)
+            guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
+            configureWalkthroughsForCurrentUser()
+            walkthroughFeatureFlagRefreshTask = nil
         }
     }
 
@@ -1488,11 +1743,21 @@ struct WanderRootView: View {
         store.saveFlowDidPresent(.addSheet)
         addTabResetToken = UUID()
         addLaunchRequest = WanderAddLaunchRequest(destination: .importHub)
-        addSheetDetent = .large
+        addSheetDetent = addSheetRestingDetent
         isPresentingAdd = true
     }
 
     private func routeWalkthrough(to surface: WalkthroughSurface) {
+        if surface == .add,
+           placeSaveDraftStore.draft?.walkthroughContentVersion != nil {
+            // A process can be killed after the NUX form is durable but before
+            // its Add -> Save checkpoint update. Prefer the recoverable form
+            // over the older Add checkpoint and reopen the exact save sheet.
+            walkthroughs.transition(to: .saveFlow)
+            routeWalkthrough(to: .saveFlow)
+            return
+        }
+
         let waitsForAddDismissal = isPresentingAdd && surface == .map
         switch surface {
         case .map, .sendoff:
@@ -1509,7 +1774,31 @@ struct WanderRootView: View {
         case .profile:
             selectedTab = .profile
             isPresentingAdd = false
-        case .placeDetail, .add, .saveFlow, .feedSearch, .listDetail, .listEditor:
+        case .placeDetail:
+            selectedTab = .map
+            isPresentingAdd = false
+        case .add:
+            selectedTab = .map
+            addSheetDetent = addSheetRestingDetent
+            if !isPresentingAdd {
+                store.saveFlowDidPresent(.addSheet)
+                addTabResetToken = UUID()
+                addLaunchRequest = nil
+                isPresentingAdd = true
+            }
+        case .saveFlow:
+            selectedTab = .map
+            if !isPresentingAdd {
+                store.saveFlowDidPresent(.addSheet)
+                addTabResetToken = UUID()
+                addLaunchRequest = nil
+                addSheetDetent = .large
+                isPresentingAdd = true
+            }
+        case .feedSearch:
+            selectedTab = .discover
+            isPresentingAdd = false
+        case .listDetail, .listEditor:
             break
         }
 
@@ -1542,18 +1831,6 @@ struct WanderRootView: View {
         case .profile:
             .profile
         }
-    }
-
-    private var walkthroughTabBarTargetHeight: CGFloat {
-        46
-    }
-
-    private var walkthroughTabBarTargetVerticalOffset: CGFloat {
-        if #available(iOS 26.0, *) { 17 } else { 13 }
-    }
-
-    private var walkthroughTabBarTargetHorizontalInset: CGFloat {
-        if #available(iOS 26.0, *) { 32 } else { 0 }
     }
 
     private var featureFlagLoadUserID: String? {
@@ -2167,16 +2444,46 @@ struct WanderTabPressInteraction: Equatable {
 }
 
 private final class WanderTabTouchAnchorView: UIView {
-    var onWindowChange: ((UIWindow?) -> Void)?
+    var onGeometryChange: ((WanderTabTouchAnchorView) -> Void)?
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        onWindowChange?(window)
+        onGeometryChange?(self)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onGeometryChange?(self)
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        onGeometryChange?(self)
+    }
+}
+
+enum WanderTabBarWalkthroughTargetGeometry {
+    static func targetFrame(
+        controlFrames: [CGRect],
+        visibleBounds: CGRect
+    ) -> CGRect? {
+        let visibleControlFrames = controlFrames.filter {
+            !$0.isNull && !$0.isInfinite && !$0.isEmpty
+        }
+        guard let first = visibleControlFrames.first else { return nil }
+
+        let union = visibleControlFrames.dropFirst().reduce(first) { $0.union($1) }
+        let visibleUnion = union.intersection(visibleBounds)
+        guard !visibleUnion.isNull, !visibleUnion.isInfinite, !visibleUnion.isEmpty else {
+            return nil
+        }
+        return visibleUnion
     }
 }
 
 private struct WanderNativeTabTouchObserver: UIViewRepresentable {
     let tabs: [WanderTab]
+    let onItemControlsFrameChange: (CGRect?) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(observer: self)
@@ -2185,21 +2492,21 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
     func makeUIView(context: Context) -> WanderTabTouchAnchorView {
         let view = WanderTabTouchAnchorView(frame: .zero)
         view.isUserInteractionEnabled = false
-        view.onWindowChange = { [weak coordinator = context.coordinator] window in
-            coordinator?.attachIfNeeded(in: window)
+        view.onGeometryChange = { [weak coordinator = context.coordinator] anchorView in
+            coordinator?.attachIfNeeded(to: anchorView)
         }
         return view
     }
 
     func updateUIView(_ uiView: WanderTabTouchAnchorView, context: Context) {
-        context.coordinator.update(observer: self, window: uiView.window)
+        context.coordinator.update(observer: self, anchorView: uiView)
     }
 
     static func dismantleUIView(
         _ uiView: WanderTabTouchAnchorView,
         coordinator: Coordinator
     ) {
-        uiView.onWindowChange = nil
+        uiView.onGeometryChange = nil
         coordinator.detach()
     }
 
@@ -2210,33 +2517,51 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
         private weak var observedTabBar: UITabBar?
         private var observedControls: [UIControl] = []
         private var originalImages: [(image: UIImage?, selectedImage: UIImage?)] = []
+        private var lastPublishedItemControlsFrame: CGRect?
+        private var attachmentRetryTask: Task<Void, Never>?
+        private var attachmentRetryCount = 0
 
         init(observer: WanderNativeTabTouchObserver) {
             self.observer = observer
         }
 
-        func update(observer: WanderNativeTabTouchObserver, window: UIWindow?) {
+        func update(observer: WanderNativeTabTouchObserver, anchorView: WanderTabTouchAnchorView) {
             self.observer = observer
-            attachIfNeeded(in: window)
+            attachIfNeeded(to: anchorView)
         }
 
-        func attachIfNeeded(in window: UIWindow?) {
-            guard let window,
+        func attachIfNeeded(to anchorView: WanderTabTouchAnchorView) {
+            guard let window = anchorView.window,
                   let tabBar = Self.findTabBar(in: window),
                   tabBar.items?.count == observer.tabs.count,
                   let itemControls = Self.itemControls(
                     in: tabBar,
-                    expectedCount: observer.tabs.count
+                    tabs: observer.tabs
                   )
             else {
+                publishItemControlsFrame(nil)
+                scheduleAttachmentRetry(for: anchorView)
                 return
             }
+
+            attachmentRetryTask?.cancel()
+            attachmentRetryTask = nil
+            attachmentRetryCount = 0
+
+            let convertedFrames = itemControls.map {
+                window.convert($0.bounds, from: $0)
+            }
+            let targetFrame = WanderTabBarWalkthroughTargetGeometry.targetFrame(
+                controlFrames: convertedFrames,
+                visibleBounds: window.bounds
+            )
+            publishItemControlsFrame(targetFrame)
 
             let controlsMatch = observedControls.count == itemControls.count
                 && zip(observedControls, itemControls).allSatisfy { $0 === $1 }
             guard observedTabBar !== tabBar || !controlsMatch else { return }
 
-            detach()
+            detach(clearPublishedFrame: false)
             observedTabBar = tabBar
             observedControls = itemControls
             originalImages = tabBar.items?.map { ($0.image, $0.selectedImage) } ?? []
@@ -2250,7 +2575,10 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
             }
         }
 
-        func detach() {
+        func detach(clearPublishedFrame: Bool = true) {
+            attachmentRetryTask?.cancel()
+            attachmentRetryTask = nil
+            attachmentRetryCount = 0
             restoreOriginalImages()
             for control in observedControls {
                 control.removeTarget(self, action: #selector(handleTouchDown(_:)), for: .touchDown)
@@ -2264,6 +2592,29 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
             originalImages = []
             observedTabBar = nil
             interaction.cancel()
+            if clearPublishedFrame {
+                publishItemControlsFrame(nil)
+            }
+        }
+
+        private func scheduleAttachmentRetry(for anchorView: WanderTabTouchAnchorView) {
+            guard attachmentRetryTask == nil, attachmentRetryCount < 20 else { return }
+            attachmentRetryCount += 1
+            attachmentRetryTask = Task { @MainActor [weak self, weak anchorView] in
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled, let self, let anchorView else { return }
+                self.attachmentRetryTask = nil
+                self.attachIfNeeded(to: anchorView)
+            }
+        }
+
+        private func publishItemControlsFrame(_ frame: CGRect?) {
+            guard frame != lastPublishedItemControlsFrame else { return }
+            lastPublishedItemControlsFrame = frame
+            let onChange = observer.onItemControlsFrameChange
+            DispatchQueue.main.async {
+                onChange(frame)
+            }
         }
 
         @objc
@@ -2337,15 +2688,37 @@ private struct WanderNativeTabTouchObserver: UIViewRepresentable {
 
         private static func itemControls(
             in tabBar: UITabBar,
-            expectedCount: Int
+            tabs: [WanderTab]
         ) -> [UIControl]? {
-            var controls = tabBar.subviews.compactMap { $0 as? UIControl }
+            let visibleControls = descendantControls(in: tabBar)
                 .filter { !$0.isHidden && $0.alpha > 0 && $0.isUserInteractionEnabled }
-                .sorted { $0.frame.minX < $1.frame.minX }
+            let labeledControls = tabs.compactMap { tab in
+                visibleControls.first { control in
+                    control.accessibilityLabel?.caseInsensitiveCompare(tab.title) == .orderedSame
+                }
+            }
+            let tabBarButtons = visibleControls.filter {
+                String(describing: type(of: $0)).contains("UITabBarButton")
+            }
+            var controls: [UIControl]
+            if Set(labeledControls.map(ObjectIdentifier.init)).count == tabs.count {
+                controls = labeledControls
+            } else if tabBarButtons.count == tabs.count {
+                controls = tabBarButtons.sorted { $0.frame.minX < $1.frame.minX }
+            } else {
+                return nil
+            }
             if tabBar.effectiveUserInterfaceLayoutDirection == .rightToLeft {
                 controls.reverse()
             }
-            return controls.count == expectedCount ? controls : nil
+            return controls
+        }
+
+        private static func descendantControls(in root: UIView) -> [UIControl] {
+            root.subviews.flatMap { subview in
+                let control = (subview as? UIControl).map { [$0] } ?? []
+                return control + descendantControls(in: subview)
+            }
         }
 
         private static func findTabBar(in root: UIView) -> UITabBar? {

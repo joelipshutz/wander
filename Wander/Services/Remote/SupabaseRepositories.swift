@@ -19,7 +19,7 @@ struct SupabaseFeatureFlagRepository: FeatureFlagRepository {
         self.table = table
     }
 
-    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: Bool] {
+    func resolvedFlags(for userID: String) async throws -> [FeatureFlagKey: ResolvedFeatureFlagValue] {
         let rows: [RemoteFeatureFlagDTO] = try await table.select(
             table: "feature_flags",
             queryItems: [
@@ -31,16 +31,22 @@ struct SupabaseFeatureFlagRepository: FeatureFlagRepository {
             ]
         )
 
-        var values: [FeatureFlagKey: Bool] = [:]
+        var values: [FeatureFlagKey: ResolvedFeatureFlagValue] = [:]
         for row in rows where row.userID == nil {
             guard let key = FeatureFlagKey(rawValue: row.key) else { continue }
-            values[key] = row.enabled
+            values[key] = ResolvedFeatureFlagValue(
+                isEnabled: row.enabled,
+                source: .globalDefault
+            )
         }
         for row in rows where row.userID == userID {
             guard let key = FeatureFlagKey(rawValue: row.key),
                   key.allowsAccountOverride
             else { continue }
-            values[key] = row.enabled
+            values[key] = ResolvedFeatureFlagValue(
+                isEnabled: row.enabled,
+                source: .accountOverride
+            )
         }
         return values
     }

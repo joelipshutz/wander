@@ -50,6 +50,9 @@ struct PlaceSaveDraft: Codable, Equatable, Identifiable {
     let candidate: PlaceCandidate
     let baselineUserPlaceLocalID: String?
     let baselineVisitLocalID: String?
+    /// Present only for drafts created by the first-visit walkthrough. Optional
+    /// so schema-v1 drafts written before the NUX marker still decode normally.
+    let walkthroughContentVersion: Int?
     var form: PlaceSaveDraftForm
     var submittedAt: Date?
     var recoveryNotice: String?
@@ -63,6 +66,7 @@ struct PlaceSaveDraft: Codable, Equatable, Identifiable {
         candidate: PlaceCandidate,
         baselineUserPlaceLocalID: String?,
         baselineVisitLocalID: String?,
+        walkthroughContentVersion: Int? = nil,
         form: PlaceSaveDraftForm,
         submittedAt: Date? = nil,
         recoveryNotice: String? = nil
@@ -76,6 +80,7 @@ struct PlaceSaveDraft: Codable, Equatable, Identifiable {
         self.candidate = candidate
         self.baselineUserPlaceLocalID = baselineUserPlaceLocalID
         self.baselineVisitLocalID = baselineVisitLocalID
+        self.walkthroughContentVersion = walkthroughContentVersion
         self.form = form
         self.submittedAt = submittedAt
         self.recoveryNotice = recoveryNotice
@@ -109,6 +114,21 @@ enum PlaceSaveDraftRecoveryOutcome: Equatable {
     case editing
     case committed
     case retry
+}
+
+enum PlaceSaveDraftWalkthroughRecoveryPolicy {
+    static func shouldDiscard(
+        _ draft: PlaceSaveDraft,
+        lastWalkthroughActivityAt: Date?,
+        now: Date,
+        resumeWindow: TimeInterval = 12 * 60 * 60
+    ) -> Bool {
+        guard draft.walkthroughContentVersion != nil else { return false }
+        guard let lastWalkthroughActivityAt else { return true }
+
+        let elapsed = now.timeIntervalSince(lastWalkthroughActivityAt)
+        return elapsed < 0 || elapsed >= resumeWindow
+    }
 }
 
 enum PlaceSaveDraftRecoveryPolicy {

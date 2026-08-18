@@ -262,6 +262,88 @@ struct PlaceCandidate: Identifiable, Equatable, Codable, Sendable {
     }
 }
 
+struct FirstVisitParkLocationContext: Equatable, Sendable {
+    let postalCode: String
+}
+
+@MainActor
+protocol FirstVisitParkLocationContextProviding {
+    /// Returns a location only when the user has already granted access. This
+    /// onboarding helper must never initiate a permission prompt by itself.
+    func alreadyAuthorizedLocationContext() async throws -> FirstVisitParkLocationContext?
+}
+
+@MainActor
+protocol FirstVisitParkSuggestionRepository {
+    func suggestion(near context: FirstVisitParkLocationContext) async throws -> PlaceCandidate
+}
+
+struct FirstVisitParkSearchResult: Equatable, Sendable {
+    let hasName: Bool
+    let hasValidCoordinate: Bool
+    let isPark: Bool
+    let distanceMeters: Double
+}
+
+enum FirstVisitParkSuggestionPolicy {
+    static let searchRadiusMeters = 16_093.44
+    static let searchQueries = ["popular parks", "park"]
+
+    static let hotchkissPark = PlaceCandidate(
+        id: "walkthrough-hotchkiss-park-santa-monica",
+        name: "Hotchkiss Park",
+        category: "park",
+        rawProviderType: "park",
+        address: "2302 4th St",
+        locality: "Santa Monica",
+        region: "CA",
+        country: "US",
+        latitude: 34.00585,
+        longitude: -118.4842,
+        sourceProvider: "walkthrough",
+        sourceProviderPlaceID: "hotchkiss-park-santa-monica",
+        confidence: 1
+    )
+
+    static func shouldRequestNearbySuggestion(postalCode: String?) -> Bool {
+        guard let postalCode = normalizedPostalCode(postalCode) else {
+            return false
+        }
+        return postalCode != "90403" && postalCode != "90405"
+    }
+
+    /// Keep MapKit's provider ordering intact. The first eligible result from
+    /// a `popular parks` query is the best popularity proxy the public MapKit
+    /// API offers; it is intentionally preferred over sorting by proximity.
+    static func firstEligibleResultIndex(
+        in results: [FirstVisitParkSearchResult]
+    ) -> Int? {
+        results.firstIndex { result in
+            result.hasName
+                && result.hasValidCoordinate
+                && result.isPark
+                && result.distanceMeters.isFinite
+                && result.distanceMeters >= 0
+                && result.distanceMeters <= searchRadiusMeters
+        }
+    }
+
+    static func normalizedPostalCode(_ postalCode: String?) -> String? {
+        guard let postalCode else { return nil }
+        let prefix = postalCode
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: "-", maxSplits: 1)
+            .first
+            .map(String.init) ?? ""
+        guard prefix.count == 5,
+              prefix.allSatisfy(\.isNumber)
+        else {
+            return nil
+        }
+        return prefix
+    }
+}
+
 struct PlaceActionLink: Equatable, Codable, Identifiable {
     enum Kind: String, Codable {
         case website

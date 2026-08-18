@@ -63,6 +63,94 @@ enum MapWalkthroughMemoryPolicy {
     }
 
     @MainActor
+    static func tutorialFallback(
+        candidate: PlaceCandidate,
+        snapshot: FirstVisitTutorialMemorySnapshot?,
+        owner: LocalProfile
+    ) -> VisiblePlace {
+        let resolvedSnapshot = snapshot ?? FirstVisitTutorialMemorySnapshot(
+            candidate: candidate,
+            status: .been,
+            date: Calendar.current.date(byAdding: .day, value: -4, to: .now) ?? .now,
+            ratingScore: 5,
+            note: "A peaceful neighborhood park with room to slow down and breathe.",
+            tag: "good walk"
+        )
+        let placeID = "walkthrough_place_\(candidate.id)"
+        let userPlaceID = "walkthrough_up_\(candidate.id)"
+        let place = LocalPlace(
+            localID: placeID,
+            canonicalName: candidate.name,
+            category: candidate.category,
+            primaryCategory: candidate.primaryCategory,
+            subcategory: candidate.subcategory,
+            categorySource: candidate.categorySource,
+            categoryConfidence: candidate.categoryConfidence,
+            rawProviderType: candidate.rawProviderType,
+            address: candidate.address,
+            locality: candidate.locality,
+            region: candidate.region,
+            country: candidate.country,
+            latitude: candidate.latitude ?? 34.00585,
+            longitude: candidate.longitude ?? -118.4842,
+            sourceProvider: candidate.sourceProvider,
+            sourceProviderPlaceID: candidate.sourceProviderPlaceID,
+            websiteURLString: candidate.websiteURLString,
+            phoneNumber: candidate.phoneNumber,
+            timeZoneIdentifier: candidate.timeZoneIdentifier,
+            actionLinksJSON: candidate.actionLinksJSON,
+            syncState: .localOnly
+        )
+        let userPlace = LocalUserPlace(
+            localID: userPlaceID,
+            userID: owner.id,
+            placeID: place.id,
+            status: resolvedSnapshot.status,
+            visibility: .followers,
+            note: resolvedSnapshot.note,
+            ratingScore: resolvedSnapshot.status == .been
+                ? resolvedSnapshot.ratingScore
+                : nil,
+            recommendedScore: resolvedSnapshot.status == .been
+                ? resolvedSnapshot.ratingScore
+                : nil,
+            recommendedCount: resolvedSnapshot.status == .been ? 1 : 0,
+            nearbyConfirmed: true,
+            visitedAt: resolvedSnapshot.status == .been ? resolvedSnapshot.date : nil,
+            savedAt: resolvedSnapshot.date,
+            plannedDate: resolvedSnapshot.status == .wannaGo ? resolvedSnapshot.date : nil,
+            sourceType: "walkthrough",
+            syncState: .localOnly
+        )
+        let attributes: [LocalPlaceAttribute]
+        if resolvedSnapshot.tag.isEmpty {
+            attributes = []
+        } else {
+            let encodedTag = (try? String(
+                data: JSONEncoder().encode([resolvedSnapshot.tag]),
+                encoding: .utf8
+            )) ?? "[]"
+            attributes = [
+                LocalPlaceAttribute(
+                    localID: "walkthrough_attr_\(candidate.id)",
+                    userPlaceID: userPlace.id,
+                    questionKey: "park_tags",
+                    valueType: "multi_tag",
+                    valueJSON: encodedTag,
+                    syncState: .localOnly
+                )
+            ]
+        }
+        return VisiblePlace(
+            id: userPlace.id,
+            place: place,
+            userPlace: userPlace,
+            owner: owner,
+            attributes: attributes
+        )
+    }
+
+    @MainActor
     static func realisticFallback(owner: LocalProfile) -> VisiblePlace {
         let reservationLinks = PlaceActionLink.encode([
             PlaceActionLink(
@@ -362,6 +450,12 @@ struct MapScreen: View {
         if mapFilterState.source == .featured, isLoadingMapSources {
             return nil
         }
+        if mapFilterState.source == .featured,
+           walkthroughs.isAwaitingEligibilityResolution
+                || walkthroughs.activeSurface != nil
+                || walkthroughs.requestedSurface != nil {
+            return nil
+        }
         if mapFilterState.more.activeSectionCount > 0 {
             return "No \(mapFilterState.source.title.lowercased()) places match these filters."
         }
@@ -631,9 +725,6 @@ struct MapScreen: View {
                                 .frame(minWidth: 44, minHeight: 48)
                                 .accessibilityIdentifier("map.filter.\(source.rawValue)")
                                 .walkthroughTarget(source.walkthroughTarget)
-                                .walkthroughEmphasis(
-                                    source == .featured ? .mapFeatured : nil
-                                )
                             }
 
                             Button {
@@ -743,6 +834,10 @@ struct MapScreen: View {
                                     walkthroughs.currentStep?.target == .mapAddAgain
                                         ? .mapAddAgain
                                         : .mapAdd
+                                )
+                                .walkthroughSlowPulse(
+                                    isActive: walkthroughs.currentStep?.target == .mapAdd
+                                        || walkthroughs.currentStep?.target == .mapAddAgain
                                 )
                             }
                         }
@@ -886,12 +981,18 @@ struct MapScreen: View {
                     isPlaceProfilePresented = false
                 }
             }
-            .onChange(of: walkthroughs.currentStep?.target, initial: true) { previousTarget, target in
+            .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                 if target == .mapMemory {
                     isMapSearchFocused = false
                     presentWalkthroughPlaceMemory()
-                } else if previousTarget == .mapMemory, target == .mapTabs {
-                    presentWalkthroughPlaceDetail()
+                } else if walkthroughs.activeSurface == .placeDetail {
+                    if !hasSelectedProfile {
+                        presentWalkthroughPlaceMemory()
+                    }
+                    Task { @MainActor in
+                        await Task.yield()
+                        presentWalkthroughPlaceDetail()
+                    }
                 }
             }
             .onDisappear {
@@ -2038,7 +2139,7 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: .none,
-                onOpen: {},
+                onOpen: openSelectedPlaceProfile,
                 onAction: {}
             )
             .zIndex(30)
@@ -2075,7 +2176,9 @@ struct MapScreen: View {
     }
 
     private func presentWalkthroughPlaceMemory() {
-        guard walkthroughs.currentStep?.target == .mapMemory else { return }
+        guard walkthroughs.currentStep?.target == .mapMemory
+                || walkthroughs.activeSurface == .placeDetail
+        else { return }
 
         isMapSearchFocused = false
         mapQuery = ""
@@ -2094,6 +2197,18 @@ struct MapScreen: View {
             centerMap(
                 latitude: visiblePlace.place.latitude,
                 longitude: visiblePlace.place.longitude
+            )
+        } else if let candidate = walkthroughs.tutorialCandidate {
+            let fallback = MapWalkthroughMemoryPolicy.tutorialFallback(
+                candidate: candidate,
+                snapshot: walkthroughs.tutorialMemorySnapshot,
+                owner: store.currentUser
+            )
+            selectedPlaceGroupKey = nil
+            walkthroughFallbackMemory = fallback
+            centerMap(
+                latitude: fallback.place.latitude,
+                longitude: fallback.place.longitude
             )
         } else {
             let fallback = MapWalkthroughMemoryPolicy.realisticFallback(
@@ -2117,6 +2232,7 @@ struct MapScreen: View {
         isPlaceProfilePresented = false
         guard walkthroughs.activeSurface == .placeDetail
                 || walkthroughs.requestedSurface == .map
+                || walkthroughs.requestedSurface == .feed
         else { return }
         walkthroughFallbackMemory = nil
         routedVisiblePlace = nil
@@ -2216,6 +2332,7 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
+        walkthroughs.perform(.mapMemory)
         if reduceMotion {
             isPlaceProfilePresented = true
         } else {
@@ -6789,15 +6906,22 @@ extension PlaceSaveDraft {
     static func addFlow(
         ownerUserID: String,
         context: MapPlaceSaveContext,
+        walkthroughContentVersion: Int? = nil,
         now: Date = .now
     ) -> PlaceSaveDraft? {
         guard case .add = context.mode else { return nil }
-        return restorableFlow(ownerUserID: ownerUserID, context: context, now: now)
+        return restorableFlow(
+            ownerUserID: ownerUserID,
+            context: context,
+            walkthroughContentVersion: walkthroughContentVersion,
+            now: now
+        )
     }
 
     static func restorableFlow(
         ownerUserID: String,
         context: MapPlaceSaveContext,
+        walkthroughContentVersion: Int? = nil,
         now: Date = .now
     ) -> PlaceSaveDraft? {
         let sourceType: AddSourceType
@@ -6840,6 +6964,7 @@ extension PlaceSaveDraft {
             candidate: context.candidate,
             baselineUserPlaceLocalID: baselineUserPlaceLocalID,
             baselineVisitLocalID: context.existingLatestVisit?.localID,
+            walkthroughContentVersion: walkthroughContentVersion,
             form: PlaceSaveDraftForm(
                 step: context.startsOnDetails ? .details : .confirm,
                 selectedAssignment: context.candidate.categoryAssignment,
@@ -7434,6 +7559,8 @@ struct MapPlaceSaveEditor: View {
     @State private var isShowingOptionalDetails = false
     @State private var isMoreOptionsArrowPulsing = false
     @State private var saveAttemptedAt: Date?
+    @State private var didStartWalkthroughAutoSave = false
+    @State private var pendingWalkthroughSaveResult: SaveResult?
 
     init(
         context: MapPlaceSaveContext,
@@ -7531,7 +7658,7 @@ struct MapPlaceSaveEditor: View {
     private var draftUpdate: PlaceSaveDraftUpdate {
         PlaceSaveDraftUpdate(
             form: PlaceSaveDraftForm(
-                step: step == .details ? .details : .confirm,
+                step: presentedStep == .details ? .details : .confirm,
                 selectedAssignment: selectedAssignment,
                 selectedStatus: selectedStatus,
                 selectedVisibility: selectedVisibility,
@@ -7552,6 +7679,24 @@ struct MapPlaceSaveEditor: View {
 
     private var questionBlocks: [AddQuestionBlock] {
         questionBlocksCache.blocks
+    }
+
+    /// The walkthrough coordinator is the durable source of truth when the
+    /// user rewinds from the automated details demo. SwiftUI may reconstruct
+    /// the sheet while that transition is publishing, so rendering directly
+    /// from the coordinator prevents a stale local `.details` value from
+    /// trapping the user on the wrong screen.
+    private var presentedStep: MapPlaceSaveStep {
+        isPresentingWalkthroughStatusSelection ? .confirm : step
+    }
+
+    private var presentedHasSelectedStatus: Bool {
+        isPresentingWalkthroughStatusSelection ? false : hasSelectedStatus
+    }
+
+    private var isPresentingWalkthroughStatusSelection: Bool {
+        walkthroughs.activeSurface == .saveFlow
+            && walkthroughs.currentStep?.target == .saveStatus
     }
 
     private var selectedCandidate: PlaceCandidate {
@@ -7592,19 +7737,19 @@ struct MapPlaceSaveEditor: View {
         NavigationStack {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: step == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
+                    VStack(alignment: .leading, spacing: presentedStep == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
                         if presentation == .sheet {
                             header
                         }
 
-                        switch step {
+                        switch presentedStep {
                         case .confirm:
                             confirmContent
                         case .details:
                             detailsContent
                         }
                     }
-                    .walkthroughTarget(step == .confirm ? .saveStatus : nil)
+                    .walkthroughTarget(presentedStep == .confirm ? .saveStatus : nil)
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, presentation == .attached ? WanderTheme.spacing1 : WanderTheme.spacing3)
                     .padding(.bottom, presentation == .attached ? WanderTheme.spacing3 : WanderTheme.spacing6)
@@ -7612,7 +7757,7 @@ struct MapPlaceSaveEditor: View {
                 .scrollDismissesKeyboard(.interactively)
                 .background(editorBackground)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if step == .details {
+                    if presentedStep == .details {
                         saveFooter
                     }
                 }
@@ -7632,10 +7777,11 @@ struct MapPlaceSaveEditor: View {
                 }
                 .onAppear {
                     store.saveFlowDidPresent(.saveSheet)
+                    restoreWalkthroughSavePresentationIfNeeded()
                     if store.isPrivateProfile {
                         selectedVisibility = .selfOnly
                     }
-                    if step == .details {
+                    if presentedStep == .details {
                         refreshQuestionBlocksIfNeeded()
                         syncAnswersForCurrentQuestions()
                     }
@@ -7655,11 +7801,22 @@ struct MapPlaceSaveEditor: View {
                     }
                 }
                 .onChange(of: draftUpdate, initial: true) { _, update in
+                    walkthroughs.recordUserActivity()
                     guard let draftID else { return }
                     onDraftChange(draftID, update.form, update.submittedAt)
                 }
                 .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                     prepareWalkthroughTarget(target, with: walkthroughScrollProxy)
+                }
+                .onChange(of: walkthroughs.requestedSurface) { _, requestedSurface in
+                    guard requestedSurface == .map,
+                          let result = pendingWalkthroughSaveResult
+                    else { return }
+                    pendingWalkthroughSaveResult = nil
+                    onSaveCompleted(result)
+                }
+                .task(id: walkthroughAutomationTaskID) {
+                    await runWalkthroughAutomationIfNeeded(with: walkthroughScrollProxy)
                 }
                 .alert(context.removeConfirmationTitle, isPresented: $isShowingRemoveConfirmation) {
                     Button(context.removeTitle, role: .destructive) {
@@ -7696,10 +7853,11 @@ struct MapPlaceSaveEditor: View {
                     )
 
                 HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                    if step == .details && context.requiresStatusConfirmation {
+                    if presentedStep == .details,
+                       context.requiresStatusConfirmation,
+                       walkthroughs.activeSurface != .saveFlow {
                         Button {
-                            errorMessage = nil
-                            step = .confirm
+                            returnToStatusSelection()
                         } label: {
                             Label("back", systemImage: "chevron.left")
                                 .font(WanderTypography.label)
@@ -7711,27 +7869,27 @@ struct MapPlaceSaveEditor: View {
 
                     Spacer(minLength: 0)
 
-                    Button {
-                        onClose()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .black))
-                            .frame(
-                                minWidth: WanderTheme.tapMinimum,
-                                minHeight: WanderTheme.tapMinimum
-                            )
-                            .foregroundStyle(WanderTheme.textInk.color)
-                            .background(WanderTheme.surfaceSand.color)
-                            .clipShape(Circle())
+                    if walkthroughs.activeSurface != .saveFlow {
+                        Button {
+                            onClose()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .black))
+                                .frame(
+                                    minWidth: WanderTheme.tapMinimum,
+                                    minHeight: WanderTheme.tapMinimum
+                                )
+                                .foregroundStyle(WanderTheme.textInk.color)
+                                .background(WanderTheme.surfaceSand.color)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Close")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close")
-                    .disabled(walkthroughs.activeSurface == .saveFlow)
-                    .accessibilityHidden(walkthroughs.activeSurface == .saveFlow)
                 }
             }
 
-            if step == .confirm {
+            if presentedStep == .confirm {
                 Text(context.subtitle)
                     .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -7743,7 +7901,7 @@ struct MapPlaceSaveEditor: View {
     private var flowTitle: String {
         return context.flowTitle(
             status: selectedStatus,
-            isShowingDetails: step == .details
+            isShowingDetails: presentedStep == .details
         )
     }
 
@@ -7755,14 +7913,14 @@ struct MapPlaceSaveEditor: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     MapSaveChoicePill(
                         title: CheckInCopy.verb,
-                        isSelected: hasSelectedStatus && selectedStatus == .been
+                        isSelected: presentedHasSelectedStatus && selectedStatus == .been
                     ) {
                         selectStatus(.been)
                     }
                     if context.allowsWannaGoSelection {
                         MapSaveChoicePill(
                             title: "wanna go",
-                            isSelected: hasSelectedStatus && selectedStatus == .wannaGo
+                            isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
                         ) {
                             selectStatus(.wannaGo)
                         }
@@ -7771,7 +7929,7 @@ struct MapPlaceSaveEditor: View {
                 .walkthroughEmphasis(.saveStatus)
             }
 
-            if hasSelectedStatus {
+            if presentedHasSelectedStatus && walkthroughs.activeSurface != .saveFlow {
                 WanderPrimaryButton(
                     title: "continue to details",
                     systemImage: "arrow.right",
@@ -7784,7 +7942,7 @@ struct MapPlaceSaveEditor: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: hasSelectedStatus)
+        .animation(.easeInOut(duration: 0.2), value: presentedHasSelectedStatus)
     }
 
     private var detailsContent: some View {
@@ -7817,11 +7975,13 @@ struct MapPlaceSaveEditor: View {
                     .walkthroughTarget(.saveDetails)
             }
 
-            if selectedStatus == .been {
+            if selectedStatus == .been || walkthroughs.activeSurface == .saveFlow {
                 ratingSection
                     .id(WalkthroughTargetID.saveRating)
                     .walkthroughTarget(.saveRating)
+            }
 
+            if selectedStatus == .been {
                 if presentation == .sheet {
                     visitParticipationSections
                         .id(WalkthroughTargetID.saveFriends)
@@ -7867,7 +8027,10 @@ struct MapPlaceSaveEditor: View {
         WanderPrimaryButton(
             title: isSaving ? progressActionTitle : primaryActionTitle,
             systemImage: selectedStatus == .been ? "ticket.fill" : "checkmark",
-            isDisabled: isSaving || isRemoving,
+            isDisabled: isSaving
+                || isRemoving
+                || isWalkthroughAutomating(.saveSubmit)
+                || didStartWalkthroughAutoSave,
             tone: .espressoConfirmation
         ) {
             save()
@@ -7876,6 +8039,8 @@ struct MapPlaceSaveEditor: View {
         .padding(.vertical, WanderTheme.spacing2)
         .background(editorBackground)
         .walkthroughTarget(.saveSubmit)
+        .walkthroughEmphasis(.saveSubmit)
+        .walkthroughTarget(.saveReview)
     }
 
     private var primaryActionTitle: String {
@@ -8040,6 +8205,7 @@ struct MapPlaceSaveEditor: View {
                             toggleAnswer(option, in: block)
                         }
                     }
+                    .id("walkthrough-question-\(block.key)")
                 }
             }
             .id(WalkthroughTargetID.saveQuestions)
@@ -8112,41 +8278,18 @@ struct MapPlaceSaveEditor: View {
 
                     Spacer()
 
-                    ZStack {
-                        Circle()
-                            .fill(
-                                isWalkthroughTarget
-                                    ? WanderTheme.sunTint.color
-                                    : .clear
-                            )
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 13, weight: .black))
-                            .foregroundStyle(WanderTheme.terracotta.color)
-                            .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
-                            .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
-                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(WanderTheme.terracotta.color)
+                        .rotationEffect(.degrees(isShowingOptionalDetails ? 180 : 0))
+                        .animation(.easeInOut(duration: 0.18), value: isShowingOptionalDetails)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .overlay {
-                        if isWalkthroughTarget {
-                            Circle()
-                                .stroke(WanderTheme.categorySun.color, lineWidth: 3)
-                        }
-                    }
                     .scaleEffect(
                         isWalkthroughTarget && !reduceMotion && isMoreOptionsArrowPulsing
-                            ? 1.08
+                            ? 1.12
                             : 1
                     )
-                    .shadow(
-                        color: isWalkthroughTarget
-                            ? WanderTheme.categorySun.color.opacity(
-                                isMoreOptionsArrowPulsing ? 0.72 : 0.34
-                            )
-                            : .clear,
-                        radius: isWalkthroughTarget && isMoreOptionsArrowPulsing ? 11 : 4
-                    )
-                    .walkthroughEmphasis(.saveMoreOptions)
+                    .offset(y: isWalkthroughTarget && isMoreOptionsArrowPulsing ? 2 : 0)
                 }
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -8158,6 +8301,7 @@ struct MapPlaceSaveEditor: View {
                 )
             }
             .buttonStyle(.plain)
+            .disabled(isWalkthroughAutomating(.saveMoreOptions))
             .walkthroughTarget(.saveMoreOptions)
             .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
@@ -8193,9 +8337,11 @@ struct MapPlaceSaveEditor: View {
                     }
                 }
                 questionAndLabelSections
+                    .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
                 visibilitySection
                     .id(WalkthroughTargetID.savePrivacy)
                     .walkthroughTarget(.savePrivacy)
+                    .walkthroughTarget(isWalkthroughTarget ? .saveMoreOptions : nil)
             }
         }
     }
@@ -8217,6 +8363,13 @@ struct MapPlaceSaveEditor: View {
 
     private var ratingSection: some View {
         PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
+            .disabled(isWalkthroughAutomating(.saveRating))
+    }
+
+    private func isWalkthroughAutomating(_ target: WalkthroughTargetID) -> Bool {
+        walkthroughs.activeSurface == .saveFlow
+            && walkthroughs.currentStep?.target == target
+            && walkthroughs.currentStep?.automaticallyAdvances == true
     }
 
     private var canInviteFriends: Bool {
@@ -8392,6 +8545,20 @@ struct MapPlaceSaveEditor: View {
         syncAnswersForCurrentQuestions()
         errorMessage = nil
         step = .details
+    }
+
+    private func returnToStatusSelection() {
+        errorMessage = nil
+        hasSelectedStatus = false
+        if let draftID {
+            var form = draftUpdate.form
+            form.step = .confirm
+            onDraftChange(draftID, form, saveAttemptedAt)
+        }
+        step = .confirm
+        guard walkthroughs.activeSurface == .saveFlow else { return }
+        walkthroughs.rewindTutorialSaveStatusSelection()
+        step = .confirm
     }
 
     private func applyDefaults(from nextContext: MapPlaceSaveContext) {
@@ -8639,10 +8806,340 @@ struct MapPlaceSaveEditor: View {
         key.hasSuffix("_tags")
     }
 
+    private var walkthroughAutomationTaskID: String {
+        let surface = walkthroughs.activeSurface?.rawValue ?? "none"
+        let target = walkthroughs.currentStep?.target.rawValue ?? "none"
+        let sheetStep = presentedStep == .details ? "details" : "confirm"
+        let saveAttempt = target == WalkthroughTargetID.saveSubmit.rawValue
+            ? ".\(didStartWalkthroughAutoSave)"
+            : ""
+        return "\(surface).\(target).\(sheetStep)\(saveAttempt)"
+    }
+
+    @MainActor
+    private func runWalkthroughAutomationIfNeeded(with proxy: ScrollViewProxy) async {
+        guard walkthroughs.activeSurface == .saveFlow,
+              presentedStep == .details,
+              let target = walkthroughs.currentStep?.target
+        else { return }
+
+        switch target {
+        case .saveDate:
+            await runWalkthroughDateDemo(for: target)
+        case .saveDetails, .saveFriends, .savePhotos, .savePrivacy:
+            guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
+            completeWalkthroughTarget(target)
+        case .saveRating:
+            await runWalkthroughRatingDemo(for: target)
+        case .saveMoreOptions:
+            await runWalkthroughMoreOptionsDemo(for: target, with: proxy)
+        case .saveNote:
+            await runWalkthroughNoteDemo(for: target, with: proxy)
+        case .saveQuestions:
+            await runWalkthroughQuestionDemo(for: target, with: proxy)
+        case .saveTags:
+            await runWalkthroughTagDemo(for: target, with: proxy)
+        case .saveSubmit:
+            await runWalkthroughSaveDemo(for: target)
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func runWalkthroughDateDemo(for target: WalkthroughTargetID) async {
+        guard await waitForWalkthroughReadingBeat(target) else { return }
+
+        let offset = tutorialDateOffset
+        if selectedStatus == .been {
+            let selectedDate = Calendar.current.date(
+                byAdding: .day,
+                value: -offset,
+                to: Date.now
+            ) ?? Date.now
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.55)) {
+                visitedAt = min(selectedDate, Date.now)
+            }
+        } else {
+            let selectedDate = Calendar.current.date(
+                byAdding: .day,
+                value: offset,
+                to: Date.now
+            ) ?? Date.now
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.55)) {
+                plannedDate = WannaGoDate.normalized(selectedDate)
+            }
+        }
+
+        guard await waitForWalkthroughBeat(.milliseconds(1_200), target: target) else { return }
+        completeWalkthroughTarget(target)
+    }
+
+    @MainActor
+    private func runWalkthroughRatingDemo(for target: WalkthroughTargetID) async {
+        guard await waitForWalkthroughReadingBeat(target) else { return }
+
+        if reduceMotion {
+            selectedRatingScore = 5
+        } else {
+            for score in [2.0, 3.5, 5.0] {
+                guard await glideWalkthroughRating(to: score, target: target) else { return }
+                guard await waitForWalkthroughBeat(.milliseconds(500), target: target) else { return }
+            }
+        }
+
+        guard await waitForWalkthroughBeat(.milliseconds(800), target: target) else { return }
+        completeWalkthroughTarget(target)
+    }
+
+    @MainActor
+    private func runWalkthroughMoreOptionsDemo(
+        for target: WalkthroughTargetID,
+        with proxy: ScrollViewProxy
+    ) async {
+        guard await waitForWalkthroughReadingBeat(target) else { return }
+        refreshQuestionBlocksIfNeeded()
+        syncAnswersForCurrentQuestions()
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+            isShowingOptionalDetails = true
+        }
+
+        guard await waitForWalkthroughBeat(.milliseconds(700), target: target) else { return }
+
+        // Dedicated note/tag coach steps can opt into the same runner later. The current
+        // compact flow demonstrates both details inside this single More Options chapter.
+        if !walkthroughHasDedicatedNoteOrTagSteps {
+            await typeWalkthroughNote(for: target, with: proxy)
+            guard isCurrentWalkthroughTarget(target) else { return }
+            guard await waitForWalkthroughBeat(.milliseconds(900), target: target) else { return }
+            await selectWalkthroughParkTags(for: target, with: proxy)
+            guard isCurrentWalkthroughTarget(target) else { return }
+        }
+
+        guard await waitForWalkthroughBeat(.milliseconds(1_050), target: target) else { return }
+        completeWalkthroughTarget(target)
+    }
+
+    @MainActor
+    private func runWalkthroughNoteDemo(
+        for target: WalkthroughTargetID,
+        with proxy: ScrollViewProxy
+    ) async {
+        if !isShowingOptionalDetails {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+                isShowingOptionalDetails = true
+            }
+        }
+        guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
+        await typeWalkthroughNote(for: target, with: proxy)
+        guard isCurrentWalkthroughTarget(target) else { return }
+        guard await waitForWalkthroughBeat(.milliseconds(850), target: target) else { return }
+        completeWalkthroughTarget(target)
+    }
+
+    @MainActor
+    private func runWalkthroughTagDemo(
+        for target: WalkthroughTargetID,
+        with proxy: ScrollViewProxy
+    ) async {
+        if !isShowingOptionalDetails {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+                isShowingOptionalDetails = true
+            }
+        }
+        guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
+        await selectWalkthroughParkTags(for: target, with: proxy)
+        guard isCurrentWalkthroughTarget(target) else { return }
+        guard await waitForWalkthroughBeat(.milliseconds(850), target: target) else { return }
+        completeWalkthroughTarget(target)
+    }
+
+    @MainActor
+    private func runWalkthroughQuestionDemo(
+        for target: WalkthroughTargetID,
+        with proxy: ScrollViewProxy
+    ) async {
+        if !isShowingOptionalDetails {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+                isShowingOptionalDetails = true
+            }
+        }
+        refreshQuestionBlocksIfNeeded()
+        syncAnswersForCurrentQuestions()
+        guard await waitForWalkthroughReadingBeat(target) else { return }
+
+        let blocks = questionBlocks.filter { !Self.isUnifiedTagKey($0.key) }
+        for block in blocks {
+            guard isCurrentWalkthroughTarget(target) else { return }
+            guard let option = walkthroughParkOption(for: block) else { continue }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+                proxy.scrollTo("walkthrough-question-\(block.key)", anchor: .center)
+            }
+            guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
+            withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76)) {
+                selectedAnswers[block.key] = [option]
+            }
+            guard await waitForWalkthroughBeat(.milliseconds(850), target: target) else { return }
+        }
+
+        completeWalkthroughTarget(target)
+    }
+
+    @MainActor
+    private func selectWalkthroughParkTags(
+        for target: WalkthroughTargetID,
+        with proxy: ScrollViewProxy
+    ) async {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+            proxy.scrollTo(WalkthroughTargetID.saveTags, anchor: .center)
+        }
+        guard await waitForWalkthroughBeat(.milliseconds(700), target: target) else { return }
+        guard let block = unifiedTagBlock else { return }
+        guard let tag = walkthroughParkTag(from: block.options) else { return }
+
+        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76)) {
+            unifiedTags = [tag]
+        }
+        _ = await waitForWalkthroughBeat(.milliseconds(650), target: target)
+    }
+
+    @MainActor
+    private func typeWalkthroughNote(
+        for target: WalkthroughTargetID,
+        with proxy: ScrollViewProxy
+    ) async {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+            proxy.scrollTo(WalkthroughTargetID.saveNote, anchor: .center)
+        }
+        guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
+
+        let demoNote = "A peaceful neighborhood park with room to slow down and breathe."
+        note = ""
+        if reduceMotion || UIAccessibility.isVoiceOverRunning {
+            note = demoNote
+            return
+        }
+
+        for character in demoNote {
+            guard isCurrentWalkthroughTarget(target), !Task.isCancelled else { return }
+            note.append(character)
+            do {
+                try await Task.sleep(for: .milliseconds(42))
+            } catch {
+                return
+            }
+        }
+    }
+
+    @MainActor
+    private func runWalkthroughSaveDemo(for target: WalkthroughTargetID) async {
+        guard !didStartWalkthroughAutoSave else { return }
+        guard await waitForWalkthroughReadingBeat(target) else { return }
+        guard isCurrentWalkthroughTarget(target), !isSaving else { return }
+        didStartWalkthroughAutoSave = true
+        save()
+    }
+
+    private var tutorialDateOffset: Int {
+        Int.random(in: 3...11)
+    }
+
+    private var walkthroughHasDedicatedNoteOrTagSteps: Bool {
+        let steps = FirstVisitWalkthroughContent.stepsBySurface[.saveFlow, default: []]
+        return steps.contains(where: { $0.target == .saveNote })
+            || steps.contains(where: { $0.target == .saveTags })
+    }
+
+    private func walkthroughParkTag(from options: [String]) -> String? {
+        let preferences = [
+            "reset spot",
+            "low effort",
+            "good walk",
+            "dog friendly",
+            "bring visitors",
+            "views"
+        ]
+        return preferences.compactMap { preferred in
+            options.first(where: { $0.caseInsensitiveCompare(preferred) == .orderedSame })
+        }.first ?? options.first
+    }
+
+    private func walkthroughParkOption(for block: AddQuestionBlock) -> String? {
+        let preferences = [
+            "good walk",
+            "reset spot",
+            "low effort",
+            "dog friendly",
+            "bring visitors",
+            "views",
+            "yes"
+        ]
+        return preferences.compactMap { preferred in
+            block.options.first(where: { $0.caseInsensitiveCompare(preferred) == .orderedSame })
+        }.first ?? block.options.first
+    }
+
+    @MainActor
+    private func glideWalkthroughRating(
+        to destination: Double,
+        target: WalkthroughTargetID
+    ) async -> Bool {
+        let start = selectedRatingScore
+        let frameCount = 28
+        for frame in 1...frameCount {
+            guard isCurrentWalkthroughTarget(target) else { return false }
+            let linear = Double(frame) / Double(frameCount)
+            let eased = linear * linear * (3 - (2 * linear))
+            selectedRatingScore = start + ((destination - start) * eased)
+            guard await waitForWalkthroughBeat(.milliseconds(38), target: target) else { return false }
+        }
+        selectedRatingScore = destination
+        return true
+    }
+
+    @MainActor
+    private func waitForWalkthroughReadingBeat(_ target: WalkthroughTargetID) async -> Bool {
+        await waitForWalkthroughBeat(
+            .milliseconds(FirstVisitWalkthroughContent.automaticReadingDelayMilliseconds(for: target)),
+            target: target
+        )
+    }
+
+    @MainActor
+    private func waitForWalkthroughBeat(
+        _ duration: Duration,
+        target: WalkthroughTargetID
+    ) async -> Bool {
+        do {
+            try await Task.sleep(for: duration)
+        } catch {
+            return false
+        }
+        return isCurrentWalkthroughTarget(target)
+    }
+
+    private func isCurrentWalkthroughTarget(_ target: WalkthroughTargetID) -> Bool {
+        !Task.isCancelled
+            && walkthroughs.activeSurface == .saveFlow
+            && walkthroughs.currentStep?.target == target
+    }
+
+    @MainActor
+    private func completeWalkthroughTarget(_ target: WalkthroughTargetID) {
+        guard isCurrentWalkthroughTarget(target), let step = walkthroughs.currentStep else { return }
+        switch step.advance {
+        case .action:
+            walkthroughs.perform(target)
+        case .next:
+            walkthroughs.advancePassiveStep()
+        }
+    }
+
     private func save() {
         guard !isSaving else { return }
         guard selectedStatus != .been || visitedAt <= Date.now else {
             errorMessage = "A check-in date can’t be in the future."
+            resetWalkthroughAutoSaveForRetry()
             return
         }
         let attributes = attributeDrafts()
@@ -8653,9 +9150,24 @@ struct MapPlaceSaveEditor: View {
             }
         } catch {
             errorMessage = error.localizedDescription
+            resetWalkthroughAutoSaveForRetry()
             return
         }
         let attemptedAt = Date.now
+        let tutorialSnapshot: FirstVisitTutorialMemorySnapshot? = {
+            guard walkthroughs.activeSurface == .saveFlow else { return nil }
+            let snapshotDate = selectedStatus == .been
+                ? visitedAt
+                : (plannedDate ?? attemptedAt)
+            return FirstVisitTutorialMemorySnapshot(
+                candidate: walkthroughs.tutorialCandidate ?? context.candidate,
+                status: selectedStatus,
+                date: snapshotDate,
+                ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
+                note: note,
+                tag: unifiedTags.sorted().first ?? ""
+            )
+        }()
         saveAttemptedAt = attemptedAt
         if let draftID {
             onDraftChange(draftID, draftUpdate.form, attemptedAt)
@@ -8685,11 +9197,20 @@ struct MapPlaceSaveEditor: View {
             await MainActor.run {
                 isSaving = false
                 if let result {
+                    if let tutorialSnapshot {
+                        walkthroughs.recordTutorialMemorySnapshot(tutorialSnapshot)
+                    }
                     walkthroughs.recordTutorialSave(userPlaceID: result.userPlaceID)
-                    walkthroughs.perform(.saveSubmit)
-                    onSaveCompleted(result)
+                    if walkthroughs.activeSurface == .saveFlow,
+                       walkthroughs.currentStep?.target == .saveSubmit {
+                        pendingWalkthroughSaveResult = result
+                        walkthroughs.perform(.saveSubmit)
+                    } else {
+                        onSaveCompleted(result)
+                    }
                 } else if auth.isSignedIn {
                     saveAttemptedAt = nil
+                    resetWalkthroughAutoSaveForRetry()
                     if context.sharedVisitInvitation != nil {
                         errorMessage = "Could not add this shared check-in. Open the invitation and try again."
                     } else {
@@ -8699,12 +9220,20 @@ struct MapPlaceSaveEditor: View {
                     }
                 } else {
                     saveAttemptedAt = nil
+                    resetWalkthroughAutoSaveForRetry()
                     errorMessage = selectedStatus == .been
                         ? "Sign in to finish your check-in."
                         : "Sign in to add this to Wanna."
                 }
             }
         }
+    }
+
+    private func resetWalkthroughAutoSaveForRetry() {
+        guard walkthroughs.activeSurface == .saveFlow,
+              walkthroughs.currentStep?.target == .saveSubmit
+        else { return }
+        didStartWalkthroughAutoSave = false
     }
 
     private func scrollToWalkthroughTarget(
@@ -8743,9 +9272,14 @@ struct MapPlaceSaveEditor: View {
         _ target: WalkthroughTargetID?,
         with proxy: ScrollViewProxy
     ) {
+        if walkthroughs.activeSurface == .saveFlow, target == .saveStatus {
+            step = .confirm
+            hasSelectedStatus = false
+        }
+
         if selectedStatus == .wannaGo {
             while let currentTarget = walkthroughs.currentStep?.target,
-                  [.saveRating, .saveFriends, .savePhotos].contains(currentTarget) {
+                  [.saveFriends, .savePhotos].contains(currentTarget) {
                 walkthroughs.recoverUnavailableTarget(currentTarget)
             }
         }
@@ -8756,7 +9290,49 @@ struct MapPlaceSaveEditor: View {
     private func selectStatus(_ status: PlaceStatus) {
         selectedStatus = status
         hasSelectedStatus = true
+        walkthroughs.recordTutorialSelectedStatus(status)
         walkthroughs.perform(.saveStatus)
+        if walkthroughs.activeSurface == .saveFlow,
+           walkthroughs.currentStep?.target == .saveContinue {
+            walkthroughs.perform(.saveContinue)
+            prepareDetails()
+        }
+    }
+
+    private func restoreWalkthroughSavePresentationIfNeeded() {
+        guard walkthroughs.activeSurface == .saveFlow,
+              let target = walkthroughs.currentStep?.target
+        else { return }
+
+        if target == .saveReview,
+           pendingWalkthroughSaveResult == nil,
+           let userPlaceID = walkthroughs.tutorialUserPlaceID {
+            pendingWalkthroughSaveResult = SaveResult(
+                userPlaceID: userPlaceID,
+                syncState: .synced
+            )
+        }
+
+        if let restoredStatus = walkthroughs.tutorialSelectedStatus {
+            selectedStatus = restoredStatus
+        }
+        if target != .saveStatus {
+            hasSelectedStatus = true
+        }
+        if step == .confirm,
+           [
+               .saveDate,
+               .saveNote,
+               .saveRating,
+               .saveMoreOptions,
+               .saveQuestions,
+               .saveTags,
+               .saveSubmit,
+               .saveReview
+           ]
+            .contains(target) {
+            prepareDetails()
+        }
     }
 
     private func loadSharedVisitInviteesIfNeeded() async {

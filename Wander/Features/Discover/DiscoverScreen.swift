@@ -330,6 +330,8 @@ struct DiscoverScreen: View {
             .onChange(of: walkthroughs.currentStep?.target, initial: true) { _, target in
                 if target == .feedSearchField || target == .feedSmartSearch {
                     searchFieldFocused = false
+                } else if target == .feedSearchResultsBack {
+                    restoreWalkthroughSearchResultsIfNeeded()
                 }
             }
             .task(id: visiblePlaceSignature) {
@@ -491,9 +493,6 @@ struct DiscoverScreen: View {
         switch walkthroughs.currentStep?.target {
         case .feedSearchResultsBack:
             walkthroughs.perform(.feedSearchResultsBack)
-            clearPlaceSearch(focusField: false)
-        case .feedSearchExitBack:
-            walkthroughs.perform(.feedSearchExitBack)
             exitPlaceSearch()
         default:
             exitPlaceSearch()
@@ -508,6 +507,9 @@ struct DiscoverScreen: View {
         let query = placesQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
 
+        if walkthroughs.activeSurface == .feedSearch {
+            walkthroughs.recordTutorialDiscoverQuery(query)
+        }
         walkthroughs.perform(.feedSmartSearch)
 
         cancelPlaceSearchWork()
@@ -581,6 +583,18 @@ struct DiscoverScreen: View {
                 ]
             )
         }
+    }
+
+    private func restoreWalkthroughSearchResultsIfNeeded() {
+        guard walkthroughs.activeSurface == .feedSearch,
+              walkthroughs.currentStep?.target == .feedSearchResultsBack,
+              submittedPlacesQuery == nil
+        else { return }
+
+        placesQuery = walkthroughs.tutorialDiscoverQuery
+            ?? suggestedSearches.first?.query
+            ?? "popular parks"
+        submitPlaceSearch(source: "walkthrough_resume")
     }
 
     private func startCommunityPlaceSearch(query: String, submissionID: UUID) {
@@ -817,7 +831,7 @@ struct DiscoverScreen: View {
                         .foregroundStyle(WanderTheme.terracottaDark.color)
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
-                .accessibilityLabel(onClose == nil ? "Back to Discover" : "Back to Feed")
+                .accessibilityLabel(walkthroughSearchBackLabel)
                 .accessibilityIdentifier("discover.searchBack")
                 .walkthroughTargetAndEmphasis(walkthroughSearchBackTarget)
             }
@@ -844,13 +858,18 @@ struct DiscoverScreen: View {
     }
 
     private var walkthroughSearchBackTarget: WalkthroughTargetID? {
+        DiscoverWalkthroughTargetPolicy.searchBackTarget(
+            activeSurface: walkthroughs.activeSurface,
+            target: walkthroughs.currentStep?.target
+        )
+    }
+
+    private var walkthroughSearchBackLabel: String {
         switch walkthroughs.currentStep?.target {
         case .feedSearchResultsBack:
-            .feedSearchResultsBack
-        case .feedSearchExitBack:
-            .feedSearchExitBack
+            "Back to Feed"
         default:
-            nil
+            onClose == nil ? "Back to Discover" : "Back to Feed"
         }
     }
 
@@ -1693,6 +1712,21 @@ struct DiscoverScreen: View {
         return store.shell(for: localProfile)
     }
 
+}
+
+enum DiscoverWalkthroughTargetPolicy {
+    /// The guided Back control must remain registered while live search is
+    /// still loading. Waiting for local, refined, and community results to all
+    /// settle can leave a signed-in user on an unanchored walkthrough step.
+    static func searchBackTarget(
+        activeSurface: WalkthroughSurface?,
+        target: WalkthroughTargetID?
+    ) -> WalkthroughTargetID? {
+        guard activeSurface == .feedSearch,
+              target == .feedSearchResultsBack
+        else { return nil }
+        return .feedSearchResultsBack
+    }
 }
 
 private struct DiscoverVisiblePlaceSignature: Equatable {

@@ -62,6 +62,74 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(selection.contains("joe"))
     }
 
+    func testSelectionInsertTracksSentInviteOnlyOnce() {
+        var selection = InviteSelection()
+
+        XCTAssertTrue(selection.insert("maya"))
+        XCTAssertFalse(selection.insert("maya"))
+        XCTAssertEqual(selection.count, 1)
+        XCTAssertTrue(selection.contains("maya"))
+    }
+
+    func testWalkthroughProgressReducerOnlyCountsSentAndDeduplicatesContacts() {
+        let initial = InviteSelection()
+        let cancelled = ContactInviteWalkthroughProgressReducer.reduce(
+            state: initial,
+            action: .messageComposerFinished(contactID: "maya", outcome: .cancelled)
+        )
+        let failed = ContactInviteWalkthroughProgressReducer.reduce(
+            state: cancelled,
+            action: .messageComposerFinished(contactID: "maya", outcome: .failed)
+        )
+        let sent = ContactInviteWalkthroughProgressReducer.reduce(
+            state: failed,
+            action: .messageComposerFinished(contactID: "maya", outcome: .sent)
+        )
+        let duplicate = ContactInviteWalkthroughProgressReducer.reduce(
+            state: sent,
+            action: .messageComposerFinished(contactID: "maya", outcome: .sent)
+        )
+
+        XCTAssertEqual(cancelled.count, 0)
+        XCTAssertEqual(failed.count, 0)
+        XCTAssertEqual(sent.count, 1)
+        XCTAssertTrue(sent.contains("maya"))
+        XCTAssertEqual(duplicate, sent)
+    }
+
+    func testWalkthroughProgressReducerCompletesAtFiveAndBlocksSixth() {
+        var progress = InviteSelection()
+
+        for index in 1...4 {
+            progress = ContactInviteWalkthroughProgressReducer.reduce(
+                state: progress,
+                action: .messageComposerFinished(contactID: "contact-\(index)", outcome: .sent)
+            )
+        }
+        XCTAssertEqual(progress.count, 4)
+        XCTAssertFalse(ContactInviteWalkthroughProgressReducer.isComplete(state: progress))
+
+        progress = ContactInviteWalkthroughProgressReducer.reduce(
+            state: progress,
+            action: .messageComposerFinished(contactID: "contact-5", outcome: .sent)
+        )
+        XCTAssertEqual(progress.count, 5)
+        XCTAssertTrue(ContactInviteWalkthroughProgressReducer.isComplete(state: progress))
+        XCTAssertFalse(
+            ContactInviteWalkthroughProgressReducer.canInvite(
+                contactID: "contact-6",
+                state: progress
+            )
+        )
+
+        let attemptedSixth = ContactInviteWalkthroughProgressReducer.reduce(
+            state: progress,
+            action: .messageComposerFinished(contactID: "contact-6", outcome: .sent)
+        )
+        XCTAssertEqual(attemptedSixth, progress)
+        XCTAssertFalse(attemptedSixth.contains("contact-6"))
+    }
+
     func testSelectionEnforcesTwentyPersonLimitAndStillAllowsRemoval() {
         var selection = InviteSelection()
 
@@ -184,7 +252,7 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("finishWalkthroughAfterDeniedPermission()"))
     }
 
-    func testWalkthroughInviteCanContinueWithoutSelectionAndInvitesAfterSelection() {
+    func testWalkthroughInviteNextRemainsAvailableAndAccentsAtGoal() {
         let empty = ContactInvitePrimaryActionState.resolve(
             selectionCount: 0,
             walkthroughSelectionGoal: 5,
@@ -195,6 +263,11 @@ final class InviteFrameworkTests: XCTestCase {
             walkthroughSelectionGoal: 5,
             defaultTitle: "Invite"
         )
+        let completed = ContactInvitePrimaryActionState.resolve(
+            selectionCount: 5,
+            walkthroughSelectionGoal: 5,
+            defaultTitle: "Invite"
+        )
         let ordinaryEmpty = ContactInvitePrimaryActionState.resolve(
             selectionCount: 0,
             walkthroughSelectionGoal: nil,
@@ -202,8 +275,27 @@ final class InviteFrameworkTests: XCTestCase {
         )
 
         XCTAssertEqual(empty, ContactInvitePrimaryActionState(title: "Next", isEnabled: true, isSubdued: true))
-        XCTAssertEqual(selected, ContactInvitePrimaryActionState(title: "Invite", isEnabled: true, isSubdued: false))
+        XCTAssertEqual(selected, ContactInvitePrimaryActionState(title: "Next", isEnabled: true, isSubdued: true))
+        XCTAssertEqual(completed, ContactInvitePrimaryActionState(title: "Next", isEnabled: true, isSubdued: false))
         XCTAssertEqual(ordinaryEmpty, ContactInvitePrimaryActionState(title: "Invite", isEnabled: false, isSubdued: true))
+    }
+
+    func testWalkthroughInviteUsesRequestedProse() {
+        XCTAssertEqual(ContactInviteWalkthroughContent.selectionGoal, 5)
+        XCTAssertEqual(
+            ContactInviteWalkthroughContent.inviteProse,
+            "Hey sharing an invite to rec.me a social app for tracking places. This app is perfect for you and selfishly i need you on the app so i can see the places that you've been to. Excited to have you on and make sure to use my link. Heads up this invite expires in 24 hours."
+        )
+
+        let content = WanderShareContent.appInvite(
+            senderProfileID: "user-sender",
+            contextMessage: ContactInviteWalkthroughContent.inviteProse,
+            includeInstallPrompt: false
+        )
+        XCTAssertEqual(content.message, ContactInviteWalkthroughContent.inviteProse)
+        XCTAssertTrue(content.messageBody.hasPrefix("\(ContactInviteWalkthroughContent.inviteProse)\n\n"))
+        XCTAssertTrue(content.items.contains(WanderShareContent.publicTestFlightURL))
+        XCTAssertEqual(content.items.count, 2)
     }
 
     func testListCollaboratorPlacesContactInviteBetweenSearchAndFriends() throws {
@@ -238,8 +330,15 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("MFMessageComposeViewController.canSendText()"))
         XCTAssertTrue(sheet.contains("ContactInviteMessageComposer("))
         XCTAssertTrue(sheet.contains("case .sent:"))
+        XCTAssertTrue(sheet.contains("Text(isSent ? \"Sent\" : \"Add\")"))
+        XCTAssertTrue(sheet.contains("beginWalkthroughInviteDelivery(for: contact)"))
+        XCTAssertTrue(sheet.contains("ContactInviteWalkthroughProgressReducer.reduce("))
+        XCTAssertTrue(sheet.contains("MessageUI's `.sent` is only a successful handoff"))
         XCTAssertTrue(sheet.contains("WanderShareContent.appInvite("))
-        XCTAssertTrue(sheet.contains("contextMessage: surface.inviteMessage"))
+        XCTAssertTrue(sheet.contains("ContactInviteWalkthroughContent.inviteProse"))
+        XCTAssertTrue(sheet.contains(".accessibilityIdentifier(\"invite.contactAdd.\\(contact.id)\")"))
+        XCTAssertTrue(sheet.contains(": surface.inviteMessage"))
+        XCTAssertTrue(sheet.contains("includeInstallPrompt: !isWalkthroughMode"))
         XCTAssertFalse(sheet.contains("Choose how to share"))
 
         XCTAssertTrue(sheet.contains("AlphabetScrubber(letters:"))
@@ -247,6 +346,24 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(sheet.contains("proxy.scrollTo(targetID"))
         XCTAssertTrue(sheet.contains("magnification(for:"))
         XCTAssertTrue(sheet.contains("UISelectionFeedbackGenerator().selectionChanged()"))
+    }
+
+    func testWalkthroughContactRowOnlyMakesAddCapsuleTappable() throws {
+        let sheet = try projectSource("Wander/Features/Invites/ContactInviteSheet.swift")
+        let walkthroughRow = try XCTUnwrap(
+            sheet.components(separatedBy: "private func walkthroughContactRow").last?
+                .components(separatedBy: "private func contactIdentity").first
+        )
+        let standardRow = try XCTUnwrap(
+            sheet.components(separatedBy: "private func standardContactRow").last?
+                .components(separatedBy: "private func walkthroughContactRow").first
+        )
+
+        XCTAssertEqual(walkthroughRow.components(separatedBy: "Button {").count - 1, 1)
+        XCTAssertTrue(walkthroughRow.contains("beginWalkthroughInviteDelivery(for: contact)"))
+        XCTAssertTrue(walkthroughRow.contains("Text(isSent ? \"Sent\" : \"Add\")"))
+        XCTAssertTrue(standardRow.contains("Button {"))
+        XCTAssertTrue(standardRow.contains("selection.toggle(contact.id)"))
     }
 
     private func projectSource(_ path: String) throws -> String {

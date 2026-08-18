@@ -36,7 +36,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(entry.contains("initialSession: session"))
         XCTAssertTrue(entry.contains("isSessionValidated: auth.isSessionValidated"))
         XCTAssertTrue(entry.contains("isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible"))
-        XCTAssertTrue(entry.contains("coordinator.completeFirstVisitWalkthrough(for: session)"))
+        XCTAssertTrue(entry.contains("coordinator.completeFirstVisitWalkthrough(forUserID: completedUserID)"))
         XCTAssertTrue(entry.contains(".sheet(isPresented: $auth.isPresentingNativeAuth"))
         XCTAssertTrue(entry.contains("ClerkNativeAuthView(mode: auth.activeNativeAuthMode)"))
         XCTAssertTrue(entry.contains("case .background:"))
@@ -49,10 +49,26 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(authStore.contains("willEnterForegroundNotification"))
         XCTAssertTrue(root.contains("store.apply(authState: .signedIn(initialSession))"))
         XCTAssertTrue(root.contains("FirstVisitWalkthroughFeatureFlag.isEnabled("))
-        XCTAssertFalse(root.contains("FirstVisitWalkthroughFeatureFlag.shouldRetireEligibility("))
+        XCTAssertTrue(root.contains("FirstVisitWalkthroughEligibilityContext("))
+        XCTAssertTrue(
+            root.contains("firstVisitWalkthroughEligibilityContext.applies(to: userID)")
+        )
+        XCTAssertTrue(
+            root.contains("firstVisitWalkthroughEligibilityContext.shouldRetire(")
+        )
+        XCTAssertTrue(root.contains(".onChange(of: firstVisitWalkthroughEligibilityContext)"))
+        XCTAssertTrue(
+            root.contains(
+                "FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement("
+            )
+        )
+        XCTAssertTrue(root.contains("retiredWalkthroughUserIDs.insert(userID).inserted"))
         XCTAssertFalse(walkthrough.contains("isRolloutEnabledByDefault"))
         XCTAssertTrue(root.contains(".task(id: featureFlagLoadUserID)"))
         XCTAssertTrue(root.contains("backend.featureFlag(.firstVisitNUX, for: userID)"))
+        XCTAssertTrue(root.contains("backend.resolvedFeatureFlag(.firstVisitNUX, for: userID)"))
+        XCTAssertTrue(root.contains("resolvedFlag?.explicitAccountOverride"))
+        XCTAssertTrue(root.contains("refreshWalkthroughFeatureFlagsAfterForeground()"))
         XCTAssertTrue(root.contains("if auth.state.session == nil {"))
         XCTAssertTrue(root.contains("backend.clearFeatureFlags()"))
         XCTAssertTrue(walkthrough.contains("launchArguments.contains(\"-WanderEnableWalkthroughs\")"))
@@ -183,6 +199,71 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains(".toolbar(.hidden, for: .tabBar)"))
     }
 
+    func testWalkthroughTabTargetUsesVisibleUnionOfNativeItemControls() throws {
+        let visibleBounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let controlFrames = [
+            CGRect(x: 24, y: 752, width: 82, height: 56),
+            CGRect(x: 106, y: 750, width: 86, height: 58),
+            CGRect(x: 192, y: 751, width: 86, height: 57),
+            CGRect(x: 278, y: 752, width: 88, height: 56)
+        ]
+
+        let target = try XCTUnwrap(
+            WanderTabBarWalkthroughTargetGeometry.targetFrame(
+                controlFrames: controlFrames,
+                visibleBounds: visibleBounds
+            )
+        )
+
+        XCTAssertEqual(target, CGRect(x: 24, y: 750, width: 342, height: 58))
+        XCTAssertEqual(target.minY, controlFrames.map(\.minY).min())
+        XCTAssertEqual(target.maxY, controlFrames.map(\.maxY).max())
+        XCTAssertLessThan(target.maxY, visibleBounds.maxY, "The home-indicator area stays scrimmed.")
+
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+        XCTAssertTrue(root.contains("window.convert($0.bounds, from: $0)"))
+        XCTAssertTrue(root.contains("externalTargetFrames: nativeTabItemControlsFrame.map { [.mapTabs: $0] }"))
+        XCTAssertTrue(root.contains("window.convert($0.bounds, from: $0)"))
+        XCTAssertTrue(root.contains("scheduleAttachmentRetry(for: anchorView)"))
+        XCTAssertTrue(root.contains("control.accessibilityLabel?.caseInsensitiveCompare(tab.title)"))
+        XCTAssertTrue(root.contains("contains(\"UITabBarButton\")"))
+        XCTAssertTrue(root.contains("let visibleControls = descendantControls(in: tabBar)"))
+        XCTAssertTrue(root.contains("WanderTabBarWalkthroughTargetGeometry.targetFrame("))
+        XCTAssertTrue(root.contains("@State private var nativeTabItemControlsFrame: CGRect?"))
+        XCTAssertFalse(root.contains("walkthroughTabBarTargetHeight"))
+        XCTAssertFalse(root.contains("walkthroughTabBarTargetVerticalOffset"))
+        XCTAssertFalse(root.contains("walkthroughTabBarTargetHorizontalInset"))
+    }
+
+    func testWalkthroughTabTargetRejectsMissingOrOffscreenControls() {
+        let visibleBounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+
+        XCTAssertNil(
+            WanderTabBarWalkthroughTargetGeometry.targetFrame(
+                controlFrames: [],
+                visibleBounds: visibleBounds
+            )
+        )
+        XCTAssertNil(
+            WanderTabBarWalkthroughTargetGeometry.targetFrame(
+                controlFrames: [CGRect(x: 20, y: 900, width: 80, height: 50)],
+                visibleBounds: visibleBounds
+            )
+        )
+        XCTAssertEqual(
+            WanderTabBarWalkthroughTargetGeometry.targetFrame(
+                controlFrames: [
+                    .zero,
+                    CGRect(x: -12, y: 780, width: 420, height: 44)
+                ],
+                visibleBounds: visibleBounds
+            ),
+            CGRect(x: 0, y: 780, width: 390, height: 44)
+        )
+    }
+
     @MainActor
     func testTabBarImagesCacheTemplateAndPressedRenditions() {
         let inactiveImage = WanderTab.discover.tabBarImage(isSelected: false)
@@ -218,14 +299,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
         XCTAssertTrue(feed.contains("DiscoverScreen("))
         XCTAssertTrue(feed.contains("startsInPlaceSearch: true"))
-        XCTAssertTrue(feed.contains("onClose: { isShowingSearch = false }"))
+        XCTAssertTrue(feed.contains("onClose: closeDiscoverSearch"))
         let discover = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
         )
         XCTAssertTrue(discover.contains("if selectedMode == .places, isPlaceSearchPresented"))
         XCTAssertTrue(discover.contains("activePlaceSearchHeader"))
         XCTAssertTrue(discover.contains("searchFieldFocused = true"))
-        XCTAssertTrue(discover.contains("onClose == nil ? \"Back to Discover\" : \"Back to Feed\""))
+        XCTAssertTrue(discover.contains("private var walkthroughSearchBackLabel: String"))
+        XCTAssertTrue(discover.contains("\"Back to Feed\""))
         XCTAssertTrue(discover.contains(".accessibilityIdentifier(\"discover.searchBack\")"))
         XCTAssertFalse(discover.contains(".accessibilityIdentifier(\"discover.close\")"))
         XCTAssertTrue(discover.contains(".accessibilityIdentifier(accessibilityIdentifier)"))
@@ -233,7 +315,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discover.contains("suggestedSearchesSection"))
         XCTAssertTrue(feed.contains("private struct FeedActivityModule"))
         XCTAssertTrue(feed.contains("private struct FeedFeaturedCard"))
-        XCTAssertTrue(feed.contains("private enum FeedSurface"))
+        XCTAssertTrue(feed.contains("enum FeedSurface"))
         XCTAssertTrue(feed.contains("private struct FeedSurfaceTabs"))
         XCTAssertTrue(feed.contains("case .people:"))
         XCTAssertTrue(feed.contains("FeedPeopleSurface("))
@@ -1566,12 +1648,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
         XCTAssertTrue(
             importViews.contains(
-                "Text(\"Import places from Google Maps, Instagram, TikTok, and more.\")"
+                "Text(\"Import your places and lists from Google Maps, Instagram, TikTok, and more here\")"
             )
         )
         XCTAssertTrue(
             importViews.contains(
-                ".accessibilityLabel(\"Import places from Google Maps, Instagram, TikTok, and more.\")"
+                ".accessibilityLabel(\"Import your places and lists from Google Maps, Instagram, TikTok, and more here\")"
             )
         )
         XCTAssertTrue(importViews.contains("TextEditor(text: $input)"))
@@ -1705,26 +1787,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(optionalDetails.contains("fit, tags & privacy"))
         XCTAssertFalse(optionalDetails.contains("date, note"))
         XCTAssertTrue(optionalDetails.contains("walkthroughs.activeSurface == .saveFlow"))
-        XCTAssertTrue(optionalDetails.contains("WanderTheme.sunTint.color"))
-        XCTAssertTrue(optionalDetails.contains("WanderTheme.categorySun.color"))
+        XCTAssertFalse(optionalDetails.contains("WanderTheme.sunTint.color"))
         XCTAssertTrue(optionalDetails.contains(".walkthroughTarget(.saveMoreOptions)"))
         XCTAssertTrue(optionalDetails.contains("isMoreOptionsArrowPulsing"))
-        let moreOptionsTarget = try XCTUnwrap(
-            optionalDetails.range(of: ".walkthroughTarget(.saveMoreOptions)")
-        )
-        let moreOptionsEmphasis = try XCTUnwrap(
-            optionalDetails.range(of: ".walkthroughEmphasis(.saveMoreOptions)")
-        )
-        let chevron = try XCTUnwrap(optionalDetails.range(of: "Image(systemName: \"chevron.down\")"))
-        let buttonEnd = try XCTUnwrap(optionalDetails.range(of: ".buttonStyle(.plain)"))
-        XCTAssertGreaterThan(moreOptionsEmphasis.lowerBound, chevron.lowerBound)
-        XCTAssertLessThan(moreOptionsEmphasis.lowerBound, buttonEnd.lowerBound)
-        XCTAssertGreaterThan(moreOptionsTarget.lowerBound, buttonEnd.lowerBound)
+        XCTAssertFalse(optionalDetails.contains(".walkthroughEmphasis(.saveMoreOptions)"))
+        XCTAssertFalse(optionalDetails.contains("Circle()\n                                .stroke(WanderTheme.categorySun.color"))
         XCTAssertEqual(
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
         )
-        XCTAssertTrue(mapScreen.contains("if step == .details && context.requiresStatusConfirmation"))
+        XCTAssertTrue(mapScreen.contains("if presentedStep == .details,"))
+        XCTAssertTrue(mapScreen.contains("walkthroughs.activeSurface != .saveFlow"))
         XCTAssertEqual(mapScreen.components(separatedBy: "Text(flowTitle)").count - 1, 1)
         XCTAssertTrue(mapScreen.contains("ZStack {"))
         XCTAssertTrue(mapScreen.contains(".multilineTextAlignment(.center)"))
@@ -2944,7 +3017,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("Search visited instead"))
         XCTAssertTrue(source.contains("Nothing was broadened automatically"))
         XCTAssertTrue(feedSource.contains("startsInPlaceSearch: true"))
-        XCTAssertTrue(feedSource.contains("onClose: { isShowingSearch = false }"))
+        XCTAssertTrue(feedSource.contains("onClose: closeDiscoverSearch"))
     }
 
     func testDiscoverAuthAndVisibleDataRefreshesRerunActiveSearchesCancellably() throws {
@@ -3693,6 +3766,91 @@ final class NavigationContractTests: XCTestCase {
                 ".animation(.easeInOut(duration: 0.2), value: coordinator.isPresentingDeviceFeaturesLesson)"
             )
         )
+    }
+
+    func testFirstVisitSurfacePolishUsesWalkthroughOnlyMapAndSingleBackContracts() throws {
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let discover = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Discover/DiscoverScreen.swift")
+        )
+        let lists = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+
+        let mapFilters = try sourceSection(
+            map,
+            after: "if !isMapSearchFocused {",
+            before: "if let mapFilterEmptyMessage"
+        )
+        XCTAssertEqual(
+            mapFilters.components(separatedBy: ".walkthroughTarget(.mapFeatured)").count - 1,
+            1
+        )
+        XCTAssertFalse(mapFilters.contains(".walkthroughEmphasis("))
+        XCTAssertTrue(map.contains("walkthroughs.isAwaitingEligibilityResolution"))
+        XCTAssertTrue(map.contains("walkthroughs.activeSurface != nil"))
+        XCTAssertTrue(map.contains("walkthroughs.requestedSurface != nil"))
+        XCTAssertTrue(map.contains("return \"No featured check-ins here yet.\""))
+
+        let optionalDetails = try sourceSection(
+            map,
+            after: "private var optionalDetailsDisclosure: some View",
+            before: "private var removeSaveSection: some View"
+        )
+        XCTAssertTrue(optionalDetails.contains("isMoreOptionsArrowPulsing"))
+        XCTAssertTrue(optionalDetails.contains(".walkthroughTarget(.saveMoreOptions)"))
+        XCTAssertFalse(optionalDetails.contains(".walkthroughEmphasis(.saveMoreOptions)"))
+        XCTAssertFalse(optionalDetails.contains(".stroke(WanderTheme.categorySun.color"))
+
+        XCTAssertEqual(
+            feed.components(separatedBy: "FeedSectionHeading(title: \"Activity\"").count - 1,
+            4
+        )
+        XCTAssertEqual(
+            feed.components(separatedBy: ".walkthroughTarget(.feedActivity)").count - 1,
+            1,
+            "The empty Feed state must provide a stable activity walkthrough target."
+        )
+        XCTAssertTrue(feed.contains("event.id == activity.first?.id ? .feedActivity : nil"))
+        XCTAssertFalse(feed.contains("FeedSectionHeading(title: \"See your friends’ check-ins here\""))
+
+        let backHandler = try sourceSection(
+            discover,
+            after: "private func handlePlaceSearchBack()",
+            before: "private func submitPlaceSearch()"
+        )
+        let resultsBack = try sourceSection(
+            backHandler,
+            after: "case .feedSearchResultsBack:",
+            before: "default:"
+        )
+        XCTAssertTrue(resultsBack.contains("walkthroughs.perform(.feedSearchResultsBack)"))
+        XCTAssertTrue(feed.contains("onClose: closeDiscoverSearch"))
+        XCTAssertTrue(feed.contains("walkthroughs.consumeRequestedSurface(.feed)"))
+        XCTAssertTrue(feed.contains("selectedSurface = .people"))
+        XCTAssertTrue(feed.contains("restoreFeedWalkthroughAfterDiscoverDismissal()"))
+        XCTAssertTrue(feed.contains("FeedSurface.walkthroughDestination("))
+        XCTAssertTrue(feed.contains("guard activeSurface == .feed else { return nil }"))
+        XCTAssertTrue(resultsBack.contains("exitPlaceSearch()"))
+        XCTAssertTrue(discover.contains("DiscoverWalkthroughTargetPolicy.searchBackTarget("))
+        XCTAssertFalse(
+            discover.contains("case .feedSearchResultsBack where isWalkthroughSearchResultReady")
+        )
+        XCTAssertFalse(discover.contains("feedSearchExitBack"))
+
+        let listsAnimation = try sourceSection(
+            lists,
+            after: "private func runListsWalkthroughAnimationIfNeeded() async",
+            before: "private var activeLists: [PlaceListMock]"
+        )
+        XCTAssertTrue(listsAnimation.contains(".milliseconds(900)"))
+        XCTAssertTrue(listsAnimation.contains(".milliseconds(1_400)"))
+        XCTAssertTrue(listsAnimation.contains(".milliseconds(4_000)"))
     }
 
     private var projectRoot: URL {
