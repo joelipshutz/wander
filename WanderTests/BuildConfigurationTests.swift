@@ -303,7 +303,7 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-master.swift"))
         XCTAssertTrue(agents.contains("scripts/generate-app-icon-renditions.sh"))
         XCTAssertTrue(contract.contains("matte liquid-glass"))
-        XCTAssertTrue(contract.contains("original full-frame"))
+        XCTAssertTrue(contract.contains("selected full-frame"))
         XCTAssertTrue(contract.contains("rec.me"))
         XCTAssertTrue(masterGeneratorSource.contains("recme-liquid-glass-map-original.png"))
         XCTAssertTrue(masterGeneratorSource.contains("1024 x 1024"))
