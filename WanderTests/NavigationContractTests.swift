@@ -134,7 +134,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("Label(tab.title, systemImage: tab.systemImage)"))
         XCTAssertFalse(root.contains("WanderNativeTabTouchObserver"))
         XCTAssertFalse(root.contains("tabBarImage("))
-        XCTAssertTrue(root.contains("Let the native tab selection and Liquid Glass transition commit"))
+        XCTAssertTrue(root.contains("withTransaction(Transaction(animation: nil))"))
+        XCTAssertTrue(root.contains("Let the native tab selection render before analytics work begins"))
     }
 
     func testDiscoverTabPresentsTheDedicatedFeedWithPersistentSearchLauncher() throws {
