@@ -139,27 +139,67 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertEqual(expected["active_pin_title_clearance_points"] as? Int, 2)
     }
 
-    func testMagnificationSuppressesOnlyTheConcurrentPanDismissal() {
-        XCTAssertFalse(
-            MapSelectionGesturePolicy.allowsPanDismissal(
-                isMagnifying: true,
-                isSuppressed: false
-            )
+    func testCameraGestureClassificationKeepsEveryZoomAndDismissesOnlyAPan() {
+        let start = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
+            span: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.12)
         )
-        XCTAssertFalse(
-            MapSelectionGesturePolicy.allowsPanDismissal(
-                isMagnifying: false,
-                isSuppressed: true
-            )
+        let oneFingerZoom = MKCoordinateRegion(
+            center: start.center,
+            span: MKCoordinateSpan(latitudeDelta: 0.075, longitudeDelta: 0.09)
         )
-        XCTAssertTrue(
-            MapSelectionGesturePolicy.allowsPanDismissal(
-                isMagnifying: false,
-                isSuppressed: false
-            )
+        let pinchZoom = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.052, longitude: -118.248),
+            span: MKCoordinateSpan(latitudeDelta: 0.14, longitudeDelta: 0.168)
         )
+        let panWithLongitudeSpanDrift = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.065, longitude: -118.225),
+            span: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.121)
+        )
+
+        XCTAssertEqual(MapSelectionGesturePolicy.classify(from: start, to: oneFingerZoom), .zoom)
+        XCTAssertEqual(MapSelectionGesturePolicy.classify(from: start, to: pinchZoom), .zoom)
+        XCTAssertEqual(
+            MapSelectionGesturePolicy.classify(from: start, to: panWithLongitudeSpanDrift),
+            .pan
+        )
+        XCTAssertEqual(MapSelectionGesturePolicy.classify(from: start, to: start), .stationary)
         XCTAssertEqual(MapSelectionGesturePolicy.minimumMagnificationDelta, 0.01)
-        XCTAssertEqual(MapSelectionGesturePolicy.panDismissalDelayNanoseconds, 80_000_000)
+        XCTAssertGreaterThan(MapSelectionGesturePolicy.tapDismissalDelayNanoseconds, 250_000_000)
+        XCTAssertGreaterThanOrEqual(MapSelectionGesturePolicy.postZoomTapSuppressionDuration, 0.5)
+        XCTAssertLessThanOrEqual(
+            MapSelectionGesturePolicy.doubleTapRecognitionWindow,
+            Double(MapSelectionGesturePolicy.tapDismissalDelayNanoseconds) / 1_000_000_000
+        )
+    }
+
+    func testSelectionLifetimeIgnoresMapKitBindingClear() {
+        XCTAssertTrue(MapSelectionLifetimePolicy.shouldDismiss(for: .emptyMapTap))
+        XCTAssertTrue(MapSelectionLifetimePolicy.shouldDismiss(for: .oneFingerPan))
+        XCTAssertFalse(
+            MapSelectionLifetimePolicy.shouldDismiss(for: .nativeFeatureBindingCleared)
+        )
+    }
+
+    func testSelectionLifetimeAndLayeringFixtureRequiresDurableTopmostSelection() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: root.appendingPathComponent(
+                "WanderTests/Fixtures/ios-fix/rec-289-selection-lifetime-layering-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let expected = try XCTUnwrap(fixture["expected_results"] as? [String: Any])
+
+        XCTAssertEqual(expected["one_finger_zoom_preserves_selection"] as? Bool, true)
+        XCTAssertEqual(expected["selection_lifetime"] as? String, "unbounded_until_explicit_dismissal")
+        XCTAssertEqual(expected["native_feature_binding_clear_preserves_selection"] as? Bool, true)
+        XCTAssertEqual(expected["active_pin_and_title_render_after_all_inactive_annotations"] as? Bool, true)
+        XCTAssertGreaterThan(MapAnnotationLayering.activeZIndex, 0)
     }
 
     func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
@@ -176,9 +216,18 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(map.contains("DragGesture(minimumDistance: MapHitTesting.panDismissalDistance"))
         XCTAssertTrue(map.contains("MagnifyGesture(minimumScaleDelta: MapSelectionGesturePolicy.minimumMagnificationDelta)"))
         XCTAssertTrue(map.contains("handleMapMagnificationChange()"))
-        XCTAssertTrue(map.contains("handleMapMagnificationEnd()"))
-        XCTAssertTrue(map.contains("handleMapPanChange()"))
-        XCTAssertTrue(map.contains("handleMapPanStart()"))
+        XCTAssertTrue(map.contains("registerMapZoom()"))
+        XCTAssertTrue(map.contains("tapDate.timeIntervalSince(previousMapTapDate)"))
+        XCTAssertTrue(map.contains("let tapRegion = currentSearchRegion"))
+        XCTAssertTrue(map.contains("Date.now >= mapTapDismissalSuppressionUntil"))
+        XCTAssertTrue(map.contains("handleMapDragChange()"))
+        XCTAssertTrue(map.contains("handleMapDragEnd()"))
+        XCTAssertTrue(map.contains("handleMapCameraChange(context.region)"))
+        XCTAssertTrue(map.contains(".onMapCameraChange(frequency: .onEnd)"))
+        XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
+        XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
+        XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
+        XCTAssertTrue(map.contains(".zIndex(MapAnnotationLayering.activeZIndex)"))
         XCTAssertTrue(map.contains("replaceCompactSelectionIfNeeded"))
         XCTAssertTrue(map.contains("MapActivePinRetention.places("))
         XCTAssertTrue(map.contains("routedVisiblePlace = visiblePlace"))
@@ -1108,6 +1157,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(personalOutline.dashPattern, [])
     }
 
+    @MainActor
     func testPinVisualMetricsTightenEmojiSpacingWithoutASelectionHalo() throws {
         XCTAssertEqual(MapPinVisualMetrics.discDiameter, 38)
         XCTAssertEqual(MapPinVisualMetrics.emojiDiameter, 24)
@@ -1115,6 +1165,13 @@ final class MapPinOutlineBuilderTests: XCTestCase {
         XCTAssertEqual(MapPinVisualMetrics.secondaryOutlinePadding, -6)
         XCTAssertEqual(MapPinVisualMetrics.wannaDashPattern, [1.5, 3.5])
         XCTAssertEqual(MapPinVisualMetrics.activeTitleClearance, 2)
+        XCTAssertGreaterThanOrEqual(
+            MapPinVisualMetrics.activeTitleVerticalOffset(
+                selectedScale: MapPinSelectionMotionStyle.selectedScale
+            ),
+            (MapPinVisualMetrics.discDiameter * MapPinSelectionMotionStyle.selectedScale / 2)
+                + MapPinVisualMetrics.activeTitleClearance
+        )
 
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -1123,9 +1180,7 @@ final class MapPinOutlineBuilderTests: XCTestCase {
             contentsOf: root.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
         XCTAssertFalse(map.contains("selectionHalo"))
-        XCTAssertTrue(
-            map.contains("isSelected ? MapPinVisualMetrics.activeTitleClearance : 0")
-        )
+        XCTAssertTrue(map.contains("MapPinVisualMetrics.activeTitleVerticalOffset("))
     }
 
     func testAccessibilityLabelDescribesOwnershipAndEveryVisibleStatusWithoutSaveCopy() {

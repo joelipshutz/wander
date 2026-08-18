@@ -129,13 +129,14 @@ struct MapScreen: View {
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
     @State private var selectedMapFeature: MapFeature?
-    @State private var ignoreNextMapFeatureClear = false
     @State private var ignoreNextMapTap = false
     @State private var lastMapPressPoint: CGPoint?
-    @State private var isMapMagnifying = false
-    @State private var isMapPanGestureActive = false
-    @State private var isMapPanDismissalSuppressed = false
-    @State private var mapPanDismissalTask: Task<Void, Never>?
+    @State private var mapInteractionStartRegion: MKCoordinateRegion?
+    @State private var mapInteractionDidZoom = false
+    @State private var mapInteractionClassificationTask: Task<Void, Never>?
+    @State private var mapTapDismissalTask: Task<Void, Never>?
+    @State private var mapTapDismissalSuppressionUntil = Date.distantPast
+    @State private var previousMapTapDate = Date.distantPast
     @State private var mapSelectionRevision = 0
     @State private var mapSaveFlow: MapPlaceSaveContext?
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
@@ -387,6 +388,20 @@ struct MapScreen: View {
 
     var body: some View {
         let annotationGroups = transitioningAnnotationGroups ?? orderedVisiblePlaceGroups()
+        let indexedAnnotationGroups = Array(annotationGroups.enumerated())
+        let indexedSearchCandidates = Array(mappableSearchCandidates.enumerated())
+        let inactiveAnnotationGroups = indexedAnnotationGroups.filter { _, group in
+            !highlightsCompactSelection || group.key != selectedPlaceGroupKey
+        }
+        let activeAnnotationGroup = indexedAnnotationGroups.first { _, group in
+            highlightsCompactSelection && group.key == selectedPlaceGroupKey
+        }
+        let inactiveSearchCandidates = indexedSearchCandidates.filter { _, candidate in
+            !highlightsCompactSelection || candidate.id != selectedSearchCandidateID
+        }
+        let activeSearchCandidate = indexedSearchCandidates.first { _, candidate in
+            highlightsCompactSelection && candidate.id == selectedSearchCandidateID
+        }
         let moreFilterSelection = Binding(
             get: { mapFilterState.more },
             set: { selection in
@@ -404,11 +419,9 @@ struct MapScreen: View {
                             UserAnnotation()
                         }
 
-                        ForEach(Array(annotationGroups.enumerated()), id: \.element.key) { index, group in
+                        ForEach(inactiveAnnotationGroups, id: \.element.key) { index, group in
                             let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
                             let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                            let isSelected = highlightsCompactSelection
-                                && group.key == selectedPlaceGroupKey
                             Annotation(
                                 group.primary.place.canonicalName,
                                 coordinate: CLLocationCoordinate2D(
@@ -423,33 +436,24 @@ struct MapScreen: View {
                                         visiblePlace: group.primary,
                                         saves: saveSummaries(for: group),
                                         currentUserID: store.currentUser.id,
-                                        isSelected: isSelected
+                                        isSelected: false
                                     )
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 44)
-                                .padding(
-                                    .bottom,
-                                    isSelected ? MapPinVisualMetrics.activeTitleClearance : 0
-                                )
                                 .modifier(
                                     MapPinEntranceModifier(
                                         isVisible: isTransitionVisible,
                                         delay: entranceDelay
                                     )
                                 )
-                                .zIndex(
-                                    isSelected ? 1 : 0
-                                )
                             }
                         }
 
-                        ForEach(Array(mappableSearchCandidates.enumerated()), id: \.element.id) { index, candidate in
+                        ForEach(inactiveSearchCandidates, id: \.element.id) { index, candidate in
                             if let latitude = candidate.latitude,
                                let longitude = candidate.longitude {
                                 let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
-                                let isSelected = highlightsCompactSelection
-                                    && selectedSearchCandidateID == candidate.id
                                 Annotation(
                                     candidate.name,
                                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -459,15 +463,11 @@ struct MapScreen: View {
                                     } label: {
                                         SearchResultMarker(
                                             candidate: candidate,
-                                            isSelected: isSelected
+                                            isSelected: false
                                         )
                                     }
                                     .buttonStyle(.plain)
                                     .frame(minWidth: 44, minHeight: 44)
-                                    .padding(
-                                        .bottom,
-                                        isSelected ? MapPinVisualMetrics.activeTitleClearance : 0
-                                    )
                                     .modifier(
                                         MapPinEntranceModifier(
                                             isVisible: true,
@@ -475,6 +475,75 @@ struct MapScreen: View {
                                         )
                                     )
                                 }
+                            }
+                        }
+
+                        if let (index, group) = activeAnnotationGroup {
+                            let isTransitionVisible = visibleTransitionGroupKeys?.contains(group.key) ?? true
+                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                            Annotation(
+                                "",
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: group.primary.place.latitude,
+                                    longitude: group.primary.place.longitude
+                                )
+                            ) {
+                                Button {
+                                    selectVisiblePlaceFromMapTap(group.primary)
+                                } label: {
+                                    ActiveMapAnnotationContent(
+                                        title: group.primary.place.canonicalName
+                                    ) {
+                                        MapPlaceMarker(
+                                            visiblePlace: group.primary,
+                                            saves: saveSummaries(for: group),
+                                            currentUserID: store.currentUser.id,
+                                            isSelected: true
+                                        )
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .modifier(
+                                    MapPinEntranceModifier(
+                                        isVisible: isTransitionVisible,
+                                        delay: entranceDelay
+                                    )
+                                )
+                                .zIndex(MapAnnotationLayering.activeZIndex)
+                            }
+                        }
+
+                        if let (index, candidate) = activeSearchCandidate,
+                           let latitude = candidate.latitude,
+                           let longitude = candidate.longitude {
+                            let entranceDelay = MapPinEntranceStyle.staggerDelay(for: index)
+                            Annotation(
+                                "",
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: latitude,
+                                    longitude: longitude
+                                )
+                            ) {
+                                Button {
+                                    selectSearchCandidateFromMapTap(candidate)
+                                } label: {
+                                    ActiveMapAnnotationContent(title: candidate.name) {
+                                        SearchResultMarker(
+                                            candidate: candidate,
+                                            isSelected: true
+                                        )
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .modifier(
+                                    MapPinEntranceModifier(
+                                        isVisible: true,
+                                        delay: entranceDelay
+                                    )
+                                )
+                                .zIndex(MapAnnotationLayering.activeZIndex)
                             }
                         }
                     }
@@ -497,8 +566,10 @@ struct MapScreen: View {
                     .onChange(of: selectedMapFeature) { _, feature in
                         handleMapFeatureSelection(feature)
                     }
+                    .onMapCameraChange(frequency: .continuous) { context in
+                        handleMapCameraChange(context.region)
+                    }
                     .onMapCameraChange(frequency: .onEnd) { context in
-                        currentSearchRegion = context.region
                         handleFeaturedCameraChange(context.region)
                     }
                     .onTapGesture(coordinateSpace: .local) { point in
@@ -513,19 +584,16 @@ struct MapScreen: View {
                     .simultaneousGesture(
                         DragGesture(minimumDistance: MapHitTesting.panDismissalDistance, coordinateSpace: .local)
                             .onChanged { _ in
-                                handleMapPanChange()
+                                handleMapDragChange()
                             }
                             .onEnded { _ in
-                                handleMapPanEnd()
+                                handleMapDragEnd()
                             }
                     )
                     .simultaneousGesture(
                         MagnifyGesture(minimumScaleDelta: MapSelectionGesturePolicy.minimumMagnificationDelta)
                             .onChanged { _ in
                                 handleMapMagnificationChange()
-                            }
-                            .onEnded { _ in
-                                handleMapMagnificationEnd()
                             }
                     )
                     .simultaneousGesture(
@@ -832,7 +900,8 @@ struct MapScreen: View {
                 mapSearchTask?.cancel()
                 featuredViewportRefreshTask?.cancel()
                 mapPinTransitionTask?.cancel()
-                mapPanDismissalTask?.cancel()
+                mapInteractionClassificationTask?.cancel()
+                mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
                 compactCardReplacementTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
@@ -1201,7 +1270,6 @@ struct MapScreen: View {
         mapFeatureResolutionTask = nil
 
         guard selectedMapFeature != nil else { return }
-        ignoreNextMapFeatureClear = true
         selectedMapFeature = nil
     }
 
@@ -1251,87 +1319,128 @@ struct MapScreen: View {
 
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
         dismissMoreFilters()
+        cancelPendingMapTapDismissal()
         if ignoreNextMapTap {
             ignoreNextMapTap = false
             return
         }
         guard !isTapNearSelectableMarker(point, proxy: proxy) else { return }
+        let tapDate = Date.now
+        guard tapDate >= mapTapDismissalSuppressionUntil else { return }
 
-        let revision = mapSelectionRevision
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 80_000_000)
-            guard revision == mapSelectionRevision,
-                  selectedMapFeature == nil
-            else { return }
-
-            dismissCompactSelection()
+        if tapDate.timeIntervalSince(previousMapTapDate)
+            <= MapSelectionGesturePolicy.doubleTapRecognitionWindow {
+            previousMapTapDate = .distantPast
+            registerMapZoom()
+            return
         }
-    }
-
-    private func handleMapPanChange() {
-        guard hasSelectedProfile,
-              compactCardPhase != .dismissing
-        else { return }
-
-        isMapPanGestureActive = true
-        guard MapSelectionGesturePolicy.allowsPanDismissal(
-            isMagnifying: isMapMagnifying,
-            isSuppressed: isMapPanDismissalSuppressed
-        ), mapPanDismissalTask == nil
-        else { return }
+        previousMapTapDate = tapDate
 
         let revision = mapSelectionRevision
-        mapPanDismissalTask = Task { @MainActor in
+        let tapRegion = currentSearchRegion
+        mapTapDismissalTask = Task { @MainActor in
             do {
                 try await Task.sleep(
-                    nanoseconds: MapSelectionGesturePolicy.panDismissalDelayNanoseconds
+                    nanoseconds: MapSelectionGesturePolicy.tapDismissalDelayNanoseconds
                 )
             } catch {
                 return
             }
 
-            guard !Task.isCancelled,
-                  revision == mapSelectionRevision,
-                  MapSelectionGesturePolicy.allowsPanDismissal(
-                    isMagnifying: isMapMagnifying,
-                    isSuppressed: isMapPanDismissalSuppressed
-                  )
-            else {
-                mapPanDismissalTask = nil
+            if MapSelectionGesturePolicy.classify(
+                from: tapRegion,
+                to: currentSearchRegion
+            ) == .zoom {
+                mapTapDismissalTask = nil
+                registerMapZoom()
                 return
             }
 
-            mapPanDismissalTask = nil
-            handleMapPanStart()
+            guard !Task.isCancelled,
+                  revision == mapSelectionRevision,
+                  selectedMapFeature == nil,
+                  mapInteractionStartRegion == nil,
+                  Date.now >= mapTapDismissalSuppressionUntil
+            else {
+                mapTapDismissalTask = nil
+                return
+            }
+
+            mapTapDismissalTask = nil
+            requestCompactSelectionDismissal(trigger: .emptyMapTap)
         }
     }
 
-    private func handleMapPanEnd() {
-        isMapPanGestureActive = false
-        isMapPanDismissalSuppressed = false
+    private func handleMapCameraChange(_ region: MKCoordinateRegion) {
+        let previousRegion = currentSearchRegion
+        currentSearchRegion = region
+
+        let comparisonRegion = mapInteractionStartRegion ?? previousRegion
+        if MapSelectionGesturePolicy.classify(
+            from: comparisonRegion,
+            to: region
+        ) == .zoom {
+            registerMapZoom()
+        }
+    }
+
+    private func handleMapDragChange() {
+        guard mapInteractionStartRegion == nil else { return }
+
+        mapInteractionClassificationTask?.cancel()
+        mapInteractionClassificationTask = nil
+        mapInteractionStartRegion = currentSearchRegion
+        mapInteractionDidZoom = false
+    }
+
+    private func handleMapDragEnd() {
+        guard let startRegion = mapInteractionStartRegion else { return }
+
+        mapInteractionClassificationTask?.cancel()
+        let revision = mapSelectionRevision
+        mapInteractionClassificationTask = Task { @MainActor in
+            do {
+                try await Task.sleep(
+                    nanoseconds: MapSelectionGesturePolicy.cameraSettleDelayNanoseconds
+                )
+            } catch {
+                return
+            }
+
+            let interaction = MapSelectionGesturePolicy.classify(
+                from: startRegion,
+                to: currentSearchRegion
+            )
+            let preservesSelection = mapInteractionDidZoom || interaction == .zoom
+            mapInteractionStartRegion = nil
+            mapInteractionDidZoom = false
+            mapInteractionClassificationTask = nil
+
+            guard !Task.isCancelled,
+                  revision == mapSelectionRevision,
+                  !preservesSelection,
+                  interaction == .pan
+            else { return }
+
+            requestCompactSelectionDismissal(trigger: .oneFingerPan)
+        }
     }
 
     private func handleMapMagnificationChange() {
-        isMapMagnifying = true
-        isMapPanDismissalSuppressed = true
-        mapPanDismissalTask?.cancel()
-        mapPanDismissalTask = nil
+        registerMapZoom()
     }
 
-    private func handleMapMagnificationEnd() {
-        isMapMagnifying = false
-        if !isMapPanGestureActive {
-            isMapPanDismissalSuppressed = false
-        }
+    private func registerMapZoom() {
+        mapInteractionDidZoom = true
+        mapTapDismissalSuppressionUntil = Date.now.addingTimeInterval(
+            MapSelectionGesturePolicy.postZoomTapSuppressionDuration
+        )
+        cancelPendingMapTapDismissal()
     }
 
-    private func handleMapPanStart() {
-        guard hasSelectedProfile,
-              compactCardPhase != .dismissing
-        else { return }
-
-        dismissMoreFilters()
-        dismissCompactSelection()
+    private func cancelPendingMapTapDismissal() {
+        mapTapDismissalTask?.cancel()
+        mapTapDismissalTask = nil
     }
 
     private func handleMapLongPress(at point: CGPoint, proxy: MapProxy) -> Bool {
@@ -1745,6 +1854,13 @@ struct MapScreen: View {
             }
             compactCardReplacementTask = nil
         }
+    }
+
+    private func requestCompactSelectionDismissal(
+        trigger: MapSelectionDismissalTrigger
+    ) {
+        guard MapSelectionLifetimePolicy.shouldDismiss(for: trigger) else { return }
+        dismissCompactSelection()
     }
 
     private func dismissCompactSelection() {
@@ -2373,15 +2489,10 @@ struct MapScreen: View {
             dismissMoreFilters()
         }
         guard let feature else {
-            if ignoreNextMapFeatureClear {
-                ignoreNextMapFeatureClear = false
-            } else {
-                dismissCompactSelection()
-            }
+            requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)
             return
         }
 
-        ignoreNextMapFeatureClear = false
         mapSelectionRevision += 1
         resolveSelectedMapFeature(feature)
     }
@@ -2429,6 +2540,9 @@ struct MapScreen: View {
             return
         }
 
+        // Once MapKit resolves the tapped POI, rec.me owns the durable selected
+        // annotation. MapKit may clear its transient feature binding later.
+        clearNativeMapFeatureSelection()
         clearSearchTextForMapInteraction()
         replaceCompactSelectionIfNeeded {
             mapSearchCandidates = [candidate]
@@ -5276,6 +5390,40 @@ private struct MapMoreOptionChip: View {
     }
 }
 
+private struct ActiveMapAnnotationContent<Marker: View>: View {
+    let title: String
+    let marker: Marker
+
+    init(
+        title: String,
+        @ViewBuilder marker: () -> Marker
+    ) {
+        self.title = title
+        self.marker = marker()
+    }
+
+    var body: some View {
+        ZStack {
+            marker
+
+            Text(title)
+                .font(.system(size: MapPinVisualMetrics.activeTitleFontSize, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+                .fixedSize()
+                .shadow(color: Color.white.opacity(0.96), radius: 2)
+                .offset(
+                    y: MapPinVisualMetrics.activeTitleVerticalOffset(
+                        selectedScale: MapPinSelectionMotionStyle.selectedScale
+                    )
+                )
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .zIndex(1)
+        }
+    }
+}
+
 private struct SearchResultMarker: View {
     let candidate: PlaceCandidate
     let isSelected: Bool
@@ -5457,18 +5605,73 @@ enum MapPinVisualMetrics {
     static let secondaryOutlinePadding: CGFloat = -6
     static let wannaDashPattern: [CGFloat] = [1.5, 3.5]
     static let activeTitleClearance: CGFloat = 2
+    static let activeTitleFontSize: CGFloat = 13
+    static let activeTitleLineHeight: CGFloat = 16
+
+    static func activeTitleVerticalOffset(selectedScale: CGFloat) -> CGFloat {
+        (discDiameter * selectedScale / 2)
+            + activeTitleClearance
+            + (activeTitleLineHeight / 2)
+    }
+}
+
+enum MapCameraInteraction: Equatable {
+    case stationary
+    case pan
+    case zoom
 }
 
 enum MapSelectionGesturePolicy {
     static let minimumMagnificationDelta: CGFloat = 0.01
-    static let panDismissalDelayNanoseconds: UInt64 = 80_000_000
+    static let minimumZoomSpanChangeRatio = 0.005
+    static let minimumPanCenterChangeRatio = 0.002
+    static let tapDismissalDelayNanoseconds: UInt64 = 320_000_000
+    static let cameraSettleDelayNanoseconds: UInt64 = 120_000_000
+    static let postZoomTapSuppressionDuration: TimeInterval = 0.5
+    static let doubleTapRecognitionWindow: TimeInterval = 0.32
 
-    static func allowsPanDismissal(
-        isMagnifying: Bool,
-        isSuppressed: Bool
-    ) -> Bool {
-        !isMagnifying && !isSuppressed
+    static func classify(
+        from start: MKCoordinateRegion,
+        to end: MKCoordinateRegion
+    ) -> MapCameraInteraction {
+        let latitudeSpan = max(abs(start.span.latitudeDelta), .leastNonzeroMagnitude)
+        let longitudeSpan = max(abs(start.span.longitudeDelta), .leastNonzeroMagnitude)
+        let latitudeSpanChange = abs(end.span.latitudeDelta - start.span.latitudeDelta) / latitudeSpan
+        let longitudeSpanChange = abs(end.span.longitudeDelta - start.span.longitudeDelta) / longitudeSpan
+
+        if min(latitudeSpanChange, longitudeSpanChange) >= minimumZoomSpanChangeRatio {
+            return .zoom
+        }
+
+        let latitudeCenterChange = abs(end.center.latitude - start.center.latitude) / latitudeSpan
+        let longitudeCenterChange = abs(end.center.longitude - start.center.longitude) / longitudeSpan
+        if max(latitudeCenterChange, longitudeCenterChange) >= minimumPanCenterChangeRatio {
+            return .pan
+        }
+
+        return .stationary
     }
+}
+
+enum MapSelectionDismissalTrigger {
+    case emptyMapTap
+    case oneFingerPan
+    case nativeFeatureBindingCleared
+}
+
+enum MapSelectionLifetimePolicy {
+    static func shouldDismiss(for trigger: MapSelectionDismissalTrigger) -> Bool {
+        switch trigger {
+        case .emptyMapTap, .oneFingerPan:
+            true
+        case .nativeFeatureBindingCleared:
+            false
+        }
+    }
+}
+
+enum MapAnnotationLayering {
+    static let activeZIndex = 100.0
 }
 
 @MainActor
