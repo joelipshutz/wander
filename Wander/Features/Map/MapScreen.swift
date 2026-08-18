@@ -4105,22 +4105,22 @@ enum MapCompactCardPhase: Equatable {
 
 @MainActor
 enum MapCompactCardMotionStyle {
-    static let entranceDuration: TimeInterval = 0.42
-    static let dismissalDuration: TimeInterval = 0.34
-    static let replacementFadeOutDuration: TimeInterval = 0.12
-    static let nearbyFadeDuration: TimeInterval = 0.46
-    static let nearbyReturnFadeDuration: TimeInterval = 0.34
-    static let hiddenVerticalOffset: CGFloat = 340
+    static let entranceDuration: TimeInterval = 0.24
+    static let dismissalDuration: TimeInterval = 0.18
+    static let replacementFadeOutDuration: TimeInterval = 0.08
+    static let nearbyFadeDuration: TimeInterval = 0.16
+    static let nearbyReturnFadeDuration: TimeInterval = 0.16
+    static let hiddenVerticalOffset: CGFloat = 220
 
     static let entranceAnimation = Animation.spring(
         duration: entranceDuration,
-        bounce: 0.10
+        bounce: 0.05
     )
     static let dismissalAnimation = Animation.easeInOut(duration: dismissalDuration)
     static let replacementFadeOutAnimation = Animation.easeOut(
         duration: replacementFadeOutDuration
     )
-    static let replacementFadeInAnimation = Animation.easeIn(duration: 0.18)
+    static let replacementFadeInAnimation = Animation.easeIn(duration: 0.10)
     static let nearbyFadeAnimation = Animation.easeOut(duration: nearbyFadeDuration)
     static let nearbyReturnFadeAnimation = Animation.easeIn(duration: nearbyReturnFadeDuration)
     static let mapRecenterAnimation = Animation.easeInOut(duration: entranceDuration)
@@ -5991,8 +5991,8 @@ private struct MapPinReselectionBounceModifier: ViewModifier {
 enum MapPinSelectionMotionStyle {
     static let inactiveScale: CGFloat = 0.90
     static let selectedScale: CGFloat = 1.45
-    static let duration: TimeInterval = 0.55
-    static let bounce = 0.75
+    static let duration: TimeInterval = 0.26
+    static let bounce = 0.32
     static let animation = Animation.spring(duration: duration, bounce: bounce)
 }
 
