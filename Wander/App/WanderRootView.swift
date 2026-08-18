@@ -482,7 +482,8 @@ struct WanderRootView: View {
                 .tag(WanderTab.profile)
         }
         .tint(WanderTheme.terracotta.color)
-        .preferredColorScheme(mapAppearanceColorScheme)
+        .preferredColorScheme(.light)
+        .toolbarColorScheme(mapAppearanceColorScheme, for: .tabBar)
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(

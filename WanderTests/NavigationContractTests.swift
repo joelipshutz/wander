@@ -2330,6 +2330,16 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(WanderRootView.resolvedInitialDarkMap(from: ["Wander"]))
     }
 
+    func testDarkMapColorSchemeStaysScopedToMapAndNativeTabBar() throws {
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+
+        XCTAssertTrue(root.contains(".preferredColorScheme(.light)"))
+        XCTAssertTrue(root.contains(".toolbarColorScheme(mapAppearanceColorScheme, for: .tabBar)"))
+        XCTAssertFalse(root.contains(".preferredColorScheme(mapAppearanceColorScheme)"))
+    }
+
     @MainActor
     func testRootViewCanResolveAddPresentationForVisualQA() {
         XCTAssertTrue(

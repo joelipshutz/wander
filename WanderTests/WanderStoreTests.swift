@@ -8,6 +8,12 @@ private enum TestError: Error {
 
 @MainActor
 final class WanderStoreTests: XCTestCase {
+    func testDarkMapDefaultsOff() {
+        let store = WanderStore(fixtures: .seed())
+
+        XCTAssertFalse(store.isDarkMapEnabled)
+    }
+
     func testSwitchingAccountsDoesNotCarryPrivateProfileSettingsOrIdentity() {
         let first = LocalProfile(
             localID: "local_profile_current",
