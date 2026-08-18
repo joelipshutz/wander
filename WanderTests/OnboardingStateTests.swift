@@ -542,6 +542,58 @@ final class OnboardingStateTests: XCTestCase {
         )
     }
 
+    func testDebugReplaySurvivesEntitlementResolutionWithoutStartingUnauthorizedNUX() {
+        let pending = FirstVisitWalkthroughDebugReplayPolicy.resolve(
+            hasLocalReplayRequest: true,
+            isDebugSettingsEntitled: false,
+            isFeatureFlagResolutionPending: true
+        )
+        XCTAssertFalse(pending.isEntitledReplayRequested)
+        XCTAssertTrue(pending.isAwaitingEntitlementResolution)
+        XCTAssertFalse(pending.canRepairCompletedLocalJourney)
+        XCTAssertTrue(
+            pending.shouldPreserveLocalJourney,
+            "A queued tester replay must not be erased while its server entitlement is loading."
+        )
+
+        let entitled = FirstVisitWalkthroughDebugReplayPolicy.resolve(
+            hasLocalReplayRequest: true,
+            isDebugSettingsEntitled: true,
+            isFeatureFlagResolutionPending: false
+        )
+        XCTAssertTrue(entitled.isEntitledReplayRequested)
+        XCTAssertTrue(entitled.shouldPreserveLocalJourney)
+        XCTAssertFalse(entitled.isAwaitingEntitlementResolution)
+        XCTAssertTrue(entitled.canRepairCompletedLocalJourney)
+        XCTAssertFalse(
+            FirstVisitWalkthroughDebugReplayPolicy.shouldRepairCompletedLocalJourney(
+                entitled,
+                hasCompletedPrimaryJourney: false
+            ),
+            "An interrupted replay must resume from its checkpoint after a cold relaunch."
+        )
+        XCTAssertTrue(
+            FirstVisitWalkthroughDebugReplayPolicy.shouldRepairCompletedLocalJourney(
+                entitled,
+                hasCompletedPrimaryJourney: true
+            ),
+            "A replay corrupted by the old launch race must recover from its completed state."
+        )
+
+        let denied = FirstVisitWalkthroughDebugReplayPolicy.resolve(
+            hasLocalReplayRequest: true,
+            isDebugSettingsEntitled: false,
+            isFeatureFlagResolutionPending: false
+        )
+        XCTAssertFalse(denied.isEntitledReplayRequested)
+        XCTAssertFalse(denied.isAwaitingEntitlementResolution)
+        XCTAssertFalse(denied.canRepairCompletedLocalJourney)
+        XCTAssertFalse(
+            denied.shouldPreserveLocalJourney,
+            "A stale local request must not enable or preserve NUX for an account that is not entitled."
+        )
+    }
+
     func testWalkthroughEligibilityRetirementIsIdempotent() throws {
         let suiteName = "OnboardingStateTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
