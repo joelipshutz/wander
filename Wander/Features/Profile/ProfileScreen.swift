@@ -790,7 +790,7 @@ struct ProfileDetailView: View {
         ProfileActivityPresenter.items(
             visiblePlaces: profileVisiblePlaces,
             visits: store.placeVisits,
-            currentUserID: store.currentUser.id
+            currentUserID: profileID
         )
     }
 

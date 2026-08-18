@@ -3947,6 +3947,25 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(screen.components(separatedBy: "viewerProfile: store.currentUser").count - 1, 2)
     }
 
+    func testOtherUserProfileBuildsActivityForTheViewedMember() throws {
+        let screen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileScreen.swift")
+        )
+        let memberProfile = try sourceSection(
+            screen,
+            after: "struct ProfileDetailView: View {",
+            before: "private struct ProfileActivityHistoryScreen: View"
+        )
+        let activityItems = try sourceSection(
+            memberProfile,
+            after: "private var profileActivityItems: [ProfileActivityItem] {",
+            before: "private var selectedActivityItem: ProfileActivityItem?"
+        )
+
+        XCTAssertTrue(activityItems.contains("currentUserID: profileID"))
+        XCTAssertFalse(activityItems.contains("currentUserID: store.currentUser.id"))
+    }
+
     func testThirdLaunchDeviceLessonUsesACompactNonScrollingEditorialPanel() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent(
