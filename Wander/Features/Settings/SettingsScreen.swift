@@ -3,6 +3,7 @@ import UIKit
 
 struct SettingsScreen: View {
     let onNUXDebugSettingsChanged: () -> Void
+    let onDismiss: (() -> Void)?
 
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -14,13 +15,18 @@ struct SettingsScreen: View {
     @State private var isUpdatingPrivateProfile = false
     @State private var privacyErrorMessage: String?
 
-    init(onNUXDebugSettingsChanged: @escaping () -> Void = {}) {
+    init(
+        onNUXDebugSettingsChanged: @escaping () -> Void = {},
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
+        self.onDismiss = onDismiss
     }
 
     var body: some View {
         ProfileSettingsHome(
-            onNUXDebugSettingsChanged: onNUXDebugSettingsChanged
+            onNUXDebugSettingsChanged: onNUXDebugSettingsChanged,
+            onDismiss: onDismiss
         )
     }
 
@@ -281,9 +287,6 @@ struct SettingsScreen: View {
                 auth.requireSignIn(for: .manageNotifications) {
                     activeDetail = .notifications
                 }
-            }
-            SettingsRow(title: "Data and sync", subtitle: "\(store.pendingSyncCount) pending local item\(store.pendingSyncCount == 1 ? "" : "s")", systemImage: "arrow.triangle.2.circlepath") {
-                auth.presentGate(for: .syncPending)
             }
         }
     }

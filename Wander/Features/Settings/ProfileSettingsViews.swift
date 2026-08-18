@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileSettingsHome: View {
     let onNUXDebugSettingsChanged: () -> Void
+    let onDismiss: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
@@ -18,77 +19,55 @@ struct ProfileSettingsHome: View {
     @State private var isNUXEnabled = false
     @State private var isNUXReplayQueued = false
     @State private var selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.productionDefault.rawValue
+    @State private var settingsDragOffset: CGFloat = 0
 
     private let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
     private let placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
 
-    init(onNUXDebugSettingsChanged: @escaping () -> Void = {}) {
+    init(
+        onNUXDebugSettingsChanged: @escaping () -> Void = {},
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
+        self.onDismiss = onDismiss
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                accountSection
-                mapSection
-                privacySection
-                supportSection
-                if isDebugSettingsEntitled {
-                    debugSettingsSection
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        showsDeleteWarning = true
-                    } label: {
-                        Label(isDeleting ? "deleting account..." : "delete my account", systemImage: "trash")
-                            .font(.system(size: 15, weight: .black))
-                            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
-                    }
-                    .disabled(isDeleting || !auth.isSignedIn)
-                }
-
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(WanderTheme.stateError.color)
-                    }
-                }
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                settingsHeader
+                settingsList
             }
-            .scrollContentBackground(.hidden)
-            .background(WanderTheme.canvasWarm.color)
-            .navigationTitle("settings")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("done") { dismiss() }
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                }
-            }
-            .sheet(isPresented: $showsAccountManagement) {
-                ClerkAccountManagementView()
-                    .onDisappear { Task { await auth.refreshSession() } }
-            }
-            .sheet(isPresented: $showsNotifications) {
-                NotificationSettingsSheet()
-                    .environmentObject(auth)
-                    .environmentObject(backend)
-                    .environmentObject(pushNotifications)
-            }
-            .alert("You are deleting your account", isPresented: $showsDeleteWarning) {
-                Button("Yes", role: .destructive) { showsFinalDeleteWarning = true }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Do you want to continue?")
-            }
-            .alert("Are you sure you want to permanently delete your account?", isPresented: $showsFinalDeleteWarning) {
-                Button("Yes, delete", role: .destructive) { Task { await deleteAccount() } }
-                Button("No, cancel", role: .cancel) {}
-            } message: {
-                Text("You will not be able to recover the data associated with your account.")
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
+            .offset(x: settingsDragOffset)
+            .contentShape(Rectangle())
+            .simultaneousGesture(interactiveDismissGesture(containerWidth: geometry.size.width))
+            .accessibilityIdentifier("settings.screen")
+        }
+        .tint(WanderTheme.terracotta.color)
+        .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showsAccountManagement) {
+            ClerkAccountManagementView()
+                .onDisappear { Task { await auth.refreshSession() } }
+        }
+        .sheet(isPresented: $showsNotifications) {
+            NotificationSettingsSheet()
+                .environmentObject(auth)
+                .environmentObject(backend)
+                .environmentObject(pushNotifications)
+        }
+        .alert("You are deleting your account", isPresented: $showsDeleteWarning) {
+            Button("Yes", role: .destructive) { showsFinalDeleteWarning = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Do you want to continue?")
+        }
+        .alert("Are you sure you want to permanently delete your account?", isPresented: $showsFinalDeleteWarning) {
+            Button("Yes, delete", role: .destructive) { Task { await deleteAccount() } }
+            Button("No, cancel", role: .cancel) {}
+        } message: {
+            Text("You will not be able to recover the data associated with your account.")
         }
         .onChange(of: debugSettingsUserID, initial: true) { _, _ in
             refreshDebugSettingsState()
@@ -100,43 +79,106 @@ struct ProfileSettingsHome: View {
         }
     }
 
+    private var settingsHeader: some View {
+        HStack(alignment: .center, spacing: WanderTheme.spacing4) {
+            Button(action: closeSettings) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+                    .background(WanderTheme.surfaceBone.color, in: Circle())
+            }
+            .accessibilityLabel("Back")
+            .accessibilityIdentifier("settings.back")
+
+            Text("Settings")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .accessibilityAddTraits(.isHeader)
+
+            Spacer()
+        }
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.top, WanderTheme.spacing2)
+        .padding(.bottom, WanderTheme.spacing3)
+        .background(WanderTheme.canvasWarm.color)
+    }
+
+    private var settingsList: some View {
+        List {
+            accountSection
+            mapSection
+            notificationsSection
+            privacySection
+            if isDebugSettingsEntitled {
+                debugSettingsSection
+            }
+
+            if let errorMessage {
+                Section {
+                    Text(errorMessage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.stateError.color)
+                }
+            }
+
+            accountActionsSection
+            resourcesSection
+        }
+        .scrollContentBackground(.hidden)
+        .background(WanderTheme.canvasWarm.color)
+    }
+
+    private func interactiveDismissGesture(containerWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .onChanged { value in
+                guard value.startLocation.x <= 28,
+                      value.translation.width > 0,
+                      abs(value.translation.width) > abs(value.translation.height)
+                else { return }
+
+                settingsDragOffset = value.translation.width
+            }
+            .onEnded { value in
+                guard settingsDragOffset > 0 else { return }
+
+                let shouldDismiss = value.translation.width >= containerWidth * 0.3
+                    || value.predictedEndTranslation.width >= containerWidth * 0.55
+
+                guard shouldDismiss else {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        settingsDragOffset = 0
+                    }
+                    return
+                }
+
+                withAnimation(.easeOut(duration: 0.14)) {
+                    settingsDragOffset = containerWidth
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    closeSettings()
+                }
+            }
+    }
+
     @ViewBuilder
     private var accountSection: some View {
-        Section("account") {
+        Section("Account") {
             switch auth.state {
             case .signedIn(let session):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
-                accountRow("change email", value: session.email, icon: "envelope")
-                accountRow("change phone number", value: session.phoneNumber ?? "optional", icon: "phone")
-                accountRow("change password", value: nil, icon: "key")
-
-                Button {
-                    Task {
-                        await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
-                        try? await auth.signOut()
-                    }
-                } label: {
-                    Label(auth.isSigningOut ? "signing out..." : "sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                        .foregroundStyle(WanderTheme.stateError.color)
-                }
-                .disabled(auth.isSigningOut)
+                accountRow("Change email", value: session.email, icon: "envelope")
+                accountRow("Change phone number", value: session.phoneNumber ?? "Optional", icon: "phone")
+                accountRow("Change password", value: nil, icon: "key")
             case .offline(let session, _):
                 ProfileSettingsIdentityRow(session: session, avatarURL: store.currentUser.avatarURL)
                 Label("Saved map available offline", systemImage: "wifi.slash")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(WanderTheme.textMuted.color)
-
-                Button {
-                    Task { try? await auth.signOut() }
-                } label: {
-                    Label(auth.isSigningOut ? "signing out..." : "sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                        .foregroundStyle(WanderTheme.stateError.color)
-                }
-                .disabled(auth.isSigningOut)
             case .signedOut:
-                Button("sign in") { auth.beginSignIn() }
+                Button("Sign in") { auth.beginSignIn() }
             case .loading:
-                ProgressView("checking account...")
+                ProgressView("Checking account...")
             case .unavailable(let message):
                 Text(message).foregroundStyle(WanderTheme.stateError.color)
             }
@@ -144,18 +186,24 @@ struct ProfileSettingsHome: View {
     }
 
     private var privacySection: some View {
-        Section("privacy and safety") {
+        Section("Privacy and safety") {
             NavigationLink {
                 ProfilePrivacyTrustScreen()
             } label: {
-                Label("privacy and trust", systemImage: "shield.lefthalf.filled")
+                Label("Privacy and trust", systemImage: "shield.lefthalf.filled")
             }
 
             NavigationLink {
                 BlockedMutedScreen()
             } label: {
-                Label("blocked and muted accounts", systemImage: "person.crop.circle.badge.xmark")
+                Label("Blocked and muted accounts", systemImage: "person.crop.circle.badge.xmark")
             }
+
+            SettingsExternalLink(
+                title: "Privacy choices",
+                icon: "slider.horizontal.3",
+                destination: RecmeSettingsWebDestination.privacyChoices
+            )
         }
     }
 
@@ -165,7 +213,7 @@ struct ProfileSettingsHome: View {
                 DefaultMapFilterSettingsScreen()
             } label: {
                 HStack {
-                    Label("default map filter", systemImage: "map")
+                    Label("Default map filter", systemImage: "map")
                     Spacer()
                     Label(store.defaultMapFilter.title, systemImage: store.defaultMapFilter.systemImage)
                         .foregroundStyle(WanderTheme.textMuted.color)
@@ -174,21 +222,21 @@ struct ProfileSettingsHome: View {
             .tint(WanderTheme.terracotta.color)
             .accessibilityIdentifier("settings.map.defaultFilter")
         } header: {
-            Text("map")
+            Text("Map")
         } footer: {
             Text("Used whenever the map opens or resets on this device.")
         }
     }
 
-    private var supportSection: some View {
-        Section("app") {
+    private var notificationsSection: some View {
+        Section("Notifications") {
             Button {
                 auth.requireSignIn(for: .manageNotifications) { showsNotifications = true }
             } label: {
                 HStack {
-                    Label("notifications", systemImage: "bell")
+                    Label("Notifications", systemImage: "bell")
                     Spacer()
-                    Text(pushNotifications.statusTitle.lowercased())
+                    Text(pushNotifications.statusTitle)
                         .foregroundStyle(WanderTheme.textMuted.color)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -196,44 +244,51 @@ struct ProfileSettingsHome: View {
                 }
             }
             .foregroundStyle(WanderTheme.textInk.color)
+        }
+    }
 
-            HStack {
-                Label("data and sync", systemImage: "arrow.triangle.2.circlepath")
-                Spacer()
-                Text("\(store.pendingSyncCount) pending")
-                    .foregroundStyle(WanderTheme.textMuted.color)
+    @ViewBuilder
+    private var accountActionsSection: some View {
+        Section("Account actions") {
+            switch auth.state {
+            case .signedIn, .offline:
+                Button {
+                    Task { await signOut() }
+                } label: {
+                    destructiveSettingsLabel(
+                        auth.isSigningOut ? "Signing out..." : "Sign out",
+                        icon: "rectangle.portrait.and.arrow.right",
+                        color: WanderTheme.stateError.color
+                    )
+                }
+                .disabled(auth.isSigningOut)
+                .accessibilityIdentifier("settings.account.signOut")
+            case .signedOut, .loading, .unavailable:
+                EmptyView()
             }
 
-            settingsLink(
-                "import help",
-                icon: "square.and.arrow.down",
-                destination: ImportHelpDestination.url
-            )
-            settingsLink(
-                "help and support",
-                icon: "questionmark.circle",
-                destination: RecmeSettingsWebDestination.support
-            )
-            settingsLink(
-                "privacy policy",
-                icon: "hand.raised",
-                destination: RecmeSettingsWebDestination.privacy
-            )
-            settingsLink(
-                "terms of use",
-                icon: "doc.text",
-                destination: RecmeSettingsWebDestination.terms
-            )
-            settingsLink(
-                "community guidelines",
-                icon: "person.3",
-                destination: RecmeSettingsWebDestination.community
-            )
-            settingsLink(
-                "privacy choices",
-                icon: "slider.horizontal.3",
-                destination: RecmeSettingsWebDestination.privacyChoices
-            )
+            Button(role: .destructive) {
+                showsDeleteWarning = true
+            } label: {
+                destructiveSettingsLabel(
+                    isDeleting ? "Deleting account..." : "Delete my account",
+                    icon: "trash",
+                    color: .red
+                )
+            }
+            .disabled(isDeleting || !auth.isSignedIn)
+            .accessibilityIdentifier("settings.account.delete")
+        }
+    }
+
+    private var resourcesSection: some View {
+        Section {
+            NavigationLink {
+                SettingsResourcesScreen()
+            } label: {
+                Label("Resources", systemImage: "books.vertical")
+            }
+            .accessibilityIdentifier("settings.resources")
         }
     }
 
@@ -251,7 +306,7 @@ struct ProfileSettingsHome: View {
     }
 
     private var debugSettingsSection: some View {
-        Section("debug settings") {
+        Section("Debug settings") {
             Toggle(
                 isOn: Binding(
                     get: { isNUXEnabled },
@@ -265,7 +320,7 @@ struct ProfileSettingsHome: View {
                     }
                 )
             ) {
-                Label("first-visit NUX", systemImage: "sparkles.rectangle.stack")
+                Label("First-visit NUX", systemImage: "sparkles.rectangle.stack")
             }
             .tint(WanderTheme.terracotta.color)
             .accessibilityIdentifier("settings.debug.firstVisitNUX")
@@ -290,7 +345,7 @@ struct ProfileSettingsHome: View {
                     Text(variant.testerLabel).tag(variant.rawValue)
                 }
             } label: {
-                Label("place button style", systemImage: "rectangle.split.2x1")
+                Label("Place button style", systemImage: "rectangle.split.2x1")
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("settings.debug.placeActionVariant")
@@ -327,32 +382,23 @@ struct ProfileSettingsHome: View {
             .rawValue
     }
 
-    private func settingsLink(
-        _ title: String,
-        icon: String,
-        destination: URL
-    ) -> some View {
-        Link(destination: destination) {
-            HStack {
-                Label(title, systemImage: icon)
-                Spacer()
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-        }
-        .foregroundStyle(WanderTheme.textInk.color)
-    }
-
     private func accountRow(_ title: String, value: String?, icon: String) -> some View {
         Button { showsAccountManagement = true } label: {
             HStack(spacing: WanderTheme.spacing3) {
-                Label(title, systemImage: icon)
-                Spacer()
+                Label {
+                    Text(title)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                } icon: {
+                    Image(systemName: icon)
+                }
+                .layoutPriority(1)
+                Spacer(minLength: WanderTheme.spacing2)
                 if let value {
                     Text(value)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .bold))
@@ -360,6 +406,33 @@ struct ProfileSettingsHome: View {
             }
         }
         .foregroundStyle(WanderTheme.textInk.color)
+    }
+
+    private func destructiveSettingsLabel(_ title: String, icon: String, color: Color) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .regular))
+                .frame(width: 22)
+            Text(title)
+        }
+        .foregroundStyle(color)
+        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+    }
+
+    private func closeSettings() {
+        if let onDismiss {
+            onDismiss()
+        } else {
+            dismiss()
+        }
+    }
+
+    @MainActor
+    private func signOut() async {
+        if case .signedIn = auth.state {
+            await pushNotifications.unregisterStoredDeviceTokenIfPossible(backend: backend)
+        }
+        try? await auth.signOut()
     }
 
     @MainActor
@@ -380,7 +453,7 @@ struct ProfileSettingsHome: View {
                 OnboardingCompletionStore().clear(for: deletingUserID)
             }
             store.resetAfterAccountDeletion()
-            dismiss()
+            closeSettings()
         } catch {
             errorMessage = "Your account could not be deleted. Nothing was removed. Please try again."
         }
@@ -437,8 +510,46 @@ private struct DefaultMapFilterSettingsScreen: View {
         }
         .scrollContentBackground(.hidden)
         .background(WanderTheme.canvasWarm.color)
-        .navigationTitle("default map filter")
+        .navigationTitle("Default map filter")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+private struct SettingsResourcesScreen: View {
+    var body: some View {
+        List {
+            SettingsExternalLink(
+                title: "Import help",
+                icon: "square.and.arrow.down",
+                destination: ImportHelpDestination.url
+            )
+            SettingsExternalLink(
+                title: "Help and support",
+                icon: "questionmark.circle",
+                destination: RecmeSettingsWebDestination.support
+            )
+            SettingsExternalLink(
+                title: "Privacy policy",
+                icon: "hand.raised",
+                destination: RecmeSettingsWebDestination.privacy
+            )
+            SettingsExternalLink(
+                title: "Terms of use",
+                icon: "doc.text",
+                destination: RecmeSettingsWebDestination.terms
+            )
+            SettingsExternalLink(
+                title: "Community guidelines",
+                icon: "person.3",
+                destination: RecmeSettingsWebDestination.community
+            )
+        }
+        .scrollContentBackground(.hidden)
+        .background(WanderTheme.canvasWarm.color)
+        .navigationTitle("Resources")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
     }
 }
 
@@ -448,6 +559,25 @@ private enum RecmeSettingsWebDestination {
     static let terms = URL(string: "https://getrec.me/terms")!
     static let community = URL(string: "https://getrec.me/community")!
     static let privacyChoices = URL(string: "https://getrec.me/privacy-choices")!
+}
+
+private struct SettingsExternalLink: View {
+    let title: String
+    let icon: String
+    let destination: URL
+
+    var body: some View {
+        Link(destination: destination) {
+            HStack {
+                Label(title, systemImage: icon)
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WanderTheme.textMuted.color)
+            }
+        }
+        .foregroundStyle(WanderTheme.textInk.color)
+    }
 }
 
 private struct ProfileSettingsIdentityRow: View {
@@ -529,7 +659,7 @@ struct ProfilePrivacyTrustScreen: View {
                 .disabled(store.isPrivateProfile)
             }
 
-            Section("how privacy works") {
+            Section("How privacy works") {
                 ForEach(SettingsTrustSurface.facts) { fact in
                     HStack(alignment: .top, spacing: WanderTheme.spacing3) {
                         Image(systemName: fact.icon)
@@ -557,8 +687,9 @@ struct ProfilePrivacyTrustScreen: View {
         }
         .scrollContentBackground(.hidden)
         .background(WanderTheme.canvasWarm.color)
-        .navigationTitle("privacy and trust")
+        .navigationTitle("Privacy and trust")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .alert(
             SettingsProfilePrivacySurface.warningTitle(enabling: pendingPrivateProfileValue ?? false),
             isPresented: $showsWarning
@@ -651,7 +782,7 @@ struct BlockedMutedScreen: View {
                                 .foregroundStyle(WanderTheme.textMuted.color)
                         }
                         Spacer()
-                        Button(selectedTab == .blocked ? "unblock" : "unmute") {
+                        Button(selectedTab == .blocked ? "Unblock" : "Unmute") {
                             auth.requireSignIn(for: .manageBlocks) {
                                 Task {
                                     if selectedTab == .blocked {
@@ -672,8 +803,9 @@ struct BlockedMutedScreen: View {
             }
         }
         .background(WanderTheme.canvasWarm.color)
-        .navigationTitle("blocked and muted")
+        .navigationTitle("Blocked and muted")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .task {
             await store.refreshRemoteBlocks(backend: backend)
             await store.refreshRemoteMutes(backend: backend)

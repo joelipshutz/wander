@@ -714,7 +714,6 @@ private struct ProfileSettingsRedesignMockup: View {
             SettingsGroupMockup(title: "app") {
                 SettingsNavigationRow(systemImage: "bell.fill", title: "Notifications")
                 SettingsDivider()
-                SettingsNavigationRow(systemImage: "arrow.triangle.2.circlepath", title: "Data & Sync")
             }
 
             Button(action: {}) {

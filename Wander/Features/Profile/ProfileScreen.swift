@@ -30,6 +30,7 @@ struct ProfileScreen: View {
     @State private var profileInsightsCache = ProfileInsightsCache()
     @State private var activeCalendarLaunchRequest: WanderProfileCalendarLaunchRequest?
     @State private var handledPresentationResetRequestID: UUID?
+    @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
 
     @Binding private var visitInvitationInboxRequestID: UUID?
     private let presentationResetRequest: WanderPresentationResetRequest?
@@ -82,7 +83,7 @@ struct ProfileScreen: View {
                 editAction: { showsEditProfile = true },
                 settingsAction: {
                     walkthroughs.perform(.profileSettings)
-                    showsSettings = true
+                    presentSettings()
                 },
                 shareAction: {
                     walkthroughs.perform(.profileShare)
@@ -114,22 +115,21 @@ struct ProfileScreen: View {
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest
             )
-                .sheet(
-                    isPresented: $showsSettings,
-                    onDismiss: onSettingsDidDismiss
-                ) {
-                    WanderRootPresentationLifecycle(
-                        surface: .profileSettings,
-                        onPresent: onSettingsPresentation,
-                        onDismiss: onSettingsWillDismiss
-                    ) {
-                        SettingsScreen()
-                            .environmentObject(store)
-                            .environmentObject(auth)
-                            .environmentObject(backend)
-                            .environmentObject(pushNotifications)
+                .accessibilityHidden(showsSettings)
+                .allowsHitTesting(!showsSettings)
+                .overlay {
+                    if showsSettings {
+                        SettingsScreen(onDismiss: dismissSettings)
+                        .environmentObject(store)
+                        .environmentObject(auth)
+                        .environmentObject(backend)
+                        .environmentObject(pushNotifications)
+                        .transition(.move(edge: .trailing))
+                        .zIndex(1)
+                        .onAppear(perform: beginSettingsPresentationLifecycle)
                     }
                 }
+                .toolbar(showsSettings ? .hidden : .visible, for: .tabBar)
                 .sheet(isPresented: $showsProfileCamera) {
                     ProfileCameraPicker { image in
                         Task {
@@ -168,6 +168,8 @@ struct ProfileScreen: View {
                 }
                 .onChange(of: showsSettings) { _, isShowing in
                     if !isShowing {
+                        endSettingsPresentationLifecycle()
+                        onSettingsDidDismiss()
                         walkthroughs.activate(.profile)
                     }
                 }
@@ -287,6 +289,31 @@ struct ProfileScreen: View {
         placeCollectionRoute = nil
         showsVisitInvitations = false
         showsEditProfile = false
+    }
+
+    private func presentSettings() {
+        withAnimation(.easeOut(duration: 0.24)) {
+            showsSettings = true
+        }
+    }
+
+    private func dismissSettings() {
+        withAnimation(.easeOut(duration: 0.22)) {
+            showsSettings = false
+        }
+    }
+
+    private func beginSettingsPresentationLifecycle() {
+        guard settingsPresentationToken == nil else { return }
+        let token = WanderDeepLinkPresentationToken(surface: .profileSettings)
+        settingsPresentationToken = token
+        onSettingsPresentation(token)
+    }
+
+    private func endSettingsPresentationLifecycle() {
+        guard let token = settingsPresentationToken else { return }
+        settingsPresentationToken = nil
+        onSettingsWillDismiss(token)
     }
 
     private func completeCalendarLaunchRequest(_ id: UUID) {
@@ -455,7 +482,7 @@ struct ProfileScreen: View {
                 Spacer()
 
                 Button {
-                    showsSettings = true
+                    presentSettings()
                 } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 18, weight: .bold))

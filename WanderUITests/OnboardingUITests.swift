@@ -1510,6 +1510,59 @@ final class OnboardingUITests: XCTestCase {
         add(collapsedScreenshot)
     }
 
+    func testSettingsUsesFullPageProfileOverlayAndInteractiveEdgeSwipe() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest",
+            "-WanderUseDemoFixtures",
+            "-WanderInitialTab",
+            "profile",
+        ]
+        app.launch()
+
+        let settingsButton = app.buttons["Settings"]
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 8))
+        settingsButton.tap()
+
+        let settingsScreen = app.descendants(matching: .any)["settings.screen"]
+        XCTAssertTrue(settingsScreen.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Settings"].exists)
+        let backButton = app.buttons["Back"]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 3))
+        XCTAssertLessThan(backButton.frame.midX, app.frame.midX)
+        XCTAssertFalse(app.buttons["Done"].exists)
+        XCTAssertFalse(app.buttons["Profile"].isHittable)
+
+        let fullPageScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        fullPageScreenshot.name = "Settings full-page Profile overlay"
+        fullPageScreenshot.lifetime = .keepAlways
+        add(fullPageScreenshot)
+
+        let resources = app.descendants(matching: .any)["settings.resources"]
+        for _ in 0..<8 where !resources.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(resources.isHittable)
+
+        let resourcesScreenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        resourcesScreenshot.name = "Settings Resources unobstructed"
+        resourcesScreenshot.lifetime = .keepAlways
+        add(resourcesScreenshot)
+
+        let leftEdge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        let rightSide = app.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5))
+        leftEdge.press(
+            forDuration: 0.1,
+            thenDragTo: rightSide,
+            withVelocity: .slow,
+            thenHoldForDuration: 0.1
+        )
+
+        XCTAssertTrue(settingsScreen.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Profile"].isHittable)
+    }
+
     func testFloatingPlaceActionsStayVisibleAndOpenThePreselectedLegacyEditor() {
         let app = XCUIApplication()
         app.launchArguments = [

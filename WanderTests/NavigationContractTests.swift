@@ -1497,14 +1497,14 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderBackend.swift")
         )
 
-        XCTAssertTrue(profileSettings.contains("Section(\"debug settings\")"))
+        XCTAssertTrue(profileSettings.contains("Section(\"Debug settings\")"))
         XCTAssertTrue(profileSettings.contains("DebugSettingsAccessPolicy.isEntitled("))
         XCTAssertTrue(profileSettings.contains("Every Simulator build exposes this local tester surface"))
         XCTAssertTrue(backend.contains("#if targetEnvironment(simulator)"))
         XCTAssertTrue(backend.contains("isSimulator || serverFlag == true"))
-        XCTAssertTrue(profileSettings.contains("Label(\"first-visit NUX\""))
+        XCTAssertTrue(profileSettings.contains("Label(\"First-visit NUX\""))
         XCTAssertTrue(profileSettings.contains("settings.debug.firstVisitNUX"))
-        XCTAssertTrue(profileSettings.contains("Label(\"place button style\""))
+        XCTAssertTrue(profileSettings.contains("Label(\"Place button style\""))
         XCTAssertTrue(profileSettings.contains("settings.debug.placeActionVariant"))
         XCTAssertTrue(profileSettings.contains("PlaceProfileFloatingActionVariant.allCases"))
         XCTAssertTrue(profileSettings.contains("placeActionDebugPreferences.setVariant"))
@@ -2845,13 +2845,131 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(settings.contains("Label(\"default map filter\", systemImage: \"map\")"))
+        XCTAssertTrue(settings.contains("Label(\"Default map filter\", systemImage: \"map\")"))
         XCTAssertTrue(settings.contains("DefaultMapFilterSettingsScreen()"))
         XCTAssertTrue(settings.contains("ForEach(MapSource.allCases)"))
         XCTAssertTrue(settings.contains("Text(source.subtitle)"))
         XCTAssertTrue(settings.contains("store.defaultMapFilter = source"))
         XCTAssertTrue(settings.contains("settings.map.defaultFilter"))
         XCTAssertTrue(settings.contains("Used whenever the map opens or resets on this device."))
+    }
+
+    func testProfileSettingsUseBrandTintProfileBackedOverlayAndRequestedHierarchy() throws {
+        let settings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/ProfileSettingsViews.swift"
+            )
+        )
+        let legacySettings = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Settings/SettingsScreen.swift"
+            )
+        )
+        let profileMockups = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/ProfileRedesignMockups.swift"
+            )
+        )
+        let profile = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/ProfileScreen.swift"
+            )
+        )
+        let root = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
+        )
+
+        XCTAssertFalse(profile.contains(".navigationDestination(isPresented: $showsSettings)"))
+        XCTAssertTrue(profile.contains("if showsSettings {"))
+        XCTAssertTrue(profile.contains("SettingsScreen(onDismiss: dismissSettings)"))
+        XCTAssertTrue(profile.contains(".accessibilityHidden(showsSettings)"))
+        XCTAssertTrue(profile.contains(".allowsHitTesting(!showsSettings)"))
+        XCTAssertTrue(profile.contains(".transition(.move(edge: .trailing))"))
+        XCTAssertTrue(profile.contains(".toolbar(showsSettings ? .hidden : .visible, for: .tabBar)"))
+        XCTAssertTrue(profile.contains("onSettingsDidDismiss()"))
+        XCTAssertTrue(root.contains("NavigationStack {\n                        SettingsScreen("))
+
+        XCTAssertTrue(settings.contains(".tint(WanderTheme.terracotta.color)"))
+        XCTAssertTrue(settings.contains("Text(\"Settings\")"))
+        XCTAssertTrue(settings.contains(".toolbar(.hidden, for: .navigationBar)"))
+        XCTAssertFalse(settings.contains(".toolbar(.hidden, for: .tabBar)"))
+        XCTAssertTrue(settings.contains("Image(systemName: \"chevron.left\")"))
+        XCTAssertTrue(settings.contains(".accessibilityLabel(\"Back\")"))
+        XCTAssertFalse(settings.contains("Button(\"done\")"))
+        XCTAssertTrue(settings.contains("DragGesture(minimumDistance: 8, coordinateSpace: .global)"))
+        XCTAssertTrue(settings.contains("value.startLocation.x <= 28"))
+        XCTAssertTrue(settings.contains("settingsDragOffset = value.translation.width"))
+        XCTAssertTrue(settings.contains("settingsDragOffset = containerWidth"))
+        XCTAssertTrue(settings.contains("DispatchQueue.main.asyncAfter"))
+        XCTAssertTrue(settings.contains("if let onDismiss"))
+
+        let header = try XCTUnwrap(
+            settings.components(separatedBy: "private var settingsHeader").last?
+                .components(separatedBy: "private var settingsList").first
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(header.range(of: "Button(action: closeSettings)")).lowerBound,
+            try XCTUnwrap(header.range(of: "Text(\"Settings\")")).lowerBound
+        )
+
+        XCTAssertTrue(settings.contains("Section(\"Account\")"))
+        XCTAssertTrue(settings.contains("Section(\"Privacy and safety\")"))
+        XCTAssertTrue(settings.contains("Section(\"Notifications\")"))
+        XCTAssertFalse(settings.contains("Section(\"App\")"))
+        XCTAssertTrue(settings.contains("Section(\"Account actions\")"))
+        XCTAssertTrue(settings.contains("Label(\"Resources\", systemImage: \"books.vertical\")"))
+
+        let list = try XCTUnwrap(
+            settings.components(separatedBy: "private var settingsList").last?
+                .components(separatedBy: "private func interactiveDismissGesture").first
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(list.range(of: "notificationsSection")).lowerBound,
+            try XCTUnwrap(list.range(of: "privacySection")).lowerBound
+        )
+
+        let actions = try XCTUnwrap(
+            settings.components(separatedBy: "private var accountActionsSection").last?
+                .components(separatedBy: "private var resourcesSection").first
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(actions.range(of: "\"Sign out\"")).lowerBound,
+            try XCTUnwrap(actions.range(of: "\"Delete my account\"")).lowerBound
+        )
+        XCTAssertTrue(actions.contains("icon: \"trash\""))
+        XCTAssertTrue(actions.contains("color: .red"))
+        XCTAssertTrue(settings.contains(".font(.system(size: 16, weight: .regular))"))
+
+        let privacy = try XCTUnwrap(
+            settings.components(separatedBy: "private var privacySection").last?
+                .components(separatedBy: "private var mapSection").first
+        )
+        XCTAssertLessThan(
+            try XCTUnwrap(privacy.range(of: "Blocked and muted accounts")).lowerBound,
+            try XCTUnwrap(privacy.range(of: "Privacy choices")).lowerBound
+        )
+
+        let resources = try XCTUnwrap(
+            settings.components(separatedBy: "private struct SettingsResourcesScreen").last?
+                .components(separatedBy: "private enum RecmeSettingsWebDestination").first
+        )
+        for title in [
+            "Import help",
+            "Help and support",
+            "Privacy policy",
+            "Terms of use",
+            "Community guidelines"
+        ] {
+            XCTAssertTrue(resources.contains("title: \"\(title)\""))
+        }
+        XCTAssertFalse(resources.contains("Privacy choices"))
+
+        XCTAssertFalse(settings.localizedCaseInsensitiveContains("data and sync"))
+        XCTAssertFalse(legacySettings.localizedCaseInsensitiveContains("data and sync"))
+        XCTAssertFalse(profileMockups.localizedCaseInsensitiveContains("data & sync"))
+        XCTAssertTrue(settings.contains("accountRow(\"Change email\", value: session.email"))
+        XCTAssertTrue(settings.contains(".fixedSize(horizontal: true, vertical: false)"))
+        XCTAssertTrue(settings.contains(".truncationMode(.tail)"))
     }
 
     @MainActor
