@@ -1,0 +1,24 @@
+{
+  "issue": "REC-289",
+  "capture_source": "supplied physical-device screenshot plus the current simultaneous map gesture path",
+  "state_server_capture": "unavailable: this repository intentionally has no DebugBridge or GET /state/snapshot integration",
+  "screenshot_capture": "not copied into the repository; the supplied screenshot remains outside the worktree",
+  "precondition": {
+    "selected_place_id": "selected-place-a",
+    "compact_card_phase": "presented",
+    "selected_pin_scale": 1.45
+  },
+  "action": "pinch zoom the map without tapping empty space or performing a one-finger pan",
+  "buggy_result": {
+    "selected_place_id": null,
+    "compact_card_phase": "dismissing"
+  },
+  "expected_result": {
+    "selected_place_id": "selected-place-a",
+    "compact_card_phase": "presented",
+    "pinch_zoom_preserves_selection": true,
+    "empty_map_tap_dismisses_selection": true,
+    "one_finger_pan_dismisses_selection": true,
+    "active_pin_title_clearance_points": 2
+  }
+}

@@ -46,7 +46,6 @@ struct PlaceProfileMapSurface: View {
             .padding(.horizontal, WanderTheme.spacing3)
             .padding(.bottom, WanderTheme.spacing3)
         }
-        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 
@@ -408,7 +407,9 @@ private struct PlaceProfilePreviewCard: View {
                         .lineLimit(2)
                         .minimumScaleFactor(0.78)
 
-                    if let heroMetadata {
+                    if place.isDroppedPin {
+                        droppedPinMetadata
+                    } else if let heroMetadata {
                         Text(heroMetadata)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(WanderTheme.textMuted.color)
@@ -504,6 +505,7 @@ private struct PlaceProfilePreviewCard: View {
         let localPhoto = localPhoto
         guard !Task.isCancelled, resolutionKey == photoResolutionKey else { return }
         photo = localPhoto
+        guard !place.isDroppedPin else { return }
         do {
             let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
             try Task.checkCancellation()
@@ -610,6 +612,33 @@ private struct PlaceProfilePreviewCard: View {
 
     private var heroMetadata: String? {
         PlaceProfileCopy.heroMetadata(for: place)
+    }
+
+    private var droppedPinMetadata: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding city…")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WanderTheme.textMuted.color)
+                .lineLimit(1)
+
+            if let coordinates = place.droppedPinCoordinateDisplay {
+                Text(coordinates)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = coordinates
+                        } label: {
+                            Label("Copy coordinates", systemImage: "doc.on.doc")
+                        }
+                    }
+                    .accessibilityIdentifier("map.droppedPinCoordinates")
+                    .accessibilityLabel("Coordinates \(coordinates)")
+                    .accessibilityHint("Touch and hold to copy")
+            }
+        }
     }
 
     private var fitSentence: String? {
