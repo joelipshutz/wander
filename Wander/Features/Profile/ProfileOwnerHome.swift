@@ -655,7 +655,7 @@ struct ProfileHeaderActionButton: View {
     }
 }
 
-private struct ProfileBackButton: View {
+struct ProfileBackButton: View {
     let action: () -> Void
 
     var body: some View {

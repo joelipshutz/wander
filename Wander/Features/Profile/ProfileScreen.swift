@@ -2412,6 +2412,7 @@ private struct ProfilePlaceCollectionClusterMarker: View {
 }
 
 private struct SavedPlacesListScreen: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
@@ -2546,6 +2547,11 @@ private struct SavedPlacesListScreen: View {
                 .padding(.bottom, WanderTheme.spacing8)
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if usesInlineNavigationHeader {
+                inlineNavigationHeader
+            }
+        }
         .navigationDestination(isPresented: selectedPlaceDestinationBinding) {
             selectedPlaceDestination
         }
@@ -2561,10 +2567,33 @@ private struct SavedPlacesListScreen: View {
         .wanderScreen()
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(usesInlineNavigationHeader ? .hidden : .visible, for: .navigationBar)
     }
 
     private var navigationTitle: String {
         collection?.title ?? mode.title
+    }
+
+    private var usesInlineNavigationHeader: Bool {
+        mode == .inCommon && collection == nil
+    }
+
+    private var inlineNavigationHeader: some View {
+        ZStack {
+            Text(navigationTitle)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+
+            HStack {
+                ProfileBackButton(action: { dismiss() })
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(minHeight: WanderTheme.tapMinimum)
+        .padding(.horizontal, WanderTheme.spacing4)
+        .padding(.vertical, WanderTheme.spacing1)
     }
 
     private func matchesCollection(_ visiblePlace: VisiblePlace) -> Bool {
