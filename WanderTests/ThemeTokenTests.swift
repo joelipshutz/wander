@@ -46,6 +46,16 @@ final class ThemeTokenTests: XCTestCase {
             .deepBlackAction
         )
     }
+
+    func testDarkMapPaletteUsesWarmHighContrastNightTokens() {
+        XCTAssertEqual(WanderMapAppearance.nightSurface.hex, "#171A1C")
+        XCTAssertEqual(WanderMapAppearance.nightRaised.hex, "#25292C")
+        XCTAssertEqual(WanderMapAppearance.nightText.hex, "#FFF7EA")
+        XCTAssertEqual(WanderMapAppearance.nightMuted.hex, "#CEC1B4")
+        XCTAssertEqual(WanderMapAppearance.light.colorScheme, .light)
+        XCTAssertEqual(WanderMapAppearance.dark.colorScheme, .dark)
+        XCTAssertEqual(WanderMapAppearance.dark.neutralGlassTone, .darkOverlay)
+    }
 }
 
 final class PlaceRatingReactionTests: XCTestCase {

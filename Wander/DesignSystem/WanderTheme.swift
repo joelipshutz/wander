@@ -92,6 +92,79 @@ enum WanderTheme {
     ]
 }
 
+/// A map-scoped appearance palette. The rest of rec.me intentionally keeps its
+/// warm light canvas; this palette only follows the Map setting through the Map
+/// view hierarchy.
+struct WanderMapAppearance: Equatable {
+    static let nightSurface = WanderColorToken(name: "color.map.night.surface", hex: "#171A1C")
+    static let nightRaised = WanderColorToken(name: "color.map.night.raised", hex: "#25292C")
+    static let nightText = WanderColorToken(name: "color.map.night.text", hex: "#FFF7EA")
+    static let nightMuted = WanderColorToken(name: "color.map.night.muted", hex: "#CEC1B4")
+
+    static let light = WanderMapAppearance(isDark: false)
+    static let dark = WanderMapAppearance(isDark: true)
+
+    let isDark: Bool
+
+    var colorScheme: ColorScheme {
+        isDark ? .dark : .light
+    }
+
+    var primaryText: Color {
+        isDark ? Self.nightText.color : WanderTheme.textInk.color
+    }
+
+    var secondaryText: Color {
+        isDark ? Self.nightMuted.color : WanderTheme.textMuted.color
+    }
+
+    var faintText: Color {
+        isDark ? Self.nightMuted.color.opacity(0.72) : WanderTheme.textFaint.color
+    }
+
+    var surface: Color {
+        isDark ? Self.nightSurface.color : WanderTheme.surfaceBone.color
+    }
+
+    var raisedSurface: Color {
+        isDark ? Self.nightRaised.color : WanderTheme.surfaceRaised.color
+    }
+
+    var border: Color {
+        isDark ? Color.white.opacity(0.20) : WanderTheme.borderHairline.color
+    }
+
+    var accentText: Color {
+        isDark ? WanderTheme.terracotta.color : WanderTheme.terracottaDark.color
+    }
+
+    var neutralGlassTone: WanderGlassTone {
+        isDark ? .darkOverlay : .neutral
+    }
+
+    func glassTone(isSelected: Bool) -> WanderGlassTone {
+        if isDark {
+            return .darkOverlay
+        }
+        return isSelected ? .selected : .neutral
+    }
+
+    var shadow: Color {
+        isDark ? Color.black.opacity(0.55) : WanderTheme.textInk.color.opacity(0.12)
+    }
+}
+
+private struct WanderMapAppearanceKey: EnvironmentKey {
+    static let defaultValue = WanderMapAppearance.light
+}
+
+extension EnvironmentValues {
+    var wanderMapAppearance: WanderMapAppearance {
+        get { self[WanderMapAppearanceKey.self] }
+        set { self[WanderMapAppearanceKey.self] = newValue }
+    }
+}
+
 /// Semantic, Dynamic-Type-aware typography roles for the approved native
 /// editorial system. Navigation chrome and utility copy stay in the default
 /// system design; serif is reserved for named content, editorial headings,

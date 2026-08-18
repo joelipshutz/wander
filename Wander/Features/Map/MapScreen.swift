@@ -695,6 +695,10 @@ struct MapScreen: View {
 
                     }
                     .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                    .environment(
+                        \.colorScheme,
+                        store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
+                    )
                     .mapFeatureSelectionDisabled { feature in
                         feature.kind != .pointOfInterest || Self.normalized(feature.title ?? "").isEmpty
                     }
@@ -900,6 +904,9 @@ struct MapScreen: View {
                     }
                     .padding(.horizontal, WanderTheme.spacing3)
                     .padding(.bottom, WanderTheme.spacing2)
+                    .opacity(isMoreFiltersPresented ? 0 : 1)
+                    .allowsHitTesting(!isMoreFiltersPresented)
+                    .accessibilityHidden(isMoreFiltersPresented)
                     .background {
                         GeometryReader { proxy in
                             Color.clear.preference(
@@ -916,7 +923,7 @@ struct MapScreen: View {
                     edges: isMapSearchFocused ? [] : .bottom
                 )
                 .overlay(alignment: .bottomTrailing) {
-                    if !isPlaceProfilePresented && !isMapSearchFocused {
+                    if !isPlaceProfilePresented && !isMapSearchFocused && !isMoreFiltersPresented {
                         RecenterButton(
                             isLoading: isRecenteringOnUser,
                             showsAttentionBadge: nearbyNeedsLocationPermission
@@ -952,7 +959,11 @@ struct MapScreen: View {
                     )
                     .accessibilityHidden(compactCardPhase == .hidden)
             }
-            .background(WanderTheme.canvasWarm.color)
+            .background(
+                store.isDarkMapEnabled
+                    ? WanderMapAppearance.dark.surface
+                    : WanderTheme.canvasWarm.color
+            )
             .onAppear {
                 locationPermission.refreshAuthorizationStatus()
                 resolveInitialSelection()
@@ -1094,6 +1105,10 @@ struct MapScreen: View {
             }
             .toolbar(.hidden, for: .navigationBar)
         }
+        .environment(
+            \.wanderMapAppearance,
+            store.isDarkMapEnabled ? WanderMapAppearance.dark : WanderMapAppearance.light
+        )
         .allowsHitTesting(!isPlaceProfileOverlayVisible)
         .accessibilityHidden(isPlaceProfileOverlayVisible)
         .overlay {
@@ -4904,6 +4919,7 @@ private struct MapViewportHeightPreferenceKey: PreferenceKey {
 
 private struct MapSolidAddButton: View {
     let action: () -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         Button(action: action) {
@@ -4914,11 +4930,16 @@ private struct MapSolidAddButton: View {
                 .background(WanderTheme.terracotta.color, in: Circle())
                 .overlay {
                     Circle()
-                        .stroke(WanderTheme.terracottaDark.color.opacity(0.32), lineWidth: 1)
+                        .stroke(
+                            appearance.isDark
+                                ? Color.white.opacity(0.24)
+                                : WanderTheme.terracottaDark.color.opacity(0.32),
+                            lineWidth: 1
+                        )
                 }
                 .contentShape(Circle())
                 .shadow(
-                    color: WanderTheme.textInk.color.opacity(0.16),
+                    color: appearance.shadow,
                     radius: 6,
                     x: 0,
                     y: 3
@@ -4938,6 +4959,7 @@ private struct SearchBar: View {
     let focusRequestID: UUID?
     let onFocusRequestHandled: (UUID) -> Void
     let onSubmit: () -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
     @State private var draftQuery: String
     @State private var queryCommitTask: Task<Void, Never>?
 
@@ -4959,12 +4981,17 @@ private struct SearchBar: View {
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(WanderTheme.textMuted.color)
-            TextField("search your map or people...", text: $draftQuery)
+                .foregroundStyle(appearance.secondaryText)
+            TextField(
+                "search your map or people...",
+                text: $draftQuery,
+                prompt: Text("search your map or people...")
+                    .foregroundStyle(appearance.secondaryText)
+            )
                 .focused(isFocused)
                 .accessibilityIdentifier("map.searchField")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(appearance.primaryText)
                 .tint(WanderTheme.terracotta.color)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -4991,7 +5018,7 @@ private struct SearchBar: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(WanderTheme.textFaint.color)
+                        .foregroundStyle(appearance.faintText)
                 }
                 .accessibilityLabel("Clear map search")
             }
@@ -5053,22 +5080,29 @@ private struct SearchBar: View {
 }
 
 private struct MapSearchCapsuleSurfaceModifier: ViewModifier {
+    @Environment(\.wanderMapAppearance) private var appearance
+
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
             content
-                .glassEffect(.regular.interactive(true), in: Capsule())
+                .glassEffect(
+                    .regular
+                        .tint(appearance.isDark ? Color.black.opacity(0.50) : nil)
+                        .interactive(true),
+                    in: Capsule()
+                )
                 .overlay {
                     Capsule()
-                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                        .stroke(appearance.border, lineWidth: 1)
                 }
         } else {
             content
                 .background(.ultraThinMaterial, in: Capsule())
-                .background(WanderTheme.surfaceRaised.color.opacity(0.72), in: Capsule())
+                .background(appearance.raisedSurface.opacity(0.88), in: Capsule())
                 .overlay {
                     Capsule()
-                        .stroke(WanderTheme.surfaceRaised.color.opacity(0.72), lineWidth: 1)
+                        .stroke(appearance.border, lineWidth: 1)
                 }
         }
     }
@@ -5082,15 +5116,16 @@ private extension View {
 
 private struct MapSearchCancelButton: View {
     let action: () -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         Button(action: action) {
             Text("Cancel")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(appearance.primaryText)
                 .frame(minWidth: 64, minHeight: 44)
                 .contentShape(Capsule())
-                .wanderGlassCapsule()
+                .wanderGlassCapsule(tone: appearance.neutralGlassTone)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("map.searchCancel")
@@ -5102,6 +5137,7 @@ private struct MapTypeaheadList: View {
     let isLoading: Bool
     let onSelect: (MapSearchSuggestion) -> Void
     let onAdd: (MapSearchSuggestion) -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         let visibleSuggestions = Array(suggestions.prefix(4))
@@ -5120,7 +5156,7 @@ private struct MapTypeaheadList: View {
 
                 if suggestion.id != visibleSuggestions.last?.id {
                     Divider()
-                        .overlay(WanderTheme.borderHairline.color)
+                        .overlay(appearance.border)
                         .padding(.leading, 52)
                 }
             }
@@ -5132,7 +5168,7 @@ private struct MapTypeaheadList: View {
                         .tint(WanderTheme.terracotta.color)
                     Text(suggestions.isEmpty ? "looking nearby..." : "checking nearby...")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                        .foregroundStyle(appearance.secondaryText)
                     Spacer()
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -5140,7 +5176,10 @@ private struct MapTypeaheadList: View {
                 .accessibilityLabel("Looking for nearby places")
             }
         }
-        .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
+        .wanderGlassPanel(
+            cornerRadius: WanderTheme.radiusLarge,
+            tone: appearance.neutralGlassTone
+        )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map.typeaheadPanel")
     }
@@ -5150,6 +5189,7 @@ private struct MapTypeaheadRow: View {
     let suggestion: MapSearchSuggestion
     let onSelect: () -> Void
     let onAdd: () -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -5164,11 +5204,11 @@ private struct MapTypeaheadRow: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(suggestion.title)
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(WanderTheme.textInk.color)
+                            .foregroundStyle(appearance.primaryText)
                             .lineLimit(1)
                         Text(suggestion.subtitle)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(WanderTheme.textMuted.color)
+                            .foregroundStyle(appearance.secondaryText)
                             .lineLimit(1)
                     }
 
@@ -5222,7 +5262,10 @@ private struct MapTypeaheadRow: View {
     }
 
     private var iconBackground: Color {
-        isSavedSuggestion ? WanderTheme.surfaceRaised.color : Color(uiColor: .systemGray5)
+        if appearance.isDark {
+            return appearance.raisedSurface
+        }
+        return isSavedSuggestion ? WanderTheme.surfaceRaised.color : Color(uiColor: .systemGray5)
     }
 }
 
@@ -5230,6 +5273,7 @@ private struct MapSearchMessage: View {
     let text: String
     var actionTitle: String?
     var action: (() -> Void)?
+    @Environment(\.wanderMapAppearance) private var appearance
 
     init(
         text: String,
@@ -5245,7 +5289,7 @@ private struct MapSearchMessage: View {
         HStack(spacing: WanderTheme.spacing2) {
             Text(text)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(appearance.primaryText)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let actionTitle, let action {
@@ -5258,9 +5302,9 @@ private struct MapSearchMessage: View {
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, action == nil ? WanderTheme.spacing3 : WanderTheme.spacing2)
         .padding(.vertical, action == nil ? WanderTheme.spacing2 : 0)
-        .background(WanderTheme.surfaceBone.color)
+        .background(appearance.surface)
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
+        .overlay(Capsule().stroke(appearance.border, lineWidth: 1))
         .accessibilityIdentifier("map.searchMessage")
     }
 }
@@ -5269,14 +5313,17 @@ private struct RecenterButton: View {
     let isLoading: Bool
     let showsAttentionBadge: Bool
     let action: () -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         Button(action: action) {
             Image(systemName: isLoading ? "location.circle.fill" : "location.fill")
                 .font(.system(size: 16, weight: .black))
                 .frame(width: 44, height: 44)
-                .background(WanderTheme.skyTint.color)
-                .foregroundStyle(WanderTheme.pinSocial.color)
+                .background(appearance.isDark ? appearance.raisedSurface : WanderTheme.skyTint.color)
+                .foregroundStyle(
+                    appearance.isDark ? Color.white.opacity(0.92) : WanderTheme.pinSocial.color
+                )
                 .clipShape(Circle())
                 .overlay(Circle().stroke(WanderTheme.pinSocial.color, lineWidth: 2))
                 .overlay(alignment: .topTrailing) {
@@ -5286,12 +5333,12 @@ private struct RecenterButton: View {
                             .frame(width: 11, height: 11)
                             .overlay {
                                 Circle()
-                                    .stroke(WanderTheme.surfaceRaised.color, lineWidth: 2)
+                                    .stroke(appearance.raisedSurface, lineWidth: 2)
                             }
                             .offset(x: 1, y: 1)
                     }
                 }
-                .shadow(color: WanderTheme.textInk.color.opacity(0.14), radius: 10, x: 0, y: 5)
+                .shadow(color: appearance.shadow, radius: 10, x: 0, y: 5)
         }
         .disabled(isLoading)
         .accessibilityIdentifier("map.nearby")
@@ -5393,30 +5440,31 @@ private struct MapFilterEmptyNotice: View {
     let message: String
     let canReset: Bool
     let reset: () -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
             Image(systemName: "mappin.slash")
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.textMuted.color)
+                .foregroundStyle(appearance.secondaryText)
             Text(message)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(appearance.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
             if canReset {
                 Button("Reset", action: reset)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(WanderTheme.terracottaDark.color)
+                    .foregroundStyle(appearance.accentText)
                     .frame(minHeight: 44)
             }
         }
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, canReset ? WanderTheme.spacing2 : WanderTheme.spacing3)
         .frame(minHeight: 44)
-        .background(WanderTheme.surfaceBone.color.opacity(0.94), in: Capsule())
-        .overlay(Capsule().stroke(WanderTheme.borderHairline.color, lineWidth: 1))
-        .shadow(color: WanderTheme.textInk.color.opacity(0.08), radius: 10, x: 0, y: 5)
+        .background(appearance.surface.opacity(0.94), in: Capsule())
+        .overlay(Capsule().stroke(appearance.border, lineWidth: 1))
+        .shadow(color: appearance.shadow, radius: 10, x: 0, y: 5)
         .accessibilityElement(children: .combine)
     }
 }
@@ -5424,6 +5472,7 @@ private struct MapFilterEmptyNotice: View {
 private struct MapSourceFilterChip: View {
     let source: MapSource
     let isSelected: Bool
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
@@ -5437,12 +5486,21 @@ private struct MapSourceFilterChip: View {
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: 44)
-        .foregroundStyle(WanderTheme.textInk.color)
+        .foregroundStyle(appearance.primaryText)
         .contentShape(Capsule())
         .wanderGlassCapsule(
-            tone: isSelected ? .selected : .neutral,
-            showsBorder: true
+            tone: appearance.glassTone(isSelected: isSelected),
+            showsBorder: !appearance.isDark
         )
+        .overlay {
+            if appearance.isDark {
+                Capsule()
+                    .stroke(
+                        isSelected ? WanderTheme.terracotta.color : appearance.border,
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            }
+        }
         .padding(.vertical, 2)
         .accessibilityLabel("\(source.title) map source")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -5453,6 +5511,7 @@ private struct MapSourceFilterChip: View {
 private struct MapMoreFilterChip: View {
     let selectedOptionCount: Int
     let isExpanded: Bool
+    @Environment(\.wanderMapAppearance) private var appearance
 
     private var isActive: Bool {
         selectedOptionCount > 0
@@ -5482,12 +5541,21 @@ private struct MapMoreFilterChip: View {
         .font(.system(size: 12, weight: .bold))
         .padding(.horizontal, WanderTheme.spacing2)
         .frame(minHeight: 44)
-        .foregroundStyle(WanderTheme.textInk.color)
+        .foregroundStyle(appearance.primaryText)
         .contentShape(Capsule())
         .wanderGlassCapsule(
-            tone: isActive ? .selected : .neutral,
-            showsBorder: true
+            tone: appearance.glassTone(isSelected: isActive),
+            showsBorder: !appearance.isDark
         )
+        .overlay {
+            if appearance.isDark {
+                Capsule()
+                    .stroke(
+                        isActive ? WanderTheme.terracotta.color : appearance.border,
+                        lineWidth: isActive ? 2 : 1
+                    )
+            }
+        }
         .padding(.vertical, 2)
         .accessibilityLabel("More map filters")
         .accessibilityValue(
@@ -5506,6 +5574,7 @@ private struct MapMoreFiltersPopover: View {
     let peopleOptions: [MapSocialOwnerOption]
     let dismiss: () -> Void
     @State private var showsAllCategories = false
+    @Environment(\.wanderMapAppearance) private var appearance
 
     private let columns = [
         GridItem(.adaptive(minimum: 118), spacing: WanderTheme.spacing2)
@@ -5556,7 +5625,7 @@ private struct MapMoreFiltersPopover: View {
                                     .font(.system(size: 10, weight: .black))
                             }
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(WanderTheme.terracottaDark.color)
+                            .foregroundStyle(appearance.accentText)
                             .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.plain)
@@ -5593,7 +5662,7 @@ private struct MapMoreFiltersPopover: View {
                         if peopleOptions.isEmpty {
                             Text("People you follow will appear here.")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(WanderTheme.textMuted.color)
+                                .foregroundStyle(appearance.secondaryText)
                         }
                     }
                 }
@@ -5619,13 +5688,16 @@ private struct MapMoreFiltersPopover: View {
 
                 Text("Choices combine across sections. If nothing matches, the map stays empty.")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(appearance.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(WanderTheme.spacing4)
         }
         .frame(width: 330, height: source == .featured ? 360 : 470)
-        .wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)
+        .wanderGlassPanel(
+            cornerRadius: WanderTheme.radiusLarge,
+            tone: appearance.neutralGlassTone
+        )
         .accessibilityIdentifier("map.moreFilters.popover")
     }
 
@@ -5634,10 +5706,10 @@ private struct MapMoreFiltersPopover: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("More filters")
                     .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(appearance.primaryText)
                 Text("Narrow \(source.title.lowercased())")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(appearance.secondaryText)
             }
 
             Spacer(minLength: WanderTheme.spacing2)
@@ -5647,13 +5719,13 @@ private struct MapMoreFiltersPopover: View {
                     selection = MapMoreFilterSelection()
                 }
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .foregroundStyle(appearance.accentText)
                 .frame(minHeight: 44)
             }
 
             Button("Done", action: dismiss)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(WanderTheme.terracottaDark.color)
+                .foregroundStyle(appearance.accentText)
                 .frame(minHeight: 44)
         }
     }
@@ -5667,11 +5739,11 @@ private struct MapMoreFiltersPopover: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
                     .font(.system(size: 14, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
+                    .foregroundStyle(appearance.primaryText)
                 Spacer()
                 Text(detail)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(WanderTheme.textMuted.color)
+                    .foregroundStyle(appearance.secondaryText)
             }
             content()
         }
@@ -5684,6 +5756,7 @@ private struct MapMoreOptionChip: View {
     var emoji: String? = nil
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         Button(action: action) {
@@ -5701,15 +5774,25 @@ private struct MapMoreOptionChip: View {
                 Spacer(minLength: 0)
             }
             .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(isSelected ? WanderTheme.terracottaDark.color : WanderTheme.textInk.color)
+            .foregroundStyle(isSelected ? appearance.accentText : appearance.primaryText)
             .padding(.horizontal, WanderTheme.spacing2)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous))
             .wanderGlassPanel(
                 cornerRadius: WanderTheme.radiusMedium,
-                tone: isSelected ? .selected : .neutral,
-                interactive: true
+                tone: appearance.glassTone(isSelected: isSelected),
+                interactive: true,
+                showsBorder: !appearance.isDark
             )
+            .overlay {
+                if appearance.isDark {
+                    RoundedRectangle(cornerRadius: WanderTheme.radiusMedium, style: .continuous)
+                        .stroke(
+                            isSelected ? WanderTheme.terracotta.color : appearance.border,
+                            lineWidth: isSelected ? 2 : 1
+                        )
+                }
+            }
         }
         .buttonStyle(.plain)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -5720,6 +5803,7 @@ private struct MapMoreOptionChip: View {
 private struct ActiveMapAnnotationContent<Marker: View>: View {
     let title: String
     let marker: Marker
+    @Environment(\.wanderMapAppearance) private var appearance
 
     init(
         title: String,
@@ -5735,10 +5819,13 @@ private struct ActiveMapAnnotationContent<Marker: View>: View {
 
             Text(title)
                 .font(.system(size: MapPinVisualMetrics.activeTitleFontSize, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
+                .foregroundStyle(appearance.primaryText)
                 .lineLimit(1)
                 .fixedSize()
-                .shadow(color: Color.white.opacity(0.96), radius: 2)
+                .shadow(
+                    color: appearance.isDark ? Color.black.opacity(0.96) : Color.white.opacity(0.96),
+                    radius: 2
+                )
                 .offset(
                     y: MapPinVisualMetrics.activeTitleVerticalOffset(
                         selectedScale: MapPinSelectionMotionStyle.selectedScale
@@ -5754,6 +5841,7 @@ private struct ActiveMapAnnotationContent<Marker: View>: View {
 private struct SearchResultMarker: View {
     let candidate: PlaceCandidate
     let isSelected: Bool
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         WanderCategoryEmoji(emoji: candidate.categoryEmoji, size: MapPinVisualMetrics.emojiDiameter)
@@ -5762,7 +5850,7 @@ private struct SearchResultMarker: View {
             .clipShape(Circle())
             .overlay(
                 Circle()
-                    .stroke(WanderTheme.surfaceRaised.color, lineWidth: MapPinVisualMetrics.outlineWidth)
+                    .stroke(appearance.isDark ? Color.white.opacity(0.88) : WanderTheme.surfaceRaised.color, lineWidth: MapPinVisualMetrics.outlineWidth)
             )
             .overlay(
                 Circle()
@@ -5824,6 +5912,7 @@ private struct MapPlaceMarker: View {
 private struct WanderMapPin: View {
     let visiblePlace: VisiblePlace
     let outlines: [MapPinOutline]
+    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         WanderCategoryEmoji(
@@ -5831,7 +5920,7 @@ private struct WanderMapPin: View {
             size: MapPinVisualMetrics.emojiDiameter
         )
             .frame(width: MapPinVisualMetrics.discDiameter, height: MapPinVisualMetrics.discDiameter)
-            .background(WanderTheme.surfaceRaised.color)
+            .background(appearance.raisedSurface)
             .clipShape(Circle())
             .overlay(outlineLayer)
             .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 6, x: 0, y: 2)

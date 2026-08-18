@@ -76,9 +76,11 @@ final class MapMoreFilterResetTests: XCTestCase {
         let popover = String(map[popoverStart.lowerBound..<popoverEnd.lowerBound])
         let optionChip = String(map[popoverEnd.lowerBound..<optionEnd.lowerBound])
 
-        XCTAssertTrue(popover.contains(".wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)"))
+        XCTAssertTrue(popover.contains(".wanderGlassPanel("))
+        XCTAssertTrue(popover.contains("tone: appearance.neutralGlassTone"))
         XCTAssertFalse(popover.contains(".background(\n            WanderTheme.surfaceBone.color"))
         XCTAssertTrue(optionChip.contains(".wanderGlassPanel("))
+        XCTAssertTrue(optionChip.contains("tone: appearance.glassTone(isSelected: isSelected)"))
         XCTAssertTrue(popover.contains("emoji: WanderPlaceCategory.broadEmoji(for: category)"))
     }
 

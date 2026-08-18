@@ -8,6 +8,12 @@ private enum TestError: Error {
 
 @MainActor
 final class WanderStoreTests: XCTestCase {
+    func testDarkMapDefaultsOff() {
+        let store = WanderStore(fixtures: .seed())
+
+        XCTAssertFalse(store.isDarkMapEnabled)
+    }
+
     func testSwitchingAccountsDoesNotCarryPrivateProfileSettingsOrIdentity() {
         let first = LocalProfile(
             localID: "local_profile_current",
@@ -68,6 +74,7 @@ final class WanderStoreTests: XCTestCase {
         store.currentUser.onboardingCompletedAt = Date()
         store.setPrivateProfile(true)
         store.defaultMapFilter = .friends
+        store.isDarkMapEnabled = true
 
         store.apply(authState: .signedOut)
 
@@ -82,6 +89,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertFalse(store.isPrivateProfile)
         XCTAssertEqual(store.defaultVisibility, .followers)
         XCTAssertEqual(store.defaultMapFilter, .featured)
+        XCTAssertTrue(store.isDarkMapEnabled)
     }
 
     func testPermanentAccountDeletionPurgesAllLocalAccountDataAndPreferences() {
@@ -89,6 +97,7 @@ final class WanderStoreTests: XCTestCase {
         store.defaultVisibility = .mutuals
         store.setPrivateProfile(true)
         store.defaultMapFilter = .friends
+        store.isDarkMapEnabled = true
 
         store.resetAfterAccountDeletion()
 
@@ -105,6 +114,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.defaultVisibility, .followers)
         XCTAssertFalse(store.isPrivateProfile)
         XCTAssertEqual(store.defaultMapFilter, .featured)
+        XCTAssertFalse(store.isDarkMapEnabled)
     }
 
     func testFriendsAreMutualFollowsFromSingleStoreHelper() {
@@ -8832,6 +8842,7 @@ final class WanderStoreTests: XCTestCase {
         let firstStore = WanderStore(fixtures: WanderFixtures.seed(), persistence: fixture.persistence)
         firstStore.autoSaveListAddsToWant = false
         firstStore.defaultMapFilter = .friends
+        firstStore.isDarkMapEnabled = true
 
         let relaunchedStore = WanderStore(fixtures: WanderFixtures.empty(), persistence: fixture.persistence)
 
@@ -8839,6 +8850,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(relaunchedStore.placeListItems.map(\.id), firstStore.placeListItems.map(\.id))
         XCTAssertFalse(relaunchedStore.autoSaveListAddsToWant)
         XCTAssertEqual(relaunchedStore.defaultMapFilter, .friends)
+        XCTAssertTrue(relaunchedStore.isDarkMapEnabled)
     }
 
     func testBatchedListProjectionMatchesIndividualListProjection() {
