@@ -2420,6 +2420,32 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
 async function runCheckInSmokeChecks(client, smokeUserID) {
   await expectQuery(
     client,
+    "list read RPCs keep their invoker, search_path, and grant posture",
+    `
+      select
+        not summaries.prosecdef as summaries_invoker,
+        'search_path=public, app' = any(coalesce(summaries.proconfig, array[]::text[])) as summaries_search_path,
+        not detail.prosecdef as detail_invoker,
+        'search_path=public, app' = any(coalesce(detail.proconfig, array[]::text[])) as detail_search_path,
+        not snapshot.prosecdef as snapshot_invoker,
+        'search_path=public, app' = any(coalesce(snapshot.proconfig, array[]::text[])) as snapshot_search_path,
+        has_function_privilege('authenticated', summaries.oid, 'execute') as summaries_authenticated,
+        has_function_privilege('authenticated', detail.oid, 'execute') as detail_authenticated,
+        has_function_privilege('authenticated', snapshot.oid, 'execute') as snapshot_authenticated,
+        not has_function_privilege('anon', snapshot.oid, 'execute') as snapshot_anon_denied
+      from pg_proc summaries
+      cross join pg_proc detail
+      cross join pg_proc snapshot
+      where summaries.oid = 'app.visible_place_lists()'::regprocedure
+        and detail.oid = 'app.place_list_detail(uuid)'::regprocedure
+        and snapshot.oid = 'public.visible_place_lists_snapshot()'::regprocedure
+    `,
+    [],
+    (result) => Object.values(result.rows[0] ?? {}).every((value) => value === true),
+  );
+
+  await expectQuery(
+    client,
     "check-in RPC grants and security metadata match the iOS boundary",
     `
       select
@@ -2652,6 +2678,42 @@ async function runCheckInSmokeChecks(client, smokeUserID) {
       && result.rows[0]?.note === "want snapshot"
       && result.rows[0]?.deleted_at === null
       && JSON.stringify(result.rows[0]?.value) === JSON.stringify(["try soon"]),
+  );
+
+  const deletionListID = await createSmokeList(client, "Codex smoke save deletion list");
+  await expectQuery(
+    client,
+    "active Wanna save can be attached to a list before deletion",
+    "select public.add_place_list_item($1::uuid, $2::uuid, $3::uuid, $3::uuid) as item_id",
+    [deletionListID, saved.rows[0].saved.place_id, userPlaceID],
+    (result) => result.rows[0]?.item_id !== null,
+  );
+  await expectQuery(
+    client,
+    "deleting a save hides its unresolvable list item without deleting the list row",
+    `
+      with deleted as (
+        select public.delete_own_user_place($1::uuid) as result
+      )
+      select
+        deleted.result->>'transition' as transition,
+        summary.item_count,
+        jsonb_array_length(public.place_list_detail($2::uuid)->'items') as detail_item_count,
+        exists (
+          select 1
+          from public.place_list_items item
+          where item.list_id = $2::uuid
+            and item.deleted_at is null
+        ) as raw_item_preserved
+      from deleted
+      cross join public.visible_place_lists() summary
+      where summary.id = $2::uuid
+    `,
+    [userPlaceID, deletionListID],
+    (result) => result.rows[0]?.transition === "removed"
+      && result.rows[0]?.item_count === 0
+      && result.rows[0]?.detail_item_count === 0
+      && result.rows[0]?.raw_item_preserved === true,
   );
 
   await expectQueryFailure(
