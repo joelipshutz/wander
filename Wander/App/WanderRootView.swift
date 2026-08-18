@@ -327,6 +327,7 @@ struct WanderRootView: View {
     @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var walkthroughLaunchConfiguredUserIDs: Set<String> = []
+    @State private var restartedWalkthroughReplayUserIDs: Set<String> = []
     @State private var retiredWalkthroughUserIDs: Set<String> = []
     @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
     @State private var nativeTabItemControlsFrame: CGRect?
@@ -1588,11 +1589,18 @@ struct WanderRootView: View {
         let isDebugSettingsEntitled = DebugSettingsAccessPolicy.isEntitled(
             serverFlag: backend.featureFlag(.debugSettings, for: userID)
         )
+        let isFeatureFlagResolutionPending = backend.featureFlagResolution
+            .isPending(for: userID)
         let debugNUXOverride = isDebugSettingsEntitled
             ? walkthroughDebugPreferences.nuxOverride(for: userID)
             : nil
-        let isReplayRequested = isDebugSettingsEntitled
-            && walkthroughDebugPreferences.isReplayRequested(for: userID)
+        let debugReplay = FirstVisitWalkthroughDebugReplayPolicy.resolve(
+            hasLocalReplayRequest: walkthroughDebugPreferences.isReplayRequested(
+                for: userID
+            ),
+            isDebugSettingsEntitled: isDebugSettingsEntitled,
+            isFeatureFlagResolutionPending: isFeatureFlagResolutionPending
+        )
         let resolvedFlag = backend.resolvedFeatureFlag(.firstVisitNUX, for: userID)
         let shouldRetireEligibility =
             FirstVisitWalkthroughEligibilityPolicy.shouldRequestPersistedEligibilityRetirement(
@@ -1614,8 +1622,9 @@ struct WanderRootView: View {
             FirstVisitWalkthroughEligibilityPolicy.isAwaitingFeatureFlagResolution(
                 isEnrolled: effectiveEligibility,
                 isUsingLiveData: fixtureMode == .empty,
-                resolutionIsPending: backend.featureFlagResolution.isPending(for: userID)
+                resolutionIsPending: isFeatureFlagResolutionPending
             )
+            || debugReplay.isAwaitingEntitlementResolution
         )
         let isEnabled = FirstVisitWalkthroughFeatureFlag.isEnabled(
             isEligible: effectiveEligibility,
@@ -1623,7 +1632,7 @@ struct WanderRootView: View {
             launchArguments: launchArguments,
             resolvedValue: resolvedFlag?.isEnabled,
             entitledDebugOverride: debugNUXOverride,
-            isEntitledDebugReplayRequested: isReplayRequested,
+            isEntitledDebugReplayRequested: debugReplay.isEntitledReplayRequested,
             isExplicitlyDisabledForAccount: resolvedFlag?.explicitAccountOverride == false
         )
         let hadActiveWalkthroughPresentation = walkthroughs.hasActivePresentation
@@ -1641,7 +1650,8 @@ struct WanderRootView: View {
                 || resolvedFlag?.explicitAccountOverride == false
             if FirstVisitWalkthroughEligibilityPolicy.shouldRetireLocalJourney(
                 isEnrolled: effectiveEligibility,
-                isExplicitReplayEnabled: hasDebugLaunchEnable || isReplayRequested,
+                isExplicitReplayEnabled: hasDebugLaunchEnable
+                    || debugReplay.shouldPreserveLocalJourney,
                 isExplicitlyDisabled: isExplicitlyDisabled
             ) {
                 walkthroughs.retireJourneyForDisabledExperience()
@@ -1651,6 +1661,17 @@ struct WanderRootView: View {
                 )
             }
             return
+        }
+
+        // The prior launch race could mark a freshly queued replay complete
+        // before tester entitlement arrived. Repair only that completed state;
+        // an in-progress replay keeps its persisted checkpoint across relaunches.
+        if FirstVisitWalkthroughDebugReplayPolicy.shouldRepairCompletedLocalJourney(
+            debugReplay,
+            hasCompletedPrimaryJourney: walkthroughs.hasCompletedPrimaryJourney
+        ),
+           restartedWalkthroughReplayUserIDs.insert(userID).inserted {
+            walkthroughs.resetCurrentUser()
         }
 
         let forcedWalkthroughTarget: WalkthroughTargetID? = {
