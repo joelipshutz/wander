@@ -358,8 +358,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(root.contains("Label(WanderTab.add.title"))
         XCTAssertTrue(map.contains(".accessibilityIdentifier(\"map.headerAdd\")"))
         XCTAssertTrue(map.contains("struct MapSourceFilterChip"))
-        XCTAssertTrue(map.contains("tone: isSelected ? .selected : .neutral"))
-        XCTAssertTrue(map.contains("tone: isActive ? .selected : .neutral"))
+        XCTAssertTrue(map.contains("tone: appearance.glassTone(isSelected: isSelected)"))
+        XCTAssertTrue(map.contains("tone: appearance.glassTone(isSelected: isActive)"))
         let mapAddButton = try sourceSection(
             map,
             after: "private struct MapSolidAddButton: View",
@@ -375,7 +375,9 @@ final class NavigationContractTests: XCTestCase {
             before: "private extension View"
         )
         XCTAssertTrue(mapSearchSurface.contains("if #available(iOS 26.0, *)"))
-        XCTAssertTrue(mapSearchSurface.contains(".glassEffect(.regular.interactive(true), in: Capsule())"))
+        XCTAssertTrue(mapSearchSurface.contains(".glassEffect("))
+        XCTAssertTrue(mapSearchSurface.contains(".tint(appearance.isDark ? Color.black.opacity(0.50) : nil)"))
+        XCTAssertTrue(mapSearchSurface.contains(".interactive(true)"))
         XCTAssertTrue(mapSearchSurface.contains(".background(.ultraThinMaterial, in: Capsule())"))
 
         XCTAssertFalse(feed.contains("WanderGlassHeader("))
@@ -522,7 +524,8 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private struct MapTypeaheadRow: View").first
         )
         XCTAssertTrue(typeahead.contains("let visibleSuggestions = Array(suggestions.prefix(4))"))
-        XCTAssertTrue(typeahead.contains(".wanderGlassPanel(cornerRadius: WanderTheme.radiusLarge)"))
+        XCTAssertTrue(typeahead.contains(".wanderGlassPanel("))
+        XCTAssertTrue(typeahead.contains("tone: appearance.neutralGlassTone"))
         XCTAssertFalse(typeahead.contains(".background(WanderTheme.surfaceRaised.color)"))
     }
 
@@ -2317,6 +2320,14 @@ final class NavigationContractTests: XCTestCase {
             .settings
         )
         XCTAssertNil(WanderRootView.resolvedInitialPresentation(from: ["Wander"]))
+    }
+
+    @MainActor
+    func testRootViewCanResolveDarkMapForVisualQA() {
+        XCTAssertTrue(
+            WanderRootView.resolvedInitialDarkMap(from: ["Wander", "-WanderDarkMap"])
+        )
+        XCTAssertFalse(WanderRootView.resolvedInitialDarkMap(from: ["Wander"]))
     }
 
     @MainActor

@@ -334,6 +334,16 @@ final class WanderStore: ObservableObject {
             persist()
         }
     }
+    var isDarkMapEnabled: Bool {
+        willSet {
+            guard newValue != isDarkMapEnabled else { return }
+            objectWillChange.send()
+        }
+        didSet {
+            guard oldValue != isDarkMapEnabled else { return }
+            persist()
+        }
+    }
 
     let contactProvider: any ContactProvider
 
@@ -515,6 +525,7 @@ final class WanderStore: ObservableObject {
             self.isPrivateProfile = restored.isPrivateProfile
             self.autoSaveListAddsToWant = restored.autoSaveListAddsToWant
             self.defaultMapFilter = restored.defaultMapFilter
+            self.isDarkMapEnabled = restored.isDarkMapEnabled
             self.providerCategoryEnrichmentAttemptedAtByKey = restored.providerCategoryEnrichmentAttemptedAtByKey
             self.saveStreakDatesByUserID = restored.saveStreakDatesByUserID
             self.saveStreakRecoveryDatesByUserID = restored.saveStreakRecoveryDatesByUserID
@@ -541,6 +552,7 @@ final class WanderStore: ObservableObject {
             self.isPrivateProfile = fixtures.currentUser.isPrivateProfile
             self.autoSaveListAddsToWant = true
             self.defaultMapFilter = .featured
+            self.isDarkMapEnabled = false
             self.saveStreakDatesByUserID = Dictionary(grouping: fixtures.userPlaces, by: \.userID)
                 .mapValues { $0.map(\.savedAt) }
             self.saveStreakRecoveryDatesByUserID = [:]
@@ -1397,6 +1409,7 @@ final class WanderStore: ObservableObject {
         isPrivateProfile = false
         autoSaveListAddsToWant = true
         defaultMapFilter = .featured
+        isDarkMapEnabled = false
         persist()
     }
 

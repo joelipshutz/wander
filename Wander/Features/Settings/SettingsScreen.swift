@@ -28,6 +28,7 @@ struct SettingsScreen: View {
             onNUXDebugSettingsChanged: onNUXDebugSettingsChanged,
             onDismiss: onDismiss
         )
+        .preferredColorScheme(.light)
     }
 
     private var header: some View {

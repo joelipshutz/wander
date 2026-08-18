@@ -386,15 +386,17 @@ struct WanderRootView: View {
             initialValue: PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
         )
         let persistence: WanderStorePersistence? = fixtureMode == .empty ? .live : nil
-        _store = StateObject(
-            wrappedValue: Self.makeStore(
-                fixtureMode: fixtureMode,
-                parser: parser,
-                analytics: analytics,
-                persistence: persistence,
-                initialSession: initialSession
-            )
+        let store = Self.makeStore(
+            fixtureMode: fixtureMode,
+            parser: parser,
+            analytics: analytics,
+            persistence: persistence,
+            initialSession: initialSession
         )
+        if Self.resolvedInitialDarkMap(from: launchArguments) {
+            store.isDarkMapEnabled = true
+        }
+        _store = StateObject(wrappedValue: store)
         let importStore = PlaceImportStore()
         _importStore = StateObject(wrappedValue: importStore)
         _placeSaveDraftStore = StateObject(
@@ -433,6 +435,12 @@ struct WanderRootView: View {
                 \.placeProfileFloatingActionVariant,
                 placeProfileFloatingActionVariant
             )
+    }
+
+    private var mapAppearanceColorScheme: ColorScheme {
+        selectedTab == .map && store.isDarkMapEnabled && !isPresentingAdd
+            ? .dark
+            : .light
     }
 
     private var tabRoot: some View {
@@ -474,7 +482,7 @@ struct WanderRootView: View {
                 .tag(WanderTab.profile)
         }
         .tint(WanderTheme.terracotta.color)
-        .preferredColorScheme(.light)
+        .preferredColorScheme(mapAppearanceColorScheme)
         .background {
             if walkthroughs.currentStep?.target == .mapTabs {
                 WanderNativeTabFrameReader(
@@ -2348,6 +2356,12 @@ struct WanderRootView: View {
 
     static func resolvedInitialPresentation(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderInitialPresentation? {
         arguments.contains("-WanderOpenSettings") ? .settings : nil
+    }
+
+    static func resolvedInitialDarkMap(
+        from arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        arguments.contains("-WanderDarkMap")
     }
 
     static func resolvedInitialAddPresentation(

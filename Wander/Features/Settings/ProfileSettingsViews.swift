@@ -221,10 +221,20 @@ struct ProfileSettingsHome: View {
             }
             .tint(WanderTheme.terracotta.color)
             .accessibilityIdentifier("settings.map.defaultFilter")
+
+            Toggle(
+                isOn: Binding(
+                    get: { store.isDarkMapEnabled },
+                    set: { store.isDarkMapEnabled = $0 }
+                )
+            ) {
+                Label("Dark map", systemImage: "moon.stars")
+            }
+            .tint(WanderTheme.terracotta.color)
+            .accessibilityHint("Uses a dark map and matching controls on the Map tab")
+            .accessibilityIdentifier("settings.map.darkMode")
         } header: {
             Text("Map")
-        } footer: {
-            Text("Used whenever the map opens or resets on this device.")
         }
     }
 
