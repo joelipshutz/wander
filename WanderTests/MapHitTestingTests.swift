@@ -677,6 +677,48 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertEqual(MapPinEntranceStyle.staggerDelay(for: 100), 0.06, accuracy: 0.001)
     }
 
+    func testPinEntrancePresentationTransitionsFromCapturedHiddenState() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let fixtureData = try Data(
+            contentsOf: root.appendingPathComponent(
+                "WanderTests/Fixtures/ios-fix/rec-303-map-pin-entrance-bounce-pre.json"
+            )
+        )
+        let fixture = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: fixtureData) as? [String: Any]
+        )
+        let snapshot = try XCTUnwrap(fixture["snapshot"] as? [String: Bool])
+        let isVisible = try XCTUnwrap(snapshot["isVisible"])
+        let reduceMotion = try XCTUnwrap(snapshot["reduceMotion"])
+        let initiallyVisible = try XCTUnwrap(snapshot["presentationInitiallyVisible"])
+        var presentation = MapPinEntrancePresentation()
+
+        XCTAssertEqual(presentation.isPresented, initiallyVisible)
+        XCTAssertEqual(
+            presentation.renderedVisibility(
+                isVisible: isVisible,
+                reduceMotion: reduceMotion
+            ),
+            initiallyVisible
+        )
+
+        presentation.setVisible(isVisible)
+
+        XCTAssertTrue(presentation.isPresented)
+        XCTAssertTrue(
+            presentation.renderedVisibility(isVisible: isVisible, reduceMotion: reduceMotion)
+        )
+
+        presentation.setVisible(false)
+
+        XCTAssertFalse(presentation.isPresented)
+        XCTAssertTrue(
+            presentation.renderedVisibility(isVisible: true, reduceMotion: true)
+        )
+    }
+
     func testFilterTransitionIsScopedToPinsAndKeepsLiquidGlass() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -702,8 +744,15 @@ final class MapFilterSelectionTests: XCTestCase {
             map.components(separatedBy: "private struct MapPinEntranceModifier: ViewModifier {").last?
                 .components(separatedBy: "enum MapStatusFilter").first
         )
-        XCTAssertFalse(pinModifier.contains("@State"))
-        XCTAssertTrue(pinModifier.contains(".animation("))
+        XCTAssertTrue(
+            pinModifier.contains(
+                "@State private var presentation = MapPinEntrancePresentation()"
+            )
+        )
+        XCTAssertTrue(pinModifier.contains(".onAppear"))
+        XCTAssertTrue(pinModifier.contains(".onChange(of: isVisible)"))
+        XCTAssertTrue(pinModifier.contains("presentation.setVisible(visible)"))
+        XCTAssertTrue(pinModifier.contains("withAnimation("))
         XCTAssertTrue(map.contains("mapPressLocation.location = value.location"))
         XCTAssertFalse(map.contains("@State private var lastMapPressPoint"))
         XCTAssertFalse(map.contains("incomingGroups + departingGroups"))

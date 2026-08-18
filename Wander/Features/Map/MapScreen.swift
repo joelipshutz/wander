@@ -4308,29 +4308,68 @@ enum MapPinEntranceStyle {
     }
 }
 
+struct MapPinEntrancePresentation: Equatable {
+    private(set) var isPresented = false
+
+    mutating func setVisible(_ isVisible: Bool) {
+        isPresented = isVisible
+    }
+
+    func renderedVisibility(isVisible: Bool, reduceMotion: Bool) -> Bool {
+        reduceMotion ? isVisible : isPresented
+    }
+}
+
 private struct MapPinEntranceModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let isVisible: Bool
     let delay: TimeInterval
 
+    @State private var presentation = MapPinEntrancePresentation()
+
     func body(content: Content) -> some View {
+        let isPresented = presentation.renderedVisibility(
+            isVisible: isVisible,
+            reduceMotion: reduceMotion
+        )
+
         content
-            .opacity(isVisible ? 1 : 0)
+            .opacity(isPresented ? 1 : 0)
             .scaleEffect(
-                isVisible ? 1 : MapPinEntranceStyle.hiddenScale,
+                isPresented ? 1 : MapPinEntranceStyle.hiddenScale,
                 anchor: .bottom
             )
-            .offset(y: isVisible ? 0 : MapPinEntranceStyle.hiddenVerticalOffset)
-            .allowsHitTesting(isVisible)
-            .animation(
-                reduceMotion
-                    ? nil
-                    : isVisible
-                        ? MapPinEntranceStyle.entranceAnimation.delay(delay)
-                        : MapPinEntranceStyle.fadeOutAnimation,
-                value: isVisible
-            )
+            .offset(y: isPresented ? 0 : MapPinEntranceStyle.hiddenVerticalOffset)
+            .allowsHitTesting(isPresented)
+            .onAppear {
+                updatePresentation(for: isVisible)
+            }
+            .onChange(of: isVisible) { _, visible in
+                updatePresentation(for: visible)
+            }
+            .onChange(of: reduceMotion) { _, _ in
+                updatePresentation(for: isVisible)
+            }
+    }
+
+    private func updatePresentation(for visible: Bool) {
+        if reduceMotion {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                presentation.setVisible(visible)
+            }
+            return
+        }
+
+        withAnimation(
+            visible
+                ? MapPinEntranceStyle.entranceAnimation.delay(delay)
+                : MapPinEntranceStyle.fadeOutAnimation
+        ) {
+            presentation.setVisible(visible)
+        }
     }
 }
 
