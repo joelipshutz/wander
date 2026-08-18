@@ -2827,6 +2827,11 @@ final class NavigationContractTests: XCTestCase {
         let root = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderRootView.swift")
         )
+        let authGate = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Auth/AuthGateSheet.swift"
+            )
+        )
 
         XCTAssertFalse(profile.contains(".navigationDestination(isPresented: $showsSettings)"))
         XCTAssertTrue(profile.contains("if showsSettings {"))
@@ -2916,8 +2921,24 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(settings.localizedCaseInsensitiveContains("data and sync"))
         XCTAssertFalse(legacySettings.localizedCaseInsensitiveContains("data and sync"))
         XCTAssertFalse(profileMockups.localizedCaseInsensitiveContains("data & sync"))
-        XCTAssertTrue(settings.contains("accountRow(\"Change email\", value: session.email"))
-        XCTAssertTrue(settings.contains(".fixedSize(horizontal: true, vertical: false)"))
+        XCTAssertTrue(settings.contains("ProfileSettingsAccountActions(session: session)"))
+        XCTAssertTrue(settings.contains("showsAccountManagement = true"))
+        XCTAssertTrue(settings.contains(".sheet(isPresented: $showsAccountManagement)"))
+        XCTAssertTrue(settings.contains("ClerkAccountManagementView()"))
+        XCTAssertTrue(authGate.contains("struct ClerkAccountManagementView: View"))
+        XCTAssertTrue(authGate.contains("UserProfileView()"))
+        XCTAssertTrue(authGate.contains(".environment(Clerk.shared)"))
+        XCTAssertTrue(settings.contains("title: \"Change email\""))
+        XCTAssertTrue(settings.contains("title: \"Change phone number\""))
+        XCTAssertTrue(settings.contains("title: \"Change password\""))
+        XCTAssertTrue(settings.contains("Button(action: onSelect)"))
+        XCTAssertTrue(settings.contains("HStack(spacing: 0)"))
+        XCTAssertTrue(settings.contains("Divider()"))
+        XCTAssertTrue(settings.contains(".overlay(Color.gray.opacity(0.22))"))
+        XCTAssertTrue(settings.contains(".multilineTextAlignment(.center)"))
+        XCTAssertTrue(settings.contains("Text(emailAddress)"))
+        XCTAssertTrue(settings.contains("Text(phoneNumber)"))
+        XCTAssertTrue(settings.contains(".font(.system(.subheadline, design: .default, weight: .regular))"))
         XCTAssertTrue(settings.contains(".truncationMode(.tail)"))
     }
 

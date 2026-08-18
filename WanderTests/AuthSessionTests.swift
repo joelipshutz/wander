@@ -933,6 +933,28 @@ final class AuthSessionTests: XCTestCase {
         XCTAssertNil(SettingsAccountIdentityPresentation.publicHandle(for: withBlankHandle))
     }
 
+    func testSettingsAccountIdentityNormalizesContactDetails() {
+        let session = AuthSession(
+            userID: "user_internal_123",
+            displayName: "Ryan",
+            handle: "ryan",
+            email: "  ryan@example.com  ",
+            phoneNumber: "  +1 (323) 555-0119  "
+        )
+        let blankContacts = AuthSession(
+            userID: "user_internal_456",
+            displayName: "Ryan",
+            handle: "ryan",
+            email: "   ",
+            phoneNumber: "\n"
+        )
+
+        XCTAssertEqual(SettingsAccountIdentityPresentation.emailAddress(for: session), "ryan@example.com")
+        XCTAssertEqual(SettingsAccountIdentityPresentation.phoneNumber(for: session), "+1 (323) 555-0119")
+        XCTAssertNil(SettingsAccountIdentityPresentation.emailAddress(for: blankContacts))
+        XCTAssertNil(SettingsAccountIdentityPresentation.phoneNumber(for: blankContacts))
+    }
+
     func testSettingsPrivacyCopyExplainsDefaultStealthAndPrivateProfileSearch() {
         XCTAssertEqual(SettingsDefaultPlacePrivacySurface.toggleTitle, "stealth mode for new saves")
 
