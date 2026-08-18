@@ -1523,7 +1523,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(profileSettings.contains("jolipshutz"))
         XCTAssertFalse(profileSettings.contains("ryan_lieblein"))
         XCTAssertFalse(profileSettings.contains("@gmail.com"))
-        XCTAssertTrue(root.contains("isEntitledDebugReplayRequested: isReplayRequested"))
+        XCTAssertTrue(root.contains("FirstVisitWalkthroughDebugReplayPolicy.resolve("))
+        XCTAssertTrue(root.contains("debugReplay.shouldPreserveLocalJourney"))
+        XCTAssertTrue(root.contains("shouldRepairCompletedLocalJourney("))
+        XCTAssertTrue(root.contains("walkthroughs.hasCompletedPrimaryJourney"))
         XCTAssertTrue(root.contains("walkthroughDebugPreferences.clearReplayRequest"))
         XCTAssertTrue(root.contains("onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser"))
         XCTAssertTrue(root.contains("@State private var placeProfileFloatingActionVariant"))
@@ -3336,6 +3339,24 @@ final class NavigationContractTests: XCTestCase {
             PlaceProfileFullScreen.resolvedFullViewBottomContentInset(from: 34),
             66
         )
+    }
+
+    func testFullPagePlaceViewOmitsFitRationaleContent() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+
+        XCTAssertFalse(fullView.contains("fitSentence"))
+        XCTAssertFalse(fullView.contains("whyItFitsSection"))
+        XCTAssertFalse(fullView.contains("Why it fits"))
+        XCTAssertFalse(fullView.contains("Strong fit based on your check-ins"))
+        XCTAssertTrue(fullView.contains("bestForSection"))
+        XCTAssertTrue(fullView.contains("PlaceActivitySection"))
     }
 
     func testPlaceProfileActionsKeepTheStandardRailAndExposeEveryWalkthroughAction() throws {
