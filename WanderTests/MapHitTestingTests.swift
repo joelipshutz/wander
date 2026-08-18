@@ -50,6 +50,56 @@ final class MapHitTestingTests: XCTestCase {
             )
         )
     }
+
+    func testSearchRankingUsesCachedViewerLocationOrFallsBackToMapCenter() {
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
+            span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+        )
+        let viewerLocation = CLLocation(latitude: 40.71, longitude: -74.01)
+
+        let cachedOrigin = MapSearchPerformancePolicy.rankingOrigin(
+            viewerLocation: viewerLocation,
+            mapRegion: region
+        )
+        let fallbackOrigin = MapSearchPerformancePolicy.rankingOrigin(
+            viewerLocation: nil,
+            mapRegion: region
+        )
+
+        XCTAssertEqual(cachedOrigin.coordinate.latitude, viewerLocation.coordinate.latitude)
+        XCTAssertEqual(cachedOrigin.coordinate.longitude, viewerLocation.coordinate.longitude)
+        XCTAssertEqual(fallbackOrigin.coordinate.latitude, region.center.latitude)
+        XCTAssertEqual(fallbackOrigin.coordinate.longitude, region.center.longitude)
+    }
+
+    func testFeaturedRefreshPolicyOnlyFetchesForFeaturedSource() {
+        XCTAssertTrue(MapSearchPerformancePolicy.shouldFetchFeatured(for: .featured))
+        XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .friends))
+        XCTAssertFalse(MapSearchPerformancePolicy.shouldFetchFeatured(for: .you))
+    }
+
+    func testMapSearchPipelineReusesImmediateProjectionWorkWithoutFreshLocationLookup() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        XCTAssertTrue(map.contains("viewerLocation: mapCardViewerLocation"))
+        XCTAssertFalse(map.contains("searchOriginLocation"))
+        XCTAssertTrue(map.contains("from: renderProjection.visiblePlaceGroups"))
+        XCTAssertTrue(map.contains("Task { @MainActor [immediateSavedSuggestions] in"))
+        XCTAssertFalse(map.contains("savedTypeaheadSuggestions(for:"))
+
+        let sourceStart = try XCTUnwrap(map.range(of: "private func selectMapSource("))
+        let sourceEnd = try XCTUnwrap(
+            map.range(of: "private func dismissMoreFilters()", range: sourceStart.upperBound..<map.endIndex)
+        )
+        let sourceSelection = map[sourceStart.lowerBound..<sourceEnd.lowerBound]
+        XCTAssertTrue(sourceSelection.contains("handleFeaturedCameraChange(currentSearchRegion)"))
+    }
 }
 
 final class MapSelectionMotionTests: XCTestCase {

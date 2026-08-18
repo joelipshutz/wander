@@ -827,6 +827,10 @@ private struct FeedPeopleSurface: View {
             return
         }
 
+        let localResults = store.searchProfiles(handleQuery: query)
+        guard !Task.isCancelled, query == memberQuery else { return }
+        memberResults = localResults
+
         if debounce {
             do {
                 try await Task.sleep(for: .milliseconds(225))

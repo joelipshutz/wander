@@ -549,7 +549,12 @@ struct DiscoverScreen: View {
         placeSearchTask = Task { @MainActor in
             let refinementClock = ContinuousClock()
             let refinementStart = refinementClock.now
-            let results = await store.discover(query: query, scope: .everyone, backend: backend)
+            let results = await store.discover(
+                query: query,
+                scope: .everyone,
+                backend: backend,
+                includeProfiles: false
+            )
             guard !Task.isCancelled,
                   isPlaceSearchPresented,
                   activePlaceSearchSubmissionID == submissionID,
@@ -1593,7 +1598,12 @@ struct DiscoverScreen: View {
         placeResults = store.searchTrustedPlaces(query: trimmedQuery, scope: .everyone)
         placeSearchResultStage = "immediate"
         isPlaceSearchRefining = true
-        let results = await store.discover(query: query, scope: .everyone, backend: backend)
+        let results = await store.discover(
+            query: query,
+            scope: .everyone,
+            backend: backend,
+            includeProfiles: false
+        )
         guard !Task.isCancelled,
               submittedPlacesQuery == self.submittedPlacesQuery,
               normalizedSearchQuery(query) == normalizedSearchQuery(placesQuery)
@@ -1631,6 +1641,10 @@ struct DiscoverScreen: View {
             memberResults = []
             return
         }
+
+        let localResults = store.searchProfiles(handleQuery: query)
+        guard !Task.isCancelled, query == memberQuery else { return }
+        memberResults = localResults
 
         guard await waitForSearchDebounceIfNeeded(debounce) else { return }
         let results = await store.discoverMembers(query: query, backend: backend)

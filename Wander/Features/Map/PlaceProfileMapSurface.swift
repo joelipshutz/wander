@@ -1137,7 +1137,10 @@ private struct PlaceProfileFullView: View {
             }
         }
         .task(id: place.photoLookupKey) {
-            await reloadGallery()
+            await reloadProviderPhoto()
+        }
+        .task(id: place.id) {
+            await reloadVisibleUserPhotos()
         }
         .task(id: businessActionLookupKey) {
             await resolveBusinessActions()
@@ -1207,35 +1210,29 @@ private struct PlaceProfileFullView: View {
         )
     }
 
-    private func reloadGallery() async {
+    private func reloadProviderPhoto() async {
         if place.id.hasPrefix("walkthrough_place_") {
             providerPhoto = nil
-            userPhotos = []
-            galleryCursor = nil
-            galleryHasMore = false
-            return
-        }
-        guard !isLoadingGallery else { return }
-        isLoadingGallery = true
-
-        async let providerResult = resolvedProviderPhoto()
-        async let firstPageResult = resolvedUserPhotoPage(after: nil)
-        let (resolvedProvider, firstPage) = await (providerResult, firstPageResult)
-
-        guard !Task.isCancelled else {
-            isLoadingGallery = false
+            reconcileSelectedPhoto()
             return
         }
 
+        providerPhoto = nil
+        let resolvedProvider = await resolvedProviderPhoto()
+        guard !Task.isCancelled else { return }
         providerPhoto = resolvedProvider
-        userPhotos = firstPage?.items ?? []
-        galleryCursor = firstPage?.nextCursor
-        galleryHasMore = firstPage?.hasMore ?? false
-        isLoadingGallery = false
         reconcileSelectedPhoto()
     }
 
     private func reloadVisibleUserPhotos() async {
+        if place.id.hasPrefix("walkthrough_place_") {
+            userPhotos = []
+            galleryCursor = nil
+            galleryHasMore = false
+            isLoadingGallery = false
+            reconcileSelectedPhoto()
+            return
+        }
         guard !isLoadingGallery else { return }
         isLoadingGallery = true
         let firstPage = await resolvedUserPhotoPage(after: nil)

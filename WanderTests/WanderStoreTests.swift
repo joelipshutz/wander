@@ -6570,6 +6570,33 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertNotNil(store.profileState(for: "user_sofia"))
     }
 
+    func testDiscoverPlaceModeSkipsUnusedRemoteProfileSearch() async {
+        let store = makeStore()
+        let profileRepository = FakeProfileRepository(
+            shells: [
+                ProfileShell(
+                    id: "user_sofia",
+                    handle: "sofia",
+                    displayName: "Sofia Rivera",
+                    avatarURL: nil,
+                    bio: nil,
+                    relationship: .nonFollower
+                )
+            ]
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        let results = await store.discover(
+            query: "@so",
+            backend: backend,
+            includeProfiles: false
+        )
+
+        XCTAssertTrue(results.profiles.isEmpty)
+        XCTAssertTrue(profileRepository.queries.isEmpty)
+        XCTAssertNil(store.profileState(for: "user_sofia"))
+    }
+
     func testDiscoverMembersSearchDoesNotInvokePlaceParser() async {
         let parser = FakeFilterParser()
         let store = WanderStore(fixtures: WanderFixtures.seed(), parser: parser)
@@ -6601,6 +6628,30 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(profiles.map(\.handle), ["sofia"])
         XCTAssertEqual(profileRepository.queries, ["so"])
         XCTAssertNotNil(store.profileState(for: "user_sofia"))
+    }
+
+    func testIdenticalRemoteMemberResultsDoNotInvalidatePresentationCachesAgain() async {
+        let store = makeStore()
+        let profileRepository = FakeProfileRepository(
+            shells: [
+                ProfileShell(
+                    id: "user_sofia",
+                    handle: "sofia",
+                    displayName: "Sofia Rivera",
+                    avatarURL: nil,
+                    bio: nil,
+                    relationship: .nonFollower
+                )
+            ]
+        )
+        let backend = WanderBackend(profileRepository: profileRepository)
+
+        _ = await store.discoverMembers(query: "@so", backend: backend)
+        let revisionAfterFirstSearch = store.presentationRevision
+        _ = await store.discoverMembers(query: "@so", backend: backend)
+
+        XCTAssertEqual(store.presentationRevision, revisionAfterFirstSearch)
+        XCTAssertEqual(profileRepository.queries, ["so", "so"])
     }
 
     func testDiscoverPeopleRecommendationsLoadsCachesAndHydratesProfiles() async {
