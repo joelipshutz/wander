@@ -348,7 +348,13 @@ final class WanderStore: ObservableObject {
     private var visiblePlacesCache: [(filters: PlaceFilters, places: [VisiblePlace])] = []
     private var visiblePlaceCountsByOwnerIDCache: [String: Int]?
     private var visiblePlacesByListIDCache: (listIDs: [String], placesByListID: [String: [VisiblePlace]])?
+    private var firstVisitPhotosByPlaceIDCache: (
+        revision: UInt64,
+        userID: String,
+        photos: [String: LocalVisitPhoto]
+    )?
     private(set) var presentationRevision: UInt64 = 0
+    private(set) var firstVisitPhotoIndexBuildCount = 0
 
     private struct RankedVisiblePlace {
         let index: Int
@@ -651,6 +657,7 @@ final class WanderStore: ObservableObject {
         visiblePlacesCache.removeAll(keepingCapacity: true)
         visiblePlaceCountsByOwnerIDCache = nil
         visiblePlacesByListIDCache = nil
+        firstVisitPhotosByPlaceIDCache = nil
         visiblePlaceListLookupCache = nil
         presentationRevision &+= 1
     }
@@ -3671,6 +3678,13 @@ final class WanderStore: ObservableObject {
     }
 
     func firstVisitPhotosByPlaceID() -> [String: LocalVisitPhoto] {
+        if let cached = firstVisitPhotosByPlaceIDCache,
+           cached.revision == presentationRevision,
+           cached.userID == currentUser.id {
+            return cached.photos
+        }
+        firstVisitPhotoIndexBuildCount += 1
+
         var placeReferencesByAlias: [String: Set<String>] = [:]
         placeReferencesByAlias.reserveCapacity(places.count * 2)
         for place in places {
@@ -3730,6 +3744,11 @@ final class WanderStore: ObservableObject {
             }
         }
 
+        firstVisitPhotosByPlaceIDCache = (
+            revision: presentationRevision,
+            userID: currentUser.id,
+            photos: firstPhotoByPlaceID
+        )
         return firstPhotoByPlaceID
     }
 

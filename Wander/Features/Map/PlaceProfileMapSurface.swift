@@ -338,6 +338,7 @@ private struct PlaceProfilePreviewCard: View {
                     .zIndex(2)
             }
         }
+        .onAppear(perform: onReady)
         .task(id: photoResolutionKey) {
             await resolvePhoto()
         }
@@ -569,33 +570,44 @@ private struct PlaceProfilePreviewCard: View {
 
     @ViewBuilder
     private var cardPhoto: some View {
-        if let preparedImage {
-            Image(uiImage: preparedImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+        ZStack {
+            if place.isDroppedPin {
+                ZStack(alignment: .bottomTrailing) {
+                    LinearGradient(
+                        colors: [
+                            WanderTheme.terracottaDark.color,
+                            WanderTheme.textInk.color,
+                            Color.black.opacity(0.92)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 112, weight: .thin))
+                        .foregroundStyle(Color.white.opacity(0.13))
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 14)
+                        .accessibilityHidden(true)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .accessibilityLabel("Photo of \(place.name)")
-        } else if place.isDroppedPin {
-            ZStack(alignment: .bottomTrailing) {
+            } else {
                 LinearGradient(
-                    colors: [
-                        WanderTheme.terracottaDark.color,
-                        WanderTheme.textInk.color,
-                        Color.black.opacity(0.92)
-                    ],
+                    colors: [WanderTheme.sunTint.color, WanderTheme.skyTint.color],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 112, weight: .thin))
-                    .foregroundStyle(Color.white.opacity(0.13))
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 14)
-                    .accessibilityHidden(true)
+                PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 72)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if let preparedImage {
+                Image(uiImage: preparedImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .accessibilityLabel("Photo of \(place.name)")
+            }
         }
     }
 
@@ -2793,7 +2805,7 @@ struct PlaceProfilePhotoImage: View {
             return
         }
 
-        withAnimation(.easeOut(duration: 0.24)) {
+        withAnimation(.easeOut(duration: 0.10)) {
             image = Image(uiImage: decodedImage.image)
         }
     }

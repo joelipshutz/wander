@@ -493,8 +493,8 @@ struct WanderRootView: View {
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
         .task(id: selectedTab) {
-            // Let the native tab selection and Liquid Glass transition commit
-            // before analytics work begins on the main actor.
+            // Let the native tab selection render before analytics work begins
+            // on the main actor.
             await Task.yield()
             guard !Task.isCancelled else { return }
             analytics.track(
@@ -951,7 +951,11 @@ struct WanderRootView: View {
                 presentAddSheet()
             } else {
                 walkthroughs.perform(.mapTabs)
-                selectedTab = newTab
+                // Preserve the system Liquid Glass bar while committing the
+                // destination content without its long selection transition.
+                withTransaction(Transaction(animation: nil)) {
+                    selectedTab = newTab
+                }
                 presentLaunchLessonIfAppropriate()
                 walkthroughs.activate(walkthroughSurface(for: newTab))
             }

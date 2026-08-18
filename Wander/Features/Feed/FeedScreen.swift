@@ -66,6 +66,10 @@ struct FeedScreen: View {
                 floatingHeaderHeight = height
             }
             .task(id: auth.isSignedIn) {
+                // Commit the selected tab's first frame before starting the
+                // remote refresh and its published state changes.
+                await Task.yield()
+                guard !Task.isCancelled else { return }
                 await refresh()
             }
             .fullScreenCover(isPresented: $isShowingSearch) {
@@ -1206,7 +1210,7 @@ private struct FeedFeaturedRail: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: WanderTheme.spacing3) {
+            LazyHStack(alignment: .top, spacing: WanderTheme.spacing3) {
                 ForEach(places) { featured in
                     FeedFeaturedCard(
                         featured: featured,

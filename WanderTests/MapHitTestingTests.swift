@@ -85,14 +85,45 @@ final class MapSelectionMotionTests: XCTestCase {
 
     @MainActor
     func testSelectionMotionUsesAStagedCardAndBouncyPinContract() {
-        XCTAssertEqual(MapCompactCardMotionStyle.entranceDuration, 0.42, accuracy: 0.001)
-        XCTAssertEqual(MapCompactCardMotionStyle.nearbyFadeDuration, 0.46, accuracy: 0.001)
-        XCTAssertEqual(MapCompactCardMotionStyle.nearbyReturnFadeDuration, 0.34, accuracy: 0.001)
-        XCTAssertGreaterThan(MapCompactCardMotionStyle.hiddenVerticalOffset, 300)
+        XCTAssertEqual(MapCompactCardMotionStyle.entranceDuration, 0.24, accuracy: 0.001)
+        XCTAssertEqual(MapCompactCardMotionStyle.nearbyFadeDuration, 0.16, accuracy: 0.001)
+        XCTAssertEqual(MapCompactCardMotionStyle.nearbyReturnFadeDuration, 0.16, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(MapCompactCardMotionStyle.hiddenVerticalOffset, 220)
         XCTAssertEqual(MapPinSelectionMotionStyle.inactiveScale, 0.90, accuracy: 0.001)
         XCTAssertEqual(MapPinSelectionMotionStyle.selectedScale, 1.45, accuracy: 0.001)
-        XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.55, accuracy: 0.001)
-        XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.75, accuracy: 0.001)
+        XCTAssertEqual(MapPinSelectionMotionStyle.duration, 0.26, accuracy: 0.001)
+        XCTAssertEqual(MapPinSelectionMotionStyle.bounce, 0.32, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testFirstVisitPhotoIndexReusesWarmProjection() {
+        let store = WanderStore(fixtures: WanderFixtures.seed())
+
+        _ = store.firstVisitPhotosByPlaceID()
+        _ = store.firstVisitPhotosByPlaceID()
+        _ = store.firstVisitPhotosByPlaceID()
+
+        XCTAssertEqual(store.firstVisitPhotoIndexBuildCount, 1)
+    }
+
+    func testColdSurfaceWorkIsDeferredAndLazy() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let placeCard = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Map/PlaceProfileMapSurface.swift"
+            )
+        )
+
+        XCTAssertTrue(feed.contains("await Task.yield()"))
+        XCTAssertTrue(feed.contains("LazyHStack(alignment: .top"))
+        XCTAssertTrue(placeCard.contains(".onAppear(perform: onReady)"))
+        XCTAssertTrue(placeCard.contains("PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 72)"))
+        XCTAssertTrue(placeCard.contains("withAnimation(.easeOut(duration: 0.10))"))
     }
 
     @MainActor
