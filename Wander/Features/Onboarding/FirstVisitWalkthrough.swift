@@ -123,78 +123,29 @@ struct WalkthroughStep: Identifiable, Equatable, Sendable {
 }
 
 enum FirstVisitWalkthroughContent {
-    static let version = 12
+    static let version = 13
     static let profileIntroAutoAdvanceDelayMilliseconds = 4_000
     static let profileAutoAdvanceDelayMilliseconds = 2_200
     static let reducedMotionProfileAutoAdvanceDelayMilliseconds = 1_900
     static let nextArrowNudgeDelayMilliseconds = 3_000
     static let discoverResultsPreviewMilliseconds = 4_000
-    static let suppressedSurfaces: Set<WalkthroughSurface> = [.listDetail, .listEditor, .profile]
+    static let suppressedSurfaces: Set<WalkthroughSurface> = [
+        .placeDetail,
+        .feed,
+        .feedSearch,
+        .lists,
+        .listDetail,
+        .listEditor,
+        .profile
+    ]
     static let primaryJourneySurfaces: [WalkthroughSurface] = [
-        .map, .add, .saveFlow, .placeDetail, .feed, .feedSearch, .lists, .sendoff
+        .map, .add, .saveFlow, .sendoff
     ]
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
             step(.map, .mapAdd, "Saving a place", "Tap + and we’ll show you how a place becomes part of your map."),
-            step(.map, .mapAddAgain, "One more shortcut", "Tap + again and we’ll show you where imports live."),
-            step(
-                .map,
-                .mapFeatured,
-                MapSource.featured.subtitle,
-                "",
-                advance: .next,
-                coachTheme: .map
-            ),
-            step(
-                .map,
-                .mapFriends,
-                MapSource.friends.subtitle,
-                "",
-                advance: .next,
-                coachTheme: .social
-            ),
-            step(
-                .map,
-                .mapYou,
-                "Only your Check Ins and Wanna places",
-                "",
-                advance: .next,
-                coachTheme: .map
-            ),
-            step(
-                .map,
-                .mapMoreFilters,
-                "Narrow in with More",
-                "Filter by category, specific friends in your network, and distinguish between a check-in, wanna go, or both.",
-                advance: .next,
-                coachTheme: .map
-            ),
-            step(
-                .map,
-                .mapSearch,
-                "Search your trusted map",
-                "Try a place, neighborhood, or person.",
-                advance: .next,
-                coachTheme: .map
-            ),
-            step(
-                .map,
-                .mapTabs,
-                "Your places, all connected",
-                "Map, Feed, Lists, and Profile work together to help you find, plan, and remember.",
-                advance: .next,
-                coachTheme: .map
-            ),
-            step(
-                .map,
-                .mapMemory,
-                "Open the place memory",
-                "Tap the highlighted place to revisit everything you just saved.",
-                allowsTargetInteraction: true,
-                allowsBackNavigation: false,
-                coachTheme: .memory
-            )
+            step(.map, .mapAddAgain, "One more shortcut", "Tap + again and we’ll show you where imports live.")
         ],
         .sendoff: [
             step(
@@ -221,15 +172,6 @@ enum FirstVisitWalkthroughContent {
             ),
             step(
                 .add,
-                .addPlace,
-                "Here’s a place to start",
-                "We found a nearby park and selected it for this quick demo.",
-                allowsTargetInteraction: false,
-                coachTheme: .save,
-                automaticallyAdvances: true
-            ),
-            step(
-                .add,
                 .addImport,
                 "Bring saves with you",
                 "Import your places and lists from Google Maps, Instagram, Tiktok, and more here.",
@@ -251,6 +193,16 @@ enum FirstVisitWalkthroughContent {
                 "A date makes it a memory",
                 "We’ll choose one for this demo.",
                 allowsTargetInteraction: false,
+                allowsBackNavigation: false,
+                automaticallyAdvances: true
+            ),
+            step(
+                .saveFlow,
+                .saveNote,
+                "Leave a note for future you",
+                "We’ll add one useful detail you’ll recognize later.",
+                allowsTargetInteraction: false,
+                coachTheme: .memory,
                 automaticallyAdvances: true
             ),
             step(
@@ -273,21 +225,30 @@ enum FirstVisitWalkthroughContent {
             ),
             step(
                 .saveFlow,
-                .saveSubmit,
-                "Putting it on your map",
-                "We’ll save the details you just watched come together.",
+                .saveQuestions,
+                "Why this place fits",
+                "We’ll choose one useful answer in each section for this park.",
                 allowsTargetInteraction: false,
-                coachTheme: .save,
+                coachTheme: .tags,
                 automaticallyAdvances: true
             ),
             step(
                 .saveFlow,
-                .saveReview,
-                "Your first place is ready",
-                "Take a look, then tap Next when you’re ready to keep exploring.",
-                advance: .next,
+                .saveTags,
+                "Tag it for later",
+                "One accurate tag makes this park easier to rediscover.",
                 allowsTargetInteraction: false,
-                coachTheme: .save
+                coachTheme: .tags,
+                automaticallyAdvances: true
+            ),
+            step(
+                .saveFlow,
+                .saveSubmit,
+                "Ready to save",
+                "The highlighted button puts everything you just watched onto your map.",
+                allowsTargetInteraction: false,
+                coachTheme: .save,
+                automaticallyAdvances: true
             )
         ],
         .feed: [
@@ -412,6 +373,40 @@ enum FirstVisitWalkthroughContent {
     static var allSteps: [WalkthroughStep] {
         WalkthroughSurface.allCases.flatMap { stepsBySurface[$0, default: []] }
     }
+
+    // Retained for a later re-enable. The current NUX intentionally ends after
+    // Import, so these Map exploration lessons must not participate in routing.
+    static let suppressedMapExplorationSteps: [WalkthroughStep] = [
+        step(.map, .mapFeatured, MapSource.featured.subtitle, "", advance: .next, coachTheme: .map),
+        step(.map, .mapFriends, MapSource.friends.subtitle, "", advance: .next, coachTheme: .social),
+        step(.map, .mapYou, "Only your Check Ins and Wanna places", "", advance: .next, coachTheme: .map),
+        step(
+            .map,
+            .mapMoreFilters,
+            "Narrow in with More",
+            "Filter by category, specific friends in your network, and distinguish between a check-in, wanna go, or both.",
+            advance: .next,
+            coachTheme: .map
+        ),
+        step(.map, .mapSearch, "Search your trusted map", "Try a place, neighborhood, or person.", advance: .next, coachTheme: .map),
+        step(
+            .map,
+            .mapTabs,
+            "Your places, all connected",
+            "Map, Feed, Lists, and Profile work together to help you find, plan, and remember.",
+            advance: .next,
+            coachTheme: .map
+        ),
+        step(
+            .map,
+            .mapMemory,
+            "Open the place memory",
+            "Tap the highlighted place to revisit everything you just saved.",
+            allowsTargetInteraction: true,
+            allowsBackNavigation: false,
+            coachTheme: .memory
+        )
+    ]
 
     /// Gives automatic demonstrations enough time for an average reader to
     /// understand the coach copy before the UI moves on.
@@ -1070,10 +1065,6 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 
     var canGoBack: Bool {
-        if activeSurface == .saveFlow, currentStep?.target == .saveDate {
-            return true
-        }
-
         guard
             let activeSurface,
             currentStepIndex > 0,
@@ -1315,6 +1306,7 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
                     $0.target == target
                 }) == true
             }),
+            !FirstVisitWalkthroughContent.suppressedSurfaces.contains(surface),
             let index = FirstVisitWalkthroughContent.stepsBySurface[surface]?.firstIndex(where: {
                 $0.target == target
             })
@@ -1429,11 +1421,6 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     }
 
     func goBack() {
-        if activeSurface == .saveFlow, currentStep?.target == .saveDate {
-            rewindTutorialSaveStatusSelection()
-            return
-        }
-
         guard canGoBack, let surface = activeSurface else { return }
         let previousIndex = currentStepIndex - 1
         isRequestingContactInvite = false
@@ -1621,12 +1608,17 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
     private func destination(after surface: WalkthroughSurface) -> WalkthroughSurface? {
         switch surface {
         case .map:
-            .placeDetail
+            // The Map chapter ends on "One more shortcut". Its destination is
+            // the already-open Add sheet so the remaining Import lesson can
+            // attach before the finale.
+            .add
         case .placeDetail:
             .feed
         case .sendoff:
             nil
-        case .add, .saveFlow:
+        case .add:
+            .sendoff
+        case .saveFlow:
             .map
         case .feed:
             .lists

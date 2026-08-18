@@ -84,7 +84,6 @@ struct AddScreen: View {
     @State private var showsImportInbox = false
     @State private var isAutoClosingWalkthrough = false
     @State private var isRunningWalkthroughSearch = false
-    @State private var isOpeningWalkthroughCandidate = false
     @State private var showsImportReview = false
     @State private var importReviewBatchIDs: [String] = []
     @FocusState private var isQuickAddFocused: Bool
@@ -703,8 +702,6 @@ struct AddScreen: View {
         switch target {
         case .addSearch:
             await runWalkthroughParkSearch()
-        case .addPlace:
-            await openWalkthroughParkAfterPreview()
         case .addImport:
             settleWalkthroughSheet()
         default:
@@ -795,7 +792,7 @@ struct AddScreen: View {
         guard !Task.isCancelled,
               walkthroughs.currentStep?.target == .addSearch
         else { return }
-        walkthroughs.perform(.addSearch)
+        openWalkthroughSaveFlowAfterSearch()
     }
 
     @MainActor
@@ -821,33 +818,6 @@ struct AddScreen: View {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
             .joined(separator: "|")
-    }
-
-    @MainActor
-    private func openWalkthroughParkAfterPreview() async {
-        guard !isOpeningWalkthroughCandidate else { return }
-        isOpeningWalkthroughCandidate = true
-        defer { isOpeningWalkthroughCandidate = false }
-
-        if selectedCandidate == nil, let candidate = walkthroughs.tutorialCandidate {
-            candidates = [candidate]
-            selectedCandidateID = candidate.id
-            selectedSource = .manual
-            quickAddQuery = candidate.name
-            isShowingInlineCandidateResults = true
-            step = .source
-        }
-
-        settleWalkthroughSheet(candidateCount: candidates.count)
-        try? await Task.sleep(for: .milliseconds(
-            FirstVisitWalkthroughContent.automaticReadingDelayMilliseconds(for: .addPlace)
-        ))
-        guard !Task.isCancelled,
-              walkthroughs.activeSurface == .add,
-              walkthroughs.currentStep?.target == .addPlace,
-              selectedCandidate != nil
-        else { return }
-        openSharedSaveFlow()
     }
 
     @MainActor
@@ -1007,6 +977,21 @@ struct AddScreen: View {
         // nested save sheet. A kill between these statements can now always
         // reconstruct the exact presentation.
         walkthroughs.perform(.addPlace, transitioningTo: .saveFlow)
+    }
+
+    private func openWalkthroughSaveFlowAfterSearch() {
+        guard walkthroughs.activeSurface == .add,
+              walkthroughs.currentStep?.target == .addSearch,
+              let selectedCandidate
+        else { return }
+
+        presentSaveFlow(addCandidateContext(
+            selectedCandidate,
+            sourceType: selectedSource,
+            defaultVisibility: store.effectiveDefaultVisibility,
+            initialPhotoAttachments: pendingVisitPhotoAttachments
+        ))
+        walkthroughs.perform(.addSearch, transitioningTo: .saveFlow)
     }
 
     private func presentSaveFlow(_ context: MapPlaceSaveContext) {

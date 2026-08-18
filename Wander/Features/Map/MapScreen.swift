@@ -7013,6 +7013,7 @@ struct MapPlaceSaveEditor: View {
         .padding(.vertical, WanderTheme.spacing2)
         .background(editorBackground)
         .walkthroughTarget(.saveSubmit)
+        .walkthroughEmphasis(.saveSubmit)
         .walkthroughTarget(.saveReview)
     }
 
@@ -7178,6 +7179,7 @@ struct MapPlaceSaveEditor: View {
                             toggleAnswer(option, in: block)
                         }
                     }
+                    .id("walkthrough-question-\(block.key)")
                 }
             }
             .id(WalkthroughTargetID.saveQuestions)
@@ -7798,7 +7800,7 @@ struct MapPlaceSaveEditor: View {
         switch target {
         case .saveDate:
             await runWalkthroughDateDemo(for: target)
-        case .saveDetails, .saveFriends, .savePhotos, .saveQuestions, .savePrivacy:
+        case .saveDetails, .saveFriends, .savePhotos, .savePrivacy:
             guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
             completeWalkthroughTarget(target)
         case .saveRating:
@@ -7807,6 +7809,8 @@ struct MapPlaceSaveEditor: View {
             await runWalkthroughMoreOptionsDemo(for: target, with: proxy)
         case .saveNote:
             await runWalkthroughNoteDemo(for: target, with: proxy)
+        case .saveQuestions:
+            await runWalkthroughQuestionDemo(for: target, with: proxy)
         case .saveTags:
             await runWalkthroughTagDemo(for: target, with: proxy)
         case .saveSubmit:
@@ -7925,6 +7929,37 @@ struct MapPlaceSaveEditor: View {
     }
 
     @MainActor
+    private func runWalkthroughQuestionDemo(
+        for target: WalkthroughTargetID,
+        with proxy: ScrollViewProxy
+    ) async {
+        if !isShowingOptionalDetails {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.42)) {
+                isShowingOptionalDetails = true
+            }
+        }
+        refreshQuestionBlocksIfNeeded()
+        syncAnswersForCurrentQuestions()
+        guard await waitForWalkthroughReadingBeat(target) else { return }
+
+        let blocks = questionBlocks.filter { !Self.isUnifiedTagKey($0.key) }
+        for block in blocks {
+            guard isCurrentWalkthroughTarget(target) else { return }
+            guard let option = walkthroughParkOption(for: block) else { continue }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
+                proxy.scrollTo("walkthrough-question-\(block.key)", anchor: .center)
+            }
+            guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
+            withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76)) {
+                selectedAnswers[block.key] = [option]
+            }
+            guard await waitForWalkthroughBeat(.milliseconds(850), target: target) else { return }
+        }
+
+        completeWalkthroughTarget(target)
+    }
+
+    @MainActor
     private func selectWalkthroughParkTags(
         for target: WalkthroughTargetID,
         with proxy: ScrollViewProxy
@@ -7934,17 +7969,12 @@ struct MapPlaceSaveEditor: View {
         }
         guard await waitForWalkthroughBeat(.milliseconds(700), target: target) else { return }
         guard let block = unifiedTagBlock else { return }
-        let tags = walkthroughParkTags(from: block.options)
-        guard !tags.isEmpty else { return }
+        guard let tag = walkthroughParkTag(from: block.options) else { return }
 
-        unifiedTags = []
-        for tag in tags {
-            guard isCurrentWalkthroughTarget(target) else { return }
-            withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76)) {
-                _ = unifiedTags.insert(tag)
-            }
-            guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.76)) {
+            unifiedTags = [tag]
         }
+        _ = await waitForWalkthroughBeat(.milliseconds(650), target: target)
     }
 
     @MainActor
@@ -7994,7 +8024,7 @@ struct MapPlaceSaveEditor: View {
             || steps.contains(where: { $0.target == .saveTags })
     }
 
-    private func walkthroughParkTags(from options: [String]) -> [String] {
+    private func walkthroughParkTag(from options: [String]) -> String? {
         let preferences = [
             "reset spot",
             "low effort",
@@ -8003,13 +8033,24 @@ struct MapPlaceSaveEditor: View {
             "bring visitors",
             "views"
         ]
-        let preferredTags = preferences.compactMap { preferred in
+        return preferences.compactMap { preferred in
             options.first(where: { $0.caseInsensitiveCompare(preferred) == .orderedSame })
-        }
-        return Array((preferredTags + options).reduce(into: [String]()) { result, tag in
-            guard !result.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
-            result.append(tag)
-        }.prefix(3))
+        }.first ?? options.first
+    }
+
+    private func walkthroughParkOption(for block: AddQuestionBlock) -> String? {
+        let preferences = [
+            "good walk",
+            "reset spot",
+            "low effort",
+            "dog friendly",
+            "bring visitors",
+            "views",
+            "yes"
+        ]
+        return preferences.compactMap { preferred in
+            block.options.first(where: { $0.caseInsensitiveCompare(preferred) == .orderedSame })
+        }.first ?? block.options.first
     }
 
     @MainActor
@@ -8253,7 +8294,16 @@ struct MapPlaceSaveEditor: View {
             hasSelectedStatus = true
         }
         if step == .confirm,
-           [.saveDate, .saveRating, .saveMoreOptions, .saveNote, .saveTags, .saveSubmit, .saveReview]
+           [
+               .saveDate,
+               .saveNote,
+               .saveRating,
+               .saveMoreOptions,
+               .saveQuestions,
+               .saveTags,
+               .saveSubmit,
+               .saveReview
+           ]
             .contains(target) {
             prepareDetails()
         }
