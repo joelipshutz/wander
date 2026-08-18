@@ -3331,6 +3331,24 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testFullPagePlaceViewOmitsFitRationaleContent() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+
+        XCTAssertFalse(fullView.contains("fitSentence"))
+        XCTAssertFalse(fullView.contains("whyItFitsSection"))
+        XCTAssertFalse(fullView.contains("Why it fits"))
+        XCTAssertFalse(fullView.contains("Strong fit based on your check-ins"))
+        XCTAssertTrue(fullView.contains("bestForSection"))
+        XCTAssertTrue(fullView.contains("PlaceActivitySection"))
+    }
+
     func testPlaceProfileActionsKeepTheStandardRailAndExposeEveryWalkthroughAction() throws {
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
