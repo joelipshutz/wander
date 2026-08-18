@@ -2,6 +2,38 @@ import XCTest
 @testable import Wander
 
 final class PlacePhotoGalleryTests: XCTestCase {
+    func testProviderCompletionCanProduceHeaderContentBeforeUserGalleryCompletes() {
+        let providerPhoto = photo(provider: "google_places", id: "provider")
+
+        let providerOnlyItems = PlacePhotoGalleryPresenter.items(
+            providerPhoto: providerPhoto,
+            userPhotos: []
+        )
+
+        XCTAssertEqual(providerOnlyItems.map(\.id), ["google_places|provider"])
+
+        let completedItems = PlacePhotoGalleryPresenter.items(
+            providerPhoto: providerPhoto,
+            userPhotos: [userItem(id: "user-photo", userID: "viewer", handle: "viewer")]
+        )
+
+        XCTAssertEqual(completedItems.map(\.id), [
+            "google_places|provider",
+            "visit_photo|user-photo"
+        ])
+    }
+
+    func testUserGalleryCompletionCanProduceHeaderContentWhileProviderIsPending() {
+        let userPhoto = userItem(id: "user-photo", userID: "viewer", handle: "viewer")
+
+        let userOnlyItems = PlacePhotoGalleryPresenter.items(
+            providerPhoto: nil,
+            userPhotos: [userPhoto]
+        )
+
+        XCTAssertEqual(userOnlyItems.map(\.id), ["visit_photo|user-photo"])
+    }
+
     func testPresenterKeepsGoogleFirstPreservesServerRankingAndDeduplicatesUserPhotos() {
         let google = photo(provider: "google_places", id: "google")
         let mine = userItem(id: "mine-1", userID: "viewer", handle: "viewer")

@@ -4729,7 +4729,12 @@ final class WanderStore: ObservableObject {
         return DiscoverRecmePlaceSearchPlanner.request(query: query, filters: filters, limit: limit)
     }
 
-    func discover(query: String, scope: DiscoverPlaceScope = .everyone, backend: WanderBackend? = nil) async -> DiscoverResults {
+    func discover(
+        query: String,
+        scope: DiscoverPlaceScope = .everyone,
+        backend: WanderBackend? = nil,
+        includeProfiles: Bool = true
+    ) async -> DiscoverResults {
         let filters = await parseDiscover(query: query)
         guard !Task.isCancelled else {
             return DiscoverResults(
@@ -4806,6 +4811,16 @@ final class WanderStore: ObservableObject {
                 )
             }
         )
+        guard includeProfiles else {
+            return DiscoverResults(
+                places: places,
+                profiles: [],
+                filters: filters,
+                parseSource: lastDiscoverParseSource,
+                evidenceByUserPlaceID: evidenceByUserPlaceID
+            )
+        }
+
         var profiles = searchProfiles(handleQuery: query)
         let normalizedProfileQuery = normalizedHandleQuery(query)
 
@@ -8732,35 +8747,54 @@ final class WanderStore: ObservableObject {
     }
 
     private func upsertRemoteProfileShells(_ shells: [ProfileShell], preserveExistingProfileMetadataWhenMissing: Bool = false) {
+        var didChange = false
+
         for shell in shells where shell.id != currentUser.id && !isBlockedBetweenCurrentUser(and: shell.id) {
             if let existing = profiles.first(where: { $0.id == shell.id || $0.handle == shell.handle }) {
-                existing.serverID = shell.id
-                existing.handle = shell.handle
-                existing.searchHandle = shell.handle.lowercased()
-                existing.displayName = shell.displayName
-                existing.avatarURL = mergedProfileMetadata(
+                let resolvedAvatarURL = mergedProfileMetadata(
                     incoming: shell.avatarURL,
                     existing: existing.avatarURL,
                     preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
                 )
-                existing.bio = mergedProfileMetadata(
+                let resolvedBio = mergedProfileMetadata(
                     incoming: shell.bio,
                     existing: existing.bio,
                     preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
                 )
-                existing.homeArea = mergedProfileMetadata(
+                let resolvedHomeArea = mergedProfileMetadata(
                     incoming: shell.homeArea,
                     existing: existing.homeArea,
                     preserveExistingWhenMissing: preserveExistingProfileMetadataWhenMissing
                 )
-                if let isPrivateProfile = shell.isPrivateProfile {
-                    existing.isPrivateProfile = isPrivateProfile
-                }
-                if let createdAt = shell.createdAt {
-                    existing.createdAt = createdAt
-                }
+                let resolvedIsPrivateProfile = shell.isPrivateProfile ?? existing.isPrivateProfile
+                let resolvedCreatedAt = shell.createdAt ?? existing.createdAt
+                let resolvedSearchHandle = shell.handle.lowercased()
+                let resolvedSyncState = SyncState.synced.rawValue
+
+                guard existing.serverID != shell.id
+                    || existing.handle != shell.handle
+                    || existing.searchHandle != resolvedSearchHandle
+                    || existing.displayName != shell.displayName
+                    || existing.avatarURL != resolvedAvatarURL
+                    || existing.bio != resolvedBio
+                    || existing.homeArea != resolvedHomeArea
+                    || existing.isPrivateProfile != resolvedIsPrivateProfile
+                    || existing.createdAt != resolvedCreatedAt
+                    || existing.syncStateRaw != resolvedSyncState
+                else { continue }
+
+                existing.serverID = shell.id
+                existing.handle = shell.handle
+                existing.searchHandle = resolvedSearchHandle
+                existing.displayName = shell.displayName
+                existing.avatarURL = resolvedAvatarURL
+                existing.bio = resolvedBio
+                existing.homeArea = resolvedHomeArea
+                existing.isPrivateProfile = resolvedIsPrivateProfile
+                existing.createdAt = resolvedCreatedAt
                 existing.syncStateRaw = SyncState.synced.rawValue
                 existing.updatedAt = .now
+                didChange = true
             } else {
                 profiles.append(
                     LocalProfile(
@@ -8776,8 +8810,11 @@ final class WanderStore: ObservableObject {
                         createdAt: shell.createdAt ?? .now
                     )
                 )
+                didChange = true
             }
         }
+
+        guard didChange else { return }
         objectWillChange.send()
         persist()
     }

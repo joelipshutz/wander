@@ -51,6 +51,22 @@ final class MapRenderProjectionCache<Key: Equatable, Value> {
     }
 }
 
+enum MapSearchPerformancePolicy {
+    static func rankingOrigin(
+        viewerLocation: CLLocation?,
+        mapRegion: MKCoordinateRegion
+    ) -> CLLocation {
+        viewerLocation ?? CLLocation(
+            latitude: mapRegion.center.latitude,
+            longitude: mapRegion.center.longitude
+        )
+    }
+
+    static func shouldFetchFeatured(for source: MapSource) -> Bool {
+        source == .featured
+    }
+}
+
 private final class MapPressLocationTracker {
     var location: CGPoint?
 }
@@ -1262,6 +1278,7 @@ struct MapScreen: View {
         guard mapFilterState != previousState else { return }
         routedVisiblePlace = nil
         transitionMapPins(from: outgoingGroups, to: orderedVisiblePlaceGroups())
+        handleFeaturedCameraChange(currentSearchRegion)
     }
 
     private func dismissMoreFilters() {
@@ -1751,22 +1768,18 @@ struct MapScreen: View {
 
     private func handleFeaturedCameraChange(_ region: MKCoordinateRegion) {
         featuredViewportRefreshTask?.cancel()
+        featuredRankingRegion = region
 
-        guard !isLoadingMapSources,
+        guard MapSearchPerformancePolicy.shouldFetchFeatured(for: mapFilterState.source),
+              !isLoadingMapSources,
               auth.isSignedIn,
               backend.placeRepository != nil
-        else {
-            featuredRankingRegion = region
-            return
-        }
+        else { return }
 
         guard MapViewportRefreshPolicy.shouldRefresh(
             visibleRegion: region,
             loadedViewport: loadedFeaturedViewport
-        ) else {
-            featuredRankingRegion = region
-            return
-        }
+        ) else { return }
 
         let requestedViewport = MapViewportRefreshPolicy.prefetchedViewport(for: region)
         featuredViewportRefreshTask = Task { @MainActor in
@@ -1785,7 +1798,6 @@ struct MapScreen: View {
 
             updateFeaturedViewportPlaces(places)
             loadedFeaturedViewport = requestedViewport
-            featuredRankingRegion = region
         }
     }
 
@@ -2812,9 +2824,12 @@ struct MapScreen: View {
         request.naturalLanguageQuery = query
         request.region = currentSearchRegion
         request.resultTypes = [.pointOfInterest, .address]
+        let origin = MapSearchPerformancePolicy.rankingOrigin(
+            viewerLocation: mapCardViewerLocation,
+            mapRegion: currentSearchRegion
+        )
 
         let response = try await MKLocalSearch(request: request).start()
-        let origin = await searchOriginLocation()
         return mapKitCandidates(from: response.mapItems, query: query, origin: origin, limit: limit)
     }
 
@@ -3520,42 +3535,35 @@ struct MapScreen: View {
             return
         }
 
-        typeaheadSuggestions = savedTypeaheadSuggestions(for: query)
+        let immediateSavedSuggestions = savedTypeaheadSuggestions(
+            from: renderProjection.visiblePlaceGroups
+        )
+        typeaheadSuggestions = immediateSavedSuggestions
         isLoadingTypeahead = true
 
-        typeaheadTask = Task { @MainActor in
+        typeaheadTask = Task { @MainActor [immediateSavedSuggestions] in
             try? await Task.sleep(nanoseconds: 280_000_000)
             guard !Task.isCancelled else { return }
 
             let candidates = (try? await mapKitCandidates(for: query, limit: 6)) ?? []
             guard !Task.isCancelled, Self.normalized(mapQuery) == normalized else { return }
 
-            let savedSuggestions = savedTypeaheadSuggestions(for: query)
-            let seenTitles = Set(savedSuggestions.map { Self.normalized($0.title) })
+            let seenTitles = Set(immediateSavedSuggestions.map { Self.normalized($0.title) })
             let mapSuggestions = candidates
                 .filter { !isAlreadyVisible(candidate: $0) }
                 .filter { !seenTitles.contains(Self.normalized($0.name)) }
-                .prefix(max(0, 6 - savedSuggestions.count))
+                .prefix(max(0, 6 - immediateSavedSuggestions.count))
                 .map(MapSearchSuggestion.mapKit)
 
-            typeaheadSuggestions = Array((savedSuggestions + mapSuggestions).prefix(6))
+            typeaheadSuggestions = Array((immediateSavedSuggestions + mapSuggestions).prefix(6))
             isLoadingTypeahead = false
         }
     }
 
-    private func savedTypeaheadSuggestions(for query: String) -> [MapSearchSuggestion] {
-        let normalized = Self.normalized(query)
-        guard !normalized.isEmpty else { return [] }
-
-        let sortedMatches = TrustedPlaceSearch.matches(
-            query: query,
-            in: baseVisiblePlaces
-        ).map(\.place)
-
-        return VisiblePlaceGrouping.groups(
-            from: sortedMatches,
-            currentUserID: store.currentUser.id
-        )
+    private func savedTypeaheadSuggestions(
+        from groups: [VisiblePlaceGroup]
+    ) -> [MapSearchSuggestion] {
+        groups
             .map { group in
                 let saveStates = group.places.map { visiblePlace in
                     MapPinSaveState(
@@ -3826,17 +3834,6 @@ struct MapScreen: View {
         mapCardViewerLocation = CLLocation(
             latitude: coordinate.latitude,
             longitude: coordinate.longitude
-        )
-    }
-
-    private func searchOriginLocation() async -> CLLocation {
-        if let coordinate = await currentUserCoordinate() {
-            return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        }
-
-        return CLLocation(
-            latitude: currentSearchRegion.center.latitude,
-            longitude: currentSearchRegion.center.longitude
         )
     }
 
