@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileSettingsHome: View {
     let onNUXDebugSettingsChanged: () -> Void
+    let onDismiss: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
@@ -23,8 +24,12 @@ struct ProfileSettingsHome: View {
     private let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
     private let placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
 
-    init(onNUXDebugSettingsChanged: @escaping () -> Void = {}) {
+    init(
+        onNUXDebugSettingsChanged: @escaping () -> Void = {},
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
+        self.onDismiss = onDismiss
     }
 
     var body: some View {
@@ -33,6 +38,7 @@ struct ProfileSettingsHome: View {
                 settingsHeader
                 settingsList
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(WanderTheme.canvasWarm.color.ignoresSafeArea())
             .offset(x: settingsDragOffset)
             .contentShape(Rectangle())
@@ -41,7 +47,6 @@ struct ProfileSettingsHome: View {
         }
         .tint(WanderTheme.terracotta.color)
         .toolbar(.hidden, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
         .sheet(isPresented: $showsAccountManagement) {
             ClerkAccountManagementView()
                 .onDisappear { Task { await auth.refreshSession() } }
@@ -76,14 +81,7 @@ struct ProfileSettingsHome: View {
 
     private var settingsHeader: some View {
         HStack(alignment: .center, spacing: WanderTheme.spacing4) {
-            Text("Settings")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .accessibilityAddTraits(.isHeader)
-
-            Spacer()
-
-            Button { dismiss() } label: {
+            Button(action: closeSettings) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
@@ -92,6 +90,13 @@ struct ProfileSettingsHome: View {
             }
             .accessibilityLabel("Back")
             .accessibilityIdentifier("settings.back")
+
+            Text("Settings")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(WanderTheme.textInk.color)
+                .accessibilityAddTraits(.isHeader)
+
+            Spacer()
         }
         .padding(.horizontal, WanderTheme.spacing4)
         .padding(.top, WanderTheme.spacing2)
@@ -103,9 +108,8 @@ struct ProfileSettingsHome: View {
         List {
             accountSection
             mapSection
-            privacySection
             notificationsSection
-            appSection
+            privacySection
             if isDebugSettingsEntitled {
                 debugSettingsSection
             }
@@ -152,7 +156,7 @@ struct ProfileSettingsHome: View {
                     settingsDragOffset = containerWidth
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                    dismiss()
+                    closeSettings()
                 }
             }
     }
@@ -243,17 +247,6 @@ struct ProfileSettingsHome: View {
         }
     }
 
-    private var appSection: some View {
-        Section("App") {
-            HStack {
-                Label("data and sync", systemImage: "arrow.triangle.2.circlepath")
-                Spacer()
-                Text("\(store.pendingSyncCount) pending")
-                    .foregroundStyle(WanderTheme.textMuted.color)
-            }
-        }
-    }
-
     @ViewBuilder
     private var accountActionsSection: some View {
         Section("Account actions") {
@@ -264,7 +257,8 @@ struct ProfileSettingsHome: View {
                 } label: {
                     destructiveSettingsLabel(
                         auth.isSigningOut ? "Signing out..." : "Sign out",
-                        icon: "rectangle.portrait.and.arrow.right"
+                        icon: "rectangle.portrait.and.arrow.right",
+                        color: WanderTheme.stateError.color
                     )
                 }
                 .disabled(auth.isSigningOut)
@@ -278,7 +272,8 @@ struct ProfileSettingsHome: View {
             } label: {
                 destructiveSettingsLabel(
                     isDeleting ? "Deleting account..." : "Delete my account",
-                    icon: "trash"
+                    icon: "trash",
+                    color: .red
                 )
             }
             .disabled(isDeleting || !auth.isSignedIn)
@@ -413,15 +408,23 @@ struct ProfileSettingsHome: View {
         .foregroundStyle(WanderTheme.textInk.color)
     }
 
-    private func destructiveSettingsLabel(_ title: String, icon: String) -> some View {
+    private func destructiveSettingsLabel(_ title: String, icon: String, color: Color) -> some View {
         HStack(spacing: WanderTheme.spacing3) {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .regular))
                 .frame(width: 22)
             Text(title)
         }
-        .foregroundStyle(WanderTheme.stateError.color)
+        .foregroundStyle(color)
         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum, alignment: .leading)
+    }
+
+    private func closeSettings() {
+        if let onDismiss {
+            onDismiss()
+        } else {
+            dismiss()
+        }
     }
 
     @MainActor
@@ -450,7 +453,7 @@ struct ProfileSettingsHome: View {
                 OnboardingCompletionStore().clear(for: deletingUserID)
             }
             store.resetAfterAccountDeletion()
-            dismiss()
+            closeSettings()
         } catch {
             errorMessage = "Your account could not be deleted. Nothing was removed. Please try again."
         }

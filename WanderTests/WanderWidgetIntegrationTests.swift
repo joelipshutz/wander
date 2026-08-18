@@ -491,7 +491,9 @@ final class WanderWidgetIntegrationTests: XCTestCase {
         XCTAssertTrue(
             profileScreen.contains("WanderDeepLinkPresentationToken(surface: .profileSettings)")
         )
-        XCTAssertTrue(profileScreen.contains(".navigationDestination(isPresented: $showsSettings)"))
+        XCTAssertTrue(profileScreen.contains("SettingsScreen(onDismiss: dismissSettings)"))
+        XCTAssertTrue(profileScreen.contains(".transition(.move(edge: .trailing))"))
+        XCTAssertFalse(profileScreen.contains(".navigationDestination(isPresented: $showsSettings)"))
         XCTAssertTrue(profileScreen.contains("onSettingsDidDismiss()"))
         XCTAssertFalse(profileScreen.contains("onDismiss: onSettingsDidDismiss"))
         XCTAssertTrue(root.contains("onDismiss: handleDeepLinkPresentationWillDismiss"))

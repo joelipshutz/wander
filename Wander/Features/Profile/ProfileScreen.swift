@@ -83,7 +83,7 @@ struct ProfileScreen: View {
                 editAction: { showsEditProfile = true },
                 settingsAction: {
                     walkthroughs.perform(.profileSettings)
-                    showsSettings = true
+                    presentSettings()
                 },
                 shareAction: {
                     walkthroughs.perform(.profileShare)
@@ -115,14 +115,21 @@ struct ProfileScreen: View {
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest
             )
-                .navigationDestination(isPresented: $showsSettings) {
-                    SettingsScreen()
+                .accessibilityHidden(showsSettings)
+                .allowsHitTesting(!showsSettings)
+                .overlay {
+                    if showsSettings {
+                        SettingsScreen(onDismiss: dismissSettings)
                         .environmentObject(store)
                         .environmentObject(auth)
                         .environmentObject(backend)
                         .environmentObject(pushNotifications)
+                        .transition(.move(edge: .trailing))
+                        .zIndex(1)
                         .onAppear(perform: beginSettingsPresentationLifecycle)
+                    }
                 }
+                .toolbar(showsSettings ? .hidden : .visible, for: .tabBar)
                 .sheet(isPresented: $showsProfileCamera) {
                     ProfileCameraPicker { image in
                         Task {
@@ -282,6 +289,18 @@ struct ProfileScreen: View {
         placeCollectionRoute = nil
         showsVisitInvitations = false
         showsEditProfile = false
+    }
+
+    private func presentSettings() {
+        withAnimation(.easeOut(duration: 0.24)) {
+            showsSettings = true
+        }
+    }
+
+    private func dismissSettings() {
+        withAnimation(.easeOut(duration: 0.22)) {
+            showsSettings = false
+        }
     }
 
     private func beginSettingsPresentationLifecycle() {
@@ -463,7 +482,7 @@ struct ProfileScreen: View {
                 Spacer()
 
                 Button {
-                    showsSettings = true
+                    presentSettings()
                 } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 18, weight: .bold))
