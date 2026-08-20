@@ -1223,10 +1223,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
         XCTAssertFalse(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
 
-        XCTAssertTrue(placeProfile.contains(".navigationTitle(\"\")"))
+        XCTAssertFalse(placeProfile.contains(".navigationTitle(\"\")"))
         XCTAssertFalse(placeProfile.contains(".navigationTitle(place.name)"))
-        XCTAssertTrue(placeProfile.contains("ToolbarItem(placement: .topBarLeading)"))
-        XCTAssertTrue(placeProfile.contains("ToolbarItemGroup(placement: .topBarTrailing)"))
+        XCTAssertTrue(placeProfile.contains("headerNavigationControls(topInset: headerTopInset)"))
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -1245,15 +1244,18 @@ final class NavigationContractTests: XCTestCase {
         let placeProfile = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
         let fullView = try sourceSection(
             placeProfile,
             after: "private struct PlaceProfileFullView: View {",
             before: "struct PlaceProfileFloatingActions: View {"
         )
-        let toolbar = try sourceSection(
+        let navigationControls = try sourceSection(
             fullView,
-            after: ".toolbar {",
-            before: ".task(id: place.photoLookupKey)"
+            after: "private func headerNavigationControls(topInset: CGFloat) -> some View {",
+            before: "private func headerNavigationLabel(systemImage: String) -> some View {"
         )
 
         // The same chrome is used for unsaved (.add), checked-in (.addVisit),
@@ -1261,16 +1263,66 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(fullView.contains("let action: PlaceSheetAction"))
         XCTAssertTrue(fullView.contains("Text(place.name)"))
         XCTAssertTrue(fullView.contains(".lineLimit(3)"))
-        XCTAssertTrue(fullView.contains(".navigationTitle(\"\")"))
+        XCTAssertFalse(fullView.contains(".navigationTitle(\"\")"))
         XCTAssertFalse(fullView.contains(".navigationTitle(place.name)"))
-        XCTAssertFalse(toolbar.contains("Button(action: onAction)"))
-        XCTAssertFalse(toolbar.contains("action.accessibilityLabel"))
+        XCTAssertFalse(fullView.contains(".toolbarColorScheme(.dark, for: .navigationBar)"))
+        XCTAssertFalse(fullView.contains(".toolbarBackground(.hidden, for: .navigationBar)"))
+        XCTAssertTrue(placeProfile.contains(".toolbar(.hidden, for: .navigationBar)"))
 
         XCTAssertTrue(fullView.contains(".ignoresSafeArea(.container, edges: .top)"))
-        XCTAssertTrue(fullView.contains(".toolbarBackground(.hidden, for: .navigationBar)"))
-        XCTAssertTrue(fullView.contains(".toolbarColorScheme(.dark, for: .navigationBar)"))
-        XCTAssertTrue(toolbar.contains("Label(\"Back\", systemImage: \"chevron.left\")"))
-        XCTAssertTrue(toolbar.contains("Label(\"Share place\", systemImage: \"square.and.arrow.up\")"))
+        XCTAssertTrue(fullView.contains(".overlay(alignment: .top)"))
+        XCTAssertTrue(fullView.contains("headerNavigationControls(topInset: headerTopInset)"))
+        XCTAssertTrue(navigationControls.contains("Button(action: onBack)"))
+        XCTAssertTrue(navigationControls.contains("headerNavigationLabel(systemImage: \"chevron.left\")"))
+        XCTAssertTrue(navigationControls.contains("headerNavigationLabel(systemImage: \"square.and.arrow.up\")"))
+        XCTAssertTrue(navigationControls.contains(".accessibilityLabel(\"Back\")"))
+        XCTAssertTrue(navigationControls.contains(".accessibilityLabel(\"Share place\")"))
+        XCTAssertTrue(navigationControls.contains(".padding(.top, topInset)"))
+        XCTAssertTrue(fullView.contains(".foregroundStyle(WanderTheme.terracotta.color)"))
+        XCTAssertTrue(fullView.contains(".wanderGlassCapsule(tone: .lightAction, interactive: true)"))
+
+        let glassCapsule = try sourceSection(
+            theme,
+            after: "private struct WanderGlassCapsuleModifier: ViewModifier {",
+            before: "private struct WanderGlassRoundedRectangleModifier: ViewModifier {"
+        )
+        XCTAssertTrue(glassCapsule.contains("if #available(iOS 26.0, *)"))
+        XCTAssertTrue(glassCapsule.contains(".glassEffect("))
+        XCTAssertTrue(glassCapsule.contains(".interactive(isInteractive)"))
+    }
+
+    func testPlaceProfileHeaderOnlyShowsRecMeUserAttribution() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let viewerAttribution = try sourceSection(
+            placeProfile,
+            after: "private var attributionCard: some View {",
+            before: "private func userAttributionCard("
+        )
+        let mapHeader = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileMapHeader: View {",
+            before: "struct PlaceProfilePhotoImage: View {"
+        )
+        let headerAttribution = try sourceSection(
+            mapHeader,
+            after: "private func photoSource(for item: PlacePhotoGalleryItem) -> some View {",
+            before: "private var selectedPhoto: PlacePhotoGalleryItem?"
+        )
+
+        XCTAssertTrue(viewerAttribution.contains("userAttributionCard(item: selectedItem, contributor: contributor)"))
+        XCTAssertTrue(viewerAttribution.contains("googleAttributionCard(photo: selectedItem.photo)"))
+        XCTAssertTrue(placeProfile.contains("private func googleAttributionCard"))
+        XCTAssertTrue(placeProfile.contains("Link(\"Photo by \\(authorName)\", destination: authorURL)"))
+        XCTAssertTrue(placeProfile.contains(".accessibilityLabel(\"Open photo in Google Maps\")"))
+
+        XCTAssertTrue(headerAttribution.contains("if let contributor = item.contributor"))
+        XCTAssertTrue(headerAttribution.contains("Photo by \\(contributor.displayName)"))
+        XCTAssertFalse(headerAttribution.contains("item.isGooglePlacesPhoto"))
+        XCTAssertFalse(headerAttribution.contains("PlacePhotoAttribution"))
+        XCTAssertFalse(mapHeader.contains("Open Google Maps photo"))
+        XCTAssertFalse(placeProfile.contains("private struct PlacePhotoAttribution"))
     }
 
     func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
@@ -3129,7 +3181,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
         XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
         XCTAssertFalse(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
-        XCTAssertTrue(placeProfile.contains(".toolbar(.visible, for: .navigationBar)"))
+        XCTAssertTrue(placeProfile.contains(".toolbar(.hidden, for: .navigationBar)"))
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
