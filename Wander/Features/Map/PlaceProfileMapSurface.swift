@@ -663,7 +663,8 @@ private struct PlaceProfilePreviewCard: View {
         PlaceCardPresentation.rating(
             providerScore: photo?.providerRating,
             providerCount: photo?.providerUserRatingCount,
-            recmeRating: presentation.overallRating ?? presentation.ownRating
+            recmeRating: presentation.overallRating ?? presentation.ownRating,
+            providerName: photo?.provider
         )
     }
 
@@ -923,6 +924,10 @@ private struct PlaceCardRatingDistanceRow: View {
                     Text("(\(count))")
                         .foregroundStyle(.white.opacity(0.8))
                 }
+
+                if let providerName = rating.providerDisplayName {
+                    PlaceCardProviderRatingBadge(providerName: providerName)
+                }
             }
 
             if rating != nil, distanceText != nil {
@@ -945,6 +950,37 @@ private struct PlaceCardRatingDistanceRow: View {
         if remainder >= 0.75 { return "star.fill" }
         if remainder >= 0.25 { return "star.leadinghalf.filled" }
         return "star"
+    }
+}
+
+private struct PlaceCardProviderRatingBadge: View {
+    let providerName: String
+
+    var body: some View {
+        Group {
+            switch providerName {
+            case "Yelp":
+                HStack(spacing: 2) {
+                    Image(systemName: "burst.fill")
+                    Text("Yelp")
+                }
+                .foregroundStyle(Color(red: 0.84, green: 0.12, blue: 0.16))
+            case "Google Maps":
+                Image("BrandGoogleMaps")
+                    .resizable()
+                    .scaledToFit()
+            case "Apple Maps":
+                Image(systemName: "apple.logo")
+                    .foregroundStyle(.white)
+            default:
+                Image(systemName: "building.2.crop.circle")
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+        }
+        .font(.system(size: 10, weight: .bold))
+        .frame(maxWidth: 34, maxHeight: 14)
+        .accessibilityLabel("\(providerName) rating")
+        .accessibilityIdentifier("map.selectedPlaceRatingProvider")
     }
 }
 

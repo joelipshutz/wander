@@ -3,32 +3,75 @@ import XCTest
 @testable import Wander
 
 final class PlaceCardPresentationTests: XCTestCase {
-    func testProviderRatingTakesPriorityAndKeepsGoogleCount() throws {
+    func testRecmeRatingTakesPriorityWhenProviderRatingIsAvailable() throws {
         let recme = PlaceActualRating(score: 5, count: 2, source: .friends)
         let rating = try XCTUnwrap(
             PlaceCardPresentation.rating(
                 providerScore: 4.7,
                 providerCount: 138,
-                recmeRating: recme
+                recmeRating: recme,
+                providerName: "google_places"
             )
         )
 
-        XCTAssertEqual(rating.scoreText, "4.7")
-        XCTAssertEqual(rating.count, 138)
+        XCTAssertEqual(rating.scoreText, "5.0")
+        XCTAssertEqual(rating.count, 2)
+        XCTAssertEqual(rating.source, .recme)
+        XCTAssertNil(rating.providerDisplayName)
     }
 
-    func testRatingFallsBackToRecmeEvidenceWhenGoogleRatingIsUnavailable() throws {
-        let recme = PlaceActualRating(score: 4.25, count: 4, source: .friends)
+    func testZeroCountRecmeRatingFallsBackToYelpWithExplicitAttribution() throws {
+        let emptyRecme = PlaceActualRating(score: 4.25, count: 0, source: .community)
         let rating = try XCTUnwrap(
+            PlaceCardPresentation.rating(
+                providerScore: 4.7,
+                providerCount: 138,
+                recmeRating: emptyRecme,
+                providerName: "yelp"
+            )
+        )
+
+        XCTAssertEqual(rating.score, 4.7)
+        XCTAssertEqual(rating.count, 138)
+        XCTAssertEqual(rating.source, .provider(displayName: "Yelp"))
+        XCTAssertEqual(rating.providerDisplayName, "Yelp")
+    }
+
+    func testMissingRecmeRatingFallsBackToActualProvider() throws {
+        let rating = try XCTUnwrap(
+            PlaceCardPresentation.rating(
+                providerScore: 4.6,
+                providerCount: 51,
+                recmeRating: nil,
+                providerName: "google_places"
+            )
+        )
+
+        XCTAssertEqual(rating.score, 4.6)
+        XCTAssertEqual(rating.count, 51)
+        XCTAssertEqual(rating.source, .provider(displayName: "Google Maps"))
+    }
+
+    func testMissingRecmeAndProviderRatingsOmitRating() {
+        XCTAssertNil(
             PlaceCardPresentation.rating(
                 providerScore: nil,
                 providerCount: nil,
-                recmeRating: recme
+                recmeRating: nil,
+                providerName: "yelp"
             )
         )
+    }
 
-        XCTAssertEqual(rating.score, 4.25)
-        XCTAssertEqual(rating.count, 4)
+    func testInvalidRecmeEvidenceNeverSilentlyFallsBackToProvider() {
+        XCTAssertNil(
+            PlaceCardPresentation.rating(
+                providerScore: 4.7,
+                providerCount: 138,
+                recmeRating: PlaceActualRating(score: 5, count: -1, source: .community),
+                providerName: "yelp"
+            )
+        )
     }
 
     func testDistanceOnlyRendersWhenViewerLocationIsAvailable() throws {
