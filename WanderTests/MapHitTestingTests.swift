@@ -191,6 +191,40 @@ final class MapHitTestingTests: XCTestCase {
 }
 
 final class MapSelectionMotionTests: XCTestCase {
+    func testSubmittedMapSearchCentersEverySelectedResultInTheVisibleMapViewport() throws {
+        let projectRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+
+        let searchStart = try XCTUnwrap(map.range(of: "private func runMapSearch("))
+        let searchEnd = try XCTUnwrap(
+            map.range(
+                of: "private func beginMapSearchRequest()",
+                range: searchStart.upperBound..<map.endIndex
+            )
+        )
+        let submittedSearch = map[searchStart.lowerBound..<searchEnd.lowerBound]
+        XCTAssertTrue(submittedSearch.contains("center(on: firstVisiblePlace)"))
+        XCTAssertTrue(submittedSearch.contains("center(on: firstCandidate)"))
+
+        let centerStart = try XCTUnwrap(map.range(of: "private func centerSearchSelection("))
+        let centerEnd = try XCTUnwrap(
+            map.range(
+                of: "private func handleNearbyTap()",
+                range: centerStart.upperBound..<map.endIndex
+            )
+        )
+        let searchCentering = map[centerStart.lowerBound..<centerEnd.lowerBound]
+        XCTAssertTrue(searchCentering.contains("MapSelectionViewport.region("))
+        XCTAssertTrue(
+            searchCentering.contains("obscuredBottomHeight: selectedPlaceRecenterClearance")
+        )
+        XCTAssertTrue(searchCentering.contains("cameraRegionTracker.region = region"))
+    }
+
     func testSelectedCoordinateCentersInsideTheUnobscuredMapHeight() {
         let coordinate = CLLocationCoordinate2D(latitude: 34, longitude: -118)
         let span = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.2)
