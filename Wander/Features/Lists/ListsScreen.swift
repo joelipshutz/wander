@@ -1928,6 +1928,7 @@ private struct ListLoadingRow: View {
 
 private struct ListMapPreview: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @EnvironmentObject private var store: WanderStore
     let list: PlaceListMock
     let height: CGFloat
     let label: String
@@ -1963,6 +1964,10 @@ private struct ListMapPreview: View {
                     }
                 }
                 .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                .environment(
+                    \.colorScheme,
+                    store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
+                )
 
                 if list.mappedPlaces.isEmpty {
                     VStack(spacing: WanderTheme.spacing2) {
@@ -2824,6 +2829,7 @@ private struct ListMapFullScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     let list: PlaceListMock
     @State private var position: MapCameraPosition
@@ -2893,6 +2899,10 @@ private struct ListMapFullScreen: View {
                         }
                     }
                     .mapStyle(.standard(elevation: .flat, emphasis: .muted))
+                    .environment(
+                        \.colorScheme,
+                        store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light
+                    )
                     .onMapCameraChange(frequency: .onEnd) { context in
                         visibleRegion = context.region
                     }

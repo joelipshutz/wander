@@ -2501,6 +2501,28 @@ final class NavigationContractTests: XCTestCase {
         }
     }
 
+    func testListMapViewsRespectThePersistedDarkMapSetting() throws {
+        let source = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
+        )
+        let preview = try sourceSection(
+            source,
+            after: "private struct ListMapPreview: View",
+            before: "private struct ListMapFullScreen: View"
+        )
+        let fullScreen = try sourceSection(
+            source,
+            after: "private struct ListMapFullScreen: View",
+            before: "private struct ListMapMarker: View"
+        )
+        let colorSchemeOverride = "store.isDarkMapEnabled ? ColorScheme.dark : ColorScheme.light"
+
+        XCTAssertTrue(preview.contains("@EnvironmentObject private var store: WanderStore"))
+        XCTAssertTrue(preview.contains(colorSchemeOverride))
+        XCTAssertTrue(fullScreen.contains("@EnvironmentObject private var store: WanderStore"))
+        XCTAssertTrue(fullScreen.contains(colorSchemeOverride))
+    }
+
     func testListMapUsesFocusThenDirectOpenWithoutIntermediatePlaceSurface() throws {
         let source = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Lists/ListsScreen.swift")
