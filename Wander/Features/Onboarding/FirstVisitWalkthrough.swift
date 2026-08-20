@@ -2654,36 +2654,38 @@ private struct FirstVisitWalkthroughOverlay: View {
                 }
 
                 if onBack != nil || (step.advance == .next && !step.automaticallyAdvances) {
-                    HStack(spacing: WanderTheme.spacing2) {
-                        Spacer(minLength: 0)
+                    WanderGlassButtonCluster {
+                        HStack(spacing: WanderTheme.spacing2) {
+                            Spacer(minLength: 0)
 
-                        if let onBack {
-                            Button(action: onBack) {
-                                Image(systemName: "arrow.left")
-                                    .font(.system(size: 13, weight: .black))
-                                    .foregroundStyle(WanderTheme.textInk.color)
-                                    .frame(width: 44, height: 44)
-                                    .contentShape(Circle())
-                                    .wanderGlassCapsule(tone: .neutral)
+                            if let onBack {
+                                Button(action: onBack) {
+                                    Image(systemName: "arrow.left")
+                                        .font(.system(size: 13, weight: .black))
+                                        .foregroundStyle(WanderTheme.textInk.color)
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Circle())
+                                        .wanderGlassCapsule(tone: .neutral)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Previous walkthrough step")
+                                .accessibilityIdentifier("walkthrough.back.\(step.id)")
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Previous walkthrough step")
-                            .accessibilityIdentifier("walkthrough.back.\(step.id)")
-                        }
 
-                        if step.advance == .next && !step.automaticallyAdvances {
-                            Button(action: onNext) {
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 14, weight: .black))
-                                    .foregroundStyle(WanderTheme.terracottaDark.color)
-                                    .frame(width: 44, height: 44)
-                                    .contentShape(Circle())
-                                    .wanderGlassCapsule(tone: .accent)
+                            if step.advance == .next && !step.automaticallyAdvances {
+                                Button(action: onNext) {
+                                    Image(systemName: "arrow.right")
+                                        .font(.system(size: 14, weight: .black))
+                                        .foregroundStyle(WanderTheme.terracottaDark.color)
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Circle())
+                                        .wanderGlassCapsule(tone: .accent)
+                                }
+                                .buttonStyle(.plain)
+                                .offset(y: isNextArrowNudging ? -5 : 0)
+                                .accessibilityLabel(step.nextButtonTitle)
+                                .accessibilityIdentifier("walkthrough.next.\(step.id)")
                             }
-                            .buttonStyle(.plain)
-                            .offset(y: isNextArrowNudging ? -5 : 0)
-                            .accessibilityLabel(step.nextButtonTitle)
-                            .accessibilityIdentifier("walkthrough.next.\(step.id)")
                         }
                     }
                     .padding(.top, isCompactFilterCoach ? -WanderTheme.spacing1 : 0)

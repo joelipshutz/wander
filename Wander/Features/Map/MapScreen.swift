@@ -837,37 +837,39 @@ struct MapScreen: View {
 
                 VStack(spacing: 0) {
                     if !isMapSearchFocused {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            ForEach(MapSource.allCases) { source in
+                        WanderGlassButtonCluster {
+                            HStack(spacing: WanderTheme.spacing1) {
+                                ForEach(MapSource.allCases) { source in
+                                    Button {
+                                        selectMapSource(
+                                            source,
+                                            from: annotationGroups
+                                        )
+                                    } label: {
+                                        MapSourceFilterChip(
+                                            source: source,
+                                            isSelected: mapFilterState.source == source
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(minWidth: 44, minHeight: 48)
+                                    .accessibilityIdentifier("map.filter.\(source.rawValue)")
+                                    .walkthroughTarget(source.walkthroughTarget)
+                                }
+
                                 Button {
-                                    selectMapSource(
-                                        source,
-                                        from: annotationGroups
-                                    )
+                                    toggleMoreFilters()
                                 } label: {
-                                    MapSourceFilterChip(
-                                        source: source,
-                                        isSelected: mapFilterState.source == source
+                                    MapMoreFilterChip(
+                                        selectedOptionCount: mapFilterState.more.activeOptionCount,
+                                        isExpanded: isMoreFiltersPresented
                                     )
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 48)
-                                .accessibilityIdentifier("map.filter.\(source.rawValue)")
-                                .walkthroughTarget(source.walkthroughTarget)
+                                .accessibilityIdentifier("map.filter.more")
+                                .walkthroughTarget(.mapMoreFilters)
                             }
-
-                            Button {
-                                toggleMoreFilters()
-                            } label: {
-                                MapMoreFilterChip(
-                                    selectedOptionCount: mapFilterState.more.activeOptionCount,
-                                    isExpanded: isMoreFiltersPresented
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .frame(minWidth: 44, minHeight: 48)
-                            .accessibilityIdentifier("map.filter.more")
-                            .walkthroughTarget(.mapMoreFilters)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.horizontal, WanderTheme.spacing3)
@@ -935,42 +937,44 @@ struct MapScreen: View {
                             }
                         }
 
-                        HStack(spacing: WanderTheme.spacing2) {
-                            SearchBar(
-                                query: $mapQuery,
-                                isFocused: $isMapSearchFocused,
-                                focusRequestID: mapSearchFocusRequestID,
-                                onFocusRequestHandled: { requestID in
-                                    guard mapSearchFocusRequestID == requestID else { return }
-                                    mapSearchFocusRequestID = nil
-                                },
-                                onSubmit: submitMapSearch
-                            )
-                            .walkthroughTarget(
-                                walkthroughs.currentStep?.target == .mapSendoff
-                                    ? .mapSendoff
-                                    : .mapSearch
-                            )
-
-                            if isMapSearchFocused {
-                                MapSearchCancelButton(action: cancelMapSearch)
-                            } else {
-                                MapSolidAddButton {
-                                    dismissMoreFilters()
-                                    onAdd()
-                                }
+                        WanderGlassButtonCluster {
+                            HStack(spacing: WanderTheme.spacing2) {
+                                SearchBar(
+                                    query: $mapQuery,
+                                    isFocused: $isMapSearchFocused,
+                                    focusRequestID: mapSearchFocusRequestID,
+                                    onFocusRequestHandled: { requestID in
+                                        guard mapSearchFocusRequestID == requestID else { return }
+                                        mapSearchFocusRequestID = nil
+                                    },
+                                    onSubmit: submitMapSearch
+                                )
                                 .walkthroughTarget(
-                                    walkthroughs.currentStep?.target == .mapAddAgain
-                                        ? .mapAddAgain
-                                        : .mapAdd
+                                    walkthroughs.currentStep?.target == .mapSendoff
+                                        ? .mapSendoff
+                                        : .mapSearch
                                 )
-                                .walkthroughSlowPulse(
-                                    isActive: walkthroughs.currentStep?.target == .mapAdd
-                                        || walkthroughs.currentStep?.target == .mapAddAgain
-                                )
+
+                                if isMapSearchFocused {
+                                    MapSearchCancelButton(action: cancelMapSearch)
+                                } else {
+                                    MapSolidAddButton {
+                                        dismissMoreFilters()
+                                        onAdd()
+                                    }
+                                    .walkthroughTarget(
+                                        walkthroughs.currentStep?.target == .mapAddAgain
+                                            ? .mapAddAgain
+                                            : .mapAdd
+                                    )
+                                    .walkthroughSlowPulse(
+                                        isActive: walkthroughs.currentStep?.target == .mapAdd
+                                            || walkthroughs.currentStep?.target == .mapAddAgain
+                                    )
+                                }
                             }
+                            .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: .infinity)
                     }
                     .frame(maxWidth: .infinity)
                     .safeAreaPadding(.horizontal, MapChromeLayout.horizontalInset)

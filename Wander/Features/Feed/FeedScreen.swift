@@ -155,13 +155,8 @@ struct FeedScreen: View {
         }
     }
 
-    @ViewBuilder
     private var floatingHeader: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: WanderTheme.spacing2) {
-                floatingHeaderContent
-            }
-        } else {
+        WanderGlassButtonCluster {
             floatingHeaderContent
         }
     }

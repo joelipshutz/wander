@@ -385,64 +385,66 @@ struct ProfileOwnerHome: View {
     }
 
     private var profileNavigationRow: some View {
-        HStack(spacing: WanderTheme.spacing1) {
-            if let backAction {
-                ProfileBackButton(action: backAction)
-            }
-
-            Text("@\(profile.handle)")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-
-            Spacer(minLength: 0)
-
-            if mode.isOwner {
-                ProfileInvitationButton(
-                    pendingInvitationCount: sharedVisitInvitationCount,
-                    action: sharedVisitInvitationsAction
-                )
-                ProfileHeaderActionButton(
-                    systemImage: "pencil",
-                    accessibilityLabel: "Edit profile",
-                    action: editAction
-                )
-            }
-
-            if let shareContent = WanderShareContent.profile(
-                serverID: profile.serverID,
-                displayName: profile.displayName,
-                handle: profile.handle
-            ) {
-                WanderShareButton(content: shareContent, onTap: shareAction) {
-                    ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
+        WanderGlassButtonCluster {
+            HStack(spacing: WanderTheme.spacing1) {
+                if let backAction {
+                    ProfileBackButton(action: backAction)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Share profile")
-                .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
-            }
 
-            if mode.isOwner {
-                ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
-                    .walkthroughTarget(.profileSettings)
-            } else if let memberActions {
-                ProfileHeaderActionButton(
-                    systemImage: "ellipsis",
-                    accessibilityLabel: "More profile actions"
-                ) {
-                    showsMemberActions.toggle()
-                }
-                .popover(
-                    isPresented: $showsMemberActions,
-                    attachmentAnchor: .rect(.bounds),
-                    arrowEdge: .top
-                ) {
-                    ProfileMemberActionsPopover(
-                        actions: memberActions,
-                        dismiss: { showsMemberActions = false }
+                Text("@\(profile.handle)")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(WanderTheme.textInk.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Spacer(minLength: 0)
+
+                if mode.isOwner {
+                    ProfileInvitationButton(
+                        pendingInvitationCount: sharedVisitInvitationCount,
+                        action: sharedVisitInvitationsAction
                     )
-                    .presentationCompactAdaptation(.popover)
+                    ProfileHeaderActionButton(
+                        systemImage: "pencil",
+                        accessibilityLabel: "Edit profile",
+                        action: editAction
+                    )
+                }
+
+                if let shareContent = WanderShareContent.profile(
+                    serverID: profile.serverID,
+                    displayName: profile.displayName,
+                    handle: profile.handle
+                ) {
+                    WanderShareButton(content: shareContent, onTap: shareAction) {
+                        ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Share profile")
+                    .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
+                }
+
+                if mode.isOwner {
+                    ProfileHeaderActionButton(systemImage: "gearshape.fill", accessibilityLabel: "Settings", action: settingsAction)
+                        .walkthroughTarget(.profileSettings)
+                } else if let memberActions {
+                    ProfileHeaderActionButton(
+                        systemImage: "ellipsis",
+                        accessibilityLabel: "More profile actions"
+                    ) {
+                        showsMemberActions.toggle()
+                    }
+                    .popover(
+                        isPresented: $showsMemberActions,
+                        attachmentAnchor: .rect(.bounds),
+                        arrowEdge: .top
+                    ) {
+                        ProfileMemberActionsPopover(
+                            actions: memberActions,
+                            dismiss: { showsMemberActions = false }
+                        )
+                        .presentationCompactAdaptation(.popover)
+                    }
                 }
             }
         }
@@ -1282,9 +1284,11 @@ private struct ProfileCalendarSection: View {
                         .foregroundStyle(WanderTheme.textMuted.color)
                 }
                 Spacer()
-                HStack(spacing: WanderTheme.spacing1) {
-                    ProfileMonthButton(systemImage: "chevron.left") { shiftMonth(-1) }
-                    ProfileMonthButton(systemImage: "chevron.right") { shiftMonth(1) }
+                WanderGlassButtonCluster {
+                    HStack(spacing: WanderTheme.spacing1) {
+                        ProfileMonthButton(systemImage: "chevron.left") { shiftMonth(-1) }
+                        ProfileMonthButton(systemImage: "chevron.right") { shiftMonth(1) }
+                    }
                 }
             }
             .walkthroughTarget(.profileCalendar)
@@ -1653,26 +1657,28 @@ private struct ProfileMapSummaryPicker: View {
     @Binding var selection: ProfileMapSummaryKind
 
     var body: some View {
-        HStack(spacing: WanderTheme.spacing2) {
-            ForEach(ProfileMapSummaryKind.allCases) { kind in
-                Button {
-                    selection = kind
-                } label: {
-                    Text(kind.title)
-                        .font(.system(.subheadline, design: .default, weight: .black))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .foregroundStyle(
-                            selection == kind
-                                ? WanderTheme.terracottaDark.color
-                                : WanderTheme.textInk.color
-                        )
-                        .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
-                        .contentShape(Capsule())
-                        .wanderGlassCapsule(tone: selection == kind ? .selected : .neutral)
+        WanderGlassButtonCluster {
+            HStack(spacing: WanderTheme.spacing2) {
+                ForEach(ProfileMapSummaryKind.allCases) { kind in
+                    Button {
+                        selection = kind
+                    } label: {
+                        Text(kind.title)
+                            .font(.system(.subheadline, design: .default, weight: .black))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .foregroundStyle(
+                                selection == kind
+                                    ? WanderTheme.terracottaDark.color
+                                    : WanderTheme.textInk.color
+                            )
+                            .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
+                            .contentShape(Capsule())
+                            .wanderGlassCapsule(tone: selection == kind ? .selected : .neutral)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selection == kind ? .isSelected : [])
                 }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == kind ? .isSelected : [])
             }
         }
         .accessibilityElement(children: .contain)
