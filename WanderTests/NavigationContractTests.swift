@@ -3096,10 +3096,19 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains("@State private var placeProfileHorizontalOffset"))
         XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
 
-        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: View"))
+        XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable"))
         XCTAssertTrue(placeProfile.contains("let isPresented: Bool"))
         XCTAssertTrue(placeProfile.contains("let content: Content"))
-        XCTAssertTrue(placeProfile.contains(".offset(y: isPresented ? 0 : proxy.size.height)"))
+        XCTAssertTrue(placeProfile.contains("PlaceProfileSlidingHostingController(rootView: content, isPresented: isPresented)"))
+        XCTAssertTrue(placeProfile.contains("if controller.isPresented == isPresented"))
+        XCTAssertTrue(placeProfile.contains("controller.setPresented(isPresented, animated: true)"))
+        XCTAssertTrue(placeProfile.contains("UIHostingController<Content>"))
+        XCTAssertTrue(placeProfile.contains("UIViewPropertyAnimator("))
+        XCTAssertTrue(placeProfile.contains("hostingController.view.transform = targetTransform(isPresented: isPresented)"))
+        XCTAssertTrue(placeProfile.contains("animator.finishAnimation(at: .current)"))
+        XCTAssertTrue(placeProfile.contains("pendingRootView = rootView"))
+        XCTAssertTrue(placeProfile.contains("hostingController.rootView = pendingRootView"))
+        XCTAssertFalse(placeProfile.contains(".offset(y: isPresented ? 0 : proxy.size.height)"))
         XCTAssertFalse(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
         XCTAssertFalse(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
         XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
@@ -3120,6 +3129,24 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(fullView.contains("LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4)"))
         XCTAssertTrue(fullView.contains("PlaceActivitySection(saves: saves, currentUserID: currentUserID)"))
+    }
+
+    func testPlaceProfilePrewarmsAStaticMapHeaderBeforePresentation() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let header = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileMapHeader: View {",
+            before: "private struct PlacePhotoAttribution: View {"
+        )
+
+        XCTAssertTrue(placeProfile.contains("private final class PlaceProfileMapSnapshotCache"))
+        XCTAssertTrue(placeProfile.contains("MKMapSnapshotter(options: options).start().image"))
+        XCTAssertTrue(placeProfile.contains(".task(id: mapSnapshotRequest?.cacheKey)"))
+        XCTAssertTrue(placeProfile.contains("_ = await PlaceProfileMapSnapshotCache.shared.image(for: mapSnapshotRequest)"))
+        XCTAssertTrue(header.contains("PlaceProfileMapSnapshotView(place: place)"))
+        XCTAssertFalse(header.contains("\n            Map("))
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
