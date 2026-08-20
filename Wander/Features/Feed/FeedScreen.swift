@@ -667,7 +667,6 @@ private struct FeedPeopleSurface: View {
                 if isMemberSearchActive {
                     memberSearchResultsSection
                 } else {
-                    FeedPeopleValueNote()
                     peopleRecommendationsSection
                     peopleSection
                 }
@@ -909,25 +908,6 @@ private struct FeedPeopleSearchField: View {
         .contentShape(Capsule())
         .wanderGlassCapsule()
         .accessibilityLabel("Search people")
-    }
-}
-
-private struct FeedPeopleValueNote: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            Image(systemName: "person.2.fill")
-                .font(.system(size: 14, weight: .black))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .frame(width: 24, height: 24)
-
-            Text("Follow people whose taste you trust. Shared places can appear in your Feed and on your map.")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(WanderTheme.textInk.color)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(WanderTheme.spacing3)
-        .background(WanderTheme.skyTint.color)
-        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
     }
 }
 

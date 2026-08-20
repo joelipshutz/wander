@@ -420,11 +420,13 @@ final class NavigationContractTests: XCTestCase {
         let peopleSurface = try sourceSection(
             feed,
             after: "private struct FeedPeopleSurface: View",
-            before: "private struct FeedPeopleValueNote: View"
+            before: "private struct FeedPeopleSearchField: View"
         )
         XCTAssertTrue(peopleSurface.contains("@Binding var memberQuery: String"))
         XCTAssertTrue(peopleSurface.contains("let contentTopInset: CGFloat"))
         XCTAssertFalse(peopleSurface.contains("FeedPeopleSearchField("))
+        XCTAssertFalse(peopleSurface.contains("FeedPeopleValueNote("))
+        XCTAssertFalse(peopleSurface.contains("Follow people whose taste you trust"))
         XCTAssertTrue(peopleSurface.contains(".padding(.top, contentTopInset)"))
         let feedSearch = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedSearchLauncher: View").last?
@@ -434,7 +436,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(feedSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
         let peopleSearch = try XCTUnwrap(
             feed.components(separatedBy: "private struct FeedPeopleSearchField: View").last?
-                .components(separatedBy: "private struct FeedPeopleValueNote: View").first
+                .components(separatedBy: "private struct FeedPeopleLoadingPanel: View").first
         )
         XCTAssertTrue(peopleSearch.contains(".wanderGlassCapsule()"))
         XCTAssertFalse(peopleSearch.contains(".background(WanderTheme.surfaceRaised.color)"))
