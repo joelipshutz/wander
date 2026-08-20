@@ -33,22 +33,28 @@ struct PlaceProfileMapSurface: View {
     }
 
     var body: some View {
-        VStack {
-            Spacer(minLength: 0)
-            PlaceProfilePreviewCard(
-                place: place,
-                presentation: presentation,
-                saves: saves,
-                currentUserID: currentUserID,
-                viewerLocation: viewerLocation,
-                action: action,
-                onOpen: onOpen,
-                onAction: onAction,
-                onReady: onReady
-            )
-            .walkthroughTarget(.mapMemory)
-            .walkthroughEmphasis(.mapMemory)
-            .padding(.horizontal, WanderTheme.spacing3)
+        GeometryReader { proxy in
+            VStack {
+                Spacer(minLength: 0)
+                PlaceProfilePreviewCard(
+                    place: place,
+                    presentation: presentation,
+                    saves: saves,
+                    currentUserID: currentUserID,
+                    viewerLocation: viewerLocation,
+                    cardWidth: MapChromeLayout.contentWidth(
+                        containerWidth: proxy.size.width,
+                        safeAreaInsets: proxy.safeAreaInsets
+                    ),
+                    action: action,
+                    onOpen: onOpen,
+                    onAction: onAction,
+                    onReady: onReady
+                )
+                .walkthroughTarget(.mapMemory)
+                .walkthroughEmphasis(.mapMemory)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 }
@@ -276,6 +282,7 @@ private struct PlaceProfilePreviewCard: View {
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     let viewerLocation: CLLocation?
+    let cardWidth: CGFloat
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
@@ -316,6 +323,15 @@ private struct PlaceProfilePreviewCard: View {
                         value: isCardPressed
                     )
                     .accessibilityHidden(true)
+                    .overlay {
+                        if ProcessInfo.processInfo.arguments.contains("-WanderMapChromeInsetProbe") {
+                            Color.clear
+                                .allowsHitTesting(false)
+                                .accessibilityElement()
+                                .accessibilityIdentifier("map.selectedPlaceCardSurface")
+                                .accessibilityHidden(false)
+                        }
+                    }
 
                 Color.clear
                     .frame(maxWidth: .infinity)
@@ -339,6 +355,7 @@ private struct PlaceProfilePreviewCard: View {
                     .zIndex(2)
             }
         }
+        .frame(width: cardWidth)
         .onAppear(perform: onReady)
         .task(id: photoResolutionKey) {
             await resolvePhoto()
@@ -383,8 +400,7 @@ private struct PlaceProfilePreviewCard: View {
 
     private var cardSurface: some View {
         cardPhoto
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.cardHeight)
+            .frame(width: cardWidth, height: Self.cardHeight)
             .clipped()
             .overlay {
                 LinearGradient(
@@ -647,7 +663,8 @@ private struct PlaceProfilePreviewCard: View {
         PlaceCardPresentation.rating(
             providerScore: photo?.providerRating,
             providerCount: photo?.providerUserRatingCount,
-            recmeRating: presentation.overallRating ?? presentation.ownRating
+            recmeRating: presentation.overallRating ?? presentation.ownRating,
+            providerName: photo?.provider
         )
     }
 
@@ -907,6 +924,10 @@ private struct PlaceCardRatingDistanceRow: View {
                     Text("(\(count))")
                         .foregroundStyle(.white.opacity(0.8))
                 }
+
+                if let providerName = rating.providerDisplayName {
+                    PlaceCardProviderRatingBadge(providerName: providerName)
+                }
             }
 
             if rating != nil, distanceText != nil {
@@ -929,6 +950,37 @@ private struct PlaceCardRatingDistanceRow: View {
         if remainder >= 0.75 { return "star.fill" }
         if remainder >= 0.25 { return "star.leadinghalf.filled" }
         return "star"
+    }
+}
+
+private struct PlaceCardProviderRatingBadge: View {
+    let providerName: String
+
+    var body: some View {
+        Group {
+            switch providerName {
+            case "Yelp":
+                HStack(spacing: 2) {
+                    Image(systemName: "burst.fill")
+                    Text("Yelp")
+                }
+                .foregroundStyle(Color(red: 0.84, green: 0.12, blue: 0.16))
+            case "Google Maps":
+                Image("BrandGoogleMaps")
+                    .resizable()
+                    .scaledToFit()
+            case "Apple Maps":
+                Image(systemName: "apple.logo")
+                    .foregroundStyle(.white)
+            default:
+                Image(systemName: "building.2.crop.circle")
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+        }
+        .font(.system(size: 10, weight: .bold))
+        .frame(maxWidth: 34, maxHeight: 14)
+        .accessibilityLabel("\(providerName) rating")
+        .accessibilityIdentifier("map.selectedPlaceRatingProvider")
     }
 }
 
