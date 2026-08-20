@@ -970,8 +970,10 @@ struct MapScreen: View {
                                 )
                             }
                         }
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, WanderTheme.spacing3)
+                    .frame(maxWidth: .infinity)
+                    .safeAreaPadding(.horizontal, MapChromeLayout.horizontalInset)
                     .padding(.bottom, WanderTheme.spacing2)
                     .opacity(isMoreFiltersPresented ? 0 : 1)
                     .allowsHitTesting(!isMoreFiltersPresented)
@@ -4909,6 +4911,23 @@ private enum MapControlLayout {
     static let fallbackViewportHeight: CGFloat = 844
 }
 
+enum MapChromeLayout {
+    static let horizontalInset = WanderTheme.spacing3
+
+    static func contentWidth(
+        containerWidth: CGFloat,
+        safeAreaInsets: EdgeInsets
+    ) -> CGFloat {
+        max(
+            0,
+            containerWidth
+                - safeAreaInsets.leading
+                - safeAreaInsets.trailing
+                - (horizontalInset * 2)
+        )
+    }
+}
+
 private struct MapSearchDockHeightPreferenceKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
 
@@ -5035,6 +5054,14 @@ private struct SearchBar: View {
         .frame(maxWidth: .infinity, minHeight: isFocused.wrappedValue ? 56 : 48)
         .contentShape(Capsule())
         .mapSearchCapsuleSurface()
+        .overlay {
+            if ProcessInfo.processInfo.arguments.contains("-WanderMapChromeInsetProbe") {
+                Color.clear
+                    .allowsHitTesting(false)
+                    .accessibilityElement()
+                    .accessibilityIdentifier("map.searchSurface")
+            }
+        }
         .animation(
             reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0.08),
             value: isFocused.wrappedValue
