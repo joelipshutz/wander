@@ -2720,6 +2720,7 @@ struct MapScreen: View {
             if let firstVisiblePlace = visiblePlaces.first {
                 selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
+                center(on: firstVisiblePlace)
                 mapSearchMessage = nil
             } else if let firstCandidate = mapSearchCandidates.first {
                 routedVisiblePlace = nil
@@ -3709,21 +3710,34 @@ struct MapScreen: View {
               let longitude = candidate.longitude
         else { return }
 
-        position = .region(
-            MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                span: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.04)
-            )
-        )
+        centerSearchSelection(latitude: latitude, longitude: longitude)
     }
 
     private func center(on visiblePlace: VisiblePlace) {
-        position = .region(
-            MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude),
-                span: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.04)
-            )
+        centerSearchSelection(
+            latitude: visiblePlace.place.latitude,
+            longitude: visiblePlace.place.longitude
         )
+    }
+
+    private func centerSearchSelection(latitude: Double, longitude: Double) {
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return }
+
+        let region = MapSelectionViewport.region(
+            centeredOn: coordinate,
+            preserving: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.04),
+            viewportHeight: measuredMapViewportHeight,
+            obscuredBottomHeight: selectedPlaceRecenterClearance
+        )
+        cameraRegionTracker.region = region
+        withAnimation(
+            reduceMotion
+                ? MapCompactCardMotionStyle.reducedMotionAnimation
+                : MapCompactCardMotionStyle.mapRecenterAnimation
+        ) {
+            position = .region(region)
+        }
     }
 
     private func handleNearbyTap() {
