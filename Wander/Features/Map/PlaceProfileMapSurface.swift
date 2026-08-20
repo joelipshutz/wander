@@ -1113,10 +1113,10 @@ private struct PlaceProfileFullView: View {
             )
             .id(context.id)
         }
-        .navigationTitle(place.name)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             if walkthroughs.activeSurface != .placeDetail {
                 ToolbarItem(placement: .topBarLeading) {
@@ -1128,13 +1128,6 @@ private struct PlaceProfileFullView: View {
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if !usesFloatingActions, action != .none {
-                    Button(action: onAction) {
-                        Label(action.accessibilityLabel, systemImage: action.systemImage)
-                            .labelStyle(.iconOnly)
-                    }
-                }
-
                 if let shareURL {
                     WanderShareButton(
                         content: .place(item: shareURL, name: place.name, message: shareText)

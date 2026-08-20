@@ -1223,7 +1223,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
         XCTAssertFalse(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
 
-        XCTAssertTrue(placeProfile.contains(".navigationTitle(place.name)"))
+        XCTAssertTrue(placeProfile.contains(".navigationTitle(\"\")"))
+        XCTAssertFalse(placeProfile.contains(".navigationTitle(place.name)"))
         XCTAssertTrue(placeProfile.contains("ToolbarItem(placement: .topBarLeading)"))
         XCTAssertTrue(placeProfile.contains("ToolbarItemGroup(placement: .topBarTrailing)"))
         let mapScreen = try String(
@@ -1238,6 +1239,38 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(streak.contains("WanderTypography"))
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
+    }
+
+    func testPlaceProfileHeaderIsFullBleedAcrossSaveStatesAndLongNames() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+        let toolbar = try sourceSection(
+            fullView,
+            after: ".toolbar {",
+            before: ".task(id: place.photoLookupKey)"
+        )
+
+        // The same chrome is used for unsaved (.add), checked-in (.addVisit),
+        // and arbitrarily long place names, so state cannot restore stale copy.
+        XCTAssertTrue(fullView.contains("let action: PlaceSheetAction"))
+        XCTAssertTrue(fullView.contains("Text(place.name)"))
+        XCTAssertTrue(fullView.contains(".lineLimit(3)"))
+        XCTAssertTrue(fullView.contains(".navigationTitle(\"\")"))
+        XCTAssertFalse(fullView.contains(".navigationTitle(place.name)"))
+        XCTAssertFalse(toolbar.contains("Button(action: onAction)"))
+        XCTAssertFalse(toolbar.contains("action.accessibilityLabel"))
+
+        XCTAssertTrue(fullView.contains(".ignoresSafeArea(.container, edges: .top)"))
+        XCTAssertTrue(fullView.contains(".toolbarBackground(.hidden, for: .navigationBar)"))
+        XCTAssertTrue(fullView.contains(".toolbarColorScheme(.dark, for: .navigationBar)"))
+        XCTAssertTrue(toolbar.contains("Label(\"Back\", systemImage: \"chevron.left\")"))
+        XCTAssertTrue(toolbar.contains("Label(\"Share place\", systemImage: \"square.and.arrow.up\")"))
     }
 
     func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
