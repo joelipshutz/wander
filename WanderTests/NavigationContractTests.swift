@@ -3073,15 +3073,22 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalContainer"))
         XCTAssertTrue(mapScreen.contains("NavigationStack {\n                    selectedPlaceProfileDestination"))
         XCTAssertTrue(mapScreen.contains(".overlay {\n            selectedPlaceProfileOverlay"))
-        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayVisible)"))
-        XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented && hasSelectedProfile"))
+        XCTAssertTrue(mapScreen.contains(".allowsHitTesting(!isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)"))
+        XCTAssertTrue(mapScreen.contains("if isPlaceProfileMounted && hasSelectedProfile {"))
+        XCTAssertTrue(mapScreen.contains("hasSelectedProfile && (isPlaceProfilePresented || placeProfileDismissalID != nil)"))
         XCTAssertTrue(mapScreen.contains(".onChange(of: hasSelectedProfile)"))
         XCTAssertTrue(mapScreen.contains("isPlaceProfilePresented = false"))
+        XCTAssertTrue(mapScreen.contains("placeProfileDismissalID = nil"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAddTraits(.isModal)"))
         XCTAssertTrue(mapScreen.contains(".accessibilityAction(.escape)"))
         XCTAssertTrue(mapScreen.contains("guard walkthroughs.activeSurface != .placeDetail else { return }"))
-        XCTAssertTrue(mapScreen.contains(".transition(.move(edge: .bottom))"))
+        XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalContainer(isPresented: isPlaceProfilePresented)"))
+        XCTAssertTrue(mapScreen.contains("finishPlaceProfileDismissal(id: dismissalID, completion: completion)"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityHidden(!isPlaceProfilePresented)"))
+        XCTAssertTrue(mapScreen.contains("mountTransaction.disablesAnimations = true"))
+        XCTAssertTrue(mapScreen.contains("await Task.yield()"))
+        XCTAssertTrue(mapScreen.contains("isPlaceProfileMounted = false"))
         XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.presentationAnimation"))
         XCTAssertTrue(mapScreen.contains("PlaceProfileVerticalMotionStyle.dismissalAnimation"))
         XCTAssertTrue(mapScreen.contains(".toolbar(.hidden, for: .navigationBar)"))
@@ -3090,13 +3097,29 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains(".offset(x: placeProfileHorizontalOffset)"))
 
         XCTAssertTrue(placeProfile.contains("struct PlaceProfileVerticalContainer<Content: View>: View"))
+        XCTAssertTrue(placeProfile.contains("let isPresented: Bool"))
         XCTAssertTrue(placeProfile.contains("let content: Content"))
+        XCTAssertTrue(placeProfile.contains(".offset(y: isPresented ? 0 : proxy.size.height)"))
         XCTAssertFalse(placeProfile.contains("struct PlaceProfileSlideContainer<Content: View>: View"))
         XCTAssertFalse(placeProfile.contains("@State private var horizontalOffset: CGFloat = 0"))
         XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
         XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
         XCTAssertFalse(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
         XCTAssertTrue(placeProfile.contains(".toolbar(.visible, for: .navigationBar)"))
+    }
+
+    func testPlaceProfileDefersBelowFoldHistoryConstructionUntilScrolled() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+
+        XCTAssertTrue(fullView.contains("LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4)"))
+        XCTAssertTrue(fullView.contains("PlaceActivitySection(saves: saves, currentUserID: currentUserID)"))
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {

@@ -327,6 +327,9 @@ struct MapScreen: View {
     @State private var attachedMapSaveFlow: MapPlaceSaveContext?
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
+    @State private var isPlaceProfileMounted: Bool
+    @State private var placeProfilePresentationID: UUID?
+    @State private var placeProfileDismissalID: UUID?
     @State private var mapQuery: String
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
@@ -494,6 +497,7 @@ struct MapScreen: View {
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
         self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
+        _isPlaceProfileMounted = State(initialValue: startsExpanded)
         _mapQuery = State(initialValue: Self.resolvedInitialMapSearchQuery())
         _mapSearchMessage = State(initialValue: Self.resolvedInitialMapSearchMessage())
         _mapFilterState = State(initialValue: initialMapFilterState)
@@ -1103,6 +1107,9 @@ struct MapScreen: View {
             .onChange(of: isPlaceProfilePresented) { _, isPresented in
                 if !isPresented {
                     closeAttachedSaveFlow()
+                    if placeProfileDismissalID == nil {
+                        isPlaceProfileMounted = false
+                    }
                 }
             }
             .onChange(of: visiblePlaceGroupKeys) { _, keys in
@@ -1179,8 +1186,8 @@ struct MapScreen: View {
             \.wanderMapAppearance,
             store.isDarkMapEnabled ? WanderMapAppearance.dark : WanderMapAppearance.light
         )
-        .allowsHitTesting(!isPlaceProfileOverlayVisible)
-        .accessibilityHidden(isPlaceProfileOverlayVisible)
+        .allowsHitTesting(!isPlaceProfileOverlayBlockingInteraction)
+        .accessibilityHidden(isPlaceProfileOverlayBlockingInteraction)
         .overlay {
             selectedPlaceProfileOverlay
         }
@@ -1196,6 +1203,9 @@ struct MapScreen: View {
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
             isPlaceProfilePresented = false
+            isPlaceProfileMounted = false
+            placeProfilePresentationID = nil
+            placeProfileDismissalID = nil
         }
         .walkthroughPresenterScrim(
             isPresented: mapSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
@@ -2313,27 +2323,28 @@ struct MapScreen: View {
 
     @ViewBuilder
     private var selectedPlaceProfileOverlay: some View {
-        if isPlaceProfileOverlayVisible {
-            PlaceProfileVerticalContainer {
+        if isPlaceProfileMounted && hasSelectedProfile {
+            PlaceProfileVerticalContainer(isPresented: isPlaceProfilePresented) {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
                 .firstVisitWalkthroughOverlay(walkthroughs, surface: .placeDetail)
             }
             .ignoresSafeArea()
+            .allowsHitTesting(isPlaceProfilePresented)
             .accessibilityElement(children: .contain)
             .accessibilityAddTraits(.isModal)
+            .accessibilityHidden(!isPlaceProfilePresented)
             .accessibilityAction(.escape) {
                 guard walkthroughs.activeSurface != .placeDetail else { return }
                 collapseSelectedPlaceProfile()
             }
-            .transition(.move(edge: .bottom))
             .zIndex(100)
         }
     }
 
-    private var isPlaceProfileOverlayVisible: Bool {
-        isPlaceProfilePresented && hasSelectedProfile
+    private var isPlaceProfileOverlayBlockingInteraction: Bool {
+        hasSelectedProfile && (isPlaceProfilePresented || placeProfileDismissalID != nil)
     }
 
     private func presentWalkthroughPlaceMemory() {
@@ -2388,9 +2399,8 @@ struct MapScreen: View {
         openSelectedPlaceProfile()
     }
 
-    private func closeWalkthroughPlaceDetail() {
+    private func clearSelectedPlaceProfile() {
         closeAttachedSaveFlow()
-        isPlaceProfilePresented = false
         guard walkthroughs.activeSurface == .placeDetail
                 || walkthroughs.requestedSurface == .map
                 || walkthroughs.requestedSurface == .feed
@@ -2493,12 +2503,36 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
+        placeProfilePresentationID = nil
+        placeProfileDismissalID = nil
         walkthroughs.perform(.mapMemory)
         if reduceMotion {
+            isPlaceProfileMounted = true
             isPlaceProfilePresented = true
-        } else {
+        } else if isPlaceProfileMounted {
             withAnimation(PlaceProfileVerticalMotionStyle.presentationAnimation) {
                 isPlaceProfilePresented = true
+            }
+        } else {
+            let presentationID = UUID()
+            placeProfilePresentationID = presentationID
+
+            var mountTransaction = Transaction()
+            mountTransaction.disablesAnimations = true
+            withTransaction(mountTransaction) {
+                isPlaceProfileMounted = true
+            }
+
+            Task { @MainActor in
+                await Task.yield()
+                guard placeProfilePresentationID == presentationID,
+                      isPlaceProfileMounted,
+                      hasSelectedProfile
+                else { return }
+                placeProfilePresentationID = nil
+                withAnimation(PlaceProfileVerticalMotionStyle.presentationAnimation) {
+                    isPlaceProfilePresented = true
+                }
             }
         }
     }
@@ -2508,17 +2542,32 @@ struct MapScreen: View {
     ) {
         guard isPlaceProfilePresented else { return }
 
+        let dismissalID = UUID()
+        placeProfileDismissalID = dismissalID
+
         guard !reduceMotion else {
-            closeWalkthroughPlaceDetail()
-            completion?()
+            isPlaceProfilePresented = false
+            finishPlaceProfileDismissal(id: dismissalID, completion: completion)
             return
         }
 
         withAnimation(PlaceProfileVerticalMotionStyle.dismissalAnimation) {
-            closeWalkthroughPlaceDetail()
+            isPlaceProfilePresented = false
         } completion: {
-            completion?()
+            finishPlaceProfileDismissal(id: dismissalID, completion: completion)
         }
+    }
+
+    private func finishPlaceProfileDismissal(
+        id: UUID,
+        completion: (@MainActor () -> Void)?
+    ) {
+        guard placeProfileDismissalID == id, !isPlaceProfilePresented else { return }
+        isPlaceProfileMounted = false
+        placeProfilePresentationID = nil
+        placeProfileDismissalID = nil
+        clearSelectedPlaceProfile()
+        completion?()
     }
 
     private func saveActionSnapshot(

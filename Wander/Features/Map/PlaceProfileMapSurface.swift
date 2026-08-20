@@ -248,11 +248,14 @@ struct PlaceProfileFullScreen: View {
 }
 
 struct PlaceProfileVerticalContainer<Content: View>: View {
+    let isPresented: Bool
     let content: Content
 
     init(
+        isPresented: Bool,
         @ViewBuilder content: () -> Content
     ) {
+        self.isPresented = isPresented
         self.content = content()
     }
 
@@ -261,6 +264,7 @@ struct PlaceProfileVerticalContainer<Content: View>: View {
             content
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .background(WanderTheme.surfaceBone.color)
+                .offset(y: isPresented ? 0 : proxy.size.height)
         }
     }
 }
@@ -1052,7 +1056,7 @@ private struct PlaceProfileFullView: View {
 
                 ScrollViewReader { scrollProxy in
                     ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
+                        LazyVStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                             heading
 
                             PlaceProfileTagRail(tags: displayTags, compact: false)
