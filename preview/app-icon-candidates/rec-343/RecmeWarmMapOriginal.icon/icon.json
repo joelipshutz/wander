@@ -1,0 +1,32 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.94510,0.91373,0.87059,1.00000"
+  },
+  "groups" : [
+    {
+      "blur-material" : null,
+      "layers" : [
+        {
+          "image-name" : "recme-warm-map-original.png",
+          "name" : "recme-warm-map-original"
+        }
+      ],
+      "name" : "Warm Map Original",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
