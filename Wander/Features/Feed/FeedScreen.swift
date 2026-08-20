@@ -156,7 +156,7 @@ struct FeedScreen: View {
     }
 
     private var floatingHeader: some View {
-        WanderGlassButtonCluster {
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
             floatingHeaderContent
         }
     }

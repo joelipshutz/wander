@@ -1657,7 +1657,7 @@ private struct ProfileMapSummaryPicker: View {
     @Binding var selection: ProfileMapSummaryKind
 
     var body: some View {
-        WanderGlassButtonCluster {
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing2) {
                 ForEach(ProfileMapSummaryKind.allCases) { kind in
                     Button {

@@ -2654,7 +2654,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                 }
 
                 if onBack != nil || (step.advance == .next && !step.automaticallyAdvances) {
-                    WanderGlassButtonCluster {
+                    WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
                         HStack(spacing: WanderTheme.spacing2) {
                             Spacer(minLength: 0)
 

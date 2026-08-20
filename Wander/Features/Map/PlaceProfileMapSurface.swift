@@ -1457,7 +1457,7 @@ private struct PlaceProfileFullView: View {
     @ViewBuilder
     private var actionRow: some View {
         if walkthroughs.activeSurface == .placeDetail {
-            WanderGlassButtonCluster {
+            WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
                 HStack(spacing: WanderTheme.spacing2) {
                     ForEach(actionItems) { item in
                         walkthroughActionButton(item)
@@ -1467,7 +1467,7 @@ private struct PlaceProfileFullView: View {
             .padding(.vertical, 1)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                WanderGlassButtonCluster {
+                WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
                     HStack(spacing: WanderTheme.spacing2) {
                         ForEach(actionItems) { item in
                             standardActionButton(item)
@@ -1945,7 +1945,7 @@ struct PlaceProfileFloatingActions: View {
     }
 
     private var clusteredActionLayout: some View {
-        WanderGlassButtonCluster {
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
             actionLayout
         }
     }
