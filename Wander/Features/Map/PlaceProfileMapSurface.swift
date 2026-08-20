@@ -33,22 +33,28 @@ struct PlaceProfileMapSurface: View {
     }
 
     var body: some View {
-        VStack {
-            Spacer(minLength: 0)
-            PlaceProfilePreviewCard(
-                place: place,
-                presentation: presentation,
-                saves: saves,
-                currentUserID: currentUserID,
-                viewerLocation: viewerLocation,
-                action: action,
-                onOpen: onOpen,
-                onAction: onAction,
-                onReady: onReady
-            )
-            .walkthroughTarget(.mapMemory)
-            .walkthroughEmphasis(.mapMemory)
-            .padding(.horizontal, WanderTheme.spacing3)
+        GeometryReader { proxy in
+            VStack {
+                Spacer(minLength: 0)
+                PlaceProfilePreviewCard(
+                    place: place,
+                    presentation: presentation,
+                    saves: saves,
+                    currentUserID: currentUserID,
+                    viewerLocation: viewerLocation,
+                    cardWidth: MapChromeLayout.contentWidth(
+                        containerWidth: proxy.size.width,
+                        safeAreaInsets: proxy.safeAreaInsets
+                    ),
+                    action: action,
+                    onOpen: onOpen,
+                    onAction: onAction,
+                    onReady: onReady
+                )
+                .walkthroughTarget(.mapMemory)
+                .walkthroughEmphasis(.mapMemory)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 }
@@ -276,6 +282,7 @@ private struct PlaceProfilePreviewCard: View {
     let saves: [PlaceSaveSummary]
     let currentUserID: String
     let viewerLocation: CLLocation?
+    let cardWidth: CGFloat
     let action: PlaceSheetAction
     let onOpen: () -> Void
     let onAction: () -> Void
@@ -316,6 +323,15 @@ private struct PlaceProfilePreviewCard: View {
                         value: isCardPressed
                     )
                     .accessibilityHidden(true)
+                    .overlay {
+                        if ProcessInfo.processInfo.arguments.contains("-WanderMapChromeInsetProbe") {
+                            Color.clear
+                                .allowsHitTesting(false)
+                                .accessibilityElement()
+                                .accessibilityIdentifier("map.selectedPlaceCardSurface")
+                                .accessibilityHidden(false)
+                        }
+                    }
 
                 Color.clear
                     .frame(maxWidth: .infinity)
@@ -339,6 +355,7 @@ private struct PlaceProfilePreviewCard: View {
                     .zIndex(2)
             }
         }
+        .frame(width: cardWidth)
         .onAppear(perform: onReady)
         .task(id: photoResolutionKey) {
             await resolvePhoto()
@@ -383,8 +400,7 @@ private struct PlaceProfilePreviewCard: View {
 
     private var cardSurface: some View {
         cardPhoto
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.cardHeight)
+            .frame(width: cardWidth, height: Self.cardHeight)
             .clipped()
             .overlay {
                 LinearGradient(

@@ -1,9 +1,34 @@
 import CoreGraphics
 import MapKit
+import SwiftUI
 import XCTest
 @testable import Wander
 
 final class MapHitTestingTests: XCTestCase {
+    func testMapChromeContentWidthPreservesInsetsAcrossPhoneSizesAndSafeAreas() {
+        XCTAssertEqual(
+            MapChromeLayout.contentWidth(
+                containerWidth: 430,
+                safeAreaInsets: EdgeInsets()
+            ),
+            406
+        )
+        XCTAssertEqual(
+            MapChromeLayout.contentWidth(
+                containerWidth: 320,
+                safeAreaInsets: EdgeInsets()
+            ),
+            296
+        )
+        XCTAssertEqual(
+            MapChromeLayout.contentWidth(
+                containerWidth: 844,
+                safeAreaInsets: EdgeInsets(top: 0, leading: 59, bottom: 0, trailing: 59)
+            ),
+            702
+        )
+    }
+
     @MainActor
     func testRenderProjectionCacheReusesStableInputsAndRebuildsAfterChange() {
         let cache = MapRenderProjectionCache<String, Int>()

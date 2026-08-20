@@ -2,6 +2,49 @@ import XCTest
 
 @MainActor
 final class MapPlaceCardUITests: XCTestCase {
+    func testMapCardAndSearchDockShareSafeAreaAwareContainerInsets() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapCardLocationFixture",
+            "-WanderMapChromeInsetProbe",
+            "-WanderMapPlace", "Hearthline Coffee",
+        ]
+        app.launch()
+
+        let card = app.descendants(matching: .any)["map.selectedPlaceCardSurface"]
+        let searchSurface = app.descendants(matching: .any)["map.searchSurface"]
+        let addButton = app.buttons["map.headerAdd"]
+        let searchField = app.textFields["map.searchField"]
+        let window = app.windows.firstMatch
+
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(searchSurface.waitForExistence(timeout: 5))
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        assertSharedContainerInsets(
+            card: card,
+            searchSurface: searchSurface,
+            trailingControl: addButton,
+            window: window
+        )
+        capture("REC-316 map chrome collapsed \(Int(window.frame.width))pt")
+
+        searchField.tap()
+        let cancelButton = app.buttons["map.searchCancel"]
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 3))
+        assertSharedContainerInsets(
+            card: card,
+            searchSurface: searchSurface,
+            trailingControl: cancelButton,
+            window: window
+        )
+        capture("REC-316 map chrome search-active \(Int(window.frame.width))pt")
+    }
+
     func testSelectedPlaceCardAndVerticalPlacePageRoundTrip() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -52,5 +95,24 @@ final class MapPlaceCardUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func assertSharedContainerInsets(
+        card: XCUIElement,
+        searchSurface: XCUIElement,
+        trailingControl: XCUIElement,
+        window: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let cardFrame = card.frame
+        let searchSurfaceFrame = searchSurface.frame
+        let trailingControlFrame = trailingControl.frame
+        let windowFrame = window.frame
+
+        XCTAssertGreaterThanOrEqual(cardFrame.minX, windowFrame.minX + 11, file: file, line: line)
+        XCTAssertLessThanOrEqual(cardFrame.maxX, windowFrame.maxX - 11, file: file, line: line)
+        XCTAssertEqual(cardFrame.minX, searchSurfaceFrame.minX, accuracy: 1, file: file, line: line)
+        XCTAssertEqual(cardFrame.maxX, trailingControlFrame.maxX, accuracy: 1, file: file, line: line)
     }
 }
