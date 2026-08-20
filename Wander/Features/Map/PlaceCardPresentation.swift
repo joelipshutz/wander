@@ -3,11 +3,22 @@ import Foundation
 import SwiftUI
 
 struct PlaceCardRatingPresentation: Equatable {
+    enum Source: Equatable {
+        case recme
+        case provider(displayName: String)
+    }
+
     let score: Double
     let count: Int?
+    let source: Source
 
     var scoreText: String {
         String(format: "%.1f", score)
+    }
+
+    var providerDisplayName: String? {
+        guard case .provider(let displayName) = source else { return nil }
+        return displayName
     }
 }
 
@@ -21,16 +32,43 @@ enum PlaceCardPresentation {
     static func rating(
         providerScore: Double?,
         providerCount: Int?,
-        recmeRating: PlaceActualRating?
+        recmeRating: PlaceActualRating?,
+        providerName: String? = nil
     ) -> PlaceCardRatingPresentation? {
-        if let providerScore, (1 ... 5).contains(providerScore) {
+        if let recmeRating, recmeRating.count > 0 {
+            guard (1 ... 5).contains(recmeRating.score) else { return nil }
             return PlaceCardRatingPresentation(
-                score: providerScore,
-                count: providerCount.flatMap { $0 >= 0 ? $0 : nil }
+                score: recmeRating.score,
+                count: recmeRating.count,
+                source: .recme
             )
         }
-        guard let recmeRating else { return nil }
-        return PlaceCardRatingPresentation(score: recmeRating.score, count: recmeRating.count)
+
+        // A malformed negative rec.me count is not the same as zero evidence.
+        // Avoid silently replacing invalid first-party data with a provider score.
+        guard recmeRating?.count ?? 0 == 0,
+              let providerScore,
+              (1 ... 5).contains(providerScore)
+        else { return nil }
+
+        return PlaceCardRatingPresentation(
+            score: providerScore,
+            count: providerCount.flatMap { $0 >= 0 ? $0 : nil },
+            source: .provider(displayName: providerDisplayName(providerName))
+        )
+    }
+
+    private static func providerDisplayName(_ value: String?) -> String {
+        switch value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "yelp":
+            "Yelp"
+        case "google", "google_maps", "google_places":
+            "Google Maps"
+        case "apple", "apple_maps", "mapkit":
+            "Apple Maps"
+        default:
+            "External"
+        }
     }
 
     static func distanceText(
