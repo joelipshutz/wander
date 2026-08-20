@@ -510,11 +510,7 @@ private struct PlaceProfilePreviewCard: View {
     @ViewBuilder
     private var actionButtonCluster: some View {
         ZStack {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 0) {
-                    actionButtons
-                }
-            } else {
+            WanderGlassButtonCluster(mergeSpacing: 0) {
                 actionButtons
             }
 
@@ -1461,17 +1457,21 @@ private struct PlaceProfileFullView: View {
     @ViewBuilder
     private var actionRow: some View {
         if walkthroughs.activeSurface == .placeDetail {
-            HStack(spacing: WanderTheme.spacing2) {
-                ForEach(actionItems) { item in
-                    walkthroughActionButton(item)
+            WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(actionItems) { item in
+                        walkthroughActionButton(item)
+                    }
                 }
             }
             .padding(.vertical, 1)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(actionItems) { item in
-                        standardActionButton(item)
+                WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(actionItems) { item in
+                            standardActionButton(item)
+                        }
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -1930,7 +1930,7 @@ struct PlaceProfileFloatingActions: View {
     @ViewBuilder
     private var actionCluster: some View {
         if variant.usesCharcoalRail {
-            option4InnerActions
+            clusteredActionLayout
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.vertical, WanderTheme.spacing3)
                 .wanderGlassRoundedRectangle(
@@ -1940,17 +1940,12 @@ struct PlaceProfileFloatingActions: View {
                     showsBorder: true
                 )
         } else {
-            actionLayout
+            clusteredActionLayout
         }
     }
 
-    @ViewBuilder
-    private var option4InnerActions: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: WanderTheme.spacing2) {
-                actionLayout
-            }
-        } else {
+    private var clusteredActionLayout: some View {
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
             actionLayout
         }
     }
