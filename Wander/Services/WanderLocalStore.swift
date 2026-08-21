@@ -2578,7 +2578,7 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func removePlace(placeID: String, from list: LocalPlaceList, backend: WanderBackend?) async -> Bool {
         let remoteListID = remoteID(list.serverID ?? list.id)
-        let remoteItemIDs = Set(
+        let remoteItemIDs: Set<String> = Set(
             equivalentListItemIndices(placeID: placeID, in: list).compactMap { itemIndex in
                 let item = placeListItems[itemIndex]
                 guard item.deletedAt == nil || item.syncState == .pendingDelete || item.syncState == .failed else {
