@@ -83,7 +83,10 @@ protocol FeatureFlagRepository {
 
 @MainActor
 final class WanderBackend: ObservableObject {
+    private static let placePhotoMetadataCacheLimit = 256
+
     let configuration: WanderBackendConfiguration
+    let photoCacheScopeID = UUID()
     let featureFlagRepository: (any FeatureFlagRepository)?
     let profileRepository: (any ProfileRepository)?
     let profileAvatarRepository: (any ProfileAvatarRepository)?
@@ -107,6 +110,7 @@ final class WanderBackend: ObservableObject {
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
     private var placePhotoCache: [String: PlacePhoto] = [:]
+    private var placePhotoCacheRecency: [String] = []
     private var placePhotoTasks: [String: Task<PlacePhoto, Error>] = [:]
     private let placePhotoImageCache: NSCache<NSString, NSData> = {
         let cache = NSCache<NSString, NSData>()
@@ -292,6 +296,7 @@ final class WanderBackend: ObservableObject {
         }
         let key = request.lookupKey
         if let cached = placePhotoCache[key] {
+            markPlacePhotoRecentlyUsed(key)
             return cached
         }
         if let existingTask = placePhotoTasks[key] {
@@ -305,12 +310,19 @@ final class WanderBackend: ObservableObject {
         do {
             let photo = try await task.value
             placePhotoTasks[key] = nil
-            placePhotoCache[key] = photo
+            cachePlacePhoto(photo, for: key)
             return photo
         } catch {
             placePhotoTasks[key] = nil
             throw error
         }
+    }
+
+    func cachedPlacePhoto(for request: PlacePhotoRequest) -> PlacePhoto? {
+        let key = request.lookupKey
+        guard let photo = placePhotoCache[key] else { return nil }
+        markPlacePhotoRecentlyUsed(key)
+        return photo
     }
 
     func visibleUserPlacePhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
@@ -335,11 +347,14 @@ final class WanderBackend: ObservableObject {
         )
     }
 
-    func placePhotoImageData(for photo: PlacePhoto) async throws -> Data {
+    func placePhotoImageData(
+        for photo: PlacePhoto,
+        canonicalPlaceKey: String
+    ) async throws -> Data {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured
         }
-        let key = photo.cacheKey
+        let key = "\(canonicalPlaceKey.utf8.count):\(canonicalPlaceKey)\(photo.cacheKey)"
         if let cached = placePhotoImageCache.object(forKey: key as NSString) {
             return cached as Data
         }
@@ -364,6 +379,22 @@ final class WanderBackend: ObservableObject {
             placePhotoImageTasks[key] = nil
             throw error
         }
+    }
+
+    private func cachePlacePhoto(_ photo: PlacePhoto, for key: String) {
+        placePhotoCache[key] = photo
+        markPlacePhotoRecentlyUsed(key)
+
+        while placePhotoCache.count > Self.placePhotoMetadataCacheLimit,
+              let oldestKey = placePhotoCacheRecency.first {
+            placePhotoCacheRecency.removeFirst()
+            placePhotoCache.removeValue(forKey: oldestKey)
+        }
+    }
+
+    private func markPlacePhotoRecentlyUsed(_ key: String) {
+        placePhotoCacheRecency.removeAll { $0 == key }
+        placePhotoCacheRecency.append(key)
     }
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {

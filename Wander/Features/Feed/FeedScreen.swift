@@ -1729,6 +1729,7 @@ struct FeedResolvedPlacePhoto: View {
             if let photo {
                 PlaceProfilePhotoImage(
                     photo: photo,
+                    canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
                     placeName: place.place.canonicalName,
                     onLoadFailure: handlePhotoLoadFailure
                 )

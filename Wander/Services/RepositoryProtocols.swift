@@ -1004,6 +1004,19 @@ struct PlacePhotoRequest: Encodable, Equatable {
         return components.joined(separator: "|")
     }
 
+    var canonicalPhotoCacheKey: String {
+        if let placeID = Self.normalizedCacheComponent(placeID) {
+            return "place:\(placeID)"
+        }
+
+        if let provider = Self.normalizedCacheComponent(sourceProvider),
+           let providerPlaceID = Self.normalizedCacheComponent(sourceProviderPlaceID) {
+            return "provider:\(provider)|\(providerPlaceID)"
+        }
+
+        return "lookup:\(lookupKey)"
+    }
+
     var skipsGooglePlacesLookup: Bool {
         let provider = sourceProvider?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1028,6 +1041,12 @@ struct PlacePhotoRequest: Encodable, Equatable {
             requiresPhoto: requiresPhoto,
             eligibleUserIDs: userIDs
         )
+    }
+
+    private static func normalizedCacheComponent(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
     }
 }
 

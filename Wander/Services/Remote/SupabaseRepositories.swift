@@ -2001,6 +2001,22 @@ struct SupabaseListSuggestionRepository: ListSuggestionRepository {
     }
 }
 
+enum PlacePhotoNetworkSession {
+    static let memoryCapacity = 16 * 1_024 * 1_024
+    static let diskCapacity = 96 * 1_024 * 1_024
+
+    static let shared: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.requestCachePolicy = .useProtocolCachePolicy
+        configuration.urlCache = URLCache(
+            memoryCapacity: memoryCapacity,
+            diskCapacity: diskCapacity,
+            diskPath: "recme-place-photos"
+        )
+        return URLSession(configuration: configuration)
+    }()
+}
+
 struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     private let rpc: (any RemoteProcedureCalling)?
     private let functions: RemoteFunctionCalling
@@ -2009,7 +2025,7 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
 
     init(
         functions: RemoteFunctionCalling,
-        photoSession: URLSession = .shared
+        photoSession: URLSession = PlacePhotoNetworkSession.shared
     ) {
         self.rpc = nil
         self.functions = functions
@@ -2021,7 +2037,7 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
         rpc: RemoteProcedureCalling,
         functions: RemoteFunctionCalling,
         storage: RemoteStorageCalling,
-        photoSession: URLSession = .shared
+        photoSession: URLSession = PlacePhotoNetworkSession.shared
     ) {
         self.rpc = rpc
         self.functions = functions

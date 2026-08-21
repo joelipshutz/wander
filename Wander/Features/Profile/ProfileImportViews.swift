@@ -2421,6 +2421,7 @@ private struct PlaceImportPhotoThumb: View {
             if let photo {
                 PlaceProfilePhotoImage(
                     photo: photo,
+                    canonicalPlaceKey: item.reviewPhotoRequest?.canonicalPhotoCacheKey ?? "import:\(item.id)",
                     placeName: item.displayName,
                     onLoadFailure: { failedPhoto in
                         if failedPhoto.providerPlaceID == self.photo?.providerPlaceID {

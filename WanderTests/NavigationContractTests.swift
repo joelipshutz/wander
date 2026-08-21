@@ -1170,7 +1170,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(previewCard.contains("YOUR WANNA"))
         XCTAssertFalse(previewCard.contains(".checkInTicketSurface("))
         XCTAssertFalse(previewCard.contains("PlaceProfilePhotoImage("))
-        XCTAssertTrue(previewCard.contains("Image(uiImage: preparedImage)"))
+        XCTAssertTrue(previewCard.contains("Image(uiImage: displayedImage)"))
         XCTAssertFalse(previewCard.contains("image.byPreparingForDisplay()"))
         XCTAssertTrue(previewCard.contains("PlacePhotoImagePipeline.shared.image("))
         XCTAssertTrue(previewCard.contains("onReady()"))

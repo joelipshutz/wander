@@ -328,6 +328,70 @@ final class ListPlacePhotoTests: XCTestCase {
     }
 
     @MainActor
+    func testResolverRevisitUsesBoundedSelectionAndDecodedCachesWithoutReloading() async throws {
+        let userPhoto = photo(provider: "visit_photo", id: "revisited-user-photo")
+        let repository = RecordingListPlacePhotoRepository(
+            visibleUserResult: .success(userPhoto),
+            providerResult: .failure(TestError.missing),
+            imageDataByPhotoID: [userPhoto.providerPlaceID: try imageData()]
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let selectionCache = ListPlacePhotoSelectionCache(countLimit: 4)
+
+        let first = await ListPlacePhotoResolver.resolve(
+            request: request,
+            preferredUserPhoto: nil,
+            authorizationScopeKey: "revisit-authorization",
+            targetPixelSize: 128,
+            backend: backend,
+            selectionCache: selectionCache
+        )
+        let second = await ListPlacePhotoResolver.resolve(
+            request: request,
+            preferredUserPhoto: nil,
+            authorizationScopeKey: "revisit-authorization",
+            targetPixelSize: 128,
+            backend: backend,
+            selectionCache: selectionCache
+        )
+
+        XCTAssertEqual(first?.photo, userPhoto)
+        XCTAssertEqual(second?.photo, userPhoto)
+        XCTAssertEqual(repository.metadataCalls, [.visibleUser])
+        XCTAssertEqual(repository.imageRequests, [userPhoto.providerPlaceID])
+        XCTAssertEqual(selectionCache.entryCount, 1)
+    }
+
+    @MainActor
+    func testImagePipelineScopesSamePhotoIdentityToCanonicalPlace() async throws {
+        let pipeline = PlacePhotoImagePipeline(countLimit: 4, totalCostLimit: 1_024 * 1_024)
+        let data = try imageData()
+
+        let first = await pipeline.image(
+            from: data,
+            canonicalPlaceKey: "place:first",
+            photoKey: "shared-photo-key",
+            targetPixelSize: 128
+        )
+        let wrongPlaceLookup = pipeline.cachedImage(
+            canonicalPlaceKey: "place:second",
+            photoKey: "shared-photo-key",
+            targetPixelSize: 128
+        )
+        let second = await pipeline.image(
+            from: data,
+            canonicalPlaceKey: "place:second",
+            photoKey: "shared-photo-key",
+            targetPixelSize: 128
+        )
+
+        XCTAssertNotNil(first)
+        XCTAssertNil(wrongPlaceLookup)
+        XCTAssertNotNil(second)
+        XCTAssertEqual(pipeline.cacheMetrics().entryCount, 2)
+    }
+
+    @MainActor
     func testPreviewSelectorReturnsAtMostFourDistinctPlacesInListOrder() {
         let owner = LocalProfile(localID: "owner", handle: "owner", displayName: "Owner")
         let placeA = place(id: "place-a")
