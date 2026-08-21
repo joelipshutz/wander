@@ -4161,6 +4161,27 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testFeedFeaturedRailBleedsToBothScreenEdgesWithoutMovingRestingCards() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let rail = try sourceSection(
+            feed,
+            after: "private struct FeedFeaturedRail: View",
+            before: "private struct FeedFeaturedCard: View"
+        )
+
+        XCTAssertTrue(feed.contains("static let screenEdgeBleed = WanderTheme.spacing4"))
+        XCTAssertTrue(rail.contains(".contentMargins("))
+        XCTAssertTrue(rail.contains("FeedFeaturedLayout.screenEdgeBleed"))
+        XCTAssertTrue(rail.contains("for: .scrollContent"))
+        XCTAssertTrue(
+            rail.contains(".padding(.horizontal, -FeedFeaturedLayout.screenEdgeBleed)")
+        )
+        XCTAssertTrue(rail.contains(".padding(.vertical, 1)"))
+        XCTAssertFalse(rail.contains(".padding(.horizontal, 1)"))
+    }
+
     func testFirstVisitSurfacePolishUsesWalkthroughOnlyMapAndSingleBackContracts() throws {
         let map = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
