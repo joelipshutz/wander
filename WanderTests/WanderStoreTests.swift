@@ -8687,6 +8687,63 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(suggestions.allSatisfy { !existingPlaceIDs.contains($0.visiblePlace.place.id) })
     }
 
+    func testListSuggestionReasonsRemoveInternalMetadataLabels() throws {
+        let store = makeStore()
+        let visiblePlace = try XCTUnwrap(
+            store.visiblePlaces().first { $0.place.locality == "Los Angeles" }
+        )
+
+        XCTAssertEqual(
+            ListSuggestionReasonFormatter.displayText(
+                "Fits: areas_addresses + Los Angeles",
+                for: visiblePlace
+            ),
+            "Fits: Los Angeles"
+        )
+        XCTAssertEqual(
+            ListSuggestionReasonFormatter.displayText(
+                "Fits: place + outdoor_seating",
+                for: visiblePlace
+            ),
+            "Fits: outdoor seating"
+        )
+
+        let fallback = ListSuggestionReasonFormatter.displayText(
+            "Fits: areas_addresses + addresses, areas",
+            for: visiblePlace
+        )
+        XCTAssertTrue(fallback.contains("Los Angeles"))
+        XCTAssertTrue(fallback.contains(visiblePlace.effectiveCompactType))
+        XCTAssertFalse(fallback.contains("_"))
+        XCTAssertFalse(fallback.lowercased().contains("areas"))
+        XCTAssertFalse(fallback.lowercased().contains("place"))
+    }
+
+    func testRemoteListSuggestionReasonsUseReadableMetadata() async throws {
+        let store = makeStore()
+        let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_laptop" })
+        let candidate = try XCTUnwrap(store.listSuggestions(for: list, limit: 1).first)
+        let repository = FakeListSuggestionRepository(
+            response: ListSuggestionFunctionResponse(
+                suggestions: [
+                    ListSuggestionFunctionItem(
+                        visiblePlaceID: candidate.visiblePlace.id,
+                        reason: "Fits: areas_addresses + \(candidate.visiblePlace.place.locality ?? "place")",
+                        score: 0.9
+                    )
+                ]
+            )
+        )
+        let backend = WanderBackend(listSuggestionRepository: repository)
+
+        let suggestions = await store.listSuggestions(for: list, limit: 1, backend: backend)
+        let reason = try XCTUnwrap(suggestions.first?.reason)
+
+        XCTAssertFalse(reason.contains("_"))
+        XCTAssertFalse(reason.lowercased().contains("areas"))
+        XCTAssertNotEqual(reason.lowercased(), "fits: place")
+    }
+
     func testListSuggestionBatchKeepsRemainingPlacesUntilExhausted() throws {
         let store = makeStore()
         let places = Array(store.visiblePlaces().prefix(3))
@@ -10335,6 +10392,19 @@ private final class FakeExtractionRepository: ExtractionRepository {
             errorCode: nil,
             errorMessage: nil
         )
+    }
+}
+
+@MainActor
+private final class FakeListSuggestionRepository: ListSuggestionRepository {
+    private let response: ListSuggestionFunctionResponse
+
+    init(response: ListSuggestionFunctionResponse) {
+        self.response = response
+    }
+
+    func suggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse {
+        response
     }
 }
 

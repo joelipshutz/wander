@@ -2209,7 +2209,7 @@ final class WanderStore: ObservableObject {
                 let category = visiblePlace.place.category.lowercased()
                 if existingCategories.contains(category) || contextText.contains(category) {
                     score += 4
-                    reasons.append(visiblePlace.place.category)
+                    reasons.append(visiblePlace.effectiveCompactType)
                 }
                 if let locality = visiblePlace.place.locality?.lowercased(),
                    existingLocalities.contains(locality) || contextText.contains(locality) {
@@ -2227,7 +2227,8 @@ final class WanderStore: ObservableObject {
                 if visiblePlace.owner.id == currentUser.id {
                     score += 1
                 }
-                let reason = reasons.isEmpty ? "Similar to this list" : "Fits: \(reasons.prefix(2).joined(separator: " + "))"
+                let rawReason = reasons.isEmpty ? "Similar to this list" : "Fits: \(reasons.prefix(2).joined(separator: " + "))"
+                let reason = ListSuggestionReasonFormatter.displayText(rawReason, for: visiblePlace)
                 return ListPlaceSuggestion(visiblePlace: visiblePlace, reason: reason, score: score)
             }
             .filter { $0.score > 0 }
@@ -2254,7 +2255,7 @@ final class WanderStore: ObservableObject {
                 else { return nil }
                 return ListPlaceSuggestion(
                     visiblePlace: visiblePlace,
-                    reason: item.reason,
+                    reason: ListSuggestionReasonFormatter.displayText(item.reason, for: visiblePlace),
                     score: item.score ?? 0
                 )
             }

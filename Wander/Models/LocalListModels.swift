@@ -145,6 +145,91 @@ struct ListPlaceSuggestion: Identifiable {
     var id: String { visiblePlace.id }
 }
 
+enum ListSuggestionReasonFormatter {
+    private static let genericValues = Set([
+        "address",
+        "addresses",
+        "addresses areas",
+        "area",
+        "area address",
+        "areas",
+        "areas addresses",
+        "categories",
+        "category",
+        "location",
+        "locations",
+        "place",
+        "places",
+        "tag",
+        "tags"
+    ])
+
+    static func displayText(_ rawReason: String, for visiblePlace: VisiblePlace) -> String {
+        let trimmedReason = rawReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reasonBody: String
+        if let colonIndex = trimmedReason.firstIndex(of: ":"),
+           trimmedReason[..<colonIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare("Fits") == .orderedSame {
+            reasonBody = String(trimmedReason[trimmedReason.index(after: colonIndex)...])
+        } else if !trimmedReason.isEmpty {
+            let humanizedReason = humanized(trimmedReason)
+            return containsInternalIdentifier(trimmedReason) && usefulValues([humanizedReason]).isEmpty
+                ? fallbackText(for: visiblePlace)
+                : humanizedReason
+        } else {
+            return fallbackText(for: visiblePlace)
+        }
+
+        let values = usefulValues(
+            reasonBody.components(separatedBy: CharacterSet(charactersIn: "+|•"))
+        )
+        guard !values.isEmpty else { return fallbackText(for: visiblePlace) }
+        return "Fits: \(values.prefix(3).joined(separator: " + "))"
+    }
+
+    private static func fallbackText(for visiblePlace: VisiblePlace) -> String {
+        let values = usefulValues([
+            visiblePlace.place.locality,
+            visiblePlace.effectiveCompactType,
+            visiblePlace.place.region
+        ].compactMap { $0 })
+        guard !values.isEmpty else { return "Similar to this list" }
+        return "Fits: \(values.prefix(3).joined(separator: " + "))"
+    }
+
+    private static func usefulValues(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.compactMap { rawValue in
+            let value = humanized(rawValue)
+            let key = normalizedKey(value)
+            guard !key.isEmpty,
+                  !genericValues.contains(key),
+                  seen.insert(key).inserted
+            else { return nil }
+            return value
+        }
+    }
+
+    private static func humanized(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+    }
+
+    private static func normalizedKey(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private static func containsInternalIdentifier(_ value: String) -> Bool {
+        value.contains("_") && genericValues.contains(normalizedKey(value))
+    }
+}
+
 struct ListSuggestionBatch {
     private(set) var suggestions: [ListPlaceSuggestion] = []
     private(set) var pendingSuggestionIDs = Set<String>()
