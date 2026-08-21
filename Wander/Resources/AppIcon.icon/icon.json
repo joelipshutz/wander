@@ -1,21 +1,22 @@
 {
   "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+    "automatic-gradient" : "extended-srgb:0.94510,0.91373,0.87059,1.00000"
   },
   "groups" : [
     {
       "blur-material" : 0,
       "layers" : [
         {
-          "image-name" : "recme-liquid-glass-map-original.png",
-          "name" : "recme-liquid-glass-map-original"
+          "image-name" : "recme-warm-map-original.png",
+          "name" : "recme-warm-map-original"
         }
       ],
-      "name" : "Matte Liquid Glass Map + App Emojis + Centered rec.me",
+      "name" : "Warm Map Original",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0
       },
+      "specular" : false,
       "translucency" : {
         "enabled" : false,
         "value" : 0

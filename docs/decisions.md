@@ -91,6 +91,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Warm utility map style | Locked | Cream/sand/espresso/terracotta/sky with useful map-first UI. |
 | No competing visual direction | Locked unless Joe asks | Do not generate new variants as implementation blockers. |
 | Native font stack | Locked for REC-132 | Use New York/native editorial serif for first-run onboarding display copy and the system sans stack for controls/body. No external font dependency is required. |
+| Production app icon | Locked for REC-343 | Use the selected warm matte neighborhood map with the centered black-serif `rec.me` wordmark, one orange-red tree pin, and sparse irregular palms contained within the coastal green strip. The review-only Liquid Glass alternative is not the production icon. |
 | Editorial typography phase two | Locked for REC-165 direction C | Use Apple's Dynamic-Type-aware system serif for named content, major content-section headings, and eligible custom content-screen mastheads. Keep navigation and header controls, persistent search, tabs, filters, buttons, body copy, metadata, counts, and timestamps in native system sans. This typography pass must not alter check-in ticket geometry/colors/media, the streak screen, check-in rating typography, or the approved serif treatment for overall place-profile rating values. |
 | SF Symbols/native controls | Locked | Use native symbols instead of mock emoji chrome for structural UI. |
 | iPhone-first visual QA | Locked | Verify real simulator screenshots before calling UI accepted. |

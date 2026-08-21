@@ -1,6 +1,6 @@
 # REC-343 app icon candidates
 
-The revised original warm-map direction is the selected candidate. The Liquid Glass version remains here as the comparison candidate from the review; the current production icon is unchanged pending explicit promotion approval.
+The revised original warm-map direction is the selected production icon. The Liquid Glass version remains here as the comparison candidate from the review.
 
 `source/recme-warm-map-original-source-1254.png` is a byte-for-byte copy of the initially supplied image. `source/recme-warm-map-selected-source-1254.png` is the selected revision with the explicitly marked palm at x=7.8%, y=11.5% removed and the surrounding peach rooftop reconstructed. The selected candidate's Icon Composer source is a 1024 px normalization of that revision.
 
@@ -9,7 +9,7 @@ The revised original warm-map direction is the selected candidate. The Liquid Gl
 - `RecmeWarmMapOriginal.icon` contains the selected warm-map revision with a sparse, irregular palm row. Icon Composer specular, blur, translucency, and shadow effects are disabled.
 - `RecmeWarmMapLiquidGlass.icon` uses a high-fidelity generated restyle of the same map composition, then applies restrained Icon Composer material settings: specular on, 12% blur, 6% translucency, and 8% neutral shadow.
 
-Each `.icon` document contains its opaque 1024 px source; the `previews` folder contains 180 px and 87 px legibility checks. Neither candidate replaces `Wander/Resources/AppIcon.icon` or the production asset catalog yet.
+Each `.icon` document contains its opaque 1024 px source; the `previews` folder contains 180 px and 87 px legibility checks. Ryan approved the original direction for production on 2026-08-20, and its source now owns `Wander/Resources/AppIcon.icon` plus the generated asset-catalog renditions.
 
 ## Selected palm revision prompt
 
