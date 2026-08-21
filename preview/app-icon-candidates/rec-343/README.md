@@ -2,7 +2,7 @@
 
 The revised original warm-map direction is the selected candidate. The Liquid Glass version remains here as the comparison candidate from the review; the current production icon is unchanged pending explicit promotion approval.
 
-`source/recme-warm-map-original-source-1254.png` is a byte-for-byte copy of the initially supplied image. `source/recme-warm-map-selected-source-1254.png` is the selected revision with eight less-symmetrical palms: the isolated upper-left palm is retained, while the separate palm nearest the yellow sand is removed. The selected candidate's Icon Composer source is a 1024 px normalization of that revision.
+`source/recme-warm-map-original-source-1254.png` is a byte-for-byte copy of the initially supplied image. `source/recme-warm-map-selected-source-1254.png` is the selected revision with the explicitly marked palm at x=7.8%, y=11.5% removed and the surrounding peach rooftop reconstructed. The selected candidate's Icon Composer source is a 1024 px normalization of that revision.
 
 ## Variants
 
@@ -17,7 +17,7 @@ Built-in image editing was used with the original supplied image as the edit tar
 
 > Edit only the palm trees running down the diagonal sage-green strip along the left side. Reduce them from the current dense, evenly spaced row to approximately eight palms. Arrange those palms with intentionally irregular natural spacing, varied gaps, subtle differences in height and crown size, and slight varied leans so they do not look copied or symmetrical. Preserve absolutely everything else in appearance. Every edited palm, including its full trunk, leaves, and shadow, must remain completely within the diagonal sage-green strip.
 
-The corrected follow-up restored the isolated upper-left palm and instead removed the palm nearest the yellow sand, reconstructing the matching green texture beneath the removed palm.
+The final coordinate-based edit removed only the palm centered at x=7.8%, y=11.5% from the supplied marked image and preserved every other palm.
 
 ## Liquid Glass image-generation prompt
 
