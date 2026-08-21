@@ -496,6 +496,7 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                             showsBorder ? tone.border : Color.clear,
                             lineWidth: showsBorder ? tone.borderWidth : 0
                         )
+                        .allowsHitTesting(false)
                 }
         } else {
             content
@@ -507,6 +508,7 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                             showsBorder ? tone.border : Color.clear,
                             lineWidth: showsBorder ? tone.borderWidth : 0
                         )
+                        .allowsHitTesting(false)
                 }
                 .shadow(
                     color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
@@ -544,6 +546,7 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
                         showsBorder ? tone.border : Color.clear,
                         lineWidth: showsBorder ? tone.borderWidth : 0
                     )
+                    .allowsHitTesting(false)
                 }
         } else {
             content
@@ -554,6 +557,7 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
                         showsBorder ? tone.border : Color.clear,
                         lineWidth: showsBorder ? tone.borderWidth : 0
                     )
+                    .allowsHitTesting(false)
                 }
                 .shadow(
                     color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
@@ -871,7 +875,7 @@ struct WanderPrimaryButton: View {
                     .wanderGlassRoundedRectangle(
                         tone: glassTone,
                         cornerRadius: WanderTheme.radiusLarge,
-                        interactive: !isDisabled,
+                        interactive: false,
                         showsBorder: false
                     )
                     .opacity(isDisabled ? 0.68 : 1)
