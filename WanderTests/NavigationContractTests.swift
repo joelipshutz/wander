@@ -352,6 +352,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(theme.contains(".background(.ultraThinMaterial"))
         XCTAssertTrue(theme.contains("struct WanderGlassHeader<Accessory: View>"))
         XCTAssertTrue(theme.contains("struct WanderGlassSegmentedSwitch"))
+        XCTAssertTrue(theme.contains("struct WanderGlassButtonCluster<Content: View>"))
+        XCTAssertTrue(theme.contains("GlassEffectContainer(spacing: mergeSpacing)"))
 
         XCTAssertTrue(root.contains("onAdd: presentAddSheet"))
         XCTAssertTrue(root.contains("private func presentAddSheet()"))
@@ -362,13 +364,19 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(map.contains("tone: appearance.glassTone(isSelected: isActive)"))
         let mapAddButton = try sourceSection(
             map,
-            after: "private struct MapSolidAddButton: View",
+            after: "private struct MapGlassAddButton: View",
             before: "private struct SearchBar: View"
         )
-        XCTAssertTrue(mapAddButton.contains(".background(WanderTheme.terracotta.color, in: Circle())"))
-        XCTAssertTrue(mapAddButton.contains(".foregroundStyle(WanderTheme.textOnAction.color)"))
-        XCTAssertFalse(mapAddButton.contains(".glassEffect("))
-        XCTAssertFalse(mapAddButton.contains(".wanderGlassCapsule("))
+        XCTAssertTrue(mapAddButton.contains(".wanderGlassCapsule(tone: .accent)"))
+        XCTAssertTrue(mapAddButton.contains(".foregroundStyle(WanderTheme.terracottaDark.color)"))
+        XCTAssertFalse(mapAddButton.contains(".background(WanderTheme.terracotta.color, in: Circle())"))
+        let nearbyButton = try sourceSection(
+            map,
+            after: "private struct RecenterButton: View",
+            before: "private struct MapLocationEducationPrompt: View"
+        )
+        XCTAssertTrue(nearbyButton.contains(".wanderGlassCapsule(tone: appearance.neutralGlassTone)"))
+        XCTAssertFalse(nearbyButton.contains(".background(appearance.isDark"))
         let mapSearchSurface = try sourceSection(
             map,
             after: "private struct MapSearchCapsuleSurfaceModifier: ViewModifier",
@@ -394,7 +402,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(rootComposition.contains(".zIndex(1)"))
         XCTAssertTrue(rootComposition.contains("FeedFloatingHeaderHeightPreferenceKey.self"))
         XCTAssertTrue(feed.contains(".onPreferenceChange(FeedFloatingHeaderHeightPreferenceKey.self)"))
-        XCTAssertTrue(feed.contains("GlassEffectContainer(spacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(feed.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
         let floatingHeader = try sourceSection(
             feed,
             after: "private var floatingHeaderContent: some View",
@@ -444,6 +452,53 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(lists.contains("WanderGlassHeader("))
         XCTAssertTrue(lists.contains("accessibilityIdentifier: \"lists.headerAdd\""))
         XCTAssertTrue(lists.contains("WanderGlassSegmentedSwitch("))
+    }
+
+    func testAdjacentFloatingGlassControlsUseSharedClusters() throws {
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let map = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
+        )
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let profile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Profile/ProfileOwnerHome.swift")
+        )
+        let walkthrough = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Onboarding/FirstVisitWalkthrough.swift")
+        )
+
+        XCTAssertTrue(theme.contains("struct WanderGlassButtonCluster<Content: View>"))
+        XCTAssertTrue(theme.contains("mergeSpacing: CGFloat = WanderTheme.spacing1"))
+        XCTAssertTrue(theme.contains("GlassEffectContainer(spacing: mergeSpacing)"))
+        XCTAssertTrue(theme.contains("if #available(iOS 26.0, *)"))
+
+        XCTAssertGreaterThanOrEqual(map.components(separatedBy: "WanderGlassButtonCluster").count - 1, 2)
+        XCTAssertTrue(map.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(map.contains("MapGlassAddButton"))
+        let mapSearchAndNearbyCluster = try sourceSection(
+            map,
+            after: "WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3)",
+            before: ".onPreferenceChange(MapSearchDockHeightPreferenceKey.self)"
+        )
+        XCTAssertTrue(mapSearchAndNearbyCluster.contains("HStack(spacing: WanderTheme.spacing3)"))
+        XCTAssertTrue(mapSearchAndNearbyCluster.contains("SearchBar("))
+        XCTAssertTrue(mapSearchAndNearbyCluster.contains("MapGlassAddButton"))
+        XCTAssertTrue(mapSearchAndNearbyCluster.contains("RecenterButton("))
+        XCTAssertTrue(mapSearchAndNearbyCluster.contains(".padding(.bottom, nearbyClusterBottomPadding)"))
+        XCTAssertGreaterThanOrEqual(placeProfile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 4)
+        XCTAssertGreaterThanOrEqual(
+            placeProfile.components(
+                separatedBy: "WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"
+            ).count - 1,
+            3
+        )
+        XCTAssertGreaterThanOrEqual(profile.components(separatedBy: "WanderGlassButtonCluster").count - 1, 3)
+        XCTAssertTrue(profile.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(walkthrough.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
     }
 
     func testListsHeaderKeepsItsAddActionWithoutAFullWidthGlassPanel() throws {
@@ -1134,7 +1189,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("case \"Yelp\":"))
         XCTAssertTrue(placeProfile.contains("Text(\"Yelp\")"))
         XCTAssertTrue(placeProfile.contains("map.selectedPlaceRatingProvider"))
-        XCTAssertTrue(previewCard.contains("GlassEffectContainer(spacing: 0)"))
+        XCTAssertTrue(previewCard.contains("WanderGlassButtonCluster(mergeSpacing: 0)"))
         XCTAssertTrue(previewCard.contains("VStack(spacing: 4)"))
         XCTAssertTrue(previewCard.contains("activeCardAction: PlaceCardPreviewAction?"))
         XCTAssertTrue(previewCard.contains("guard activeCardAction == nil else"))
@@ -1228,9 +1283,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("WanderGlassSegmentedSwitch("))
         XCTAssertFalse(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
 
-        XCTAssertTrue(placeProfile.contains(".navigationTitle(place.name)"))
-        XCTAssertTrue(placeProfile.contains("ToolbarItem(placement: .topBarLeading)"))
-        XCTAssertTrue(placeProfile.contains("ToolbarItemGroup(placement: .topBarTrailing)"))
+        XCTAssertFalse(placeProfile.contains(".navigationTitle(\"\")"))
+        XCTAssertFalse(placeProfile.contains(".navigationTitle(place.name)"))
+        XCTAssertTrue(placeProfile.contains("headerNavigationControls(topInset: headerTopInset)"))
         let mapScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
         )
@@ -1243,6 +1298,91 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(streak.contains("WanderTypography"))
         XCTAssertTrue(streak.contains(".font(.system(size: 29, weight: .black, design: .serif))"))
+    }
+
+    func testPlaceProfileHeaderIsFullBleedAcrossSaveStatesAndLongNames() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let theme = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/DesignSystem/WanderTheme.swift")
+        )
+        let fullView = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileFullView: View {",
+            before: "struct PlaceProfileFloatingActions: View {"
+        )
+        let navigationControls = try sourceSection(
+            fullView,
+            after: "private func headerNavigationControls(topInset: CGFloat) -> some View {",
+            before: "private func headerNavigationLabel(systemImage: String) -> some View {"
+        )
+
+        // The same chrome is used for unsaved (.add), checked-in (.addVisit),
+        // and arbitrarily long place names, so state cannot restore stale copy.
+        XCTAssertTrue(fullView.contains("let action: PlaceSheetAction"))
+        XCTAssertTrue(fullView.contains("Text(place.name)"))
+        XCTAssertTrue(fullView.contains(".lineLimit(3)"))
+        XCTAssertFalse(fullView.contains(".navigationTitle(\"\")"))
+        XCTAssertFalse(fullView.contains(".navigationTitle(place.name)"))
+        XCTAssertFalse(fullView.contains(".toolbarColorScheme(.dark, for: .navigationBar)"))
+        XCTAssertFalse(fullView.contains(".toolbarBackground(.hidden, for: .navigationBar)"))
+        XCTAssertTrue(placeProfile.contains(".toolbar(.hidden, for: .navigationBar)"))
+
+        XCTAssertTrue(fullView.contains(".ignoresSafeArea(.container, edges: .top)"))
+        XCTAssertTrue(fullView.contains(".overlay(alignment: .top)"))
+        XCTAssertTrue(fullView.contains("headerNavigationControls(topInset: headerTopInset)"))
+        XCTAssertTrue(navigationControls.contains("Button(action: onBack)"))
+        XCTAssertTrue(navigationControls.contains("headerNavigationLabel(systemImage: \"chevron.left\")"))
+        XCTAssertTrue(navigationControls.contains("headerNavigationLabel(systemImage: \"square.and.arrow.up\")"))
+        XCTAssertTrue(navigationControls.contains(".accessibilityLabel(\"Back\")"))
+        XCTAssertTrue(navigationControls.contains(".accessibilityLabel(\"Share place\")"))
+        XCTAssertTrue(navigationControls.contains(".padding(.top, topInset)"))
+        XCTAssertTrue(fullView.contains(".foregroundStyle(WanderTheme.terracotta.color)"))
+        XCTAssertTrue(fullView.contains(".wanderGlassCapsule(tone: .lightAction, interactive: true)"))
+
+        let glassCapsule = try sourceSection(
+            theme,
+            after: "private struct WanderGlassCapsuleModifier: ViewModifier {",
+            before: "private struct WanderGlassRoundedRectangleModifier: ViewModifier {"
+        )
+        XCTAssertTrue(glassCapsule.contains("if #available(iOS 26.0, *)"))
+        XCTAssertTrue(glassCapsule.contains(".glassEffect("))
+        XCTAssertTrue(glassCapsule.contains(".interactive(isInteractive)"))
+    }
+
+    func testPlaceProfileHeaderOnlyShowsRecMeUserAttribution() throws {
+        let placeProfile = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
+        )
+        let viewerAttribution = try sourceSection(
+            placeProfile,
+            after: "private var attributionCard: some View {",
+            before: "private func userAttributionCard("
+        )
+        let mapHeader = try sourceSection(
+            placeProfile,
+            after: "private struct PlaceProfileMapHeader: View {",
+            before: "struct PlaceProfilePhotoImage: View {"
+        )
+        let headerAttribution = try sourceSection(
+            mapHeader,
+            after: "private func photoSource(for item: PlacePhotoGalleryItem) -> some View {",
+            before: "private var selectedPhoto: PlacePhotoGalleryItem?"
+        )
+
+        XCTAssertTrue(viewerAttribution.contains("userAttributionCard(item: selectedItem, contributor: contributor)"))
+        XCTAssertTrue(viewerAttribution.contains("googleAttributionCard(photo: selectedItem.photo)"))
+        XCTAssertTrue(placeProfile.contains("private func googleAttributionCard"))
+        XCTAssertTrue(placeProfile.contains("Link(\"Photo by \\(authorName)\", destination: authorURL)"))
+        XCTAssertTrue(placeProfile.contains(".accessibilityLabel(\"Open photo in Google Maps\")"))
+
+        XCTAssertTrue(headerAttribution.contains("if let contributor = item.contributor"))
+        XCTAssertTrue(headerAttribution.contains("Photo by \\(contributor.displayName)"))
+        XCTAssertFalse(headerAttribution.contains("item.isGooglePlacesPhoto"))
+        XCTAssertFalse(headerAttribution.contains("PlacePhotoAttribution"))
+        XCTAssertFalse(mapHeader.contains("Open Google Maps photo"))
+        XCTAssertFalse(placeProfile.contains("private struct PlacePhotoAttribution"))
     }
 
     func testCheckInAndWannaFlowUsesEditorialPlaceNameWithSystemSansControls() throws {
@@ -3101,7 +3241,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(placeProfile.contains(".offset(x: horizontalOffset)"))
         XCTAssertTrue(placeProfile.contains("if usesInteractiveHorizontalDismissal {\n                profileContent"))
         XCTAssertFalse(placeProfile.contains(".simultaneousGesture(edgeSwipeGesture(containerWidth: proxy.size.width))"))
-        XCTAssertTrue(placeProfile.contains(".toolbar(.visible, for: .navigationBar)"))
+        XCTAssertTrue(placeProfile.contains(".toolbar(.hidden, for: .navigationBar)"))
     }
 
     func testDiscoverTickerStateIsOwnedBySearchField() throws {
@@ -3473,7 +3613,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(floatingActions.contains("case .option5:"))
         XCTAssertTrue(floatingActions.contains(".deepBlackAction"))
         XCTAssertTrue(floatingActions.contains("tone: .darkOverlay"))
-        XCTAssertTrue(floatingActions.contains("GlassEffectContainer(spacing: WanderTheme.spacing2)"))
+        XCTAssertTrue(floatingActions.contains("private var clusteredActionLayout: some View"))
+        XCTAssertTrue(floatingActions.contains("WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2)"))
         XCTAssertTrue(floatingActions.contains("material: variant == .option4 ? .clear : .regular"))
         XCTAssertTrue(floatingActions.contains("static let compactActionHeight: CGFloat = 60"))
         XCTAssertTrue(floatingActions.contains("static let compactActionFrameWidth: CGFloat = 124"))

@@ -675,6 +675,33 @@ extension View {
     }
 }
 
+/// Shares one Liquid Glass sampling region across a related group of controls.
+/// The content owns its horizontal or vertical layout; `mergeSpacing` only
+/// controls how soon neighboring glass shapes begin to blend.
+struct WanderGlassButtonCluster<Content: View>: View {
+    let mergeSpacing: CGFloat
+    private let content: Content
+
+    init(
+        mergeSpacing: CGFloat = WanderTheme.spacing1,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.mergeSpacing = mergeSpacing
+        self.content = content()
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: mergeSpacing) {
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
 struct WanderGlassActionButton: View {
     let systemImage: String
     let accessibilityLabel: String
