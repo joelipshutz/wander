@@ -1731,6 +1731,69 @@ final class OnboardingUITests: XCTestCase {
         )
     }
 
+    func testMapWannaAndSaveRespondToSinglePhysicalTap() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
+        ]
+        app.launch()
+
+        let wanna = app.buttons["place-profile.floating-action.wanna"]
+        XCTAssertTrue(wanna.waitForExistence(timeout: 5))
+        XCTAssertTrue(wanna.isHittable)
+        wanna.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let attachedTray = app.otherElements["place-profile.attached-wanna"].firstMatch
+        XCTAssertTrue(
+            attachedTray.waitForExistence(timeout: 4),
+            "One physical tap should open the Wanna editor."
+        )
+
+        let save = attachedTray.buttons["Add to Wanna"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.isHittable)
+        save.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(
+            attachedTray.waitForNonExistence(timeout: 4),
+            "One physical tap should submit and dismiss the Wanna editor."
+        )
+        XCTAssertTrue(app.buttons["place-profile.floating-action.wanna"].isSelected)
+    }
+
+    func testMapCheckInRespondsToSinglePhysicalTap() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(checkIn.isHittable)
+        checkIn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(
+            app.otherElements["place-profile.attached-check-in"].firstMatch
+                .waitForExistence(timeout: 4),
+            "One physical tap should open the Check in editor."
+        )
+    }
+
     func testAttachedWannaSheetCanExpandCollapseAndDismissFromItsNativeGrabber() {
         let app = XCUIApplication()
         app.launchArguments = [

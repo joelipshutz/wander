@@ -1981,7 +1981,7 @@ struct PlaceProfileFloatingActions: View {
                             tone: Self.glassTone(for: action, variant: variant),
                             cornerRadius: Self.compactCornerRadius,
                             material: variant == .option4 ? .clear : .regular,
-                            interactive: true,
+                            interactive: false,
                             showsBorder: true
                         )
                 } else {
@@ -1989,7 +1989,7 @@ struct PlaceProfileFloatingActions: View {
                         .contentShape(Capsule())
                         .wanderGlassCapsule(
                             tone: Self.glassTone(for: action, variant: variant),
-                            interactive: true,
+                            interactive: false,
                             showsBorder: true
                         )
                 }
