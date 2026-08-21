@@ -3609,7 +3609,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(floatingActions.contains(".wanderGlassCapsule("))
         XCTAssertTrue(floatingActions.contains(".wanderGlassRoundedRectangle("))
         XCTAssertTrue(floatingActions.contains("tone: Self.glassTone(for: action, variant: variant)"))
-        XCTAssertTrue(floatingActions.contains("interactive: true"))
+        XCTAssertTrue(floatingActions.contains("interactive: false"))
         XCTAssertTrue(floatingActions.contains("showsBorder: true"))
         XCTAssertTrue(floatingActions.contains("case .option5:"))
         XCTAssertTrue(floatingActions.contains(".deepBlackAction"))
