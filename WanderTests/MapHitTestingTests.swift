@@ -222,7 +222,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertTrue(
             searchCentering.contains("obscuredBottomHeight: selectedPlaceRecenterClearance")
         )
-        XCTAssertTrue(searchCentering.contains("cameraRegionTracker.region = region"))
+        XCTAssertTrue(searchCentering.contains("cameraRegionTracker.synchronize(with: region)"))
     }
 
     func testSelectedCoordinateCentersInsideTheUnobscuredMapHeight() {
@@ -395,13 +395,100 @@ final class MapSelectionMotionTests: XCTestCase {
             .pan
         )
         XCTAssertEqual(MapSelectionGesturePolicy.classify(from: start, to: start), .stationary)
-        XCTAssertEqual(MapSelectionGesturePolicy.minimumMagnificationDelta, 0.01)
         XCTAssertGreaterThan(MapSelectionGesturePolicy.tapDismissalDelayNanoseconds, 250_000_000)
         XCTAssertGreaterThanOrEqual(MapSelectionGesturePolicy.postZoomTapSuppressionDuration, 0.5)
+        XCTAssertGreaterThanOrEqual(
+            MapSelectionGesturePolicy.nativeFeatureTapSuppressionDuration,
+            0.5
+        )
         XCTAssertLessThanOrEqual(
             MapSelectionGesturePolicy.doubleTapRecognitionWindow,
             Double(MapSelectionGesturePolicy.tapDismissalDelayNanoseconds) / 1_000_000_000
         )
+    }
+
+    func testCameraRegionTrackerClassifiesAContinuousPanWithoutPublishingViewState() {
+        let start = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
+            span: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.12)
+        )
+        let tracker = MapCameraRegionTracker(region: start)
+        let samples = (1...120).map { index in
+            MKCoordinateRegion(
+                center: CLLocationCoordinate2D(
+                    latitude: start.center.latitude + (Double(index) * 0.0001),
+                    longitude: start.center.longitude + (Double(index) * 0.00015)
+                ),
+                span: start.span
+            )
+        }
+
+        for sample in samples {
+            tracker.recordCameraChange(sample)
+        }
+        let end = samples[samples.count - 1]
+
+        XCTAssertTrue(tracker.isInteractionActive)
+        XCTAssertEqual(tracker.region.center.latitude, end.center.latitude)
+        XCTAssertEqual(tracker.region.center.longitude, end.center.longitude)
+        XCTAssertEqual(tracker.finishCameraChange(end), .pan)
+        XCTAssertFalse(tracker.isInteractionActive)
+    }
+
+    func testCameraRegionTrackerKeepsPinchZoomDistinctFromPan() {
+        let start = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
+            span: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.12)
+        )
+        let zoomed = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.052, longitude: -118.248),
+            span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.072)
+        )
+        let tracker = MapCameraRegionTracker(region: start)
+
+        tracker.recordCameraChange(zoomed)
+
+        XCTAssertEqual(tracker.finishCameraChange(zoomed), .zoom)
+        XCTAssertFalse(tracker.isInteractionActive)
+    }
+
+    func testCameraRegionTrackerRemembersZoomAcrossRapidDirectionChanges() {
+        let start = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
+            span: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.12)
+        )
+        let zoomed = MKCoordinateRegion(
+            center: start.center,
+            span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.072)
+        )
+        let returnedWithCenterDrift = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.06, longitude: -118.24),
+            span: start.span
+        )
+        let tracker = MapCameraRegionTracker(region: start)
+
+        tracker.recordCameraChange(zoomed)
+        tracker.recordCameraChange(returnedWithCenterDrift)
+
+        XCTAssertEqual(tracker.finishCameraChange(returnedWithCenterDrift), .zoom)
+        XCTAssertFalse(tracker.isInteractionActive)
+    }
+
+    func testCameraRegionTrackerSynchronizesProgrammaticCameraMoves() {
+        let start = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 34.05, longitude: -118.25),
+            span: MKCoordinateSpan(latitudeDelta: 0.10, longitudeDelta: 0.12)
+        )
+        let destination = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 40.71, longitude: -74.01),
+            span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.05)
+        )
+        let tracker = MapCameraRegionTracker(region: start)
+
+        tracker.synchronize(with: destination)
+
+        XCTAssertFalse(tracker.isInteractionActive)
+        XCTAssertEqual(tracker.finishCameraChange(destination), .stationary)
     }
 
     func testSelectionLifetimeIgnoresMapKitBindingClear() {
@@ -444,7 +531,7 @@ final class MapSelectionMotionTests: XCTestCase {
         XCTAssertFalse(map.contains("proxy.convert(coordinate, to: .local)"))
     }
 
-    func testMapInteractionSourceKeepsReplacementMountedAndAddsPanDismissal() throws {
+    func testMapInteractionSourceLeavesNativeGesturesUnblockedAndKeepsPanDismissal() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -454,21 +541,56 @@ final class MapSelectionMotionTests: XCTestCase {
         let card = try String(
             contentsOf: root.appendingPathComponent("Wander/Features/Map/PlaceProfileMapSurface.swift")
         )
+        let nativeMapStart = try XCTUnwrap(map.range(of: "                    Map(\n"))
+        let nativeMapEnd = try XCTUnwrap(
+            map.range(of: "                    .mapStyle(", range: nativeMapStart.upperBound..<map.endIndex)
+        )
+        let nativeMapContent = map[nativeMapStart.lowerBound..<nativeMapEnd.lowerBound]
+        let continuousHandlerStart = try XCTUnwrap(
+            map.range(of: "    private func handleMapCameraChange(")
+        )
+        let continuousHandlerEnd = try XCTUnwrap(
+            map.range(
+                of: "    private func handleMapCameraInteractionEnd(",
+                range: continuousHandlerStart.upperBound..<map.endIndex
+            )
+        )
+        let continuousHandler = map[
+            continuousHandlerStart.lowerBound..<continuousHandlerEnd.lowerBound
+        ]
 
-        XCTAssertTrue(map.contains("DragGesture(minimumDistance: MapHitTesting.panDismissalDistance"))
-        XCTAssertTrue(map.contains("MagnifyGesture(minimumScaleDelta: MapSelectionGesturePolicy.minimumMagnificationDelta)"))
-        XCTAssertTrue(map.contains("handleMapMagnificationChange()"))
+        XCTAssertTrue(map.contains("interactionModes: .all"))
+        XCTAssertFalse(nativeMapContent.contains("Button {"))
+        XCTAssertTrue(nativeMapContent.contains(".allowsHitTesting(false)"))
+        XCTAssertTrue(map.contains("selectableMarker(at: point, proxy: proxy)"))
+        XCTAssertTrue(map.contains("nativeMapFeatureSelectionSuppressionUntil"))
+        XCTAssertFalse(map.contains(".onTapGesture(coordinateSpace: .local)"))
+        XCTAssertFalse(map.contains("DragGesture(minimumDistance: 0, coordinateSpace: .local)"))
+        XCTAssertFalse(map.contains("DragGesture(minimumDistance: MapHitTesting.panDismissalDistance"))
+        XCTAssertFalse(map.contains("MagnifyGesture(minimumScaleDelta:"))
+        XCTAssertTrue(map.contains("MapGestureObserver("))
+        XCTAssertTrue(map.contains("longPressMinimumDuration: 0.48"))
+        XCTAssertTrue(map.contains("configureForPassiveObservation(recognizer)"))
+        XCTAssertTrue(map.contains("recognizer.cancelsTouchesInView = false"))
+        XCTAssertTrue(map.contains("recognizer.delaysTouchesBegan = false"))
+        XCTAssertTrue(map.contains("shouldRecognizeSimultaneouslyWith otherGestureRecognizer"))
         XCTAssertTrue(map.contains("registerMapZoom()"))
         XCTAssertTrue(map.contains("tapDate.timeIntervalSince(previousMapTapDate)"))
         XCTAssertTrue(map.contains("let tapRegion = currentSearchRegion"))
         XCTAssertTrue(map.contains("Date.now >= mapTapDismissalSuppressionUntil"))
-        XCTAssertTrue(map.contains("handleMapDragChange()"))
-        XCTAssertTrue(map.contains("handleMapDragEnd()"))
         XCTAssertTrue(map.contains("handleMapCameraChange(context.region)"))
+        XCTAssertTrue(map.contains("handleMapCameraInteractionEnd(context.region)"))
         XCTAssertTrue(map.contains(".onMapCameraChange(frequency: .onEnd)"))
         XCTAssertTrue(map.contains("@State private var cameraRegionTracker"))
         XCTAssertFalse(map.contains("@State private var currentSearchRegion"))
-        XCTAssertTrue(map.contains("cameraRegionTracker.region = region"))
+        XCTAssertTrue(map.contains("cameraRegionTracker.recordCameraChange(region)"))
+        XCTAssertTrue(map.contains("cameraRegionTracker.finishCameraChange(region)"))
+        XCTAssertFalse(continuousHandler.contains("Task"))
+        XCTAssertFalse(continuousHandler.contains("withAnimation"))
+        XCTAssertFalse(continuousHandler.contains("store."))
+        XCTAssertFalse(continuousHandler.contains("registerMapZoom"))
+        XCTAssertFalse(map.contains("@State private var mapInteractionStartRegion"))
+        XCTAssertFalse(map.contains("@State private var mapInteractionDidZoom"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .oneFingerPan)"))
         XCTAssertTrue(map.contains("requestCompactSelectionDismissal(trigger: .nativeFeatureBindingCleared)"))
         XCTAssertTrue(map.contains("ActiveMapAnnotationContent"))
@@ -812,7 +934,8 @@ final class MapFilterSelectionTests: XCTestCase {
         XCTAssertTrue(pinModifier.contains(".onChange(of: isVisible)"))
         XCTAssertTrue(pinModifier.contains("presentation.setVisible(visible)"))
         XCTAssertTrue(pinModifier.contains("withAnimation("))
-        XCTAssertTrue(map.contains("mapPressLocation.location = value.location"))
+        XCTAssertTrue(map.contains("MapGestureObserver("))
+        XCTAssertFalse(map.contains("@State private var mapPressLocation"))
         XCTAssertFalse(map.contains("@State private var lastMapPressPoint"))
         XCTAssertFalse(map.contains("incomingGroups + departingGroups"))
         XCTAssertTrue(theme.contains("if #available(iOS 26.0, *) {"))
