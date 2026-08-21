@@ -1685,12 +1685,27 @@ final class NavigationContractTests: XCTestCase {
         let addScreen = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
         )
+        let cameraCapture = try sourceSection(
+            addScreen,
+            after: "private struct AddCameraCaptureScreen: View",
+            before: "private enum AddCameraRecoveryState"
+        )
+        let cameraPickerStart = try XCTUnwrap(
+            addScreen.range(of: "private struct AddCameraPicker: UIViewControllerRepresentable")
+        )
+        let cameraPicker = String(addScreen[cameraPickerStart.lowerBound...])
 
         XCTAssertTrue(addScreen.contains(".fullScreenCover("))
         XCTAssertTrue(addScreen.contains("item: $cameraPresentation.route"))
         XCTAssertFalse(addScreen.contains(".sheet(isPresented: $showsCamera)"))
         XCTAssertTrue(addScreen.contains("AddCameraCaptureScreen("))
-        XCTAssertTrue(addScreen.contains("Label(\"Photos\", systemImage: \"photo.on.rectangle\")"))
+        XCTAssertTrue(cameraCapture.contains("Image(systemName: \"photo.on.rectangle\")"))
+        XCTAssertTrue(cameraCapture.contains("Image(systemName: \"arrow.triangle.2.circlepath.camera\")"))
+        XCTAssertTrue(cameraCapture.contains("Image(systemName: \"xmark\")"))
+        XCTAssertTrue(cameraCapture.contains("captureRequest += 1"))
+        XCTAssertTrue(cameraPicker.contains("picker.showsCameraControls = false"))
+        XCTAssertTrue(cameraPicker.contains("uiViewController.takePicture()"))
+        XCTAssertTrue(cameraPicker.contains("uiViewController.cameraDevice = requestedCameraDevice"))
         XCTAssertTrue(addScreen.contains("case .permissionDenied:"))
         XCTAssertTrue(addScreen.contains("case .unavailable:"))
         XCTAssertTrue(addScreen.contains("handleCameraPresentationDismissal"))

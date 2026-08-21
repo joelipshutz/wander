@@ -1885,11 +1885,24 @@ private struct AddCameraCaptureScreen: View {
     let onGallery: () -> Void
     let onCancel: () -> Void
 
+    @State private var captureRequest = 0
+    @State private var requestedCameraDevice: UIImagePickerController.CameraDevice = .rear
+
+    private var canFlipCamera: Bool {
+        UIImagePickerController.isCameraDeviceAvailable(.rear)
+            && UIImagePickerController.isCameraDeviceAvailable(.front)
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            AddCameraPicker(onImage: onImage, onCancel: onCancel)
+            AddCameraPicker(
+                captureRequest: captureRequest,
+                requestedCameraDevice: requestedCameraDevice,
+                onImage: onImage,
+                onCancel: onCancel
+            )
                 .ignoresSafeArea()
 
             VStack {
@@ -1911,19 +1924,50 @@ private struct AddCameraCaptureScreen: View {
 
                 HStack {
                     Button(action: onGallery) {
-                        Label("Photos", systemImage: "photo.on.rectangle")
-                            .font(.system(size: 14, weight: .bold))
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 21, weight: .semibold))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .frame(minHeight: WanderTheme.tapMinimum)
+                            .frame(width: 56, height: 56)
                             .background(.black.opacity(0.58))
-                            .clipShape(Capsule())
+                            .clipShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Choose from Photos")
                     .accessibilityHint("Closes the camera and opens your photo library")
 
                     Spacer()
+
+                    Button {
+                        captureRequest += 1
+                    } label: {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 72, height: 72)
+                            .overlay {
+                                Circle()
+                                    .stroke(.white.opacity(0.55), lineWidth: 3)
+                                    .padding(-6)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Take photo")
+
+                    Spacer()
+
+                    Button {
+                        requestedCameraDevice = requestedCameraDevice == .rear ? .front : .rear
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath.camera")
+                            .font(.system(size: 23, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 56, height: 56)
+                            .background(.black.opacity(0.58))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canFlipCamera)
+                    .opacity(canFlipCamera ? 1 : 0)
+                    .accessibilityLabel("Flip camera")
                 }
             }
             .padding(.horizontal, WanderTheme.spacing3)
@@ -2036,6 +2080,8 @@ private struct AddCameraRecoveryScreen: View {
 }
 
 private struct AddCameraPicker: UIViewControllerRepresentable {
+    let captureRequest: Int
+    let requestedCameraDevice: UIImagePickerController.CameraDevice
     let onImage: @MainActor (UIImage) -> Void
     let onCancel: () -> Void
 
@@ -2043,13 +2089,23 @@ private struct AddCameraPicker: UIViewControllerRepresentable {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
         picker.allowsEditing = false
+        picker.showsCameraControls = false
         picker.delegate = context.coordinator
         picker.modalPresentationStyle = .fullScreen
         picker.view.backgroundColor = .black
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
+        if UIImagePickerController.isCameraDeviceAvailable(requestedCameraDevice),
+           uiViewController.cameraDevice != requestedCameraDevice {
+            uiViewController.cameraDevice = requestedCameraDevice
+        }
+
+        guard context.coordinator.lastHandledCaptureRequest != captureRequest else { return }
+        context.coordinator.lastHandledCaptureRequest = captureRequest
+        uiViewController.takePicture()
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onImage: onImage, onCancel: onCancel)
@@ -2057,6 +2113,7 @@ private struct AddCameraPicker: UIViewControllerRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        var lastHandledCaptureRequest = 0
         private let onImage: @MainActor (UIImage) -> Void
         private let onCancel: () -> Void
 
