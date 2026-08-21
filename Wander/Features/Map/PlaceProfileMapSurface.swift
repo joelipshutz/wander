@@ -249,24 +249,32 @@ struct PlaceProfileFullScreen: View {
 
 struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentable {
     let isPresented: Bool
+    let onTransitionCompleted: @MainActor (Bool) -> Void
     let content: Content
 
     init(
         isPresented: Bool,
+        onTransitionCompleted: @escaping @MainActor (Bool) -> Void = { _ in },
         @ViewBuilder content: () -> Content
     ) {
         self.isPresented = isPresented
+        self.onTransitionCompleted = onTransitionCompleted
         self.content = content()
     }
 
     func makeUIViewController(context: Context) -> PlaceProfileSlidingHostingController<Content> {
-        PlaceProfileSlidingHostingController(rootView: content, isPresented: isPresented)
+        PlaceProfileSlidingHostingController(
+            rootView: content,
+            isPresented: isPresented,
+            onTransitionCompleted: onTransitionCompleted
+        )
     }
 
     func updateUIViewController(
         _ controller: PlaceProfileSlidingHostingController<Content>,
         context: Context
     ) {
+        controller.onTransitionCompleted = onTransitionCompleted
         if controller.isPresented == isPresented {
             controller.updateRootView(content)
         } else {
@@ -278,14 +286,21 @@ struct PlaceProfileVerticalContainer<Content: View>: UIViewControllerRepresentab
 @MainActor
 final class PlaceProfileSlidingHostingController<Content: View>: UIViewController {
     private let hostingController: UIHostingController<Content>
+    private var hostingConstraints: [NSLayoutConstraint] = []
     private var animator: UIViewPropertyAnimator?
     private var pendingRootView: Content?
     private var appliesInitialPosition = true
     private(set) var isPresented: Bool
+    var onTransitionCompleted: @MainActor (Bool) -> Void
 
-    init(rootView: Content, isPresented: Bool) {
+    init(
+        rootView: Content,
+        isPresented: Bool,
+        onTransitionCompleted: @escaping @MainActor (Bool) -> Void
+    ) {
         hostingController = UIHostingController(rootView: rootView)
         self.isPresented = isPresented
+        self.onTransitionCompleted = onTransitionCompleted
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -296,17 +311,13 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(WanderTheme.surfaceBone.color)
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        updateAccessibilityVisibility(isPresented: isPresented)
         hostingController.view.backgroundColor = UIColor(WanderTheme.surfaceBone.color)
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
         addChild(hostingController)
-        view.addSubview(hostingController.view)
-        NSLayoutConstraint.activate([
-            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
-            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
+        attachHostingViewIfNeeded()
         hostingController.didMove(toParent: self)
     }
 
@@ -316,6 +327,7 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         if appliesInitialPosition {
             appliesInitialPosition = false
             hostingController.view.transform = targetTransform(isPresented: isPresented)
+            configureRasterization(isEnabled: !isPresented)
         } else if !isPresented, animator == nil {
             hostingController.view.transform = targetTransform(isPresented: false)
         }
@@ -332,15 +344,27 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
     func setPresented(_ isPresented: Bool, animated: Bool) {
         guard self.isPresented != isPresented else { return }
         self.isPresented = isPresented
+        if isPresented {
+            attachHostingViewIfNeeded()
+            hostingController.view.isHidden = false
+        }
+        updateAccessibilityVisibility(isPresented: isPresented)
         view.layoutIfNeeded()
+        configureRasterization(isEnabled: true)
         if let animator {
+            self.animator = nil
             animator.stopAnimation(false)
             animator.finishAnimation(at: .current)
-            self.animator = nil
         }
 
         guard animated, view.bounds.height > 0 else {
             hostingController.view.transform = targetTransform(isPresented: isPresented)
+            configureRasterization(isEnabled: !isPresented)
+            hostingController.view.isHidden = !isPresented
+            if !isPresented {
+                detachHostingView()
+            }
+            onTransitionCompleted(isPresented)
             return
         }
 
@@ -359,10 +383,16 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
             guard let self, self.animator === animator else { return }
             hostingController.view.transform = targetTransform(isPresented: isPresented)
             self.animator = nil
+            configureRasterization(isEnabled: !isPresented)
+            hostingController.view.isHidden = !isPresented
+            if !isPresented {
+                detachHostingView()
+            }
             if let pendingRootView {
                 self.pendingRootView = nil
                 hostingController.rootView = pendingRootView
             }
+            onTransitionCompleted(isPresented)
         }
         self.animator = animator
         animator.startAnimation()
@@ -372,6 +402,36 @@ final class PlaceProfileSlidingHostingController<Content: View>: UIViewControlle
         isPresented
             ? .identity
             : CGAffineTransform(translationX: 0, y: view.bounds.height)
+    }
+
+    private func configureRasterization(isEnabled: Bool) {
+        let displayScale = view.window?.screen.scale ?? view.traitCollection.displayScale
+        hostingController.view.layer.rasterizationScale = max(displayScale, 1)
+        hostingController.view.layer.shouldRasterize = isEnabled
+    }
+
+    private func attachHostingViewIfNeeded() {
+        guard hostingController.view.superview == nil else { return }
+        view.addSubview(hostingController.view)
+        hostingConstraints = [
+            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ]
+        NSLayoutConstraint.activate(hostingConstraints)
+    }
+
+    private func detachHostingView() {
+        NSLayoutConstraint.deactivate(hostingConstraints)
+        hostingConstraints.removeAll()
+        hostingController.view.removeFromSuperview()
+    }
+
+    private func updateAccessibilityVisibility(isPresented: Bool) {
+        view.accessibilityElementsHidden = !isPresented
+        view.accessibilityViewIsModal = isPresented
+        hostingController.view.accessibilityElementsHidden = !isPresented
     }
 }
 

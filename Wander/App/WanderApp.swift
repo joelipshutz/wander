@@ -186,7 +186,10 @@ struct WanderApp: App {
 
     @MainActor
     static func makeMapCaptureBackend() -> WanderBackend {
-        WanderBackend(placePhotoRepository: MapCapturePlacePhotoRepository())
+        let disablesPhotos = ProcessInfo.processInfo.arguments.contains("-WanderMapCaptureNoPhotos")
+        return WanderBackend(
+            placePhotoRepository: disablesPhotos ? nil : MapCapturePlacePhotoRepository()
+        )
     }
     #endif
 

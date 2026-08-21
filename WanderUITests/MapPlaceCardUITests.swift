@@ -92,6 +92,7 @@ final class MapPlaceCardUITests: XCTestCase {
     }
 
     func testRepeatedImageHeavyPlaceProfilePresentationRoundTrips() {
+        executionTimeAllowance = 60
         let app = XCUIApplication()
         app.launchArguments += [
             "-WanderMapCapture",
@@ -101,6 +102,33 @@ final class MapPlaceCardUITests: XCTestCase {
             "-WanderMapCardLocationFixture",
             "-WanderMapPlace",
             "Hearthline Coffee"
+        ]
+        app.launch()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+
+        for _ in 0..<6 {
+            card.tap()
+            XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 3))
+
+            app.buttons["Back"].tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 3))
+        }
+    }
+
+    func testRepeatedPhotoFallbackPlaceProfilePresentationRoundTrips() {
+        executionTimeAllowance = 60
+        let app = XCUIApplication()
+        app.launchArguments += [
+            "-WanderMapCapture",
+            "-WanderMapCaptureNoPhotos",
+            "-WanderUseStorefrontFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapCardLocationFixture",
+            "-WanderMapPlace",
+            "Canyon Lookout Trail"
         ]
         app.launch()
 

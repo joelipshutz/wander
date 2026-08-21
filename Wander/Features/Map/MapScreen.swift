@@ -328,8 +328,10 @@ struct MapScreen: View {
     @State private var mapSaveFlowSelection = MapSaveFlowSelectionCoordinator()
     @State private var isPlaceProfilePresented: Bool
     @State private var isPlaceProfileMounted: Bool
+    @State private var placeProfilePreloadTask: Task<Void, Never>?
     @State private var placeProfilePresentationID: UUID?
     @State private var placeProfileDismissalID: UUID?
+    @State private var placeProfileDismissalCompletion: (@MainActor () -> Void)?
     @State private var mapQuery: String
     @State private var mapSearchMessage: String?
     @State private var mapSearchCandidates: [PlaceCandidate] = []
@@ -1171,6 +1173,7 @@ struct MapScreen: View {
                 mapInteractionClassificationTask?.cancel()
                 mapTapDismissalTask?.cancel()
                 compactCardMotionTask?.cancel()
+                placeProfilePreloadTask?.cancel()
                 droppedPinGeocodingTask?.cancel()
             }
             .sheet(item: $mapSaveFlow, onDismiss: {
@@ -1209,10 +1212,13 @@ struct MapScreen: View {
         }
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
+            placeProfilePreloadTask?.cancel()
+            placeProfilePreloadTask = nil
             isPlaceProfilePresented = false
             isPlaceProfileMounted = false
             placeProfilePresentationID = nil
             placeProfileDismissalID = nil
+            placeProfileDismissalCompletion = nil
         }
         .walkthroughPresenterScrim(
             isPresented: mapSaveFlow != nil && walkthroughs.activeSurface == .saveFlow
@@ -2056,12 +2062,34 @@ struct MapScreen: View {
     }
 
     private func handleCompactCardReady(for identity: String) {
-        guard identity == compactSelectionIdentity,
-              compactCardReadyIdentity != identity
-        else { return }
+        guard identity == compactSelectionIdentity else { return }
 
-        compactCardReadyIdentity = identity
-        presentCompactCard()
+        if compactCardReadyIdentity != identity {
+            compactCardReadyIdentity = identity
+            presentCompactCard()
+        }
+        preloadSelectedPlaceProfile(for: identity)
+    }
+
+    private func preloadSelectedPlaceProfile(for identity: String) {
+        guard !isPlaceProfileMounted, !isPlaceProfilePresented else { return }
+        placeProfilePreloadTask?.cancel()
+        placeProfilePreloadTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled,
+                  identity == compactSelectionIdentity,
+                  hasSelectedProfile,
+                  !isPlaceProfileMounted,
+                  !isPlaceProfilePresented
+            else { return }
+
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isPlaceProfileMounted = true
+            }
+            placeProfilePreloadTask = nil
+        }
     }
 
     private func presentCompactCard() {
@@ -2331,7 +2359,10 @@ struct MapScreen: View {
     @ViewBuilder
     private var selectedPlaceProfileOverlay: some View {
         if isPlaceProfileMounted && hasSelectedProfile {
-            PlaceProfileVerticalContainer(isPresented: isPlaceProfilePresented) {
+            PlaceProfileVerticalContainer(
+                isPresented: isPlaceProfilePresented,
+                onTransitionCompleted: handlePlaceProfileTransitionCompleted
+            ) {
                 NavigationStack {
                     selectedPlaceProfileDestination
                 }
@@ -2510,16 +2541,17 @@ struct MapScreen: View {
 
     private func openSelectedPlaceProfile() {
         guard hasSelectedProfile else { return }
+        placeProfilePreloadTask?.cancel()
+        placeProfilePreloadTask = nil
         placeProfilePresentationID = nil
         placeProfileDismissalID = nil
+        placeProfileDismissalCompletion = nil
         walkthroughs.perform(.mapMemory)
         if reduceMotion {
             isPlaceProfileMounted = true
             isPlaceProfilePresented = true
         } else if isPlaceProfileMounted {
-            withAnimation(PlaceProfileVerticalMotionStyle.presentationAnimation) {
-                isPlaceProfilePresented = true
-            }
+            setPlaceProfilePresentedWithoutSwiftUIAnimation(true)
         } else {
             let presentationID = UUID()
             placeProfilePresentationID = presentationID
@@ -2537,9 +2569,7 @@ struct MapScreen: View {
                       hasSelectedProfile
                 else { return }
                 placeProfilePresentationID = nil
-                withAnimation(PlaceProfileVerticalMotionStyle.presentationAnimation) {
-                    isPlaceProfilePresented = true
-                }
+                setPlaceProfilePresentedWithoutSwiftUIAnimation(true)
             }
         }
     }
@@ -2551,28 +2581,36 @@ struct MapScreen: View {
 
         let dismissalID = UUID()
         placeProfileDismissalID = dismissalID
+        placeProfileDismissalCompletion = completion
 
         guard !reduceMotion else {
             isPlaceProfilePresented = false
-            finishPlaceProfileDismissal(id: dismissalID, completion: completion)
+            finishPlaceProfileDismissal(id: dismissalID)
             return
         }
 
-        withAnimation(PlaceProfileVerticalMotionStyle.dismissalAnimation) {
-            isPlaceProfilePresented = false
-        } completion: {
-            finishPlaceProfileDismissal(id: dismissalID, completion: completion)
+        setPlaceProfilePresentedWithoutSwiftUIAnimation(false)
+    }
+
+    private func handlePlaceProfileTransitionCompleted(isPresented: Bool) {
+        guard !isPresented, let dismissalID = placeProfileDismissalID else { return }
+        finishPlaceProfileDismissal(id: dismissalID)
+    }
+
+    private func setPlaceProfilePresentedWithoutSwiftUIAnimation(_ isPresented: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            isPlaceProfilePresented = isPresented
         }
     }
 
-    private func finishPlaceProfileDismissal(
-        id: UUID,
-        completion: (@MainActor () -> Void)?
-    ) {
+    private func finishPlaceProfileDismissal(id: UUID) {
         guard placeProfileDismissalID == id, !isPlaceProfilePresented else { return }
-        isPlaceProfileMounted = false
+        let completion = placeProfileDismissalCompletion
         placeProfilePresentationID = nil
         placeProfileDismissalID = nil
+        placeProfileDismissalCompletion = nil
         clearSelectedPlaceProfile()
         completion?()
     }
