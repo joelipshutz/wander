@@ -9037,6 +9037,31 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(store.placeListItems.allSatisfy { $0.syncState == .tombstoned })
     }
 
+    func testListDeletionUsesRenderedUserPlaceIdentityWhenPlaceResolutionIsStale() async throws {
+        let store = WanderStore(fixtures: makeJadeRabbitMultipleResolutionFixture())
+        let list = try XCTUnwrap(store.placeLists.first)
+        let renderedPlace = try XCTUnwrap(store.visiblePlaces(in: list).first)
+        let repository = FakePlaceListRepository()
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let removed = await store.removePlace(
+            placeID: "stale-provider-place-alias",
+            visiblePlaceID: renderedPlace.id,
+            from: list,
+            backend: backend
+        )
+
+        XCTAssertTrue(removed)
+        XCTAssertTrue(store.visiblePlaces(in: list).isEmpty)
+        XCTAssertEqual(
+            Set(repository.removedItems.map(\.itemID)),
+            Set([
+                "22222222-2222-4222-8222-222222222222",
+                "33333333-3333-4333-8333-333333333333"
+            ])
+        )
+    }
+
     func testJadeRabbitDeletionSurvivesRelaunchAndRetriesPendingRemoteDeletes() async throws {
         let fixture = makeTemporaryPersistence()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }

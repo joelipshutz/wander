@@ -1376,15 +1376,21 @@ private struct ListDetailScreen: View {
 
     @MainActor
     private func removePlace(_ place: ListPlaceMock) {
+        removedPlaceIDs.insert(place.id)
+
         if let sourceList, let placeID = place.placeID {
             Task {
-                _ = await store.removePlace(placeID: placeID, from: sourceList, backend: backend)
+                _ = await store.removePlace(
+                    placeID: placeID,
+                    visiblePlaceID: place.visiblePlaceID,
+                    from: sourceList,
+                    backend: backend
+                )
                 await MainActor.run {
+                    removedPlaceIDs.remove(place.id)
                     onListChanged(sourceList.id)
                 }
             }
-        } else {
-            removedPlaceIDs.insert(place.id)
         }
     }
 

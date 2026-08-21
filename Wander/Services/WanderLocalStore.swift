@@ -2410,10 +2410,18 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func removePlace(placeID: String, from list: LocalPlaceList) -> Bool {
+    func removePlace(
+        placeID: String,
+        visiblePlaceID: String? = nil,
+        from list: LocalPlaceList
+    ) -> Bool {
         guard canManage(list) else { return false }
 
-        let matchingIndices = equivalentListItemIndices(placeID: placeID, in: list)
+        let matchingIndices = equivalentListItemIndices(
+            placeID: placeID,
+            visiblePlaceID: visiblePlaceID,
+            in: list
+        )
         guard !matchingIndices.isEmpty else { return false }
 
         let activeIndices = matchingIndices.filter { placeListItems[$0].deletedAt == nil }
@@ -2576,10 +2584,19 @@ final class WanderStore: ObservableObject {
     }
 
     @discardableResult
-    func removePlace(placeID: String, from list: LocalPlaceList, backend: WanderBackend?) async -> Bool {
+    func removePlace(
+        placeID: String,
+        visiblePlaceID: String? = nil,
+        from list: LocalPlaceList,
+        backend: WanderBackend?
+    ) async -> Bool {
         let remoteListID = remoteID(list.serverID ?? list.id)
         let remoteItemIDs: Set<String> = Set(
-            equivalentListItemIndices(placeID: placeID, in: list).compactMap { itemIndex in
+            equivalentListItemIndices(
+                placeID: placeID,
+                visiblePlaceID: visiblePlaceID,
+                in: list
+            ).compactMap { itemIndex in
                 let item = placeListItems[itemIndex]
                 guard item.deletedAt == nil || item.syncState == .pendingDelete || item.syncState == .failed else {
                     return nil
@@ -2588,7 +2605,11 @@ final class WanderStore: ObservableObject {
             }
         )
 
-        let removed = removePlace(placeID: placeID, from: list)
+        let removed = removePlace(
+            placeID: placeID,
+            visiblePlaceID: visiblePlaceID,
+            from: list
+        )
         guard removed, let backend, let remoteListID, !remoteItemIDs.isEmpty else {
             return removed
         }
@@ -3051,17 +3072,35 @@ final class WanderStore: ObservableObject {
         .sorted { $0.createdAt < $1.createdAt }
     }
 
-    private func equivalentListItemIndices(placeID: String, in list: LocalPlaceList) -> [Int] {
+    private func equivalentListItemIndices(
+        placeID: String,
+        visiblePlaceID: String? = nil,
+        in list: LocalPlaceList
+    ) -> [Int] {
         let listIDs = listReferenceIDs(for: list)
-        guard let targetPlace = place(matching: placeID) else {
-            return placeListItems.indices.filter {
-                listIDs.contains(placeListItems[$0].listID) && placeListItems[$0].placeID == placeID
+        var targetPlaces = [place(matching: placeID)].compactMap { $0 }
+        if let visiblePlaceID {
+            let linkedPlaces = placeListItems.compactMap { item -> LocalPlace? in
+                guard listIDs.contains(item.listID),
+                      item.ownerUserPlaceID == visiblePlaceID || item.sourceUserPlaceID == visiblePlaceID
+                else { return nil }
+                return place(matching: item.placeID)
             }
+            targetPlaces.append(contentsOf: linkedPlaces)
         }
 
         return placeListItems.indices.filter { itemIndex in
             let item = placeListItems[itemIndex]
-            return listIDs.contains(item.listID) && listItem(item, represents: targetPlace)
+            guard listIDs.contains(item.listID) else { return false }
+
+            if item.placeID == placeID { return true }
+            if let visiblePlaceID,
+               item.ownerUserPlaceID == visiblePlaceID || item.sourceUserPlaceID == visiblePlaceID {
+                return true
+            }
+            return targetPlaces.contains { targetPlace in
+                listItem(item, represents: targetPlace)
+            }
         }
     }
 
