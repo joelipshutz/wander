@@ -169,7 +169,7 @@ struct PlaceProfileFullScreen: View {
         )
         .preferredColorScheme(.light)
         .navigationBarBackButtonHidden(true)
-        .toolbar(.visible, for: .navigationBar)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .onChange(of: currentUserActionState) { _, state in
             guard let snapshot = saveActionSnapshot,
@@ -624,11 +624,7 @@ private struct PlaceProfilePreviewCard: View {
     @ViewBuilder
     private var actionButtonCluster: some View {
         ZStack {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 0) {
-                    actionButtons
-                }
-            } else {
+            WanderGlassButtonCluster(mergeSpacing: 0) {
                 actionButtons
             }
 
@@ -777,7 +773,8 @@ private struct PlaceProfilePreviewCard: View {
         PlaceCardPresentation.rating(
             providerScore: photo?.providerRating,
             providerCount: photo?.providerUserRatingCount,
-            recmeRating: presentation.overallRating ?? presentation.ownRating
+            recmeRating: presentation.overallRating ?? presentation.ownRating,
+            providerName: photo?.provider
         )
     }
 
@@ -1045,6 +1042,10 @@ private struct PlaceCardRatingDistanceRow: View {
                     Text("(\(count))")
                         .foregroundStyle(.white.opacity(0.8))
                 }
+
+                if let providerName = rating.providerDisplayName {
+                    PlaceCardProviderRatingBadge(providerName: providerName)
+                }
             }
 
             if rating != nil, distanceText != nil {
@@ -1067,6 +1068,37 @@ private struct PlaceCardRatingDistanceRow: View {
         if remainder >= 0.75 { return "star.fill" }
         if remainder >= 0.25 { return "star.leadinghalf.filled" }
         return "star"
+    }
+}
+
+private struct PlaceCardProviderRatingBadge: View {
+    let providerName: String
+
+    var body: some View {
+        Group {
+            switch providerName {
+            case "Yelp":
+                HStack(spacing: 2) {
+                    Image(systemName: "burst.fill")
+                    Text("Yelp")
+                }
+                .foregroundStyle(Color(red: 0.84, green: 0.12, blue: 0.16))
+            case "Google Maps":
+                Image("BrandGoogleMaps")
+                    .resizable()
+                    .scaledToFit()
+            case "Apple Maps":
+                Image(systemName: "apple.logo")
+                    .foregroundStyle(.white)
+            default:
+                Image(systemName: "building.2.crop.circle")
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+        }
+        .font(.system(size: 10, weight: .bold))
+        .frame(maxWidth: 34, maxHeight: 14)
+        .accessibilityLabel("\(providerName) rating")
+        .accessibilityIdentifier("map.selectedPlaceRatingProvider")
     }
 }
 
@@ -1223,6 +1255,9 @@ private struct PlaceProfileFullView: View {
                 }
                 .background(WanderTheme.surfaceBone.color)
             }
+            .overlay(alignment: .top) {
+                headerNavigationControls(topInset: headerTopInset)
+            }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .background(WanderTheme.surfaceBone.color)
             .ignoresSafeArea(.container, edges: .top)
@@ -1250,38 +1285,6 @@ private struct PlaceProfileFullView: View {
                 onSaveCompleted: onAttachedSaveCompleted
             )
             .id(context.id)
-        }
-        .navigationTitle(place.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(WanderTheme.surfaceBone.color, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-            if walkthroughs.activeSurface != .placeDetail {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onBack) {
-                        Label("Back", systemImage: "chevron.left")
-                            .labelStyle(.iconOnly)
-                    }
-                }
-            }
-
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if !usesFloatingActions, action != .none {
-                    Button(action: onAction) {
-                        Label(action.accessibilityLabel, systemImage: action.systemImage)
-                            .labelStyle(.iconOnly)
-                    }
-                }
-
-                if let shareURL {
-                    WanderShareButton(
-                        content: .place(item: shareURL, name: place.name, message: shareText)
-                    ) {
-                        Label("Share place", systemImage: "square.and.arrow.up")
-                            .labelStyle(.iconOnly)
-                    }
-                }
-            }
         }
         .task(id: place.photoLookupKey) {
             await reloadProviderPhoto()
@@ -1313,6 +1316,43 @@ private struct PlaceProfileFullView: View {
                 onPhotoLoadFailure: handlePhotoLoadFailure
             )
         }
+    }
+
+    private func headerNavigationControls(topInset: CGFloat) -> some View {
+        HStack(spacing: WanderTheme.spacing3) {
+            if walkthroughs.activeSurface != .placeDetail {
+                Button(action: onBack) {
+                    headerNavigationLabel(systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+                .accessibilityIdentifier("place-profile.back")
+            }
+
+            Spacer(minLength: 0)
+
+            if let shareURL {
+                WanderShareButton(
+                    content: .place(item: shareURL, name: place.name, message: shareText)
+                ) {
+                    headerNavigationLabel(systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Share place")
+                .accessibilityIdentifier("place-profile.share")
+            }
+        }
+        .padding(.horizontal, WanderTheme.spacing3)
+        .padding(.top, topInset)
+    }
+
+    private func headerNavigationLabel(systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 18, weight: .bold))
+            .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
+            .foregroundStyle(WanderTheme.terracotta.color)
+            .contentShape(Circle())
+            .wanderGlassCapsule(tone: .lightAction, interactive: true)
     }
 
     private var usesFloatingActions: Bool {
@@ -1539,17 +1579,21 @@ private struct PlaceProfileFullView: View {
     @ViewBuilder
     private var actionRow: some View {
         if walkthroughs.activeSurface == .placeDetail {
-            HStack(spacing: WanderTheme.spacing2) {
-                ForEach(actionItems) { item in
-                    walkthroughActionButton(item)
+            WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
+                HStack(spacing: WanderTheme.spacing2) {
+                    ForEach(actionItems) { item in
+                        walkthroughActionButton(item)
+                    }
                 }
             }
             .padding(.vertical, 1)
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: WanderTheme.spacing2) {
-                    ForEach(actionItems) { item in
-                        standardActionButton(item)
+                WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
+                    HStack(spacing: WanderTheme.spacing2) {
+                        ForEach(actionItems) { item in
+                            standardActionButton(item)
+                        }
                     }
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
@@ -2008,7 +2052,7 @@ struct PlaceProfileFloatingActions: View {
     @ViewBuilder
     private var actionCluster: some View {
         if variant.usesCharcoalRail {
-            option4InnerActions
+            clusteredActionLayout
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.vertical, WanderTheme.spacing3)
                 .wanderGlassRoundedRectangle(
@@ -2018,17 +2062,12 @@ struct PlaceProfileFloatingActions: View {
                     showsBorder: true
                 )
         } else {
-            actionLayout
+            clusteredActionLayout
         }
     }
 
-    @ViewBuilder
-    private var option4InnerActions: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: WanderTheme.spacing2) {
-                actionLayout
-            }
-        } else {
+    private var clusteredActionLayout: some View {
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
             actionLayout
         }
     }
@@ -2064,7 +2103,7 @@ struct PlaceProfileFloatingActions: View {
                             tone: Self.glassTone(for: action, variant: variant),
                             cornerRadius: Self.compactCornerRadius,
                             material: variant == .option4 ? .clear : .regular,
-                            interactive: true,
+                            interactive: false,
                             showsBorder: true
                         )
                 } else {
@@ -2072,7 +2111,7 @@ struct PlaceProfileFloatingActions: View {
                         .contentShape(Capsule())
                         .wanderGlassCapsule(
                             tone: Self.glassTone(for: action, variant: variant),
-                            interactive: true,
+                            interactive: false,
                             showsBorder: true
                         )
                 }
@@ -2573,15 +2612,18 @@ private struct PlacePhotoGalleryViewer: View {
                     .foregroundStyle(WanderTheme.textInk.color)
 
                 if let authorName = photo.authorName, !authorName.isEmpty {
-                    Text("Photo by \(authorName)")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
+                    if let authorURL = photo.authorProfileURL {
+                        Link("Photo by \(authorName)", destination: authorURL)
+                            .underline()
+                    } else {
+                        Text("Photo by \(authorName)")
+                    }
                 } else {
                     Text("Place photo")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WanderTheme.textMuted.color)
                 }
             }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(WanderTheme.textMuted.color)
 
             Spacer()
 
@@ -2907,9 +2949,7 @@ private struct PlaceProfileMapHeader: View {
 
     @ViewBuilder
     private func photoSource(for item: PlacePhotoGalleryItem) -> some View {
-        if item.isGooglePlacesPhoto {
-            PlacePhotoAttribution(photo: item.photo)
-        } else if let contributor = item.contributor {
+        if let contributor = item.contributor {
             HStack(spacing: 7) {
                 WanderAvatar(
                     initials: contributor.initials,
@@ -2949,7 +2989,7 @@ private struct PlaceProfileMapHeader: View {
         if let contributor = item.contributor {
             return "Open place photo by \(contributor.displayName) full screen"
         }
-        return "Open Google Maps photo of \(place.name) full screen"
+        return "Open place photo of \(place.name) full screen"
     }
 
     @ViewBuilder
@@ -2965,53 +3005,6 @@ private struct PlaceProfileMapHeader: View {
         max(safeAreaTopInset, minimumFullBleedTopInset)
     }
 
-}
-
-private struct PlacePhotoAttribution: View {
-    let photo: PlacePhoto
-
-    var body: some View {
-        HStack(spacing: 5) {
-            if let authorName = photo.authorName, !authorName.isEmpty {
-                if let authorURL = photo.authorProfileURL {
-                    Link("Photo by \(authorName)", destination: authorURL)
-                } else {
-                    Text("Photo by \(authorName)")
-                }
-
-                Text("·")
-            }
-
-            if let sourceURL = photo.sourcePhotoURL {
-                Link("Google Maps", destination: sourceURL)
-            } else {
-                Text("Google Maps")
-            }
-        }
-        .font(.system(size: 12, weight: .regular))
-        .lineLimit(1)
-        .padding(.horizontal, 9)
-        .frame(minHeight: 44)
-        .background(Color.black.opacity(0.68))
-        .foregroundStyle(Color.white)
-        .tint(Color.white)
-        .clipShape(Capsule())
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var label: String {
-        if let authorName = photo.authorName, !authorName.isEmpty {
-            return "Photo by \(authorName) · Google Maps"
-        }
-        return "Google Maps"
-    }
-
-    private var accessibilityLabel: String {
-        if photo.sourcePhotoURL != nil {
-            return "\(label). Open source photo in Google Maps."
-        }
-        return label
-    }
 }
 
 struct PlaceProfilePhotoImage: View {

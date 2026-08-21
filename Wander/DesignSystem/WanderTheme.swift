@@ -496,6 +496,7 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                             showsBorder ? tone.border : Color.clear,
                             lineWidth: showsBorder ? tone.borderWidth : 0
                         )
+                        .allowsHitTesting(false)
                 }
         } else {
             content
@@ -507,6 +508,7 @@ private struct WanderGlassCapsuleModifier: ViewModifier {
                             showsBorder ? tone.border : Color.clear,
                             lineWidth: showsBorder ? tone.borderWidth : 0
                         )
+                        .allowsHitTesting(false)
                 }
                 .shadow(
                     color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
@@ -544,6 +546,7 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
                         showsBorder ? tone.border : Color.clear,
                         lineWidth: showsBorder ? tone.borderWidth : 0
                     )
+                    .allowsHitTesting(false)
                 }
         } else {
             content
@@ -554,6 +557,7 @@ private struct WanderGlassRoundedRectangleModifier: ViewModifier {
                         showsBorder ? tone.border : Color.clear,
                         lineWidth: showsBorder ? tone.borderWidth : 0
                     )
+                    .allowsHitTesting(false)
                 }
                 .shadow(
                     color: tone == .darkOverlay || tone == .blackAction || tone == .deepBlackAction
@@ -672,6 +676,33 @@ extension View {
                 showsBorder: showsBorder
             )
         )
+    }
+}
+
+/// Shares one Liquid Glass sampling region across a related group of controls.
+/// The content owns its horizontal or vertical layout; `mergeSpacing` only
+/// controls how soon neighboring glass shapes begin to blend.
+struct WanderGlassButtonCluster<Content: View>: View {
+    let mergeSpacing: CGFloat
+    private let content: Content
+
+    init(
+        mergeSpacing: CGFloat = WanderTheme.spacing1,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.mergeSpacing = mergeSpacing
+        self.content = content()
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: mergeSpacing) {
+                content
+            }
+        } else {
+            content
+        }
     }
 }
 
@@ -844,7 +875,7 @@ struct WanderPrimaryButton: View {
                     .wanderGlassRoundedRectangle(
                         tone: glassTone,
                         cornerRadius: WanderTheme.radiusLarge,
-                        interactive: !isDisabled,
+                        interactive: false,
                         showsBorder: false
                     )
                     .opacity(isDisabled ? 0.68 : 1)

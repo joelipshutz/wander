@@ -155,13 +155,8 @@ struct FeedScreen: View {
         }
     }
 
-    @ViewBuilder
     private var floatingHeader: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: WanderTheme.spacing2) {
-                floatingHeaderContent
-            }
-        } else {
+        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing2) {
             floatingHeaderContent
         }
     }
@@ -1203,8 +1198,14 @@ private struct FeedFeaturedRail: View {
                     )
                 }
             }
-            .padding(.horizontal, 1)
+            .padding(.vertical, 1)
         }
+        .contentMargins(
+            .horizontal,
+            FeedFeaturedLayout.screenEdgeBleed,
+            for: .scrollContent
+        )
+        .padding(.horizontal, -FeedFeaturedLayout.screenEdgeBleed)
         .accessibilityLabel("Featured places from people you follow")
     }
 }
@@ -1303,6 +1304,7 @@ private struct FeedActivityList: View {
 
 private enum FeedFeaturedLayout {
     static let cardWidth: CGFloat = 184
+    static let screenEdgeBleed = WanderTheme.spacing4
 }
 
 private enum FeedActivityLayout {

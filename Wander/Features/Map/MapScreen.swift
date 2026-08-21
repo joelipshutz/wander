@@ -514,6 +514,10 @@ struct MapScreen: View {
         max(MapControlLayout.searchDockClearance, measuredMapSearchDockHeight)
     }
 
+    private var nearbyClusterBottomPadding: CGFloat {
+        mapSearchDockClearance - WanderTheme.spacing2 + nearbyLift
+    }
+
     private var selectedPlaceRecenterClearance: CGFloat {
         MapControlLayout.selectedPlaceRecenterClearance
             + max(0, mapSearchDockClearance - MapControlLayout.searchDockClearance)
@@ -603,7 +607,7 @@ struct MapScreen: View {
         }
         switch mapFilterState.source {
         case .featured:
-            return "No featured check-ins here yet."
+            return nil
         case .friends:
             return "No friends’ places yet."
         case .you:
@@ -841,37 +845,39 @@ struct MapScreen: View {
 
                 VStack(spacing: 0) {
                     if !isMapSearchFocused {
-                        HStack(spacing: WanderTheme.spacing1) {
-                            ForEach(MapSource.allCases) { source in
+                        WanderGlassButtonCluster {
+                            HStack(spacing: WanderTheme.spacing1) {
+                                ForEach(MapSource.allCases) { source in
+                                    Button {
+                                        selectMapSource(
+                                            source,
+                                            from: annotationGroups
+                                        )
+                                    } label: {
+                                        MapSourceFilterChip(
+                                            source: source,
+                                            isSelected: mapFilterState.source == source
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(minWidth: 44, minHeight: 48)
+                                    .accessibilityIdentifier("map.filter.\(source.rawValue)")
+                                    .walkthroughTarget(source.walkthroughTarget)
+                                }
+
                                 Button {
-                                    selectMapSource(
-                                        source,
-                                        from: annotationGroups
-                                    )
+                                    toggleMoreFilters()
                                 } label: {
-                                    MapSourceFilterChip(
-                                        source: source,
-                                        isSelected: mapFilterState.source == source
+                                    MapMoreFilterChip(
+                                        selectedOptionCount: mapFilterState.more.activeOptionCount,
+                                        isExpanded: isMoreFiltersPresented
                                     )
                                 }
                                 .buttonStyle(.plain)
                                 .frame(minWidth: 44, minHeight: 48)
-                                .accessibilityIdentifier("map.filter.\(source.rawValue)")
-                                .walkthroughTarget(source.walkthroughTarget)
+                                .accessibilityIdentifier("map.filter.more")
+                                .walkthroughTarget(.mapMoreFilters)
                             }
-
-                            Button {
-                                toggleMoreFilters()
-                            } label: {
-                                MapMoreFilterChip(
-                                    selectedOptionCount: mapFilterState.more.activeOptionCount,
-                                    isExpanded: isMoreFiltersPresented
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .frame(minWidth: 44, minHeight: 48)
-                            .accessibilityIdentifier("map.filter.more")
-                            .walkthroughTarget(.mapMoreFilters)
                         }
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.horizontal, WanderTheme.spacing3)
@@ -939,42 +945,62 @@ struct MapScreen: View {
                             }
                         }
 
-                        HStack(spacing: WanderTheme.spacing2) {
-                            SearchBar(
-                                query: $mapQuery,
-                                isFocused: $isMapSearchFocused,
-                                focusRequestID: mapSearchFocusRequestID,
-                                onFocusRequestHandled: { requestID in
-                                    guard mapSearchFocusRequestID == requestID else { return }
-                                    mapSearchFocusRequestID = nil
-                                },
-                                onSubmit: submitMapSearch
-                            )
-                            .walkthroughTarget(
-                                walkthroughs.currentStep?.target == .mapSendoff
-                                    ? .mapSendoff
-                                    : .mapSearch
-                            )
-
-                            if isMapSearchFocused {
-                                MapSearchCancelButton(action: cancelMapSearch)
-                            } else {
-                                MapSolidAddButton {
-                                    dismissMoreFilters()
-                                    onAdd()
-                                }
+                        WanderGlassButtonCluster(mergeSpacing: WanderTheme.spacing3) {
+                            HStack(spacing: WanderTheme.spacing3) {
+                                SearchBar(
+                                    query: $mapQuery,
+                                    isFocused: $isMapSearchFocused,
+                                    focusRequestID: mapSearchFocusRequestID,
+                                    onFocusRequestHandled: { requestID in
+                                        guard mapSearchFocusRequestID == requestID else { return }
+                                        mapSearchFocusRequestID = nil
+                                    },
+                                    onSubmit: submitMapSearch
+                                )
                                 .walkthroughTarget(
-                                    walkthroughs.currentStep?.target == .mapAddAgain
-                                        ? .mapAddAgain
-                                        : .mapAdd
+                                    walkthroughs.currentStep?.target == .mapSendoff
+                                        ? .mapSendoff
+                                        : .mapSearch
                                 )
-                                .walkthroughSlowPulse(
-                                    isActive: walkthroughs.currentStep?.target == .mapAdd
-                                        || walkthroughs.currentStep?.target == .mapAddAgain
-                                )
+
+                                if isMapSearchFocused {
+                                    MapSearchCancelButton(action: cancelMapSearch)
+                                } else {
+                                    MapGlassAddButton {
+                                        dismissMoreFilters()
+                                        onAdd()
+                                    }
+                                    .walkthroughTarget(
+                                        walkthroughs.currentStep?.target == .mapAddAgain
+                                            ? .mapAddAgain
+                                            : .mapAdd
+                                    )
+                                    .walkthroughSlowPulse(
+                                        isActive: walkthroughs.currentStep?.target == .mapAdd
+                                            || walkthroughs.currentStep?.target == .mapAddAgain
+                                    )
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .overlay(alignment: .bottomTrailing) {
+                                if !isPlaceProfilePresented && !isMapSearchFocused && !isMoreFiltersPresented {
+                                    RecenterButton(
+                                        isLoading: isRecenteringOnUser,
+                                        showsAttentionBadge: nearbyNeedsLocationPermission
+                                    ) {
+                                        dismissMoreFilters()
+                                        handleNearbyTap()
+                                    }
+                                    .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
+                                    .accessibilityHidden(
+                                        walkthroughs.currentStep?.target == .mapTabs || nearbyOpacity <= 0.5
+                                    )
+                                    .padding(.bottom, nearbyClusterBottomPadding)
+                                    .opacity(nearbyOpacity)
+                                    .allowsHitTesting(nearbyOpacity > 0.5)
+                                }
                             }
                         }
-                        .frame(maxWidth: .infinity)
                     }
                     .frame(maxWidth: .infinity)
                     .safeAreaPadding(.horizontal, MapChromeLayout.horizontalInset)
@@ -997,25 +1023,6 @@ struct MapScreen: View {
                     .keyboard,
                     edges: isMapSearchFocused ? [] : .bottom
                 )
-                .overlay(alignment: .bottomTrailing) {
-                    if !isPlaceProfilePresented && !isMapSearchFocused && !isMoreFiltersPresented {
-                        RecenterButton(
-                            isLoading: isRecenteringOnUser,
-                            showsAttentionBadge: nearbyNeedsLocationPermission
-                        ) {
-                            dismissMoreFilters()
-                            handleNearbyTap()
-                        }
-                        .opacity(walkthroughs.currentStep?.target == .mapTabs ? 0 : 1)
-                        .accessibilityHidden(
-                            walkthroughs.currentStep?.target == .mapTabs || nearbyOpacity <= 0.5
-                        )
-                        .padding(.trailing, WanderTheme.spacing3)
-                        .padding(.bottom, mapSearchDockClearance + nearbyLift)
-                        .opacity(nearbyOpacity)
-                        .allowsHitTesting(nearbyOpacity > 0.5)
-                    }
-                }
                 .onPreferenceChange(MapSearchDockHeightPreferenceKey.self) { height in
                     guard height > 0 else { return }
                     measuredMapSearchDockHeight = height
@@ -2769,6 +2776,7 @@ struct MapScreen: View {
             if let firstVisiblePlace = visiblePlaces.first {
                 selectVisiblePlace(firstVisiblePlace)
                 selectedSearchCandidateID = nil
+                center(on: firstVisiblePlace)
                 mapSearchMessage = nil
             } else if let firstCandidate = mapSearchCandidates.first {
                 routedVisiblePlace = nil
@@ -2889,7 +2897,7 @@ struct MapScreen: View {
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
-            mapSearchMessage = "Map place. Tap + to add it."
+            mapSearchMessage = nil
             centerCompactSelection(on: candidate)
         }
     }
@@ -3758,21 +3766,34 @@ struct MapScreen: View {
               let longitude = candidate.longitude
         else { return }
 
-        position = .region(
-            MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                span: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.04)
-            )
-        )
+        centerSearchSelection(latitude: latitude, longitude: longitude)
     }
 
     private func center(on visiblePlace: VisiblePlace) {
-        position = .region(
-            MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: visiblePlace.place.latitude, longitude: visiblePlace.place.longitude),
-                span: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.04)
-            )
+        centerSearchSelection(
+            latitude: visiblePlace.place.latitude,
+            longitude: visiblePlace.place.longitude
         )
+    }
+
+    private func centerSearchSelection(latitude: Double, longitude: Double) {
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        guard CLLocationCoordinate2DIsValid(coordinate) else { return }
+
+        let region = MapSelectionViewport.region(
+            centeredOn: coordinate,
+            preserving: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.04),
+            viewportHeight: measuredMapViewportHeight,
+            obscuredBottomHeight: selectedPlaceRecenterClearance
+        )
+        cameraRegionTracker.region = region
+        withAnimation(
+            reduceMotion
+                ? MapCompactCardMotionStyle.reducedMotionAnimation
+                : MapCompactCardMotionStyle.mapRecenterAnimation
+        ) {
+            position = .region(region)
+        }
     }
 
     private func handleNearbyTap() {
@@ -4993,33 +5014,17 @@ private struct MapViewportHeightPreferenceKey: PreferenceKey {
     }
 }
 
-private struct MapSolidAddButton: View {
+private struct MapGlassAddButton: View {
     let action: () -> Void
-    @Environment(\.wanderMapAppearance) private var appearance
 
     var body: some View {
         Button(action: action) {
             Image(systemName: "plus")
                 .font(.system(size: 18, weight: .black))
                 .frame(width: 44, height: 44)
-                .foregroundStyle(WanderTheme.textOnAction.color)
-                .background(WanderTheme.terracotta.color, in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(
-                            appearance.isDark
-                                ? Color.white.opacity(0.24)
-                                : WanderTheme.terracottaDark.color.opacity(0.32),
-                            lineWidth: 1
-                        )
-                }
+                .foregroundStyle(WanderTheme.terracottaDark.color)
                 .contentShape(Circle())
-                .shadow(
-                    color: appearance.shadow,
-                    radius: 6,
-                    x: 0,
-                    y: 3
-                )
+                .wanderGlassCapsule(tone: .accent)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add a place")
@@ -5404,12 +5409,11 @@ private struct RecenterButton: View {
             Image(systemName: isLoading ? "location.circle.fill" : "location.fill")
                 .font(.system(size: 16, weight: .black))
                 .frame(width: 44, height: 44)
-                .background(appearance.isDark ? appearance.raisedSurface : WanderTheme.skyTint.color)
                 .foregroundStyle(
                     appearance.isDark ? Color.white.opacity(0.92) : WanderTheme.pinSocial.color
                 )
-                .clipShape(Circle())
-                .overlay(Circle().stroke(WanderTheme.pinSocial.color, lineWidth: 2))
+                .contentShape(Circle())
+                .wanderGlassCapsule(tone: appearance.neutralGlassTone)
                 .overlay(alignment: .topTrailing) {
                     if showsAttentionBadge {
                         Circle()
@@ -5422,8 +5426,8 @@ private struct RecenterButton: View {
                             .offset(x: 1, y: 1)
                     }
                 }
-                .shadow(color: appearance.shadow, radius: 10, x: 0, y: 5)
         }
+        .buttonStyle(.plain)
         .disabled(isLoading)
         .accessibilityIdentifier("map.nearby")
         .accessibilityLabel("Center on my location")
