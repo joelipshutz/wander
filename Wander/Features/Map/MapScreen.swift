@@ -603,7 +603,7 @@ struct MapScreen: View {
         }
         switch mapFilterState.source {
         case .featured:
-            return "No featured check-ins here yet."
+            return nil
         case .friends:
             return "No friends’ places yet."
         case .you:
@@ -2848,7 +2848,7 @@ struct MapScreen: View {
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
-            mapSearchMessage = "Map place. Tap + to add it."
+            mapSearchMessage = nil
             centerCompactSelection(on: candidate)
         }
     }
