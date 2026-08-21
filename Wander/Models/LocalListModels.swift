@@ -145,6 +145,40 @@ struct ListPlaceSuggestion: Identifiable {
     var id: String { visiblePlace.id }
 }
 
+struct ListSuggestionBatch {
+    private(set) var suggestions: [ListPlaceSuggestion] = []
+    private(set) var pendingSuggestionIDs = Set<String>()
+
+    mutating func replace(with suggestions: [ListPlaceSuggestion]) {
+        self.suggestions = suggestions
+        pendingSuggestionIDs.formIntersection(suggestions.map(\.id))
+    }
+
+    mutating func beginAdding(suggestionID: String) -> Bool {
+        guard suggestions.contains(where: { $0.id == suggestionID }) else { return false }
+        return pendingSuggestionIDs.insert(suggestionID).inserted
+    }
+
+    mutating func finishAdding(
+        suggestionID: String,
+        outcome: ListPlaceAddResult.Outcome
+    ) -> Bool {
+        guard pendingSuggestionIDs.remove(suggestionID) != nil else { return false }
+
+        guard outcome == .added || outcome == .alreadyInList else { return false }
+        suggestions.removeAll { $0.id == suggestionID }
+        return suggestions.isEmpty
+    }
+
+    func isAdding(suggestionID: String) -> Bool {
+        pendingSuggestionIDs.contains(suggestionID)
+    }
+
+    mutating func cancelPendingAdditions() {
+        pendingSuggestionIDs.removeAll()
+    }
+}
+
 struct ListPlaceAddResult: Equatable {
     enum Outcome: Equatable {
         case added

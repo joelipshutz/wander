@@ -8687,6 +8687,70 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(suggestions.allSatisfy { !existingPlaceIDs.contains($0.visiblePlace.place.id) })
     }
 
+    func testListSuggestionBatchKeepsRemainingPlacesUntilExhausted() throws {
+        let store = makeStore()
+        let places = Array(store.visiblePlaces().prefix(3))
+        XCTAssertEqual(places.count, 3)
+        let suggestions = places.enumerated().map { index, place in
+            ListPlaceSuggestion(visiblePlace: place, reason: "Suggestion \(index)", score: Double(index))
+        }
+        var batch = ListSuggestionBatch()
+        batch.replace(with: suggestions)
+
+        let firstID = try XCTUnwrap(suggestions.first?.id)
+        XCTAssertTrue(batch.beginAdding(suggestionID: firstID))
+        XCTAssertFalse(batch.beginAdding(suggestionID: firstID), "Repeated taps must not start duplicate adds")
+        XCTAssertFalse(batch.finishAdding(suggestionID: firstID, outcome: .added))
+        XCTAssertEqual(batch.suggestions.map(\.id), Array(suggestions.dropFirst()).map(\.id))
+
+        let secondID = suggestions[1].id
+        XCTAssertTrue(batch.beginAdding(suggestionID: secondID))
+        XCTAssertFalse(batch.finishAdding(suggestionID: secondID, outcome: .alreadyInList))
+        XCTAssertEqual(batch.suggestions.map(\.id), [suggestions[2].id])
+
+        let finalID = suggestions[2].id
+        XCTAssertTrue(batch.beginAdding(suggestionID: finalID))
+        XCTAssertTrue(batch.finishAdding(suggestionID: finalID, outcome: .added))
+        XCTAssertTrue(batch.suggestions.isEmpty)
+    }
+
+    func testListSuggestionBatchKeepsFailedAdditionAndResetsForRelaunch() throws {
+        let store = makeStore()
+        let visiblePlace = try XCTUnwrap(store.visiblePlaces().first)
+        let suggestion = ListPlaceSuggestion(visiblePlace: visiblePlace, reason: "Fits", score: 1)
+        var batch = ListSuggestionBatch()
+        batch.replace(with: [suggestion])
+
+        XCTAssertTrue(batch.beginAdding(suggestionID: suggestion.id))
+        XCTAssertFalse(batch.finishAdding(suggestionID: suggestion.id, outcome: .permissionDenied))
+        XCTAssertEqual(batch.suggestions.map(\.id), [suggestion.id])
+        XCTAssertTrue(batch.beginAdding(suggestionID: suggestion.id), "A failed add should be retryable")
+
+        batch.cancelPendingAdditions()
+        XCTAssertFalse(batch.finishAdding(suggestionID: suggestion.id, outcome: .added))
+        XCTAssertEqual(batch.suggestions.map(\.id), [suggestion.id])
+        XCTAssertTrue(batch.beginAdding(suggestionID: suggestion.id), "Cancelling the flow must clear pending taps")
+
+        var relaunchedBatch = ListSuggestionBatch()
+        relaunchedBatch.replace(with: [suggestion])
+        XCTAssertEqual(relaunchedBatch.suggestions.map(\.id), [suggestion.id])
+        XCTAssertFalse(relaunchedBatch.isAdding(suggestionID: suggestion.id))
+    }
+
+    func testRepeatedListSuggestionAddIsIdempotent() async throws {
+        let store = makeStore()
+        let list = try XCTUnwrap(store.placeLists.first { $0.id == "list_laptop" })
+        let suggestion = try XCTUnwrap(store.listSuggestions(for: list, limit: 1).first)
+        let initialCount = store.visiblePlaces(in: list).count
+
+        let firstResult = await store.addVisiblePlace(suggestion.visiblePlace, to: list, backend: nil)
+        let repeatedResult = await store.addVisiblePlace(suggestion.visiblePlace, to: list, backend: nil)
+
+        XCTAssertEqual(firstResult.outcome, .added)
+        XCTAssertEqual(repeatedResult.outcome, .alreadyInList)
+        XCTAssertEqual(store.visiblePlaces(in: list).count, initialCount + 1)
+    }
+
     func testOwnerCanAddNetworkPlaceAndAutoSaveItToWant() async {
         let store = makeStore()
         let list = store.placeLists.first { $0.id == "list_laptop" }!
