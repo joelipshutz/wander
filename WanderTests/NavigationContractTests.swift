@@ -1681,6 +1681,22 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
+    func testAddCameraUsesFullScreenCaptureWithRecoverableGalleryHandoff() throws {
+        let addScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/AddScreen.swift")
+        )
+
+        XCTAssertTrue(addScreen.contains(".fullScreenCover("))
+        XCTAssertTrue(addScreen.contains("item: $cameraPresentation.route"))
+        XCTAssertFalse(addScreen.contains(".sheet(isPresented: $showsCamera)"))
+        XCTAssertTrue(addScreen.contains("AddCameraCaptureScreen("))
+        XCTAssertTrue(addScreen.contains("Label(\"Photos\", systemImage: \"photo.on.rectangle\")"))
+        XCTAssertTrue(addScreen.contains("case .permissionDenied:"))
+        XCTAssertTrue(addScreen.contains("case .unavailable:"))
+        XCTAssertTrue(addScreen.contains("handleCameraPresentationDismissal"))
+        XCTAssertTrue(addScreen.contains("Task.detached(priority: .userInitiated"))
+    }
+
     func testSuccessfulMapSaveWaitsForSheetDismissalBeforeSelectingSavedPlace() throws {
         let result = SaveResult(userPlaceID: "saved-place", syncState: .synced)
         var coordinator = MapSaveFlowSelectionCoordinator()
