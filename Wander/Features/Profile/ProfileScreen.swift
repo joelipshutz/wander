@@ -577,6 +577,43 @@ struct ProfileScreen: View {
     }
 }
 
+enum ProfileDetailBackSwipePolicy {
+    private static let activationWidth: CGFloat = 28
+    private static let completionFraction: CGFloat = 0.3
+    private static let projectedCompletionFraction: CGFloat = 0.55
+
+    static func interactiveOffset(
+        startX: CGFloat,
+        translation: CGSize,
+        containerWidth: CGFloat
+    ) -> CGFloat? {
+        guard startX <= activationWidth, containerWidth > 0 else { return nil }
+        guard translation.width > 0 else { return 0 }
+        guard translation.width >= abs(translation.height) else { return nil }
+
+        return min(translation.width, containerWidth)
+    }
+
+    static func shouldComplete(
+        startX: CGFloat,
+        translation: CGSize,
+        predictedEndTranslation: CGSize,
+        containerWidth: CGFloat
+    ) -> Bool {
+        guard startX <= activationWidth,
+              containerWidth > 0,
+              translation.width > 0,
+              translation.width >= abs(translation.height)
+        else { return false }
+
+        return translation.width >= containerWidth * completionFraction
+            || (
+                predictedEndTranslation.width >= containerWidth * projectedCompletionFraction
+                    && predictedEndTranslation.width >= abs(predictedEndTranslation.height)
+            )
+    }
+}
+
 struct ProfileDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: WanderStore
@@ -595,6 +632,8 @@ struct ProfileDetailView: View {
     @State private var reportSubject: CommunityReportSubject?
     @State private var isLoading = true
     @State private var profileInsightsCache = ProfileInsightsCache()
+    @State private var backSwipeOffset: CGFloat = 0
+    @State private var isCompletingBackSwipe = false
 
     init(profileID: String, onBlock: @escaping (String) -> Void = { _ in }) {
         self.profileID = profileID
@@ -606,6 +645,16 @@ struct ProfileDetailView: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            profileNavigationStack
+                .offset(x: backSwipeOffset)
+                .contentShape(Rectangle())
+                .simultaneousGesture(interactiveBackSwipeGesture(containerWidth: geometry.size.width))
+        }
+        .presentationBackground(.clear)
+    }
+
+    private var profileNavigationStack: some View {
         NavigationStack {
             ZStack(alignment: .topLeading) {
                 Group {
@@ -745,6 +794,55 @@ struct ProfileDetailView: View {
                 }
             }
         }
+    }
+
+    private var hasNestedNavigationDestination: Bool {
+        savedListMode != nil
+            || activityListFilter != nil
+            || selectedActivityItem != nil
+            || placeCollectionRoute != nil
+    }
+
+    private func interactiveBackSwipeGesture(containerWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .onChanged { value in
+                guard !hasNestedNavigationDestination, !isCompletingBackSwipe else { return }
+                guard let offset = ProfileDetailBackSwipePolicy.interactiveOffset(
+                    startX: value.startLocation.x,
+                    translation: value.translation,
+                    containerWidth: containerWidth
+                ) else { return }
+
+                backSwipeOffset = offset
+            }
+            .onEnded { value in
+                guard !hasNestedNavigationDestination,
+                      !isCompletingBackSwipe,
+                      backSwipeOffset > 0
+                else { return }
+
+                let shouldDismiss = ProfileDetailBackSwipePolicy.shouldComplete(
+                    startX: value.startLocation.x,
+                    translation: value.translation,
+                    predictedEndTranslation: value.predictedEndTranslation,
+                    containerWidth: containerWidth
+                )
+
+                guard shouldDismiss else {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                        backSwipeOffset = 0
+                    }
+                    return
+                }
+
+                isCompletingBackSwipe = true
+                withAnimation(.easeOut(duration: 0.14)) {
+                    backSwipeOffset = containerWidth
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                    dismiss()
+                }
+            }
     }
 
     private var profileVisiblePlaces: [VisiblePlace] {
