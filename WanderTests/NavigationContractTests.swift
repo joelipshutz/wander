@@ -2077,6 +2077,7 @@ final class NavigationContractTests: XCTestCase {
             ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
             ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Map/PlaceProfileMapSurface.swift", ".fullScreenCover(item: $selectedProfileRoute)"),
             ("Wander/Features/Profile/ProfileScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", ".fullScreenCover(item: $selectedProfileID)")
         ]
@@ -2086,6 +2087,122 @@ final class NavigationContractTests: XCTestCase {
             XCTAssertTrue(source.contains("ProfileDetailView("), "Missing full member profile destination in \(file)")
             XCTAssertTrue(source.contains(presentation), "Member profile must use a full-screen presentation in \(file)")
         }
+    }
+
+    @MainActor
+    func testMemberProfileEntryPathsShareInteractiveEdgeBackNavigation() throws {
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/ProfileScreen.swift"
+            )
+        )
+        let detail = try sourceSection(
+            profileScreen,
+            after: "struct ProfileDetailView: View {",
+            before: "private enum GraphListMode"
+        )
+
+        XCTAssertTrue(detail.contains(".offset(x: backSwipeOffset)"))
+        XCTAssertTrue(detail.contains(".simultaneousGesture(interactiveBackSwipeGesture"))
+        XCTAssertTrue(detail.contains("DragGesture(minimumDistance: 8, coordinateSpace: .global)"))
+        XCTAssertTrue(detail.contains("guard !hasNestedNavigationDestination"))
+        XCTAssertTrue(detail.contains("backSwipeOffset = 0"))
+        XCTAssertTrue(detail.contains("backSwipeOffset = containerWidth"))
+        XCTAssertTrue(detail.contains("DispatchQueue.main.asyncAfter"))
+        XCTAssertTrue(detail.contains("backAction: { dismiss() }"))
+        XCTAssertTrue(detail.contains("accessibilityLabel: \"Back\""))
+    }
+
+    @MainActor
+    func testMemberProfileEdgeBackTracksOnlyRightwardHorizontalMotionFromLeftEdge() throws {
+        XCTAssertEqual(
+            try XCTUnwrap(
+                ProfileDetailBackSwipePolicy.interactiveOffset(
+                    startX: 12,
+                    translation: CGSize(width: 42, height: 8),
+                    containerWidth: 390
+                )
+            ),
+            42
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                ProfileDetailBackSwipePolicy.interactiveOffset(
+                    startX: 12,
+                    translation: CGSize(width: 500, height: 4),
+                    containerWidth: 390
+                )
+            ),
+            390
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                ProfileDetailBackSwipePolicy.interactiveOffset(
+                    startX: 12,
+                    translation: CGSize(width: -12, height: 0),
+                    containerWidth: 390
+                )
+            ),
+            0
+        )
+        XCTAssertNil(
+            ProfileDetailBackSwipePolicy.interactiveOffset(
+                startX: 48,
+                translation: CGSize(width: 80, height: 4),
+                containerWidth: 390
+            )
+        )
+        XCTAssertNil(
+            ProfileDetailBackSwipePolicy.interactiveOffset(
+                startX: 12,
+                translation: CGSize(width: 20, height: 32),
+                containerWidth: 390
+            )
+        )
+    }
+
+    @MainActor
+    func testMemberProfileEdgeBackCompletesByDistanceOrProjectedVelocityAndCancelsOtherwise() {
+        XCTAssertTrue(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 120, height: 8),
+                predictedEndTranslation: CGSize(width: 130, height: 10),
+                containerWidth: 390
+            )
+        )
+        XCTAssertTrue(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 44, height: 5),
+                predictedEndTranslation: CGSize(width: 220, height: 8),
+                containerWidth: 390
+            )
+        )
+        XCTAssertFalse(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 44, height: 5),
+                predictedEndTranslation: CGSize(width: 180, height: 8),
+                containerWidth: 390
+            )
+        )
+        XCTAssertFalse(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 50,
+                translation: CGSize(width: 140, height: 4),
+                predictedEndTranslation: CGSize(width: 250, height: 5),
+                containerWidth: 390
+            )
+        )
+        XCTAssertFalse(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 140, height: 180),
+                predictedEndTranslation: CGSize(width: 260, height: 300),
+                containerWidth: 390
+            )
+        )
     }
 
     func testCheckInPickerUsesDateOnlyWithoutInstructionalCopy() throws {
