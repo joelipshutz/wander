@@ -1669,6 +1669,134 @@ final class WanderStoreTests: XCTestCase {
         WanderStore(fixtures: WanderFixtures.seed())
     }
 
+    private func makeJadeRabbitMultipleResolutionFixture() -> WanderFixtures {
+        let currentUser = LocalProfile(
+            localID: "local_profile_jade_tester",
+            serverID: "user_jade_tester",
+            handle: "jade_tester",
+            displayName: "Jade Tester",
+            syncState: .synced
+        )
+        let firstPlaceID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        let secondPlaceID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        let firstUserPlaceID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        let secondUserPlaceID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        let listID = "11111111-1111-4111-8111-111111111111"
+        let createdAt = Date(timeIntervalSince1970: 1_775_000_000)
+        let firstPlace = LocalPlace(
+            localID: "local_place_jade_rabbit_first",
+            serverID: firstPlaceID,
+            canonicalName: "Jade Rabbit",
+            category: "bar",
+            address: "1518 NW 22nd Avenue",
+            locality: "Portland",
+            region: "OR",
+            country: "US",
+            latitude: 45.5332,
+            longitude: -122.6964,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "jade-rabbit-resolution-a",
+            syncState: .synced,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let secondPlace = LocalPlace(
+            localID: "local_place_jade_rabbit_second",
+            serverID: secondPlaceID,
+            canonicalName: "Jade Rabbit",
+            category: "cocktail bar",
+            address: "1518 NW 22nd Ave.",
+            locality: "Portland",
+            region: "OR",
+            country: "US",
+            latitude: 45.5333,
+            longitude: -122.6965,
+            sourceProvider: "mapkit",
+            sourceProviderPlaceID: "jade-rabbit-resolution-b",
+            syncState: .synced,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let firstUserPlace = LocalUserPlace(
+            localID: "local_user_place_jade_rabbit_first",
+            serverID: firstUserPlaceID,
+            userID: currentUser.id,
+            placeID: firstPlaceID,
+            status: .been,
+            visibility: .followers,
+            savedAt: createdAt,
+            sourceType: AddSourceType.manual.rawValue,
+            syncState: .synced,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let secondUserPlace = LocalUserPlace(
+            localID: "local_user_place_jade_rabbit_second",
+            serverID: secondUserPlaceID,
+            userID: currentUser.id,
+            placeID: secondPlaceID,
+            status: .been,
+            visibility: .followers,
+            savedAt: createdAt,
+            sourceType: AddSourceType.manual.rawValue,
+            syncState: .synced,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let list = LocalPlaceList(
+            localID: "remote_list_\(listID)",
+            serverID: listID,
+            ownerUserID: currentUser.id,
+            name: "Portland drinks",
+            description: "Jade Rabbit provider resolution regression",
+            visibility: .followers,
+            syncState: .synced,
+            cachedItemCount: 2,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let items = [
+            LocalPlaceListItem(
+                localID: "remote_list_item_jade_rabbit_first",
+                serverID: "22222222-2222-4222-8222-222222222222",
+                listID: listID,
+                placeID: firstPlaceID,
+                ownerUserPlaceID: firstUserPlaceID,
+                sourceUserPlaceID: firstUserPlaceID,
+                addedByUserID: currentUser.id,
+                syncState: .synced,
+                createdAt: createdAt,
+                updatedAt: createdAt
+            ),
+            LocalPlaceListItem(
+                localID: "remote_list_item_jade_rabbit_second",
+                serverID: "33333333-3333-4333-8333-333333333333",
+                listID: listID,
+                placeID: secondPlaceID,
+                ownerUserPlaceID: secondUserPlaceID,
+                sourceUserPlaceID: secondUserPlaceID,
+                addedByUserID: currentUser.id,
+                syncState: .synced,
+                createdAt: createdAt.addingTimeInterval(1),
+                updatedAt: createdAt.addingTimeInterval(1)
+            )
+        ]
+
+        return WanderFixtures(
+            currentUser: currentUser,
+            profiles: [currentUser],
+            places: [firstPlace, secondPlace],
+            userPlaces: [firstUserPlace, secondUserPlace],
+            placeAttributes: [],
+            follows: [],
+            blocks: [],
+            placeLists: [list],
+            placeListMembers: [],
+            placeListItems: items,
+            contactProvider: FakeContactProvider(seededMatches: [])
+        )
+    }
+
     private func makeRemoteCollaboratorListStore() -> (WanderStore, LocalPlaceList) {
         let seed = WanderFixtures.seed()
         let listID = "11111111-1111-4111-8111-111111111111"
@@ -8854,6 +8982,158 @@ final class WanderStoreTests: XCTestCase {
             store.placeListItems.first { $0.serverID == "list_item_laptop_circuit" }?.syncState,
             .pendingDelete
         )
+    }
+
+    func testJadeRabbitEquivalentProviderResolutionsShareCanonicalListMembership() async throws {
+        let store = WanderStore(fixtures: makeJadeRabbitMultipleResolutionFixture())
+        let list = try XCTUnwrap(store.placeLists.first)
+
+        XCTAssertTrue(VisiblePlaceGrouping.matches(store.places[0], store.places[1]))
+        XCTAssertEqual(store.visiblePlaces(in: list).map(\.place.canonicalName), ["Jade Rabbit"])
+
+        XCTAssertTrue(store.removePlace(placeID: store.places[0].id, from: list))
+        XCTAssertTrue(
+            store.removePlace(placeID: store.places[1].id, from: list),
+            "Equivalent repeated removals should be idempotent"
+        )
+
+        XCTAssertTrue(store.visiblePlaces(in: list).isEmpty)
+        XCTAssertTrue(store.placeListItems.allSatisfy { $0.deletedAt != nil })
+        XCTAssertFalse(
+            store.listSuggestions(for: list, limit: 10).contains {
+                $0.visiblePlace.place.canonicalName == "Jade Rabbit"
+            },
+            "A deleted canonical venue must not immediately return as a duplicate suggestion"
+        )
+
+        let explicitRestorePlace = try XCTUnwrap(
+            store.visiblePlaces().first { $0.place.canonicalName == "Jade Rabbit" }
+        )
+        let restoreResult = await store.addVisiblePlace(explicitRestorePlace, to: list, backend: nil)
+        XCTAssertEqual(restoreResult.outcome, .added)
+        XCTAssertEqual(store.visiblePlaces(in: list).map(\.place.canonicalName), ["Jade Rabbit"])
+    }
+
+    func testJadeRabbitDeletionRemovesEveryEquivalentRemoteItemOnce() async throws {
+        let store = WanderStore(fixtures: makeJadeRabbitMultipleResolutionFixture())
+        let list = try XCTUnwrap(store.placeLists.first)
+        let repository = FakePlaceListRepository()
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let firstRemoval = await store.removePlace(placeID: store.places[0].id, from: list, backend: backend)
+        let repeatedRemoval = await store.removePlace(placeID: store.places[1].id, from: list, backend: backend)
+
+        XCTAssertTrue(firstRemoval)
+        XCTAssertTrue(repeatedRemoval)
+
+        XCTAssertEqual(
+            Set(repository.removedItems.map(\.itemID)),
+            Set([
+                "22222222-2222-4222-8222-222222222222",
+                "33333333-3333-4333-8333-333333333333"
+            ])
+        )
+        XCTAssertEqual(repository.removedItems.count, 2)
+        XCTAssertTrue(store.placeListItems.allSatisfy { $0.syncState == .tombstoned })
+    }
+
+    func testListDeletionUsesRenderedUserPlaceIdentityWhenPlaceResolutionIsStale() async throws {
+        let store = WanderStore(fixtures: makeJadeRabbitMultipleResolutionFixture())
+        let list = try XCTUnwrap(store.placeLists.first)
+        let renderedPlace = try XCTUnwrap(store.visiblePlaces(in: list).first)
+        let repository = FakePlaceListRepository()
+        let backend = WanderBackend(placeListRepository: repository)
+
+        let removed = await store.removePlace(
+            placeID: "stale-provider-place-alias",
+            visiblePlaceID: renderedPlace.id,
+            from: list,
+            backend: backend
+        )
+
+        XCTAssertTrue(removed)
+        XCTAssertTrue(store.visiblePlaces(in: list).isEmpty)
+        XCTAssertEqual(
+            Set(repository.removedItems.map(\.itemID)),
+            Set([
+                "22222222-2222-4222-8222-222222222222",
+                "33333333-3333-4333-8333-333333333333"
+            ])
+        )
+    }
+
+    func testJadeRabbitDeletionSurvivesRelaunchAndRetriesPendingRemoteDeletes() async throws {
+        let fixture = makeTemporaryPersistence()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let firstStore = WanderStore(
+            fixtures: makeJadeRabbitMultipleResolutionFixture(),
+            persistence: fixture.persistence
+        )
+        let firstList = try XCTUnwrap(firstStore.placeLists.first)
+
+        XCTAssertTrue(firstStore.removePlace(placeID: firstStore.places[0].id, from: firstList))
+        firstStore.flushPersistence()
+
+        let relaunchedStore = WanderStore(fixtures: .empty(), persistence: fixture.persistence)
+        let relaunchedList = try XCTUnwrap(relaunchedStore.placeLists.first)
+        XCTAssertTrue(relaunchedStore.visiblePlaces(in: relaunchedList).isEmpty)
+
+        let repository = FakePlaceListRepository()
+        let syncedCount = await relaunchedStore.syncPendingPlaceLists(
+            backend: WanderBackend(placeListRepository: repository)
+        )
+
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(
+            Set(repository.removedItems.map(\.itemID)),
+            Set([
+                "22222222-2222-4222-8222-222222222222",
+                "33333333-3333-4333-8333-333333333333"
+            ])
+        )
+        XCTAssertTrue(relaunchedStore.visiblePlaces(in: relaunchedList).isEmpty)
+        XCTAssertTrue(relaunchedStore.placeListItems.allSatisfy { $0.syncState == .tombstoned })
+    }
+
+    func testStaleListDetailCannotReviveJadeRabbitAfterDeletionSync() async throws {
+        let store = WanderStore(fixtures: makeJadeRabbitMultipleResolutionFixture())
+        let list = try XCTUnwrap(store.placeLists.first)
+        let staleItems = store.placeListItems
+        let staleList = LocalPlaceList(
+            localID: list.localID,
+            serverID: list.serverID,
+            ownerUserID: list.ownerUserID,
+            name: list.name,
+            description: list.description,
+            visibility: list.visibility,
+            syncState: .synced,
+            cachedItemCount: 2,
+            createdAt: list.createdAt,
+            updatedAt: list.updatedAt
+        )
+        let repository = FakePlaceListRepository(
+            details: [
+                list.id: RemotePlaceListDetail(
+                    list: staleList,
+                    collaborators: [],
+                    items: staleItems
+                )
+            ]
+        )
+        let backend = WanderBackend(placeListRepository: repository)
+
+        XCTAssertTrue(store.removePlace(placeID: store.places[0].id, from: list))
+        let syncedCount = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertEqual(syncedCount, 1)
+        XCTAssertEqual(store.placeLists.first?.syncState, .synced)
+
+        await store.refreshRemotePlaceList(list, backend: backend)
+
+        let refreshedList = try XCTUnwrap(store.placeLists.first)
+        XCTAssertTrue(store.visiblePlaces(in: refreshedList).isEmpty)
+        XCTAssertEqual(refreshedList.cachedItemCount, 0)
+        XCTAssertTrue(store.placeListItems.allSatisfy { $0.deletedAt != nil })
+        XCTAssertTrue(store.placeListItems.allSatisfy { $0.syncState == .pendingDelete })
     }
 
     func testOwnerCanCreateUpdateAndDeletePlaceListLocally() {

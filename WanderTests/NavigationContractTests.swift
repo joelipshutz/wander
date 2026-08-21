@@ -2837,6 +2837,11 @@ final class NavigationContractTests: XCTestCase {
             after: "private struct ListPlaceProjectionContext",
             before: "private struct ListPlaceMock: Identifiable"
         )
+        let detailProjection = try sourceSection(
+            source,
+            after: "init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore)",
+            before: "@MainActor\nprivate struct ListPlaceProjectionContext"
+        )
 
         XCTAssertTrue(activeLists.contains("summary: list"))
         XCTAssertTrue(activeLists.contains("ListPreviewPlaceSelector.distinctPrefix("))
@@ -2846,6 +2851,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("listGrid(lists: renderedLists)"))
         XCTAssertTrue(detailScreen.contains("let renderedList = displayList"))
         XCTAssertEqual(detailScreen.components(separatedBy: "let renderedList = displayList").count - 1, 1)
+        XCTAssertTrue(detailScreen.contains("Text(\"There are no places added to this list yet.\")"))
+        XCTAssertFalse(detailScreen.contains("Loading places in this list."))
+        XCTAssertTrue(detailProjection.contains("self.itemCountOverride = visiblePlaces.count"))
+        XCTAssertFalse(detailProjection.contains("self.itemCountOverride = list.cachedItemCount"))
         XCTAssertTrue(richProjection.contains("VisiblePlaceGrouping.groups("))
         XCTAssertTrue(richProjection.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
