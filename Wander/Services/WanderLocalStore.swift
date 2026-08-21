@@ -2169,7 +2169,7 @@ final class WanderStore: ObservableObject {
 
     func hasPlace(_ visiblePlace: VisiblePlace, in list: LocalPlaceList) -> Bool {
         listItems(for: list).contains { item in
-            item.placeID == visiblePlace.place.id
+            listItem(item, represents: visiblePlace.place)
                 || item.ownerUserPlaceID == visiblePlace.userPlace.id
                 || item.sourceUserPlaceID == visiblePlace.userPlace.id
         }
@@ -2177,15 +2177,13 @@ final class WanderStore: ObservableObject {
 
     func hasCandidate(_ candidate: PlaceCandidate, in list: LocalPlaceList) -> Bool {
         guard let place = matchingPlace(for: candidate) else { return false }
-        let placeIDs = Set([place.id, place.localID, place.serverID].compactMap { $0 })
         return listItems(for: list).contains { item in
-            placeIDs.contains(item.placeID)
+            listItem(item, represents: place)
         }
     }
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5) -> [ListPlaceSuggestion] {
         let existingPlaces = visiblePlaces(in: list)
-        let existingPlaceIDs = Set(existingPlaces.map(\.place.id))
         let contextText = ([list.name, list.description] + existingPlaces.flatMap { visiblePlace in
             [
                 visiblePlace.place.category,
@@ -2202,7 +2200,10 @@ final class WanderStore: ObservableObject {
         let existingTags = Set(existingPlaces.flatMap { tagTokens(for: $0) })
 
         return visiblePlaces()
-            .filter { !existingPlaceIDs.contains($0.place.id) }
+            .filter {
+                !hasPlace($0, in: list)
+                    && !wasRemovedFromList($0.place, list: list)
+            }
             .map { visiblePlace in
                 var score = 0.0
                 var reasons: [String] = []
@@ -2251,7 +2252,8 @@ final class WanderStore: ObservableObject {
             let candidatesByID = Dictionary(uniqueKeysWithValues: visiblePlaces().map { ($0.id, $0) })
             let remoteSuggestions = response.suggestions.compactMap { item -> ListPlaceSuggestion? in
                 guard let visiblePlace = candidatesByID[item.visiblePlaceID],
-                      !hasPlace(visiblePlace, in: list)
+                      !hasPlace(visiblePlace, in: list),
+                      !wasRemovedFromList(visiblePlace.place, list: list)
                 else { return nil }
                 return ListPlaceSuggestion(
                     visiblePlace: visiblePlace,
@@ -2329,11 +2331,18 @@ final class WanderStore: ObservableObject {
                 shouldExplainAutoSave: false
             )
         }
-        guard !listItems(for: list).contains(where: { item in
+        let userPlaceAlreadyInList = place(matching: userPlace.placeID).map { resolvedPlace in
+            listItems(for: list).contains { item in
+                listItem(item, represents: resolvedPlace)
+                    || item.ownerUserPlaceID == userPlace.id
+                    || item.sourceUserPlaceID == userPlace.id
+            }
+        } ?? listItems(for: list).contains { item in
             item.placeID == userPlace.placeID
                 || item.ownerUserPlaceID == userPlace.id
                 || item.sourceUserPlaceID == userPlace.id
-        }) else {
+        }
+        guard !userPlaceAlreadyInList else {
             return ListPlaceAddResult(
                 outcome: .alreadyInList,
                 createdWantSave: false,
@@ -2402,19 +2411,27 @@ final class WanderStore: ObservableObject {
 
     @discardableResult
     func removePlace(placeID: String, from list: LocalPlaceList) -> Bool {
-        guard canManage(list),
-              let itemIndex = placeListItems.firstIndex(where: { item in
-                  item.listID == list.id
-                      && item.placeID == placeID
-                      && item.deletedAt == nil
-              })
-        else { return false }
+        guard canManage(list) else { return false }
 
-        placeListItems[itemIndex].deletedAt = .now
-        placeListItems[itemIndex].updatedAt = .now
-        placeListItems[itemIndex].syncStateRaw = SyncState.pendingDelete.rawValue
+        let matchingIndices = equivalentListItemIndices(placeID: placeID, in: list)
+        guard !matchingIndices.isEmpty else { return false }
+
+        let activeIndices = matchingIndices.filter { placeListItems[$0].deletedAt == nil }
+        guard !activeIndices.isEmpty else {
+            return true
+        }
+
+        let now = Date.now
+        for itemIndex in activeIndices {
+            placeListItems[itemIndex].deletedAt = now
+            placeListItems[itemIndex].updatedAt = now
+            placeListItems[itemIndex].syncStateRaw = placeListItems[itemIndex].serverID == nil
+                ? SyncState.tombstoned.rawValue
+                : SyncState.pendingDelete.rawValue
+        }
         if let listIndex = placeLists.firstIndex(where: { $0.id == list.id }) {
-            placeLists[listIndex].updatedAt = .now
+            placeLists[listIndex].cachedItemCount = listItems(for: placeLists[listIndex]).count
+            placeLists[listIndex].updatedAt = now
             placeLists[listIndex].syncStateRaw = SyncState.pendingUpdate.rawValue
         }
         persist()
@@ -2561,30 +2578,43 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func removePlace(placeID: String, from list: LocalPlaceList, backend: WanderBackend?) async -> Bool {
         let remoteListID = remoteID(list.serverID ?? list.id)
-        let remoteItemID = placeListItems.first { item in
-            item.listID == list.id
-                && item.placeID == placeID
-                && item.deletedAt == nil
-        }.flatMap { remoteID($0.serverID) }
+        let remoteItemIDs = Set(
+            equivalentListItemIndices(placeID: placeID, in: list).compactMap { itemIndex in
+                let item = placeListItems[itemIndex]
+                guard item.deletedAt == nil || item.syncState == .pendingDelete || item.syncState == .failed else {
+                    return nil
+                }
+                return remoteID(item.serverID)
+            }
+        )
 
         let removed = removePlace(placeID: placeID, from: list)
-        guard removed, let backend, let remoteListID, let remoteItemID else {
+        guard removed, let backend, let remoteListID, !remoteItemIDs.isEmpty else {
             return removed
         }
 
-        do {
-            try await backend.removePlaceListItem(listID: remoteListID, itemID: remoteItemID)
-            if let index = placeListItems.firstIndex(where: { $0.serverID == remoteItemID }) {
-                placeListItems[index].syncStateRaw = SyncState.tombstoned.rawValue
+        var firstRemovalError: Error?
+        for remoteItemID in remoteItemIDs.sorted() {
+            do {
+                try await backend.removePlaceListItem(listID: remoteListID, itemID: remoteItemID)
+                if let index = placeListItems.firstIndex(where: { $0.serverID == remoteItemID }) {
+                    placeListItems[index].syncStateRaw = SyncState.tombstoned.rawValue
+                }
+            } catch {
+                if let index = placeListItems.firstIndex(where: { $0.serverID == remoteItemID }) {
+                    placeListItems[index].syncStateRaw = SyncState.failed.rawValue
+                }
+                firstRemovalError = firstRemovalError ?? error
             }
-            lastRemoteError = nil
-            await refreshRemotePlaceLists(backend: backend)
-        } catch {
-            if let index = placeListItems.firstIndex(where: { $0.serverID == remoteItemID }) {
-                placeListItems[index].syncStateRaw = SyncState.failed.rawValue
-            }
-            lastRemoteError = remoteErrorMessage(error)
+        }
+
+        if let firstRemovalError {
+            lastRemoteError = remoteErrorMessage(firstRemovalError)
             persist()
+        } else {
+            lastRemoteError = nil
+            persist()
+            await refreshRemotePlaceLists(backend: backend)
         }
 
         return removed
@@ -2746,6 +2776,21 @@ final class WanderStore: ObservableObject {
 
             try await backend.setPlaceListCollaborators(listID: remoteListID, userIDs: collaboratorUserIDs)
 
+            let deletedItemIDs = placeListItems
+                .filter {
+                    $0.listID == remoteListID
+                        && $0.deletedAt != nil
+                        && ($0.syncState == .pendingDelete || $0.syncState == .failed)
+                }
+                .map(\.id)
+            for itemID in deletedItemIDs {
+                try await syncPlaceListItemDeletion(
+                    localOrServerID: itemID,
+                    listID: remoteListID,
+                    backend: backend
+                )
+            }
+
             let itemIDs = placeListItems
                 .filter { $0.listID == remoteListID && $0.deletedAt == nil && $0.syncState != .synced }
                 .map(\.id)
@@ -2837,6 +2882,31 @@ final class WanderStore: ObservableObject {
             placeListItems[itemIndex].syncStateRaw = SyncState.failed.rawValue
             lastRemoteError = remoteErrorMessage(error)
             persist()
+        }
+    }
+
+    private func syncPlaceListItemDeletion(
+        localOrServerID: String,
+        listID: String,
+        backend: WanderBackend
+    ) async throws {
+        guard let itemIndex = placeListItems.firstIndex(where: { item in
+            item.id == localOrServerID || item.localID == localOrServerID || item.serverID == localOrServerID
+        }), placeListItems[itemIndex].deletedAt != nil else {
+            return
+        }
+
+        guard let remoteItemID = remoteID(placeListItems[itemIndex].serverID) else {
+            placeListItems[itemIndex].syncStateRaw = SyncState.tombstoned.rawValue
+            return
+        }
+
+        do {
+            try await backend.removePlaceListItem(listID: listID, itemID: remoteItemID)
+            placeListItems[itemIndex].syncStateRaw = SyncState.tombstoned.rawValue
+        } catch {
+            placeListItems[itemIndex].syncStateRaw = SyncState.failed.rawValue
+            throw error
         }
     }
 
@@ -2952,9 +3022,93 @@ final class WanderStore: ObservableObject {
 
     private func listItems(for list: LocalPlaceList) -> [LocalPlaceListItem] {
         let listIDs = listReferenceIDs(for: list)
-        return placeListItems
-            .filter { listIDs.contains($0.listID) && $0.deletedAt == nil }
+        let allItems = placeListItems
+            .filter { listIDs.contains($0.listID) }
             .sorted { $0.createdAt < $1.createdAt }
+        var groups: [[LocalPlaceListItem]] = []
+
+        for item in allItems {
+            let matchingGroupIndices = groups.indices.filter { groupIndex in
+                groups[groupIndex].contains { equivalentListItems($0, item) }
+            }
+            guard let destinationIndex = matchingGroupIndices.first else {
+                groups.append([item])
+                continue
+            }
+
+            groups[destinationIndex].append(item)
+            for sourceIndex in matchingGroupIndices.dropFirst().reversed() {
+                groups[destinationIndex].append(contentsOf: groups[sourceIndex])
+                groups.remove(at: sourceIndex)
+            }
+        }
+
+        return groups.compactMap { group in
+            group.max(by: listMembershipItemIsOlder).flatMap { latest in
+                latest.deletedAt == nil ? latest : nil
+            }
+        }
+        .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func equivalentListItemIndices(placeID: String, in list: LocalPlaceList) -> [Int] {
+        let listIDs = listReferenceIDs(for: list)
+        guard let targetPlace = place(matching: placeID) else {
+            return placeListItems.indices.filter {
+                listIDs.contains(placeListItems[$0].listID) && placeListItems[$0].placeID == placeID
+            }
+        }
+
+        return placeListItems.indices.filter { itemIndex in
+            let item = placeListItems[itemIndex]
+            return listIDs.contains(item.listID) && listItem(item, represents: targetPlace)
+        }
+    }
+
+    private func wasRemovedFromList(_ place: LocalPlace, list: LocalPlaceList) -> Bool {
+        let listIDs = listReferenceIDs(for: list)
+        let matchingItems = placeListItems.filter {
+            listIDs.contains($0.listID) && listItem($0, represents: place)
+        }
+        guard let latest = matchingItems.max(by: listMembershipItemIsOlder) else { return false }
+        return latest.deletedAt != nil
+    }
+
+    private func listMembershipItemIsOlder(
+        _ lhs: LocalPlaceListItem,
+        _ rhs: LocalPlaceListItem
+    ) -> Bool {
+        let lhsDate = lhs.deletedAt ?? lhs.updatedAt
+        let rhsDate = rhs.deletedAt ?? rhs.updatedAt
+        guard lhsDate == rhsDate else { return lhsDate < rhsDate }
+
+        let lhsIsExplicitRestore = lhs.deletedAt == nil && lhs.syncState == .pendingCreate
+        let rhsIsExplicitRestore = rhs.deletedAt == nil && rhs.syncState == .pendingCreate
+        if lhsIsExplicitRestore != rhsIsExplicitRestore {
+            return !lhsIsExplicitRestore
+        }
+        return lhs.deletedAt == nil && rhs.deletedAt != nil
+    }
+
+    private func equivalentListItems(_ lhs: LocalPlaceListItem, _ rhs: LocalPlaceListItem) -> Bool {
+        if lhs.placeID == rhs.placeID { return true }
+        guard let lhsPlace = place(matching: lhs.placeID),
+              let rhsPlace = place(matching: rhs.placeID)
+        else { return false }
+        return VisiblePlaceGrouping.matches(lhsPlace, rhsPlace)
+    }
+
+    private func listItem(_ item: LocalPlaceListItem, represents place: LocalPlace) -> Bool {
+        guard let itemPlace = self.place(matching: item.placeID) else {
+            return [place.id, place.localID, place.serverID].compactMap { $0 }.contains(item.placeID)
+        }
+        return VisiblePlaceGrouping.matches(itemPlace, place)
+    }
+
+    private func place(matching localOrServerID: String) -> LocalPlace? {
+        places.first {
+            $0.id == localOrServerID || $0.localID == localOrServerID || $0.serverID == localOrServerID
+        }
     }
 
     private func listReferenceIDs(for list: LocalPlaceList) -> Set<String> {
@@ -2962,24 +3116,9 @@ final class WanderStore: ObservableObject {
     }
 
     private func visibleListItemsByListID(in lists: [LocalPlaceList]) -> [String: [LocalPlaceListItem]] {
-        var canonicalListIDByReferenceID: [String: String] = [:]
-        canonicalListIDByReferenceID.reserveCapacity(lists.count * 2)
-        for list in lists {
-            for referenceID in listReferenceIDs(for: list) {
-                canonicalListIDByReferenceID[referenceID] = list.id
-            }
-        }
-
-        var itemsByListID: [String: [LocalPlaceListItem]] = [:]
-        itemsByListID.reserveCapacity(lists.count)
-        for item in placeListItems where item.deletedAt == nil {
-            guard let canonicalListID = canonicalListIDByReferenceID[item.listID] else { continue }
-            itemsByListID[canonicalListID, default: []].append(item)
-        }
-        for listID in itemsByListID.keys {
-            itemsByListID[listID]?.sort { $0.createdAt < $1.createdAt }
-        }
-        return itemsByListID
+        Dictionary(uniqueKeysWithValues: lists.map { list in
+            (list.id, listItems(for: list))
+        })
     }
 
     private func visiblePlaceListLookup(candidates: [VisiblePlace]) -> VisiblePlaceListLookup {
@@ -3129,9 +3268,11 @@ final class WanderStore: ObservableObject {
 
     private func listSuggestionPayload(for list: LocalPlaceList, limit: Int) -> ListSuggestionPayload {
         let existingPlaces = visiblePlaces(in: list)
-        let existingPlaceIDs = Set(existingPlaces.map(\.place.id))
         let candidates = visiblePlaces()
-            .filter { !existingPlaceIDs.contains($0.place.id) }
+            .filter {
+                !hasPlace($0, in: list)
+                    && !wasRemovedFromList($0.place, list: list)
+            }
             .sorted { lhs, rhs in
                 if lhs.owner.id == currentUser.id && rhs.owner.id != currentUser.id { return true }
                 if rhs.owner.id == currentUser.id && lhs.owner.id != currentUser.id { return false }
@@ -8433,7 +8574,7 @@ final class WanderStore: ObservableObject {
         replaceRemoteItems(listID: detail.list.id, items: detail.items)
 
         if let index = placeLists.firstIndex(where: { $0.id == detail.list.id || $0.serverID == detail.list.id }) {
-            placeLists[index].cachedItemCount = detail.items.filter { $0.deletedAt == nil }.count
+            placeLists[index].cachedItemCount = listItems(for: placeLists[index]).count
         }
 
         objectWillChange.send()
@@ -8516,27 +8657,56 @@ final class WanderStore: ObservableObject {
             item.listID == listID
                 && item.localID.hasPrefix("remote_list_item_")
                 && !incomingIDs.contains(item.id)
+                && item.deletedAt == nil
         }
 
         for item in items {
-            if let index = placeListItems.firstIndex(where: { existing in
-                existing.serverID == item.serverID
-                    || existing.id == item.id
-                    || (existing.listID == listID && existing.placeID == item.placeID && existing.deletedAt == nil)
-            }) {
-                placeListItems[index].serverID = item.serverID
-                placeListItems[index].listID = listID
-                placeListItems[index].placeID = item.placeID
-                placeListItems[index].ownerUserPlaceID = item.ownerUserPlaceID
-                placeListItems[index].sourceUserPlaceID = item.sourceUserPlaceID
-                placeListItems[index].addedByUserID = item.addedByUserID
-                placeListItems[index].syncStateRaw = SyncState.synced.rawValue
-                placeListItems[index].createdAt = item.createdAt
-                placeListItems[index].updatedAt = item.updatedAt
-                placeListItems[index].deletedAt = item.deletedAt
-            } else {
-                placeListItems.append(item)
+            let preservingTombstone = placeListItems
+                .filter {
+                    $0.listID == listID
+                        && $0.deletedAt != nil
+                        && ($0.syncState == .pendingDelete || $0.syncState == .failed || $0.syncState == .tombstoned)
+                        && (equivalentListItems($0, item) || ($0.serverID != nil && $0.serverID == item.serverID))
+                }
+                .max { ($0.deletedAt ?? $0.updatedAt) < ($1.deletedAt ?? $1.updatedAt) }
+            var mergedItem = item
+            if let preservingTombstone,
+               preservingTombstone.serverID == item.serverID
+                    || (preservingTombstone.deletedAt ?? preservingTombstone.updatedAt) >= item.updatedAt {
+                let deletedAt = preservingTombstone.deletedAt ?? preservingTombstone.updatedAt
+                mergedItem.deletedAt = deletedAt
+                mergedItem.updatedAt = max(deletedAt, item.updatedAt)
+                mergedItem.syncStateRaw = remoteID(item.serverID) == nil
+                    ? SyncState.tombstoned.rawValue
+                    : SyncState.pendingDelete.rawValue
             }
+
+            if let index = placeListItems.firstIndex(where: { existing in
+                existing.serverID == mergedItem.serverID
+                    || existing.id == mergedItem.id
+                    || (existing.listID == listID && existing.placeID == mergedItem.placeID && existing.deletedAt == nil)
+            }) {
+                placeListItems[index].serverID = mergedItem.serverID
+                placeListItems[index].listID = listID
+                placeListItems[index].placeID = mergedItem.placeID
+                placeListItems[index].ownerUserPlaceID = mergedItem.ownerUserPlaceID
+                placeListItems[index].sourceUserPlaceID = mergedItem.sourceUserPlaceID
+                placeListItems[index].addedByUserID = mergedItem.addedByUserID
+                placeListItems[index].syncStateRaw = mergedItem.syncStateRaw
+                placeListItems[index].createdAt = mergedItem.createdAt
+                placeListItems[index].updatedAt = mergedItem.updatedAt
+                placeListItems[index].deletedAt = mergedItem.deletedAt
+            } else {
+                placeListItems.append(mergedItem)
+            }
+        }
+
+        if placeListItems.contains(where: {
+            $0.listID == listID && $0.deletedAt != nil && $0.syncState == .pendingDelete
+        }), let listIndex = placeLists.firstIndex(where: {
+            ($0.id == listID || $0.serverID == listID) && $0.ownerUserID == currentUser.id
+        }) {
+            placeLists[listIndex].syncStateRaw = SyncState.pendingUpdate.rawValue
         }
     }
 
