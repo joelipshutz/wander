@@ -548,6 +548,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertFalse(map.contains("Map result. Tap + to add it."))
+        XCTAssertFalse(map.contains("Map place. Tap + to add it."))
         XCTAssertFalse(map.contains("Also showing new map results."))
         XCTAssertTrue(map.contains("No places on your map or map results found."))
         XCTAssertTrue(map.contains("That shared place could not be opened. Try the link again."))
@@ -4187,7 +4188,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(map.contains("walkthroughs.isAwaitingEligibilityResolution"))
         XCTAssertTrue(map.contains("walkthroughs.activeSurface != nil"))
         XCTAssertTrue(map.contains("walkthroughs.requestedSurface != nil"))
-        XCTAssertTrue(map.contains("return \"No featured check-ins here yet.\""))
+        XCTAssertFalse(map.contains("No featured check-ins here yet."))
 
         let optionalDetails = try sourceSection(
             map,
