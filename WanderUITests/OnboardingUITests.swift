@@ -2229,11 +2229,22 @@ final class OnboardingUITests: XCTestCase {
 
         let checkInChoice = app.buttons["check in"]
         XCTAssertTrue(checkInChoice.waitForExistence(timeout: 3))
+        let statusSelector = app.descendants(matching: .any)["save.statusSelector"]
+        XCTAssertTrue(statusSelector.exists)
+        XCTAssertFalse(app.buttons["Check in"].exists)
         checkInChoice.tap()
-        app.buttons["continue to details"].tap()
+        XCTAssertFalse(app.buttons["continue to details"].exists)
+        XCTAssertFalse(app.buttons["back"].exists)
 
         let disclosure = app.buttons["save.checkInDateDisclosure"]
         XCTAssertTrue(disclosure.waitForExistence(timeout: 3))
+        XCTAssertTrue(statusSelector.exists)
+        XCTAssertLessThan(statusSelector.frame.minY, disclosure.frame.minY)
+        let note = app.textFields["save.note"]
+        XCTAssertTrue(note.exists)
+        XCTAssertLessThan(disclosure.frame.minY, note.frame.minY)
+        let finalCheckIn = app.buttons["Check in"]
+        XCTAssertTrue(finalCheckIn.exists)
 
         let start = ProcessInfo.processInfo.systemUptime
         disclosure.tap()
@@ -2250,5 +2261,10 @@ final class OnboardingUITests: XCTestCase {
         screenshot.name = "REC-241 responsive check-in calendar tray"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        disclosure.tap()
+        XCTAssertTrue((disclosure.value as? String)?.contains("Collapsed") == true)
+        finalCheckIn.tap()
+        XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 5))
     }
 }

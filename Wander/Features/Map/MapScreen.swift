@@ -8133,6 +8133,7 @@ struct MapPlaceSaveFlowSheet: View {
 
 struct MapPlaceSaveEditor: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
@@ -8322,6 +8323,10 @@ struct MapPlaceSaveEditor: View {
         isPresentingWalkthroughStatusSelection ? false : hasSelectedStatus
     }
 
+    private var isReadyForDetails: Bool {
+        !context.requiresStatusConfirmation || presentedHasSelectedStatus
+    }
+
     private var isPresentingWalkthroughStatusSelection: Bool {
         walkthroughs.activeSurface == .saveFlow
             && walkthroughs.currentStep?.target == .saveStatus
@@ -8365,19 +8370,14 @@ struct MapPlaceSaveEditor: View {
         NavigationStack {
             ScrollViewReader { walkthroughScrollProxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: presentedStep == .details ? WanderTheme.spacing3 : WanderTheme.spacing4) {
+                    VStack(alignment: .leading, spacing: isReadyForDetails ? WanderTheme.spacing3 : WanderTheme.spacing4) {
                         if presentation == .sheet {
                             header
                         }
 
-                        switch presentedStep {
-                        case .confirm:
-                            confirmContent
-                        case .details:
-                            detailsContent
-                        }
+                        singleScreenContent
                     }
-                    .walkthroughTarget(presentedStep == .confirm ? .saveStatus : nil)
+                    .walkthroughTarget(isReadyForDetails ? nil : .saveStatus)
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, presentation == .attached ? WanderTheme.spacing1 : WanderTheme.spacing3)
                     .padding(.bottom, presentation == .attached ? WanderTheme.spacing3 : WanderTheme.spacing6)
@@ -8385,7 +8385,7 @@ struct MapPlaceSaveEditor: View {
                 .scrollDismissesKeyboard(.interactively)
                 .background(editorBackground)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    if presentedStep == .details {
+                    if isReadyForDetails {
                         saveFooter
                     }
                 }
@@ -8409,7 +8409,7 @@ struct MapPlaceSaveEditor: View {
                     if store.isPrivateProfile {
                         selectedVisibility = .selfOnly
                     }
-                    if presentedStep == .details {
+                    if isReadyForDetails {
                         refreshQuestionBlocksIfNeeded()
                         syncAnswersForCurrentQuestions()
                     }
@@ -8481,20 +8481,6 @@ struct MapPlaceSaveEditor: View {
                     )
 
                 HStack(alignment: .center, spacing: WanderTheme.spacing2) {
-                    if presentedStep == .details,
-                       context.requiresStatusConfirmation,
-                       walkthroughs.activeSurface != .saveFlow {
-                        Button {
-                            returnToStatusSelection()
-                        } label: {
-                            Label("back", systemImage: "chevron.left")
-                                .font(WanderTypography.label)
-                                .foregroundStyle(WanderTheme.terracotta.color)
-                                .frame(minHeight: WanderTheme.tapMinimum)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
                     Spacer(minLength: 0)
 
                     if walkthroughs.activeSurface != .saveFlow {
@@ -8517,7 +8503,7 @@ struct MapPlaceSaveEditor: View {
                 }
             }
 
-            if presentedStep == .confirm {
+            if !isReadyForDetails {
                 Text(context.subtitle)
                     .font(WanderTypography.metadata)
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -8529,56 +8515,67 @@ struct MapPlaceSaveEditor: View {
     private var flowTitle: String {
         return context.flowTitle(
             status: selectedStatus,
-            isShowingDetails: presentedStep == .details
+            isShowingDetails: isReadyForDetails
         )
     }
 
-    private var confirmContent: some View {
+    private var singleScreenContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-            candidateCard
-
-            MapSavePickerBlock(title: "what do you want to do?") {
-                HStack(spacing: WanderTheme.spacing2) {
-                    MapSaveChoicePill(
-                        title: CheckInCopy.verb,
-                        isSelected: presentedHasSelectedStatus && selectedStatus == .been
-                    ) {
-                        selectStatus(.been)
-                    }
-                    if context.allowsWannaGoSelection {
-                        MapSaveChoicePill(
-                            title: "wanna go",
-                            isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
-                        ) {
-                            selectStatus(.wannaGo)
-                        }
-                    }
-                }
-                .walkthroughEmphasis(.saveStatus)
-            }
-
-            if presentedHasSelectedStatus && walkthroughs.activeSurface != .saveFlow {
-                WanderPrimaryButton(
-                    title: "continue to details",
-                    systemImage: "arrow.right",
-                    tone: .espressoConfirmation
-                ) {
-                    walkthroughs.perform(.saveContinue)
-                    prepareDetails()
-                }
-                .walkthroughTarget(.saveContinue)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: presentedHasSelectedStatus)
-    }
-
-    private var detailsContent: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             if presentation == .sheet {
                 candidateCard
             }
 
+            if context.requiresStatusConfirmation {
+                MapSavePickerBlock(title: "what do you want to do?") {
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                                checkInStatusChoice
+                                wannaGoStatusChoice
+                            }
+                        } else {
+                            HStack(spacing: WanderTheme.spacing2) {
+                                checkInStatusChoice
+                                wannaGoStatusChoice
+                            }
+                        }
+                    }
+                    .walkthroughEmphasis(.saveStatus)
+                }
+                .accessibilityIdentifier("save.statusSelector")
+            }
+
+            if isReadyForDetails {
+                detailsContent
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isReadyForDetails)
+    }
+
+    private var checkInStatusChoice: some View {
+        MapSaveChoicePill(
+            title: CheckInCopy.verb,
+            isSelected: presentedHasSelectedStatus && selectedStatus == .been
+        ) {
+            selectStatus(.been)
+        }
+    }
+
+    @ViewBuilder
+    private var wannaGoStatusChoice: some View {
+        if context.allowsWannaGoSelection {
+            MapSaveChoicePill(
+                title: "wanna go",
+                isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
+            ) {
+                selectStatus(.wannaGo)
+            }
+        }
+    }
+
+    private var detailsContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             if context.candidate.sourceProvider == "coordinate" {
                 droppedPinNameSection
             }
@@ -8967,8 +8964,8 @@ struct MapPlaceSaveEditor: View {
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
-                    ? "This walkthrough points out where optional fit, tag, and privacy fields live. Use Next to continue."
-                    : "Optional. Continue without opening this section."
+                    ? "This walkthrough points out where optional fit, tag, and privacy fields live."
+                    : "Optional. You can save without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)
             .task(id: isWalkthroughTarget) {
@@ -9126,13 +9123,15 @@ struct MapPlaceSaveEditor: View {
 
                     Spacer(minLength: WanderTheme.spacing1)
 
-                    Text(selectedStatus.displayTitle)
-                        .font(WanderTypography.metadata)
-                        .foregroundStyle(WanderTheme.terracotta.color)
-                        .padding(.horizontal, WanderTheme.spacing2)
-                        .padding(.vertical, WanderTheme.spacing1)
-                        .background(WanderTheme.terracottaTint.color)
-                        .clipShape(Capsule())
+                    if isReadyForDetails {
+                        Text(selectedStatus.displayTitle)
+                            .font(WanderTypography.metadata)
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                            .padding(.horizontal, WanderTheme.spacing2)
+                            .padding(.vertical, WanderTheme.spacing1)
+                            .background(WanderTheme.terracottaTint.color)
+                            .clipShape(Capsule())
+                    }
                 }
 
                 Text(candidateSubtitle)
@@ -9214,20 +9213,6 @@ struct MapPlaceSaveEditor: View {
         syncAnswersForCurrentQuestions()
         errorMessage = nil
         step = .details
-    }
-
-    private func returnToStatusSelection() {
-        errorMessage = nil
-        hasSelectedStatus = false
-        if let draftID {
-            var form = draftUpdate.form
-            form.step = .confirm
-            onDraftChange(draftID, form, saveAttemptedAt)
-        }
-        step = .confirm
-        guard walkthroughs.activeSurface == .saveFlow else { return }
-        walkthroughs.rewindTutorialSaveStatusSelection()
-        step = .confirm
     }
 
     private func applyDefaults(from nextContext: MapPlaceSaveContext) {
@@ -9993,11 +9978,7 @@ struct MapPlaceSaveEditor: View {
         hasSelectedStatus = true
         walkthroughs.recordTutorialSelectedStatus(status)
         walkthroughs.perform(.saveStatus)
-        if walkthroughs.activeSurface == .saveFlow,
-           walkthroughs.currentStep?.target == .saveContinue {
-            walkthroughs.perform(.saveContinue)
-            prepareDetails()
-        }
+        prepareDetails()
     }
 
     private func restoreWalkthroughSavePresentationIfNeeded() {
@@ -10274,7 +10255,7 @@ private struct MapSavePickerBlock<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text(title)
-                .font(.system(size: 14, weight: .bold))
+                .font(WanderTypography.label)
                 .foregroundStyle(WanderTheme.textMuted.color)
             content
         }
@@ -10289,7 +10270,8 @@ private struct MapSaveChoicePill: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 13, weight: .bold))
+                .font(WanderTypography.label)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: WanderTheme.tapMinimum)
                 .padding(.horizontal, WanderTheme.spacing3)
                 .background(isSelected ? WanderTheme.textInk.color : WanderTheme.surfaceRaised.color)

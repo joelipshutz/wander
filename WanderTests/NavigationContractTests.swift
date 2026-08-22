@@ -1993,7 +1993,13 @@ final class NavigationContractTests: XCTestCase {
             mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"what do you want to do?\")").count - 1,
             1
         )
-        XCTAssertTrue(mapScreen.contains("if presentedStep == .details,"))
+        XCTAssertTrue(mapScreen.contains("private var singleScreenContent: some View"))
+        XCTAssertTrue(mapScreen.contains("if context.requiresStatusConfirmation"))
+        XCTAssertTrue(mapScreen.contains("if isReadyForDetails"))
+        XCTAssertTrue(mapScreen.contains(".accessibilityIdentifier(\"save.statusSelector\")"))
+        XCTAssertFalse(mapScreen.contains("private var confirmContent: some View"))
+        XCTAssertFalse(mapScreen.contains("title: \"continue to details\""))
+        XCTAssertFalse(mapScreen.contains("returnToStatusSelection"))
         XCTAssertTrue(mapScreen.contains("walkthroughs.activeSurface != .saveFlow"))
         XCTAssertEqual(mapScreen.components(separatedBy: "Text(flowTitle)").count - 1, 1)
         XCTAssertTrue(mapScreen.contains("ZStack {"))
