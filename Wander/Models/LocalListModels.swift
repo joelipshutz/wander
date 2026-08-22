@@ -271,9 +271,37 @@ struct ListPlaceAddResult: Equatable {
         case permissionDenied
     }
 
+    enum CompanionSave: Equatable {
+        case none
+        case createdWanna(userPlaceID: String)
+        case existingWanna(userPlaceID: String)
+        case existingCheckIn(userPlaceID: String)
+
+        var userPlaceID: String? {
+            switch self {
+            case .none:
+                nil
+            case .createdWanna(let userPlaceID),
+                 .existingWanna(let userPlaceID),
+                 .existingCheckIn(let userPlaceID):
+                userPlaceID
+            }
+        }
+    }
+
     let outcome: Outcome
-    let createdWantSave: Bool
-    let shouldExplainAutoSave: Bool
+    let companionSave: CompanionSave
+
+    var createdWantSave: Bool {
+        if case .createdWanna = companionSave {
+            return true
+        }
+        return false
+    }
+
+    var shouldExplainAutoSave: Bool {
+        outcome == .added && companionSave != .none
+    }
 }
 
 struct ListSuggestionPayload: Codable, Equatable {

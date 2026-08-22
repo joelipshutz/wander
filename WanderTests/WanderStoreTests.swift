@@ -8959,6 +8959,133 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(projectedPlace?.userPlace.status, .wannaGo)
     }
 
+    func testAddingUnsavedCandidateToListReportsCreatedWannaForEditableToast() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "Try next",
+                description: "Places to remember",
+                visibility: .followers
+            )
+        )
+        let candidate = PlaceCandidate(
+            id: "rec348_unsaved",
+            name: "New Corner Cafe",
+            category: "coffee",
+            latitude: 34.041,
+            longitude: -118.236,
+            confidence: 0.94
+        )
+
+        let result = await store.addCandidate(candidate, to: list, backend: nil)
+
+        XCTAssertEqual(result.outcome, .added)
+        guard case .createdWanna(let userPlaceID) = result.companionSave else {
+            return XCTFail("Expected the list add to report its newly-created Wanna save")
+        }
+        XCTAssertTrue(result.createdWantSave)
+        XCTAssertTrue(result.shouldExplainAutoSave)
+        XCTAssertEqual(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == userPlaceID }?.userPlace.status,
+            .wannaGo
+        )
+        let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
+        XCTAssertEqual(toast.message, "We also saved this to your Wanna Go")
+        XCTAssertEqual(toast.actionTitle, "edit")
+        let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
+        guard case .add = context.mode else {
+            return XCTFail("A newly-created Wanna should reopen the Check In/Wanna landing step")
+        }
+    }
+
+    func testAddingExistingWannaToListReportsDirectWannaEditTarget() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "Try next",
+                description: "Places to remember",
+                visibility: .followers
+            )
+        )
+        let candidate = PlaceCandidate(
+            id: "rec348_wanna",
+            name: "Saved Corner Cafe",
+            category: "coffee",
+            latitude: 34.042,
+            longitude: -118.237,
+            confidence: 0.94
+        )
+        let wanna = store.saveCandidate(
+            candidate,
+            status: .wannaGo,
+            visibility: .followers,
+            note: "try the patio",
+            sourceType: .manual
+        )
+
+        let result = await store.addCandidate(candidate, to: list, backend: nil)
+
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertEqual(result.companionSave, .existingWanna(userPlaceID: wanna.userPlaceID))
+        XCTAssertFalse(result.createdWantSave)
+        XCTAssertTrue(result.shouldExplainAutoSave)
+        let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
+        XCTAssertEqual(toast.message, "This is already saved to your Wanna Go")
+        XCTAssertEqual(toast.actionTitle, "edit")
+        let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
+        guard case .editWant(let visiblePlace) = context.mode else {
+            return XCTFail("An existing Wanna should open its editor directly")
+        }
+        XCTAssertEqual(visiblePlace.userPlace.id, wanna.userPlaceID)
+    }
+
+    func testAddingCheckedInPlaceToListPrioritizesCheckInEditTarget() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "Favorites",
+                description: "Places worth returning to",
+                visibility: .followers
+            )
+        )
+        let candidate = PlaceCandidate(
+            id: "rec348_checkin",
+            name: "Visited Corner Cafe",
+            category: "coffee",
+            latitude: 34.043,
+            longitude: -118.238,
+            confidence: 0.94
+        )
+        let checkIn = store.saveCandidate(
+            candidate,
+            status: .been,
+            visibility: .followers,
+            note: "great morning light",
+            sourceType: .manual,
+            ratingScore: 4.5
+        )
+
+        let result = await store.addCandidate(candidate, to: list, backend: nil)
+
+        XCTAssertEqual(result.outcome, .added)
+        XCTAssertEqual(result.companionSave, .existingCheckIn(userPlaceID: checkIn.userPlaceID))
+        XCTAssertFalse(result.createdWantSave)
+        XCTAssertTrue(result.shouldExplainAutoSave)
+        XCTAssertEqual(store.visits(for: checkIn.userPlaceID).first?.note, "great morning light")
+        let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
+        XCTAssertEqual(toast.message, "Added to this list")
+        XCTAssertEqual(toast.actionTitle, "edit check-in")
+        let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
+        guard case .editVisit(let visiblePlace, let visit) = context.mode else {
+            return XCTFail("A prior check-in should open its latest visit editor directly")
+        }
+        XCTAssertEqual(visiblePlace.userPlace.id, checkIn.userPlaceID)
+        XCTAssertEqual(visit.note, "great morning light")
+    }
+
     func testNonMemberCannotAddPlaceToSomeoneElsesList() async {
         let store = makeStore()
         let friendList = store.placeLists.first { $0.id == "list_maya_sunset" }!

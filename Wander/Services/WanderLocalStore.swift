@@ -2271,21 +2271,27 @@ final class WanderStore: ObservableObject {
     @discardableResult
     func addVisiblePlace(_ visiblePlace: VisiblePlace, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
-            return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: false, shouldExplainAutoSave: false)
+            return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
         }
         guard !hasPlace(visiblePlace, in: list) else {
-            return ListPlaceAddResult(outcome: .alreadyInList, createdWantSave: false, shouldExplainAutoSave: false)
+            return ListPlaceAddResult(outcome: .alreadyInList, companionSave: .none)
         }
 
-        let existingOwnSave = currentUserVisiblePlaces.first { currentUserPlace in
+        let matchingOwnSaves = currentUserVisiblePlaces.filter { currentUserPlace in
             VisiblePlaceGrouping.matches(currentUserPlace, visiblePlace)
         }
+        let existingOwnSave = matchingOwnSaves.first(where: { $0.userPlace.status == .been })
+            ?? matchingOwnSaves.first
         var ownerUserPlaceID = existingOwnSave?.userPlace.id
-        var createdWantSave = false
+        var companionSave: ListPlaceAddResult.CompanionSave = existingOwnSave.map {
+            $0.userPlace.status == .been
+                ? .existingCheckIn(userPlaceID: $0.userPlace.id)
+                : .existingWanna(userPlaceID: $0.userPlace.id)
+        } ?? .none
         if ownerUserPlaceID == nil && autoSaveListAddsToWant {
             let result = await saveVisiblePlace(visiblePlace, status: .wannaGo, backend: backend)
             ownerUserPlaceID = result.userPlaceID
-            createdWantSave = true
+            companionSave = .createdWanna(userPlaceID: result.userPlaceID)
         }
 
         let item = LocalPlaceListItem(
@@ -2311,7 +2317,7 @@ final class WanderStore: ObservableObject {
             await syncPlaceListItem(localOrServerID: item.id, listID: list.id, backend: backend)
         }
 
-        return ListPlaceAddResult(outcome: .added, createdWantSave: createdWantSave, shouldExplainAutoSave: createdWantSave)
+        return ListPlaceAddResult(outcome: .added, companionSave: companionSave)
     }
 
     /// Adds an already-owned place to a list without rebuilding the visible
@@ -2327,8 +2333,7 @@ final class WanderStore: ObservableObject {
         else {
             return ListPlaceAddResult(
                 outcome: .permissionDenied,
-                createdWantSave: false,
-                shouldExplainAutoSave: false
+                companionSave: .none
             )
         }
         let userPlaceAlreadyInList = place(matching: userPlace.placeID).map { resolvedPlace in
@@ -2345,8 +2350,7 @@ final class WanderStore: ObservableObject {
         guard !userPlaceAlreadyInList else {
             return ListPlaceAddResult(
                 outcome: .alreadyInList,
-                createdWantSave: false,
-                shouldExplainAutoSave: false
+                companionSave: .none
             )
         }
 
@@ -2370,14 +2374,15 @@ final class WanderStore: ObservableObject {
         persist()
         return ListPlaceAddResult(
             outcome: .added,
-            createdWantSave: false,
-            shouldExplainAutoSave: false
+            companionSave: userPlace.status == .been
+                ? .existingCheckIn(userPlaceID: userPlace.id)
+                : .existingWanna(userPlaceID: userPlace.id)
         )
     }
 
     func addCandidate(_ candidate: PlaceCandidate, to list: LocalPlaceList, backend: WanderBackend?) async -> ListPlaceAddResult {
         guard canAddPlaces(to: list) else {
-            return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: false, shouldExplainAutoSave: false)
+            return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
         }
 
         if let existingVisiblePlace = matchingCurrentUserVisiblePlace(for: candidate) {
@@ -2385,7 +2390,7 @@ final class WanderStore: ObservableObject {
         }
 
         if hasCandidate(candidate, in: list) {
-            return ListPlaceAddResult(outcome: .alreadyInList, createdWantSave: false, shouldExplainAutoSave: false)
+            return ListPlaceAddResult(outcome: .alreadyInList, companionSave: .none)
         }
 
         let saveResult = await saveCandidate(
@@ -2398,14 +2403,16 @@ final class WanderStore: ObservableObject {
         )
 
         guard let savedVisiblePlace = visiblePlaceForCurrentUser(userPlaceID: saveResult.userPlaceID) else {
-            return ListPlaceAddResult(outcome: .permissionDenied, createdWantSave: true, shouldExplainAutoSave: true)
+            return ListPlaceAddResult(
+                outcome: .permissionDenied,
+                companionSave: .createdWanna(userPlaceID: saveResult.userPlaceID)
+            )
         }
 
         let result = await addVisiblePlace(savedVisiblePlace, to: list, backend: backend)
         return ListPlaceAddResult(
             outcome: result.outcome,
-            createdWantSave: true,
-            shouldExplainAutoSave: result.outcome == .added
+            companionSave: .createdWanna(userPlaceID: saveResult.userPlaceID)
         )
     }
 
@@ -3229,9 +3236,10 @@ final class WanderStore: ObservableObject {
     }
 
     private func matchingCurrentUserVisiblePlace(for candidate: PlaceCandidate) -> VisiblePlace? {
-        currentUserVisiblePlaces.first { visiblePlace in
+        let matches = currentUserVisiblePlaces.filter { visiblePlace in
             candidateMatches(candidate, place: visiblePlace.place)
         }
+        return matches.first(where: { $0.userPlace.status == .been }) ?? matches.first
     }
 
     private func matchingPlace(for candidate: PlaceCandidate) -> LocalPlace? {
