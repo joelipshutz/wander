@@ -81,6 +81,10 @@ Before starting implementation:
 - If the work starts in chat and no issue exists yet, create a Linear issue in
   the `recme` team that captures the user request, assign it to the active
   owner when clear, and move it to `In Progress` before editing code.
+- When a ticket is opened for active work, rename the current chat/task to
+  `REC-123 Ticket title [In Progress]`. Keep the identifier and status exact;
+  shorten only the title if the client enforces a length limit. Whenever the
+  Linear status changes, update the chat/task name in the same step.
 - Triage feedback once. Keep untriaged work in `Backlog`; move accepted,
   implementation-ready work to `Todo`. Do not re-triage `Todo` issues during
   later scans or again when packaging a release.
