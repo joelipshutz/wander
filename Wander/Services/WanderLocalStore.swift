@@ -2285,7 +2285,7 @@ final class WanderStore: ObservableObject {
         var ownerUserPlaceID = existingOwnSave?.userPlace.id
         var companionSave: ListPlaceAddResult.CompanionSave = existingOwnSave.map {
             $0.userPlace.status == .been
-                ? .existingCheckIn(userPlaceID: $0.userPlace.id)
+                ? .none
                 : .existingWanna(userPlaceID: $0.userPlace.id)
         } ?? .none
         if ownerUserPlaceID == nil && autoSaveListAddsToWant {
@@ -2375,7 +2375,7 @@ final class WanderStore: ObservableObject {
         return ListPlaceAddResult(
             outcome: .added,
             companionSave: userPlace.status == .been
-                ? .existingCheckIn(userPlaceID: userPlace.id)
+                ? .none
                 : .existingWanna(userPlaceID: userPlace.id)
         )
     }

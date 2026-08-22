@@ -9041,7 +9041,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(visiblePlace.userPlace.id, wanna.userPlaceID)
     }
 
-    func testAddingCheckedInPlaceToListPrioritizesCheckInEditTarget() async throws {
+    func testAddingCheckedInPlaceToListDoesNotShowCompanionSaveToast() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
         let list = try XCTUnwrap(
@@ -9071,19 +9071,11 @@ final class WanderStoreTests: XCTestCase {
         let result = await store.addCandidate(candidate, to: list, backend: nil)
 
         XCTAssertEqual(result.outcome, .added)
-        XCTAssertEqual(result.companionSave, .existingCheckIn(userPlaceID: checkIn.userPlaceID))
+        XCTAssertEqual(result.companionSave, .none)
         XCTAssertFalse(result.createdWantSave)
-        XCTAssertTrue(result.shouldExplainAutoSave)
+        XCTAssertFalse(result.shouldExplainAutoSave)
         XCTAssertEqual(store.visits(for: checkIn.userPlaceID).first?.note, "great morning light")
-        let toast = try XCTUnwrap(ListSaveToastPresentation(companionSave: result.companionSave))
-        XCTAssertEqual(toast.message, "Added to this list")
-        XCTAssertEqual(toast.actionTitle, "edit check-in")
-        let context = try XCTUnwrap(listSaveFlowContext(for: result.companionSave, store: store))
-        guard case .editVisit(let visiblePlace, let visit) = context.mode else {
-            return XCTFail("A prior check-in should open its latest visit editor directly")
-        }
-        XCTAssertEqual(visiblePlace.userPlace.id, checkIn.userPlaceID)
-        XCTAssertEqual(visit.note, "great morning light")
+        XCTAssertNil(ListSaveToastPresentation(companionSave: result.companionSave))
     }
 
     func testNonMemberCannotAddPlaceToSomeoneElsesList() async {

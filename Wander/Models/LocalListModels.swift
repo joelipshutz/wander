@@ -275,15 +275,13 @@ struct ListPlaceAddResult: Equatable {
         case none
         case createdWanna(userPlaceID: String)
         case existingWanna(userPlaceID: String)
-        case existingCheckIn(userPlaceID: String)
 
         var userPlaceID: String? {
             switch self {
             case .none:
                 nil
             case .createdWanna(let userPlaceID),
-                 .existingWanna(let userPlaceID),
-                 .existingCheckIn(let userPlaceID):
+                 .existingWanna(let userPlaceID):
                 userPlaceID
             }
         }

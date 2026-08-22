@@ -1865,16 +1865,6 @@ func listSaveFlowContext(
         )
     case .existingWanna:
         return MapPlaceSaveContext.editWant(visiblePlace, attributes: attributes)
-    case .existingCheckIn:
-        if let latestVisit {
-            return MapPlaceSaveContext.editVisit(latestVisit, visiblePlace: visiblePlace)
-        }
-        return MapPlaceSaveContext.existingCurrentUserSave(
-            visiblePlace,
-            selectedStatus: .been,
-            attributes: attributes,
-            latestVisit: nil
-        )
     }
 }
 
@@ -1958,9 +1948,6 @@ struct ListSaveToastPresentation: Equatable {
         case .existingWanna:
             message = "This is already saved to your Wanna Go"
             actionTitle = "edit"
-        case .existingCheckIn:
-            message = "Added to this list"
-            actionTitle = "edit check-in"
         }
     }
 }
