@@ -71,6 +71,51 @@ final class ActivityEngagementTests: XCTestCase {
         )
     }
 
+    func testInstagramStoryExplainsTheLinkStickerStepOnce() {
+        XCTAssertEqual(
+            ActivityShareInstagramStoryLinkGuidance.action(
+                hasAcknowledgedLinkStep: false
+            ),
+            .showLinkGuidance
+        )
+        XCTAssertEqual(
+            ActivityShareInstagramStoryLinkGuidance.action(
+                hasAcknowledgedLinkStep: true
+            ),
+            .openComposer
+        )
+        XCTAssertTrue(ActivityShareInstagramStoryLinkGuidance.message.contains("Stickers"))
+        XCTAssertTrue(ActivityShareInstagramStoryLinkGuidance.message.contains("Paste"))
+    }
+
+    func testInstagramStoryPayloadKeepsAttributionAndPasteableDeepLink() throws {
+        let imageData = Data([0xCA, 0xFE])
+        let contentURL = try XCTUnwrap(
+            URL(string: "https://getrec.me/activities/41000000-0000-0000-0000-000000000001")
+        )
+        let item = ActivityShareInstagramStoryContract.pasteboardItem(
+            imageData: imageData,
+            contentURL: contentURL
+        )
+
+        XCTAssertEqual(
+            item[ActivityShareInstagramStoryContract.backgroundImageKey] as? Data,
+            imageData
+        )
+        XCTAssertEqual(
+            item[ActivityShareInstagramStoryContract.attributionURLKey] as? String,
+            contentURL.absoluteString
+        )
+        XCTAssertEqual(
+            (item[ActivityShareInstagramStoryContract.pasteableURLKey] as? NSURL)?.absoluteString,
+            contentURL.absoluteString
+        )
+        XCTAssertEqual(
+            item[ActivityShareInstagramStoryContract.pasteableTextKey] as? String,
+            contentURL.absoluteString
+        )
+    }
+
     func testInstagramFeedPrefersLibraryDeepLinkAndKeepsDocumentFallback() throws {
         let localIdentifier = "A1B2C3/L0/001"
         let deepLink = try XCTUnwrap(

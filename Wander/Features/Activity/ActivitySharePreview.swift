@@ -2,6 +2,7 @@ import MessageUI
 import Photos
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 #if canImport(TikTokOpenShareSDK)
 import TikTokOpenShareSDK
 #endif
@@ -83,6 +84,21 @@ enum ActivitySharePhotoPermissionPolicy {
 enum ActivityShareInstagramPostTapAction: Equatable {
     case showPhotoAccessGuidance
     case openDirectEditor
+}
+
+enum ActivityShareInstagramStoryTapAction: Equatable {
+    case showLinkGuidance
+    case openComposer
+}
+
+enum ActivityShareInstagramStoryLinkGuidance {
+    static let acknowledgementKey = "activityShare.instagramStoryLinkGuidanceAcknowledged"
+    static let title = "Add the rec.me link in Instagram"
+    static let message = "We’ll copy this ticket’s link. In Instagram, tap Stickers, choose Link, then Paste."
+
+    static func action(hasAcknowledgedLinkStep: Bool) -> ActivityShareInstagramStoryTapAction {
+        hasAcknowledgedLinkStep ? .openComposer : .showLinkGuidance
+    }
 }
 
 enum ActivityShareInstagramPhotoAccessGuidance {
@@ -178,6 +194,9 @@ struct ActivitySharePreviewScreen: View {
     @AppStorage(ActivityShareInstagramPhotoAccessGuidance.acknowledgementKey)
     private var hasAcknowledgedInstagramFullPhotoAccess = false
 
+    @AppStorage(ActivityShareInstagramStoryLinkGuidance.acknowledgementKey)
+    private var hasAcknowledgedInstagramStoryLinkStep = false
+
     let context: ActivityEngagementContext
     let content: WanderShareContent
     let initiallyVisibleDestination: ActivityShareDestination?
@@ -207,6 +226,7 @@ struct ActivitySharePreviewScreen: View {
     @State private var isMessagePresentationPending = false
     @State private var shouldOpenSystemShareAfterMessagesDismiss = false
     @State private var shouldOpenSystemShareAfterInstagramDismiss = false
+    @State private var isShowingInstagramStoryLinkGuidance = false
     @State private var isShowingPhotoSettingsAlert = false
     @State private var isShowingExportError = false
     @State private var tikTokFailureMessage: String?
@@ -305,6 +325,18 @@ struct ActivitySharePreviewScreen: View {
         } message: {
             Text("Please go to Settings > rec.me and turn on Photos access.")
         }
+        .alert(
+            ActivityShareInstagramStoryLinkGuidance.title,
+            isPresented: $isShowingInstagramStoryLinkGuidance
+        ) {
+            Button("Open Instagram") {
+                hasAcknowledgedInstagramStoryLinkStep = true
+                Task { await presentInstagramStory() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ActivityShareInstagramStoryLinkGuidance.message)
+        }
         .alert("Couldn't make the share image", isPresented: $isShowingExportError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -393,7 +425,14 @@ struct ActivitySharePreviewScreen: View {
         case .messages:
             startMessagesPresentation()
         case .instagramStory:
-            Task { await presentInstagramStory() }
+            switch ActivityShareInstagramStoryLinkGuidance.action(
+                hasAcknowledgedLinkStep: hasAcknowledgedInstagramStoryLinkStep
+            ) {
+            case .showLinkGuidance:
+                isShowingInstagramStoryLinkGuidance = true
+            case .openComposer:
+                Task { await presentInstagramStory() }
+            }
         case .instagramPost:
             switch ActivityShareInstagramPhotoAccessGuidance.action(
                 hasAcknowledgedFullAccess: hasAcknowledgedInstagramFullPhotoAccess
@@ -1076,7 +1115,8 @@ private struct ActivityShareDestinationButton: View {
         switch destination.route {
         case .messages: "Opens Messages with the ticket image and rec.me link."
         case .copyLink: "Copies the rec.me link."
-        case .instagramStory: "Opens the Instagram Story composer with the ticket image."
+        case .instagramStory:
+            "Opens the Instagram Story composer with the ticket image and copies the rec.me link for a Link sticker."
         case .instagramPost:
             "Opens the Instagram post composer with the ticket image. Instagram needs Full Photo Access to select the exact ticket."
         case .tikTok: "Shares the ticket image to TikTok when Share Kit is configured."
@@ -1270,6 +1310,24 @@ enum ActivityShareProviderConfiguration {
     }
 }
 
+enum ActivityShareInstagramStoryContract {
+    static let backgroundImageKey = "com.instagram.sharedSticker.backgroundImage"
+    static let attributionURLKey = "com.instagram.sharedSticker.contentURL"
+    static let pasteableURLKey = UTType.url.identifier
+    static let pasteableTextKey = UTType.utf8PlainText.identifier
+
+    static func pasteboardItem(imageData: Data, contentURL: URL) -> [String: Any] {
+        // Instagram does not publicly support creating a Link sticker for us.
+        // Keep both URL and text representations ready for its manual Paste step.
+        [
+            backgroundImageKey: imageData,
+            attributionURLKey: contentURL.absoluteString,
+            pasteableURLKey: contentURL as NSURL,
+            pasteableTextKey: contentURL.absoluteString,
+        ]
+    }
+}
+
 @MainActor
 enum ActivityShareProviderLauncher {
     #if canImport(TikTokOpenShareSDK)
@@ -1298,10 +1356,12 @@ enum ActivityShareProviderLauncher {
             return false
         }
 
-        setExpiringPasteboardItems([[
-            "com.instagram.sharedSticker.backgroundImage": pngData,
-            "com.instagram.sharedSticker.contentURL": contentURL.absoluteString,
-        ]])
+        setExpiringPasteboardItems([
+            ActivityShareInstagramStoryContract.pasteboardItem(
+                imageData: pngData,
+                contentURL: contentURL
+            ),
+        ])
         return await open(shareURL)
     }
 
