@@ -84,8 +84,9 @@ Before starting implementation:
 - After finding or creating the Linear issue for the current work, rename the
   chat/task when supported: `REC-123 Ticket title [In Progress]`. Keep the
   identifier and status exact; shorten only the title for client length limits.
-  Whenever the Linear status changes, update the name in the same step. If the
-  client cannot rename it, continue the work and note that in the handoff.
+  Whenever this chat changes the Linear status, rename this same chat/task in
+  the same step. On resume, resync its name from Linear before continuing. If
+  the client cannot rename it, continue the work and note that in the handoff.
 - Triage feedback once. Keep untriaged work in `Backlog`; move accepted,
   implementation-ready work to `Todo`. Do not re-triage `Todo` issues during
   later scans or again when packaging a release.
