@@ -1794,6 +1794,63 @@ final class OnboardingUITests: XCTestCase {
         )
     }
 
+    func testMapCheckInSaveWorksWithFocusedNoteAndVisibleKeyboard() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderAuthenticatedUITest",
+            "-WanderResetWalkthroughs",
+            "-WanderMapPlace",
+            "Griffith Observatory Trail",
+            "-WanderMapSheetExpanded",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityExtraLarge"
+        ]
+        app.launch()
+
+        let checkIn = app.buttons["place-profile.floating-action.checkIn"]
+        XCTAssertTrue(checkIn.waitForExistence(timeout: 5))
+        XCTAssertTrue(checkIn.isHittable)
+        checkIn.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let attachedTray = app.otherElements["place-profile.attached-check-in"].firstMatch
+        XCTAssertTrue(attachedTray.waitForExistence(timeout: 4))
+
+        let note = app.textFields["save.note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        XCTAssertTrue(note.isHittable)
+        note.tap()
+        note.typeText("Keyboard-visible check-in")
+
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 3))
+
+        let keyboardTutorialContinue = app.buttons["Continue"]
+        if keyboardTutorialContinue.waitForExistence(timeout: 1) {
+            keyboardTutorialContinue.tap()
+        }
+
+        let save = attachedTray.buttons["Check in"].firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.isHittable)
+        save.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(
+            keyboard.waitForNonExistence(timeout: 4),
+            "The same Save tap should intentionally dismiss the keyboard."
+        )
+        XCTAssertTrue(
+            attachedTray.waitForNonExistence(timeout: 4),
+            "One physical Save tap should commit and dismiss the Check-in editor."
+        )
+        XCTAssertTrue(
+            app.buttons["Check in again"].firstMatch.waitForExistence(timeout: 4),
+            "The completed Check-in should update the place action exactly once."
+        )
+    }
+
     func testAttachedWannaSheetCanExpandCollapseAndDismissFromItsNativeGrabber() {
         let app = XCUIApplication()
         app.launchArguments = [

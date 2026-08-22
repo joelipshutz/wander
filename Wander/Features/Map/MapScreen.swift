@@ -9592,6 +9592,7 @@ struct MapPlaceSaveEditor: View {
 
     private func save() {
         guard !isSaving else { return }
+        dismissKeyboard()
         guard selectedStatus != .been || visitedAt <= Date.now else {
             errorMessage = "A check-in date can’t be in the future."
             resetWalkthroughAutoSaveForRetry()
@@ -9682,6 +9683,15 @@ struct MapPlaceSaveEditor: View {
                 }
             }
         }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private func resetWalkthroughAutoSaveForRetry() {
