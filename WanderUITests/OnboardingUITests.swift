@@ -2229,7 +2229,7 @@ final class OnboardingUITests: XCTestCase {
 
         let checkInChoice = app.buttons["check in"]
         XCTAssertTrue(checkInChoice.waitForExistence(timeout: 3))
-        let statusSelector = app.descendants(matching: .any)["save.statusSelector"]
+        let statusSelector = app.staticTexts["save.statusSelector"]
         XCTAssertTrue(statusSelector.exists)
         XCTAssertFalse(app.buttons["Check in"].exists)
         checkInChoice.tap()
