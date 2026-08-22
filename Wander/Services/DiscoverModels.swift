@@ -808,15 +808,16 @@ enum VisiblePlaceGrouping {
     }
 
     static func matches(_ lhs: LocalPlace, _ rhs: LocalPlace) -> Bool {
-        let lhsIDs = Set([lhs.id, lhs.localID, lhs.serverID].compactMap { $0 }.map(normalizedIdentifier))
-            .subtracting([""])
-        let rhsIDs = Set([rhs.id, rhs.localID, rhs.serverID].compactMap { $0 }.map(normalizedIdentifier))
-            .subtracting([""])
-        if !lhsIDs.isDisjoint(with: rhsIDs) {
-            return true
-        }
+        !groupingAliases(for: lhs).isDisjoint(with: groupingAliases(for: rhs))
+    }
 
-        return !Set(keys(for: lhs)).isDisjoint(with: Set(keys(for: rhs)))
+    static func groupingAliases(for place: LocalPlace) -> Set<String> {
+        let identifiers = [place.id, place.localID, place.serverID]
+            .compactMap { $0 }
+            .map(normalizedIdentifier)
+            .filter { !$0.isEmpty }
+            .map { "id:\($0)" }
+        return Set(keys(for: place)).union(identifiers)
     }
 
     static func matches(_ visiblePlace: VisiblePlace, candidate: PlaceCandidate) -> Bool {

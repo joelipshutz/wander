@@ -3045,12 +3045,29 @@ final class WanderStore: ObservableObject {
         let listIDs = listReferenceIDs(for: list)
         let allItems = placeListItems
             .filter { listIDs.contains($0.listID) }
-            .sorted { $0.createdAt < $1.createdAt }
+        return collapsedVisibleListItems(
+            allItems,
+            placeAliasesByReferenceID: placeGroupingAliasesByReferenceID()
+        )
+    }
+
+    private func collapsedVisibleListItems(
+        _ items: [LocalPlaceListItem],
+        placeAliasesByReferenceID: [String: Set<String>]
+    ) -> [LocalPlaceListItem] {
         var groups: [[LocalPlaceListItem]] = []
 
-        for item in allItems {
+        for item in items.sorted(by: { $0.createdAt < $1.createdAt }) {
             let matchingGroupIndices = groups.indices.filter { groupIndex in
-                groups[groupIndex].contains { equivalentListItems($0, item) }
+                groups[groupIndex].contains { existingItem in
+                    if existingItem.placeID == item.placeID {
+                        return true
+                    }
+                    guard let existingAliases = placeAliasesByReferenceID[existingItem.placeID],
+                          let itemAliases = placeAliasesByReferenceID[item.placeID]
+                    else { return false }
+                    return !existingAliases.isDisjoint(with: itemAliases)
+                }
             }
             guard let destinationIndex = matchingGroupIndices.first else {
                 groups.append([item])
@@ -3155,9 +3172,45 @@ final class WanderStore: ObservableObject {
     }
 
     private func visibleListItemsByListID(in lists: [LocalPlaceList]) -> [String: [LocalPlaceListItem]] {
-        Dictionary(uniqueKeysWithValues: lists.map { list in
-            (list.id, listItems(for: list))
+        var canonicalListIDByReferenceID: [String: String] = [:]
+        canonicalListIDByReferenceID.reserveCapacity(lists.count * 3)
+        for list in lists {
+            for referenceID in listReferenceIDs(for: list) {
+                canonicalListIDByReferenceID[referenceID] = list.id
+            }
+        }
+
+        var itemsByListID: [String: [LocalPlaceListItem]] = [:]
+        itemsByListID.reserveCapacity(lists.count)
+        for item in placeListItems {
+            guard let canonicalListID = canonicalListIDByReferenceID[item.listID] else {
+                continue
+            }
+            itemsByListID[canonicalListID, default: []].append(item)
+        }
+
+        let placeAliasesByReferenceID = placeGroupingAliasesByReferenceID()
+        return Dictionary(uniqueKeysWithValues: lists.map { list in
+            (
+                list.id,
+                collapsedVisibleListItems(
+                    itemsByListID[list.id, default: []],
+                    placeAliasesByReferenceID: placeAliasesByReferenceID
+                )
+            )
         })
+    }
+
+    private func placeGroupingAliasesByReferenceID() -> [String: Set<String>] {
+        var result: [String: Set<String>] = [:]
+        result.reserveCapacity(places.count * 3)
+        for place in places {
+            let aliases = VisiblePlaceGrouping.groupingAliases(for: place)
+            for referenceID in [place.id, place.localID] + [place.serverID].compactMap({ $0 }) {
+                result[referenceID] = aliases
+            }
+        }
+        return result
     }
 
     private func visiblePlaceListLookup(candidates: [VisiblePlace]) -> VisiblePlaceListLookup {
