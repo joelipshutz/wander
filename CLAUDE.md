@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+Read and follow `AGENTS.md` for the shared rec.me engineering workflow and
+contracts. In particular, any request to "put this behind a flag" must use the
+typed registry and restart-safe device override flow in `docs/feature-flags.md`;
+do not create a one-off or remote-only flag.
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.

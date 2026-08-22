@@ -2,12 +2,42 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(14);
+select plan(18);
 
 select is(
   (select enabled from public.feature_flags where key = 'first_visit_nux' and user_id is null),
   true,
   'first-visit NUX is globally enabled'
+);
+
+select is(
+  (
+    select value_type || ':' || integer_value::text
+    from public.feature_flags
+    where key = 'place_profile_action_variant' and user_id is null
+  ),
+  'integer:5',
+  'place-profile action variant is a registered integer flag'
+);
+
+select has_column(
+  'public',
+  'feature_flags',
+  'value_type',
+  'feature flags declare their value type'
+);
+
+select has_column(
+  'public',
+  'feature_flags',
+  'integer_value',
+  'feature flags can store integer values'
+);
+
+select has_check(
+  'public',
+  'feature_flags',
+  'feature flags enforce registry and typed-value checks'
 );
 
 select is(

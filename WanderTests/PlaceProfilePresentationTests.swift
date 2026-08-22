@@ -459,34 +459,27 @@ final class PlaceProfilePresentationTests: XCTestCase {
         )
     }
 
-    func testFloatingActionDebugPreferencesPersistPerAccount() throws {
+    func testFloatingActionIntegerFlagPersistsPerAccount() throws {
         let suiteName = "PlaceProfilePresentationTests.placeActionVariant.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let preferences = PlaceProfileFloatingActionDebugPreferences(defaults: defaults)
+        let flags = FeatureFlagOverrideStore(defaults: defaults)
 
-        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option5)
-        preferences.setVariant(.option5, for: "user_a")
-        preferences.setVariant(.option2, for: "user_b")
-        XCTAssertEqual(preferences.storedVariant(for: "user_a"), .option5)
-        XCTAssertEqual(preferences.storedVariant(for: "user_b"), .option2)
-        XCTAssertEqual(preferences.storedVariant(for: "user_c"), .option5)
+        XCTAssertNil(flags.override(for: .placeProfileActionVariant, userID: "user_a"))
+        flags.setOverride(.integer(5), for: .placeProfileActionVariant, userID: "user_a")
+        flags.setOverride(.integer(2), for: .placeProfileActionVariant, userID: "user_b")
+        XCTAssertEqual(flags.override(for: .placeProfileActionVariant, userID: "user_a"), .integer(5))
+        XCTAssertEqual(flags.override(for: .placeProfileActionVariant, userID: "user_b"), .integer(2))
+        XCTAssertNil(flags.override(for: .placeProfileActionVariant, userID: "user_c"))
         XCTAssertEqual(
-            preferences.activeVariant(
-                for: "user_a",
-                isDebugSettingsEntitled: false,
-                arguments: []
+            PlaceProfileFloatingActionVariant(
+                rawValue: flags.override(
+                    for: .placeProfileActionVariant,
+                    userID: "user_b"
+                )?.integerValue ?? 5
             ),
-            .option5
-        )
-        XCTAssertEqual(
-            preferences.activeVariant(
-                for: "user_a",
-                isDebugSettingsEntitled: true,
-                arguments: []
-            ),
-            .option5
+            .option2
         )
     }
 
@@ -788,7 +781,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(openedProfile.route, .floatingActions)
     }
 
-    func testSimulatorBuildDefaultsToFloatingActionsAcrossManualRelaunches() {
+    func testSimulatorAndPhysicalDeviceBothFailClosedWithoutAResolvedFlag() {
         let simulator = PlaceProfileSaveActionPolicy.snapshot(
             state: .unsaved,
             isSignedIn: true,
@@ -804,8 +797,8 @@ final class PlaceProfilePresentationTests: XCTestCase {
             isSimulator: false
         )
 
-        XCTAssertEqual(simulator.route, .floatingActions)
-        XCTAssertEqual(simulator.presentation.actions.map(\.kind), [.checkIn, .wanna])
+        XCTAssertEqual(simulator.route, .legacy)
+        XCTAssertTrue(simulator.presentation.actions.isEmpty)
         XCTAssertEqual(physicalDevice.route, .legacy)
     }
 

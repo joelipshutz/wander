@@ -241,6 +241,26 @@ Core rules:
 - Link/photo capture in M2 is an honest unresolved-draft shell until backend extraction jobs exist.
 - Native Contacts permission is planned later; M2 uses `FakeContactProvider` plus username search.
 
+## Feature Flag Contract
+
+When Joe or Ryan says "put this behind a flag," use the shared platform in
+`Wander/App/FeatureFlags.swift` and follow `docs/feature-flags.md`.
+
+- Register every Boolean or integer flag in `FeatureFlagKey`; the registry
+  automatically drives remote fetching and the tester Settings UI.
+- Add the matching Supabase migration/global row and keep the hosted registered-key
+  constraint aligned. A remote-only flag is not allowed.
+- Feature code reads values only through `WanderBackend.featureFlag`,
+  `integerFeatureFlag`, or `resolvedFeatureFlag`. Do not add one-off
+  `UserDefaults`, build-mode, or remote-only flag paths.
+- Device overrides are account-scoped, persist locally, and take effect from an
+  immutable snapshot on the next full app launch. Settings changes must not
+  mutate active behavior in the current process.
+- Debug and Simulator builds must respect explicit Off values. Use launch
+  arguments only for isolated automation, not ordinary feature enablement.
+- Tests must cover registration/UI presence, persistence, restart precedence,
+  reset-to-remote behavior, remote decoding, and the gated consumer.
+
 ## Supabase Schema, RLS, And RPC Policy
 
 Supabase migrations are app behavior, not incidental backend plumbing. Treat

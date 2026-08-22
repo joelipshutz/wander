@@ -4,11 +4,29 @@ private struct RemoteFeatureFlagDTO: Decodable {
     let key: String
     let userID: String?
     let enabled: Bool
+    let valueType: String?
+    let integerValue: Int?
 
     enum CodingKeys: String, CodingKey {
         case key
         case userID = "user_id"
         case enabled
+        case valueType = "value_type"
+        case integerValue = "integer_value"
+    }
+
+    func value(for key: FeatureFlagKey) -> FeatureFlagValue? {
+        let value: FeatureFlagValue?
+        switch valueType ?? FeatureFlagValueKind.boolean.rawValue {
+        case FeatureFlagValueKind.boolean.rawValue:
+            value = .boolean(enabled)
+        case FeatureFlagValueKind.integer.rawValue:
+            value = integerValue.map(FeatureFlagValue.integer)
+        default:
+            value = nil
+        }
+        guard let value, key.definition.accepts(value) else { return nil }
+        return value
     }
 }
 
@@ -23,7 +41,10 @@ struct SupabaseFeatureFlagRepository: FeatureFlagRepository {
         let rows: [RemoteFeatureFlagDTO] = try await table.select(
             table: "feature_flags",
             queryItems: [
-                URLQueryItem(name: "select", value: "key,user_id,enabled"),
+                URLQueryItem(
+                    name: "select",
+                    value: "key,user_id,enabled,value_type,integer_value"
+                ),
                 URLQueryItem(
                     name: "key",
                     value: "in.(\(FeatureFlagKey.allCases.map(\.rawValue).joined(separator: ",")))"
@@ -33,18 +54,21 @@ struct SupabaseFeatureFlagRepository: FeatureFlagRepository {
 
         var values: [FeatureFlagKey: ResolvedFeatureFlagValue] = [:]
         for row in rows where row.userID == nil {
-            guard let key = FeatureFlagKey(rawValue: row.key) else { continue }
+            guard let key = FeatureFlagKey(rawValue: row.key),
+                  let value = row.value(for: key)
+            else { continue }
             values[key] = ResolvedFeatureFlagValue(
-                isEnabled: row.enabled,
+                value: value,
                 source: .globalDefault
             )
         }
         for row in rows where row.userID == userID {
             guard let key = FeatureFlagKey(rawValue: row.key),
-                  key.allowsAccountOverride
+                  key.definition.allowsRemoteAccountOverride,
+                  let value = row.value(for: key)
             else { continue }
             values[key] = ResolvedFeatureFlagValue(
-                isEnabled: row.enabled,
+                value: value,
                 source: .accountOverride
             )
         }

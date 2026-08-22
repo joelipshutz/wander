@@ -538,15 +538,16 @@ enum FirstVisitWalkthroughFeatureFlag {
 
 struct FirstVisitWalkthroughDebugPreferences {
     let defaults: UserDefaults
+    private var featureFlagOverrides: FeatureFlagOverrideStore {
+        FeatureFlagOverrideStore(defaults: defaults)
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
     func nuxOverride(for userID: String) -> Bool? {
-        let key = enabledKey(userID: userID)
-        guard defaults.object(forKey: key) != nil else { return nil }
-        return defaults.bool(forKey: key)
+        featureFlagOverrides.override(for: .firstVisitNUX, userID: userID)?.booleanValue
     }
 
     func isReplayRequested(for userID: String) -> Bool {
@@ -559,7 +560,7 @@ struct FirstVisitWalkthroughDebugPreferences {
         for userID: String,
         launchRegistry: FirstVisitWalkthroughLaunchRegistry = .process
     ) {
-        defaults.set(isEnabled, forKey: enabledKey(userID: userID))
+        featureFlagOverrides.setOverride(.boolean(isEnabled), for: .firstVisitNUX, userID: userID)
         if isEnabled {
             FirstVisitWalkthroughStore(defaults: defaults).reset(for: userID)
             launchRegistry.reset(for: userID)
@@ -573,8 +574,9 @@ struct FirstVisitWalkthroughDebugPreferences {
         defaults.removeObject(forKey: replayKey(userID: userID))
     }
 
-    private func enabledKey(userID: String) -> String {
-        "wander.debugSettings.\(userID).firstVisitNUX.enabled"
+    func clearNUXOverride(for userID: String) {
+        featureFlagOverrides.clearOverride(for: .firstVisitNUX, userID: userID)
+        clearReplayRequest(for: userID)
     }
 
     private func replayKey(userID: String) -> String {

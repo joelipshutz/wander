@@ -3252,7 +3252,7 @@ final class RemoteRepositoryTests: XCTestCase {
     func testFeatureFlagRepositoryAppliesSupportedOverridesAndKeepsSemanticGlobal() async throws {
         let table = RecordingTable()
         table.responses["GET:feature_flags"] = Data(
-            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":true},{"key":"first_visit_nux","user_id":"user_test","enabled":false},{"key":"debug_settings","user_id":null,"enabled":false},{"key":"debug_settings","user_id":"user_test","enabled":true},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":false},{"key":"place_profile_save_tray_v1","user_id":"user_test","enabled":true},{"key":"semantic_place_search_v1","user_id":null,"enabled":false},{"key":"semantic_place_search_v1","user_id":"user_test","enabled":true},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":5},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":2},{"key":"first_visit_nux","user_id":"user_other","enabled":true},{"key":"unknown_flag","user_id":null,"enabled":true}]"#.utf8
         )
         let repository = SupabaseFeatureFlagRepository(table: table)
 
@@ -3276,6 +3276,10 @@ final class RemoteRepositoryTests: XCTestCase {
                 .semanticPlaceSearchV1: ResolvedFeatureFlagValue(
                     isEnabled: false,
                     source: .globalDefault
+                ),
+                .placeProfileActionVariant: ResolvedFeatureFlagValue(
+                    value: .integer(2),
+                    source: .accountOverride
                 )
             ]
         )
@@ -3285,10 +3289,13 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(
             table.calls.first?.queryItems,
             [
-                URLQueryItem(name: "select", value: "key,user_id,enabled"),
+                URLQueryItem(
+                    name: "select",
+                    value: "key,user_id,enabled,value_type,integer_value"
+                ),
                 URLQueryItem(
                     name: "key",
-                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1)"
+                    value: "in.(first_visit_nux,debug_settings,place_profile_save_tray_v1,semantic_place_search_v1,place_profile_action_variant)"
                 )
             ]
         )
@@ -3334,12 +3341,15 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
-    func testSemanticPlaceSearchAccessPolicyUsesDebugBuildWithoutAnAccountFlag() {
-        XCTAssertTrue(
+    func testSemanticPlaceSearchAccessPolicyUsesResolvedFlagInEveryBuild() {
+        XCTAssertFalse(
             SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: nil, isDebugBuild: true)
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: false, isDebugBuild: true)
+        )
+        XCTAssertTrue(
+            SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: true, isDebugBuild: true)
         )
         XCTAssertFalse(
             SemanticPlaceSearchAccessPolicy.isEnabled(serverFlag: nil, isDebugBuild: false)
@@ -3381,8 +3391,8 @@ final class RemoteRepositoryTests: XCTestCase {
 
         repository.error = WanderRemoteError.invalidResponse("expected")
         await backend.refreshFeatureFlags(for: "user_b")
-        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_b"))
-        XCTAssertNil(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_b"))
+        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user_b"), false)
+        XCTAssertEqual(backend.featureFlag(.placeProfileSaveTrayV1, for: "user_b"), false)
         XCTAssertFalse(
             backend.featureFlagResolution.isPending(for: "user_b"),
             "A failed fetch must stop suppressing normal non-NUX UI."
@@ -3398,7 +3408,11 @@ final class RemoteRepositoryTests: XCTestCase {
 
         await backend.refreshFeatureFlags(for: "user_without_row")
 
-        XCTAssertNil(backend.featureFlag(.firstVisitNUX, for: "user_without_row"))
+        XCTAssertEqual(backend.featureFlag(.firstVisitNUX, for: "user_without_row"), false)
+        XCTAssertEqual(
+            backend.resolvedFeatureFlag(.firstVisitNUX, for: "user_without_row")?.source,
+            .bundledDefault
+        )
         XCTAssertFalse(backend.featureFlagResolution.isPending(for: "user_without_row"))
     }
 

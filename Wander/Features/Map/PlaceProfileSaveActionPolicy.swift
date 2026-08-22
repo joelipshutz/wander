@@ -96,9 +96,9 @@ enum PlaceProfileSaveActionPolicy {
         launchArguments: [String] = ProcessInfo.processInfo.arguments,
         isSimulator: Bool = false
     ) -> Bool {
-        if isSimulator {
-            return true
-        }
+        // Simulator builds follow the same flag as TestFlight. The explicit
+        // launch argument below remains available for isolated UI automation.
+        _ = isSimulator
 
         #if DEBUG
         if launchArguments.contains(debugEnableLaunchArgument) {
