@@ -1994,9 +1994,14 @@ final class NavigationContractTests: XCTestCase {
             1
         )
         XCTAssertTrue(mapScreen.contains("private var singleScreenContent: some View"))
-        XCTAssertTrue(mapScreen.contains("if context.requiresStatusConfirmation"))
+        XCTAssertTrue(mapScreen.contains("if sourceContext.requiresStatusConfirmation"))
         XCTAssertTrue(mapScreen.contains("if isReadyForDetails"))
         XCTAssertTrue(mapScreen.contains(".accessibilityIdentifier(\"save.statusSelector\")"))
+        XCTAssertTrue(mapScreen.contains("modeDrafts.store(currentModeDraft, for: selectedStatus)"))
+        XCTAssertTrue(mapScreen.contains("sourceContext.preselectingStatus(status)"))
+        XCTAssertTrue(mapScreen.contains("restoreModeDraft(cachedDraft)"))
+        XCTAssertTrue(mapScreen.contains("MapPlaceSaveSubmissionPolicy.checkInValues("))
+        XCTAssertTrue(mapScreen.contains("MapPlaceSaveSubmissionPolicy.wannaGoValue("))
         XCTAssertFalse(mapScreen.contains("private var confirmContent: some View"))
         XCTAssertFalse(mapScreen.contains("title: \"continue to details\""))
         XCTAssertFalse(mapScreen.contains("returnToStatusSelection"))
@@ -3924,8 +3929,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(theme.contains("cornerRadius: WanderTheme.radiusLarge"))
         XCTAssertEqual(
             mapEditor.components(separatedBy: "tone: .espressoConfirmation").count - 1,
-            2,
-            "Both the save-flow continuation and final confirmation use Espresso."
+            1,
+            "The unified save flow has one final Espresso confirmation."
         )
         XCTAssertTrue(addScreen.contains("private var candidateSaveAction: some View"))
         XCTAssertTrue(addScreen.contains("tone: .espressoConfirmation"))

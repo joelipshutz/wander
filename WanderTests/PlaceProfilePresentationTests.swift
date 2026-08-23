@@ -543,6 +543,38 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertTrue(wanna.startsOnDetails)
     }
 
+    func testUnifiedSaveModeDraftCacheRestoresBothSwitchDirections() {
+        var cache = MapPlaceSaveModeDraftCache<String>()
+        cache.store("check-in draft", for: .been)
+        cache.store("wanna draft", for: .wannaGo)
+
+        XCTAssertEqual(cache.draft(for: .been), "check-in draft")
+        XCTAssertEqual(cache.draft(for: .wannaGo), "wanna draft")
+
+        cache.store("updated check-in draft", for: .been)
+        XCTAssertEqual(cache.draft(for: .been), "updated check-in draft")
+        XCTAssertEqual(cache.draft(for: .wannaGo), "wanna draft")
+    }
+
+    func testUnifiedSaveSubmissionPolicyExcludesHiddenModeValues() {
+        XCTAssertEqual(MapPlaceSaveSubmissionPolicy.checkInValue(4.5, status: .been), 4.5)
+        XCTAssertNil(MapPlaceSaveSubmissionPolicy.checkInValue(4.5, status: .wannaGo))
+        XCTAssertEqual(
+            MapPlaceSaveSubmissionPolicy.checkInValues(["photo", "friend"], status: .been),
+            ["photo", "friend"]
+        )
+        XCTAssertEqual(
+            MapPlaceSaveSubmissionPolicy.checkInValues(["photo", "friend"], status: .wannaGo),
+            []
+        )
+        let plannedDate = Date(timeIntervalSince1970: 400)
+        XCTAssertNil(MapPlaceSaveSubmissionPolicy.wannaGoValue(plannedDate, status: .been))
+        XCTAssertEqual(
+            MapPlaceSaveSubmissionPolicy.wannaGoValue(plannedDate, status: .wannaGo),
+            plannedDate
+        )
+    }
+
     func testCandidateProfilePreservesProviderPhotoIdentityAndChooseAction() {
         let candidate = PlaceCandidate(
             id: "candidate-maru",

@@ -7827,6 +7827,67 @@ private enum MapPlaceSaveStep {
     case details
 }
 
+struct MapPlaceSaveModeDraft<Photo> {
+    var visibility: PlaceVisibility
+    var ratingScore: Double
+    var selectedAnswers: [String: Set<String>]
+    var unifiedTags: Set<String>
+    var note: String
+    var visitedAt: Date
+    var plannedDate: Date?
+    var photoAttachments: [Photo]
+    var selectedInviteeUserIDs: [String]
+    var isShowingOptionalDetails: Bool
+    var didLoadSharedVisitInvitees: Bool
+    var sharedVisitInviteesError: String?
+}
+
+extension MapPlaceSaveModeDraft: Equatable where Photo: Equatable {}
+
+struct MapPlaceSaveModeDraftCache<Draft> {
+    private var checkIn: Draft?
+    private var wannaGo: Draft?
+
+    init(checkIn: Draft? = nil, wannaGo: Draft? = nil) {
+        self.checkIn = checkIn
+        self.wannaGo = wannaGo
+    }
+
+    mutating func store(_ draft: Draft, for status: PlaceStatus) {
+        switch status {
+        case .been:
+            checkIn = draft
+        case .wannaGo:
+            wannaGo = draft
+        }
+    }
+
+    func draft(for status: PlaceStatus) -> Draft? {
+        switch status {
+        case .been:
+            checkIn
+        case .wannaGo:
+            wannaGo
+        }
+    }
+}
+
+extension MapPlaceSaveModeDraftCache: Equatable where Draft: Equatable {}
+
+enum MapPlaceSaveSubmissionPolicy {
+    static func checkInValue<Value>(_ value: Value, status: PlaceStatus) -> Value? {
+        status == .been ? value : nil
+    }
+
+    static func checkInValues<Value>(_ values: [Value], status: PlaceStatus) -> [Value] {
+        status == .been ? values : []
+    }
+
+    static func wannaGoValue<Value>(_ value: Value?, status: PlaceStatus) -> Value? {
+        status == .wannaGo ? value : nil
+    }
+}
+
 enum MapPlaceSaveDetailsPolicy {
     static func usesCompactWannaGoLayout(
         context: MapPlaceSaveContext,
@@ -8134,6 +8195,7 @@ struct MapPlaceSaveFlowSheet: View {
 struct MapPlaceSaveEditor: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private let sourceContext: MapPlaceSaveContext
     @State private var context: MapPlaceSaveContext
     let onSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onRemove: @MainActor (MapPlaceSaveContext) async -> Bool
@@ -8181,6 +8243,7 @@ struct MapPlaceSaveEditor: View {
     @State private var saveAttemptedAt: Date?
     @State private var didStartWalkthroughAutoSave = false
     @State private var pendingWalkthroughSaveResult: SaveResult?
+    @State private var modeDrafts: MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>
 
     init(
         context: MapPlaceSaveContext,
@@ -8193,6 +8256,7 @@ struct MapPlaceSaveEditor: View {
         onContentExpansionRequested: @escaping @MainActor () -> Void = {},
         onSaveCompleted: @escaping @MainActor (SaveResult) -> Void
     ) {
+        sourceContext = context
         _context = State(initialValue: context)
         draftID = draft?.id
         self.presentation = presentation
@@ -8271,6 +8335,27 @@ struct MapPlaceSaveEditor: View {
         )
         _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
         _isShowingOptionalDetails = State(initialValue: restoredForm?.isShowingOptionalDetails ?? false)
+        var initialModeDrafts = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
+        if restoredForm != nil {
+            initialModeDrafts.store(
+                MapPlaceSaveModeDraft(
+                    visibility: initialVisibility,
+                    ratingScore: initialRatingScore,
+                    selectedAnswers: initialAnswers,
+                    unifiedTags: initialUnifiedTags,
+                    note: restoredForm?.note ?? context.initialNote,
+                    visitedAt: restoredForm?.visitedAt ?? context.editedVisit?.visitedAt ?? .now,
+                    plannedDate: initialPlannedDate,
+                    photoAttachments: restoredAttachments ?? context.initialPhotoAttachments,
+                    selectedInviteeUserIDs: restoredForm?.selectedInviteeUserIDs ?? [],
+                    isShowingOptionalDetails: restoredForm?.isShowingOptionalDetails ?? false,
+                    didLoadSharedVisitInvitees: false,
+                    sharedVisitInviteesError: nil
+                ),
+                for: initialStatus
+            )
+        }
+        _modeDrafts = State(initialValue: initialModeDrafts)
         let hasMissingRestoredPhotos = restoredForm.map {
             $0.photoAttachments.count != (restoredAttachments?.count ?? 0)
         } ?? false
@@ -8324,7 +8409,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var isReadyForDetails: Bool {
-        !context.requiresStatusConfirmation || presentedHasSelectedStatus
+        !sourceContext.requiresStatusConfirmation || presentedHasSelectedStatus
     }
 
     private var isPresentingWalkthroughStatusSelection: Bool {
@@ -8414,7 +8499,7 @@ struct MapPlaceSaveEditor: View {
                         syncAnswersForCurrentQuestions()
                     }
                 }
-                .task {
+                .task(id: context.id) {
                     await loadSharedVisitInviteesIfNeeded()
                 }
                 .onChange(of: store.isPrivateProfile) { _, isPrivateProfile in
@@ -8513,7 +8598,7 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var flowTitle: String {
-        return context.flowTitle(
+        return sourceContext.flowTitle(
             status: selectedStatus,
             isShowingDetails: isReadyForDetails
         )
@@ -8525,7 +8610,7 @@ struct MapPlaceSaveEditor: View {
                 candidateCard
             }
 
-            if context.requiresStatusConfirmation {
+            if sourceContext.requiresStatusConfirmation {
                 MapSavePickerBlock(title: "what do you want to do?") {
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {
@@ -8564,7 +8649,7 @@ struct MapPlaceSaveEditor: View {
 
     @ViewBuilder
     private var wannaGoStatusChoice: some View {
-        if context.allowsWannaGoSelection {
+        if sourceContext.allowsWannaGoSelection {
             MapSaveChoicePill(
                 title: "wanna go",
                 isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
@@ -9204,30 +9289,87 @@ struct MapPlaceSaveEditor: View {
             ?? WanderPlaceCategory.restaurantCuisineInference(for: context.candidate)?.cuisine
     }
 
+    private var currentModeDraft: MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment> {
+        MapPlaceSaveModeDraft(
+            visibility: selectedVisibility,
+            ratingScore: selectedRatingScore,
+            selectedAnswers: selectedAnswers,
+            unifiedTags: unifiedTags,
+            note: note,
+            visitedAt: visitedAt,
+            plannedDate: plannedDate,
+            photoAttachments: visitPhotoAttachments,
+            selectedInviteeUserIDs: selectedInviteeUserIDs,
+            isShowingOptionalDetails: isShowingOptionalDetails,
+            didLoadSharedVisitInvitees: didLoadSharedVisitInvitees,
+            sharedVisitInviteesError: sharedVisitInviteesError
+        )
+    }
+
+    private func restoreModeDraft(
+        _ draft: MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>
+    ) {
+        selectedVisibility = store.isPrivateProfile ? .selfOnly : draft.visibility
+        selectedRatingScore = draft.ratingScore
+        selectedAnswers = draft.selectedAnswers
+        unifiedTags = draft.unifiedTags
+        note = draft.note
+        visitedAt = draft.visitedAt
+        plannedDate = draft.plannedDate
+        visitPhotoAttachments = draft.photoAttachments
+        selectedInviteeUserIDs = draft.selectedInviteeUserIDs
+        isShowingOptionalDetails = draft.isShowingOptionalDetails
+        didLoadSharedVisitInvitees = draft.didLoadSharedVisitInvitees
+        sharedVisitInviteesError = draft.sharedVisitInviteesError
+        resetQuestionBlocksForCurrentMode()
+    }
+
+    private func resetQuestionBlocksForCurrentMode() {
+        let initialQuestionBlocks = AddQuestionTemplates.blocks(
+            primaryCategory: selectedAssignment.primaryCategory,
+            subcategory: selectedAssignment.subcategory,
+            cuisine: selectedCuisine,
+            status: selectedStatus
+        )
+        lastUnifiedTagOptions = initialQuestionBlocks
+            .first(where: { Self.isUnifiedTagKey($0.key) })?
+            .options ?? []
+        lastQuestionOptions = Dictionary(
+            uniqueKeysWithValues: initialQuestionBlocks
+                .filter { !Self.isUnifiedTagKey($0.key) }
+                .map { ($0.key, $0.options) }
+        )
+        questionBlocksCache = MapPlaceSaveQuestionBlocksCache(initialBlocks: initialQuestionBlocks)
+    }
+
     private func prepareDetails() {
-        let resolvedContext = context.resolvingExistingSave(selection: selectedStatus)
-        if resolvedContext.id != context.id {
-            applyDefaults(from: resolvedContext)
-        }
         refreshQuestionBlocksIfNeeded()
         syncAnswersForCurrentQuestions()
         errorMessage = nil
         step = .details
     }
 
-    private func applyDefaults(from nextContext: MapPlaceSaveContext) {
+    private func applyDefaults(
+        from nextContext: MapPlaceSaveContext,
+        preservingSharedPlaceDetails: Bool = false
+    ) {
         context = nextContext
-        selectedAssignment = nextContext.candidate.categoryAssignment
         selectedStatus = nextContext.initialStatus
         selectedVisibility = nextContext.initialVisibility.normalizedForStealthMode
         selectedRatingScore = nextContext.initialRatingScore ?? PlaceRating.defaultScore
 
-        let initialCuisine = Self.initialCuisine(for: nextContext)
-        selectedCuisine = initialCuisine
-        droppedPinName = nextContext.initialAnswers[PlaceMemoryAttributeKeys.droppedPinName]?.first ?? ""
+        let initialCuisine: String?
+        if preservingSharedPlaceDetails {
+            initialCuisine = selectedCuisine
+        } else {
+            selectedAssignment = nextContext.candidate.categoryAssignment
+            initialCuisine = Self.initialCuisine(for: nextContext)
+            selectedCuisine = initialCuisine
+            droppedPinName = nextContext.initialAnswers[PlaceMemoryAttributeKeys.droppedPinName]?.first ?? ""
+        }
         let initialQuestionBlocks = AddQuestionTemplates.blocks(
-            primaryCategory: nextContext.candidate.primaryCategory,
-            subcategory: nextContext.candidate.subcategory,
+            primaryCategory: selectedAssignment.primaryCategory,
+            subcategory: selectedAssignment.subcategory,
             cuisine: initialCuisine,
             status: nextContext.initialStatus
         )
@@ -9258,6 +9400,7 @@ struct MapPlaceSaveEditor: View {
         selectedInviteeUserIDs = []
         didLoadSharedVisitInvitees = false
         sharedVisitInviteesError = nil
+        isShowingOptionalDetails = false
     }
 
     private func syncAnswersForCurrentQuestions() {
@@ -9857,16 +10000,30 @@ struct MapPlaceSaveEditor: View {
             candidate: selectedCandidate,
             status: selectedStatus,
             visibility: saveVisibility,
-            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
+            ratingScore: MapPlaceSaveSubmissionPolicy.checkInValue(
+                selectedRatingScore,
+                status: selectedStatus
+            ),
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributes,
-            photoAttachments: visitPhotoAttachments,
-            inviteeUserIDs: canInviteFriends ? selectedInviteeUserIDs : [],
+            photoAttachments: MapPlaceSaveSubmissionPolicy.checkInValues(
+                visitPhotoAttachments,
+                status: selectedStatus
+            ),
+            inviteeUserIDs: canInviteFriends
+                ? MapPlaceSaveSubmissionPolicy.checkInValues(
+                    selectedInviteeUserIDs,
+                    status: selectedStatus
+                )
+                : [],
             reconcilesSharedVisitInvitees: context.editedVisit != nil
                 && canInviteFriends
                 && didLoadSharedVisitInvitees,
             visitedAt: visitedAt,
-            plannedDate: selectedStatus == .wannaGo ? plannedDate : nil
+            plannedDate: MapPlaceSaveSubmissionPolicy.wannaGoValue(
+                plannedDate,
+                status: selectedStatus
+            )
         )
 
         Task {
@@ -9974,7 +10131,22 @@ struct MapPlaceSaveEditor: View {
     }
 
     private func selectStatus(_ status: PlaceStatus) {
+        if presentedHasSelectedStatus, status == selectedStatus {
+            return
+        }
+
+        if presentedHasSelectedStatus {
+            modeDrafts.store(currentModeDraft, for: selectedStatus)
+        }
+
+        let nextContext = sourceContext.preselectingStatus(status)
+        context = nextContext
         selectedStatus = status
+        if let cachedDraft = modeDrafts.draft(for: status) {
+            restoreModeDraft(cachedDraft)
+        } else {
+            applyDefaults(from: nextContext, preservingSharedPlaceDetails: true)
+        }
         hasSelectedStatus = true
         walkthroughs.recordTutorialSelectedStatus(status)
         walkthroughs.perform(.saveStatus)

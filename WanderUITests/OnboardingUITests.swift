@@ -2246,6 +2246,25 @@ final class OnboardingUITests: XCTestCase {
         let finalCheckIn = app.buttons["Check in"]
         XCTAssertTrue(finalCheckIn.exists)
 
+        note.tap()
+        note.typeText("Check-in mode draft")
+        let wannaChoice = app.buttons["wanna go"]
+        XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
+        XCTAssertTrue(wannaChoice.isHittable)
+        wannaChoice.tap()
+        XCTAssertTrue(app.buttons["Add a Wanna go date"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
+        let wannaNote = app.textFields["save.note"]
+        XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")
+        wannaNote.tap()
+        wannaNote.typeText("Wanna mode draft")
+        XCTAssertTrue(checkInChoice.isHittable)
+        checkInChoice.tap()
+        XCTAssertEqual(app.textFields["save.note"].value as? String, "Check-in mode draft")
+        wannaChoice.tap()
+        XCTAssertEqual(app.textFields["save.note"].value as? String, "Wanna mode draft")
+        checkInChoice.tap()
+
         let start = ProcessInfo.processInfo.systemUptime
         disclosure.tap()
         XCTAssertTrue((disclosure.value as? String)?.contains("Expanded") == true)
