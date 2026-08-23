@@ -419,7 +419,7 @@ The production slice that follows must include Supabase migrations, RLS/RPC regr
 - [x] T2. Add pure relationship, check-in-resolution, and participant-visibility projections with unit coverage.
 - [x] T3. Add deterministic DEBUG SwiftUI pages for save, people, Feed, invitation, map, check-in, and plan management.
 - [x] T4. Compile, run focused/full tests, and capture the current and smaller-phone simulator screenshots.
-- [ ] T5. Push the branch, open the isolated worktree in Xcode, and hand off exact launch arguments and a tester checklist.
+- [x] T5. Push the branch, open the isolated worktree in Xcode, and hand off exact launch arguments and a tester checklist.
 
 ### Linked production slice after prototype approval
 
