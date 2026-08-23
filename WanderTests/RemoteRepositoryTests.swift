@@ -3323,6 +3323,18 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testFeatureFlagRepositoryRejectsMalformedTypedRows() async throws {
+        let table = RecordingTable()
+        table.responses["GET:feature_flags"] = Data(
+            #"[{"key":"first_visit_nux","user_id":null,"enabled":false,"value_type":"integer","integer_value":1},{"key":"place_profile_save_tray_v1","user_id":null,"enabled":true,"value_type":"unsupported"},{"key":"place_profile_action_variant","user_id":null,"enabled":false,"value_type":"integer","integer_value":null},{"key":"place_profile_action_variant","user_id":"user_test","enabled":false,"value_type":"integer","integer_value":6}]"#.utf8
+        )
+        let repository = SupabaseFeatureFlagRepository(table: table)
+
+        let flags = try await repository.resolvedFlags(for: "user_test")
+
+        XCTAssertTrue(flags.isEmpty)
+    }
+
     func testDebugSettingsAccessPolicyAllowsEverySimulatorAndRequiresServerFlagOnDevice() {
         XCTAssertTrue(
             DebugSettingsAccessPolicy.isEntitled(serverFlag: nil, isSimulator: true)

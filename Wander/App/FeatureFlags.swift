@@ -51,7 +51,7 @@ struct FeatureFlagDefinition: Equatable {
         case (.boolean, .boolean):
             true
         case (.integer, .integer(let value)):
-            integerRange?.contains(value) ?? true
+            integerRange?.contains(value) ?? false
         default:
             false
         }
@@ -211,6 +211,17 @@ struct FeatureFlagOverrideStore {
         "wander.featureFlags.\(userID).\(key.rawValue).deviceOverride"
     }
 
+    static func legacyStorageKey(for key: FeatureFlagKey, userID: String) -> String? {
+        switch key {
+        case .firstVisitNUX:
+            "wander.debugSettings.\(userID).firstVisitNUX.enabled"
+        case .placeProfileActionVariant:
+            "wander.debugSettings.\(userID).placeActionVariant"
+        case .debugSettings, .placeProfileSaveTrayV1, .semanticPlaceSearchV1:
+            nil
+        }
+    }
+
     fileprivate static func decode(_ object: Any?, for key: FeatureFlagKey) -> FeatureFlagValue? {
         guard let object else { return nil }
         let value: FeatureFlagValue?
@@ -225,28 +236,13 @@ struct FeatureFlagOverrideStore {
     }
 
     private func legacyOverride(for key: FeatureFlagKey, userID: String) -> FeatureFlagValue? {
-        let legacyKey: String?
-        switch key {
-        case .firstVisitNUX:
-            legacyKey = "wander.debugSettings.\(userID).firstVisitNUX.enabled"
-        case .placeProfileActionVariant:
-            legacyKey = "wander.debugSettings.\(userID).placeActionVariant"
-        case .debugSettings, .placeProfileSaveTrayV1, .semanticPlaceSearchV1:
-            legacyKey = nil
-        }
-        guard let legacyKey else { return nil }
+        guard let legacyKey = Self.legacyStorageKey(for: key, userID: userID) else { return nil }
         return Self.decode(defaults.object(forKey: legacyKey), for: key)
     }
 
     private func clearLegacyOverride(for key: FeatureFlagKey, userID: String) {
-        switch key {
-        case .firstVisitNUX:
-            defaults.removeObject(forKey: "wander.debugSettings.\(userID).firstVisitNUX.enabled")
-        case .placeProfileActionVariant:
-            defaults.removeObject(forKey: "wander.debugSettings.\(userID).placeActionVariant")
-        case .debugSettings, .placeProfileSaveTrayV1, .semanticPlaceSearchV1:
-            break
-        }
+        guard let legacyKey = Self.legacyStorageKey(for: key, userID: userID) else { return }
+        defaults.removeObject(forKey: legacyKey)
     }
 }
 
@@ -267,16 +263,10 @@ struct FeatureFlagDeviceOverrideSnapshot {
     }
 
     private func legacyOverride(for key: FeatureFlagKey, userID: String) -> FeatureFlagValue? {
-        let legacyKey: String?
-        switch key {
-        case .firstVisitNUX:
-            legacyKey = "wander.debugSettings.\(userID).firstVisitNUX.enabled"
-        case .placeProfileActionVariant:
-            legacyKey = "wander.debugSettings.\(userID).placeActionVariant"
-        case .debugSettings, .placeProfileSaveTrayV1, .semanticPlaceSearchV1:
-            legacyKey = nil
-        }
-        guard let legacyKey else { return nil }
+        guard let legacyKey = FeatureFlagOverrideStore.legacyStorageKey(
+            for: key,
+            userID: userID
+        ) else { return nil }
         return FeatureFlagOverrideStore.decode(values[legacyKey], for: key)
     }
 }

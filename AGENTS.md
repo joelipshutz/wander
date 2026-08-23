@@ -247,7 +247,8 @@ When Joe or Ryan says "put this behind a flag," use the shared platform in
 `Wander/App/FeatureFlags.swift` and follow `docs/feature-flags.md`.
 
 - Register every Boolean or integer flag in `FeatureFlagKey`; the registry
-  automatically drives remote fetching and the tester Settings UI.
+  automatically drives remote fetching and the tester Settings UI. Every
+  integer flag declares a bounded range shared by storage, decoding, and UI.
 - Add the matching Supabase migration/global row and keep the hosted registered-key
   constraint aligned. A remote-only flag is not allowed.
 - Feature code reads values only through `WanderBackend.featureFlag`,

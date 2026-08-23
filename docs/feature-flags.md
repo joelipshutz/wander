@@ -28,7 +28,7 @@ complete until all of these land together:
 
 1. Add a `FeatureFlagKey` case and its complete `FeatureFlagDefinition` in
    `Wander/App/FeatureFlags.swift`. Choose Boolean or integer, a fail-closed
-   bundled default, and an integer range when applicable.
+   bundled default, and a bounded range for every integer flag.
 2. Add or update the Supabase migration. The hosted `feature_flags` key check
    must list the key, and a global row must exist. A remote-only key is invalid.
 3. Read the value through `WanderBackend.featureFlag`,
@@ -50,5 +50,7 @@ Never add a separate flag toggle or an unregistered hosted row.
 
 Open Profile → Settings → Feature flags. Choose Remote, On, Off, or an integer
 value. When the restart message appears, fully quit rec.me from the app switcher
-and reopen it. To stop testing a local value, choose Remote or use **Reset all to
-remote values**, then fully quit and reopen again.
+and reopen it. To stop testing local values, choose Remote for one flag or use
+**Reset all to defaults** for every flag, then fully quit and reopen again. This
+clears device overrides, so each flag resolves from its remote value or bundled
+fallback on the next launch.

@@ -337,7 +337,7 @@ struct ProfileSettingsHome: View {
             }
 
             if hasDeviceFeatureFlagOverrides {
-                Button("Reset all to remote values", role: .destructive) {
+                Button("Reset all to defaults", role: .destructive) {
                     resetAllDeviceFeatureFlagOverrides()
                 }
                 .accessibilityIdentifier("settings.flags.resetAll")
@@ -400,14 +400,19 @@ struct ProfileSettingsHome: View {
         for key: FeatureFlagKey,
         definition: FeatureFlagDefinition
     ) -> some View {
-        let range = definition.integerRange ?? 0 ... 100
-        Toggle("Override on this device", isOn: integerOverrideEnabledBinding(for: key))
-            .tint(WanderTheme.terracotta.color)
-        if deviceFeatureFlagOverrides[key]?.integerValue != nil {
-            Stepper(value: integerOverrideBinding(for: key, range: range), in: range) {
-                Text("Value: \(integerOverrideBinding(for: key, range: range).wrappedValue)")
-                    .font(.system(size: 13, weight: .semibold))
+        if let range = definition.integerRange {
+            Toggle("Override on this device", isOn: integerOverrideEnabledBinding(for: key))
+                .tint(WanderTheme.terracotta.color)
+            if deviceFeatureFlagOverrides[key]?.integerValue != nil {
+                Stepper(value: integerOverrideBinding(for: key, range: range), in: range) {
+                    Text("Value: \(integerOverrideBinding(for: key, range: range).wrappedValue)")
+                        .font(.system(size: 13, weight: .semibold))
+                }
             }
+        } else {
+            Text("Invalid integer flag configuration")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.stateError.color)
         }
     }
 

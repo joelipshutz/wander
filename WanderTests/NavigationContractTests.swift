@@ -1621,7 +1621,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileSettings.contains("settings.flags.\\(key.rawValue)"))
         XCTAssertTrue(profileSettings.contains("booleanOverrideBinding(for: key)"))
         XCTAssertTrue(profileSettings.contains("integerFeatureFlagControl(for: key"))
-        XCTAssertTrue(profileSettings.contains("Reset all to remote values"))
+        XCTAssertTrue(profileSettings.contains("Reset all to defaults"))
         XCTAssertTrue(profileSettings.contains("Restart rec.me to apply these changes"))
         XCTAssertTrue(profileSettings.contains("backend.remoteFeatureFlag(.debugSettings"))
         XCTAssertTrue(profileSettings.contains("featureFlagOverrideStore.setOverride"))
@@ -1630,8 +1630,6 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(profileSettings.contains("@gmail.com"))
         XCTAssertTrue(root.contains("FirstVisitWalkthroughDebugReplayPolicy.resolve("))
         XCTAssertTrue(root.contains("debugReplay.shouldPreserveLocalJourney"))
-        XCTAssertTrue(root.contains("shouldRepairCompletedLocalJourney("))
-        XCTAssertTrue(root.contains("walkthroughs.hasCompletedPrimaryJourney"))
         XCTAssertTrue(root.contains("walkthroughDebugPreferences.clearReplayRequest"))
         XCTAssertFalse(root.contains("onNUXDebugSettingsChanged"))
         XCTAssertTrue(root.contains("@State private var placeProfileFloatingActionVariant"))
@@ -1640,6 +1638,19 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains(".environment("))
         XCTAssertTrue(root.contains("\\.placeProfileFloatingActionVariant"))
         XCTAssertTrue(root.contains("placeProfileFloatingActionVariant = .productionDefault"))
+        XCTAssertTrue(root.contains("walkthroughDebugPreferenceSnapshot.shouldStartReplay"))
+        let foregroundRefresh = try XCTUnwrap(
+            root
+                .components(separatedBy: "private func refreshWalkthroughFeatureFlagsAfterForeground()")
+                .last?
+                .components(separatedBy: "private func presentLaunchLessonIfAppropriate()")
+                .first
+        )
+        XCTAssertTrue(
+            foregroundRefresh.contains(
+                "placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant("
+            )
+        )
     }
 
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {

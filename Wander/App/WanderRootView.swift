@@ -327,7 +327,6 @@ struct WanderRootView: View {
     @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var walkthroughLaunchConfiguredUserIDs: Set<String> = []
-    @State private var restartedWalkthroughReplayUserIDs: Set<String> = []
     @State private var retiredWalkthroughUserIDs: Set<String> = []
     @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
     @State private var nativeTabItemControlsFrame: CGRect?
@@ -344,6 +343,7 @@ struct WanderRootView: View {
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
+    private let walkthroughDebugPreferenceSnapshot: FirstVisitWalkthroughDebugPreferenceSnapshot
     private let firstVisitWalkthroughEligibilityContext: FirstVisitWalkthroughEligibilityContext
     private let onFirstVisitWalkthroughCompleted: (String) -> Void
 
@@ -369,6 +369,7 @@ struct WanderRootView: View {
         self.analytics = analytics
         let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
         self.walkthroughDebugPreferences = walkthroughDebugPreferences
+        self.walkthroughDebugPreferenceSnapshot = walkthroughDebugPreferences.launchSnapshot()
         let firstVisitWalkthroughEligibilityContext = FirstVisitWalkthroughEligibilityContext(
             sourceUserID: initialSession?.userID,
             isEligible: isFirstVisitWalkthroughEligible
@@ -695,9 +696,7 @@ struct WanderRootView: View {
             placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant(
                 for: userID
             )
-            if backend.featureFlag(.firstVisitNUX, for: userID) == nil {
-                configureWalkthroughsForCurrentUser()
-            }
+            configureWalkthroughsForCurrentUser()
             await backend.refreshFeatureFlags(for: userID)
             guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
             placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant(
@@ -1592,18 +1591,23 @@ struct WanderRootView: View {
         // still need their own stale checkpoints cleared, never the previous
         // account's or the coordinator's placeholder account.
         walkthroughs.setUserID(userID)
+        let hasLocalReplayRequest = walkthroughDebugPreferenceSnapshot.isReplayRequested(
+            for: userID
+        )
+        let hasLaunchDeviceNUXOverride = backend.deviceFeatureFlagOverride(
+            .firstVisitNUX,
+            for: userID
+        ) != nil
         let isDebugSettingsEntitled = DebugSettingsAccessPolicy.isEntitled(
             serverFlag: backend.remoteFeatureFlag(.debugSettings, for: userID)?.isEnabled
-        )
+        ) || hasLocalReplayRequest || hasLaunchDeviceNUXOverride
         let isFeatureFlagResolutionPending = backend.featureFlagResolution
             .isPending(for: userID)
         let debugNUXOverride = isDebugSettingsEntitled
             ? backend.deviceFeatureFlagOverride(.firstVisitNUX, for: userID)?.booleanValue
             : nil
         let debugReplay = FirstVisitWalkthroughDebugReplayPolicy.resolve(
-            hasLocalReplayRequest: walkthroughDebugPreferences.isReplayRequested(
-                for: userID
-            ),
+            hasLocalReplayRequest: hasLocalReplayRequest,
             isDebugSettingsEntitled: isDebugSettingsEntitled,
             isFeatureFlagResolutionPending: isFeatureFlagResolutionPending
         )
@@ -1669,17 +1673,6 @@ struct WanderRootView: View {
             return
         }
 
-        // The prior launch race could mark a freshly queued replay complete
-        // before tester entitlement arrived. Repair only that completed state;
-        // an in-progress replay keeps its persisted checkpoint across relaunches.
-        if FirstVisitWalkthroughDebugReplayPolicy.shouldRepairCompletedLocalJourney(
-            debugReplay,
-            hasCompletedPrimaryJourney: walkthroughs.hasCompletedPrimaryJourney
-        ),
-           restartedWalkthroughReplayUserIDs.insert(userID).inserted {
-            walkthroughs.resetCurrentUser()
-        }
-
         let forcedWalkthroughTarget: WalkthroughTargetID? = {
             guard let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") else {
                 return nil
@@ -1691,7 +1684,10 @@ struct WanderRootView: View {
         let shouldApplyLaunchConfiguration = !walkthroughLaunchConfiguredUserIDs.contains(userID)
         if shouldApplyLaunchConfiguration {
             walkthroughLaunchConfiguredUserIDs.insert(userID)
-            if let forcedWalkthroughTarget {
+            if walkthroughDebugPreferenceSnapshot.shouldStartReplay(for: userID) {
+                walkthroughs.resetCurrentUser()
+                walkthroughDebugPreferences.markReplayStarted(for: userID)
+            } else if let forcedWalkthroughTarget {
                 walkthroughs.prepareDebugReplay(at: forcedWalkthroughTarget)
             } else if launchArguments.contains("-WanderResetWalkthroughs") {
                 walkthroughs.resetCurrentUser()
@@ -1758,6 +1754,9 @@ struct WanderRootView: View {
         walkthroughFeatureFlagRefreshTask = Task { @MainActor in
             await backend.refreshFeatureFlags(for: userID)
             guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
+            placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant(
+                for: userID
+            )
             configureWalkthroughsForCurrentUser()
             walkthroughFeatureFlagRefreshTask = nil
         }

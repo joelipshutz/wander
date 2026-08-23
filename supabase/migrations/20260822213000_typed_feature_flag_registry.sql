@@ -10,11 +10,6 @@ alter table public.feature_flags
 alter table public.feature_flags
   add constraint feature_flags_value_type_check
     check (value_type in ('boolean', 'integer')),
-  add constraint feature_flags_typed_value_check
-    check (
-      (value_type = 'boolean' and integer_value is null)
-      or (value_type = 'integer' and integer_value is not null)
-    ),
   add constraint feature_flags_registered_key_check
     check (
       key in (
@@ -25,11 +20,29 @@ alter table public.feature_flags
         'place_profile_action_variant'
       )
     ),
-  add constraint feature_flags_integer_range_check
+  add constraint feature_flags_key_value_contract_check
     check (
-      key <> 'place_profile_action_variant'
+      key not in (
+        'first_visit_nux',
+        'debug_settings',
+        'place_profile_save_tray_v1',
+        'semantic_place_search_v1',
+        'place_profile_action_variant'
+      )
       or (
-        value_type = 'integer'
+        key in (
+          'first_visit_nux',
+          'debug_settings',
+          'place_profile_save_tray_v1',
+          'semantic_place_search_v1'
+        )
+        and value_type = 'boolean'
+        and integer_value is null
+      )
+      or (
+        key = 'place_profile_action_variant'
+        and value_type = 'integer'
+        and integer_value is not null
         and integer_value between 1 and 5
       )
     );
