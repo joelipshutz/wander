@@ -124,6 +124,8 @@ struct WanderApp: App {
             #if DEBUG
             if let streakMockupPage = SaveStreakMockupPage.resolved() {
                 SaveStreakMockupRoot(page: streakMockupPage)
+            } else if let wannaGoWithMockupPage = WannaGoWithMockupPage.resolved() {
+                WannaGoWithMockupRoot(page: wannaGoWithMockupPage)
             } else if let futureDateMockupPage = FutureDateSaveMockupPage.resolved() {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
             } else if let inviteMockupPage = InviteMockupPage.resolved() {
