@@ -7,7 +7,6 @@ enum WannaGoWithMockupPage: String, CaseIterable {
     case people
     case feed
     case invitation
-    case map
     case checkIn
     case plan
 
@@ -55,8 +54,6 @@ private struct WannaGoWithMockupDestination: View {
             WannaGoWithFeedPrototype()
         case .invitation:
             WannaGoWithInvitationPrototype()
-        case .map:
-            WannaGoWithMapPrototype()
         case .checkIn:
             WannaGoWithCheckInPrototype()
         case .plan:
@@ -132,7 +129,6 @@ private extension WannaGoWithMockupPage {
         case .people: "Choose people"
         case .feed: "Feed visibility"
         case .invitation: "Invitation response"
-        case .map: "Map treatment"
         case .checkIn: "Repeat check-in"
         case .plan: "Manage a group plan"
         }
@@ -145,7 +141,6 @@ private extension WannaGoWithMockupPage {
         case .people: "Multiple independent invitees"
         case .feed: "Shared statement versus private activity"
         case .invitation: "Accept creates your own Wanna"
-        case .map: "Been + Wanna with an additive plan halo"
         case .checkIn: "Save first, then Keep or Remove"
         case .plan: "Going, invited, declined, and date state"
         }
@@ -158,7 +153,6 @@ private extension WannaGoWithMockupPage {
         case .people: "person.2.fill"
         case .feed: "rectangle.stack.fill"
         case .invitation: "envelope.open.fill"
-        case .map: "map.fill"
         case .checkIn: "checkmark.circle.fill"
         case .plan: "calendar.badge.clock"
         }
@@ -619,151 +613,6 @@ private struct WannaGoWithInvitationPrototype: View {
             .navigationTitle("invitation")
             .navigationBarTitleDisplayMode(.inline)
         }
-    }
-}
-
-private struct WannaGoWithMapPrototype: View {
-    @State private var showsPlan = true
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                ZStack {
-                    WannaPrototypeMapBackground()
-                    VStack(spacing: WanderTheme.spacing2) {
-                        WannaPlannedMapPin(showsPlan: showsPlan)
-                        Text("Gnarwhal Coffee")
-                            .font(.system(size: 13, weight: .black))
-                            .padding(.horizontal, WanderTheme.spacing2)
-                            .padding(.vertical, WanderTheme.spacing1)
-                            .background(WanderTheme.surfaceRaised.color.opacity(0.94))
-                            .clipShape(Capsule())
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                    Toggle("Show active plan", isOn: $showsPlan)
-                        .font(.system(size: 15, weight: .bold))
-                        .tint(WanderTheme.terracotta.color)
-
-                    HStack(spacing: WanderTheme.spacing4) {
-                        WannaMapLegendSample(style: .solid, label: "Been")
-                        WannaMapLegendSample(style: .dashed, label: "Wanna")
-                        WannaMapLegendSample(style: .halo, label: "Plan")
-                    }
-
-                    Text("The terracotta ring preserves Been + Wanna. The sun halo and people badge add planning without creating a third status color.")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WanderTheme.textMuted.color)
-                }
-                .padding(WanderTheme.spacing4)
-                .background(WanderTheme.surfaceBone.color)
-            }
-            .navigationTitle("map state")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-}
-
-private struct WannaPlannedMapPin: View {
-    let showsPlan: Bool
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            if showsPlan {
-                Circle()
-                    .stroke(WanderTheme.categorySun.color, lineWidth: 3)
-                    .frame(width: 58, height: 58)
-                    .shadow(color: WanderTheme.categorySun.color.opacity(0.35), radius: 6)
-            }
-
-            ZStack {
-                Circle()
-                    .fill(WanderTheme.surfaceRaised.color)
-                    .frame(width: 42, height: 42)
-                Text("☕️")
-                    .font(.system(size: 24))
-                MapPinOutlineStroke(
-                    outline: MapPinOutline(
-                        ownership: .currentUser,
-                        status: .been,
-                        secondaryStatus: .wannaGo
-                    ),
-                    lineWidth: 3
-                )
-                .frame(width: 42, height: 42)
-            }
-            .frame(width: 58, height: 58)
-
-            if showsPlan {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(WanderTheme.textInk.color)
-                    .frame(width: 22, height: 22)
-                    .background(WanderTheme.categorySun.color)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(WanderTheme.surfaceRaised.color, lineWidth: 2))
-                    .offset(x: 4, y: -4)
-            }
-        }
-        .frame(width: 66, height: 66)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            showsPlan
-                ? "Gnarwhal Coffee, been and wanna go, planned with 2 people on August 28"
-                : "Gnarwhal Coffee, been and wanna go"
-        )
-    }
-}
-
-private enum WannaMapLegendStyle: Equatable {
-    case solid
-    case dashed
-    case halo
-}
-
-private struct WannaMapLegendSample: View {
-    let style: WannaMapLegendStyle
-    let label: String
-
-    var body: some View {
-        HStack(spacing: WanderTheme.spacing1) {
-            Circle()
-                .stroke(
-                    style == .halo ? WanderTheme.categorySun.color : WanderTheme.terracotta.color,
-                    style: StrokeStyle(
-                        lineWidth: 2,
-                        dash: style == .dashed ? [2, 3] : []
-                    )
-                )
-                .frame(width: 16, height: 16)
-            Text(label)
-                .font(.system(size: 12, weight: .bold))
-        }
-    }
-}
-
-private struct WannaPrototypeMapBackground: View {
-    var body: some View {
-        Canvas { context, size in
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .color(WanderTheme.surfaceSand.color)
-            )
-            var roads = Path()
-            for fraction in stride(from: 0.15, through: 0.9, by: 0.18) {
-                roads.move(to: CGPoint(x: 0, y: size.height * fraction))
-                roads.addLine(to: CGPoint(x: size.width, y: size.height * (fraction - 0.08)))
-            }
-            for fraction in stride(from: 0.12, through: 0.9, by: 0.22) {
-                roads.move(to: CGPoint(x: size.width * fraction, y: 0))
-                roads.addLine(to: CGPoint(x: size.width * (fraction + 0.08), y: size.height))
-            }
-            context.stroke(roads, with: .color(Color.white.opacity(0.72)), lineWidth: 7)
-        }
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
     }
 }
 

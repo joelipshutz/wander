@@ -14,7 +14,7 @@ Wanna Go With adds an optional planning layer to an ordinary Wanna:
 
 > I wanna go to Gnarwhal Coffee with Joe and Maia on August 28.
 
-People and date are optional. The ordinary Wanna flow stays lightweight. Planning controls live in a progressive disclosure and reuse the existing friend picker, invitation inbox, notification, visibility, date, reminder, Feed ticket, and map-pin systems.
+People and date are optional. The ordinary Wanna flow stays lightweight. Planning controls live in a progressive disclosure and reuse the existing friend picker, invitation inbox, notification, visibility, date, reminder, Feed ticket, and place-detail systems.
 
 ## What already exists
 
@@ -53,7 +53,7 @@ Invitation inbox
 
 Active plan
   ├─ Feed / Activity ticket
-  ├─ Additive map halo
+  ├─ Existing Wanna map state
   └─ Plan detail → participants, date, sharing, cancel/leave
 
 Repeat check-in while Wanna is active
@@ -68,7 +68,7 @@ Repeat check-in while Wanna is active
 4. **One plan, independent invitations.** A group plan coordinates people without merging their personal records.
 5. **Ordinary Wanna remains ordinary.** No required invitee, date, visibility decision, or RSVP step is added to the base case.
 6. **Social by default, private when chosen.** A normal plan is a statement to the creator's allowed Feed audience. A Private plan stays among its participants.
-7. **Stealth fails closed.** Stealth users and stealth saves never leak through plan tiles, participant counts, notifications, map decoration, or attribution.
+7. **Stealth fails closed.** Stealth users and stealth saves never leak through plan tiles, participant counts, notifications, place details, or attribution.
 
 ## Vocabulary
 
@@ -210,7 +210,7 @@ Accepting is one tap. The new personal Wanna is created with blank personal fiel
 
 ## Map
 
-Do not introduce a third place status color. Preserve the existing owner/status outline:
+Do not introduce any plan-specific map treatment. Preserve the existing owner/status outline:
 
 - owner remains terracotta;
 - social remains sky;
@@ -218,16 +218,7 @@ Do not introduce a third place status color. Preserve the existing owner/status 
 - Wanna remains dashed;
 - a place may render both Been and Wanna relationship segments.
 
-An active plan adds a separate, accessible planning adornment:
-
-- thin sun/gold outer halo;
-- small `person.2.fill` badge for participants;
-- optional compact date badge only on selection, never at map overview density;
-- accessibility label includes “planned with 2 people” and the date when visible.
-
-The halo is additive, so color is not the only signal and plan state never overwrites preservation of Been/Wanna status. Private plans render only for participants. Public plans render only when the viewer may see the underlying plan event.
-
-Clusters keep the existing ownership/status breakdown. A small planning glyph may appear only when at least one visible member place has an active plan; the cluster never exposes hidden participant counts.
+Accepting an invitation creates the participant's own Wanna, so the ordinary Wanna pin already represents the useful map state. A plan does not change pins, clusters, legends, badges, or map accessibility labels. Planning details appear after entering the existing place, Feed/activity, invitation, or plan-detail surfaces.
 
 ## Feed and activity
 
@@ -344,9 +335,8 @@ The deterministic debug prototype must include:
 2. Multi-person friend picker with selected, pending, and stealth-aware states.
 3. Public and private Feed/activity tickets.
 4. Invitation inbox card and accepted state.
-5. Map pin with additive plan halo, including Been + active Wanna.
-6. Post-repeat-check-in Keep/Remove speed bump.
-7. Plan detail/management with Going, Invited, and declined/left disclosure.
+5. Post-repeat-check-in Keep/Remove speed bump.
+6. Plan detail/management with Going, Invited, and declined/left disclosure.
 
 Mockups must be interactive enough to exercise selection, privacy, accept/decline, and keep/remove decisions without touching production backend data.
 
@@ -373,9 +363,9 @@ The production slice that follows must include Supabase migrations, RLS/RPC regr
 - Date is optional and may be added or changed later.
 - Share on Feed and Private are explicit, understandable choices.
 - Stealth and block rules fail closed with no identity or count leakage.
-- Map treatment does not replace existing owner/Been/Wanna encoding.
+- Plans do not add or alter map treatment; accepted participants appear through the existing Wanna encoding.
 - Public Feed never exposes pending or stealth invitees.
-- Private plans remain visible to direct participants in inbox/activity/map surfaces.
+- Private plans remain visible to direct participants in inbox, activity, place-detail, and plan-detail surfaces.
 - Mockups pass Dynamic Type and 44-point tap-target checks and are testable in Xcode via deterministic launch arguments.
 
 ## Interaction state matrix
@@ -386,7 +376,7 @@ The production slice that follows must include Supabase migrations, RLS/RPC regr
 | People picker | Skeleton rows only if remote graph is unavailable | “No people found” with search reset | Retry graph load | Selected shelf updates immediately | Stealth contacts are selectable but clearly private-only |
 | Invitation | Existing inbox loading treatment | Removed/cancelled invite resolves to activity copy | Accept/decline remains retryable | Accepted creates a personal Wanna atomically | Stale accept loses to block/cancel and explains why |
 | Feed / activity | Existing feed placeholders | No new empty state | Existing retry treatment | Immutable plan ticket | Public projection omits pending and stealth people without leaking counts |
-| Map | Existing map loading | No visible plan means ordinary pin | Existing map error | Additive halo + participant badge | Private/stealth filtering happens before clustering |
+| Map | Existing map loading | Existing empty behavior | Existing map error | Existing Been/Wanna pin projection | Plans add no pin, badge, legend, cluster, or accessibility treatment |
 | Repeat check-in | Check-in saves before prompt | No active Wanna means no prompt | Failed check-in never shows prompt | Keep or Remove applies after save | Dismiss/network interruption defaults to Keep |
 | Plan detail | Existing detail loading | Cancelled plan becomes read-only activity | Per-action retry, no optimistic identity leaks | Participant/date/sharing changes reconcile | Mixed accepted, pending, declined, left, and stealth states remain independent |
 
@@ -398,18 +388,17 @@ The production slice that follows must include Supabase migrations, RLS/RPC regr
 | 2. Coordination | In More Options, Ryan selects Joe and Maia, optionally adds Aug 28, and chooses Feed or Private. | A Wanna becomes a plan only when the user asks for it. |
 | 3. Statement | Saving creates Ryan's immutable Wanna and one shared plan. A Feed plan appears only when sharing is allowed. | History and current state are separate; privacy is explicit. |
 | 4. Independent replies | Joe accepts and gets his own Wanna. Maia remains pending or declines without affecting Joe or Ryan. | One plan can contain independent people and place relationships. |
-| 5. Retrieval | Participants see the plan halo on Gnarwhal while Been and Wanna remain legible underneath. | Planning is additive, not a new place status. |
+| 5. Retrieval | Participants find Gnarwhal through the ordinary Wanna map state, then open the place or plan detail for coordination. | The plan creates no redundant map state. |
 | 6. Visit | Ryan checks in. Only Ryan's active Wanna resolves; the plan and other people remain untouched. | Attendance is personal until a later explicit reconciliation flow exists. |
 
 ## Responsive and accessibility behavior
 
 - iPhone-first vertical flow; selected people wrap or horizontally scroll rather than compressing names and controls.
-- All primary rows and actions preserve a 44-point minimum target, including privacy choices, RSVP actions, and the map legend toggle.
+- All primary rows and actions preserve a 44-point minimum target, including privacy choices and RSVP actions.
 - Dynamic Type may turn horizontal button pairs into vertical full-width actions; no important copy is truncated to one line.
-- The map halo is paired with a `person.2.fill` badge and an accessibility label, so color is never the sole plan signal.
-- VoiceOver announces place, Been/Wanna relationship, plan privacy, visible participant state, and optional date in that order.
+- VoiceOver keeps the existing map relationship announcement. Plan surfaces announce place, privacy, visible participant state, and optional date in that order.
 - Reduce Motion removes decorative transitions but preserves selection and save feedback.
-- Private and stealth filtering occurs before UI counts, labels, map clusters, and notification copy are constructed.
+- Private and stealth filtering occurs before UI counts, labels, and notification copy are constructed.
 
 ## Implementation Tasks
 
@@ -417,7 +406,7 @@ The production slice that follows must include Supabase migrations, RLS/RPC regr
 
 - [x] T1. Write the event/state, privacy, invitation, surface, and failure contracts in this specification.
 - [x] T2. Add pure relationship, check-in-resolution, and participant-visibility projections with unit coverage.
-- [x] T3. Add deterministic DEBUG SwiftUI pages for save, people, Feed, invitation, map, check-in, and plan management.
+- [x] T3. Add deterministic DEBUG SwiftUI pages for save, people, Feed, invitation, check-in, and plan management.
 - [x] T4. Compile, run focused/full tests, and capture the current and smaller-phone simulator screenshots.
 - [x] T5. Push the branch, open the isolated worktree in Xcode, and hand off exact launch arguments and a tester checklist.
 
@@ -434,7 +423,7 @@ The production slice that follows must include Supabase migrations, RLS/RPC regr
 - Simulator build passed on iOS 18.6 with the iPhone 16 Plus and iPhone 16e active architectures.
 - All 11 focused `WannaPlanModelsTests` passed, including launch argument/environment resolution, Been + Wanna projection, first/repeat check-in behavior, independent participant visibility, Feed filtering, and stealth/private coercion.
 - The repository-wide suite ran 1,461 tests: 1,448 passed, 1 skipped, and 12 failed. The failures are outside REC-357: three stale source-contract assertions in untouched Map/Profile code and nine existing Map/Onboarding UI failures. No failure references the new model, mockup, app launch branch, or tests.
-- Visual QA covered save, Feed, invitation, plan management, and the additive map treatment on iPhone 16 Plus, plus save and map on iPhone 16e.
+- Visual QA covered save, Feed, invitation, and plan management on iPhone 16 Plus, plus the save flow on iPhone 16e. The proposed plan-specific map treatment was removed after review because the existing Wanna state is sufficient.
 - Small-phone QA found and fixed a large-Dynamic-Type overflow in the compact system date picker. The final design uses a stable responsive date summary row that opens the full calendar in a sheet; the place subtitle now wraps instead of truncating.
 
 ## GSTACK REVIEW REPORT
@@ -447,7 +436,7 @@ Design review date: 2026-08-22
 | Interaction states | 9/10 | Loading, empty, error, success, partial delivery, stale invitation, cancellation, and safe-dismiss behavior are specified. |
 | Journey coherence | 9/10 | Creation, invitation, acceptance, retrieval, and personal check-in form one end-to-end story. |
 | Visual restraint / AI-slop resistance | 9/10 | Existing rec.me tickets, controls, colors, and map grammar are reused; no dashboard/card-grid design direction was introduced. |
-| Design-system fidelity | 10/10 | SwiftUI mockups use the existing design tokens and components; planning is an additive sun/gold adornment. |
+| Design-system fidelity | 10/10 | SwiftUI mockups use the existing design tokens and components; the map remains unchanged. |
 | Responsive / accessibility | 9/10 | Small-phone, Dynamic Type, tap target, non-color encoding, VoiceOver, and Reduce Motion rules are explicit. |
 
 Initial draft: 7/10. Final design-spec review: 9/10.

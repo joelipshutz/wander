@@ -1,6 +1,6 @@
 # Decisions
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Durable product and engineering decisions for rec.me, formerly Wander. See the product spec and engineering plan for fuller rationale.
 
@@ -15,7 +15,7 @@ Durable product and engineering decisions for rec.me, formerly Wander. See the p
 | Cross-category places | Locked | Not restaurant-only; coffee, hikes, bars, parks, restaurants, etc. |
 | No live location | Locked | Current location is for nearby place resolution, not broadcasting. |
 | No gamified check-ins | Locked | Avoid mayorships, streaks, leaderboards, and public check-in framing. |
-| Event-based Wanna and Wanna Go With | Locked for REC-357 prototype; 2026-08-22 | A Wanna is an immutable moment plus an active-state input, so a user may have visit history and an active Wanna at the same place. Multiple Wanna moments are allowed. A first check-in fulfills active Wannas; a repeat check-in with active Wanna saves first, then asks whether to keep the place in Wanna. Wanna Go With adds one optional-date plan with multiple independent invitations. Acceptance creates the recipient's own Wanna with blank personal metadata. One participant's check-in affects only their Wanna. Plans default to the creator's allowed Feed audience but offer an explicit Private participant-only option; stealth forces private behavior and never leaks a participant identity or count. A later “Did you end up going with Ryan?” follow-up is deferred. |
+| Event-based Wanna and Wanna Go With | Locked for REC-357 prototype; revised 2026-08-23 | A Wanna is an immutable moment plus an active-state input, so a user may have visit history and an active Wanna at the same place. Multiple Wanna moments are allowed. A first check-in fulfills active Wannas; a repeat check-in with active Wanna saves first, then asks whether to keep the place in Wanna. Wanna Go With adds one optional-date plan with multiple independent invitations. Acceptance creates the recipient's own Wanna with blank personal metadata. One participant's check-in affects only their Wanna. Plans default to the creator's allowed Feed audience but offer an explicit Private participant-only option; stealth forces private behavior and never leaks a participant identity or count. Plans add no special map treatment: the accepted participant's ordinary Wanna already supplies the correct map state. A later “Did you end up going with Ryan?” follow-up is deferred. |
 | Four bottom tabs | Locked | Map, Add, Discover, Profile. |
 | Settings from Profile gear | Locked | Do not add Settings as a fifth tab. |
 | Profile merges self memory and social profile | Locked | Owner and other-user profile states share the same conceptual surface. |

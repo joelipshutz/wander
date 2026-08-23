@@ -5,10 +5,10 @@ final class WannaPlanModelsTests: XCTestCase {
     func testMockupLaunchArgumentResolvesRequestedPage() {
         XCTAssertEqual(
             WannaGoWithMockupPage.resolved(
-                from: ["Wander", "-WanderWannaGoWithMockup", "map"],
+                from: ["Wander", "-WanderWannaGoWithMockup", "plan"],
                 environment: [:]
             ),
-            .map
+            .plan
         )
     }
 
