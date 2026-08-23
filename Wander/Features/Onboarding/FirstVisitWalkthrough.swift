@@ -538,47 +538,97 @@ enum FirstVisitWalkthroughFeatureFlag {
 
 struct FirstVisitWalkthroughDebugPreferences {
     let defaults: UserDefaults
+    private var featureFlagOverrides: FeatureFlagOverrideStore {
+        FeatureFlagOverrideStore(defaults: defaults)
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
     func nuxOverride(for userID: String) -> Bool? {
-        let key = enabledKey(userID: userID)
-        guard defaults.object(forKey: key) != nil else { return nil }
-        return defaults.bool(forKey: key)
+        featureFlagOverrides.override(for: .firstVisitNUX, userID: userID)?.booleanValue
     }
 
     func isReplayRequested(for userID: String) -> Bool {
-        defaults.bool(forKey: replayKey(userID: userID))
+        replayRequestToken(for: userID) != nil
     }
 
-    @MainActor
-    func setNUXEnabled(
-        _ isEnabled: Bool,
-        for userID: String,
-        launchRegistry: FirstVisitWalkthroughLaunchRegistry = .process
-    ) {
-        defaults.set(isEnabled, forKey: enabledKey(userID: userID))
+    func setNUXEnabled(_ isEnabled: Bool, for userID: String) {
+        featureFlagOverrides.setOverride(.boolean(isEnabled), for: .firstVisitNUX, userID: userID)
         if isEnabled {
-            FirstVisitWalkthroughStore(defaults: defaults).reset(for: userID)
-            launchRegistry.reset(for: userID)
-            defaults.set(true, forKey: replayKey(userID: userID))
+            defaults.set(UUID().uuidString, forKey: Self.replayKey(userID: userID))
+            defaults.removeObject(forKey: Self.consumedReplayKey(userID: userID))
         } else {
             clearReplayRequest(for: userID)
         }
     }
 
+    func launchSnapshot() -> FirstVisitWalkthroughDebugPreferenceSnapshot {
+        FirstVisitWalkthroughDebugPreferenceSnapshot(values: defaults.dictionaryRepresentation())
+    }
+
+    func markReplayStarted(for userID: String) {
+        guard let token = replayRequestToken(for: userID) else { return }
+        defaults.set(token, forKey: Self.consumedReplayKey(userID: userID))
+    }
+
     func clearReplayRequest(for userID: String) {
-        defaults.removeObject(forKey: replayKey(userID: userID))
+        defaults.removeObject(forKey: Self.replayKey(userID: userID))
+        defaults.removeObject(forKey: Self.consumedReplayKey(userID: userID))
     }
 
-    private func enabledKey(userID: String) -> String {
-        "wander.debugSettings.\(userID).firstVisitNUX.enabled"
+    func clearNUXOverride(for userID: String) {
+        featureFlagOverrides.clearOverride(for: .firstVisitNUX, userID: userID)
+        clearReplayRequest(for: userID)
     }
 
-    private func replayKey(userID: String) -> String {
+    private func replayRequestToken(for userID: String) -> String? {
+        Self.decodeReplayRequestToken(defaults.object(forKey: Self.replayKey(userID: userID)))
+    }
+
+    fileprivate static func decodeReplayRequestToken(_ object: Any?) -> String? {
+        if let token = object as? String, !token.isEmpty {
+            return token
+        }
+        if let legacyValue = object as? NSNumber, legacyValue.boolValue {
+            return "legacy"
+        }
+        return nil
+    }
+
+    fileprivate static func replayKey(userID: String) -> String {
         "wander.debugSettings.\(userID).firstVisitNUX.replayRequested"
+    }
+
+    fileprivate static func consumedReplayKey(userID: String) -> String {
+        "wander.debugSettings.\(userID).firstVisitNUX.replayStarted"
+    }
+}
+
+struct FirstVisitWalkthroughDebugPreferenceSnapshot {
+    private let values: [String: Any]
+
+    init(values: [String: Any] = [:]) {
+        self.values = values
+    }
+
+    func isReplayRequested(for userID: String) -> Bool {
+        replayRequestToken(for: userID) != nil
+    }
+
+    func shouldStartReplay(for userID: String) -> Bool {
+        guard let requested = replayRequestToken(for: userID) else { return false }
+        let consumed = values[
+            FirstVisitWalkthroughDebugPreferences.consumedReplayKey(userID: userID)
+        ] as? String
+        return consumed != requested
+    }
+
+    private func replayRequestToken(for userID: String) -> String? {
+        FirstVisitWalkthroughDebugPreferences.decodeReplayRequestToken(
+            values[FirstVisitWalkthroughDebugPreferences.replayKey(userID: userID)]
+        )
     }
 }
 
