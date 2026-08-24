@@ -382,6 +382,20 @@ final class WanderStore: ObservableObject {
         let listLookup: VisiblePlaceListLookup
     }
 
+    private struct ListSuggestionAttributeIndex {
+        var categories: Set<String> = []
+        var subcategories: Set<String> = []
+        var cuisines: Set<String> = []
+        var localities: Set<String> = []
+        var regions: Set<String> = []
+        var tagsAndLabels: Set<String> = []
+    }
+
+    private struct ListSuggestionMatch {
+        let reasonValues: [String]
+        let relevanceScore: Double
+    }
+
     private struct VisitReconciliationIndex {
         private let canonicalUserPlaceIDByReferenceID: [String: String]
         private var visitsByCanonicalUserPlaceID: [String: [LocalPlaceVisit]]
@@ -2184,58 +2198,33 @@ final class WanderStore: ObservableObject {
 
     func listSuggestions(for list: LocalPlaceList, limit: Int = 5) -> [ListPlaceSuggestion] {
         let existingPlaces = visiblePlaces(in: list)
-        let contextText = ([list.name, list.description] + existingPlaces.flatMap { visiblePlace in
-            [
-                visiblePlace.place.category,
-                visiblePlace.place.locality,
-                visiblePlace.place.region,
-                visiblePlace.userPlace.note
-            ]
-            .compactMap { $0 }
-        })
-        .joined(separator: " ")
-        .lowercased()
-        let existingCategories = Set(existingPlaces.map(\.effectiveCategory))
-        let existingLocalities = Set(existingPlaces.compactMap { $0.place.locality?.lowercased() })
-        let existingTags = Set(existingPlaces.flatMap { tagTokens(for: $0) })
+        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
         let candidates = listSuggestionCandidates(for: list)
+        let matchedCandidates = candidates.compactMap { visiblePlace -> (VisiblePlace, ListSuggestionMatch)? in
+            guard let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex) else {
+                return nil
+            }
+            return (visiblePlace, match)
+        }
         let focusedCategory = focusedListSuggestionCategory(
             in: existingPlaces,
-            whenAvailableAmong: candidates
+            whenAvailableAmong: matchedCandidates.map(\.0)
         )
 
-        let suggestions = candidates
-            .filter { focusedCategory == nil || $0.effectiveCategory == focusedCategory }
-            .map { visiblePlace in
-                var score = 0.0
-                var reasons: [String] = []
-                let category = visiblePlace.effectiveCategory
-                if existingCategories.contains(category)
-                    || contextText.contains(visiblePlace.place.category.lowercased()) {
-                    score += 4
-                    reasons.append(visiblePlace.effectiveCompactType)
-                }
-                if let locality = visiblePlace.place.locality?.lowercased(),
-                   existingLocalities.contains(locality) || contextText.contains(locality) {
-                    score += 2
-                    reasons.append(visiblePlace.place.locality ?? locality)
-                }
-                let overlap = existingTags.intersection(tagTokens(for: visiblePlace))
-                if !overlap.isEmpty {
-                    score += Double(min(overlap.count, 3)) * 1.5
-                    reasons.append(overlap.sorted().prefix(2).joined(separator: ", "))
-                }
+        let suggestions = matchedCandidates
+            .filter { focusedCategory == nil || $0.0.effectiveCategory == focusedCategory }
+            .map { visiblePlace, match in
+                var score = match.relevanceScore
                 if let rating = visiblePlace.recommendedScore {
                     score += max(0, rating - 3)
                 }
                 if visiblePlace.owner.id == currentUser.id {
                     score += 1
                 }
-                let rawReason = reasons.isEmpty ? "Similar to this list" : "Fits: \(reasons.prefix(2).joined(separator: " + "))"
+                let rawReason = "Fits: \(match.reasonValues.prefix(2).joined(separator: " + "))"
                 let reason = ListSuggestionReasonFormatter.displayText(rawReason, for: visiblePlace)
                 return ListPlaceSuggestion(visiblePlace: visiblePlace, reason: reason, score: score)
             }
-            .filter { $0.score > 0 }
             .sorted {
                 if $0.score == $1.score {
                     return $0.visiblePlace.place.canonicalName < $1.visiblePlace.place.canonicalName
@@ -2256,20 +2245,28 @@ final class WanderStore: ObservableObject {
             let response = try await backend.listSuggestions(payload: listSuggestionPayload(for: list, limit: limit))
             let existingPlaces = visiblePlaces(in: list)
             let candidates = listSuggestionCandidates(for: list)
+            let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+            let relevantCandidates = candidates.filter {
+                listSuggestionMatch(for: $0, against: attributeIndex) != nil
+            }
             let focusedCategory = focusedListSuggestionCategory(
                 in: existingPlaces,
-                whenAvailableAmong: candidates
+                whenAvailableAmong: relevantCandidates
             )
-            let candidatesByID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
+            let candidatesByID = Dictionary(uniqueKeysWithValues: relevantCandidates.map { ($0.id, $0) })
             let remoteSuggestions = response.suggestions.compactMap { item -> ListPlaceSuggestion? in
                 guard let visiblePlace = candidatesByID[item.visiblePlaceID],
+                      let match = listSuggestionMatch(for: visiblePlace, against: attributeIndex),
                       focusedCategory == nil || visiblePlace.effectiveCategory == focusedCategory,
                       !hasPlace(visiblePlace, in: list),
                       !wasRemovedFromList(visiblePlace.place, list: list)
                 else { return nil }
                 return ListPlaceSuggestion(
                     visiblePlace: visiblePlace,
-                    reason: ListSuggestionReasonFormatter.displayText(item.reason, for: visiblePlace),
+                    reason: ListSuggestionReasonFormatter.displayText(
+                        "Fits: \(match.reasonValues.prefix(2).joined(separator: " + "))",
+                        for: visiblePlace
+                    ),
                     score: item.score ?? 0
                 )
             }
@@ -3408,11 +3405,15 @@ final class WanderStore: ObservableObject {
     private func listSuggestionPayload(for list: LocalPlaceList, limit: Int) -> ListSuggestionPayload {
         let existingPlaces = visiblePlaces(in: list)
         let candidates = listSuggestionCandidates(for: list)
+        let attributeIndex = listSuggestionAttributeIndex(for: existingPlaces)
+        let relevantCandidates = candidates.filter {
+            listSuggestionMatch(for: $0, against: attributeIndex) != nil
+        }
         let focusedCategory = focusedListSuggestionCategory(
             in: existingPlaces,
-            whenAvailableAmong: candidates
+            whenAvailableAmong: relevantCandidates
         )
-        let focusedCandidates = candidates
+        let focusedCandidates = relevantCandidates
             .filter { focusedCategory == nil || $0.effectiveCategory == focusedCategory }
             .sorted { lhs, rhs in
                 if lhs.owner.id == currentUser.id && rhs.owner.id != currentUser.id { return true }
@@ -3428,6 +3429,112 @@ final class WanderStore: ObservableObject {
             candidatePlaces: focusedCandidates.map(listSuggestionPlacePayload),
             limit: limit
         )
+    }
+
+    private func listSuggestionAttributeIndex(
+        for existingPlaces: [VisiblePlace]
+    ) -> ListSuggestionAttributeIndex {
+        existingPlaces.reduce(into: ListSuggestionAttributeIndex()) { index, visiblePlace in
+            if let category = normalizedListSuggestionValue(visiblePlace.effectiveCategory) {
+                index.categories.insert(category)
+            }
+            if let subcategory = normalizedListSuggestionValue(visiblePlace.effectiveSubcategory) {
+                index.subcategories.insert(subcategory)
+            }
+            if let cuisine = normalizedListSuggestionValue(visiblePlace.restaurantCuisine) {
+                index.cuisines.insert(cuisine)
+            }
+            if let locality = normalizedListSuggestionValue(visiblePlace.place.locality) {
+                index.localities.insert(locality)
+            }
+            if let region = normalizedListSuggestionValue(visiblePlace.place.region) {
+                index.regions.insert(region)
+            }
+            index.tagsAndLabels.formUnion(listSuggestionTagsAndLabels(for: visiblePlace).keys)
+        }
+    }
+
+    private func listSuggestionMatch(
+        for visiblePlace: VisiblePlace,
+        against index: ListSuggestionAttributeIndex
+    ) -> ListSuggestionMatch? {
+        var score = 0.0
+        var reasons: [String] = []
+        var normalizedReasons: Set<String> = []
+
+        func addReason(_ value: String?, score additionalScore: Double) {
+            guard let value,
+                  let normalizedValue = normalizedListSuggestionValue(value)
+            else { return }
+            score += additionalScore
+            if normalizedReasons.insert(normalizedValue).inserted {
+                reasons.append(value)
+            }
+        }
+
+        if let category = normalizedListSuggestionValue(visiblePlace.effectiveCategory),
+           index.categories.contains(category) {
+            addReason(visiblePlace.effectiveCompactType, score: 4)
+        }
+        if let subcategory = normalizedListSuggestionValue(visiblePlace.effectiveSubcategory),
+           index.subcategories.contains(subcategory) {
+            addReason(visiblePlace.effectiveSubcategory, score: 2)
+        }
+        if let cuisine = normalizedListSuggestionValue(visiblePlace.restaurantCuisine),
+           index.cuisines.contains(cuisine) {
+            addReason(visiblePlace.restaurantCuisine, score: 2)
+        }
+
+        let matchingTagsAndLabels = listSuggestionTagsAndLabels(for: visiblePlace)
+            .filter { index.tagsAndLabels.contains($0.key) }
+            .sorted { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }
+        for match in matchingTagsAndLabels.prefix(2) {
+            addReason(match.value, score: 1.5)
+        }
+
+        let matchesLocality = normalizedListSuggestionValue(visiblePlace.place.locality)
+            .map { index.localities.contains($0) } == true
+        if matchesLocality {
+            addReason(visiblePlace.place.locality, score: 3)
+        }
+        if !matchesLocality,
+           let region = normalizedListSuggestionValue(visiblePlace.place.region),
+           index.regions.contains(region) {
+            addReason(visiblePlace.place.region, score: 1)
+        }
+
+        guard !reasons.isEmpty else { return nil }
+        return ListSuggestionMatch(reasonValues: reasons, relevanceScore: score)
+    }
+
+    private func listSuggestionTagsAndLabels(for visiblePlace: VisiblePlace) -> [String: String] {
+        let eligibleValueTypes = Set(["multi_tag", "multi_select", "personal_label"])
+        let ineligibleGenericValues = Set(["yes", "no", "true", "false", "none", "other", "maybe", "n a"])
+        var valuesByNormalizedValue: [String: String] = [:]
+
+        for attribute in visiblePlace.attributes
+        where eligibleValueTypes.contains(attribute.valueType)
+            || attribute.questionKey == PlaceMemoryAttributeKeys.personalLabels {
+            for value in PlaceAttributeValuePresentation.strings(from: attribute.valueJSON) {
+                guard let normalizedValue = normalizedListSuggestionValue(value),
+                      !ineligibleGenericValues.contains(normalizedValue)
+                else { continue }
+                valuesByNormalizedValue[normalizedValue] = value
+            }
+        }
+
+        return valuesByNormalizedValue
+    }
+
+    private func normalizedListSuggestionValue(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return normalized.isEmpty ? nil : normalized
     }
 
     private func listSuggestionCandidates(for list: LocalPlaceList) -> [VisiblePlace] {
@@ -9994,28 +10101,6 @@ final class WanderStore: ObservableObject {
         else { return nil }
 
         return try? JSONDecoder().decode(String.self, from: data)
-    }
-
-    private func tagTokens(for visiblePlace: VisiblePlace) -> Set<String> {
-        let attributeText = attributes(for: visiblePlace.userPlace.id)
-            .map(\.valueJSON)
-            .joined(separator: " ")
-        let value = [
-            visiblePlace.place.category,
-            visiblePlace.place.locality,
-            visiblePlace.place.region,
-            visiblePlace.userPlace.note,
-            attributeText
-        ]
-            .compactMap { $0 }
-            .joined(separator: " ")
-            .lowercased()
-
-        return Set(
-            value
-                .components(separatedBy: CharacterSet.alphanumerics.inverted)
-                .filter { $0.count > 2 }
-        )
     }
 
     private func slug(_ value: String) -> String {

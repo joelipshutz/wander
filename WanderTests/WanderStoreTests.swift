@@ -8937,6 +8937,174 @@ final class WanderStoreTests: XCTestCase {
         }
     }
 
+    func testListSuggestionsRequireAtLeastOneSharedPlaceAttribute() throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "A mixed day",
+                description: "Places worth keeping together",
+                visibility: .followers
+            )
+        )
+
+        func save(
+            _ id: String,
+            name: String,
+            category: String,
+            locality: String,
+            ratingScore: Double? = nil,
+            attributes: [PlaceAttributeDraft] = []
+        ) -> SaveResult {
+            store.saveCandidate(
+                PlaceCandidate(
+                    id: id,
+                    name: name,
+                    category: category,
+                    locality: locality,
+                    region: locality == "Los Angeles" ? "CA" : "WA",
+                    country: "US",
+                    latitude: 34.04,
+                    longitude: -118.24,
+                    confidence: 0.95
+                ),
+                status: ratingScore == nil ? .wannaGo : .been,
+                visibility: .followers,
+                note: nil,
+                sourceType: .manual,
+                ratingScore: ratingScore,
+                attributes: attributes
+            )
+        }
+
+        let anchor = save(
+            "anchor_coffee",
+            name: "Anchor Coffee",
+            category: "coffee",
+            locality: "Los Angeles",
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                    valueType: "personal_label",
+                    stringValues: ["sunny patio"]
+                )
+            ]
+        )
+        XCTAssertEqual(store.addCurrentUserPlace(userPlaceID: anchor.userPlaceID, to: list).outcome, .added)
+
+        _ = save(
+            "category_match",
+            name: "Seattle Coffee",
+            category: "coffee",
+            locality: "Seattle"
+        )
+        _ = save(
+            "location_match",
+            name: "LA Design Museum",
+            category: "museum",
+            locality: "Los Angeles"
+        )
+        _ = save(
+            "label_match",
+            name: "Portland Garden",
+            category: "garden",
+            locality: "Portland",
+            attributes: [
+                PlaceAttributeDraft(
+                    questionKey: PlaceMemoryAttributeKeys.personalLabels,
+                    valueType: "personal_label",
+                    stringValues: ["sunny patio"]
+                )
+            ]
+        )
+        _ = save(
+            "unrelated_high_rating",
+            name: "Seattle Ridge Trail",
+            category: "trail",
+            locality: "Seattle",
+            ratingScore: 5
+        )
+
+        let suggestions = store.listSuggestions(for: list, limit: 10)
+        let names = Set(suggestions.map { $0.visiblePlace.place.canonicalName })
+
+        XCTAssertEqual(names, ["Seattle Coffee", "LA Design Museum", "Portland Garden"])
+        XCTAssertFalse(names.contains("Seattle Ridge Trail"))
+    }
+
+    func testRemoteListSuggestionsRejectUnrelatedCandidatesAndExplainTheSharedAttribute() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "A mixed day",
+                description: "Places worth keeping together",
+                visibility: .followers
+            )
+        )
+
+        func save(_ id: String, name: String, category: String, locality: String, ratingScore: Double? = nil) -> SaveResult {
+            store.saveCandidate(
+                PlaceCandidate(
+                    id: id,
+                    name: name,
+                    category: category,
+                    locality: locality,
+                    region: locality == "Los Angeles" ? "CA" : "WA",
+                    country: "US",
+                    latitude: 34.04,
+                    longitude: -118.24,
+                    confidence: 0.95
+                ),
+                status: ratingScore == nil ? .wannaGo : .been,
+                visibility: .followers,
+                note: nil,
+                sourceType: .manual,
+                ratingScore: ratingScore
+            )
+        }
+
+        let anchor = save("anchor_coffee", name: "Anchor Coffee", category: "coffee", locality: "Los Angeles")
+        XCTAssertEqual(store.addCurrentUserPlace(userPlaceID: anchor.userPlaceID, to: list).outcome, .added)
+        let locationMatch = save("location_match", name: "LA Design Museum", category: "museum", locality: "Los Angeles")
+        let unrelated = save(
+            "unrelated_high_rating",
+            name: "Seattle Ridge Trail",
+            category: "trail",
+            locality: "Seattle",
+            ratingScore: 5
+        )
+        let locationMatchID = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == locationMatch.userPlaceID }?.id
+        )
+        let unrelatedID = try XCTUnwrap(
+            store.currentUserVisiblePlaces.first { $0.userPlace.id == unrelated.userPlaceID }?.id
+        )
+        let repository = FakeListSuggestionRepository(
+            response: ListSuggestionFunctionResponse(
+                suggestions: [
+                    ListSuggestionFunctionItem(
+                        visiblePlaceID: unrelatedID,
+                        reason: "Fits: highly rated",
+                        score: 1
+                    ),
+                    ListSuggestionFunctionItem(
+                        visiblePlaceID: locationMatchID,
+                        reason: "Fits: favorite",
+                        score: 0.9
+                    )
+                ]
+            )
+        )
+        let backend = WanderBackend(listSuggestionRepository: repository)
+
+        let suggestions = await store.listSuggestions(for: list, limit: 10, backend: backend)
+
+        XCTAssertEqual(suggestions.map { $0.visiblePlace.place.canonicalName }, ["LA Design Museum"])
+        XCTAssertEqual(suggestions.first?.reason, "Fits: Los Angeles")
+        XCTAssertEqual(repository.payloads.first?.candidatePlaces.map(\.visiblePlaceID), [locationMatchID])
+    }
+
     func testListSuggestionReasonsRemoveInternalMetadataLabels() throws {
         let store = makeStore()
         let visiblePlace = try XCTUnwrap(
@@ -11178,13 +11346,15 @@ private final class FakeExtractionRepository: ExtractionRepository {
 @MainActor
 private final class FakeListSuggestionRepository: ListSuggestionRepository {
     private let response: ListSuggestionFunctionResponse
+    private(set) var payloads: [ListSuggestionPayload] = []
 
     init(response: ListSuggestionFunctionResponse) {
         self.response = response
     }
 
     func suggestions(payload: ListSuggestionPayload) async throws -> ListSuggestionFunctionResponse {
-        response
+        payloads.append(payload)
+        return response
     }
 }
 
