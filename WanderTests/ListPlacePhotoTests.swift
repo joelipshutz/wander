@@ -159,14 +159,17 @@ final class ListPlacePhotoTests: XCTestCase {
         XCTAssertEqual(resolved?.photo, userPhoto)
         XCTAssertEqual(
             repository.metadataCalls,
-            [.scopedVisibleUser(["user_owner", "user_collaborator"])]
+            [.scopedVisibleUser(["user_collaborator", "user_owner"])]
         )
         XCTAssertEqual(repository.imageRequests, [userPhoto.providerPlaceID])
     }
 
     @MainActor
     func testResolverSkipsUserPhotoLookupWhenListHasNoEligibleContributors() async throws {
-        let googlePhoto = photo(provider: "google_places", id: "google-photo")
+        let googlePhoto = photo(
+            provider: "google_places",
+            id: "empty-contributors-google-photo"
+        )
         let repository = RecordingListPlacePhotoRepository(
             visibleUserResult: .failure(TestError.missing),
             providerResult: .success(googlePhoto),
@@ -191,7 +194,7 @@ final class ListPlacePhotoTests: XCTestCase {
     @MainActor
     func testResolverFallsBackToGoogleMapsWhenUserPhotoCannotRender() async throws {
         let userPhoto = photo(provider: "visit_photo", id: "broken-user-photo")
-        let googlePhoto = photo(provider: "google_places", id: "google-photo")
+        let googlePhoto = photo(provider: "google_places", id: "fallback-google-photo")
         let repository = RecordingListPlacePhotoRepository(
             visibleUserResult: .success(userPhoto),
             providerResult: .success(googlePhoto),
@@ -296,7 +299,8 @@ final class ListPlacePhotoTests: XCTestCase {
             visibleUserResult: .success(userPhoto),
             providerResult: .failure(TestError.missing),
             imageDataByPhotoID: [userPhoto.providerPlaceID: try imageData()],
-            visibleUserDelayNanoseconds: 25_000_000
+            visibleUserDelayNanoseconds: 25_000_000,
+            imageDelayNanoseconds: 25_000_000
         )
         let backend = WanderBackend(placePhotoRepository: repository)
         let photoRequest = request
@@ -325,6 +329,56 @@ final class ListPlacePhotoTests: XCTestCase {
         XCTAssertEqual(results.1?.photo, userPhoto)
         XCTAssertEqual(repository.metadataCalls, [.visibleUser])
         XCTAssertEqual(repository.imageRequests, [userPhoto.providerPlaceID])
+    }
+
+    @MainActor
+    func testResolverBatchesDifferentVisibleListPlacesIntoOneMetadataRequest() async throws {
+        let userPhoto = photo(provider: "visit_photo", id: "batched-user-photo")
+        let repository = RecordingListPlacePhotoRepository(
+            visibleUserResult: .success(userPhoto),
+            providerResult: .failure(TestError.missing),
+            imageDataByPhotoID: [userPhoto.providerPlaceID: try imageData()]
+        )
+        let backend = WanderBackend(placePhotoRepository: repository)
+        let firstRequest = request
+        let secondRequest = PlacePhotoRequest(
+            placeID: "00000000-0000-0000-0000-000000000114",
+            name: "Maru Coffee",
+            address: "Los Angeles, CA",
+            latitude: 34.06,
+            longitude: -118.24,
+            sourceProvider: "google_maps",
+            sourceProviderPlaceID: "google-maru"
+        )
+
+        let firstTask = Task { @MainActor in
+            await ListPlacePhotoResolver.resolve(
+                request: firstRequest,
+                preferredUserPhoto: nil,
+                authorizationScopeKey: "two-place-batch",
+                targetPixelSize: 128,
+                backend: backend
+            )
+        }
+        let secondTask = Task { @MainActor in
+            await ListPlacePhotoResolver.resolve(
+                request: secondRequest,
+                preferredUserPhoto: nil,
+                authorizationScopeKey: "two-place-batch",
+                targetPixelSize: 128,
+                backend: backend
+            )
+        }
+        let results = await (firstTask.value, secondTask.value)
+
+        XCTAssertEqual(results.0?.photo, userPhoto)
+        XCTAssertEqual(results.1?.photo, userPhoto)
+        XCTAssertEqual(repository.visibleUserBatchRequests.count, 1)
+        XCTAssertEqual(
+            Set(repository.visibleUserBatchRequests[0].map(\.canonicalPhotoCacheKey)),
+            Set([firstRequest, secondRequest].map(\.canonicalPhotoCacheKey))
+        )
+        XCTAssertTrue(repository.providerBatchRequests.isEmpty)
     }
 
     @MainActor
@@ -536,24 +590,50 @@ private final class RecordingListPlacePhotoRepository: PlacePhotoRepository {
     let providerResult: Result<PlacePhoto, Error>
     let imageDataByPhotoID: [String: Data]
     let visibleUserDelayNanoseconds: UInt64
+    let imageDelayNanoseconds: UInt64
     private(set) var metadataCalls: [MetadataCall] = []
     private(set) var imageRequests: [String] = []
+    private(set) var providerBatchRequests: [[PlacePhotoRequest]] = []
+    private(set) var visibleUserBatchRequests: [[PlacePhotoRequest]] = []
 
     init(
         visibleUserResult: Result<PlacePhoto, Error>,
         providerResult: Result<PlacePhoto, Error>,
         imageDataByPhotoID: [String: Data],
-        visibleUserDelayNanoseconds: UInt64 = 0
+        visibleUserDelayNanoseconds: UInt64 = 0,
+        imageDelayNanoseconds: UInt64 = 0
     ) {
         self.visibleUserResult = visibleUserResult
         self.providerResult = providerResult
         self.imageDataByPhotoID = imageDataByPhotoID
         self.visibleUserDelayNanoseconds = visibleUserDelayNanoseconds
+        self.imageDelayNanoseconds = imageDelayNanoseconds
     }
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
         metadataCalls.append(.provider)
         return try providerResult.get()
+    }
+
+    func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        providerBatchRequests.append(requests)
+        var results: [PlacePhotoBatchResult] = []
+        for request in requests {
+            do {
+                let photo = try await photo(for: request)
+                results.append(
+                    PlacePhotoBatchResult(
+                        canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                        photo: photo
+                    )
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
+        }
+        return results
     }
 
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
@@ -568,8 +648,34 @@ private final class RecordingListPlacePhotoRepository: PlacePhotoRepository {
         return try visibleUserResult.get()
     }
 
+    func visibleUserPhotos(
+        for requests: [PlacePhotoRequest]
+    ) async throws -> [PlacePhotoBatchResult] {
+        visibleUserBatchRequests.append(requests)
+        var results: [PlacePhotoBatchResult] = []
+        for request in requests {
+            do {
+                let photo = try await visibleUserPhoto(for: request)
+                results.append(
+                    PlacePhotoBatchResult(
+                        canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                        photo: photo
+                    )
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
+        }
+        return results
+    }
+
     func imageData(for photo: PlacePhoto) async throws -> Data {
         imageRequests.append(photo.providerPlaceID)
+        if imageDelayNanoseconds > 0 {
+            try await Task.sleep(nanoseconds: imageDelayNanoseconds)
+        }
         guard let data = imageDataByPhotoID[photo.providerPlaceID] else {
             throw TestError.missing
         }

@@ -765,7 +765,9 @@ private struct PlaceProfilePreviewCard: View {
         }
 
         do {
-            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            let remotePhoto = try await backend.placePhoto(
+                for: place.photoRequest.rendering(.card)
+            )
             try Task.checkCancellation()
 
             if remotePhoto.isGooglePlacesPhoto {
@@ -831,7 +833,8 @@ private struct PlaceProfilePreviewCard: View {
         } else {
             data = try? await backend.placePhotoImageData(
                 for: photo,
-                canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey
+                canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+                variant: .card
             )
         }
 
@@ -849,7 +852,9 @@ private struct PlaceProfilePreviewCard: View {
     }
 
     private var synchronouslyCachedPhoto: ListPlaceResolvedPhoto? {
-        let candidate = place.isDroppedPin ? localPhoto : backend.cachedPlacePhoto(for: place.photoRequest)
+        let candidate = place.isDroppedPin
+            ? localPhoto
+            : backend.cachedPlacePhoto(for: place.photoRequest.rendering(.card))
         guard let candidate,
               let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
                   canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
@@ -1236,6 +1241,7 @@ private struct PlaceProfileFullView: View {
             PlacePhotoGalleryViewer(
                 canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                 placeName: place.name,
+                photoRequest: place.photoRequest,
                 photos: galleryItems,
                 initialPhotoID: route.photoID,
                 currentUserID: currentUserID,
@@ -1364,7 +1370,9 @@ private struct PlaceProfileFullView: View {
 
     private func resolvedProviderPhoto() async -> PlacePhoto? {
         do {
-            let remotePhoto = try await backend.placePhoto(for: place.photoRequest)
+            let remotePhoto = try await backend.placePhoto(
+                for: place.photoRequest.rendering(.profile)
+            )
             try Task.checkCancellation()
             if remotePhoto.isGooglePlacesPhoto {
                 await store.applyProviderCategoryEnrichment(
@@ -2226,6 +2234,7 @@ private struct PlacePhotoGalleryViewer: View {
 
     let canonicalPlaceKey: String
     let placeName: String
+    let photoRequest: PlacePhotoRequest
     let photos: [PlacePhotoGalleryItem]
     let currentUserID: String
     let onNearEnd: (String) -> Void
@@ -2239,6 +2248,7 @@ private struct PlacePhotoGalleryViewer: View {
     init(
         canonicalPlaceKey: String,
         placeName: String,
+        photoRequest: PlacePhotoRequest,
         photos: [PlacePhotoGalleryItem],
         initialPhotoID: String,
         currentUserID: String,
@@ -2248,6 +2258,7 @@ private struct PlacePhotoGalleryViewer: View {
     ) {
         self.canonicalPlaceKey = canonicalPlaceKey
         self.placeName = placeName
+        self.photoRequest = photoRequest
         self.photos = photos
         self.currentUserID = currentUserID
         self.onNearEnd = onNearEnd
@@ -2352,6 +2363,8 @@ private struct PlacePhotoGalleryViewer: View {
                                 photo: item.photo,
                                 canonicalPlaceKey: canonicalPlaceKey,
                                 placeName: placeName,
+                                photoRequest: photoRequest,
+                                variant: .fullscreen,
                                 contentMode: .fit,
                                 onLoadFailure: onPhotoLoadFailure
                             )
@@ -2676,6 +2689,8 @@ private struct PlaceProfileMapHeader: View {
                                 photo: item.photo,
                                 canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                                 placeName: place.name,
+                                photoRequest: place.photoRequest,
+                                variant: .profile,
                                 onLoadFailure: onPhotoLoadFailure
                             )
                             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -2773,6 +2788,8 @@ struct PlaceProfilePhotoImage: View {
     let photo: PlacePhoto
     let canonicalPlaceKey: String
     let placeName: String
+    var photoRequest: PlacePhotoRequest? = nil
+    var variant: PlacePhotoRenderVariant = .profile
     var contentMode: ContentMode = .fill
     var onLoadFailure: ((PlacePhoto) -> Void)? = nil
     @EnvironmentObject private var backend: WanderBackend
@@ -2782,7 +2799,7 @@ struct PlaceProfilePhotoImage: View {
     var body: some View {
         GeometryReader { proxy in
             let targetPixelSize = max(
-                1,
+                variant.minimumDecodePixelDimension ?? 1,
                 Int(ceil(max(proxy.size.width, proxy.size.height) * displayScale))
             )
             let currentRenderKey = renderKey(targetPixelSize: targetPixelSize)
@@ -2826,16 +2843,26 @@ struct PlaceProfilePhotoImage: View {
         }
 
         loadedImage = nil
+        let deliveryPhoto: PlacePhoto
+        if photo.isGooglePlacesPhoto, let photoRequest {
+            deliveryPhoto = (try? await backend.placePhoto(
+                for: photoRequest.rendering(variant)
+            )) ?? photo
+        } else {
+            deliveryPhoto = photo
+        }
+
         let data: Data?
-        if let localAssetRef = photo.localAssetRef,
+        if let localAssetRef = deliveryPhoto.localAssetRef,
            let localData = await Task.detached(priority: .utility, operation: {
                VisitPhotoLocalFileStore.data(from: localAssetRef)
            }).value {
             data = localData
         } else {
             data = try? await backend.placePhotoImageData(
-                for: photo,
-                canonicalPlaceKey: canonicalPlaceKey
+                for: deliveryPhoto,
+                canonicalPlaceKey: canonicalPlaceKey,
+                variant: variant
             )
         }
 
@@ -2861,7 +2888,7 @@ struct PlaceProfilePhotoImage: View {
     }
 
     private func renderKey(targetPixelSize: Int) -> String {
-        "\(canonicalPlaceKey)|\(photo.cacheKey)|target-px:\(targetPixelSize)"
+        "\(canonicalPlaceKey)|\(photo.cacheKey)|\(variant.rawValue)|target-px:\(targetPixelSize)"
     }
 
 }
@@ -2885,6 +2912,8 @@ private struct PlaceProfilePhotoThumb: View {
                     photo: photo,
                     canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
                     placeName: place.name,
+                    photoRequest: place.photoRequest,
+                    variant: .listThumbnail,
                     onLoadFailure: onLoadFailure
                 )
                     .frame(width: size, height: size)

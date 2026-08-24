@@ -396,6 +396,69 @@ final class RemoteRepositoryTests: XCTestCase {
         )
     }
 
+    func testProtectedPhotoVariantUsesAuthenticatedTransformAtCardQuality() async throws {
+        let expectedData = Data([0xFF, 0xD8, 0xFF, 0xD9])
+        FeedRPCURLProtocol.reset(responses: [(200, expectedData)])
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: FeedTokenAuthSession(),
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        let data = try await client.downloadImage(
+            bucket: "visit-photos",
+            path: "user/visit/photo.jpg",
+            variant: .card
+        )
+
+        XCTAssertEqual(data, expectedData)
+        let url = try XCTUnwrap(FeedRPCURLProtocol.requestURLs.first)
+        XCTAssertEqual(
+            url.path,
+            "/storage/v1/render/image/authenticated/visit-photos/user/visit/photo.jpg"
+        )
+        let queryItems = try XCTUnwrap(
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        )
+        XCTAssertEqual(queryItems.first { $0.name == "width" }?.value, "1440")
+        XCTAssertEqual(queryItems.first { $0.name == "height" }?.value, "1440")
+        XCTAssertEqual(queryItems.first { $0.name == "resize" }?.value, "contain")
+        XCTAssertEqual(queryItems.first { $0.name == "quality" }?.value, "90")
+    }
+
+    func testFullscreenPhotoVariantRequestsTheOriginalAuthenticatedObject() async throws {
+        FeedRPCURLProtocol.reset(responses: [(200, Data([0x01]))])
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [FeedRPCURLProtocol.self]
+        let client = WanderSupabaseClient(
+            configuration: WanderBackendConfiguration(
+                clerkPublishableKey: "pk_test_mock",
+                clerkFrontendAPI: "mock.clerk.accounts.dev",
+                supabaseURL: URL(string: "https://example.supabase.co"),
+                supabasePublishableKey: "anon-key"
+            ),
+            authSession: FeedTokenAuthSession(),
+            urlSession: URLSession(configuration: sessionConfiguration)
+        )
+
+        _ = try await client.downloadImage(
+            bucket: "visit-photos",
+            path: "user/visit/photo.jpg",
+            variant: .fullscreen
+        )
+
+        let url = try XCTUnwrap(FeedRPCURLProtocol.requestURLs.first)
+        XCTAssertEqual(url.path, "/storage/v1/object/visit-photos/user/visit/photo.jpg")
+        XCTAssertNil(url.query)
+    }
+
     func testRejectedStorageReplacementTokenIsRefreshedAgainOnTheNextRequest() async throws {
         let expectedData = Data([0xFF, 0xD8, 0xFF, 0xD9])
         FeedRPCURLProtocol.reset(
@@ -2388,11 +2451,92 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.rawBodies[0]["source_provider"] as? String, "mapkit")
         XCTAssertEqual(rpc.rawBodies[0]["source_provider_place_id"] as? String, "mapkit-woodcat")
         XCTAssertEqual(rpc.rawBodies[0]["requires_photo"] as? Bool, true)
+        XCTAssertEqual(rpc.rawBodies[0]["render_variant"] as? String, "profile")
         XCTAssertEqual(
             try XCTUnwrap(rpc.rawBodies[0]["latitude"] as? Double),
             34.0777,
             accuracy: 0.00001
         )
+    }
+
+    func testPlacePhotoRepositoryBatchesProviderMetadataIntoOneFunctionCall() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:place-photo"] = """
+        {
+          "results": [
+            {"index": 0, "photo": {
+              "provider": "google_places",
+              "provider_place_id": "provider-first",
+              "photo_url": "https://example.com/first.jpg"
+            }},
+            {"index": 1, "photo": {
+              "provider": "google_places",
+              "provider_place_id": "provider-second",
+              "photo_url": "https://example.com/second.jpg"
+            }}
+          ]
+        }
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(functions: rpc)
+        let requests = [
+            PlacePhotoRequest(
+                placeID: "50000000-0000-0000-0000-000000000323",
+                name: "First",
+                address: nil,
+                latitude: 34.05,
+                longitude: -118.25,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "mapkit-first",
+                renderVariant: .feed
+            ),
+            PlacePhotoRequest(
+                placeID: "50000000-0000-0000-0000-000000000324",
+                name: "Second",
+                address: nil,
+                latitude: 34.06,
+                longitude: -118.26,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "mapkit-second",
+                renderVariant: .feed
+            )
+        ]
+
+        let results = try await repository.photos(for: requests)
+
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo"])
+        let encodedRequests = try XCTUnwrap(
+            rpc.rawBodies[0]["requests"] as? [[String: Any]]
+        )
+        XCTAssertEqual(encodedRequests.count, 2)
+        XCTAssertEqual(Set(encodedRequests.compactMap { $0["name"] as? String }), ["First", "Second"])
+        XCTAssertEqual(Set(encodedRequests.compactMap { $0["render_variant"] as? String }), ["feed"])
+    }
+
+    func testPlacePhotoRepositoryChunksProviderMetadataWithoutDroppingLargeLists() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["function:place-photo"] = """
+        {"results": []}
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(functions: rpc)
+        let requests = (0..<33).map { index in
+            PlacePhotoRequest(
+                placeID: String(format: "50000000-0000-0000-0000-%012d", index),
+                name: "Place \(index)",
+                address: nil,
+                latitude: nil,
+                longitude: nil,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "mapkit-\(index)",
+                renderVariant: .listThumbnail
+            )
+        }
+
+        _ = try await repository.photos(for: requests)
+
+        XCTAssertEqual(rpc.calls.map(\.name), ["function:place-photo", "function:place-photo"])
+        XCTAssertEqual((rpc.rawBodies[0]["requests"] as? [[String: Any]])?.count, 32)
+        XCTAssertEqual((rpc.rawBodies[1]["requests"] as? [[String: Any]])?.count, 1)
     }
 
     func testOwnPlaceSaveRejectsProhibitedCanonicalMetadataBeforeNetwork() async {
@@ -2498,6 +2642,112 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photo"])
         XCTAssertEqual(rpc.rawBodies[0]["input_place_id"] as? String, "50000000-0000-0000-0000-000000000001")
         XCTAssertEqual(storage.downloads.map(\.path), ["user_joe/54000000-0000-0000-0000-000000000001/55000000-0000-0000-0000-000000000001.jpg"])
+    }
+
+    func testPlacePhotoRepositoryUsesTransformedStorageWithoutOriginalFallback() async throws {
+        let storage = VariantRecordingStorage()
+        storage.transformedData = Data([0xAA, 0xBB])
+        let rpc = RecordingRPC()
+        let repository = SupabasePlacePhotoRepository(
+            rpc: rpc,
+            functions: rpc,
+            storage: storage
+        )
+
+        let data = try await repository.imageData(
+            for: storageBackedPhoto,
+            variant: .profile
+        )
+
+        XCTAssertEqual(data, Data([0xAA, 0xBB]))
+        XCTAssertEqual(storage.imageVariants, [.profile])
+        XCTAssertEqual(storage.originalDownloads, 0)
+    }
+
+    func testPlacePhotoRepositoryUsesOriginalOnlyAsTransformFailureRecovery() async throws {
+        let storage = VariantRecordingStorage()
+        storage.transformedError = TestStorageError.unavailable
+        storage.originalData = Data([0xCC])
+        let rpc = RecordingRPC()
+        let repository = SupabasePlacePhotoRepository(
+            rpc: rpc,
+            functions: rpc,
+            storage: storage
+        )
+
+        let data = try await repository.imageData(
+            for: storageBackedPhoto,
+            variant: .card
+        )
+
+        XCTAssertEqual(data, Data([0xCC]))
+        XCTAssertEqual(storage.imageVariants, [.card])
+        XCTAssertEqual(storage.originalDownloads, 1)
+    }
+
+    func testPlacePhotoRepositoryBatchesVisibleUserPhotoMetadataIntoOneRPC() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["first_visible_place_photos_by_users"] = """
+        [
+          {
+            "place_id": "50000000-0000-0000-0000-000000000325",
+            "photo_id": "55000000-0000-0000-0000-000000000325",
+            "storage_bucket": "visit-photos",
+            "storage_path": "user/first.jpg",
+            "width": 1200,
+            "height": 900
+          },
+          {
+            "place_id": "50000000-0000-0000-0000-000000000326",
+            "photo_id": "55000000-0000-0000-0000-000000000326",
+            "storage_bucket": "visit-photos",
+            "storage_path": "user/second.jpg",
+            "width": 900,
+            "height": 1200
+          }
+        ]
+        """.data(using: .utf8)
+        let repository = SupabasePlacePhotoRepository(
+            rpc: rpc,
+            functions: rpc,
+            storage: RecordingStorage()
+        )
+        let requests = [
+            PlacePhotoRequest(
+                placeID: "50000000-0000-0000-0000-000000000325",
+                name: "First",
+                address: nil,
+                latitude: nil,
+                longitude: nil,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "first"
+            ),
+            PlacePhotoRequest(
+                placeID: "50000000-0000-0000-0000-000000000326",
+                name: "Second",
+                address: nil,
+                latitude: nil,
+                longitude: nil,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "second"
+            )
+        ].map { $0.restrictingVisibleUserPhotos(to: ["user_owner", "user_friend"]) }
+
+        let results = try await repository.visibleUserPhotos(for: requests)
+
+        XCTAssertEqual(
+            Set(results.map { $0.canonicalPlaceKey }),
+            Set(requests.map { $0.canonicalPhotoCacheKey })
+        )
+        XCTAssertEqual(rpc.calls.map(\.name), ["first_visible_place_photos_by_users"])
+        XCTAssertEqual(
+            Set(rpc.rawBodies[0]["input_place_ids"] as? [String] ?? []),
+            Set(requests.compactMap(\.placeID))
+        )
+        XCTAssertEqual(
+            rpc.rawBodies[0]["input_user_ids"] as? [String],
+            ["user_friend", "user_owner"]
+        )
     }
 
     func testPlacePhotoRepositoryScopesVisiblePhotoToListContributors() async throws {
@@ -2644,7 +2894,25 @@ final class RemoteRepositoryTests: XCTestCase {
 
         XCTAssertEqual(
             request.lookupKey,
-            "google_maps|chijwoodcat|woodcat coffee|34.07771,-118.25881"
+            "google_maps|chijwoodcat|woodcat coffee|34.07771,-118.25881|variant:profile"
+        )
+    }
+
+    private var storageBackedPhoto: PlacePhoto {
+        PlacePhoto(
+            provider: "visit_photo",
+            providerPlaceID: "55000000-0000-0000-0000-000000000327",
+            photoURLString: "",
+            width: 4_032,
+            height: 3_024,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: nil,
+            flagContentURLString: nil,
+            storageBucket: "visit-photos",
+            storagePath: "user/visit/photo.jpg",
+            localAssetRef: nil
         )
     }
 
@@ -3712,6 +3980,12 @@ private final class FeedRPCURLProtocol: URLProtocol {
         return requests.compactMap { $0.url?.path }
     }
 
+    static var requestURLs: [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests.compactMap(\.url)
+    }
+
     static var requestBodies: [Data] {
         lock.lock()
         defer { lock.unlock() }
@@ -3865,6 +4139,52 @@ private final class RecordingStorage: RemoteStorageCalling {
         }
         return url
     }
+}
+
+@MainActor
+private final class VariantRecordingStorage: RemoteStorageCalling {
+    private(set) var imageVariants: [PlacePhotoRenderVariant] = []
+    private(set) var originalDownloads = 0
+    var transformedData = Data()
+    var originalData = Data()
+    var transformedError: Error?
+
+    func uploadObject(
+        bucket: String,
+        path: String,
+        data: Data,
+        contentType: String,
+        upsert: Bool
+    ) async throws {}
+
+    func deleteObject(bucket: String, path: String) async throws {}
+
+    func downloadObject(bucket: String, path: String) async throws -> Data {
+        originalDownloads += 1
+        return originalData
+    }
+
+    func downloadImage(
+        bucket: String,
+        path: String,
+        variant: PlacePhotoRenderVariant
+    ) async throws -> Data {
+        imageVariants.append(variant)
+        if let transformedError { throw transformedError }
+        return transformedData
+    }
+
+    func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
+        throw WanderRemoteError.notImplemented("test")
+    }
+
+    func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL {
+        throw WanderRemoteError.notImplemented("test")
+    }
+}
+
+private enum TestStorageError: Error {
+    case unavailable
 }
 
 @MainActor

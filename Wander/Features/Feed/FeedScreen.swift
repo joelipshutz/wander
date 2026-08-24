@@ -1738,6 +1738,8 @@ struct FeedResolvedPlacePhoto: View {
                     photo: photo,
                     canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
                     placeName: place.place.canonicalName,
+                    photoRequest: sheetPlace.photoRequest,
+                    variant: .feed,
                     onLoadFailure: handlePhotoLoadFailure
                 )
                 .overlay(alignment: .bottomTrailing) {
@@ -1769,7 +1771,9 @@ struct FeedResolvedPlacePhoto: View {
         photo = nil
 
         do {
-            let remotePhoto = try await backend.placePhoto(for: sheetPlace.photoRequest)
+            let remotePhoto = try await backend.placePhoto(
+                for: sheetPlace.photoRequest.rendering(.feed)
+            )
             try Task.checkCancellation()
             let resolvedPhoto: PlacePhoto
             if remotePhoto.isGooglePlacesPhoto,

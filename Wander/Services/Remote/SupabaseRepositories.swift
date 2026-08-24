@@ -2096,6 +2096,60 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
         }
     }
 
+    func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        let uniqueRequests = Array(
+            Dictionary(
+                requests.map { ($0.canonicalPhotoCacheKey, $0) },
+                uniquingKeysWith: { first, _ in first }
+            ).values
+        )
+        guard !uniqueRequests.isEmpty else { return [] }
+
+        var results: [PlacePhotoBatchResult] = []
+        for chunkStart in stride(from: 0, to: uniqueRequests.count, by: 32) {
+            try Task.checkCancellation()
+            let chunkEnd = min(chunkStart + 32, uniqueRequests.count)
+            let chunk = Array(uniqueRequests[chunkStart..<chunkEnd])
+            do {
+                let response: PlacePhotoBatchResponse = try await functions.invoke(
+                    "place-photo",
+                    body: PlacePhotoBatchRequest(requests: chunk)
+                )
+                results.append(contentsOf: response.results.compactMap { item in
+                    guard chunk.indices.contains(item.index), let photo = item.photo else {
+                        return nil
+                    }
+                    return PlacePhotoBatchResult(
+                        canonicalPlaceKey: chunk[item.index].canonicalPhotoCacheKey,
+                        photo: photo
+                    )
+                })
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // Rolling deploy compatibility: older Edge Functions accept only
+                // one request. Keep correctness while the batch endpoint lands.
+                for request in chunk {
+                    try Task.checkCancellation()
+                    do {
+                        let photo = try await photo(for: request)
+                        results.append(
+                            PlacePhotoBatchResult(
+                                canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                                photo: photo
+                            )
+                        )
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        continue
+                    }
+                }
+            }
+        }
+        return results
+    }
+
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
         if let eligibleUserIDs = request.eligibleUserIDs {
             return try await visibleUserPhoto(
@@ -2119,6 +2173,53 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
             throw WanderRemoteError.invalidResponse("Place has no visible user photo")
         }
         return row.photo
+    }
+
+    func visibleUserPhotos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        guard let rpc else {
+            return try await visibleUserPhotosIndividually(for: requests)
+        }
+
+        let eligibleUserIDs = requests.first?.eligibleUserIDs?.sorted()
+        guard requests.allSatisfy({ $0.eligibleUserIDs?.sorted() == eligibleUserIDs }) else {
+            return try await visibleUserPhotosIndividually(for: requests)
+        }
+
+        let requestsByPlaceID = Dictionary(
+            requests.compactMap { request -> (String, PlacePhotoRequest)? in
+                guard let placeID = request.placeID, UUID(uuidString: placeID) != nil else {
+                    return nil
+                }
+                return (placeID.lowercased(), request)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        guard !requestsByPlaceID.isEmpty else { return [] }
+
+        do {
+            let rows: [FirstVisiblePlacePhotoBatchRow] = try await rpc.call(
+                "first_visible_place_photos_by_users",
+                params: FirstVisiblePlacePhotoBatchParams(
+                    inputPlaceIDs: Array(requestsByPlaceID.keys),
+                    inputUserIDs: eligibleUserIDs
+                )
+            )
+            return rows.compactMap { row in
+                guard let request = requestsByPlaceID[row.placeID.lowercased()] else {
+                    return nil
+                }
+                return PlacePhotoBatchResult(
+                    canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                    photo: row.photo
+                )
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Rolling migration compatibility. The list batcher still bounds
+            // image downloads while the RPC reaches every environment.
+            return try await visibleUserPhotosIndividually(for: requests)
+        }
     }
 
     func visiblePhotoGalleryPage(
@@ -2187,10 +2288,25 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
     }
 
     func imageData(for photo: PlacePhoto) async throws -> Data {
+        try await imageData(for: photo, variant: .fullscreen)
+    }
+
+    func imageData(for photo: PlacePhoto, variant: PlacePhotoRenderVariant) async throws -> Data {
         if let storageBucket = photo.storageBucket,
            let storagePath = photo.storagePath,
            let storage {
-            return try await storage.downloadObject(bucket: storageBucket, path: storagePath)
+            do {
+                return try await storage.downloadImage(
+                    bucket: storageBucket,
+                    path: storagePath,
+                    variant: variant
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard variant.maximumPixelDimension != nil else { throw error }
+                return try await storage.downloadObject(bucket: storageBucket, path: storagePath)
+            }
         }
 
         guard let photoURL = photo.photoURL else {
@@ -2206,6 +2322,88 @@ struct SupabasePlacePhotoRepository: PlacePhotoRepository {
             throw WanderRemoteError.invalidResponse("Place photo download failed")
         }
         return data
+    }
+
+    private func visibleUserPhotosIndividually(
+        for requests: [PlacePhotoRequest]
+    ) async throws -> [PlacePhotoBatchResult] {
+        var results: [PlacePhotoBatchResult] = []
+        for request in requests {
+            try Task.checkCancellation()
+            do {
+                let photo = try await visibleUserPhoto(for: request)
+                results.append(
+                    PlacePhotoBatchResult(
+                        canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                        photo: photo
+                    )
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
+        }
+        return results
+    }
+}
+
+private struct PlacePhotoBatchRequest: Encodable {
+    let requests: [PlacePhotoRequest]
+}
+
+private struct PlacePhotoBatchResponse: Decodable {
+    let results: [PlacePhotoBatchItem]
+}
+
+private struct PlacePhotoBatchItem: Decodable {
+    let index: Int
+    let photo: PlacePhoto?
+}
+
+private struct FirstVisiblePlacePhotoBatchParams: Encodable {
+    let inputPlaceIDs: [String]
+    let inputUserIDs: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case inputPlaceIDs = "input_place_ids"
+        case inputUserIDs = "input_user_ids"
+    }
+}
+
+private struct FirstVisiblePlacePhotoBatchRow: Decodable {
+    let placeID: String
+    let photoID: String
+    let storageBucket: String
+    let storagePath: String
+    let width: Int?
+    let height: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case placeID = "place_id"
+        case photoID = "photo_id"
+        case storageBucket = "storage_bucket"
+        case storagePath = "storage_path"
+        case width
+        case height
+    }
+
+    var photo: PlacePhoto {
+        PlacePhoto(
+            provider: "visit_photo",
+            providerPlaceID: photoID,
+            photoURLString: "",
+            width: width,
+            height: height,
+            authorName: nil,
+            authorProfileURLString: nil,
+            authorAvatarURLString: nil,
+            sourcePhotoURLString: nil,
+            flagContentURLString: nil,
+            storageBucket: storageBucket,
+            storagePath: storagePath,
+            localAssetRef: nil
+        )
     }
 }
 
