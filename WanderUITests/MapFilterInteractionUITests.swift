@@ -2,6 +2,85 @@ import XCTest
 
 @MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testSingleScreenTapOnMapPinSelectsThatPlace() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderUseStorefrontFixtures"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["map.filter.featured"].waitForExistence(timeout: 8))
+
+        let pin = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Canyon Lookout Trail,")
+        ).firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 8))
+        let pinCenter = CGPoint(x: pin.frame.midX, y: pin.frame.midY)
+        XCTAssertTrue(map.frame.contains(pinCenter))
+
+        // Tap the Map at the rendered pin's screen coordinate. Calling
+        // pin.tap() would invoke its accessibility action and would not prove
+        // that a normal touch reaches the passive map tap observer.
+        map.coordinate(
+            withNormalizedOffset: CGVector(
+                dx: (pinCenter.x - map.frame.minX) / map.frame.width,
+                dy: (pinCenter.y - map.frame.minY) / map.frame.height
+            )
+        ).tap()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            card.label.contains("Canyon Lookout Trail"),
+            "A single physical map tap should select Canyon Lookout Trail; card was \(card.label)"
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "map.pin.active.saved.")
+            ).firstMatch.waitForExistence(timeout: 3)
+        )
+
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-360 single-tap selection and frontmost active pin"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testVisiblePlacePinSelectsOnFirstTap() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 5))
+
+        let pin = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Bar Nido"))
+            .firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 5))
+
+        // Tap through the map at the rendered pin center. This exercises the
+        // gesture bridge instead of dispatching the pin's accessibility action.
+        let normalizedPinCenter = CGVector(
+            dx: (pin.frame.midX - map.frame.minX) / map.frame.width,
+            dy: (pin.frame.midY - map.frame.minY) / map.frame.height
+        )
+        map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        XCTAssertTrue(card.label.contains("Bar Nido"))
+    }
+
     func testSourceFiltersFitWithoutOverlapOnSmallPhones() {
         let app = XCUIApplication()
         app.launchArguments = [

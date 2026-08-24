@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(68);
+select plan(76);
 
 select ok(
   exists (
@@ -181,6 +181,54 @@ select ok(
     where oid = 'public.first_visible_place_photo_by_users(uuid,text[])'::regprocedure
   ),
   'list cover photo RPC pins search_path'
+);
+
+select has_function(
+  'public',
+  'first_visible_place_photos_by_users',
+  array['uuid[]', 'text[]']
+);
+
+select function_privs_are(
+  'public',
+  'first_visible_place_photos_by_users',
+  array['uuid[]', 'text[]'],
+  'authenticated',
+  array['EXECUTE']
+);
+
+select function_privs_are(
+  'public',
+  'first_visible_place_photos_by_users',
+  array['uuid[]', 'text[]'],
+  'anon',
+  array[]::text[]
+);
+
+select is(
+  (
+    select prosecdef
+    from pg_proc
+    where oid = 'public.first_visible_place_photos_by_users(uuid[],text[])'::regprocedure
+  ),
+  false,
+  'batched list cover RPC stays security invoker so visit-photo RLS remains authoritative'
+);
+
+select ok(
+  (
+    select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
+    from pg_proc
+    where oid = 'public.first_visible_place_photos_by_users(uuid[],text[])'::regprocedure
+  ),
+  'batched list cover RPC pins search_path'
+);
+
+select has_index(
+  'public',
+  'visit_photos',
+  'visit_photos_uploaded_cover_idx',
+  'batched list cover lookup has an uploaded-photo covering index'
 );
 
 select is(
@@ -767,6 +815,30 @@ select is(
   ),
   0,
   'list cover photo RPC excludes visible photos whose owner is not an eligible contributor'
+);
+
+select is(
+  (
+    select photo_id::text
+    from public.first_visible_place_photos_by_users(
+      array['10000000-0000-0000-0000-000000000101']::uuid[],
+      array['user_owner']::text[]
+    )
+  ),
+  '50000000-0000-0000-0000-000000000101',
+  'batched list cover RPC returns the first RLS-visible eligible photo'
+);
+
+select is(
+  (
+    select count(*)::integer
+    from public.first_visible_place_photos_by_users(
+      array['10000000-0000-0000-0000-000000000101']::uuid[],
+      array['user_mutual']::text[]
+    )
+  ),
+  0,
+  'batched list cover RPC cannot expand visibility outside eligible contributors'
 );
 
 select set_config('request.jwt.claim.sub', 'user_nonfollower', true);

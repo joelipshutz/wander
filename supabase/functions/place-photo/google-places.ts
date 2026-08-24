@@ -6,6 +6,7 @@ export type PlacePhotoInput = {
   sourceProvider: string | null;
   sourceProviderPlaceID: string | null;
   requiresPhoto: boolean;
+  renderVariant?: "list_thumbnail" | "feed" | "card" | "profile" | "fullscreen";
 };
 
 export type GoogleAuthorAttribution = {

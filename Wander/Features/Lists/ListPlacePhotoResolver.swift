@@ -19,63 +19,182 @@ final class PlacePhotoDecodedImage: @unchecked Sendable {
     }
 }
 
+struct PlacePhotoImageCacheMetrics: Equatable, Sendable {
+    let hits: Int
+    let misses: Int
+    let coalescedRequests: Int
+    let entryCount: Int
+    let totalByteCost: Int
+}
+
+private struct PlacePhotoImageCacheKey: Hashable, Sendable {
+    let canonicalPlaceKey: String
+    let photoKey: String
+    let targetPixelSize: Int
+}
+
+private final class PlacePhotoImageMemoryCache: @unchecked Sendable {
+    private struct Entry {
+        let image: PlacePhotoDecodedImage
+        let byteCost: Int
+    }
+
+    private let countLimit: Int
+    private let totalCostLimit: Int
+    private let lock = NSLock()
+    private var entries: [PlacePhotoImageCacheKey: Entry] = [:]
+    private var recency: [PlacePhotoImageCacheKey] = []
+    private var totalByteCost = 0
+    private var hits = 0
+    private var misses = 0
+    private var coalescedRequests = 0
+
+    init(countLimit: Int, totalCostLimit: Int) {
+        self.countLimit = max(1, countLimit)
+        self.totalCostLimit = max(1, totalCostLimit)
+    }
+
+    func image(for key: PlacePhotoImageCacheKey) -> PlacePhotoDecodedImage? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let entry = entries[key] else {
+            misses += 1
+            return nil
+        }
+        hits += 1
+        markRecentlyUsed(key)
+        return entry.image
+    }
+
+    func insert(_ image: PlacePhotoDecodedImage, for key: PlacePhotoImageCacheKey) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let previous = entries.removeValue(forKey: key) {
+            totalByteCost -= previous.byteCost
+        }
+        recency.removeAll { $0 == key }
+
+        let entry = Entry(image: image, byteCost: max(1, image.estimatedByteCost))
+        entries[key] = entry
+        recency.append(key)
+        totalByteCost += entry.byteCost
+
+        while entries.count > countLimit || totalByteCost > totalCostLimit {
+            guard let oldestKey = recency.first else { break }
+            recency.removeFirst()
+            if let removed = entries.removeValue(forKey: oldestKey) {
+                totalByteCost -= removed.byteCost
+            }
+        }
+    }
+
+    func recordCoalescedRequest() {
+        lock.lock()
+        coalescedRequests += 1
+        lock.unlock()
+    }
+
+    func metrics() -> PlacePhotoImageCacheMetrics {
+        lock.lock()
+        defer { lock.unlock() }
+        return PlacePhotoImageCacheMetrics(
+            hits: hits,
+            misses: misses,
+            coalescedRequests: coalescedRequests,
+            entryCount: entries.count,
+            totalByteCost: totalByteCost
+        )
+    }
+
+    private func markRecentlyUsed(_ key: PlacePhotoImageCacheKey) {
+        recency.removeAll { $0 == key }
+        recency.append(key)
+    }
+}
+
 actor PlacePhotoImagePipeline {
     static let shared = PlacePhotoImagePipeline()
 
-    private struct CacheKey: Hashable, Sendable {
-        let photoKey: String
-        let targetPixelSize: Int
-
-        var cacheKey: NSString {
-            "\(photoKey)|target-px:\(targetPixelSize)" as NSString
-        }
-    }
+    typealias Decoder = @Sendable (Data, Int) -> PlacePhotoDecodedImage?
 
     private struct InFlightEntry {
         let id: UUID
         let task: Task<PlacePhotoDecodedImage?, Never>
     }
 
-    private let cache: NSCache<NSString, PlacePhotoDecodedImage>
-    private var inFlight: [CacheKey: InFlightEntry] = [:]
+    nonisolated private let cache: PlacePhotoImageMemoryCache
+    private let decoder: Decoder
+    private var inFlight: [PlacePhotoImageCacheKey: InFlightEntry] = [:]
 
-    init(countLimit: Int = 128, totalCostLimit: Int = 32 * 1_024 * 1_024) {
-        cache = NSCache<NSString, PlacePhotoDecodedImage>()
-        cache.countLimit = max(1, countLimit)
-        cache.totalCostLimit = max(1, totalCostLimit)
+    init(
+        countLimit: Int = 128,
+        totalCostLimit: Int = 96 * 1_024 * 1_024,
+        decoder: @escaping Decoder = { data, targetPixelSize in
+            guard let image = PlacePhotoImagePipeline.downsampledImage(
+                from: data,
+                targetPixelSize: targetPixelSize
+            ) else { return nil }
+            return PlacePhotoDecodedImage(image: image)
+        }
+    ) {
+        cache = PlacePhotoImageMemoryCache(
+            countLimit: countLimit,
+            totalCostLimit: totalCostLimit
+        )
+        self.decoder = decoder
+    }
+
+    nonisolated func cachedImage(
+        canonicalPlaceKey: String,
+        photoKey: String,
+        targetPixelSize: Int
+    ) -> PlacePhotoDecodedImage? {
+        cache.image(
+            for: Self.cacheKey(
+                canonicalPlaceKey: canonicalPlaceKey,
+                photoKey: photoKey,
+                targetPixelSize: targetPixelSize
+            )
+        )
+    }
+
+    nonisolated func cacheMetrics() -> PlacePhotoImageCacheMetrics {
+        cache.metrics()
     }
 
     func image(
         from data: Data,
+        canonicalPlaceKey: String,
         photoKey: String,
         targetPixelSize: Int
     ) async -> PlacePhotoDecodedImage? {
         guard !Task.isCancelled else { return nil }
 
-        let key = CacheKey(
+        let key = Self.cacheKey(
+            canonicalPlaceKey: canonicalPlaceKey,
             photoKey: photoKey,
-            targetPixelSize: max(1, targetPixelSize)
+            targetPixelSize: targetPixelSize
         )
-        if let cached = cache.object(forKey: key.cacheKey) {
+        if let cached = cache.image(for: key) {
             return cached
         }
 
         let entry: InFlightEntry
         if let existing = inFlight[key] {
+            cache.recordCoalescedRequest()
             entry = existing
         } else {
             let id = UUID()
+            let decoder = self.decoder
             let task = Task<PlacePhotoDecodedImage?, Never>.detached(priority: .utility) {
-                guard !Task.isCancelled,
-                      let image = Self.downsampledImage(
-                          from: data,
-                          targetPixelSize: key.targetPixelSize
-                      ),
-                      !Task.isCancelled
-                else {
-                    return nil
-                }
-                return PlacePhotoDecodedImage(image: image)
+                guard !Task.isCancelled else { return nil }
+                let startedAt = ContinuousClock.now
+                let decodedImage = decoder(data, key.targetPixelSize)
+                await PlacePhotoPerformanceMonitor.shared.record(.decode, startedAt: startedAt)
+                guard !Task.isCancelled else { return nil }
+                return decodedImage
             }
             let newEntry = InFlightEntry(id: id, task: task)
             inFlight[key] = newEntry
@@ -86,15 +205,29 @@ actor PlacePhotoImagePipeline {
         if inFlight[key]?.id == entry.id {
             inFlight[key] = nil
             if let decodedImage {
-                cache.setObject(
-                    decodedImage,
-                    forKey: key.cacheKey,
-                    cost: max(1, decodedImage.estimatedByteCost)
-                )
+                cache.insert(decodedImage, for: key)
             }
         }
         guard !Task.isCancelled else { return nil }
         return decodedImage
+    }
+
+    nonisolated private static func cacheKey(
+        canonicalPlaceKey: String,
+        photoKey: String,
+        targetPixelSize: Int
+    ) -> PlacePhotoImageCacheKey {
+        PlacePhotoImageCacheKey(
+            canonicalPlaceKey: canonicalPlaceKey,
+            photoKey: photoKey,
+            targetPixelSize: normalizedTargetPixelSize(targetPixelSize)
+        )
+    }
+
+    nonisolated private static func normalizedTargetPixelSize(_ targetPixelSize: Int) -> Int {
+        let clamped = max(1, targetPixelSize)
+        let quantum = 64
+        return ((clamped + quantum - 1) / quantum) * quantum
     }
 
     nonisolated private static func downsampledImage(
@@ -144,13 +277,226 @@ enum ListPreviewPlaceSelector {
 }
 
 @MainActor
-enum ListPlacePhotoResolver {
-    private struct VisibleUserPhotoTask {
-        let id: UUID
-        let task: Task<PlacePhoto, Error>
+final class ListPlacePhotoSelectionCache {
+    struct Key: Hashable {
+        let backendScopeID: UUID
+        let canonicalPlaceKey: String
+        let preferredPhotoKey: String
+        let eligibleUserIDs: [String]?
+        let authorizationScopeKey: String
     }
 
-    private static var visibleUserPhotoTasks: [String: VisibleUserPhotoTask] = [:]
+    static let shared = ListPlacePhotoSelectionCache()
+
+    private let countLimit: Int
+    private var photos: [Key: PlacePhoto] = [:]
+    private var recency: [Key] = []
+
+    init(countLimit: Int = 256) {
+        self.countLimit = max(1, countLimit)
+    }
+
+    func photo(for key: Key) -> PlacePhoto? {
+        guard let photo = photos[key] else { return nil }
+        recency.removeAll { $0 == key }
+        recency.append(key)
+        return photo
+    }
+
+    func insert(_ photo: PlacePhoto, for key: Key) {
+        photos[key] = photo
+        recency.removeAll { $0 == key }
+        recency.append(key)
+
+        while photos.count > countLimit, let oldestKey = recency.first {
+            recency.removeFirst()
+            photos.removeValue(forKey: oldestKey)
+        }
+    }
+
+    func removePhoto(for key: Key) {
+        photos.removeValue(forKey: key)
+        recency.removeAll { $0 == key }
+    }
+
+    var entryCount: Int { photos.count }
+}
+
+@MainActor
+final class ListPlacePhotoBatcher {
+    struct Resolution {
+        let photo: PlacePhoto?
+        let providerLookupAttempted: Bool
+        let wasCancelled: Bool
+    }
+
+    private struct GroupKey: Hashable {
+        let backendScopeID: UUID
+        let eligibleUserIDs: [String]?
+        let authorizationScopeKey: String
+    }
+
+    private final class PendingBatch {
+        var requests: [String: PlacePhotoRequest] = [:]
+        var task: Task<[String: Resolution], Never>?
+    }
+
+    static let shared = ListPlacePhotoBatcher()
+
+    private let debounceNanoseconds: UInt64
+    private var pendingBatches: [GroupKey: PendingBatch] = [:]
+
+    init(debounceNanoseconds: UInt64 = 12_000_000) {
+        self.debounceNanoseconds = debounceNanoseconds
+    }
+
+    func photo(
+        for request: PlacePhotoRequest,
+        eligibleUserIDs: [String]?,
+        authorizationScopeKey: String,
+        backend: WanderBackend
+    ) async -> Resolution {
+        let normalizedEligibleUserIDs = eligibleUserIDs?.sorted()
+        let groupKey = GroupKey(
+            backendScopeID: backend.photoCacheScopeID,
+            eligibleUserIDs: normalizedEligibleUserIDs,
+            authorizationScopeKey: authorizationScopeKey
+        )
+        let pending = pendingBatches[groupKey] ?? PendingBatch()
+        pending.requests[request.canonicalPhotoCacheKey] = request
+        pendingBatches[groupKey] = pending
+
+        if pending.task == nil {
+            let debounceNanoseconds = self.debounceNanoseconds
+            pending.task = Task { @MainActor [weak self, weak pending] in
+                if debounceNanoseconds > 0 {
+                    try? await Task.sleep(nanoseconds: debounceNanoseconds)
+                } else {
+                    await Task.yield()
+                }
+                guard let self, let pending else { return [:] }
+                let requests = Array(pending.requests.values)
+                if self.pendingBatches[groupKey] === pending {
+                    self.pendingBatches[groupKey] = nil
+                }
+                return await self.resolve(
+                    requests: requests,
+                    eligibleUserIDs: normalizedEligibleUserIDs,
+                    backend: backend
+                )
+            }
+        }
+
+        let resolutions = await pending.task?.value ?? [:]
+        guard !Task.isCancelled else {
+            return Resolution(photo: nil, providerLookupAttempted: false, wasCancelled: true)
+        }
+        return resolutions[request.canonicalPhotoCacheKey]
+            ?? Resolution(photo: nil, providerLookupAttempted: false, wasCancelled: false)
+    }
+
+    private func resolve(
+        requests: [PlacePhotoRequest],
+        eligibleUserIDs: [String]?,
+        backend: WanderBackend
+    ) async -> [String: Resolution] {
+        guard !requests.isEmpty else { return [:] }
+        var photosByCanonicalKey: [String: PlacePhoto] = [:]
+
+        if eligibleUserIDs?.isEmpty != true {
+            let userRequests = requests.map { request in
+                if let eligibleUserIDs {
+                    return request.restrictingVisibleUserPhotos(to: eligibleUserIDs)
+                }
+                return request
+            }
+            do {
+                let visiblePhotos = try await backend.visibleUserPlacePhotos(for: userRequests)
+                for result in visiblePhotos {
+                    photosByCanonicalKey[result.canonicalPlaceKey] = result.photo
+                }
+            } catch is CancellationError {
+                return cancelledResolutions(for: requests)
+            } catch {
+                // A missing user photo is expected; provider coverage follows.
+            }
+        }
+
+        let providerRequests = requests.filter {
+            photosByCanonicalKey[$0.canonicalPhotoCacheKey] == nil
+        }
+        if !providerRequests.isEmpty {
+            do {
+                let providerPhotos = try await backend.placePhotos(for: providerRequests)
+                for result in providerPhotos {
+                    photosByCanonicalKey[result.canonicalPlaceKey] = result.photo
+                }
+            } catch is CancellationError {
+                return cancelledResolutions(for: requests)
+            } catch {
+                // Preserve any user photos already selected for this batch.
+            }
+        }
+        let providerKeys = Set(providerRequests.map(\.canonicalPhotoCacheKey))
+        return Dictionary(
+            uniqueKeysWithValues: requests.map {
+                (
+                    $0.canonicalPhotoCacheKey,
+                    Resolution(
+                        photo: photosByCanonicalKey[$0.canonicalPhotoCacheKey],
+                        providerLookupAttempted: providerKeys.contains($0.canonicalPhotoCacheKey),
+                        wasCancelled: false
+                    )
+                )
+            }
+        )
+    }
+
+    private func cancelledResolutions(
+        for requests: [PlacePhotoRequest]
+    ) -> [String: Resolution] {
+        Dictionary(
+            uniqueKeysWithValues: requests.map {
+                (
+                    $0.canonicalPhotoCacheKey,
+                    Resolution(photo: nil, providerLookupAttempted: false, wasCancelled: true)
+                )
+            }
+        )
+    }
+}
+
+@MainActor
+enum ListPlacePhotoResolver {
+    static func cachedResolvedPhoto(
+        request: PlacePhotoRequest,
+        preferredUserPhoto: PlacePhoto?,
+        eligibleUserIDs: [String]? = nil,
+        authorizationScopeKey: String,
+        targetPixelSize: Int,
+        backend: WanderBackend,
+        selectionCache: ListPlacePhotoSelectionCache = .shared
+    ) -> ListPlaceResolvedPhoto? {
+        let request = request.rendering(.listThumbnail)
+        let key = selectionCacheKey(
+            request: request,
+            preferredUserPhoto: preferredUserPhoto,
+            eligibleUserIDs: eligibleUserIDs,
+            authorizationScopeKey: authorizationScopeKey,
+            backend: backend
+        )
+        let selectedPhoto = selectionCache.photo(for: key) ?? preferredUserPhoto
+        guard let selectedPhoto,
+              let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
+                  canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                  photoKey: selectedPhoto.cacheKey,
+                  targetPixelSize: targetPixelSize
+              )
+        else { return nil }
+
+        selectionCache.insert(selectedPhoto, for: key)
+        return ListPlaceResolvedPhoto(photo: selectedPhoto, image: decodedImage.image)
+    }
 
     static func resolve(
         request: PlacePhotoRequest,
@@ -158,67 +504,100 @@ enum ListPlacePhotoResolver {
         eligibleUserIDs: [String]? = nil,
         authorizationScopeKey: String,
         targetPixelSize: Int,
-        backend: WanderBackend
+        backend: WanderBackend,
+        selectionCache: ListPlacePhotoSelectionCache = .shared
     ) async -> ListPlaceResolvedPhoto? {
+        let request = request.rendering(.listThumbnail)
         var attemptedPhotoKeys = Set<String>()
+        let selectionKey = selectionCacheKey(
+            request: request,
+            preferredUserPhoto: preferredUserPhoto,
+            eligibleUserIDs: eligibleUserIDs,
+            authorizationScopeKey: authorizationScopeKey,
+            backend: backend
+        )
+
+        if let cachedPhoto = selectionCache.photo(for: selectionKey) {
+            if let resolved = await render(
+                cachedPhoto,
+                canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                backend: backend,
+                targetPixelSize: targetPixelSize,
+                attemptedPhotoKeys: &attemptedPhotoKeys
+            ) {
+                return resolved
+            }
+            selectionCache.removePhoto(for: selectionKey)
+        }
 
         if let preferredUserPhoto,
            let resolved = await render(
                preferredUserPhoto,
+               canonicalPlaceKey: request.canonicalPhotoCacheKey,
                backend: backend,
                targetPixelSize: targetPixelSize,
                attemptedPhotoKeys: &attemptedPhotoKeys
            ) {
+            selectionCache.insert(resolved.photo, for: selectionKey)
             return resolved
         }
 
-        if eligibleUserIDs?.isEmpty != true {
-            do {
-                let visibleUserPhoto = try await visibleUserPhoto(
-                    for: request,
-                    eligibleUserIDs: eligibleUserIDs,
-                    authorizationScopeKey: authorizationScopeKey,
-                    backend: backend
-                )
-                if let resolved = await render(
-                    visibleUserPhoto,
-                    backend: backend,
-                    targetPixelSize: targetPixelSize,
-                    attemptedPhotoKeys: &attemptedPhotoKeys
-                ) {
-                    return resolved
-                }
-            } catch is CancellationError {
-                return nil
-            } catch {
-                // A missing eligible user photo is the expected path to provider fallback.
-            }
-        }
-
-        guard !Task.isCancelled else { return nil }
-
-        do {
-            let providerPhoto = try await backend.placePhoto(for: request)
-            return await render(
-                providerPhoto,
+        let batchResolution = await ListPlacePhotoBatcher.shared.photo(
+            for: request,
+            eligibleUserIDs: eligibleUserIDs,
+            authorizationScopeKey: authorizationScopeKey,
+            backend: backend
+        )
+        guard !batchResolution.wasCancelled, !Task.isCancelled else { return nil }
+        if let selectedPhoto = batchResolution.photo {
+            let resolved = await render(
+                selectedPhoto,
+                canonicalPlaceKey: request.canonicalPhotoCacheKey,
                 backend: backend,
                 targetPixelSize: targetPixelSize,
                 attemptedPhotoKeys: &attemptedPhotoKeys
             )
-        } catch is CancellationError {
-            return nil
-        } catch {
-            return nil
+            if let resolved {
+                selectionCache.insert(resolved.photo, for: selectionKey)
+            }
+            if let resolved { return resolved }
         }
+
+        guard !batchResolution.providerLookupAttempted else { return nil }
+
+        // A selected user photo can disappear between metadata and Storage.
+        // Provider fallback is deliberately individual because this is a rare
+        // recovery path, not normal list loading.
+        if let providerPhoto = try? await backend.placePhoto(for: request),
+           let resolved = await render(
+               providerPhoto,
+               canonicalPlaceKey: request.canonicalPhotoCacheKey,
+               backend: backend,
+               targetPixelSize: targetPixelSize,
+               attemptedPhotoKeys: &attemptedPhotoKeys
+           ) {
+            selectionCache.insert(resolved.photo, for: selectionKey)
+            return resolved
+        }
+        return nil
     }
 
     private static func render(
         _ photo: PlacePhoto,
+        canonicalPlaceKey: String,
         backend: WanderBackend,
         targetPixelSize: Int,
         attemptedPhotoKeys: inout Set<String>
     ) async -> ListPlaceResolvedPhoto? {
         guard attemptedPhotoKeys.insert(photo.cacheKey).inserted else { return nil }
+
+        if let decodedImage = PlacePhotoImagePipeline.shared.cachedImage(
+            canonicalPlaceKey: canonicalPlaceKey,
+            photoKey: photo.cacheKey,
+            targetPixelSize: targetPixelSize
+        ) {
+            return ListPlaceResolvedPhoto(photo: photo, image: decodedImage.image)
+        }
 
         do {
             let data: Data
@@ -228,14 +607,23 @@ enum ListPlacePhotoResolver {
                 }).value {
                     data = localData
                 } else {
-                    data = try await backend.placePhotoImageData(for: photo)
+                    data = try await backend.placePhotoImageData(
+                        for: photo,
+                        canonicalPlaceKey: canonicalPlaceKey,
+                        variant: .listThumbnail
+                    )
                 }
             } else {
-                data = try await backend.placePhotoImageData(for: photo)
+                data = try await backend.placePhotoImageData(
+                    for: photo,
+                    canonicalPlaceKey: canonicalPlaceKey,
+                    variant: .listThumbnail
+                )
             }
             try Task.checkCancellation()
             guard let decodedImage = await PlacePhotoImagePipeline.shared.image(
                 from: data,
+                canonicalPlaceKey: canonicalPlaceKey,
                 photoKey: photo.cacheKey,
                 targetPixelSize: targetPixelSize
             ) else {
@@ -248,47 +636,20 @@ enum ListPlacePhotoResolver {
         }
     }
 
-    private static func visibleUserPhoto(
-        for request: PlacePhotoRequest,
+    private static func selectionCacheKey(
+        request: PlacePhotoRequest,
+        preferredUserPhoto: PlacePhoto?,
         eligibleUserIDs: [String]?,
         authorizationScopeKey: String,
         backend: WanderBackend
-    ) async throws -> PlacePhoto {
-        try Task.checkCancellation()
-        let contributorKey = eligibleUserIDs?
-            .sorted()
-            .joined(separator: ",") ?? "all-visible-users"
-        let key = "\(authorizationScopeKey)|\(request.lookupKey)|contributors:\(contributorKey)"
-        let entry: VisibleUserPhotoTask
-        if let existing = visibleUserPhotoTasks[key] {
-            entry = existing
-        } else {
-            let id = UUID()
-            let task = Task { @MainActor in
-                if let eligibleUserIDs {
-                    return try await backend.visibleUserPlacePhoto(
-                        for: request.restrictingVisibleUserPhotos(to: eligibleUserIDs)
-                    )
-                }
-                return try await backend.visibleUserPlacePhoto(for: request)
-            }
-            let newEntry = VisibleUserPhotoTask(id: id, task: task)
-            visibleUserPhotoTasks[key] = newEntry
-            entry = newEntry
-        }
-
-        do {
-            let photo = try await entry.task.value
-            if visibleUserPhotoTasks[key]?.id == entry.id {
-                visibleUserPhotoTasks[key] = nil
-            }
-            try Task.checkCancellation()
-            return photo
-        } catch {
-            if visibleUserPhotoTasks[key]?.id == entry.id {
-                visibleUserPhotoTasks[key] = nil
-            }
-            throw error
-        }
+    ) -> ListPlacePhotoSelectionCache.Key {
+        ListPlacePhotoSelectionCache.Key(
+            backendScopeID: backend.photoCacheScopeID,
+            canonicalPlaceKey: request.canonicalPhotoCacheKey,
+            preferredPhotoKey: preferredUserPhoto?.cacheKey ?? "none",
+            eligibleUserIDs: eligibleUserIDs?.sorted(),
+            authorizationScopeKey: authorizationScopeKey
+        )
     }
+
 }

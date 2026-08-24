@@ -11,6 +11,7 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
   let storageUploadCount = 0;
   let storageCacheControl: string | null = null;
   let signedURLExpirySeconds: number | null = null;
+  let signedTransform: Record<string, unknown> | null = null;
 
   const dependencies: PlacePhotoDependencies = {
     now: () => fixedNow,
@@ -90,8 +91,10 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
       }
       if (url.includes("/storage/v1/object/sign/google-place-photo-cache/")) {
         signedURLExpirySeconds =
-          (JSON.parse(String(init?.body)) as { expiresIn: number })
-            .expiresIn;
+          (JSON.parse(String(init?.body)) as { expiresIn: number }).expiresIn;
+        signedTransform = (JSON.parse(String(init?.body)) as {
+          transform?: Record<string, unknown>;
+        }).transform ?? null;
         return Response.json({
           signedURL:
             "/storage/v1/object/sign/google-place-photo-cache/cache.img?token=test",
@@ -126,6 +129,16 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
   assertEquals("expires_at" in writtenRow, false);
   assertEquals(storageCacheControl, "86400");
   assertEquals(signedURLExpirySeconds, 86_400);
+  assert(signedTransform !== null, "signed profile transform was not requested");
+  const profileTransform = signedTransform as unknown as Record<string, unknown>;
+  assertEquals(profileTransform.width, 1_800);
+  assertEquals(profileTransform.height, 1_800);
+  assertEquals(profileTransform.resize, "contain");
+  assertEquals(profileTransform.quality, 92);
+  assert(
+    calls.some(({ url }) => url.includes("maxWidthPx=3200&maxHeightPx=3200")),
+    "provider cache stores a fullscreen-quality source",
+  );
 
   const second = await handleRequest(photoRequest(), dependencies);
   assertEquals(second.status, 200);
@@ -143,6 +156,117 @@ Deno.test("place-photo stores a provider image once and reuses the private serve
     "the removed quota RPC was called",
   );
 });
+
+Deno.test("place-photo batches cached list manifests behind one auth and cache read", async () => {
+  let authCount = 0;
+  let cacheReadCount = 0;
+  let signCount = 0;
+  const dependencies: PlacePhotoDependencies = {
+    now: () => fixedNow,
+    env: (name) =>
+      ({
+        SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_ANON_KEY: "publishable-key",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+      })[name],
+    // deno-lint-ignore require-await
+    fetch: async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/rest/v1/rpc/current_profile")) {
+        authCount += 1;
+        return Response.json({ id: "profile" });
+      }
+      if (url.includes("/rest/v1/google_place_photo_cache")) {
+        cacheReadCount += 1;
+        const filter = new URL(url).searchParams.get("cache_key") ?? "";
+        const keys = filter.slice("in.(".length, -1).split(",");
+        return Response.json(keys.map((key, index) => ({
+          cache_key: key,
+          object_path: `${key.slice(0, 2)}/${key}.img`,
+          provider_place_id: `google-${index + 1}`,
+          provider_primary_type: "restaurant",
+          provider_types: ["restaurant"],
+          provider_rating: 4.5,
+          provider_user_rating_count: 100,
+          provider_open_now: true,
+          provider_next_open_time: null,
+          provider_next_close_time: null,
+          provider_utc_offset_minutes: -420,
+          width: 3_200,
+          height: 2_400,
+          content_type: "image/jpeg",
+          byte_size: 500_000,
+          author_name: null,
+          author_profile_url: null,
+          author_avatar_url: null,
+          source_photo_url: "https://www.google.com/maps/place/example",
+          flag_content_url: null,
+          fetched_at: fixedNow.toISOString(),
+          last_accessed_at: fixedNow.toISOString(),
+        })));
+      }
+      if (url.includes("/storage/v1/object/sign/google-place-photo-cache/")) {
+        signCount += 1;
+        const body = JSON.parse(String(init?.body)) as {
+          transform?: { width?: number; height?: number; quality?: number };
+        };
+        assertEquals(body.transform?.width, 512);
+        assertEquals(body.transform?.height, 512);
+        assertEquals(body.transform?.quality, 84);
+        return Response.json({
+          signedURL:
+            "/storage/v1/render/image/sign/google-place-photo-cache/cache.img?token=test",
+        });
+      }
+      throw new Error(`unexpected request ${init?.method ?? "GET"} ${url}`);
+    },
+  };
+
+  const request = new Request(
+    "https://example.supabase.co/functions/v1/place-photo",
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer user-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        requests: [
+          {
+            name: "One",
+            source_provider: "google_places",
+            source_provider_place_id: "google-1",
+            requires_photo: true,
+            render_variant: "list_thumbnail",
+          },
+          {
+            name: "Two",
+            source_provider: "google_places",
+            source_provider_place_id: "google-2",
+            requires_photo: true,
+            render_variant: "list_thumbnail",
+          },
+        ],
+      }),
+    },
+  );
+
+  const response = await handleRequest(request, dependencies);
+  assertEquals(response.status, 200);
+  const payload = await response.json() as {
+    results: Array<{ index: number; photo: PlacePhotoRecord | null }>;
+  };
+  assertEquals(payload.results.length, 2);
+  assertEquals(payload.results[0].photo?.provider, "google_places");
+  assertEquals(payload.results[1].photo?.provider, "google_places");
+  assertEquals(authCount, 1);
+  assertEquals(cacheReadCount, 1);
+  assertEquals(signCount, 2);
+});
+
+type PlacePhotoRecord = {
+  provider: string;
+};
 
 Deno.test("place-photo reuses legacy cache rows without applying their former expiry", async () => {
   let deletedStorageObject = false;

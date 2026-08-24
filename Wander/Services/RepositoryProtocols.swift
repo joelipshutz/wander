@@ -957,6 +957,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
     let sourceProviderPlaceID: String?
     let requiresPhoto: Bool
     let eligibleUserIDs: [String]?
+    let renderVariant: PlacePhotoRenderVariant
 
     init(
         placeID: String? = nil,
@@ -967,7 +968,8 @@ struct PlacePhotoRequest: Encodable, Equatable {
         sourceProvider: String?,
         sourceProviderPlaceID: String?,
         requiresPhoto: Bool = true,
-        eligibleUserIDs: [String]? = nil
+        eligibleUserIDs: [String]? = nil,
+        renderVariant: PlacePhotoRenderVariant = .profile
     ) {
         self.placeID = placeID
         self.name = name
@@ -978,6 +980,7 @@ struct PlacePhotoRequest: Encodable, Equatable {
         self.sourceProviderPlaceID = sourceProviderPlaceID
         self.requiresPhoto = requiresPhoto
         self.eligibleUserIDs = eligibleUserIDs
+        self.renderVariant = renderVariant
     }
 
     enum CodingKeys: String, CodingKey {
@@ -989,19 +992,39 @@ struct PlacePhotoRequest: Encodable, Equatable {
         case sourceProvider = "source_provider"
         case sourceProviderPlaceID = "source_provider_place_id"
         case requiresPhoto = "requires_photo"
+        case renderVariant = "render_variant"
     }
 
     var lookupKey: String {
+        var components = lookupComponents
+        if !requiresPhoto {
+            components.append("metadata-only")
+        } else {
+            components.append("variant:\(renderVariant.rawValue)")
+        }
+        return components.joined(separator: "|")
+    }
+
+    private var lookupComponents: [String] {
         let coordinate = [latitude, longitude]
             .compactMap { $0.map { String(format: "%.5f", $0) } }
             .joined(separator: ",")
-        var components = [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
+        return [placeID, sourceProvider, sourceProviderPlaceID, name, address, coordinate]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
-        if !requiresPhoto {
-            components.append("metadata-only")
+    }
+
+    var canonicalPhotoCacheKey: String {
+        if let placeID = Self.normalizedCacheComponent(placeID) {
+            return "place:\(placeID)"
         }
-        return components.joined(separator: "|")
+
+        if let provider = Self.normalizedCacheComponent(sourceProvider),
+           let providerPlaceID = Self.normalizedCacheComponent(sourceProviderPlaceID) {
+            return "provider:\(provider)|\(providerPlaceID)"
+        }
+
+        return "lookup:\(lookupComponents.joined(separator: "|"))"
     }
 
     var skipsGooglePlacesLookup: Bool {
@@ -1026,9 +1049,74 @@ struct PlacePhotoRequest: Encodable, Equatable {
             sourceProvider: sourceProvider,
             sourceProviderPlaceID: sourceProviderPlaceID,
             requiresPhoto: requiresPhoto,
-            eligibleUserIDs: userIDs
+            eligibleUserIDs: userIDs,
+            renderVariant: renderVariant
         )
     }
+
+    func rendering(_ variant: PlacePhotoRenderVariant) -> PlacePhotoRequest {
+        PlacePhotoRequest(
+            placeID: placeID,
+            name: name,
+            address: address,
+            latitude: latitude,
+            longitude: longitude,
+            sourceProvider: sourceProvider,
+            sourceProviderPlaceID: sourceProviderPlaceID,
+            requiresPhoto: requiresPhoto,
+            eligibleUserIDs: eligibleUserIDs,
+            renderVariant: variant
+        )
+    }
+
+    private static func normalizedCacheComponent(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+}
+
+enum PlacePhotoRenderVariant: String, Codable, CaseIterable, Sendable {
+    case listThumbnail = "list_thumbnail"
+    case feed
+    case card
+    case profile
+    case fullscreen
+
+    var maximumPixelDimension: Int? {
+        switch self {
+        case .listThumbnail:
+            512
+        case .feed, .card:
+            1_440
+        case .profile:
+            1_800
+        case .fullscreen:
+            nil
+        }
+    }
+
+    var deliveryQuality: Int {
+        switch self {
+        case .listThumbnail:
+            84
+        case .feed, .card:
+            90
+        case .profile:
+            92
+        case .fullscreen:
+            96
+        }
+    }
+
+    var minimumDecodePixelDimension: Int? {
+        self == .fullscreen ? 3_200 : nil
+    }
+}
+
+struct PlacePhotoBatchResult: Equatable {
+    let canonicalPlaceKey: String
+    let photo: PlacePhoto
 }
 
 struct PlacePhoto: Decodable, Equatable {
@@ -1149,7 +1237,7 @@ struct PlacePhoto: Decodable, Equatable {
     var isGooglePlacesPhoto: Bool { provider == "google_places" }
 
     var cacheKey: String {
-        [provider, providerPlaceID, photoURLString, storageBucket, storagePath, localAssetRef]
+        [provider, providerPlaceID, storageBucket, storagePath, localAssetRef]
             .compactMap { $0 }
             .joined(separator: "|")
     }
@@ -1840,16 +1928,65 @@ protocol SocialPlaceSaveRepository {
 @MainActor
 protocol PlacePhotoRepository {
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult]
     func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto
+    func visibleUserPhotos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult]
     func visiblePhotoGalleryPage(
         placeID: String,
         after cursor: PlacePhotoGalleryCursor?,
         limit: Int
     ) async throws -> PlacePhotoGalleryPage
     func imageData(for photo: PlacePhoto) async throws -> Data
+    func imageData(for photo: PlacePhoto, variant: PlacePhotoRenderVariant) async throws -> Data
 }
 
 extension PlacePhotoRepository {
+    func photos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        var results: [PlacePhotoBatchResult] = []
+        results.reserveCapacity(requests.count)
+        for request in requests {
+            do {
+                let photo = try await photo(for: request)
+                results.append(
+                    PlacePhotoBatchResult(
+                        canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                        photo: photo
+                    )
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
+        }
+        return results
+    }
+
+    func visibleUserPhotos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        var results: [PlacePhotoBatchResult] = []
+        results.reserveCapacity(requests.count)
+        for request in requests {
+            do {
+                let photo = try await visibleUserPhoto(for: request)
+                results.append(
+                    PlacePhotoBatchResult(
+                        canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                        photo: photo
+                    )
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                continue
+            }
+        }
+        return results
+    }
+
+    func imageData(for photo: PlacePhoto, variant: PlacePhotoRenderVariant) async throws -> Data {
+        try await imageData(for: photo)
+    }
+
     func visiblePhotoGalleryPage(
         placeID: String,
         after cursor: PlacePhotoGalleryCursor?,

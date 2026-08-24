@@ -15,8 +15,8 @@ select is(
 );
 select is(
   (select file_size_limit from storage.buckets where id = 'google-place-photo-cache'),
-  10485760::bigint,
-  'Google place photo cache limits objects to 10 MiB'
+  16777216::bigint,
+  'Google place photo cache allows a bounded 16 MiB fullscreen-quality source'
 );
 select is(
   (select allowed_mime_types from storage.buckets where id = 'google-place-photo-cache'),

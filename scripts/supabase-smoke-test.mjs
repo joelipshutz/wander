@@ -895,6 +895,28 @@ begin
 end
 $list_cover_metadata$;
 
+do $batched_list_cover_metadata$
+declare
+  valid boolean;
+begin
+  select
+    not p.prosecdef
+    and 'search_path=public, app' = any(p.proconfig)
+    and has_function_privilege('authenticated', p.oid, 'execute')
+    and not has_function_privilege('anon', p.oid, 'execute')
+  into valid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'first_visible_place_photos_by_users'
+    and pg_get_function_identity_arguments(p.oid)
+      = 'input_place_ids uuid[], input_user_ids text[]';
+  if valid is distinct from true then
+    raise exception 'batched list-cover photo metadata contract failed';
+  end if;
+end
+$batched_list_cover_metadata$;
+
 do $photo_gallery_metadata$
 declare
   valid boolean;
@@ -950,7 +972,7 @@ begin
       from storage.buckets b
       where b.id = 'google-place-photo-cache'
         and not b.public
-        and b.file_size_limit = 10485760
+        and b.file_size_limit = 16777216
     )
     and c.relrowsecurity
     and c.relforcerowsecurity
@@ -2307,6 +2329,100 @@ async function runOwnPlaceSmokeChecks(client, smokeUserID, collaboratorUserID) {
   );
   const socialPlaceID = socialFixture.rows[0].place_id;
   const sourceUserPlaceID = socialFixture.rows[0].source_user_place_id;
+  const isolatedSocialPlace = {
+    canonical_name: "Codex Smoke Note Isolation",
+    category: "coffee_tea_sweets",
+    primary_category: "coffee_tea_sweets",
+    subcategory: "Coffee shop",
+    category_source: "deterministic",
+    raw_provider_type: "coffee shop",
+    address: "2 Smoke Test Way",
+    locality: "Los Angeles",
+    region: "CA",
+    country: "United States",
+    latitude: 34.052245,
+    longitude: -118.243693,
+    source_provider: "codex_smoke",
+    source_provider_place_id: "social-note-isolation-smoke",
+    confidence: 1,
+  };
+
+  await setAuthenticatedUser(client, collaboratorUserID);
+  const isolatedSourceSave = await expectQuery(
+    client,
+    "create a source-account memory with a private note",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(isolatedSocialPlace),
+      JSON.stringify({
+        status: "been",
+        visibility: "followers",
+        note: "collaborator private note",
+        nearby_confirmed: false,
+        source_type: "manual",
+        rating_score: 5,
+      }),
+    ],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id)
+      && Boolean(result.rows[0]?.saved?.place_id),
+  );
+  const isolatedSourceUserPlaceID = isolatedSourceSave.rows[0].saved.user_place_id;
+  const isolatedSocialPlaceID = isolatedSourceSave.rows[0].saved.place_id;
+
+  await setAuthenticatedUser(client, smokeUserID);
+  const isolatedSocialSave = await expectQuery(
+    client,
+    "social save creates the viewer memory without the source note",
+    "select public.save_visible_place($1::uuid, $2::uuid) as saved",
+    [isolatedSocialPlaceID, isolatedSourceUserPlaceID],
+    (result) => Boolean(result.rows[0]?.saved?.user_place_id),
+  );
+  const isolatedSocialSaveID = isolatedSocialSave.rows[0].saved.user_place_id;
+
+  await expectQuery(
+    client,
+    "new social save keeps the source-account note isolated",
+    "select status, note from public.user_places where id = $1::uuid",
+    [isolatedSocialSaveID],
+    (result) => result.rows.length === 1
+      && result.rows[0].status === "wanna_go"
+      && result.rows[0].note === null,
+  );
+
+  await expectQuery(
+    client,
+    "viewer adds an account-owned note to the social save",
+    "select public.save_own_place($1::jsonb, $2::jsonb, '[]'::jsonb) as saved",
+    [
+      JSON.stringify(isolatedSocialPlace),
+      JSON.stringify({
+        status: "wanna_go",
+        visibility: "followers",
+        note: "viewer private note",
+        nearby_confirmed: false,
+        source_type: "social_save",
+      }),
+    ],
+    (result) => result.rows[0]?.saved?.user_place_id === isolatedSocialSaveID,
+  );
+
+  await expectQuery(
+    client,
+    "repeated social save returns the existing viewer memory",
+    "select public.save_visible_place($1::uuid, $2::uuid) as saved",
+    [isolatedSocialPlaceID, isolatedSourceUserPlaceID],
+    (result) => result.rows[0]?.saved?.user_place_id === isolatedSocialSaveID,
+  );
+
+  await expectQuery(
+    client,
+    "repeated social save preserves the viewer account note",
+    "select note from public.user_places where id = $1::uuid",
+    [isolatedSocialSaveID],
+    (result) => result.rows.length === 1
+      && result.rows[0].note === "viewer private note",
+  );
+
   const socialPlace = {
     canonical_name: "Codex Smoke Coffee",
     category: "coffee_tea_sweets",
@@ -4155,6 +4271,32 @@ async function runFirstVisiblePlacePhotoChecks(
 
   await expectQuery(
     client,
+    "batched list-cover contributor photo RPC metadata",
+    `
+      select
+        not p.prosecdef as security_invoker,
+        'search_path=public, app' = any(p.proconfig) as pinned_search_path,
+        has_function_privilege('authenticated', p.oid, 'execute') as authenticated_execute,
+        not has_function_privilege('anon', p.oid, 'execute') as anon_denied
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'first_visible_place_photos_by_users'
+        and pg_get_function_identity_arguments(p.oid)
+          = 'input_place_ids uuid[], input_user_ids text[]'
+    `,
+    [],
+    (result) => {
+      const row = result.rows[0];
+      return row?.security_invoker === true
+        && row?.pinned_search_path === true
+        && row?.authenticated_execute === true
+        && row?.anon_denied === true;
+    },
+  );
+
+  await expectQuery(
+    client,
     "place photo gallery RPC metadata",
     `
       select
@@ -4304,6 +4446,14 @@ async function runFirstVisiblePlacePhotoChecks(
   );
   await expectQuery(
     client,
+    "owner batched list cover selects the requested owner photo",
+    "select * from public.first_visible_place_photos_by_users(array[$1::uuid], $2::text[])",
+    [smokePlaceID, [smokeUserID]],
+    (result) => result.rows[0]?.place_id === smokePlaceID
+      && result.rows[0]?.photo_id === expectedPhotoID,
+  );
+  await expectQuery(
+    client,
     "owner list cover can select an eligible collaborator photo",
     "select * from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
     [smokePlaceID, [collaboratorUserID]],
@@ -4359,6 +4509,13 @@ async function runFirstVisiblePlacePhotoChecks(
     client,
     "follower list cover excludes a visible photo outside the contributor set",
     "select count(*)::integer as count from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
+    [smokePlaceID, [strangerUserID]],
+    (result) => result.rows[0]?.count === 0,
+  );
+  await expectQuery(
+    client,
+    "follower batched list cover cannot expand outside the contributor set",
+    "select count(*)::integer as count from public.first_visible_place_photos_by_users(array[$1::uuid], $2::text[])",
     [smokePlaceID, [strangerUserID]],
     (result) => result.rows[0]?.count === 0,
   );
@@ -4430,6 +4587,13 @@ async function runFirstVisiblePlacePhotoChecks(
     [smokePlaceID],
     (result) => result.rows[0]?.count === 0,
   );
+  await expectQuery(
+    client,
+    "stranger cannot resolve hidden batched place photo",
+    "select count(*)::integer as count from public.first_visible_place_photos_by_users(array[$1::uuid], null)",
+    [smokePlaceID],
+    (result) => result.rows[0]?.count === 0,
+  );
 
   await client.query("set local role anon");
   await expectQueryFailure(
@@ -4443,6 +4607,13 @@ async function runFirstVisiblePlacePhotoChecks(
     client,
     "anonymous role cannot call list-cover contributor photo RPC",
     "select * from public.first_visible_place_photo_by_users($1::uuid, $2::text[])",
+    [smokePlaceID, [smokeUserID]],
+    /permission denied/,
+  );
+  await expectQueryFailure(
+    client,
+    "anonymous role cannot call batched list-cover contributor photo RPC",
+    "select * from public.first_visible_place_photos_by_users(array[$1::uuid], $2::text[])",
     [smokePlaceID, [smokeUserID]],
     /permission denied/,
   );

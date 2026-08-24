@@ -54,11 +54,24 @@ protocol RemoteStorageCalling {
     ) async throws
     func deleteObject(bucket: String, path: String) async throws
     func downloadObject(bucket: String, path: String) async throws -> Data
+    func downloadImage(
+        bucket: String,
+        path: String,
+        variant: PlacePhotoRenderVariant
+    ) async throws -> Data
     func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL
     func publicObjectURL(bucket: String, path: String, cacheBust: String?) throws -> URL
 }
 
 extension RemoteStorageCalling {
+    func downloadImage(
+        bucket: String,
+        path: String,
+        variant: PlacePhotoRenderVariant
+    ) async throws -> Data {
+        try await downloadObject(bucket: bucket, path: path)
+    }
+
     func signedObjectURL(bucket: String, path: String, expiresIn: Int) async throws -> URL {
         throw WanderRemoteError.notImplemented("private storage signed URL")
     }
@@ -859,11 +872,28 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
     }
 
     func downloadObject(bucket: String, path: String) async throws -> Data {
+        try await downloadStorageObject(bucket: bucket, path: path, variant: nil)
+    }
+
+    func downloadImage(
+        bucket: String,
+        path: String,
+        variant: PlacePhotoRenderVariant
+    ) async throws -> Data {
+        try await downloadStorageObject(bucket: bucket, path: path, variant: variant)
+    }
+
+    private func downloadStorageObject(
+        bucket: String,
+        path: String,
+        variant: PlacePhotoRenderVariant?
+    ) async throws -> Data {
         let expectedUserID = try configuredAuthenticatedUserID()
         let initialResponse = try await storageDownloadResponse(
             bucket: bucket,
             path: path,
-            expectedUserID: expectedUserID
+            expectedUserID: expectedUserID,
+            variant: variant
         )
 
         let response: (data: Data, response: HTTPURLResponse, requestToken: String)
@@ -876,6 +906,7 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
                 bucket: bucket,
                 path: path,
                 expectedUserID: expectedUserID,
+                variant: variant,
                 rejectedToken: initialResponse.requestToken
             )
         } else {
@@ -896,9 +927,20 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         bucket: String,
         path: String,
         expectedUserID: String,
+        variant: PlacePhotoRenderVariant?,
         rejectedToken: String? = nil
     ) async throws -> (data: Data, response: HTTPURLResponse, requestToken: String) {
-        let endpoint = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
+        let endpoint: URL
+        if let maximumPixelDimension = variant?.maximumPixelDimension {
+            endpoint = try storageImageURL(
+                bucket: bucket,
+                path: path,
+                maximumPixelDimension: maximumPixelDimension,
+                quality: variant?.deliveryQuality ?? 90
+            )
+        } else {
+            endpoint = try storageObjectURL(bucket: bucket, path: path, isPublic: false)
+        }
         let requestContext = try await authenticatedRequestContext(
             expectedUserID: expectedUserID,
             rejectedToken: rejectedToken
@@ -925,6 +967,51 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             )
         }
         return (data, httpResponse, requestContext.token)
+    }
+
+    private func storageImageURL(
+        bucket: String,
+        path: String,
+        maximumPixelDimension: Int,
+        quality: Int
+    ) throws -> URL {
+        guard let supabaseURL = configuration.supabaseURL else {
+            throw WanderRemoteError.notConfigured
+        }
+        guard !bucket.isEmpty, !bucket.contains("/") else {
+            throw WanderRemoteError.invalidResponse("Invalid storage bucket")
+        }
+        let pathComponents = path.split(separator: "/", omittingEmptySubsequences: false)
+            .map(String.init)
+        guard !pathComponents.isEmpty,
+              pathComponents.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+        else {
+            throw WanderRemoteError.invalidResponse("Invalid storage path")
+        }
+
+        var endpoint = supabaseURL
+            .appendingPathComponent("storage")
+            .appendingPathComponent("v1")
+            .appendingPathComponent("render")
+            .appendingPathComponent("image")
+            .appendingPathComponent("authenticated")
+            .appendingPathComponent(bucket)
+        pathComponents.forEach { endpoint.appendPathComponent($0) }
+
+        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+            throw WanderRemoteError.invalidResponse("Invalid transformed storage URL")
+        }
+        let dimension = max(1, min(maximumPixelDimension, 2_500))
+        components.queryItems = [
+            URLQueryItem(name: "width", value: String(dimension)),
+            URLQueryItem(name: "height", value: String(dimension)),
+            URLQueryItem(name: "resize", value: "contain"),
+            URLQueryItem(name: "quality", value: String(max(20, min(quality, 100))))
+        ]
+        guard let url = components.url else {
+            throw WanderRemoteError.invalidResponse("Invalid transformed storage URL")
+        }
+        return url
     }
 
     func publicObjectURL(bucket: String, path: String, cacheBust: String? = nil) throws -> URL {

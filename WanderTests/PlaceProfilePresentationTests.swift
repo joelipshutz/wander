@@ -217,7 +217,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         }
         XCTAssertEqual(visiblePlace.userPlace.id, currentWanna.userPlace.id)
         XCTAssertEqual(conversion.initialStatus, .been)
-        XCTAssertEqual(conversion.initialNote, "Bring a picnic blanket.")
+        XCTAssertEqual(conversion.initialNote, "")
         XCTAssertTrue(conversion.startsOnDetails)
         XCTAssertFalse(conversion.showsRemoveControl)
         XCTAssertTrue(conversion.allowsPhotoAttachments)
@@ -229,7 +229,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             )
         )
         XCTAssertEqual(conversionDraft.baselineUserPlaceLocalID, currentWanna.userPlace.localID)
-        XCTAssertEqual(conversionDraft.form.note, "Bring a picnic blanket.")
+        XCTAssertEqual(conversionDraft.form.note, "")
         XCTAssertEqual(conversionDraft.form.selectedStatus, .been)
         XCTAssertEqual(conversionDraft.form.step, .details)
 
@@ -1069,7 +1069,11 @@ final class PlaceProfilePresentationTests: XCTestCase {
             localAssetRef: nil
         )
         let host = UIHostingController(
-            rootView: PlaceProfilePhotoImage(photo: photo, placeName: "Test Place")
+            rootView: PlaceProfilePhotoImage(
+                photo: photo,
+                canonicalPlaceKey: "place:test",
+                placeName: "Test Place"
+            )
                 .environmentObject(backend)
         )
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
@@ -1115,14 +1119,25 @@ final class PlaceProfilePresentationTests: XCTestCase {
 
         let firstPhoto = try await backend.placePhoto(for: request)
         let secondPhoto = try await backend.placePhoto(for: request)
-        let firstData = try await backend.placePhotoImageData(for: photo)
-        let secondData = try await backend.placePhotoImageData(for: photo)
+        let firstData = try await backend.placePhotoImageData(
+            for: photo,
+            canonicalPlaceKey: "place:test"
+        )
+        let secondData = try await backend.placePhotoImageData(
+            for: photo,
+            canonicalPlaceKey: "place:test"
+        )
+        let otherPlaceData = try await backend.placePhotoImageData(
+            for: photo,
+            canonicalPlaceKey: "place:other"
+        )
 
         XCTAssertEqual(firstPhoto, photo)
         XCTAssertEqual(secondPhoto, photo)
         XCTAssertEqual(firstData, secondData)
+        XCTAssertEqual(firstData, otherPlaceData)
         XCTAssertEqual(repository.metadataRequestCount, 1)
-        XCTAssertEqual(repository.imageRequestCount, 1)
+        XCTAssertEqual(repository.imageRequestCount, 2)
     }
 
     @MainActor
@@ -1148,6 +1163,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let host = UIHostingController(
             rootView: PlaceProfilePhotoImage(
                 photo: photo,
+                canonicalPlaceKey: "place:failed-test",
                 placeName: "Failed Test Place",
                 onLoadFailure: { failedPhoto in
                     XCTAssertEqual(failedPhoto, photo)
@@ -1689,7 +1705,11 @@ private struct PlacePhotoControlLayoutProbe: View {
         ZStack {
             Color.clear
 
-            PlaceProfilePhotoImage(photo: photo, placeName: "Wide Test Place")
+            PlaceProfilePhotoImage(
+                photo: photo,
+                canonicalPlaceKey: "place:wide-test",
+                placeName: "Wide Test Place"
+            )
 
             HStack {
                 Color.blue

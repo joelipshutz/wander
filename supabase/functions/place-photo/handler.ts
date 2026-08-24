@@ -11,7 +11,9 @@ const googlePlacesBaseURL = "https://places.googleapis.com/v1";
 const cacheBucket = "google-place-photo-cache";
 const signedURLLifetimeSeconds = 24 * 60 * 60;
 const businessMetadataFreshnessMilliseconds = 15 * 60 * 1_000;
-const maximumCachedImageBytes = 10 * 1_024 * 1_024;
+const maximumCachedImageBytes = 16 * 1_024 * 1_024;
+const providerSourceMaximumPixels = 3_200;
+const maximumBatchSize = 32;
 const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
 
 export type PlacePhotoDependencies = {
@@ -72,6 +74,12 @@ type PlacePhotoPayload = {
   flag_content_url: string | null;
 };
 
+type PlacePhotoResolution = {
+  status: number;
+  payload?: PlacePhotoPayload;
+  error?: string;
+};
+
 const defaultDependencies: PlacePhotoDependencies = {
   fetch,
   env: (name) => Deno.env.get(name),
@@ -98,16 +106,98 @@ export async function handleRequest(
     return jsonResponse({ error: "invalid_authorization" }, 401);
   }
 
-  const input = placePhotoInput(await readBody(request));
+  const body = await readBody(request);
+  if (Array.isArray(body.requests)) {
+    return handleBatchRequest(body.requests, supabase, dependencies);
+  }
+
+  const input = placePhotoInput(body);
   if (!input) {
     return jsonResponse({ error: "invalid_place" }, 400);
   }
-  if (!shouldUseGooglePlaces(input)) {
-    return jsonResponse({ error: "photo_not_found" }, 404);
+  const resolution = await resolvePhotoPayload(
+    input,
+    supabase,
+    dependencies,
+  );
+  return resolutionResponse(resolution);
+}
+
+async function handleBatchRequest(
+  values: unknown[],
+  supabase: SupabaseConfiguration,
+  dependencies: PlacePhotoDependencies,
+): Promise<Response> {
+  if (!values.length || values.length > maximumBatchSize) {
+    return jsonResponse({ error: "invalid_batch" }, 400);
   }
 
-  const cacheKey = await placePhotoCacheKey(input);
-  const cached = supabase.serviceRoleKey
+  const inputs = values.map((value, index) => ({
+    index,
+    input: value && typeof value === "object" && !Array.isArray(value)
+      ? placePhotoInput(value as Record<string, unknown>)
+      : null,
+  }));
+  const validInputs = inputs.filter(
+    (item): item is { index: number; input: PlacePhotoInput } =>
+      item.input !== null && shouldUseGooglePlaces(item.input),
+  );
+  const keyedInputs = await Promise.all(validInputs.map(async (item) => ({
+    ...item,
+    cacheKey: await placePhotoCacheKey(item.input),
+  })));
+  const cachedRows = supabase.serviceRoleKey
+    ? await readCachedPhotos(
+      keyedInputs.map((item) => item.cacheKey),
+      supabase,
+      dependencies,
+    )
+    : new Map<string, CachedPhotoRow>();
+
+  const resolved = await mapWithConcurrency(keyedInputs, 4, async (item) => ({
+    index: item.index,
+    resolution: await resolvePhotoPayload(
+      item.input,
+      supabase,
+      dependencies,
+      item.cacheKey,
+      cachedRows.get(item.cacheKey) ?? null,
+      true,
+    ),
+  }));
+  const resolutionsByIndex = new Map(
+    resolved.map((item) => [item.index, item.resolution]),
+  );
+  return Response.json({
+    results: inputs.map(({ index }) => {
+      const resolution = resolutionsByIndex.get(index);
+      return {
+        index,
+        photo: resolution?.status === 200 ? resolution.payload ?? null : null,
+        error: resolution?.status === 200
+          ? null
+          : resolution?.error ?? "invalid_place",
+      };
+    }),
+  }, { headers: noStoreHeaders });
+}
+
+async function resolvePhotoPayload(
+  input: PlacePhotoInput,
+  supabase: SupabaseConfiguration,
+  dependencies: PlacePhotoDependencies,
+  resolvedCacheKey?: string,
+  resolvedCachedRow?: CachedPhotoRow | null,
+  skipsStaleBusinessRefresh = false,
+): Promise<PlacePhotoResolution> {
+  if (!shouldUseGooglePlaces(input)) {
+    return { status: 404, error: "photo_not_found" };
+  }
+
+  const cacheKey = resolvedCacheKey ?? await placePhotoCacheKey(input);
+  const cached = typeof resolvedCachedRow !== "undefined"
+    ? resolvedCachedRow
+    : supabase.serviceRoleKey
     ? await readCachedPhoto(cacheKey, supabase, dependencies)
     : null;
   if (cached && businessMetadataIsFresh(cached, dependencies.now())) {
@@ -119,13 +209,13 @@ export async function handleRequest(
     );
     if (payload) {
       console.log("place_photo_cache_hit");
-      return Response.json(payload, { headers: noStoreHeaders });
+      return { status: 200, payload };
     }
   }
 
   const apiKey = googlePlacesAPIKey(dependencies);
   if (cached) {
-    if (apiKey && supabase.serviceRoleKey) {
+    if (!skipsStaleBusinessRefresh && apiKey && supabase.serviceRoleKey) {
       try {
         const refreshedPlace = await resolvePlace(
           { ...input, requiresPhoto: false },
@@ -147,7 +237,7 @@ export async function handleRequest(
           );
           if (payload) {
             console.log("place_photo_business_metadata_refreshed");
-            return Response.json(payload, { headers: noStoreHeaders });
+            return { status: 200, payload };
           }
         }
       } catch (error) {
@@ -166,19 +256,19 @@ export async function handleRequest(
     );
     if (payload) {
       console.log("place_photo_cache_hit_without_current_hours");
-      return Response.json(payload, { headers: noStoreHeaders });
+      return { status: 200, payload };
     }
   }
 
   console.log("place_photo_cache_miss");
   if (!apiKey) {
-    return jsonResponse({ error: "provider_unavailable" }, 503);
+    return { status: 503, error: "provider_unavailable" };
   }
 
   const place = await resolvePlace(input, apiKey, dependencies);
   const photo = place ? representativePhoto(place) : null;
   if (!place?.id) {
-    return jsonResponse({ error: "photo_not_found" }, 404);
+    return { status: 404, error: "photo_not_found" };
   }
 
   const basePayload = placePayload(place);
@@ -186,14 +276,14 @@ export async function handleRequest(
     if (supabase.serviceRoleKey) {
       await writeCachedMetadata(cacheKey, basePayload, supabase, dependencies);
     }
-    return Response.json(basePayload, { headers: noStoreHeaders });
+    return { status: 200, payload: basePayload };
   }
   if (!photo?.name) {
-    return jsonResponse({ error: "photo_not_found" }, 404);
+    return { status: 404, error: "photo_not_found" };
   }
 
   const media = await fetchJSON<{ photoUri?: string }>(
-    `${googlePlacesBaseURL}/${photo.name}/media?maxWidthPx=1600&maxHeightPx=1200&skipHttpRedirect=true&key=${
+    `${googlePlacesBaseURL}/${photo.name}/media?maxWidthPx=${providerSourceMaximumPixels}&maxHeightPx=${providerSourceMaximumPixels}&skipHttpRedirect=true&key=${
       encodeURIComponent(apiKey)
     }`,
     { method: "GET" },
@@ -206,7 +296,7 @@ export async function handleRequest(
   const author = photo.authorAttributions?.[0];
   const sourcePhotoURL = absoluteGoogleURL(photo.googleMapsUri);
   if (!sourcePhotoURL) {
-    return jsonResponse({ error: "photo_attribution_unavailable" }, 404);
+    return { status: 404, error: "photo_attribution_unavailable" };
   }
   const providerPayload: PlacePhotoPayload = {
     ...basePayload,
@@ -225,17 +315,28 @@ export async function handleRequest(
       cacheKey,
       media.photoUri,
       providerPayload,
+      input,
       supabase,
       dependencies,
     );
     if (cachedPayload) {
-      return Response.json(cachedPayload, { headers: noStoreHeaders });
+      return { status: 200, payload: cachedPayload };
     }
   }
 
   // Keep the app working if Storage is temporarily unavailable. The provider
   // URL is never persisted by the client and the next request retries caching.
-  return Response.json(providerPayload, { headers: noStoreHeaders });
+  return { status: 200, payload: providerPayload };
+}
+
+function resolutionResponse(resolution: PlacePhotoResolution): Response {
+  if (resolution.status === 200 && resolution.payload) {
+    return Response.json(resolution.payload, { headers: noStoreHeaders });
+  }
+  return jsonResponse(
+    { error: resolution.error ?? "internal_error" },
+    resolution.status,
+  );
 }
 
 async function resolvePlace(
@@ -322,6 +423,38 @@ async function readCachedPhoto(
   }
 }
 
+async function readCachedPhotos(
+  cacheKeys: string[],
+  supabase: SupabaseConfiguration,
+  dependencies: PlacePhotoDependencies,
+): Promise<Map<string, CachedPhotoRow>> {
+  const uniqueKeys = [...new Set(cacheKeys)].filter((key) =>
+    /^[0-9a-f]{64}$/.test(key)
+  );
+  if (!uniqueKeys.length) return new Map();
+  try {
+    const endpoint = new URL(
+      `${supabase.url}/rest/v1/google_place_photo_cache`,
+    );
+    endpoint.searchParams.set("cache_key", `in.(${uniqueKeys.join(",")})`);
+    endpoint.searchParams.set("select", "*");
+    const response = await dependencies.fetch(endpoint, {
+      headers: serviceHeaders(supabase),
+    });
+    if (!response.ok) {
+      throw new Error(`cache_batch_read_status_${response.status}`);
+    }
+    const rows = await response.json() as CachedPhotoRow[];
+    return new Map(rows.map((row) => [row.cache_key, row]));
+  } catch (error) {
+    console.warn(
+      "place_photo_cache_batch_read_failed",
+      error instanceof Error ? error.message : "unknown_error",
+    );
+    return new Map();
+  }
+}
+
 async function cachedPayload(
   row: CachedPhotoRow,
   input: PlacePhotoInput,
@@ -331,8 +464,12 @@ async function cachedPayload(
   let photoURL = "";
   if (input.requiresPhoto) {
     if (!row.object_path) return null;
-    photoURL =
-      await signedStorageURL(row.object_path, supabase, dependencies) ?? "";
+    photoURL = await signedStorageURL(
+      row.object_path,
+      input.renderVariant ?? "profile",
+      supabase,
+      dependencies,
+    ) ?? "";
     if (!photoURL) return null;
   }
   return {
@@ -361,6 +498,7 @@ async function cacheProviderPhoto(
   cacheKey: string,
   providerURL: string,
   payload: PlacePhotoPayload,
+  input: PlacePhotoInput,
   supabase: SupabaseConfiguration,
   dependencies: PlacePhotoDependencies,
 ): Promise<PlacePhotoPayload | null> {
@@ -379,7 +517,12 @@ async function cacheProviderPhoto(
       supabase,
       dependencies,
     );
-    const photoURL = await signedStorageURL(objectPath, supabase, dependencies);
+    const photoURL = await signedStorageURL(
+      objectPath,
+      input.renderVariant ?? "profile",
+      supabase,
+      dependencies,
+    );
     if (!photoURL) return null;
     console.log("place_photo_cache_stored");
     return { ...payload, photo_url: photoURL };
@@ -566,6 +709,7 @@ async function uploadCachedImage(
 
 async function signedStorageURL(
   objectPath: string,
+  renderVariant: NonNullable<PlacePhotoInput["renderVariant"]>,
   supabase: SupabaseConfiguration,
   dependencies: PlacePhotoDependencies,
 ): Promise<string | null> {
@@ -580,7 +724,7 @@ async function signedStorageURL(
           ...serviceHeaders(supabase),
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ expiresIn: signedURLLifetimeSeconds }),
+        body: JSON.stringify(signedURLRequestBody(renderVariant)),
       },
     );
     if (!response.ok) throw new Error(`cache_sign_status_${response.status}`);
@@ -602,6 +746,64 @@ async function signedStorageURL(
     );
     return null;
   }
+}
+
+function signedURLRequestBody(
+  renderVariant: NonNullable<PlacePhotoInput["renderVariant"]>,
+): Record<string, unknown> {
+  const expiresIn = signedURLLifetimeSeconds;
+  if (renderVariant === "fullscreen") return { expiresIn };
+  const dimensions: Record<
+    Exclude<NonNullable<PlacePhotoInput["renderVariant"]>, "fullscreen">,
+    number
+  > = {
+    list_thumbnail: 512,
+    feed: 1_440,
+    card: 1_440,
+    profile: 1_800,
+  };
+  const qualities: Record<
+    Exclude<NonNullable<PlacePhotoInput["renderVariant"]>, "fullscreen">,
+    number
+  > = {
+    list_thumbnail: 84,
+    feed: 90,
+    card: 90,
+    profile: 92,
+  };
+  return {
+    expiresIn,
+    transform: {
+      width: dimensions[renderVariant],
+      height: dimensions[renderVariant],
+      resize: "contain",
+      quality: qualities[renderVariant],
+    },
+  };
+}
+
+async function mapWithConcurrency<Input, Output>(
+  inputs: Input[],
+  concurrency: number,
+  operation: (input: Input) => Promise<Output>,
+): Promise<Output[]> {
+  const results = new Array<Output>(inputs.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= inputs.length) return;
+      results[index] = await operation(inputs[index]);
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(Math.max(1, concurrency), inputs.length) },
+      worker,
+    ),
+  );
+  return results;
 }
 
 async function fetchJSON<Value>(
@@ -688,8 +890,12 @@ function placePayload(place: GooglePlace): PlacePhotoPayload {
     provider_rating: finiteNumber(place.rating),
     provider_user_rating_count: finiteInteger(place.userRatingCount),
     provider_open_now: place.currentOpeningHours?.openNow ?? null,
-    provider_next_open_time: cleanString(place.currentOpeningHours?.nextOpenTime),
-    provider_next_close_time: cleanString(place.currentOpeningHours?.nextCloseTime),
+    provider_next_open_time: cleanString(
+      place.currentOpeningHours?.nextOpenTime,
+    ),
+    provider_next_close_time: cleanString(
+      place.currentOpeningHours?.nextCloseTime,
+    ),
     provider_utc_offset_minutes: finiteInteger(place.utcOffsetMinutes),
     photo_url: "",
     width: null,
@@ -792,7 +998,23 @@ function placePhotoInput(
     sourceProviderPlaceID:
       cleanString(body.source_provider_place_id)?.slice(0, 300) ?? null,
     requiresPhoto: body.requires_photo !== false,
+    renderVariant: renderVariant(body.render_variant),
   };
+}
+
+function renderVariant(
+  value: unknown,
+): NonNullable<PlacePhotoInput["renderVariant"]> {
+  switch (value) {
+    case "list_thumbnail":
+    case "feed":
+    case "card":
+    case "profile":
+    case "fullscreen":
+      return value;
+    default:
+      return "profile";
+  }
 }
 
 function jsonResponse(body: Record<string, unknown>, status: number): Response {

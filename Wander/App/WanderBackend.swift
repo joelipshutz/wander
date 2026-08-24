@@ -61,7 +61,10 @@ protocol FeatureFlagRepository {
 
 @MainActor
 final class WanderBackend: ObservableObject {
+    private static let placePhotoMetadataCacheLimit = 256
+
     let configuration: WanderBackendConfiguration
+    let photoCacheScopeID = UUID()
     let featureFlagRepository: (any FeatureFlagRepository)?
     let profileRepository: (any ProfileRepository)?
     let profileAvatarRepository: (any ProfileAvatarRepository)?
@@ -86,7 +89,10 @@ final class WanderBackend: ObservableObject {
     private var featureFlagRefreshGeneration = 0
     private let featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot
     private var placePhotoCache: [String: PlacePhoto] = [:]
+    private var placePhotoCacheRecency: [String] = []
     private var placePhotoTasks: [String: Task<PlacePhoto, Error>] = [:]
+    private let placePhotoDataDiskCache: PlacePhotoDataDiskCache
+    private let placePhotoDownloadLimiter: PlacePhotoDownloadLimiter
     private let placePhotoImageCache: NSCache<NSString, NSData> = {
         let cache = NSCache<NSString, NSData>()
         cache.countLimit = 120
@@ -98,6 +104,8 @@ final class WanderBackend: ObservableObject {
     init(configuration: WanderBackendConfiguration, authSession: any AuthSessionProviding) {
         self.configuration = configuration
         self.featureFlagDeviceOverrides = FeatureFlagOverrideStore().launchSnapshot()
+        self.placePhotoDataDiskCache = .shared
+        self.placePhotoDownloadLimiter = .shared
 
         if configuration.isSupabaseConfigured {
             let client = WanderSupabaseClient(configuration: configuration, authSession: authSession)
@@ -173,10 +181,14 @@ final class WanderBackend: ObservableObject {
         notificationRepository: (any NotificationRepository)? = nil,
         sharedVisitRepository: (any SharedVisitRepository)? = nil,
         featureFlagRepository: (any FeatureFlagRepository)? = nil,
-        featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot()
+        featureFlagDeviceOverrides: FeatureFlagDeviceOverrideSnapshot = FeatureFlagOverrideStore().launchSnapshot(),
+        placePhotoDataDiskCache: PlacePhotoDataDiskCache = .disabled,
+        placePhotoDownloadLimiter: PlacePhotoDownloadLimiter = .shared
     ) {
         self.configuration = configuration
         self.featureFlagDeviceOverrides = featureFlagDeviceOverrides
+        self.placePhotoDataDiskCache = placePhotoDataDiskCache
+        self.placePhotoDownloadLimiter = placePhotoDownloadLimiter
         self.featureFlagRepository = featureFlagRepository
         self.profileRepository = profileRepository
         self.profileAvatarRepository = profileAvatarRepository
@@ -303,6 +315,7 @@ final class WanderBackend: ObservableObject {
         }
         let key = request.lookupKey
         if let cached = placePhotoCache[key] {
+            markPlacePhotoRecentlyUsed(key)
             return cached
         }
         if let existingTask = placePhotoTasks[key] {
@@ -316,7 +329,7 @@ final class WanderBackend: ObservableObject {
         do {
             let photo = try await task.value
             placePhotoTasks[key] = nil
-            placePhotoCache[key] = photo
+            cachePlacePhoto(photo, for: key)
             return photo
         } catch {
             placePhotoTasks[key] = nil
@@ -324,11 +337,70 @@ final class WanderBackend: ObservableObject {
         }
     }
 
+    func placePhotos(for requests: [PlacePhotoRequest]) async throws -> [PlacePhotoBatchResult] {
+        guard let placePhotoRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        let uniqueRequests = Dictionary(
+            requests.map { ($0.lookupKey, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var results: [PlacePhotoBatchResult] = []
+        var misses: [PlacePhotoRequest] = []
+        for (key, request) in uniqueRequests {
+            if let cached = placePhotoCache[key] {
+                markPlacePhotoRecentlyUsed(key)
+                results.append(
+                    PlacePhotoBatchResult(
+                        canonicalPlaceKey: request.canonicalPhotoCacheKey,
+                        photo: cached
+                    )
+                )
+            } else {
+                misses.append(request)
+            }
+        }
+        guard !misses.isEmpty else { return results }
+
+        let startedAt = ContinuousClock.now
+        let fetched = try await placePhotoRepository.photos(for: misses)
+        await PlacePhotoPerformanceMonitor.shared.record(.metadataBatch, startedAt: startedAt)
+        let requestsByCanonicalKey = Dictionary(
+            misses.map { ($0.canonicalPhotoCacheKey, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for result in fetched {
+            guard let request = requestsByCanonicalKey[result.canonicalPlaceKey] else { continue }
+            cachePlacePhoto(result.photo, for: request.lookupKey)
+            results.append(result)
+        }
+        return results
+    }
+
+    func cachedPlacePhoto(for request: PlacePhotoRequest) -> PlacePhoto? {
+        let key = request.lookupKey
+        guard let photo = placePhotoCache[key] else { return nil }
+        markPlacePhotoRecentlyUsed(key)
+        return photo
+    }
+
     func visibleUserPlacePhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured
         }
         return try await placePhotoRepository.visibleUserPhoto(for: request)
+    }
+
+    func visibleUserPlacePhotos(
+        for requests: [PlacePhotoRequest]
+    ) async throws -> [PlacePhotoBatchResult] {
+        guard let placePhotoRepository else {
+            throw WanderRemoteError.notConfigured
+        }
+        let startedAt = ContinuousClock.now
+        let photos = try await placePhotoRepository.visibleUserPhotos(for: requests)
+        await PlacePhotoPerformanceMonitor.shared.record(.metadataBatch, startedAt: startedAt)
+        return photos
     }
 
     func visiblePlacePhotoGalleryPage(
@@ -346,12 +418,51 @@ final class WanderBackend: ObservableObject {
         )
     }
 
-    func placePhotoImageData(for photo: PlacePhoto) async throws -> Data {
+    func placePhotoImageData(
+        for photo: PlacePhoto,
+        canonicalPlaceKey: String
+    ) async throws -> Data {
+        try await placePhotoImageData(
+            for: photo,
+            canonicalPlaceKey: canonicalPlaceKey,
+            variant: .profile
+        )
+    }
+
+    func placePhotoImageData(
+        for photo: PlacePhoto,
+        canonicalPlaceKey: String,
+        variant: PlacePhotoRenderVariant
+    ) async throws -> Data {
         guard let placePhotoRepository else {
             throw WanderRemoteError.notConfigured
         }
-        let key = photo.cacheKey
+        let key = "\(canonicalPlaceKey.utf8.count):\(canonicalPlaceKey)|\(photo.cacheKey)|\(variant.rawValue)"
         if let cached = placePhotoImageCache.object(forKey: key as NSString) {
+            await placePhotoDataDiskCache.recordMemoryHit()
+            return cached as Data
+        }
+        if let existingTask = placePhotoImageTasks[key] {
+            return try await existingTask.value
+        }
+
+        if let diskData = await placePhotoDataDiskCache.data(
+            canonicalPlaceKey: canonicalPlaceKey,
+            photoKey: photo.cacheKey,
+            variant: variant
+        ) {
+            placePhotoImageCache.setObject(
+                diskData as NSData,
+                forKey: key as NSString,
+                cost: diskData.count
+            )
+            return diskData
+        }
+
+        // The disk actor hop yields the main actor. Another visible surface may
+        // have filled memory or started this exact download while we waited.
+        if let cached = placePhotoImageCache.object(forKey: key as NSString) {
+            await placePhotoDataDiskCache.recordMemoryHit()
             return cached as Data
         }
         if let existingTask = placePhotoImageTasks[key] {
@@ -359,7 +470,20 @@ final class WanderBackend: ObservableObject {
         }
 
         let task = Task { @MainActor in
-            try await placePhotoRepository.imageData(for: photo)
+            try await placePhotoDownloadLimiter.acquire()
+            do {
+                let startedAt = ContinuousClock.now
+                let data = try await placePhotoRepository.imageData(for: photo, variant: variant)
+                await PlacePhotoPerformanceMonitor.shared.record(
+                    .networkDownload,
+                    startedAt: startedAt
+                )
+                await placePhotoDownloadLimiter.release()
+                return data
+            } catch {
+                await placePhotoDownloadLimiter.release()
+                throw error
+            }
         }
         placePhotoImageTasks[key] = task
         do {
@@ -370,11 +494,34 @@ final class WanderBackend: ObservableObject {
                 forKey: key as NSString,
                 cost: data.count
             )
+            await placePhotoDataDiskCache.recordNetworkLoad()
+            await placePhotoDataDiskCache.insert(
+                data,
+                canonicalPlaceKey: canonicalPlaceKey,
+                photoKey: photo.cacheKey,
+                variant: variant
+            )
             return data
         } catch {
             placePhotoImageTasks[key] = nil
             throw error
         }
+    }
+
+    private func cachePlacePhoto(_ photo: PlacePhoto, for key: String) {
+        placePhotoCache[key] = photo
+        markPlacePhotoRecentlyUsed(key)
+
+        while placePhotoCache.count > Self.placePhotoMetadataCacheLimit,
+              let oldestKey = placePhotoCacheRecency.first {
+            placePhotoCacheRecency.removeFirst()
+            placePhotoCache.removeValue(forKey: oldestKey)
+        }
+    }
+
+    private func markPlacePhotoRecentlyUsed(_ key: String) {
+        placePhotoCacheRecency.removeAll { $0 == key }
+        placePhotoCacheRecency.append(key)
     }
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] {
