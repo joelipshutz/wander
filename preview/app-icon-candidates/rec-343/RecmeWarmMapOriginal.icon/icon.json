@@ -4,7 +4,7 @@
   },
   "groups" : [
     {
-      "blur-material" : 0,
+      "blur-material" : null,
       "layers" : [
         {
           "image-name" : "recme-warm-map-original.png",

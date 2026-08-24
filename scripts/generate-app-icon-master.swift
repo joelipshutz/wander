@@ -8,7 +8,7 @@ let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
     .deletingLastPathComponent()
 let sourceURL = repoRoot.appendingPathComponent(
-    "Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-original.png"
+    "Wander/Resources/AppIcon.icon/Assets/recme-warm-map-original.png"
 )
 let defaultOutputURL = repoRoot.appendingPathComponent(
     "Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png"
@@ -52,7 +52,7 @@ do {
     fail("Could not write app icon master to \(outputURL.path): \(error)")
 }
 
-print("Generated rec.me liquid-glass app icon master at \(outputURL.path)")
+print("Generated rec.me warm-map app icon master at \(outputURL.path)")
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data("Error: \(message)\n".utf8))

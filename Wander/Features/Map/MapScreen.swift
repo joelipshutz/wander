@@ -603,7 +603,7 @@ struct MapScreen: View {
         }
         switch mapFilterState.source {
         case .featured:
-            return "No featured check-ins here yet."
+            return nil
         case .friends:
             return "No friends’ places yet."
         case .you:
@@ -2848,7 +2848,7 @@ struct MapScreen: View {
             selectedPlaceGroupKey = nil
             selectedSearchCandidateID = candidate.id
             isPlaceProfilePresented = false
-            mapSearchMessage = "Map place. Tap + to add it."
+            mapSearchMessage = nil
             centerCompactSelection(on: candidate)
         }
     }
@@ -9592,6 +9592,8 @@ struct MapPlaceSaveEditor: View {
 
     private func save() {
         guard !isSaving else { return }
+        guard saveAttemptedAt == nil else { return }
+        dismissKeyboard()
         guard selectedStatus != .been || visitedAt <= Date.now else {
             errorMessage = "A check-in date can’t be in the future."
             resetWalkthroughAutoSaveForRetry()
@@ -9682,6 +9684,15 @@ struct MapPlaceSaveEditor: View {
                 }
             }
         }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private func resetWalkthroughAutoSaveForRetry() {

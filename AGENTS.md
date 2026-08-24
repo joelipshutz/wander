@@ -81,6 +81,12 @@ Before starting implementation:
 - If the work starts in chat and no issue exists yet, create a Linear issue in
   the `recme` team that captures the user request, assign it to the active
   owner when clear, and move it to `In Progress` before editing code.
+- After finding or creating the Linear issue for the current work, rename the
+  chat/task when supported: `REC-123 Ticket title [In Progress]`. Keep the
+  identifier and status exact; shorten only the title for client length limits.
+  Whenever this chat changes the Linear status, rename this same chat/task in
+  the same step. On resume, resync its name from Linear before continuing. If
+  the client cannot rename it, continue the work and note that in the handoff.
 - Triage feedback once. Keep untriaged work in `Backlog`; move accepted,
   implementation-ready work to `Todo`. Do not re-triage `Todo` issues during
   later scans or again when packaging a release.
@@ -235,6 +241,27 @@ Core rules:
 - Link/photo capture in M2 is an honest unresolved-draft shell until backend extraction jobs exist.
 - Native Contacts permission is planned later; M2 uses `FakeContactProvider` plus username search.
 
+## Feature Flag Contract
+
+When Joe or Ryan says "put this behind a flag," use the shared platform in
+`Wander/App/FeatureFlags.swift` and follow `docs/feature-flags.md`.
+
+- Register every Boolean or integer flag in `FeatureFlagKey`; the registry
+  automatically drives remote fetching and the tester Settings UI. Every
+  integer flag declares a bounded range shared by storage, decoding, and UI.
+- Add the matching Supabase migration/global row and keep the hosted registered-key
+  constraint aligned. A remote-only flag is not allowed.
+- Feature code reads values only through `WanderBackend.featureFlag`,
+  `integerFeatureFlag`, or `resolvedFeatureFlag`. Do not add one-off
+  `UserDefaults`, build-mode, or remote-only flag paths.
+- Device overrides are account-scoped, persist locally, and take effect from an
+  immutable snapshot on the next full app launch. Settings changes must not
+  mutate active behavior in the current process.
+- Debug and Simulator builds must respect explicit Off values. Use launch
+  arguments only for isolated automation, not ordinary feature enablement.
+- Tests must cover registration/UI presence, persistence, restart precedence,
+  reset-to-remote behavior, remote decoding, and the gated consumer.
+
 ## Supabase Schema, RLS, And RPC Policy
 
 Supabase migrations are app behavior, not incidental backend plumbing. Treat
@@ -342,12 +369,13 @@ Observability policy:
 - Before editing the app icon, read `docs/brand/recme-app-icon.md`.
 - The canonical icon master is
   `Wander/Resources/Assets.xcassets/AppIcon.appiconset/Icon-1024.png`.
-- The approved icon is the matte liquid-glass neighborhood map in
-  `Wander/Resources/AppIcon.icon/Assets/recme-liquid-glass-map-original.png`:
-  four terracotta pins, crisp Apple-style symbols, centered black-serif
-  `rec.me`, a subtle cool-blue lower gradient, and the original full-frame
-  composition. Keep it matte rather than glossy and do not apply a directional
-  crop or reframe.
+- The approved icon is the warm matte neighborhood map in
+  `Wander/Resources/AppIcon.icon/Assets/recme-warm-map-original.png`: cream and
+  peach raised buildings, a sage park with one orange-red tree pin, a blue
+  ocean edge, an irregular palm row contained within the coastal green strip,
+  and centered black-serif `rec.me`. Keep the selected full-frame composition
+  matte and do not crop, reframe, move trees, or add Liquid Glass effects
+  without explicit approval.
 - Regenerate the fallback master with `scripts/generate-app-icon-master.swift`;
   it validates and copies the approved Icon Composer source byte-for-byte.
 - Regenerate all platform renditions with

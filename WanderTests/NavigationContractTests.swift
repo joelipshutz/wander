@@ -548,6 +548,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertFalse(map.contains("Map result. Tap + to add it."))
+        XCTAssertFalse(map.contains("Map place. Tap + to add it."))
         XCTAssertFalse(map.contains("Also showing new map results."))
         XCTAssertTrue(map.contains("No places on your map or map results found."))
         XCTAssertTrue(map.contains("That shared place could not be opened. Try the link again."))
@@ -1611,34 +1612,45 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderBackend.swift")
         )
 
-        XCTAssertTrue(profileSettings.contains("Section(\"Debug settings\")"))
+        XCTAssertTrue(profileSettings.contains("Text(\"Feature flags\")"))
         XCTAssertTrue(profileSettings.contains("DebugSettingsAccessPolicy.isEntitled("))
         XCTAssertTrue(profileSettings.contains("Every Simulator build exposes this local tester surface"))
         XCTAssertTrue(backend.contains("#if targetEnvironment(simulator)"))
         XCTAssertTrue(backend.contains("isSimulator || serverFlag == true"))
-        XCTAssertTrue(profileSettings.contains("Label(\"First-visit NUX\""))
-        XCTAssertTrue(profileSettings.contains("settings.debug.firstVisitNUX"))
-        XCTAssertTrue(profileSettings.contains("Label(\"Place button style\""))
-        XCTAssertTrue(profileSettings.contains("settings.debug.placeActionVariant"))
-        XCTAssertTrue(profileSettings.contains("PlaceProfileFloatingActionVariant.allCases"))
-        XCTAssertTrue(profileSettings.contains("placeActionDebugPreferences.setVariant"))
-        XCTAssertFalse(profileSettings.contains("settings.debug.replayNUX"))
-        XCTAssertFalse(profileSettings.contains("settings.debug.disableNUX"))
+        XCTAssertTrue(profileSettings.contains("ForEach(FeatureFlagKey.allCases"))
+        XCTAssertTrue(profileSettings.contains("settings.flags.\\(key.rawValue)"))
+        XCTAssertTrue(profileSettings.contains("booleanOverrideBinding(for: key)"))
+        XCTAssertTrue(profileSettings.contains("integerFeatureFlagControl(for: key"))
+        XCTAssertTrue(profileSettings.contains("Reset all to defaults"))
+        XCTAssertTrue(profileSettings.contains("Restart rec.me to apply these changes"))
+        XCTAssertTrue(profileSettings.contains("backend.remoteFeatureFlag(.debugSettings"))
+        XCTAssertTrue(profileSettings.contains("featureFlagOverrideStore.setOverride"))
         XCTAssertFalse(profileSettings.contains("jolipshutz"))
         XCTAssertFalse(profileSettings.contains("ryan_lieblein"))
         XCTAssertFalse(profileSettings.contains("@gmail.com"))
         XCTAssertTrue(root.contains("FirstVisitWalkthroughDebugReplayPolicy.resolve("))
         XCTAssertTrue(root.contains("debugReplay.shouldPreserveLocalJourney"))
-        XCTAssertTrue(root.contains("shouldRepairCompletedLocalJourney("))
-        XCTAssertTrue(root.contains("walkthroughs.hasCompletedPrimaryJourney"))
         XCTAssertTrue(root.contains("walkthroughDebugPreferences.clearReplayRequest"))
-        XCTAssertTrue(root.contains("onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser"))
+        XCTAssertFalse(root.contains("onNUXDebugSettingsChanged"))
         XCTAssertTrue(root.contains("@State private var placeProfileFloatingActionVariant"))
-        XCTAssertTrue(root.contains("placeActionDebugPreferences.activeVariant("))
-        XCTAssertTrue(root.contains("isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled("))
+        XCTAssertTrue(root.contains("backend.integerFeatureFlag(.placeProfileActionVariant"))
+        XCTAssertTrue(root.contains("backend.deviceFeatureFlagOverride(.firstVisitNUX"))
         XCTAssertTrue(root.contains(".environment("))
         XCTAssertTrue(root.contains("\\.placeProfileFloatingActionVariant"))
         XCTAssertTrue(root.contains("placeProfileFloatingActionVariant = .productionDefault"))
+        XCTAssertTrue(root.contains("walkthroughDebugPreferenceSnapshot.shouldStartReplay"))
+        let foregroundRefresh = try XCTUnwrap(
+            root
+                .components(separatedBy: "private func refreshWalkthroughFeatureFlagsAfterForeground()")
+                .last?
+                .components(separatedBy: "private func presentLaunchLessonIfAppropriate()")
+                .first
+        )
+        XCTAssertTrue(
+            foregroundRefresh.contains(
+                "placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant("
+            )
+        )
     }
 
     func testAddTabPresentsTheCanonicalMapSaveFlowInsteadOfOwningASecondSavePath() throws {
@@ -2076,6 +2088,7 @@ final class NavigationContractTests: XCTestCase {
             ("Wander/Features/Discover/DiscoverScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Lists/ListsScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
             ("Wander/Features/Map/MapScreen.swift", ".fullScreenCover(isPresented: profileDestinationBinding)"),
+            ("Wander/Features/Map/PlaceProfileMapSurface.swift", ".fullScreenCover(item: $selectedProfileRoute)"),
             ("Wander/Features/Profile/ProfileScreen.swift", ".fullScreenCover(item: $selectedProfile)"),
             ("Wander/Features/Profile/ProfileSocialGraphScreen.swift", ".fullScreenCover(item: $selectedProfileID)")
         ]
@@ -2085,6 +2098,122 @@ final class NavigationContractTests: XCTestCase {
             XCTAssertTrue(source.contains("ProfileDetailView("), "Missing full member profile destination in \(file)")
             XCTAssertTrue(source.contains(presentation), "Member profile must use a full-screen presentation in \(file)")
         }
+    }
+
+    @MainActor
+    func testMemberProfileEntryPathsShareInteractiveEdgeBackNavigation() throws {
+        let profileScreen = try String(
+            contentsOf: projectRoot.appendingPathComponent(
+                "Wander/Features/Profile/ProfileScreen.swift"
+            )
+        )
+        let detail = try sourceSection(
+            profileScreen,
+            after: "struct ProfileDetailView: View {",
+            before: "private enum GraphListMode"
+        )
+
+        XCTAssertTrue(detail.contains(".offset(x: backSwipeOffset)"))
+        XCTAssertTrue(detail.contains(".simultaneousGesture(interactiveBackSwipeGesture"))
+        XCTAssertTrue(detail.contains("DragGesture(minimumDistance: 8, coordinateSpace: .global)"))
+        XCTAssertTrue(detail.contains("guard !hasNestedNavigationDestination"))
+        XCTAssertTrue(detail.contains("backSwipeOffset = 0"))
+        XCTAssertTrue(detail.contains("backSwipeOffset = containerWidth"))
+        XCTAssertTrue(detail.contains("DispatchQueue.main.asyncAfter"))
+        XCTAssertTrue(detail.contains("backAction: { dismiss() }"))
+        XCTAssertTrue(detail.contains("accessibilityLabel: \"Back\""))
+    }
+
+    @MainActor
+    func testMemberProfileEdgeBackTracksOnlyRightwardHorizontalMotionFromLeftEdge() throws {
+        XCTAssertEqual(
+            try XCTUnwrap(
+                ProfileDetailBackSwipePolicy.interactiveOffset(
+                    startX: 12,
+                    translation: CGSize(width: 42, height: 8),
+                    containerWidth: 390
+                )
+            ),
+            42
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                ProfileDetailBackSwipePolicy.interactiveOffset(
+                    startX: 12,
+                    translation: CGSize(width: 500, height: 4),
+                    containerWidth: 390
+                )
+            ),
+            390
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                ProfileDetailBackSwipePolicy.interactiveOffset(
+                    startX: 12,
+                    translation: CGSize(width: -12, height: 0),
+                    containerWidth: 390
+                )
+            ),
+            0
+        )
+        XCTAssertNil(
+            ProfileDetailBackSwipePolicy.interactiveOffset(
+                startX: 48,
+                translation: CGSize(width: 80, height: 4),
+                containerWidth: 390
+            )
+        )
+        XCTAssertNil(
+            ProfileDetailBackSwipePolicy.interactiveOffset(
+                startX: 12,
+                translation: CGSize(width: 20, height: 32),
+                containerWidth: 390
+            )
+        )
+    }
+
+    @MainActor
+    func testMemberProfileEdgeBackCompletesByDistanceOrProjectedVelocityAndCancelsOtherwise() {
+        XCTAssertTrue(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 120, height: 8),
+                predictedEndTranslation: CGSize(width: 130, height: 10),
+                containerWidth: 390
+            )
+        )
+        XCTAssertTrue(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 44, height: 5),
+                predictedEndTranslation: CGSize(width: 220, height: 8),
+                containerWidth: 390
+            )
+        )
+        XCTAssertFalse(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 44, height: 5),
+                predictedEndTranslation: CGSize(width: 180, height: 8),
+                containerWidth: 390
+            )
+        )
+        XCTAssertFalse(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 50,
+                translation: CGSize(width: 140, height: 4),
+                predictedEndTranslation: CGSize(width: 250, height: 5),
+                containerWidth: 390
+            )
+        )
+        XCTAssertFalse(
+            ProfileDetailBackSwipePolicy.shouldComplete(
+                startX: 12,
+                translation: CGSize(width: 140, height: 180),
+                predictedEndTranslation: CGSize(width: 260, height: 300),
+                containerWidth: 390
+            )
+        )
     }
 
     func testCheckInPickerUsesDateOnlyWithoutInstructionalCopy() throws {
@@ -2719,6 +2848,11 @@ final class NavigationContractTests: XCTestCase {
             after: "private struct ListPlaceProjectionContext",
             before: "private struct ListPlaceMock: Identifiable"
         )
+        let detailProjection = try sourceSection(
+            source,
+            after: "init(list: LocalPlaceList, visiblePlaces: [VisiblePlace], store: WanderStore)",
+            before: "@MainActor\nprivate struct ListPlaceProjectionContext"
+        )
 
         XCTAssertTrue(activeLists.contains("summary: list"))
         XCTAssertTrue(activeLists.contains("ListPreviewPlaceSelector.distinctPrefix("))
@@ -2728,6 +2862,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("listGrid(lists: renderedLists)"))
         XCTAssertTrue(detailScreen.contains("let renderedList = displayList"))
         XCTAssertEqual(detailScreen.components(separatedBy: "let renderedList = displayList").count - 1, 1)
+        XCTAssertTrue(detailScreen.contains("Text(\"There are no places added to this list yet.\")"))
+        XCTAssertFalse(detailScreen.contains("Loading places in this list."))
+        XCTAssertTrue(detailProjection.contains("self.itemCountOverride = visiblePlaces.count"))
+        XCTAssertFalse(detailProjection.contains("self.itemCountOverride = list.cachedItemCount"))
         XCTAssertTrue(richProjection.contains("VisiblePlaceGrouping.groups("))
         XCTAssertTrue(richProjection.contains("store.firstVisitPhotosByPlaceID()"))
         XCTAssertFalse(richProjection.contains("store.attributes(for:"))
@@ -3608,7 +3746,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(floatingActions.contains(".wanderGlassCapsule("))
         XCTAssertTrue(floatingActions.contains(".wanderGlassRoundedRectangle("))
         XCTAssertTrue(floatingActions.contains("tone: Self.glassTone(for: action, variant: variant)"))
-        XCTAssertTrue(floatingActions.contains("interactive: true"))
+        XCTAssertTrue(floatingActions.contains("interactive: false"))
         XCTAssertTrue(floatingActions.contains("showsBorder: true"))
         XCTAssertTrue(floatingActions.contains("case .option5:"))
         XCTAssertTrue(floatingActions.contains(".deepBlackAction"))
@@ -3755,6 +3893,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(sharedEditor.contains("onDraftChange(draftID, update.form, update.submittedAt)"))
         XCTAssertTrue(sharedEditor.contains("onSaveCompleted(result)"))
         XCTAssertTrue(sharedEditor.contains("guard !isSaving else { return }"))
+        XCTAssertTrue(sharedEditor.contains("guard saveAttemptedAt == nil else { return }"))
         XCTAssertTrue(sharedEditor.contains(".safeAreaInset(edge: .bottom, spacing: 0)"))
         XCTAssertTrue(sharedEditor.contains("if presentation == .attached"))
         XCTAssertTrue(sharedEditor.contains("let onContentExpansionRequested: @MainActor () -> Void"))
@@ -3767,7 +3906,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(policy.contains("static func attachedFirstSaveContext("))
         XCTAssertTrue(policy.contains("static func attachedExistingWannaContext("))
         XCTAssertTrue(policy.contains("static func attachedSaveContext("))
-        XCTAssertTrue(policy.contains("if isSimulator {"))
+        XCTAssertFalse(policy.contains("if isSimulator {"))
+        XCTAssertTrue(policy.contains("Simulator builds follow the same flag as TestFlight"))
         XCTAssertTrue(policy.contains("route == .floatingActions"))
         XCTAssertTrue(policy.contains("state == .unsaved"))
         XCTAssertTrue(policy.contains("state == .wanna"))
@@ -4160,6 +4300,27 @@ final class NavigationContractTests: XCTestCase {
         )
     }
 
+    func testFeedFeaturedRailBleedsToBothScreenEdgesWithoutMovingRestingCards() throws {
+        let feed = try String(
+            contentsOf: projectRoot.appendingPathComponent("Wander/Features/Feed/FeedScreen.swift")
+        )
+        let rail = try sourceSection(
+            feed,
+            after: "private struct FeedFeaturedRail: View",
+            before: "private struct FeedFeaturedCard: View"
+        )
+
+        XCTAssertTrue(feed.contains("static let screenEdgeBleed = WanderTheme.spacing4"))
+        XCTAssertTrue(rail.contains(".contentMargins("))
+        XCTAssertTrue(rail.contains("FeedFeaturedLayout.screenEdgeBleed"))
+        XCTAssertTrue(rail.contains("for: .scrollContent"))
+        XCTAssertTrue(
+            rail.contains(".padding(.horizontal, -FeedFeaturedLayout.screenEdgeBleed)")
+        )
+        XCTAssertTrue(rail.contains(".padding(.vertical, 1)"))
+        XCTAssertFalse(rail.contains(".padding(.horizontal, 1)"))
+    }
+
     func testFirstVisitSurfacePolishUsesWalkthroughOnlyMapAndSingleBackContracts() throws {
         let map = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Map/MapScreen.swift")
@@ -4187,7 +4348,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(map.contains("walkthroughs.isAwaitingEligibilityResolution"))
         XCTAssertTrue(map.contains("walkthroughs.activeSurface != nil"))
         XCTAssertTrue(map.contains("walkthroughs.requestedSurface != nil"))
-        XCTAssertTrue(map.contains("return \"No featured check-ins here yet.\""))
+        XCTAssertFalse(map.contains("No featured check-ins here yet."))
 
         let optionalDetails = try sourceSection(
             map,

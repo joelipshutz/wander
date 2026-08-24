@@ -1,7 +1,22 @@
 import SwiftUI
 
+private enum FeatureFlagBooleanOverrideChoice: String, CaseIterable, Identifiable {
+    case remote
+    case off
+    case on
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .remote: "Remote"
+        case .off: "Off"
+        case .on: "On"
+        }
+    }
+}
+
 struct ProfileSettingsHome: View {
-    let onNUXDebugSettingsChanged: () -> Void
     let onDismiss: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
@@ -16,19 +31,15 @@ struct ProfileSettingsHome: View {
     @State private var showsFinalDeleteWarning = false
     @State private var isDeleting = false
     @State private var errorMessage: String?
-    @State private var isNUXEnabled = false
-    @State private var isNUXReplayQueued = false
-    @State private var selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.productionDefault.rawValue
+    @State private var deviceFeatureFlagOverrides: [FeatureFlagKey: FeatureFlagValue] = [:]
     @State private var settingsDragOffset: CGFloat = 0
 
     private let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
-    private let placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
+    private let featureFlagOverrideStore = FeatureFlagOverrideStore()
 
     init(
-        onNUXDebugSettingsChanged: @escaping () -> Void = {},
         onDismiss: (() -> Void)? = nil
     ) {
-        self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
         self.onDismiss = onDismiss
     }
 
@@ -111,7 +122,7 @@ struct ProfileSettingsHome: View {
             notificationsSection
             privacySection
             if isDebugSettingsEntitled {
-                debugSettingsSection
+                featureFlagsSection
             }
 
             if let errorMessage {
@@ -307,7 +318,7 @@ struct ProfileSettingsHome: View {
     private var isDebugSettingsEntitled: Bool {
         guard let userID = debugSettingsUserID else { return false }
         return DebugSettingsAccessPolicy.isEntitled(
-            serverFlag: backend.featureFlag(.debugSettings, for: userID)
+            serverFlag: backend.remoteFeatureFlag(.debugSettings, for: userID)?.isEnabled
         )
     }
 
@@ -315,81 +326,203 @@ struct ProfileSettingsHome: View {
         auth.state.session?.userID
     }
 
-    private var debugSettingsSection: some View {
-        Section("Debug settings") {
-            Toggle(
-                isOn: Binding(
-                    get: { isNUXEnabled },
-                    set: { newValue in
-                        guard let userID = debugSettingsUserID else { return }
-                        walkthroughDebugPreferences.setNUXEnabled(newValue, for: userID)
-                        refreshDebugSettingsState()
-                        if !newValue {
-                            onNUXDebugSettingsChanged()
-                        }
-                    }
-                )
-            ) {
-                Label("First-visit NUX", systemImage: "sparkles.rectangle.stack")
-            }
-            .tint(WanderTheme.terracotta.color)
-            .accessibilityIdentifier("settings.debug.firstVisitNUX")
-
-            Text(debugNUXStatusMessage)
+    private var featureFlagsSection: some View {
+        Section {
+            Text("Device overrides are saved for this account on this device. Active behavior changes only after you fully quit and reopen rec.me.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(WanderTheme.textMuted.color)
 
-            Picker(
-                selection: Binding(
-                    get: { selectedPlaceActionVariantRawValue },
-                    set: { newValue in
-                        guard let userID = debugSettingsUserID,
-                              let variant = PlaceProfileFloatingActionVariant(rawValue: newValue)
-                        else { return }
-                        placeActionDebugPreferences.setVariant(variant, for: userID)
-                        selectedPlaceActionVariantRawValue = variant.rawValue
-                    }
-                )
-            ) {
-                ForEach(PlaceProfileFloatingActionVariant.allCases, id: \.rawValue) { variant in
-                    Text(variant.testerLabel).tag(variant.rawValue)
+            ForEach(FeatureFlagKey.allCases, id: \.self) { key in
+                featureFlagControl(for: key)
+            }
+
+            if hasDeviceFeatureFlagOverrides {
+                Button("Reset all to defaults", role: .destructive) {
+                    resetAllDeviceFeatureFlagOverrides()
                 }
-            } label: {
-                Label("Place button style", systemImage: "rectangle.split.2x1")
+                .accessibilityIdentifier("settings.flags.resetAll")
             }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier("settings.debug.placeActionVariant")
 
-            Text("Style \(selectedPlaceActionVariantRawValue) is saved for this account on this device. It applies on the next app launch.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(WanderTheme.textMuted.color)
+            if hasPendingFeatureFlagRestart {
+                Label("Restart rec.me to apply these changes", systemImage: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(WanderTheme.terracotta.color)
+                    .accessibilityIdentifier("settings.flags.restartRequired")
+            }
+        } header: {
+            Text("Feature flags")
         }
     }
 
-    private var debugNUXStatusMessage: String {
-        if isNUXReplayQueued {
-            return "On for this account on this device. The NUX will restart on the next app launch."
+    @ViewBuilder
+    private func featureFlagControl(for key: FeatureFlagKey) -> some View {
+        let definition = key.definition
+        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(definition.title)
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                if !definition.isEditableOnDevice {
+                    Text(activeFeatureFlagStatus(for: key))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WanderTheme.textMuted.color)
+                }
+            }
+
+            Text(definition.summary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.textMuted.color)
+
+            if definition.isEditableOnDevice {
+                switch definition.valueKind {
+                case .boolean:
+                    Picker("Device value", selection: booleanOverrideBinding(for: key)) {
+                        ForEach(FeatureFlagBooleanOverrideChoice.allCases) { choice in
+                            Text(choice.title).tag(choice)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                case .integer:
+                    integerFeatureFlagControl(for: key, definition: definition)
+                }
+            }
+
+            Text(featureFlagProvenance(for: key))
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(WanderTheme.textMuted.color)
         }
-        if isNUXEnabled {
-            return "On for this account on this device. Switch it off and back on to replay it."
+        .padding(.vertical, WanderTheme.spacing1)
+        .accessibilityIdentifier("settings.flags.\(key.rawValue)")
+    }
+
+    @ViewBuilder
+    private func integerFeatureFlagControl(
+        for key: FeatureFlagKey,
+        definition: FeatureFlagDefinition
+    ) -> some View {
+        if let range = definition.integerRange {
+            Toggle("Override on this device", isOn: integerOverrideEnabledBinding(for: key))
+                .tint(WanderTheme.terracotta.color)
+            if deviceFeatureFlagOverrides[key]?.integerValue != nil {
+                Stepper(value: integerOverrideBinding(for: key, range: range), in: range) {
+                    Text("Value: \(integerOverrideBinding(for: key, range: range).wrappedValue)")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+            }
+        } else {
+            Text("Invalid integer flag configuration")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WanderTheme.stateError.color)
         }
-        return "Off for this account on this device. Other users are unaffected."
     }
 
     private func refreshDebugSettingsState() {
         guard let userID = debugSettingsUserID else {
-            isNUXEnabled = false
-            isNUXReplayQueued = false
-            selectedPlaceActionVariantRawValue = PlaceProfileFloatingActionVariant.productionDefault.rawValue
+            deviceFeatureFlagOverrides = [:]
             return
         }
-        isNUXEnabled = walkthroughDebugPreferences.nuxOverride(for: userID)
-            ?? backend.featureFlag(.firstVisitNUX, for: userID)
-            ?? false
-        isNUXReplayQueued = walkthroughDebugPreferences.isReplayRequested(for: userID)
-        selectedPlaceActionVariantRawValue = placeActionDebugPreferences
-            .storedVariant(for: userID)
-            .rawValue
+        deviceFeatureFlagOverrides = featureFlagOverrideStore.overrides(for: userID)
+    }
+
+    private var hasDeviceFeatureFlagOverrides: Bool {
+        !deviceFeatureFlagOverrides.isEmpty
+    }
+
+    private var hasPendingFeatureFlagRestart: Bool {
+        guard let userID = debugSettingsUserID else { return false }
+        return FeatureFlagKey.allCases.contains { key in
+            guard key.definition.isEditableOnDevice else { return false }
+            return deviceFeatureFlagOverrides[key]
+                != backend.deviceFeatureFlagOverride(key, for: userID)
+        }
+    }
+
+    private func activeFeatureFlagStatus(for key: FeatureFlagKey) -> String {
+        guard let userID = debugSettingsUserID,
+              let resolved = backend.resolvedFeatureFlag(key, for: userID)
+        else { return "Loading" }
+        return resolved.value.displayValue
+    }
+
+    private func featureFlagProvenance(for key: FeatureFlagKey) -> String {
+        guard let userID = debugSettingsUserID,
+              let resolved = backend.resolvedFeatureFlag(key, for: userID)
+        else { return "\(key.rawValue) · loading remote value" }
+        return "\(key.rawValue) · active \(resolved.value.displayValue) · \(resolved.source.settingsLabel)"
+    }
+
+    private func booleanOverrideBinding(for key: FeatureFlagKey) -> Binding<FeatureFlagBooleanOverrideChoice> {
+        Binding(
+            get: {
+                guard let value = deviceFeatureFlagOverrides[key]?.booleanValue else {
+                    return .remote
+                }
+                return value ? .on : .off
+            },
+            set: { choice in
+                switch choice {
+                case .remote:
+                    persistDeviceFeatureFlagOverride(nil, for: key)
+                case .off:
+                    persistDeviceFeatureFlagOverride(.boolean(false), for: key)
+                case .on:
+                    persistDeviceFeatureFlagOverride(.boolean(true), for: key)
+                }
+            }
+        )
+    }
+
+    private func integerOverrideEnabledBinding(for key: FeatureFlagKey) -> Binding<Bool> {
+        Binding(
+            get: { deviceFeatureFlagOverrides[key]?.integerValue != nil },
+            set: { isEnabled in
+                guard isEnabled else {
+                    persistDeviceFeatureFlagOverride(nil, for: key)
+                    return
+                }
+                let value = backend.integerFeatureFlag(key, for: debugSettingsUserID ?? "")
+                    ?? key.definition.bundledDefault.integerValue
+                    ?? key.definition.integerRange?.lowerBound
+                    ?? 0
+                persistDeviceFeatureFlagOverride(.integer(value), for: key)
+            }
+        )
+    }
+
+    private func integerOverrideBinding(
+        for key: FeatureFlagKey,
+        range: ClosedRange<Int>
+    ) -> Binding<Int> {
+        Binding(
+            get: { deviceFeatureFlagOverrides[key]?.integerValue ?? range.lowerBound },
+            set: { persistDeviceFeatureFlagOverride(.integer($0), for: key) }
+        )
+    }
+
+    private func persistDeviceFeatureFlagOverride(
+        _ value: FeatureFlagValue?,
+        for key: FeatureFlagKey
+    ) {
+        guard let userID = debugSettingsUserID else { return }
+        if key == .firstVisitNUX {
+            if let isEnabled = value?.booleanValue {
+                walkthroughDebugPreferences.setNUXEnabled(isEnabled, for: userID)
+            } else {
+                walkthroughDebugPreferences.clearNUXOverride(for: userID)
+            }
+        } else if let value {
+            featureFlagOverrideStore.setOverride(value, for: key, userID: userID)
+        } else {
+            featureFlagOverrideStore.clearOverride(for: key, userID: userID)
+        }
+        refreshDebugSettingsState()
+    }
+
+    private func resetAllDeviceFeatureFlagOverrides() {
+        guard let userID = debugSettingsUserID else { return }
+        featureFlagOverrideStore.clearAllOverrides(for: userID)
+        walkthroughDebugPreferences.clearReplayRequest(for: userID)
+        refreshDebugSettingsState()
     }
 
     private func destructiveSettingsLabel(_ title: String, icon: String, color: Color) -> some View {

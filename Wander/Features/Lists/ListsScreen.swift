@@ -882,7 +882,7 @@ private struct ListDetailScreen: View {
     @State private var removedPlaceIDs = Set<String>()
     @State private var selectedPlace: ListPlaceMock?
     @State private var isAddingPlaces = false
-    @State private var suggestions: [ListPlaceSuggestion] = []
+    @State private var suggestionBatch = ListSuggestionBatch()
     @State private var isLoadingSuggestions = false
     @State private var shouldShowAutoSaveExplanation = false
     @State private var autoSaveToastTask: Task<Void, Never>?
@@ -1020,12 +1020,15 @@ private struct ListDetailScreen: View {
                 ListAddPlacesScreen(list: sourceList) { result in
                     handleAddResult(result)
                     onListChanged(sourceList.id)
-                    Task {
-                        await loadSuggestions()
-                    }
                 }
             } else {
                 ListAddPlacesUnavailableScreen()
+            }
+        }
+        .onChange(of: isAddingPlaces) { wasAddingPlaces, isAddingPlaces in
+            guard wasAddingPlaces, !isAddingPlaces else { return }
+            Task {
+                await loadSuggestions()
             }
         }
         .overlay(alignment: .bottom) {
@@ -1187,7 +1190,7 @@ private struct ListDetailScreen: View {
                 .font(.system(size: 18, weight: .black))
 
             if visiblePlaces.isEmpty {
-                Text(renderedList.itemCount > 0 ? "Loading places in this list." : "No places in this list yet.")
+                Text("There are no places added to this list yet.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1219,10 +1222,13 @@ private struct ListDetailScreen: View {
     private var suggestionsSection: some View {
         if canAddPlaces {
             ListSuggestionsSection(
-                suggestions: suggestions,
+                suggestions: suggestionBatch.suggestions,
                 isLoading: isLoadingSuggestions,
                 outlineCatalog: savedPlaceOutlineCatalog,
                 currentUserID: store.currentUser.id,
+                isAdding: { suggestion in
+                    suggestionBatch.isAdding(suggestionID: suggestion.id)
+                },
                 onAdd: { suggestion in
                     Task {
                         await addSuggestion(suggestion)
@@ -1302,22 +1308,33 @@ private struct ListDetailScreen: View {
     @MainActor
     private func loadSuggestions() async {
         guard let sourceList, canAddPlaces else {
-            suggestions = []
+            suggestionBatch.replace(with: [])
             return
         }
 
         isLoadingSuggestions = true
-        suggestions = await store.listSuggestions(for: sourceList, limit: 5, backend: backend)
+        let suggestions = await store.listSuggestions(for: sourceList, limit: 5, backend: backend)
+        guard !Task.isCancelled else { return }
+        suggestionBatch.replace(with: suggestions)
         isLoadingSuggestions = false
     }
 
     @MainActor
     private func addSuggestion(_ suggestion: ListPlaceSuggestion) async {
-        guard let sourceList else { return }
+        guard let sourceList,
+              suggestionBatch.beginAdding(suggestionID: suggestion.id)
+        else { return }
+
         let result = await store.addVisiblePlace(suggestion.visiblePlace, to: sourceList, backend: backend)
+        let didExhaustBatch = suggestionBatch.finishAdding(
+            suggestionID: suggestion.id,
+            outcome: result.outcome
+        )
         handleAddResult(result)
         onListChanged(sourceList.id)
-        await loadSuggestions()
+        if didExhaustBatch {
+            await loadSuggestions()
+        }
     }
 
     @MainActor
@@ -1359,15 +1376,21 @@ private struct ListDetailScreen: View {
 
     @MainActor
     private func removePlace(_ place: ListPlaceMock) {
+        removedPlaceIDs.insert(place.id)
+
         if let sourceList, let placeID = place.placeID {
             Task {
-                _ = await store.removePlace(placeID: placeID, from: sourceList, backend: backend)
+                _ = await store.removePlace(
+                    placeID: placeID,
+                    visiblePlaceID: place.visiblePlaceID,
+                    from: sourceList,
+                    backend: backend
+                )
                 await MainActor.run {
+                    removedPlaceIDs.remove(place.id)
                     onListChanged(sourceList.id)
                 }
             }
-        } else {
-            removedPlaceIDs.insert(place.id)
         }
     }
 
@@ -1396,6 +1419,7 @@ private struct ListSuggestionsSection: View {
     let isLoading: Bool
     let outlineCatalog: [String: [MapPinOutline]]
     let currentUserID: String
+    let isAdding: (ListPlaceSuggestion) -> Bool
     let onAdd: (ListPlaceSuggestion) -> Void
     let onOpen: (ListPlaceSuggestion) -> Void
 
@@ -1430,6 +1454,7 @@ private struct ListSuggestionsSection: View {
                                 currentUserID: currentUserID
                             ),
                             currentUserID: currentUserID,
+                            isAdding: isAdding(suggestion),
                             onOpen: {
                                 onOpen(suggestion)
                             },
@@ -1451,11 +1476,12 @@ private struct ListAddPlacesScreen: View {
     let list: LocalPlaceList
     let onAdded: (ListPlaceAddResult) -> Void
     @State private var query = ""
-    @State private var suggestions: [ListPlaceSuggestion] = []
+    @State private var suggestionBatch = ListSuggestionBatch()
     @State private var searchCandidates: [PlaceCandidate] = []
     @State private var isLoadingSuggestions = false
     @State private var isSearching = false
     @State private var selectedPlace: ListPlaceMock?
+    @State private var pendingSearchCandidateIDs = Set<String>()
     @State private var shouldShowAutoSaveExplanation = false
     @State private var autoSaveToastTask: Task<Void, Never>?
 
@@ -1516,6 +1542,8 @@ private struct ListAddPlacesScreen: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: shouldShowAutoSaveExplanation)
         .onDisappear {
             autoSaveToastTask?.cancel()
+            suggestionBatch.cancelPendingAdditions()
+            pendingSearchCandidateIDs.removeAll()
         }
     }
 
@@ -1529,7 +1557,7 @@ private struct ListAddPlacesScreen: View {
 
             if isLoadingSuggestions {
                 ListLoadingRow(title: "Finding places that fit")
-            } else if addableSuggestions.isEmpty {
+            } else if suggestionBatch.suggestions.isEmpty {
                 Text("Start with search, then suggestions will get sharper as the list fills in.")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(WanderTheme.textMuted.color)
@@ -1539,7 +1567,7 @@ private struct ListAddPlacesScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
             } else {
                 VStack(spacing: WanderTheme.spacing2) {
-                    ForEach(addableSuggestions) { suggestion in
+                    ForEach(suggestionBatch.suggestions) { suggestion in
                         ListVisiblePlaceAddRow(
                             visiblePlace: suggestion.visiblePlace,
                             supportingText: suggestion.reason,
@@ -1549,6 +1577,7 @@ private struct ListAddPlacesScreen: View {
                                 currentUserID: store.currentUser.id
                             ),
                             currentUserID: store.currentUser.id,
+                            isAdding: suggestionBatch.isAdding(suggestionID: suggestion.id),
                             onOpen: {
                                 selectedPlace = ListPlaceMock(
                                     visiblePlace: suggestion.visiblePlace,
@@ -1589,6 +1618,7 @@ private struct ListAddPlacesScreen: View {
                         ListPlaceCandidateAddRow(
                             candidate: candidate,
                             supportingText: searchSupportingText(for: candidate),
+                            isAdding: pendingSearchCandidateIDs.contains(candidate.id),
                             onAdd: {
                                 Task {
                                     await add(candidate)
@@ -1603,10 +1633,6 @@ private struct ListAddPlacesScreen: View {
 
     private var normalizedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var addableSuggestions: [ListPlaceSuggestion] {
-        suggestions.filter { !store.hasPlace($0.visiblePlace, in: list) }
     }
 
     private var savedPlaceOutlineCatalog: [String: [MapPinOutline]] {
@@ -1643,7 +1669,9 @@ private struct ListAddPlacesScreen: View {
     @MainActor
     private func loadSuggestions() async {
         isLoadingSuggestions = true
-        suggestions = await store.listSuggestions(for: list, limit: 8, backend: backend)
+        let suggestions = await store.listSuggestions(for: list, limit: 8, backend: backend)
+        guard !Task.isCancelled else { return }
+        suggestionBatch.replace(with: suggestions)
         isLoadingSuggestions = false
     }
 
@@ -1667,12 +1695,17 @@ private struct ListAddPlacesScreen: View {
 
     @MainActor
     private func add(_ visiblePlace: VisiblePlace) async {
+        guard suggestionBatch.beginAdding(suggestionID: visiblePlace.id) else { return }
+
         let result = await store.addVisiblePlace(visiblePlace, to: list, backend: backend)
+        let didExhaustBatch = suggestionBatch.finishAdding(
+            suggestionID: visiblePlace.id,
+            outcome: result.outcome
+        )
         onAdded(result)
         handleAddResult(result)
-        await loadSuggestions()
-        if !normalizedQuery.isEmpty {
-            await runSearch()
+        if didExhaustBatch {
+            await loadSuggestions()
         }
     }
 
@@ -1699,13 +1732,15 @@ private struct ListAddPlacesScreen: View {
 
     @MainActor
     private func add(_ candidate: PlaceCandidate) async {
+        guard pendingSearchCandidateIDs.insert(candidate.id).inserted else { return }
+
         let result = await store.addCandidate(candidate, to: list, backend: backend)
+        pendingSearchCandidateIDs.remove(candidate.id)
+        if result.outcome == .added || result.outcome == .alreadyInList {
+            searchCandidates.removeAll { $0.id == candidate.id }
+        }
         onAdded(result)
         handleAddResult(result)
-        await loadSuggestions()
-        if !normalizedQuery.isEmpty {
-            await runSearch()
-        }
     }
 
     private func searchSupportingText(for candidate: PlaceCandidate) -> String {
@@ -1793,6 +1828,7 @@ private struct ListVisiblePlaceAddRow: View {
     let supportingText: String
     let outlines: [MapPinOutline]
     let currentUserID: String
+    let isAdding: Bool
     let onOpen: () -> Void
     let onAdd: () -> Void
 
@@ -1833,11 +1869,19 @@ private struct ListVisiblePlaceAddRow: View {
             .buttonStyle(.plain)
 
             Button(action: onAdd) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 28, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(width: 44, height: 44)
+                Group {
+                    if isAdding {
+                        ProgressView()
+                            .tint(WanderTheme.terracotta.color)
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+                .frame(width: 44, height: 44)
             }
+            .disabled(isAdding)
             .accessibilityLabel("Add \(place.name) to list")
         }
         .padding(WanderTheme.spacing3)
@@ -1853,6 +1897,7 @@ private struct ListVisiblePlaceAddRow: View {
 private struct ListPlaceCandidateAddRow: View {
     let candidate: PlaceCandidate
     let supportingText: String
+    let isAdding: Bool
     let onAdd: () -> Void
 
     private var subtitle: String {
@@ -1891,11 +1936,19 @@ private struct ListPlaceCandidateAddRow: View {
             }
 
             Button(action: onAdd) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 28, weight: .black))
-                    .foregroundStyle(WanderTheme.terracotta.color)
-                    .frame(width: 44, height: 44)
+                Group {
+                    if isAdding {
+                        ProgressView()
+                            .tint(WanderTheme.terracotta.color)
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 28, weight: .black))
+                            .foregroundStyle(WanderTheme.terracotta.color)
+                    }
+                }
+                .frame(width: 44, height: 44)
             }
+            .disabled(isAdding)
             .accessibilityLabel("Add \(candidate.name) to list")
         }
         .padding(WanderTheme.spacing3)
@@ -4397,15 +4450,14 @@ private extension PlaceListMock {
                 preferredUserPhoto: preferredUserPhoto
             )
         }
-        self.itemCountOverride = list.cachedItemCount
+        self.itemCountOverride = visiblePlaces.count
         self.sourceListID = list.id
         self.ownerUserID = list.ownerUserID
         self.canManage = store.canManage(list)
         self.canAddPlaces = store.canAddPlaces(to: list)
         self.canLeave = store.canLeave(list)
-        // The store currently has no list-scoped request state. A cached count
-        // without hydrated places is unresolved content, not proof that a
-        // request is actively loading.
+        // Detail counts must describe the rows the viewer can actually see.
+        // Cached server membership counts may include unresolved legacy items.
         self.mapAvailability = .ready
     }
 }

@@ -327,7 +327,6 @@ struct WanderRootView: View {
     @State private var pendingCommittedWalkthroughDraft: PlaceSaveDraft?
     @State private var interruptedSaveRecoveryMessage: String?
     @State private var walkthroughLaunchConfiguredUserIDs: Set<String> = []
-    @State private var restartedWalkthroughReplayUserIDs: Set<String> = []
     @State private var retiredWalkthroughUserIDs: Set<String> = []
     @State private var walkthroughFeatureFlagRefreshTask: Task<Void, Never>?
     @State private var nativeTabItemControlsFrame: CGRect?
@@ -344,9 +343,9 @@ struct WanderRootView: View {
     private let onDeepLinkLaunchRequestHandled: (UUID) -> Void
     private let analytics: AnalyticsClient
     private let walkthroughDebugPreferences: FirstVisitWalkthroughDebugPreferences
+    private let walkthroughDebugPreferenceSnapshot: FirstVisitWalkthroughDebugPreferenceSnapshot
     private let firstVisitWalkthroughEligibilityContext: FirstVisitWalkthroughEligibilityContext
     private let onFirstVisitWalkthroughCompleted: (String) -> Void
-    private let placeActionDebugPreferences: PlaceProfileFloatingActionDebugPreferences
 
     init(
         initialTab: WanderTab? = nil,
@@ -370,12 +369,12 @@ struct WanderRootView: View {
         self.analytics = analytics
         let walkthroughDebugPreferences = FirstVisitWalkthroughDebugPreferences()
         self.walkthroughDebugPreferences = walkthroughDebugPreferences
+        self.walkthroughDebugPreferenceSnapshot = walkthroughDebugPreferences.launchSnapshot()
         let firstVisitWalkthroughEligibilityContext = FirstVisitWalkthroughEligibilityContext(
             sourceUserID: initialSession?.userID,
             isEligible: isFirstVisitWalkthroughEligible
         )
         self.firstVisitWalkthroughEligibilityContext = firstVisitWalkthroughEligibilityContext
-        placeActionDebugPreferences = PlaceProfileFloatingActionDebugPreferences()
         self.onFirstVisitWalkthroughCompleted = onFirstVisitWalkthroughCompleted
         let requestedTab = initialTab ?? Self.resolvedInitialTab()
         _selectedTab = State(initialValue: requestedTab == .add ? .map : requestedTab)
@@ -648,9 +647,7 @@ struct WanderRootView: View {
                 switch presentation {
                 case .settings:
                     NavigationStack {
-                        SettingsScreen(
-                            onNUXDebugSettingsChanged: configureWalkthroughsForCurrentUser
-                        )
+                        SettingsScreen()
                     }
                         .environmentObject(store)
                         .environmentObject(auth)
@@ -696,17 +693,14 @@ struct WanderRootView: View {
 
             // A different account must fail closed while its own override loads;
             // the tagged resolution prevents the previous account from leaking.
-            placeProfileFloatingActionVariant = .productionDefault
-            if backend.featureFlag(.firstVisitNUX, for: userID) == nil {
-                configureWalkthroughsForCurrentUser()
-            }
+            placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant(
+                for: userID
+            )
+            configureWalkthroughsForCurrentUser()
             await backend.refreshFeatureFlags(for: userID)
             guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
-            placeProfileFloatingActionVariant = placeActionDebugPreferences.activeVariant(
-                for: userID,
-                isDebugSettingsEntitled: DebugSettingsAccessPolicy.isEntitled(
-                    serverFlag: backend.featureFlag(.debugSettings, for: userID)
-                )
+            placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant(
+                for: userID
             )
             configureWalkthroughsForCurrentUser()
         }
@@ -1597,18 +1591,23 @@ struct WanderRootView: View {
         // still need their own stale checkpoints cleared, never the previous
         // account's or the coordinator's placeholder account.
         walkthroughs.setUserID(userID)
-        let isDebugSettingsEntitled = DebugSettingsAccessPolicy.isEntitled(
-            serverFlag: backend.featureFlag(.debugSettings, for: userID)
+        let hasLocalReplayRequest = walkthroughDebugPreferenceSnapshot.isReplayRequested(
+            for: userID
         )
+        let hasLaunchDeviceNUXOverride = backend.deviceFeatureFlagOverride(
+            .firstVisitNUX,
+            for: userID
+        ) != nil
+        let isDebugSettingsEntitled = DebugSettingsAccessPolicy.isEntitled(
+            serverFlag: backend.remoteFeatureFlag(.debugSettings, for: userID)?.isEnabled
+        ) || hasLocalReplayRequest || hasLaunchDeviceNUXOverride
         let isFeatureFlagResolutionPending = backend.featureFlagResolution
             .isPending(for: userID)
         let debugNUXOverride = isDebugSettingsEntitled
-            ? walkthroughDebugPreferences.nuxOverride(for: userID)
+            ? backend.deviceFeatureFlagOverride(.firstVisitNUX, for: userID)?.booleanValue
             : nil
         let debugReplay = FirstVisitWalkthroughDebugReplayPolicy.resolve(
-            hasLocalReplayRequest: walkthroughDebugPreferences.isReplayRequested(
-                for: userID
-            ),
+            hasLocalReplayRequest: hasLocalReplayRequest,
             isDebugSettingsEntitled: isDebugSettingsEntitled,
             isFeatureFlagResolutionPending: isFeatureFlagResolutionPending
         )
@@ -1674,17 +1673,6 @@ struct WanderRootView: View {
             return
         }
 
-        // The prior launch race could mark a freshly queued replay complete
-        // before tester entitlement arrived. Repair only that completed state;
-        // an in-progress replay keeps its persisted checkpoint across relaunches.
-        if FirstVisitWalkthroughDebugReplayPolicy.shouldRepairCompletedLocalJourney(
-            debugReplay,
-            hasCompletedPrimaryJourney: walkthroughs.hasCompletedPrimaryJourney
-        ),
-           restartedWalkthroughReplayUserIDs.insert(userID).inserted {
-            walkthroughs.resetCurrentUser()
-        }
-
         let forcedWalkthroughTarget: WalkthroughTargetID? = {
             guard let flagIndex = launchArguments.firstIndex(of: "-WanderWalkthroughTarget") else {
                 return nil
@@ -1696,7 +1684,10 @@ struct WanderRootView: View {
         let shouldApplyLaunchConfiguration = !walkthroughLaunchConfiguredUserIDs.contains(userID)
         if shouldApplyLaunchConfiguration {
             walkthroughLaunchConfiguredUserIDs.insert(userID)
-            if let forcedWalkthroughTarget {
+            if walkthroughDebugPreferenceSnapshot.shouldStartReplay(for: userID) {
+                walkthroughs.resetCurrentUser()
+                walkthroughDebugPreferences.markReplayStarted(for: userID)
+            } else if let forcedWalkthroughTarget {
                 walkthroughs.prepareDebugReplay(at: forcedWalkthroughTarget)
             } else if launchArguments.contains("-WanderResetWalkthroughs") {
                 walkthroughs.resetCurrentUser()
@@ -1763,6 +1754,9 @@ struct WanderRootView: View {
         walkthroughFeatureFlagRefreshTask = Task { @MainActor in
             await backend.refreshFeatureFlags(for: userID)
             guard !Task.isCancelled, featureFlagLoadUserID == userID else { return }
+            placeProfileFloatingActionVariant = resolvedPlaceProfileFloatingActionVariant(
+                for: userID
+            )
             configureWalkthroughsForCurrentUser()
             walkthroughFeatureFlagRefreshTask = nil
         }
@@ -1874,6 +1868,21 @@ struct WanderRootView: View {
                 && ProcessInfo.processInfo.arguments.contains("-WanderEnableWalkthroughs"))
         else { return nil }
         return auth.state.session?.userID
+    }
+
+    private func resolvedPlaceProfileFloatingActionVariant(
+        for userID: String
+    ) -> PlaceProfileFloatingActionVariant {
+        #if DEBUG
+        let launchArguments = ProcessInfo.processInfo.arguments
+        if launchArguments.contains(PlaceProfileFloatingActionVariant.selectionLaunchArgument) {
+            return PlaceProfileFloatingActionVariant.resolved(from: launchArguments)
+        }
+        #endif
+
+        let value = backend.integerFeatureFlag(.placeProfileActionVariant, for: userID)
+            ?? PlaceProfileFloatingActionVariant.productionDefault.rawValue
+        return PlaceProfileFloatingActionVariant(rawValue: value) ?? .productionDefault
     }
 
     private func handleDeepLinkPresentationDismissal(
