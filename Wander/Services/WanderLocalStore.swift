@@ -5613,7 +5613,7 @@ final class WanderStore: ObservableObject {
                 candidate,
                 status: .been,
                 visibility: existingUserPlace.visibility,
-                note: existingUserPlace.note,
+                note: note,
                 sourceType: sourceType,
                 ratingScore: ratingScore,
                 visitedAt: visitedAt
@@ -5666,7 +5666,7 @@ final class WanderStore: ObservableObject {
             _ = createVisit(
                 userPlaceID: userPlace.id,
                 visitedAt: visitedAt,
-                note: userPlace.note,
+                note: nil,
                 ratingScore: ratingScore,
                 attributes: currentAttributes,
                 visibility: userPlace.visibility
@@ -5674,9 +5674,9 @@ final class WanderStore: ObservableObject {
             return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
         }
 
-        // A Check In's editor stores its details on the visit. Carry those
-        // details forward to Wanna before removing the visits, while leaving
-        // the current category override and visibility untouched.
+        // A Check In's editor stores its details on the visit. Keep the
+        // classification details when changing status, but start the new Wanna
+        // memory without carrying over the visit's note.
         let latestVisit = visits(for: userPlace.id).max { lhs, rhs in
             if lhs.visitedAt != rhs.visitedAt {
                 return lhs.visitedAt < rhs.visitedAt
@@ -5688,9 +5688,7 @@ final class WanderStore: ObservableObject {
         } ?? attributeDrafts(for: userPlace.id)
 
         userPlace.statusRaw = PlaceStatus.wannaGo.rawValue
-        if let latestVisit {
-            userPlace.note = latestVisit.note
-        }
+        userPlace.note = nil
         userPlace.ratingSignal = ratingSignal(from: currentAttributes)
         userPlace.ratingScore = nil
         userPlace.recommendedScore = nil
@@ -6474,6 +6472,17 @@ final class WanderStore: ObservableObject {
     }
 
     func saveVisiblePlace(_ visiblePlace: VisiblePlace, status: PlaceStatus = .wannaGo) -> SaveResult {
+        if status == .wannaGo,
+           let existingOwnSave = currentUserVisiblePlaces.first(where: {
+               VisiblePlaceGrouping.matches($0, visiblePlace)
+           }) {
+            return SaveResult(
+                userPlaceID: existingOwnSave.userPlace.id,
+                syncState: existingOwnSave.userPlace.syncState,
+                placeID: existingOwnSave.place.serverID
+            )
+        }
+
         let sourceAttributes = visiblePlace.attributes.isEmpty
             ? attributes(for: visiblePlace.userPlace.id)
             : visiblePlace.attributes
@@ -6524,7 +6533,7 @@ final class WanderStore: ObservableObject {
             ),
             status: status,
             visibility: effectiveDefaultVisibility,
-            note: visiblePlace.userPlace.note,
+            note: nil,
             sourceType: .socialSave,
             attributes: copiedAttributes
         )

@@ -2,6 +2,37 @@ import XCTest
 
 @MainActor
 final class MapFilterInteractionUITests: XCTestCase {
+    func testVisiblePlacePinSelectsOnFirstTap() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture",
+            "-WanderUseDemoFixtures",
+            "-WanderDisableWalkthroughs",
+            "-WanderMapCaptureMode", "friends"
+        ]
+        app.launch()
+
+        let map = app.maps.firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 5))
+
+        let pin = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Bar Nido"))
+            .firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 5))
+
+        // Tap through the map at the rendered pin center. This exercises the
+        // gesture bridge instead of dispatching the pin's accessibility action.
+        let normalizedPinCenter = CGVector(
+            dx: (pin.frame.midX - map.frame.minX) / map.frame.width,
+            dy: (pin.frame.midY - map.frame.minY) / map.frame.height
+        )
+        map.coordinate(withNormalizedOffset: normalizedPinCenter).tap()
+
+        let card = app.buttons["map.selectedPlaceCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        XCTAssertTrue(card.label.contains("Bar Nido"))
+    }
+
     func testSourceFiltersFitWithoutOverlapOnSmallPhones() {
         let app = XCUIApplication()
         app.launchArguments = [
