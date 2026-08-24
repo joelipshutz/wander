@@ -254,6 +254,52 @@ test("an explicit record command can classify a direct main push", async () => {
   }
 });
 
+test("main sync preserves and deliberately replaces an explicit direct-push classification", async () => {
+  const repository = makeRepository();
+  git(repository.cwd, ["commit", "--amend", "-m", "REC-500: emergency direct fix"]);
+  repository.candidateSha = git(repository.cwd, ["rev-parse", "HEAD"]);
+  const { client } = fakeGitHub(repository);
+  try {
+    await recordManifestEntry({
+      client,
+      cwd: repository.cwd,
+      commitRef: repository.candidateSha,
+      payload: shipPayload,
+      headRef: repository.candidateSha,
+    });
+
+    const synced = await syncManifestRange({
+      client,
+      cwd: repository.cwd,
+      headRef: repository.candidateSha,
+    });
+    assert.equal(synced.pendingEntries[0].disposition, "ship");
+    assert.equal(synced.results[0].action, "unchanged");
+
+    await recordManifestEntry({
+      client,
+      cwd: repository.cwd,
+      commitRef: repository.candidateSha,
+      payload: {
+        disposition: "release-operation",
+        reason: "Deliberately replaced after release review.",
+      },
+      headRef: repository.candidateSha,
+    });
+
+    const resynced = await syncManifestRange({
+      client,
+      cwd: repository.cwd,
+      headRef: repository.candidateSha,
+    });
+    assert.equal(resynced.pendingEntries[0].disposition, "release-operation");
+    assert.equal(resynced.pendingEntries[0].reason, "Deliberately replaced after release review.");
+    assert.equal(resynced.results[0].action, "unchanged");
+  } finally {
+    rmSync(repository.cwd, { recursive: true, force: true });
+  }
+});
+
 test("release verification rejects a live manifest changed after snapshot", async () => {
   const commit = "a".repeat(40);
   const snapshotEntry = buildManifestEntry({ commit, pr: 12, payload: shipPayload });
