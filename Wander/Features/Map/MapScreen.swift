@@ -6768,6 +6768,7 @@ struct MapPlaceSaveContext: Identifiable {
     let candidate: PlaceCandidate
     let mode: MapPlaceSaveMode
     let requiresStatusConfirmation: Bool
+    let preselectsInitialStatus: Bool
     let hasPriorCheckIn: Bool
     let initialStatus: PlaceStatus
     let initialVisibility: PlaceVisibility
@@ -6785,6 +6786,7 @@ struct MapPlaceSaveContext: Identifiable {
         candidate: PlaceCandidate,
         mode: MapPlaceSaveMode,
         requiresStatusConfirmation: Bool,
+        preselectsInitialStatus: Bool = false,
         hasPriorCheckIn: Bool,
         initialStatus: PlaceStatus,
         initialVisibility: PlaceVisibility,
@@ -6801,6 +6803,7 @@ struct MapPlaceSaveContext: Identifiable {
         self.candidate = candidate
         self.mode = mode
         self.requiresStatusConfirmation = requiresStatusConfirmation
+        self.preselectsInitialStatus = preselectsInitialStatus
         self.hasPriorCheckIn = hasPriorCheckIn
         self.initialStatus = initialStatus
         self.initialVisibility = initialVisibility
@@ -6980,12 +6983,14 @@ struct MapPlaceSaveContext: Identifiable {
         defaultVisibility: PlaceVisibility,
         initialPhotoAttachments: [MapPlaceSavePhotoAttachment] = [],
         currentUserSave: VisiblePlace? = nil,
-        latestVisit: LocalPlaceVisit? = nil
+        latestVisit: LocalPlaceVisit? = nil,
+        preselectsInitialStatus: Bool = false
     ) -> MapPlaceSaveContext {
         MapPlaceSaveContext(
             candidate: candidate,
             mode: .add(sourceType),
             requiresStatusConfirmation: true,
+            preselectsInitialStatus: preselectsInitialStatus,
             hasPriorCheckIn: currentUserSave?.userPlace.status == .been,
             initialStatus: currentUserSave?.userPlace.status ?? .wannaGo,
             initialVisibility: currentUserSave?.userPlace.visibility ?? defaultVisibility,
@@ -7102,7 +7107,8 @@ struct MapPlaceSaveContext: Identifiable {
         _ visiblePlace: VisiblePlace,
         defaultVisibility: PlaceVisibility,
         attributes: [LocalPlaceAttribute],
-        latestVisit: LocalPlaceVisit?
+        latestVisit: LocalPlaceVisit?,
+        preselectsInitialStatus: Bool = false
     ) -> MapPlaceSaveContext {
         var currentUserSave = visiblePlace
         currentUserSave.attributes = attributes
@@ -7111,7 +7117,8 @@ struct MapPlaceSaveContext: Identifiable {
             sourceType: .manual,
             defaultVisibility: defaultVisibility,
             currentUserSave: currentUserSave,
-            latestVisit: latestVisit
+            latestVisit: latestVisit,
+            preselectsInitialStatus: preselectsInitialStatus
         )
     }
 
@@ -8236,7 +8243,9 @@ struct MapPlaceSaveEditor: View {
         _selectedAssignment = State(initialValue: initialAssignment)
         _selectedStatus = State(initialValue: initialStatus)
         _hasSelectedStatus = State(
-            initialValue: initialStep == .details || !context.requiresStatusConfirmation
+            initialValue: initialStep == .details
+                || !context.requiresStatusConfirmation
+                || context.preselectsInitialStatus
         )
         _selectedVisibility = State(initialValue: initialVisibility)
         _selectedRatingScore = State(initialValue: initialRatingScore)

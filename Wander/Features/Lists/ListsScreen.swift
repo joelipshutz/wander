@@ -1861,7 +1861,8 @@ func listSaveFlowContext(
             visiblePlace,
             defaultVisibility: store.effectiveDefaultVisibility,
             attributes: attributes,
-            latestVisit: latestVisit
+            latestVisit: latestVisit,
+            preselectsInitialStatus: true
         )
     case .existingWanna:
         return MapPlaceSaveContext.editWant(visiblePlace, attributes: attributes)
@@ -1972,11 +1973,11 @@ private struct ListSaveToast: View {
 
             Button(presentation.actionTitle, action: onEdit)
                 .font(.system(size: 12, weight: .black))
-                .foregroundStyle(WanderTheme.stateSuccess.color)
+                .foregroundStyle(WanderTheme.terracottaDark.color)
                 .underline()
                 .padding(.horizontal, 10)
                 .frame(minWidth: 48, minHeight: WanderTheme.tapMinimum)
-                .background(WanderTheme.stateSuccess.color.opacity(0.12))
+                .background(WanderTheme.terracottaTint.color)
                 .clipShape(Capsule())
                 .contentShape(Capsule())
                 .buttonStyle(.plain)

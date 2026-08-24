@@ -6643,7 +6643,7 @@ final class WanderStore: ObservableObject {
 
         do {
             let visiblePlaces = try await backend.visiblePlaces(in: viewport)
-            replaceRemoteViewportVisiblePlaces(visiblePlaces)
+            replaceRemoteViewportVisiblePlaces(visiblePlaces, in: viewport)
             lastRemoteError = nil
         } catch {
             lastRemoteError = remoteErrorMessage(error)
@@ -6913,7 +6913,7 @@ final class WanderStore: ObservableObject {
                         following: snapshot.following,
                         followers: snapshot.followers
                     )
-                    replaceRemoteViewportVisiblePlaces(snapshot.viewportPlaces)
+                    replaceRemoteViewportVisiblePlaces(snapshot.viewportPlaces, in: viewport)
                     applyRemoteWannaGoPlans(snapshot.ownWannaGoPlans)
                     for profileID in followedProfileIDs {
                         if let visiblePlaces = snapshot.visiblePlacesByOwnerID[profileID] {
@@ -7008,7 +7008,7 @@ final class WanderStore: ObservableObject {
                 )
             }
             if let viewportPlaces {
-                replaceRemoteViewportVisiblePlaces(viewportPlaces)
+                replaceRemoteViewportVisiblePlaces(viewportPlaces, in: viewport)
             }
             if let ownWannaGoPlans {
                 applyRemoteWannaGoPlans(ownWannaGoPlans)
@@ -9007,9 +9007,16 @@ final class WanderStore: ObservableObject {
     /// Viewport queries are intentionally partial. Keep the current user's
     /// fully hydrated profile slice so Map/Discover refreshes cannot truncate
     /// Profile calendar or widget activity outside the visible region.
-    private func replaceRemoteViewportVisiblePlaces(_ visiblePlaces: [VisiblePlace]) {
+    private func replaceRemoteViewportVisiblePlaces(
+        _ visiblePlaces: [VisiblePlace],
+        in viewport: MapViewport
+    ) {
         let retainedOwnerPlaces = remoteVisiblePlaceCache.filter {
             $0.owner.id == currentUser.id
+        }
+        let retainedOutOfViewportSocialPlaces = remoteVisiblePlaceCache.filter {
+            $0.owner.id != currentUser.id
+                && !Self.contains($0, in: viewport)
         }
         let incomingNonOwnerPlaces = visiblePlaces.filter {
             $0.owner.id != currentUser.id
@@ -9022,8 +9029,19 @@ final class WanderStore: ObservableObject {
                 }
             )
 
-        remoteVisiblePlaceCache = mergeVisiblePlaces(incomingNonOwnerPlaces + ownerPlaces)
+        remoteVisiblePlaceCache = mergeVisiblePlaces(
+            incomingNonOwnerPlaces
+                + retainedOutOfViewportSocialPlaces
+                + ownerPlaces
+        )
         hydrateRemoteVisiblePlaceMetadata(visiblePlaces)
+    }
+
+    private static func contains(_ visiblePlace: VisiblePlace, in viewport: MapViewport) -> Bool {
+        visiblePlace.place.latitude >= viewport.minLatitude
+            && visiblePlace.place.latitude <= viewport.maxLatitude
+            && visiblePlace.place.longitude >= viewport.minLongitude
+            && visiblePlace.place.longitude <= viewport.maxLongitude
     }
 
     private func applyRemoteCurrentProfile(_ remoteProfile: LocalProfile) {

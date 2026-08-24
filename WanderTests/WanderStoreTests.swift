@@ -7056,6 +7056,47 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.remoteVisiblePlaceCache.map(\.id), originalCacheIDs)
     }
 
+    func testRemoteViewportRefreshRemovesStaleSocialPlacesInsideRefreshedBounds() async {
+        let store = WanderStore(fixtures: .empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_current", displayName: "Ryan", handle: "ryan")
+            )
+        )
+        let owner = LocalProfile(
+            localID: "remote_profile_joe",
+            serverID: "user_joe",
+            handle: "joe",
+            displayName: "Joe",
+            syncState: .synced
+        )
+        let remotePlace = makeRemoteCalendarVisiblePlace(
+            owner: owner,
+            userPlaceID: "up_remote_joe_woodcat",
+            placeID: "place_woodcat",
+            name: "Woodcat Coffee",
+            status: .been,
+            visibility: .followers,
+            savedAt: Date(timeIntervalSince1970: 1_753_000_000)
+        )
+        let placeRepository = FakePlaceRepository(places: [remotePlace])
+        let backend = WanderBackend(placeRepository: placeRepository)
+        let viewport = MapViewport(
+            minLatitude: 33.9,
+            minLongitude: -118.6,
+            maxLatitude: 34.2,
+            maxLongitude: -118.3
+        )
+
+        await store.refreshRemoteVisiblePlaces(in: viewport, backend: backend)
+        XCTAssertTrue(store.remoteVisiblePlaceCache.contains { $0.id == remotePlace.id })
+
+        placeRepository.setPlaces([])
+        await store.refreshRemoteVisiblePlaces(in: viewport, backend: backend)
+
+        XCTAssertFalse(store.remoteVisiblePlaceCache.contains { $0.id == remotePlace.id })
+    }
+
     func testRemoteFeaturedViewportFetchUsesCommunityPathWithoutReplacingProfileWideCache() async throws {
         let store = WanderStore(fixtures: .seed())
         let remotePlace = try XCTUnwrap(store.visiblePlaces().first)
@@ -9118,6 +9159,108 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertTrue(outlines.contains { $0.ownership == .social })
     }
 
+    func testListAddPreservesOutOfViewportSocialSaveForCanonicalOutlines() async throws {
+        let store = WanderStore(fixtures: WanderFixtures.empty())
+        store.apply(
+            authState: .signedIn(
+                AuthSession(userID: "user_current", displayName: "Ryan", handle: "ryan")
+            )
+        )
+        let list = try XCTUnwrap(
+            store.createPlaceList(
+                name: "NYC bakeries",
+                description: "Places to try",
+                visibility: .followers
+            )
+        )
+        let placeID = "11111111-1111-4111-8111-111111111111"
+        let sourceUserPlaceID = "22222222-2222-4222-8222-222222222222"
+        let createdUserPlaceID = "33333333-3333-4333-8333-333333333333"
+        let socialPlace = VisiblePlace(
+            id: sourceUserPlaceID,
+            place: LocalPlace(
+                localID: "remote_place_maison_twenty_seven",
+                serverID: placeID,
+                canonicalName: "Maison Twenty Seven",
+                category: "bakery",
+                address: "27 Spring Street",
+                locality: "New York",
+                region: "NY",
+                country: "US",
+                latitude: 40.722,
+                longitude: -73.995,
+                sourceProvider: "mapkit",
+                sourceProviderPlaceID: "maison-twenty-seven",
+                syncState: .synced
+            ),
+            userPlace: LocalUserPlace(
+                localID: "remote_up_joe_maison_twenty_seven",
+                serverID: sourceUserPlaceID,
+                userID: "user_joe",
+                placeID: placeID,
+                status: .been,
+                visibility: .followers,
+                sourceType: "manual",
+                syncState: .synced
+            ),
+            owner: LocalProfile(
+                localID: "remote_profile_joe",
+                serverID: "user_joe",
+                handle: "joe",
+                displayName: "Joe",
+                syncState: .synced
+            )
+        )
+        let placeRepository = FakePlaceRepository(places: [socialPlace])
+        let socialSaveRepository = FakeSocialPlaceSaveRepository(
+            result: SaveResult(userPlaceID: createdUserPlaceID, syncState: .synced)
+        )
+        let backend = WanderBackend(
+            placeRepository: placeRepository,
+            socialPlaceSaveRepository: socialSaveRepository
+        )
+        let newYorkViewport = MapViewport(
+            minLatitude: 40.6,
+            minLongitude: -74.1,
+            maxLatitude: 40.9,
+            maxLongitude: -73.7
+        )
+        await store.refreshRemoteVisiblePlaces(in: newYorkViewport, backend: backend)
+        let suggestion = try XCTUnwrap(
+            store.visiblePlaces().first { $0.userPlace.id == sourceUserPlaceID }
+        )
+
+        // The social save is outside the automatic post-save LA viewport.
+        placeRepository.setPlaces([])
+        let result = await store.addVisiblePlace(suggestion, to: list, backend: backend)
+
+        XCTAssertEqual(result.companionSave, .createdWanna(userPlaceID: createdUserPlaceID))
+        let group = try XCTUnwrap(
+            VisiblePlaceGrouping.matchingGroup(
+                for: suggestion,
+                in: store.visiblePlaces(),
+                currentUserID: store.currentUser.id
+            )
+        )
+        XCTAssertTrue(group.places.contains { $0.owner.id == store.currentUser.id })
+        XCTAssertTrue(group.places.contains { $0.owner.id == "user_joe" })
+
+        let outlines = MapPinOutlineBuilder.outlines(
+            for: group.places.map {
+                MapPinSaveState(
+                    ownership: $0.owner.id == store.currentUser.id ? .currentUser : .social,
+                    status: $0.userPlace.status
+                )
+            }
+        )
+        XCTAssertTrue(outlines.contains {
+            $0.ownership == .currentUser && $0.status == .wannaGo
+        })
+        XCTAssertTrue(outlines.contains {
+            $0.ownership == .social && $0.status == .been
+        })
+    }
+
     func testAddingUnsavedCandidateToListReportsCreatedWannaForEditableToast() async throws {
         let store = WanderStore(fixtures: WanderFixtures.empty())
         store.apply(authState: .signedIn(AuthSession(userID: "user_live", displayName: "Joe", handle: "joe")))
@@ -9156,6 +9299,9 @@ final class WanderStoreTests: XCTestCase {
         guard case .add = context.mode else {
             return XCTFail("A newly-created Wanna should reopen the Check In/Wanna landing step")
         }
+        XCTAssertEqual(context.initialStatus, .wannaGo)
+        XCTAssertTrue(context.requiresStatusConfirmation)
+        XCTAssertTrue(context.preselectsInitialStatus)
     }
 
     func testAddingExistingWannaToListReportsDirectWannaEditTarget() async throws {
