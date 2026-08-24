@@ -327,6 +327,7 @@ enum WanderPlaceEmojiResolver {
         WanderPlaceCategory.outdoorsNature: [
             Rule(emoji: "🏞️", terms: ["national park", "state park", "nature preserve"]),
             Rule(emoji: "🥾", terms: ["hiking area", "trail", "hike", "trailhead"]),
+            Rule(emoji: "🐕", terms: ["dog beach"]),
             Rule(emoji: "🏖️", terms: ["beach"]),
             Rule(emoji: "🏝️", terms: ["island"]),
             Rule(emoji: "🌊", terms: ["lake", "river"]),
@@ -586,7 +587,7 @@ enum WanderPlaceEmojiResolver {
 
     private static let restaurantCuisineEmojis: [String: String] = Dictionary(
         uniqueKeysWithValues: [
-            ("American", "🍔"),
+            ("American", "🇺🇸"),
             ("Mexican", "🌮"),
             ("Thai", "🇹🇭"),
             ("Vietnamese", "🍜"),

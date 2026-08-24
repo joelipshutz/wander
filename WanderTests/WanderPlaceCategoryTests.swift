@@ -77,6 +77,14 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(WanderPlaceCategory.emoji(for: "park"), "🌳")
         XCTAssertEqual(WanderPlaceCategory.emoji(for: "hike"), "🥾")
         XCTAssertEqual(WanderPlaceCategory.emoji(for: "thai restaurant"), "🇹🇭")
+        XCTAssertEqual(
+            WanderPlaceCategory.emoji(
+                for: WanderPlaceCategory.restaurantsFood,
+                subcategory: "American",
+                cuisine: "American"
+            ),
+            "🇺🇸"
+        )
         XCTAssertEqual(WanderPlaceCategory.emoji(for: "unknown provider value"), "📍")
     }
 
@@ -1120,7 +1128,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         let data = try Data(contentsOf: taxonomyURL)
         let shared = try JSONDecoder().decode(SharedTaxonomy.self, from: data)
 
-        XCTAssertEqual(shared.version, 9)
+        XCTAssertEqual(shared.version, 10)
         XCTAssertEqual(WanderPlaceCategory.allowedCategories, shared.categories.map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories, shared.categories.filter(\.editable).map(\.id))
         XCTAssertEqual(WanderPlaceCategory.editableCategories.count, 14)
@@ -1185,6 +1193,21 @@ final class WanderPlaceCategoryTests: XCTestCase {
             )
             XCTAssertEqual(WanderPlaceCategory.emoji(for: assignment), expectedEmoji, subcategory)
         }
+    }
+
+    func testOutdoorsNatureIncludesDogBeach() throws {
+        let suggestions = WanderPlaceCategory.subcategorySuggestions(for: WanderPlaceCategory.outdoorsNature)
+        XCTAssertTrue(suggestions.contains("Dog beach"))
+        XCTAssertEqual(WanderPlaceCategory.normalizedPrimaryCategory("dog beach"), WanderPlaceCategory.outdoorsNature)
+
+        let assignment = WanderPlaceCategory.assignment(forRawCategory: "dog beach")
+        XCTAssertEqual(assignment.primaryCategory, WanderPlaceCategory.outdoorsNature)
+        XCTAssertEqual(assignment.subcategory, "Dog beach")
+        XCTAssertEqual(WanderPlaceCategory.emoji(for: assignment), "🐕")
+
+        let groups = WanderPlaceCategory.subcategoryGroups(for: WanderPlaceCategory.outdoorsNature)
+        let waterAndCamping = try XCTUnwrap(groups.first { $0.title == "Water & camping" })
+        XCTAssertTrue(waterAndCamping.subcategories.contains("Dog beach"))
     }
 
     func testRestaurantsFoodUsesCuisineOnlyGroups() throws {
