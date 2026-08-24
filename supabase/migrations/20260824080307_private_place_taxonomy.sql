@@ -904,7 +904,7 @@ $$;
 create or replace function app.save_visible_place(input_place_id uuid, input_source_user_place_id uuid)
 returns public.user_places
 language plpgsql
-security invoker
+security definer
 set search_path = public, app
 as $$
 declare
@@ -918,7 +918,8 @@ begin
   from public.user_places source
   where source.id = input_source_user_place_id
     and source.place_id = input_place_id
-    and source.deleted_at is null;
+    and source.deleted_at is null
+    and app.can_read_user_place(viewer_id, source.user_id, source.visibility);
   if source_row.id is null then raise exception 'source_not_visible'; end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
@@ -970,6 +971,72 @@ begin
     updated_at = now();
 
   return saved_row;
+end;
+$$;
+
+create or replace function public.save_own_place(
+  input_place jsonb,
+  input_user_place jsonb,
+  input_attributes jsonb default '[]'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, app
+as $$
+declare
+  viewer_id text := app.current_user_id();
+  saved public.user_places;
+  requested_planned_date date;
+  planned_date_kind text;
+begin
+  if viewer_id is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  select *
+  into saved
+  from app.save_own_place(input_place, input_user_place, input_attributes);
+
+  if saved.status = 'been'
+     and input_user_place->>'status' = 'wanna_go' then
+    return jsonb_build_object(
+      'user_place_id', saved.id,
+      'place_id', saved.place_id
+    );
+  end if;
+
+  if input_user_place ? 'planned_date' then
+    planned_date_kind := jsonb_typeof(input_user_place->'planned_date');
+    if planned_date_kind not in ('string', 'null') then
+      raise exception 'invalid_planned_date';
+    end if;
+
+    if planned_date_kind = 'string' then
+      begin
+        requested_planned_date := (input_user_place->>'planned_date')::date;
+      exception
+        when invalid_datetime_format or datetime_field_overflow then
+          raise exception 'invalid_planned_date';
+      end;
+    end if;
+
+    if requested_planned_date is not null
+       and input_user_place->>'status' <> 'wanna_go' then
+      raise exception 'planned_date_requires_wanna_go';
+    end if;
+
+    update public.user_places
+    set planned_date = requested_planned_date
+    where id = saved.id
+      and user_id = viewer_id
+    returning * into saved;
+  end if;
+
+  return jsonb_build_object(
+    'user_place_id', saved.id,
+    'place_id', saved.place_id
+  );
 end;
 $$;
 
@@ -1215,7 +1282,7 @@ grant execute on function public.get_shared_visit_context(uuid, integer)
 comment on function app.save_own_place(jsonb, jsonb, jsonb) is
   'Authenticated own-place save. Provider refreshes update canonical taxonomy; viewer consensus cannot overwrite provider truth.';
 comment on function app.save_visible_place(uuid, uuid) is
-  'Copies a visible place without copying the source owner''s private food type and preserves the viewer''s first-relation taxonomy snapshot.';
+  'Narrow security-definer copy of an explicitly viewer-visible place without the source owner''s private food type; preserves the viewer''s first-relation taxonomy snapshot.';
 comment on function app.shared_visit_source_snapshot(uuid) is
   'Builds a shareable visit snapshot without the source owner''s private restaurant food type.';
 comment on function app.private_taxonomy_snapshot_projection(jsonb) is
@@ -1224,8 +1291,10 @@ comment on function app.private_taxonomy_snapshot_projection(jsonb) is
 revoke all on function app.save_own_place(jsonb, jsonb, jsonb) from public, anon;
 revoke all on function app.save_visible_place(uuid, uuid) from public, anon;
 revoke all on function app.shared_visit_source_snapshot(uuid) from public, anon, authenticated;
+revoke all on function public.save_own_place(jsonb, jsonb, jsonb) from public, anon;
 grant execute on function app.save_own_place(jsonb, jsonb, jsonb) to authenticated;
 grant execute on function app.save_visible_place(uuid, uuid) to authenticated;
+grant execute on function public.save_own_place(jsonb, jsonb, jsonb) to authenticated;
 
 do $$
 begin
@@ -1241,14 +1310,24 @@ begin
   if not exists (
     select 1 from pg_proc
     where oid = 'app.save_visible_place(uuid,uuid)'::regprocedure
-      and not prosecdef
+      and prosecdef
       and 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
   ) then
     raise exception 'app.save_visible_place security posture changed';
   end if;
 
+  if not exists (
+    select 1 from pg_proc
+    where oid = 'public.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
+      and prosecdef
+      and 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
+  ) then
+    raise exception 'public.save_own_place security posture changed';
+  end if;
+
   if has_function_privilege('anon', 'app.save_own_place(jsonb,jsonb,jsonb)', 'execute')
-     or has_function_privilege('anon', 'app.save_visible_place(uuid,uuid)', 'execute') then
+     or has_function_privilege('anon', 'app.save_visible_place(uuid,uuid)', 'execute')
+     or has_function_privilege('anon', 'public.save_own_place(jsonb,jsonb,jsonb)', 'execute') then
     raise exception 'taxonomy write RPCs must remain authenticated-only';
   end if;
 end;

@@ -11,17 +11,17 @@ select is(
     from pg_proc
     where oid = 'public.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
   ),
-  false,
-  'public save_own_place remains security invoker'
+  true,
+  'public save_own_place is a narrow security-definer wrapper'
 );
 
 select ok(
   (
-    select 'search_path=app, public' = any(coalesce(proconfig, array[]::text[]))
+    select 'search_path=public, app' = any(coalesce(proconfig, array[]::text[]))
     from pg_proc
     where oid = 'public.save_own_place(jsonb,jsonb,jsonb)'::regprocedure
   ),
-  'public save_own_place retains its pinned search path'
+  'public save_own_place pins public and app'
 );
 
 select is(

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(24);
+select plan(28);
 
 select ok(
   position(
@@ -24,6 +24,18 @@ select ok(
 select ok(
   not has_table_privilege('authenticated', 'public.place_taxonomy_snapshots', 'select'),
   'authenticated clients cannot read private taxonomy snapshots directly'
+);
+
+select ok(
+  not has_column_privilege('authenticated', 'public.user_places', 'category_override', 'select')
+  and not has_column_privilege('authenticated', 'public.user_places', 'subcategory_override', 'select')
+  and not has_column_privilege('authenticated', 'public.user_places', 'historical_want_attribute_answers', 'select'),
+  'raw user-place reads cannot select private taxonomy columns'
+);
+
+select ok(
+  not has_column_privilege('authenticated', 'public.place_visits', 'attribute_answers', 'select'),
+  'raw visit reads cannot select private attribute answers'
 );
 
 select is(
@@ -194,6 +206,27 @@ select is(
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'taxonomy_viewer', true);
+
+select is(
+  (
+    select count(*)
+    from public.user_places
+    where id = 'a6210000-0000-0000-0000-000000000001'
+  ),
+  1::bigint,
+  'ordinary social save fields remain directly readable through visibility RLS'
+);
+
+select is(
+  (
+    select count(*)
+    from public.place_attributes
+    where user_place_id = 'a6210000-0000-0000-0000-000000000001'
+      and question_key = 'restaurant_cuisine'
+  ),
+  0::bigint,
+  'raw social attribute reads cannot see another owner food type'
+);
 
 select is(
   (

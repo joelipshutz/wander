@@ -48,7 +48,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, app
 as $$
   with visible_rows as (
@@ -88,6 +88,7 @@ as $$
     cross join lateral app.global_place_taxonomy(place.id) global_default
     cross join lateral app.viewer_place_taxonomy(place.id) viewer_default
     where own.deleted_at is null
+      and app.can_read_user_place(app.current_user_id(), own.user_id, own.visibility)
       and place.latitude between min_lat and max_lat
       and place.longitude between min_lng and max_lng
       and (status_filter is null or own.status = any(status_filter))
@@ -109,6 +110,7 @@ as $$
     where rated.deleted_at is null
       and rated.status = 'been'
       and rated.rating_score is not null
+      and app.can_read_user_place(app.current_user_id(), rated.user_id, rated.visibility)
       and rated.place_id in (select distinct place_id from visible_rows)
     group by rated.place_id
   )
@@ -219,7 +221,7 @@ returns table (
 )
 language sql
 stable
-security invoker
+security definer
 set search_path = public, app
 as $$
   with visible_rows as (
@@ -264,6 +266,7 @@ as $$
     cross join lateral app.viewer_place_taxonomy(place.id) viewer_default
     where own.user_id = profile_id
       and own.deleted_at is null
+      and app.can_read_user_place(app.current_user_id(), own.user_id, own.visibility)
       and owner.deleted_at is null
       and (status_filter is null or own.status = any(status_filter))
       and (category_filter is null or viewer_default.primary_category = any(category_filter))
@@ -277,6 +280,7 @@ as $$
     where rated.deleted_at is null
       and rated.status = 'been'
       and rated.rating_score is not null
+      and app.can_read_user_place(app.current_user_id(), rated.user_id, rated.visibility)
       and rated.place_id in (select distinct place_id from visible_rows)
     group by rated.place_id
   )
@@ -996,10 +1000,69 @@ revoke all on function public.search_recme_places_semantic(extensions.vector, te
 grant execute on function public.search_recme_places_semantic(extensions.vector, text[], text, boolean, text, integer, double precision)
   to authenticated, service_role;
 
+-- Raw Data API reads keep ordinary social fields available while private
+-- taxonomy is accessible only through viewer-aware RPC projections.
+drop policy if exists "place attributes readable through user place"
+  on public.place_attributes;
+create policy "place attributes readable without private taxonomy"
+  on public.place_attributes for select
+  using (
+    exists (
+      select 1
+      from public.user_places own
+      where own.id = place_attributes.user_place_id
+        and app.can_read_user_place(app.current_user_id(), own.user_id, own.visibility)
+        and (
+          own.user_id = app.current_user_id()
+          or place_attributes.question_key <> 'restaurant_cuisine'
+        )
+    )
+  );
+
+revoke select on public.user_places from authenticated;
+grant select (
+  id,
+  user_id,
+  place_id,
+  status,
+  note,
+  rating_signal,
+  rating_score,
+  visibility,
+  nearby_confirmed,
+  visited_at,
+  saved_at,
+  planned_date,
+  source_type,
+  source_artifact_id,
+  source_user_place_id,
+  attribution_user_id,
+  historical_want_note,
+  historical_want_tags,
+  historical_wanted_at,
+  created_at,
+  updated_at,
+  deleted_at
+) on public.user_places to authenticated;
+
+revoke select on public.place_visits from authenticated;
+grant select (
+  id,
+  user_place_id,
+  visited_at,
+  note,
+  rating_score,
+  tags,
+  backfilled_from_user_place,
+  created_at,
+  updated_at,
+  deleted_at
+) on public.place_visits to authenticated;
+
 comment on function app.visible_places_in_view(double precision, double precision, double precision, double precision, text[], text[], text[]) is
-  'Returns RLS-visible saves with global canonical taxonomy plus a private authenticated-viewer taxonomy envelope.';
+  'Narrow security-definer projection of explicitly viewer-visible saves with global canonical taxonomy plus a private authenticated-viewer taxonomy envelope.';
 comment on function app.profile_visible_places(text, text[], text[]) is
-  'Returns an RLS-visible profile without exposing the profile owner''s private taxonomy choices to another viewer.';
+  'Narrow security-definer projection of an explicitly viewer-visible profile without exposing the profile owner''s private taxonomy choices.';
 comment on function public.featured_places_in_view(double precision, double precision, double precision, double precision) is
   'Returns Featured rows with private taxonomy removed and the authenticated viewer''s own frozen/default taxonomy projected.';
 comment on function app.feed_place_projection(uuid, uuid) is
@@ -1016,7 +1079,7 @@ begin
     if not exists (
       select 1 from pg_proc procedure
       where procedure.oid = signature
-        and not procedure.prosecdef
+        and procedure.prosecdef
         and 'search_path=public, app' = any(coalesce(procedure.proconfig, array[]::text[]))
     ) then
       raise exception 'visible taxonomy RPC % security posture changed', signature;
