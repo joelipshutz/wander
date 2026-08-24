@@ -271,16 +271,10 @@ struct AddScreen: View {
         Group {
             if let context = addSaveFlow {
                 inlineSaveFlow(context)
-                    .transition(.opacity)
             } else {
                 addPlaceFlow
-                    .transition(.opacity)
             }
         }
-        .animation(
-            reduceMotion ? nil : .snappy(duration: 0.34, extraBounce: 0),
-            value: addSaveFlow?.id
-        )
         .presentationDetents(activeSheetDetents, selection: $selectedDetent)
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(WanderTheme.radiusSheet)
@@ -1135,16 +1129,16 @@ struct AddScreen: View {
         ) {
             placeSaveDraftStore.begin(draft)
         }
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.24, extraBounce: 0)) {
+        var contentSwap = Transaction()
+        contentSwap.disablesAnimations = true
+        withTransaction(contentSwap) {
             addSaveFlow = context
         }
         Task { @MainActor in
             await Task.yield()
             guard addSaveFlow?.id == context.id else { return }
             withAnimation(reduceMotion ? nil : .snappy(duration: 0.42, extraBounce: 0)) {
-                selectedDetent = context.startsOnDetails
-                    ? .large
-                    : MapPlaceSaveFlowSheet.compactDetent
+                selectedDetent = MapPlaceSaveFlowSheet.compactDetent
             }
         }
     }
@@ -1175,9 +1169,7 @@ struct AddScreen: View {
             context = context.resolvingExistingSave(selection: draft.form.selectedStatus)
         }
         addSaveFlow = context
-        selectedDetent = draft.form.step == .details
-            ? .large
-            : MapPlaceSaveFlowSheet.compactDetent
+        selectedDetent = MapPlaceSaveFlowSheet.compactDetent
     }
 
     private func restoreLegacyWalkthroughSaveWithoutDraftIfNeeded() {

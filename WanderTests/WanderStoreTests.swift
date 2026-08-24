@@ -5578,7 +5578,15 @@ final class WanderStoreTests: XCTestCase {
             )
         )
         XCTAssertTrue(context.requiresStatusConfirmation)
-        XCTAssertFalse(context.startsOnDetails)
+        XCTAssertTrue(context.startsOnDetails)
+        XCTAssertEqual(context.initialStatus, .been)
+        let newSaveDraft = try XCTUnwrap(PlaceSaveDraft.addFlow(
+            ownerUserID: "user-1",
+            context: context,
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        ))
+        XCTAssertEqual(newSaveDraft.form.step, .details)
+        XCTAssertTrue(newSaveDraft.form.isShowingOptionalDetails)
         XCTAssertEqual(
             context.flowTitle(status: .wannaGo, isShowingDetails: false),
             "Check in or Wanna"
@@ -5833,10 +5841,16 @@ final class WanderStoreTests: XCTestCase {
             ),
             defaultVisibility: .followers
         )
-        let contexts: [(name: String, context: MapPlaceSaveContext, requiresConfirmation: Bool)] = [
+        let contexts: [(
+            name: String,
+            context: MapPlaceSaveContext,
+            requiresConfirmation: Bool,
+            startsOnDetails: Bool
+        )] = [
             (
                 "new candidate",
                 .addCandidate(candidate, sourceType: .manual, defaultVisibility: .followers),
+                true,
                 true
             ),
             (
@@ -5847,7 +5861,8 @@ final class WanderStoreTests: XCTestCase {
                     status: .been,
                     defaultVisibility: .followers
                 ),
-                false
+                false,
+                true
             ),
             (
                 "social save",
@@ -5856,6 +5871,7 @@ final class WanderStoreTests: XCTestCase {
                     defaultVisibility: .followers,
                     attributes: store.attributes(for: socialPlace.userPlace.id)
                 ),
+                true,
                 true
             ),
             (
@@ -5865,17 +5881,20 @@ final class WanderStoreTests: XCTestCase {
                     attributes: store.attributes(for: ownBeenPlace.userPlace.id),
                     latestVisit: ownVisit
                 ),
-                false
+                false,
+                true
             ),
             (
                 "shared visit",
                 sharedVisitContext,
-                false
+                false,
+                true
             ),
             (
                 "edit visit",
                 .editVisit(ownVisit, visiblePlace: ownBeenPlace),
-                false
+                false,
+                true
             ),
             (
                 "edit want",
@@ -5883,7 +5902,8 @@ final class WanderStoreTests: XCTestCase {
                     ownWantPlace,
                     attributes: store.attributes(for: ownWantPlace.userPlace.id)
                 ),
-                false
+                false,
+                true
             )
         ]
 
@@ -5895,7 +5915,7 @@ final class WanderStoreTests: XCTestCase {
             )
             XCTAssertEqual(
                 entry.context.startsOnDetails,
-                !entry.requiresConfirmation,
+                entry.startsOnDetails,
                 entry.name
             )
         }

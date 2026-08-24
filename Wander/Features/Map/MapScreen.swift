@@ -6830,7 +6830,10 @@ struct MapPlaceSaveContext: Identifiable {
     }
 
     var startsOnDetails: Bool {
-        !requiresStatusConfirmation
+        if case .add = mode {
+            return true
+        }
+        return !requiresStatusConfirmation
     }
 
     var allowsWannaGoSelection: Bool {
@@ -6985,7 +6988,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(sourceType),
             requiresStatusConfirmation: true,
             hasPriorCheckIn: currentUserSave?.userPlace.status == .been,
-            initialStatus: currentUserSave?.userPlace.status ?? .wannaGo,
+            initialStatus: currentUserSave?.userPlace.status ?? .been,
             initialVisibility: currentUserSave?.userPlace.visibility ?? defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
@@ -7034,7 +7037,7 @@ struct MapPlaceSaveContext: Identifiable {
             mode: .add(.socialSave),
             requiresStatusConfirmation: true,
             hasPriorCheckIn: false,
-            initialStatus: visiblePlace.userPlace.status,
+            initialStatus: .been,
             initialVisibility: defaultVisibility,
             initialRatingScore: nil,
             initialNote: "",
@@ -7595,7 +7598,7 @@ extension PlaceSaveDraft {
                 plannedDate: plannedDate,
                 photoAttachments: context.initialPhotoAttachments.compactMap(\.draftPhoto),
                 selectedInviteeUserIDs: [],
-                isShowingOptionalDetails: false
+                isShowingOptionalDetails: true
             )
         )
     }
@@ -8150,7 +8153,7 @@ private struct MapCheckInDateSection: View {
 }
 
 struct MapPlaceSaveFlowSheet: View {
-    static let compactHeight: CGFloat = 430
+    static let compactHeight: CGFloat = 560
     static let compactDetent = PresentationDetent.height(compactHeight)
 
     @Environment(\.dismiss) private var dismiss
@@ -8360,7 +8363,10 @@ struct MapPlaceSaveEditor: View {
             initialValue: restoredAttachments ?? context.initialPhotoAttachments
         )
         _selectedInviteeUserIDs = State(initialValue: restoredForm?.selectedInviteeUserIDs ?? [])
-        _isShowingOptionalDetails = State(initialValue: restoredForm?.isShowingOptionalDetails ?? true)
+        let initialShowsOptionalDetails = context.isNewPlaceAdd
+            ? true
+            : restoredForm?.isShowingOptionalDetails ?? true
+        _isShowingOptionalDetails = State(initialValue: initialShowsOptionalDetails)
         var initialModeDrafts = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
         if restoredForm != nil {
             initialModeDrafts.store(
@@ -8374,7 +8380,7 @@ struct MapPlaceSaveEditor: View {
                     plannedDate: initialPlannedDate,
                     photoAttachments: restoredAttachments ?? context.initialPhotoAttachments,
                     selectedInviteeUserIDs: restoredForm?.selectedInviteeUserIDs ?? [],
-                    isShowingOptionalDetails: restoredForm?.isShowingOptionalDetails ?? true,
+                    isShowingOptionalDetails: initialShowsOptionalDetails,
                     didLoadSharedVisitInvitees: false,
                     sharedVisitInviteesError: nil
                 ),
@@ -8680,6 +8686,16 @@ struct MapPlaceSaveEditor: View {
                 droppedPinNameSection
             }
 
+            if selectedStatus == .been || walkthroughs.activeSurface == .saveFlow {
+                ratingSection
+                    .id(WalkthroughTargetID.saveRating)
+                    .walkthroughTarget(.saveRating)
+            }
+
+            noteSection
+                .id(WalkthroughTargetID.saveNote)
+                .walkthroughTarget(.saveNote)
+
             if selectedStatus == .been {
                 MapCheckInDateSection(
                     visitedAt: $visitedAt,
@@ -8694,19 +8710,9 @@ struct MapPlaceSaveEditor: View {
                     .walkthroughTarget(.saveDate)
             }
 
-            noteSection
-                .id(WalkthroughTargetID.saveNote)
-                .walkthroughTarget(.saveNote)
-
             placeTypeSection
                 .id(WalkthroughTargetID.saveDetails)
                 .walkthroughTarget(.saveDetails)
-
-            if selectedStatus == .been || walkthroughs.activeSurface == .saveFlow {
-                ratingSection
-                    .id(WalkthroughTargetID.saveRating)
-                    .walkthroughTarget(.saveRating)
-            }
 
             if selectedStatus == .been {
                 visitParticipationSections
@@ -8756,7 +8762,7 @@ struct MapPlaceSaveEditor: View {
                 || isRemoving
                 || isWalkthroughAutomating(.saveSubmit)
                 || didStartWalkthroughAutoSave,
-            tone: .espressoConfirmation
+            tone: .solidBlackConfirmation
         ) {
             save()
         }

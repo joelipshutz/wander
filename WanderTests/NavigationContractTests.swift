@@ -1670,7 +1670,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(addScreen.contains("MapPlaceSaveFlowSheet("))
         XCTAssertFalse(addScreen.contains(".sheet(item: $addSaveFlow"))
         XCTAssertTrue(addScreen.contains("return [MapPlaceSaveFlowSheet.compactDetent, .large]"))
-        XCTAssertTrue(addScreen.contains("selectedDetent = context.startsOnDetails"))
+        XCTAssertTrue(addScreen.contains("selectedDetent = MapPlaceSaveFlowSheet.compactDetent"))
+        XCTAssertTrue(addScreen.contains("contentSwap.disablesAnimations = true"))
+        XCTAssertFalse(addScreen.contains(".transition(.opacity)"))
         XCTAssertTrue(addScreen.contains("context: context"))
         XCTAssertTrue(addScreen.contains("persistAddPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
@@ -2031,9 +2033,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(mapScreen.contains("add a few details"))
 
         let orderedMarkers = [
-            "noteSection",
-            "placeTypeSection",
             "ratingSection",
+            "noteSection",
+            "MapCheckInDateSection(",
+            "placeTypeSection",
             "visitParticipationSections",
             "optionalDetailsDisclosure"
         ]
@@ -2044,9 +2047,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(offsets, offsets.sorted())
 
         let attachedEssentialMarkers = [
-            "MapCheckInDateSection(",
-            "noteSection",
             "ratingSection",
+            "noteSection",
+            "MapCheckInDateSection(",
             "optionalDetailsDisclosure"
         ]
         let attachedEssentialOffsets = try attachedEssentialMarkers.map { marker in
@@ -3931,14 +3934,15 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
         XCTAssertTrue(theme.contains("case espressoConfirmation"))
+        XCTAssertTrue(theme.contains("case solidBlackConfirmation"))
         XCTAssertTrue(theme.contains("private struct WanderPrimaryButtonPressStyle: ButtonStyle"))
         XCTAssertTrue(theme.contains(".buttonStyle(WanderPrimaryButtonPressStyle())"))
         XCTAssertTrue(theme.contains(".wanderGlassRoundedRectangle("))
         XCTAssertTrue(theme.contains("cornerRadius: WanderTheme.radiusLarge"))
         XCTAssertEqual(
-            mapEditor.components(separatedBy: "tone: .espressoConfirmation").count - 1,
+            mapEditor.components(separatedBy: "tone: .solidBlackConfirmation").count - 1,
             1,
-            "The unified save flow has one final Espresso confirmation."
+            "The unified save flow has one final solid-black confirmation."
         )
         XCTAssertTrue(addScreen.contains("private var candidateSaveAction: some View"))
         XCTAssertTrue(addScreen.contains("tone: .espressoConfirmation"))
@@ -4019,7 +4023,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-check-in\""))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-wanna\""))
         XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))"))
-        XCTAssertTrue(sheetWrapper.contains("static let compactHeight: CGFloat = 430"))
+        XCTAssertTrue(sheetWrapper.contains("static let compactHeight: CGFloat = 560"))
         XCTAssertTrue(sheetWrapper.contains("static let compactDetent = PresentationDetent.height(compactHeight)"))
         XCTAssertTrue(sheetWrapper.contains("[Self.compactDetent, .large]"))
         XCTAssertTrue(sheetWrapper.contains("selection: $selectedDetent"))

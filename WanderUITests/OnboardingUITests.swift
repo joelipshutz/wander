@@ -1614,7 +1614,8 @@ final class OnboardingUITests: XCTestCase {
             "-WanderResetWalkthroughs",
             "-WanderMapPlace",
             "Griffith Observatory Trail",
-            "-WanderMapSheetExpanded"
+            "-WanderMapSheetExpanded",
+            "-WanderPlaceProfileSaveTrayV1"
         ]
         app.launch()
 
@@ -1634,11 +1635,11 @@ final class OnboardingUITests: XCTestCase {
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         XCTAssertTrue(note.isHittable)
-        XCTAssertTrue(app.buttons["Show more options"].exists)
+        XCTAssertTrue(app.buttons["Hide more options"].exists)
         note.tap()
         note.typeText("Sunset draft")
 
-        app.buttons["Collapse check-in"].tap()
+        app.buttons["Close"].tap()
         XCTAssertFalse(attachedTray.waitForExistence(timeout: 2))
         XCTAssertTrue(checkIn.isHittable)
         checkIn.tap()
@@ -2231,20 +2232,24 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(checkInChoice.waitForExistence(timeout: 3))
         let statusSelector = app.staticTexts["save.statusSelector"]
         XCTAssertTrue(statusSelector.exists)
-        XCTAssertFalse(app.buttons["Check in"].exists)
-        checkInChoice.tap()
+        XCTAssertTrue(checkInChoice.isSelected)
+        let finalCheckIn = app.buttons["Check in"]
+        XCTAssertTrue(finalCheckIn.waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["continue to details"].exists)
         XCTAssertFalse(app.buttons["back"].exists)
+        XCTAssertTrue(app.buttons["Hide more options"].exists)
 
         let disclosure = app.buttons["save.checkInDateDisclosure"]
         XCTAssertTrue(disclosure.waitForExistence(timeout: 3))
         XCTAssertTrue(statusSelector.exists)
-        XCTAssertLessThan(statusSelector.frame.minY, disclosure.frame.minY)
+        let rating = app.descendants(matching: .any)["place-rating-slider"]
+        XCTAssertTrue(rating.exists)
         let note = app.textFields["save.note"]
         XCTAssertTrue(note.exists)
-        XCTAssertLessThan(disclosure.frame.minY, note.frame.minY)
-        let finalCheckIn = app.buttons["Check in"]
-        XCTAssertTrue(finalCheckIn.exists)
+        XCTAssertLessThan(statusSelector.frame.minY, rating.frame.minY)
+        XCTAssertLessThan(rating.frame.minY, note.frame.minY)
+        XCTAssertLessThan(note.frame.minY, disclosure.frame.minY)
+        XCTAssertTrue(disclosure.isHittable)
 
         note.tap()
         note.typeText("Check-in mode draft")
@@ -2253,6 +2258,8 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(wannaChoice.isHittable)
         wannaChoice.tap()
         XCTAssertTrue(app.buttons["Add a Wanna go date"].waitForExistence(timeout: 2))
+        XCTAssertTrue(wannaChoice.isSelected)
+        XCTAssertTrue(app.buttons["Hide more options"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["place-rating-slider"].exists)
         let wannaNote = app.textFields["save.note"]
         XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")
