@@ -752,44 +752,32 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         )
     }
 
-    func testDebugPreferencesAreAccountScopedAndReplayResetsOnlyThatAccount() throws {
+    func testDebugPreferencesAreAccountScopedAndReplayStartsOnNextLaunchOnly() throws {
         let defaults = try makeDefaults()
         let walkthroughStore = FirstVisitWalkthroughStore(defaults: defaults)
         let preferences = FirstVisitWalkthroughDebugPreferences(defaults: defaults)
-        let launchRegistry = FirstVisitWalkthroughLaunchRegistry()
-        let coordinator = FirstVisitWalkthroughCoordinator(
-            userID: "user_a",
-            store: walkthroughStore,
-            launchRegistry: launchRegistry
-        )
 
         walkthroughStore.setProgress(2, for: "user_a", surface: .map)
         walkthroughStore.markComplete(for: "user_a", surface: .map)
         walkthroughStore.markComplete(for: "user_b", surface: .map)
-        coordinator.registerLaunch()
         XCTAssertNil(preferences.nuxOverride(for: "user_a"))
         XCTAssertNil(preferences.nuxOverride(for: "user_b"))
 
-        preferences.setNUXEnabled(
-            true,
-            for: "user_a",
-            launchRegistry: launchRegistry
-        )
-        coordinator.registerLaunch()
+        preferences.setNUXEnabled(true, for: "user_a")
 
         XCTAssertEqual(preferences.nuxOverride(for: "user_a"), true)
         XCTAssertTrue(preferences.isReplayRequested(for: "user_a"))
-        XCTAssertEqual(walkthroughStore.progress(for: "user_a", surface: .map), 0)
-        XCTAssertFalse(walkthroughStore.isComplete(for: "user_a", surface: .map))
+        XCTAssertEqual(walkthroughStore.progress(for: "user_a", surface: .map), 2)
+        XCTAssertTrue(walkthroughStore.isComplete(for: "user_a", surface: .map))
         XCTAssertNil(preferences.nuxOverride(for: "user_b"))
         XCTAssertFalse(preferences.isReplayRequested(for: "user_b"))
         XCTAssertTrue(walkthroughStore.isComplete(for: "user_b", surface: .map))
-        XCTAssertEqual(
-            defaults.integer(
-                forKey: "wander.walkthrough.user_a.authenticatedLaunchCount"
-            ),
-            1
-        )
+
+        let nextLaunch = preferences.launchSnapshot()
+        XCTAssertTrue(nextLaunch.isReplayRequested(for: "user_a"))
+        XCTAssertTrue(nextLaunch.shouldStartReplay(for: "user_a"))
+        preferences.markReplayStarted(for: "user_a")
+        XCTAssertFalse(preferences.launchSnapshot().shouldStartReplay(for: "user_a"))
 
         preferences.clearReplayRequest(for: "user_a")
         XCTAssertEqual(preferences.nuxOverride(for: "user_a"), true)
@@ -798,6 +786,23 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         preferences.setNUXEnabled(false, for: "user_a")
         XCTAssertEqual(preferences.nuxOverride(for: "user_a"), false)
         XCTAssertFalse(preferences.isReplayRequested(for: "user_a"))
+    }
+
+    func testCancelingPendingNUXReplayPreservesWalkthroughProgress() throws {
+        let defaults = try makeDefaults()
+        let walkthroughStore = FirstVisitWalkthroughStore(defaults: defaults)
+        let preferences = FirstVisitWalkthroughDebugPreferences(defaults: defaults)
+
+        walkthroughStore.setProgress(2, for: "user_a", surface: .map)
+        walkthroughStore.markComplete(for: "user_a", surface: .profile)
+
+        preferences.setNUXEnabled(true, for: "user_a")
+        preferences.clearNUXOverride(for: "user_a")
+
+        XCTAssertNil(preferences.nuxOverride(for: "user_a"))
+        XCTAssertFalse(preferences.isReplayRequested(for: "user_a"))
+        XCTAssertEqual(walkthroughStore.progress(for: "user_a", surface: .map), 2)
+        XCTAssertTrue(walkthroughStore.isComplete(for: "user_a", surface: .profile))
     }
 
     func testDismissPermanentlyCompletesEveryWalkthroughForTheCurrentAccount() throws {

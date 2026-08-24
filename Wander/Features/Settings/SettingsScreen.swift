@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 
 struct SettingsScreen: View {
-    let onNUXDebugSettingsChanged: () -> Void
     let onDismiss: (() -> Void)?
 
     @EnvironmentObject private var store: WanderStore
@@ -16,18 +15,13 @@ struct SettingsScreen: View {
     @State private var privacyErrorMessage: String?
 
     init(
-        onNUXDebugSettingsChanged: @escaping () -> Void = {},
         onDismiss: (() -> Void)? = nil
     ) {
-        self.onNUXDebugSettingsChanged = onNUXDebugSettingsChanged
         self.onDismiss = onDismiss
     }
 
     var body: some View {
-        ProfileSettingsHome(
-            onNUXDebugSettingsChanged: onNUXDebugSettingsChanged,
-            onDismiss: onDismiss
-        )
+        ProfileSettingsHome(onDismiss: onDismiss)
         .preferredColorScheme(.light)
     }
 

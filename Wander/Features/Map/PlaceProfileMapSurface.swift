@@ -1841,50 +1841,6 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
     }
 }
 
-struct PlaceProfileFloatingActionDebugPreferences {
-    let defaults: UserDefaults
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-    }
-
-    func activeVariant(
-        for userID: String,
-        isDebugSettingsEntitled: Bool,
-        arguments: [String] = ProcessInfo.processInfo.arguments
-    ) -> PlaceProfileFloatingActionVariant {
-        #if DEBUG
-        if arguments.contains(PlaceProfileFloatingActionVariant.selectionLaunchArgument) {
-            return PlaceProfileFloatingActionVariant.resolved(from: arguments)
-        }
-        #endif
-
-        guard isDebugSettingsEntitled else { return .productionDefault }
-        return storedVariant(for: userID)
-    }
-
-    func storedVariant(for userID: String) -> PlaceProfileFloatingActionVariant {
-        PlaceProfileFloatingActionVariant.resolved(
-            from: [],
-            storedRawValue: storedRawValue(for: userID)
-        )
-    }
-
-    func setVariant(_ variant: PlaceProfileFloatingActionVariant, for userID: String) {
-        defaults.set(variant.rawValue, forKey: selectionKey(userID: userID))
-    }
-
-    private func storedRawValue(for userID: String) -> Int? {
-        let key = selectionKey(userID: userID)
-        guard defaults.object(forKey: key) != nil else { return nil }
-        return defaults.integer(forKey: key)
-    }
-
-    private func selectionKey(userID: String) -> String {
-        "wander.debugSettings.\(userID).placeActionVariant"
-    }
-}
-
 private struct PlaceProfileFloatingActionVariantEnvironmentKey: EnvironmentKey {
     static let defaultValue = PlaceProfileFloatingActionVariant.productionDefault
 }

@@ -2,12 +2,61 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(14);
+select plan(22);
 
 select is(
   (select enabled from public.feature_flags where key = 'first_visit_nux' and user_id is null),
   true,
   'first-visit NUX is globally enabled'
+);
+
+select is(
+  (
+    select value_type || ':' || integer_value::text
+    from public.feature_flags
+    where key = 'place_profile_action_variant' and user_id is null
+  ),
+  'integer:5',
+  'place-profile action variant is a registered integer flag'
+);
+
+select has_column(
+  'public',
+  'feature_flags',
+  'value_type',
+  'feature flags declare their value type'
+);
+
+select has_column(
+  'public',
+  'feature_flags',
+  'integer_value',
+  'feature flags can store integer values'
+);
+
+select results_eq(
+  $$
+    select conname::text
+    from pg_constraint
+    where conrelid = 'public.feature_flags'::regclass
+      and conname in (
+        'feature_flags_value_type_check',
+        'feature_flags_registered_key_check',
+        'feature_flags_key_value_contract_check'
+      )
+    order by conname
+  $$,
+  $$
+    select conname
+    from (
+      values
+        ('feature_flags_key_value_contract_check'),
+        ('feature_flags_registered_key_check'),
+        ('feature_flags_value_type_check')
+    ) as expected(conname)
+    order by conname
+  $$,
+  'feature flags enforce their registered key, type, and range contracts'
 );
 
 select is(
@@ -49,6 +98,30 @@ insert into public.profiles(id, handle, display_name)
 values
   ('user_feature_flag_a', 'featureflaga', 'Feature Flag A'),
   ('user_feature_flag_b', 'featureflagb', 'Feature Flag B');
+
+select throws_like(
+  $$ insert into public.feature_flags(key, user_id, enabled) values ('other_flag', null, true) $$,
+  '%feature_flags_registered_key_check%',
+  'unknown feature flag keys are rejected by the registry constraint'
+);
+
+select throws_like(
+  $$ insert into public.feature_flags(key, user_id, enabled, value_type, integer_value) values ('debug_settings', null, false, 'integer', 2) $$,
+  '%feature_flags_key_value_contract_check%',
+  'boolean feature flags reject integer storage'
+);
+
+select throws_like(
+  $$ insert into public.feature_flags(key, user_id, enabled, value_type, integer_value) values ('place_profile_action_variant', null, false, 'integer', 6) $$,
+  '%feature_flags_key_value_contract_check%',
+  'integer feature flags reject out-of-range values'
+);
+
+select throws_like(
+  $$ insert into public.feature_flags(key, user_id, enabled, value_type, integer_value) values ('place_profile_action_variant', null, false, 'integer', null) $$,
+  '%feature_flags_key_value_contract_check%',
+  'integer feature flags require a concrete value'
+);
 
 insert into public.feature_flags(key, user_id, enabled)
 values
