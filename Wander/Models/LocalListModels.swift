@@ -158,6 +158,10 @@ enum ListSuggestionReasonFormatter {
         "category",
         "location",
         "locations",
+        "and",
+        "or",
+        "plus",
+        "with",
         "place",
         "places",
         "tag",
@@ -172,16 +176,13 @@ enum ListSuggestionReasonFormatter {
             .caseInsensitiveCompare("Fits") == .orderedSame {
             reasonBody = String(trimmedReason[trimmedReason.index(after: colonIndex)...])
         } else if !trimmedReason.isEmpty {
-            let humanizedReason = humanized(trimmedReason)
-            return containsInternalIdentifier(trimmedReason) && usefulValues([humanizedReason]).isEmpty
-                ? fallbackText(for: visiblePlace)
-                : humanizedReason
+            reasonBody = trimmedReason
         } else {
             return fallbackText(for: visiblePlace)
         }
 
         let values = usefulValues(
-            reasonBody.components(separatedBy: CharacterSet(charactersIn: "+|•"))
+            reasonBody.components(separatedBy: CharacterSet(charactersIn: "+|,•;"))
         )
         guard !values.isEmpty else { return fallbackText(for: visiblePlace) }
         return "Fits: \(values.prefix(3).joined(separator: " + "))"
@@ -199,7 +200,16 @@ enum ListSuggestionReasonFormatter {
 
     private static func usefulValues(_ values: [String]) -> [String] {
         var seen = Set<String>()
-        return values.compactMap { rawValue in
+        return values.flatMap { rawValue in
+            rawValue
+                .replacingOccurrences(
+                    of: #"\b(?:and|or|plus|with)\b"#,
+                    with: "|",
+                    options: [.regularExpression, .caseInsensitive]
+                )
+                .components(separatedBy: "|")
+        }
+        .compactMap { rawValue in
             let value = humanized(rawValue)
             let key = normalizedKey(value)
             guard !key.isEmpty,
@@ -223,10 +233,6 @@ enum ListSuggestionReasonFormatter {
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
-    }
-
-    private static func containsInternalIdentifier(_ value: String) -> Bool {
-        value.contains("_") && genericValues.contains(normalizedKey(value))
     }
 }
 
@@ -271,9 +277,35 @@ struct ListPlaceAddResult: Equatable {
         case permissionDenied
     }
 
+    enum CompanionSave: Equatable {
+        case none
+        case createdWanna(userPlaceID: String)
+        case existingWanna(userPlaceID: String)
+
+        var userPlaceID: String? {
+            switch self {
+            case .none:
+                nil
+            case .createdWanna(let userPlaceID),
+                 .existingWanna(let userPlaceID):
+                userPlaceID
+            }
+        }
+    }
+
     let outcome: Outcome
-    let createdWantSave: Bool
-    let shouldExplainAutoSave: Bool
+    let companionSave: CompanionSave
+
+    var createdWantSave: Bool {
+        if case .createdWanna = companionSave {
+            return true
+        }
+        return false
+    }
+
+    var shouldExplainAutoSave: Bool {
+        outcome == .added && companionSave != .none
+    }
 }
 
 struct ListSuggestionPayload: Codable, Equatable {
